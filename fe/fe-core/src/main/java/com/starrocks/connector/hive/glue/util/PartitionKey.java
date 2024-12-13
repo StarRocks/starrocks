@@ -15,7 +15,12 @@
 
 package com.starrocks.connector.hive.glue.util;
 
+<<<<<<< HEAD
 import com.amazonaws.services.glue.model.Partition;
+=======
+
+import software.amazon.awssdk.services.glue.model.Partition;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import java.util.List;
 
@@ -25,7 +30,11 @@ public class PartitionKey {
     private final int hashCode;
 
     public PartitionKey(Partition partition) {
+<<<<<<< HEAD
         this(partition.getValues());
+=======
+        this(partition.values());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public PartitionKey(List<String> partitionValues) {

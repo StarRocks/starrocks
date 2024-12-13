@@ -17,10 +17,20 @@
 #include <thrift/Thrift.h>
 #include <thrift/protocol/TDebugProtocol.h>
 
+<<<<<<< HEAD
+=======
+#include <memory>
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "agent/master_info.h"
 #include "runtime/client_cache.h"
 #include "runtime/exec_env.h"
 #include "service/backend_options.h"
+<<<<<<< HEAD
+=======
+#include "util/network_util.h"
+#include "util/thrift_rpc_helper.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 namespace starrocks::pipeline {
 std::string to_load_error_http_path(const std::string& file_name) {
@@ -28,23 +38,39 @@ std::string to_load_error_http_path(const std::string& file_name) {
         return "";
     }
     std::stringstream url;
+<<<<<<< HEAD
     url << "http://" << BackendOptions::get_localhost() << ":" << config::be_http_port << "/api/_load_error_log?"
+=======
+    url << "http://" << get_host_port(BackendOptions::get_localhost(), config::be_http_port) << "/api/_load_error_log?"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         << "file=" << file_name;
     return url.str();
 }
 
 std::string to_http_path(const std::string& token, const std::string& file_name) {
     std::stringstream url;
+<<<<<<< HEAD
     url << "http://" << BackendOptions::get_localhost() << ":" << config::be_http_port << "/api/_download_load?"
+=======
+    url << "http://" << get_host_port(BackendOptions::get_localhost(), config::be_http_port) << "/api/_download_load?"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         << "token=" << token << "&file=" << file_name;
     return url.str();
 }
 
+<<<<<<< HEAD
 TReportExecStatusParams ExecStateReporter::create_report_exec_status_params(QueryContext* query_ctx,
                                                                             FragmentContext* fragment_ctx,
                                                                             RuntimeProfile* profile,
                                                                             const Status& status, bool done) {
     TReportExecStatusParams params;
+=======
+std::unique_ptr<TReportExecStatusParams> ExecStateReporter::create_report_exec_status_params(
+        QueryContext* query_ctx, FragmentContext* fragment_ctx, RuntimeProfile* profile,
+        RuntimeProfile* load_channel_profile, const Status& status, bool done) {
+    auto res = std::make_unique<TReportExecStatusParams>();
+    TReportExecStatusParams& params = *res;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     auto* runtime_state = fragment_ctx->runtime_state();
     DCHECK(runtime_state != nullptr);
     DCHECK(profile != nullptr);
@@ -65,6 +91,12 @@ TReportExecStatusParams ExecStateReporter::create_report_exec_status_params(Quer
         if (query_ctx->enable_profile()) {
             profile->to_thrift(&params.profile);
             params.__isset.profile = true;
+<<<<<<< HEAD
+=======
+
+            load_channel_profile->to_thrift(&params.load_channel_profile);
+            params.__isset.load_channel_profile = true;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     } else {
         if (runtime_state->query_options().query_type == TQueryType::LOAD) {
@@ -74,6 +106,14 @@ TReportExecStatusParams ExecStateReporter::create_report_exec_status_params(Quer
         if (query_ctx->enable_profile()) {
             profile->to_thrift(&params.profile);
             params.__isset.profile = true;
+<<<<<<< HEAD
+=======
+
+            if (runtime_state->query_options().query_type == TQueryType::LOAD) {
+                load_channel_profile->to_thrift(&params.load_channel_profile);
+                params.__isset.load_channel_profile = true;
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         if (!runtime_state->output_files().empty()) {
@@ -126,16 +166,20 @@ TReportExecStatusParams ExecStateReporter::create_report_exec_status_params(Quer
                 params.sink_commit_infos.push_back(info);
             }
         }
+<<<<<<< HEAD
 
         // Send new errors to coordinator
         runtime_state->get_unreported_errors(&(params.error_log));
         params.__isset.error_log = (params.error_log.size() > 0);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     auto backend_id = get_backend_id();
     if (backend_id.has_value()) {
         params.__set_backend_id(backend_id.value());
     }
+<<<<<<< HEAD
     return params;
 }
 
@@ -189,6 +233,25 @@ Status ExecStateReporter::report_exec_status(const TReportExecStatusParams& para
         rpc_status = Status::InternalError(msg.str());
         return rpc_status;
     }
+=======
+    return res;
+}
+
+// including the final status when execution finishes.
+Status ExecStateReporter::report_exec_status(const TReportExecStatusParams& params, ExecEnv* exec_env,
+                                             const TNetworkAddress& fe_addr) {
+    TReportExecStatusResult res;
+    Status rpc_status;
+
+    rpc_status = ThriftRpcHelper::rpc<FrontendServiceClient>(
+            fe_addr, [&res, &params](FrontendServiceConnection& client) { client->reportExecStatus(res, params); },
+            config::thrift_rpc_timeout_ms);
+
+    if (rpc_status.ok()) {
+        rpc_status = Status(res.status);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     return rpc_status;
 }
 
@@ -262,6 +325,7 @@ TMVMaintenanceTasks ExecStateReporter::create_report_epoch_params(const QueryCon
 Status ExecStateReporter::report_epoch(const TMVMaintenanceTasks& params, ExecEnv* exec_env,
                                        const TNetworkAddress& fe_addr) {
     Status fe_status;
+<<<<<<< HEAD
     FrontendServiceConnection coord(exec_env->frontend_client_cache(), fe_addr, config::thrift_rpc_timeout_ms,
                                     &fe_status);
     if (!fe_status.ok()) {
@@ -306,11 +370,28 @@ Status ExecStateReporter::report_epoch(const TMVMaintenanceTasks& params, ExecEn
 }
 
 ExecStateReporter::ExecStateReporter() {
+=======
+    TMVReportEpochResponse res;
+    Status rpc_status;
+
+    rpc_status = ThriftRpcHelper::rpc<FrontendServiceClient>(
+            fe_addr, [&res, &params](FrontendServiceConnection& client) { client->mvReport(res, params); },
+            config::thrift_rpc_timeout_ms);
+
+    return rpc_status;
+}
+
+ExecStateReporter::ExecStateReporter(const CpuUtil::CpuIds& cpuids) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     auto status = ThreadPoolBuilder("ex_state_report") // exec state reporter
                           .set_min_threads(1)
                           .set_max_threads(2)
                           .set_max_queue_size(1000)
                           .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
+<<<<<<< HEAD
+=======
+                          .set_cpuids(cpuids)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                           .build(&_thread_pool);
     if (!status.ok()) {
         LOG(FATAL) << "Cannot create thread pool for ExecStateReport: error=" << status.to_string();
@@ -320,6 +401,10 @@ ExecStateReporter::ExecStateReporter() {
                      .set_min_threads(1)
                      .set_max_threads(2)
                      .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
+<<<<<<< HEAD
+=======
+                     .set_cpuids(cpuids)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                      .build(&_priority_thread_pool);
     if (!status.ok()) {
         LOG(FATAL) << "Cannot create thread pool for priority ExecStateReport: error=" << status.to_string();
@@ -334,4 +419,12 @@ void ExecStateReporter::submit(std::function<void()>&& report_task, bool priorit
     }
 }
 
+<<<<<<< HEAD
+=======
+void ExecStateReporter::bind_cpus(const CpuUtil::CpuIds& cpuids) const {
+    _thread_pool->bind_cpus(cpuids, {});
+    _priority_thread_pool->bind_cpus(cpuids, {});
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // namespace starrocks::pipeline

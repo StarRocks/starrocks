@@ -38,12 +38,21 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
+<<<<<<< HEAD
+=======
+import com.starrocks.authorization.AccessDeniedException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.ColocateGroupSchema;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.ColocateTableIndex.GroupId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.DdlException;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
@@ -87,7 +96,11 @@ public class ColocateMetaService {
     private static final String GROUP_ID = "group_id";
     private static final String DB_ID = "db_id";
 
+<<<<<<< HEAD
     private static ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentColocateIndex();
+=======
+    private static ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     private static GroupId checkAndGetGroupId(BaseRequest request) throws DdlException {
         long grpId = Long.valueOf(request.getSingleParameter(GROUP_ID).trim());
@@ -107,7 +120,11 @@ public class ColocateMetaService {
 
         @Override
         public void executeWithoutPassword(BaseRequest request, BaseResponse response)
+<<<<<<< HEAD
                 throws DdlException {
+=======
+                throws DdlException, AccessDeniedException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (redirectToLeader(request, response)) {
                 return;
             }
@@ -139,7 +156,11 @@ public class ColocateMetaService {
                 throws DdlException {
             response.setContentType("application/json");
             RestResult result = new RestResult();
+<<<<<<< HEAD
             result.addResultEntry("colocate_meta", GlobalStateMgr.getCurrentColocateIndex());
+=======
+            result.addResultEntry("colocate_meta", GlobalStateMgr.getCurrentState().getColocateTableIndex());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             sendResult(request, response, result);
         }
     }
@@ -259,15 +280,26 @@ public class ColocateMetaService {
                 isJoin = false;
             }
 
+<<<<<<< HEAD
             Database db = GlobalStateMgr.getCurrentState().getDbIncludeRecycleBin(groupId.dbId);
+=======
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIncludeRecycleBin(groupId.dbId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (db == null) {
                 response.appendContent("Non-exist db");
                 writeResponse(request, response, HttpResponseStatus.BAD_REQUEST);
                 return;
             }
+<<<<<<< HEAD
             db.writeLock();
             try {
                 OlapTable table = (OlapTable) globalStateMgr.getCurrentState().getTableIncludeRecycleBin(db, tableId);
+=======
+            Locker locker = new Locker();
+            locker.lockDatabase(db.getId(), LockType.WRITE);
+            try {
+                OlapTable table = (OlapTable) globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(db, tableId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (table == null) {
                     response.appendContent("Non-exist table");
                     writeResponse(request, response, HttpResponseStatus.BAD_REQUEST);
@@ -282,7 +314,11 @@ public class ColocateMetaService {
                 response.appendContent("update succeed");
                 sendResult(request, response);
             } finally {
+<<<<<<< HEAD
                 db.writeUnlock();
+=======
+                locker.unLockDatabase(db.getId(), LockType.WRITE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
     }
@@ -311,14 +347,22 @@ public class ColocateMetaService {
             List<List<Long>> backendsPerBucketSeq = new Gson().fromJson(meta, type);
             LOG.info("get buckets sequence: {}", backendsPerBucketSeq);
 
+<<<<<<< HEAD
             ColocateGroupSchema groupSchema = GlobalStateMgr.getCurrentColocateIndex().getGroupSchema(groupId);
+=======
+            ColocateGroupSchema groupSchema = GlobalStateMgr.getCurrentState().getColocateTableIndex().getGroupSchema(groupId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (backendsPerBucketSeq.size() != groupSchema.getBucketsNum()) {
                 throw new DdlException("Invalid bucket num. expected: " + groupSchema.getBucketsNum() + ", actual: "
                         + backendsPerBucketSeq.size());
             }
 
             List<Long> clusterBackendIds =
+<<<<<<< HEAD
                     GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true);
+=======
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(true);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             //check the Backend id
             for (List<Long> backendIds : backendsPerBucketSeq) {
                 if (backendIds.size() != groupSchema.getReplicationNum()) {

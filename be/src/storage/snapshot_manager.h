@@ -100,7 +100,12 @@ public:
 
     Status make_snapshot_on_tablet_meta(const TabletSharedPtr& tablet);
 
+<<<<<<< HEAD
     Status assign_new_rowset_id(SnapshotMeta* snapshot_meta, const std::string& clone_dir);
+=======
+    Status assign_new_rowset_id(SnapshotMeta* snapshot_meta, const std::string& clone_dir,
+                                const TabletSchemaCSPtr& tablet_schema = nullptr);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // this function is only used for ut
     std::string calc_snapshot_id_path(const TabletSharedPtr& tablet, int64_t timeout_s) {
@@ -114,7 +119,11 @@ private:
 
     std::string _get_header_full_path(const TabletSharedPtr& ref_tablet, const std::string& schema_hash_path) const;
 
+<<<<<<< HEAD
     Status _rename_rowset_id(const RowsetMetaPB& rs_meta_pb, const string& new_path, TabletSchema& tablet_schema,
+=======
+    Status _rename_rowset_id(const RowsetMetaPB& rs_meta_pb, const string& new_path, TabletSchemaCSPtr& tablet_schema,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                              const RowsetId& next_id, RowsetMetaPB* new_rs_meta_pb);
 
     static SnapshotManager* _s_instance;

@@ -59,6 +59,10 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+<<<<<<< HEAD
+=======
+import com.starrocks.server.GlobalStateMgr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.PartitionNames;
@@ -130,7 +134,11 @@ public class BrokerFileGroup implements Writable {
         this.csvFormat = new CsvFormat((byte) 0, (byte) 0, 0, false);
     }
 
+<<<<<<< HEAD
     public BrokerFileGroup(TableFunctionTable table) throws AnalysisException {
+=======
+    public BrokerFileGroup(TableFunctionTable table, Set<String> scanColumns) throws AnalysisException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.tableId = table.getId();
         this.isNegative = false;
 
@@ -138,6 +146,7 @@ public class BrokerFileGroup implements Writable {
         this.filePaths.add(table.getPath());
 
         this.fileFormat = table.getFormat();
+<<<<<<< HEAD
         this.columnSeparator = "\t";
         this.rowDelimiter = "\n";
         this.csvFormat = new CsvFormat((byte) 0, (byte) 0, 0, false);
@@ -145,6 +154,16 @@ public class BrokerFileGroup implements Writable {
 
         this.columnExprList = table.getColumnExprList();
         this.columnsFromPath = new ArrayList<>();
+=======
+        this.columnSeparator = Delimiter.convertDelimiter(table.getCsvColumnSeparator());
+        this.rowDelimiter = Delimiter.convertDelimiter(table.getCsvRowDelimiter());
+        this.csvFormat = new CsvFormat(table.getCsvEnclose(), table.getCsvEscape(),
+                table.getCsvSkipHeader(), table.getCsvTrimSpace());
+        this.fileFieldNames = new ArrayList<>();
+
+        this.columnExprList = table.getColumnExprList(scanColumns);
+        this.columnsFromPath = table.getColumnsFromPath();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public BrokerFileGroup(DataDescription dataDescription) {
@@ -167,7 +186,12 @@ public class BrokerFileGroup implements Writable {
     // This will parse the input DataDescription to list for BrokerFileInfo
     public void parse(Database db, DataDescription dataDescription) throws DdlException {
         // tableId
+<<<<<<< HEAD
         Table table = db.getTable(dataDescription.getTableName());
+=======
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), dataDescription.getTableName());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (table == null) {
             throw new DdlException("Unknown table " + dataDescription.getTableName()
                     + " in database " + db.getOriginName());
@@ -221,8 +245,13 @@ public class BrokerFileGroup implements Writable {
 
         fileFormat = dataDescription.getFileFormat();
         if (fileFormat != null) {
+<<<<<<< HEAD
             if (!fileFormat.toLowerCase().equals("parquet") && !fileFormat.toLowerCase().equals("csv") &&
                     !fileFormat.toLowerCase().equals("orc")) {
+=======
+            String format = fileFormat.toLowerCase();
+            if (!format.equals("parquet") && !format.equals("csv") && !format.equals("orc") && !format.equals("json")) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 throw new DdlException("File Format Type " + fileFormat + " is invalid.");
             }
         }
@@ -236,7 +265,11 @@ public class BrokerFileGroup implements Writable {
         if (dataDescription.isLoadFromTable()) {
             String srcTableName = dataDescription.getSrcTableName();
             // src table should be hive table
+<<<<<<< HEAD
             Table srcTable = db.getTable(srcTableName);
+=======
+            Table srcTable = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), srcTableName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (srcTable == null) {
                 throw new DdlException("Unknown table " + srcTableName + " in database " + db.getOriginName());
             }

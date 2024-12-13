@@ -87,7 +87,11 @@ public:
         return Status::NotSupported("vectorized not supported yet");
     }
 
+<<<<<<< HEAD
     virtual Status next_batch(const SparseRange& range, Column* column) {
+=======
+    virtual Status next_batch(const SparseRange<>& range, Column* column) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return Status::NotSupported("PageDecoder Not Support");
     }
 
@@ -108,7 +112,11 @@ public:
         return Status::NotSupported("next_dict_codes() not supported");
     }
 
+<<<<<<< HEAD
     virtual Status next_dict_codes(const SparseRange& range, Column* dst) {
+=======
+    virtual Status next_dict_codes(const SparseRange<>& range, Column* dst) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return Status::NotSupported("next_dict_codes() not supported");
     }
 

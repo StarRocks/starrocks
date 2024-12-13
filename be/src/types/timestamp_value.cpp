@@ -99,6 +99,7 @@ int64_t TimestampValue::diff_microsecond(TimestampValue other) const {
 }
 
 bool TimestampValue::from_string(const char* date_str, size_t len) {
+<<<<<<< HEAD
     int year, month, day, hour, minute, second, microsecond;
     if (!date::from_string_to_datetime(date_str, len, &year, &month, &day, &hour, &minute, &second, &microsecond)) {
         return false;
@@ -110,6 +111,29 @@ bool TimestampValue::from_string(const char* date_str, size_t len) {
 
     from_timestamp(year, month, day, hour, minute, second, microsecond);
     return true;
+=======
+    date::ToDatetimeResult res;
+    const auto [is_valid, is_only_date] = date::from_string_to_datetime(date_str, len, &res);
+    if (!is_valid) {
+        return false;
+    }
+
+    auto process = [&](int year, int month, int day, int hour, int minute, int second, int microsecond) {
+        if (!timestamp::check(year, month, day, hour, minute, second, microsecond)) {
+            return false;
+        }
+        from_timestamp(year, month, day, hour, minute, second, microsecond);
+        return true;
+    };
+
+    // If `date_str` only contains date part, then pass constant zero for hour/minute/second/usec
+    // to make compiler eliminate some compution logic.
+    if (is_only_date) {
+        return process(res.year, res.month, res.day, 0, 0, 0, 0);
+    } else {
+        return process(res.year, res.month, res.day, res.hour, res.minute, res.second, res.microsecond);
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 // process string content based on format like "%Y-%m-%d". '-' means any char.
@@ -817,6 +841,10 @@ void TimestampValue::trunc_to_quarter() {
     _timestamp = timestamp::from_datetime(year, month_to_quarter[month], 1, 0, 0, 0, 0);
 }
 
+<<<<<<< HEAD
+=======
+// return seconds since epoch.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 int64_t TimestampValue::to_unix_second() const {
     int64_t result = timestamp::to_julian(_timestamp);
     result *= SECS_PER_DAY;
@@ -825,6 +853,19 @@ int64_t TimestampValue::to_unix_second() const {
     return result;
 }
 
+<<<<<<< HEAD
+=======
+// return microseconds since epoch.
+int64_t TimestampValue::to_unixtime() const {
+    int64_t result = timestamp::to_julian(_timestamp);
+    result *= SECS_PER_DAY;
+    result -= timestamp::UNIX_EPOCH_SECONDS;
+    result *= 1000L;
+    result += timestamp::to_time(_timestamp) / USECS_PER_MILLIS;
+    return result;
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 bool TimestampValue::from_unixtime(int64_t second, const std::string& timezone) {
     cctz::time_zone ctz;
     if (!TimezoneUtils::find_cctz_time_zone(timezone, ctz)) {

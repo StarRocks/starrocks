@@ -22,6 +22,13 @@
 #ifdef __SSE4_2__
 #include <nmmintrin.h>
 #endif
+<<<<<<< HEAD
+=======
+#if defined(__ARM_NEON) && defined(__aarch64__)
+#include <arm_acle.h>
+#include <arm_neon.h>
+#endif
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "util/coding.h"
 
 namespace starrocks::crc32c {
@@ -170,7 +177,18 @@ static inline uint64_t LE_LOAD64(const uint8_t* p) {
 
 static inline void Fast_CRC32(uint64_t* l, uint8_t const** p) {
 #ifndef __SSE4_2__
+<<<<<<< HEAD
     Slow_CRC32(l, p);
+=======
+#if defined(__ARM_NEON) && defined(__aarch64__)
+    *l = __crc32cw(static_cast<unsigned int>(*l), LE_LOAD32(*p));
+    *p += 4;
+    *l = __crc32cw(static_cast<unsigned int>(*l), LE_LOAD32(*p));
+    *p += 4;
+#else
+    Slow_CRC32(l, p);
+#endif // defined(__ARM_NEON) && defined(__aarch64__)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #elif defined(__LP64__) || defined(_WIN64)
     *l = _mm_crc32_u64(*l, LE_LOAD64(*p));
     *p += 8;
@@ -200,7 +218,11 @@ uint32_t ExtendImpl(uint32_t crc, const char* buf, size_t size) {
     // Point x at first 16-byte aligned byte in string.  This might be
     // just past the end of the string.
     const auto pval = reinterpret_cast<uintptr_t>(p);
+<<<<<<< HEAD
     const auto* x = reinterpret_cast<const uint8_t*>(ALIGN(pval, 4));
+=======
+    const auto* x = reinterpret_cast<const uint8_t*>(ALIGN(pval, 4)); // NOLINT
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     if (x <= e) {
         // Process bytes until finished or p is 16-byte aligned
         while (p != x) {
@@ -226,11 +248,15 @@ uint32_t ExtendImpl(uint32_t crc, const char* buf, size_t size) {
 }
 
 uint32_t Extend(uint32_t crc, const char* buf, size_t size) {
+<<<<<<< HEAD
 #ifdef __SSE4_2__
     return ExtendImpl<Fast_CRC32>(crc, buf, size);
 #else
     return ExtendImpl<Slow_CRC32>(crc, buf, size);
 #endif
+=======
+    return ExtendImpl<Fast_CRC32>(crc, buf, size);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 } // namespace starrocks::crc32c

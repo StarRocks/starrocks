@@ -63,7 +63,11 @@ public:
 
     void close(RuntimeState* state) override { SourceOperatorFactory::close(state); }
 
+<<<<<<< HEAD
     SourceOperatorFactory::AdaptiveState adaptive_state() const override { return AdaptiveState::ACTIVE; }
+=======
+    SourceOperatorFactory::AdaptiveState adaptive_initial_state() const override { return AdaptiveState::ACTIVE; }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 private:
     SpillProcessChannelFactoryPtr _process_ctx;

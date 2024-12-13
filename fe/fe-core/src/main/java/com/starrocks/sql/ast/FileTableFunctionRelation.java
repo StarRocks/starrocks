@@ -15,12 +15,30 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.TableName;
+<<<<<<< HEAD
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Map;
 
 public class FileTableFunctionRelation extends TableRelation {
     private Map<String, String> properties;
+=======
+import com.starrocks.catalog.TableFunctionTable;
+import com.starrocks.sql.parser.NodePosition;
+
+import java.util.Map;
+import java.util.function.Consumer;
+
+public class FileTableFunctionRelation extends TableRelation {
+
+    public static final String IDENTIFIER = "FILES";
+
+    private Map<String, String> properties;
+
+    // function of push down target table schema to files, for insert from files()
+    private Consumer<TableFunctionTable> pushDownSchemaFunc;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public FileTableFunctionRelation(Map<String, String> properties, NodePosition pos) {
         super(new TableName("", "table_function_table"));
         this.properties = properties;
@@ -30,8 +48,22 @@ public class FileTableFunctionRelation extends TableRelation {
         return properties;
     }
 
+<<<<<<< HEAD
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitTable(this, context);
+=======
+    public Consumer<TableFunctionTable> getPushDownSchemaFunc() {
+        return pushDownSchemaFunc;
+    }
+
+    public void setPushDownSchemaFunc(Consumer<TableFunctionTable> pushDownSchemaFunc) {
+        this.pushDownSchemaFunc = pushDownSchemaFunc;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitFileTableFunction(this, context);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }

@@ -23,6 +23,19 @@
 
 namespace starrocks {
 
+<<<<<<< HEAD
+=======
+/// If an ArrayColumn is nullable, it will be nested as follows:
+/// NullableColumn( ArrayColumn(data_column=NullableColumn, offsets_column=UInt32Column ) ).
+/// eg. (null, [1,2,3], [4, null, 6])
+/// NullableColumn
+///     - null_column: (1, 0, 0)
+///     - data_column (ArrayColumn):
+///         - data_column (NullableColumn):
+///             - null_column: (0, 0, 0, 0, 1, 0)
+///             - data_column: (1, 2, 3, 4, <default>, 6)
+///         - offsets_column: (0, 0, 3, 6)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 class ArrayColumn final : public ColumnFactory<Column, ArrayColumn> {
     friend class ColumnFactory<Column, ArrayColumn>;
 
@@ -87,8 +100,11 @@ public:
 
     bool append_nulls(size_t count) override;
 
+<<<<<<< HEAD
     bool append_strings(const Buffer<Slice>& strs) override { return false; }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     size_t append_numbers(const void* buff, size_t length) override { return -1; }
 
     void append_value_multiple_times(const void* value, size_t count) override;
@@ -99,7 +115,11 @@ public:
 
     void fill_default(const Filter& filter) override;
 
+<<<<<<< HEAD
     Status update_rows(const Column& src, const uint32_t* indexes) override;
+=======
+    void update_rows(const Column& src, const uint32_t* indexes) override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     void remove_first_n_values(size_t count) override;
 
@@ -135,9 +155,15 @@ public:
 
     int64_t xor_checksum(uint32_t from, uint32_t to) const override;
 
+<<<<<<< HEAD
     void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const override;
 
     std::string get_name() const override { return "array"; }
+=======
+    void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol = false) const override;
+
+    std::string get_name() const override { return "array-" + _elements->get_name(); }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     Datum get(size_t idx) const override;
 
@@ -165,6 +191,10 @@ public:
 
     const UInt32Column& offsets() const { return *_offsets; }
     UInt32Column::Ptr& offsets_column() { return _offsets; }
+<<<<<<< HEAD
+=======
+    UInt32Column::Ptr offsets_column() const { return _offsets; }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     bool is_nullable() const override { return false; }
 
@@ -172,8 +202,14 @@ public:
 
     std::string debug_string() const override;
 
+<<<<<<< HEAD
     bool capacity_limit_reached(std::string* msg = nullptr) const override {
         return _elements->capacity_limit_reached(msg) || _offsets->capacity_limit_reached(msg);
+=======
+    Status capacity_limit_reached() const override {
+        RETURN_IF_ERROR(_elements->capacity_limit_reached());
+        return _offsets->capacity_limit_reached();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     StatusOr<ColumnPtr> upgrade_if_overflow() override;
@@ -186,7 +222,23 @@ public:
 
     Status unfold_const_children(const starrocks::TypeDescriptor& type) override;
 
+<<<<<<< HEAD
 private:
+=======
+    // get the number of all non-null elements
+    size_t get_total_elements_num(const NullColumnPtr& null_column) const;
+
+    // check if the length of each array in two columns is equal
+    // v1 and v2 must be one of ArrayColumn or Const(ArrayColumn)
+    template <bool IgnoreNull>
+    static bool is_all_array_lengths_equal(const ColumnPtr& v1, const ColumnPtr& v2, const NullColumnPtr& null_data);
+
+private:
+    template <bool ConstV1, bool ConstV2, bool IgnoreNull>
+    static bool compare_lengths_from_offsets(const UInt32Column& v1, const UInt32Column& v2,
+                                             const NullColumnPtr& null_data);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // Elements must be NullableColumn to facilitate handling nested types.
     ColumnPtr _elements;
     // Offsets column will store the start position of every array element.
@@ -196,4 +248,12 @@ private:
     UInt32Column::Ptr _offsets;
 };
 
+<<<<<<< HEAD
+=======
+extern template bool ArrayColumn::is_all_array_lengths_equal<true>(const ColumnPtr& v1, const ColumnPtr& v2,
+                                                                   const NullColumnPtr& null_data);
+extern template bool ArrayColumn::is_all_array_lengths_equal<false>(const ColumnPtr& v1, const ColumnPtr& v2,
+                                                                    const NullColumnPtr& null_data);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // namespace starrocks

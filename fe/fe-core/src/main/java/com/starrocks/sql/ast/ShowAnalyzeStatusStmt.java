@@ -22,20 +22,37 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.MetaNotFoundException;
+<<<<<<< HEAD
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.common.MetaUtils;
+=======
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.analyzer.SemanticException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.StatsConstants;
+<<<<<<< HEAD
+=======
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 public class ShowAnalyzeStatusStmt extends ShowStmt {
+<<<<<<< HEAD
+=======
+    private static final Logger LOG = LogManager.getLogger(ShowAnalyzeStatusStmt.class);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public ShowAnalyzeStatusStmt(Predicate predicate) {
         this(predicate, NodePosition.ZERO);
@@ -70,6 +87,7 @@ public class ShowAnalyzeStatusStmt extends ShowStmt {
         row.set(1, analyzeStatus.getCatalogName() + "." + analyzeStatus.getDbName());
         row.set(2, analyzeStatus.getTableName());
 
+<<<<<<< HEAD
         Table table = MetaUtils.getTable(analyzeStatus.getCatalogName(), analyzeStatus.getDbName(),
                 analyzeStatus.getTableName());
 
@@ -78,6 +96,20 @@ public class ShowAnalyzeStatusStmt extends ShowStmt {
             Authorizer.checkAnyActionOnTableLikeObject(context.getCurrentUserIdentity(),
                     context.getCurrentRoleIds(), analyzeStatus.getDbName(), table);
         } catch (AccessDeniedException e) {
+=======
+        Table table;
+        // In new privilege framework(RBAC), user needs any action on the table to show analysis status for it.
+        try {
+            table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(
+                    analyzeStatus.getCatalogName(), analyzeStatus.getDbName(), analyzeStatus.getTableName());
+            if (table == null) {
+                throw new SemanticException("Table %s is not found", analyzeStatus.getTableName());
+            }
+            Authorizer.checkAnyActionOnTableLikeObject(context.getCurrentUserIdentity(),
+                    context.getCurrentRoleIds(), analyzeStatus.getDbName(), table);
+        } catch (Exception e) {
+            LOG.warn("Failed to check privilege for show analyze status for table {}.", analyzeStatus.getTableName(), e);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return null;
         }
 

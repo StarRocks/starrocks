@@ -37,6 +37,13 @@ public class HdfsFs {
     private Configuration configuration;
     private String userName;
 
+<<<<<<< HEAD
+=======
+    public HdfsFs() {
+
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public HdfsFs(HdfsFsIdentity identity) {
         this.identity = identity;
         this.lock = new ReentrantLock();

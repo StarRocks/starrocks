@@ -125,7 +125,11 @@ Status KafkaDataConsumer::init(StreamLoadContext* ctx) {
             Status st = ctx->exec_env()->small_file_mgr()->get_file(file_id, parts[2], &file_path);
             if (!st.ok()) {
                 std::stringstream ss;
+<<<<<<< HEAD
                 ss << "PAUSE: failed to get file for config: " << item.first << ", error: " << st.get_error_msg();
+=======
+                ss << "PAUSE: failed to get file for config: " << item.first << ", error: " << st.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 return Status::InternalError(ss.str());
             }
             RETURN_IF_ERROR(set_conf(item.first, file_path));
@@ -438,12 +442,35 @@ Status KafkaDataConsumer::reset() {
     return Status::OK();
 }
 
+<<<<<<< HEAD
 Status KafkaDataConsumer::commit(std::vector<RdKafka::TopicPartition*>& offset) {
     DCHECK(!_k_consumer->closed());
     RdKafka::ErrorCode err = _k_consumer->commitSync(offset);
     if (err != RdKafka::ERR_NO_ERROR) {
         std::stringstream ss;
         ss << "failed to commit kafka offset, topic: " << _topic << ", group id: " << _group_id
+=======
+// The offsets is the last consumed message for every partition. We need to +1 when we commit offset.
+Status KafkaDataConsumer::commit(const std::string& topic, const std::map<int32_t, int64_t>& offsets) {
+    DCHECK(!_k_consumer->closed());
+    std::vector<RdKafka::TopicPartition*> topic_partitions;
+    // delete TopicPartition finally
+    auto tp_deleter = [&topic_partitions]() {
+        std::for_each(topic_partitions.begin(), topic_partitions.end(),
+                      [](RdKafka::TopicPartition* tp1) { delete tp1; });
+    };
+    DeferOp delete_tp([tp_deleter] { return tp_deleter(); });
+
+    for (auto& offset : offsets) {
+        RdKafka::TopicPartition* tp1 = RdKafka::TopicPartition::create(topic, offset.first, offset.second + 1);
+        topic_partitions.push_back(tp1);
+    }
+
+    RdKafka::ErrorCode err = _k_consumer->commitSync(topic_partitions);
+    if (err != RdKafka::ERR_NO_ERROR) {
+        std::stringstream ss;
+        ss << "failed to commit kafka offset, topic: " << topic << ", group id: " << _group_id
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
            << ", err: " << RdKafka::err2str(err);
         return Status::InternalError(ss.str());
     }

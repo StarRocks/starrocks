@@ -72,7 +72,11 @@ public class SimpleQueryAnalyzer {
         new Visitor().process(node);
     }
 
+<<<<<<< HEAD
     private static class Visitor extends AstVisitor<Void, Void> {
+=======
+    private static class Visitor implements AstVisitor<Void, Void> {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         public Void process(ParseNode node) {
             return node.accept(this, null);
         }

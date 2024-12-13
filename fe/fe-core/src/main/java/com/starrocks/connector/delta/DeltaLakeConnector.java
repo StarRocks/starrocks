@@ -12,13 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
 package com.starrocks.connector.delta;
 
+=======
+package com.starrocks.connector.delta;
+
+import com.starrocks.common.Pair;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.HdfsEnvironment;
+<<<<<<< HEAD
 import com.starrocks.connector.hive.IHiveMetastore;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
@@ -26,6 +33,17 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Map;
+=======
+import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.credential.CloudConfigurationFactory;
+import com.starrocks.server.GlobalStateMgr;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 public class DeltaLakeConnector implements Connector {
     private static final Logger LOG = LogManager.getLogger(DeltaLakeConnector.class);
@@ -36,6 +54,10 @@ public class DeltaLakeConnector implements Connector {
     private final String catalogName;
     private final DeltaLakeInternalMgr internalMgr;
     private final DeltaLakeMetadataFactory metadataFactory;
+<<<<<<< HEAD
+=======
+    private IDeltaLakeMetastore metastore;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public DeltaLakeConnector(ConnectorContext context) {
         this.catalogName = context.getCatalogName();
@@ -44,7 +66,11 @@ public class DeltaLakeConnector implements Connector {
         HdfsEnvironment hdfsEnvironment = new HdfsEnvironment(cloudConfiguration);
         this.internalMgr = new DeltaLakeInternalMgr(catalogName, properties, hdfsEnvironment);
         this.metadataFactory = createMetadataFactory();
+<<<<<<< HEAD
         // TODO extract to ConnectorConfigFactory
+=======
+        onCreate();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -53,12 +79,17 @@ public class DeltaLakeConnector implements Connector {
     }
 
     private DeltaLakeMetadataFactory createMetadataFactory() {
+<<<<<<< HEAD
         IHiveMetastore metastore = internalMgr.createHiveMetastore();
+=======
+        metastore = internalMgr.createDeltaLakeMetastore();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return new DeltaLakeMetadataFactory(
                 catalogName,
                 metastore,
                 internalMgr.getHiveMetastoreConf(),
                 properties,
+<<<<<<< HEAD
                 internalMgr.getHdfsEnvironment()
         );
     }
@@ -66,6 +97,13 @@ public class DeltaLakeConnector implements Connector {
     public void onCreate() {
     }
 
+=======
+                internalMgr.getHdfsEnvironment(),
+                internalMgr.getMetastoreType()
+        );
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public CloudConfiguration getCloudConfiguration() {
         return this.cloudConfiguration;
     }
@@ -73,5 +111,31 @@ public class DeltaLakeConnector implements Connector {
     @Override
     public void shutdown() {
         internalMgr.shutdown();
+<<<<<<< HEAD
+=======
+        metadataFactory.metastoreCacheInvalidateCache();
+        GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor().unRegisterCacheUpdateProcessor(catalogName);
+    }
+
+    public void onCreate() {
+        Optional<DeltaLakeCacheUpdateProcessor> updateProcessor = metadataFactory.getCacheUpdateProcessor();
+        updateProcessor.ifPresent(processor -> GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor()
+                        .registerCacheUpdateProcessor(catalogName, updateProcessor.get()));
+    }
+
+    @Override
+    public boolean supportMemoryTrack() {
+        return metastore != null;
+    }
+
+    @Override
+    public List<Pair<List<Object>, Long>> getSamples() {
+        return metastore.getSamples();
+    }
+
+    @Override
+    public Map<String, Long> estimateCount() {
+        return metastore.estimateCount();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }

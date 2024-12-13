@@ -78,11 +78,19 @@ Status EngineChecksumTask::_compute_checksum() {
     }
 
     std::vector<uint32_t> return_columns;
+<<<<<<< HEAD
     const TabletSchema& tablet_schema = tablet->tablet_schema();
 
     size_t num_columns = tablet_schema.num_columns();
     for (size_t i = 0; i < num_columns; ++i) {
         const auto& column = tablet_schema.column(i);
+=======
+    auto tablet_schema = tablet->tablet_schema();
+
+    size_t num_columns = tablet_schema->num_columns();
+    for (size_t i = 0; i < num_columns; ++i) {
+        const auto& column = tablet_schema->column(i);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (column.is_support_checksum()) {
             return_columns.push_back(i);
         }

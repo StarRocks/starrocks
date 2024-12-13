@@ -20,7 +20,10 @@ import com.starrocks.analysis.ExprId;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.OrderByElement;
+<<<<<<< HEAD
 import com.starrocks.analysis.SlotRef;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.IdGenerator;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectRelation;
@@ -56,8 +59,11 @@ public class AnalyzeState {
     private Scope orderScope;
     private List<Expr> orderSourceExpressions;
 
+<<<<<<< HEAD
     private Map<Expr, SlotRef> generatedExprToColumnRef = new HashMap<>();
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     /**
      * outputExprInOrderByScope is used to record which expressions in outputExpression are to be
      * recorded in the first level of OrderByScope (order by expressions can refer to columns in output)
@@ -257,6 +263,7 @@ public class AnalyzeState {
     public List<Expr> getColumnNotInGroupBy() {
         return columnNotInGroupBy;
     }
+<<<<<<< HEAD
 
     public void setGeneratedExprToColumnRef(Map<Expr, SlotRef> generatedExprToColumnRef) {
         this.generatedExprToColumnRef = generatedExprToColumnRef;
@@ -265,4 +272,6 @@ public class AnalyzeState {
     public Map<Expr, SlotRef> getGeneratedExprToColumnRef() {
         return generatedExprToColumnRef;
     }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

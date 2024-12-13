@@ -23,9 +23,17 @@ import com.starrocks.thrift.TSchemaTableType;
 import static com.starrocks.catalog.system.SystemTable.builder;
 
 public class BeCompactionsSystemTable {
+<<<<<<< HEAD
     public static SystemTable create() {
         return new SystemTable(SystemId.BE_COMPACTIONS_ID,
                 "be_compactions",
+=======
+    private static final String NAME = "be_compactions";
+
+    public static SystemTable create() {
+        return new SystemTable(SystemId.BE_COMPACTIONS_ID,
+                NAME,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 Table.TableType.SCHEMA,
                 builder()
                         .column("BE_ID", ScalarType.createType(PrimitiveType.BIGINT))

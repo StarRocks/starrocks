@@ -48,6 +48,10 @@ struct TabletPublishVersionTask {
     // max continuous version after publish is done
     // or 0 which means tablet not found or publish task cannot be submitted
     int64_t max_continuous_version{0};
+<<<<<<< HEAD
+=======
+    bool is_double_write{false};
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 void run_publish_version_task(ThreadPoolToken* token, const TPublishVersionRequest& publish_version_req,
@@ -67,6 +71,11 @@ void run_publish_version_task(ThreadPoolToken* token, const TPublishVersionReque
     size_t num_active_tablet = 0;
     bool is_replication_txn =
             publish_version_req.__isset.txn_type && publish_version_req.txn_type == TTxnType::TXN_REPLICATION;
+<<<<<<< HEAD
+=======
+    bool is_version_overwrite =
+            publish_version_req.__isset.is_version_overwrite && publish_version_req.is_version_overwrite;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     if (is_replication_txn) {
         std::vector<std::vector<TTabletId>> partitions(num_partition);
         for (size_t i = 0; i < publish_version_req.partition_version_infos.size(); i++) {
@@ -106,6 +115,12 @@ void run_publish_version_task(ThreadPoolToken* token, const TPublishVersionReque
                 task.tablet_id = itr.first.tablet_id;
                 task.version = publish_version_req.partition_version_infos[i].version;
                 task.rowset = std::move(itr.second);
+<<<<<<< HEAD
+=======
+                task.rowset->rowset_meta()->set_gtid(publish_version_req.gtid);
+                task.is_double_write = publish_version_req.partition_version_infos[i].__isset.is_double_write &&
+                                       publish_version_req.partition_version_infos[i].is_double_write;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
     }
@@ -149,6 +164,7 @@ void run_publish_version_task(ThreadPoolToken* token, const TPublishVersionReque
                         LOG(WARNING) << "Publish txn failed tablet:" << tablet->tablet_id()
                                      << " version:" << task.version << " partition:" << task.partition_id
                                      << " txn_id: " << task.txn_id;
+<<<<<<< HEAD
                         tablet_span->SetStatus(trace::StatusCode::kError, task.st.get_error_msg());
                     } else {
                         VLOG(1) << "Publish txn success tablet:" << tablet->tablet_id() << " version:" << task.version
@@ -158,13 +174,49 @@ void run_publish_version_task(ThreadPoolToken* token, const TPublishVersionReque
                 } else {
                     task.st = StorageEngine::instance()->txn_manager()->publish_txn(
                             task.partition_id, tablet, task.txn_id, task.version, task.rowset, wait_time);
+=======
+                        std::string_view msg = task.st.message();
+                        tablet_span->SetStatus(trace::StatusCode::kError, {msg.data(), msg.size()});
+                    } else {
+                        VLOG(2) << "Publish txn success tablet:" << tablet->tablet_id() << " version:" << task.version
+                                << " tablet_max_version:" << tablet->max_continuous_version()
+                                << " partition:" << task.partition_id << " txn_id: " << task.txn_id;
+                    }
+                } else if (is_version_overwrite) {
+                    task.st = StorageEngine::instance()->txn_manager()->publish_overwrite_txn(
+                            task.partition_id, tablet, task.txn_id, task.version, task.rowset, wait_time);
+                    if (!task.st.ok()) {
+                        LOG(WARNING) << "Publish overwrite txn failed tablet:" << tablet->tablet_id()
+                                     << " version:" << task.version << " partition:" << task.partition_id
+                                     << " txn_id: " << task.txn_id << " rowset:" << task.rowset->rowset_id();
+                        std::string_view msg = task.st.message();
+                        tablet_span->SetStatus(trace::StatusCode::kError, {msg.data(), msg.size()});
+                    } else {
+                        LOG(INFO) << "Publish overwrite txn success tablet:" << tablet->tablet_id()
+                                  << " version:" << task.version
+                                  << " tablet_max_version:" << tablet->max_continuous_version()
+                                  << " partition:" << task.partition_id << " txn_id: " << task.txn_id
+                                  << " rowset:" << task.rowset->rowset_id();
+                    }
+                } else {
+                    task.st = StorageEngine::instance()->txn_manager()->publish_txn(
+                            task.partition_id, tablet, task.txn_id, task.version, task.rowset, wait_time,
+                            task.is_double_write);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     if (!task.st.ok()) {
                         LOG(WARNING) << "Publish txn failed tablet:" << tablet->tablet_id()
                                      << " version:" << task.version << " partition:" << task.partition_id
                                      << " txn_id: " << task.txn_id << " rowset:" << task.rowset->rowset_id();
+<<<<<<< HEAD
                         tablet_span->SetStatus(trace::StatusCode::kError, task.st.get_error_msg());
                     } else {
                         VLOG(1) << "Publish txn success tablet:" << tablet->tablet_id() << " version:" << task.version
+=======
+                        std::string_view msg = task.st.message();
+                        tablet_span->SetStatus(trace::StatusCode::kError, {msg.data(), msg.size()});
+                    } else {
+                        VLOG(2) << "Publish txn success tablet:" << tablet->tablet_id() << " version:" << task.version
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                 << " tablet_max_version:" << tablet->max_continuous_version()
                                 << " partition:" << task.partition_id << " txn_id: " << task.txn_id
                                 << " rowset:" << task.rowset->rowset_id();
@@ -211,8 +263,12 @@ void run_publish_version_task(ThreadPoolToken* token, const TPublishVersionReque
     }
     // return tablet and its version which has already finished.
     int total_tablet_cnt = 0;
+<<<<<<< HEAD
     for (size_t i = 0; i < publish_version_req.partition_version_infos.size(); i++) {
         const auto& partition_version = publish_version_req.partition_version_infos[i];
+=======
+    for (const auto& partition_version : publish_version_req.partition_version_infos) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         std::vector<TabletInfo> tablet_infos;
         StorageEngine::instance()->tablet_manager()->get_tablets_by_partition(partition_version.partition_id,
                                                                               tablet_infos);
@@ -225,12 +281,23 @@ void run_publish_version_task(ThreadPoolToken* token, const TPublishVersionReque
                                             tablet_info.tablet_id, partition_version.version, transaction_id);
             } else {
                 const int64_t max_continuous_version =
+<<<<<<< HEAD
                         enable_sync_publish ? tablet->max_continuous_version() : tablet->max_readable_version();
+=======
+                        enable_sync_publish ? tablet->max_readable_version() : tablet->max_continuous_version();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (max_continuous_version > 0) {
                     auto& pair = tablet_versions.emplace_back();
                     pair.__set_tablet_id(tablet_info.tablet_id);
                     pair.__set_version(max_continuous_version);
                 }
+<<<<<<< HEAD
+=======
+
+                if (enable_sync_publish && tablet_tasks.empty() && max_continuous_version < partition_version.version) {
+                    error_tablet_ids.push_back(tablet_info.tablet_id);
+                }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
     }
@@ -249,6 +316,7 @@ void run_publish_version_task(ThreadPoolToken* token, const TPublishVersionReque
                 StorageEngine::instance()->replication_txn_manager()->clear_txn(transaction_id);
             });
         }
+<<<<<<< HEAD
         LOG(INFO) << "publish_version success. txn_id: " << transaction_id << " #partition:" << num_partition
                   << " #tablet:" << tablet_tasks.size() << " time:" << publish_latency << "ms"
                   << " #already_finished:" << total_tablet_cnt - num_active_tablet;
@@ -257,6 +325,18 @@ void run_publish_version_task(ThreadPoolToken* token, const TPublishVersionReque
         LOG(WARNING) << "publish_version has error. txn_id: " << transaction_id << " #partition:" << num_partition
                      << " #tablet:" << tablet_tasks.size() << " error_tablets(" << error_tablet_ids.size()
                      << "):" << JoinInts(error_tablet_ids, ",") << " time:" << publish_latency << "ms"
+=======
+        LOG(INFO) << "publish_version success. txn_id: " << transaction_id << " gtid: " << publish_version_req.gtid
+                  << " #partition:" << num_partition << " #tablet:" << tablet_tasks.size()
+                  << " time:" << publish_latency << "ms"
+                  << " #already_finished:" << total_tablet_cnt - num_active_tablet;
+    } else {
+        StarRocksMetrics::instance()->publish_task_failed_total.increment(1);
+        LOG(WARNING) << "publish_version has error. txn_id: " << transaction_id << " gtid: " << publish_version_req.gtid
+                     << " #partition:" << num_partition << " #tablet:" << tablet_tasks.size() << " error_tablets("
+                     << error_tablet_ids.size() << "):" << JoinInts(error_tablet_ids, ",")
+                     << " time:" << publish_latency << "ms"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                      << " #already_finished:" << total_tablet_cnt - num_active_tablet;
     }
 }

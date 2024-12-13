@@ -77,7 +77,10 @@ public class DeleteStmt extends DmlStmt {
         this.usingRelations = usingRelations;
         this.wherePredicate = wherePredicate;
         this.commonTableExpressions = commonTableExpressions;
+<<<<<<< HEAD
         this.deleteConditions = Lists.newLinkedList();
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public long getJobId() {

@@ -33,11 +33,18 @@ public:
 
     struct Stats {
         // The total number of items stored in the map.
+<<<<<<< HEAD
         size_t num_items = 0;
         // How many bytes occupied by the items stored in this map.
         size_t memory_usage = 0;
         // How many bytes saved by using the TabletSchemaMap.
         size_t saved_memory_usage = 0;
+=======
+        std::atomic<size_t> num_items = 0;
+
+        // How many bytes occupied by the items stored in this map.
+        int64_t memory_usage = 0;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     };
 
     TabletSchemaMap() = default;
@@ -55,11 +62,21 @@ public:
     // [thread-safe]
     std::pair<TabletSchemaPtr, bool> emplace(const TabletSchemaPB& schema_pb);
 
+<<<<<<< HEAD
     // Removes the TabletSchema (if one exists) with the id equivalent to id.
     //
     // Returns number of elements removed (0 or 1).
     // [thread-safe]
     size_t erase(SchemaId id);
+=======
+    std::pair<TabletSchemaPtr, bool> emplace(const TabletSchemaPtr& tablet_schema);
+
+    // Removes the TabletSchema (if one exists) with the id equivalent to id.
+    // [thread-safe]
+    void erase(SchemaId id);
+
+    TabletSchemaPtr get(SchemaId id);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // Checks if there is an element with unique id equivalent to id in the container.
     //
@@ -68,21 +85,48 @@ public:
 
     // NOTE: time complexity of method is high, don't call this method too often.
     // [thread-safe]
+<<<<<<< HEAD
     Stats stats() const;
+=======
+    const Stats& stats() const;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 private:
     constexpr static int kShardSize = 16;
 
+<<<<<<< HEAD
     bool check_schema_unique_id(const TabletSchemaPB& schema_pb, const std::shared_ptr<const TabletSchema>& schema_ptr);
     struct MapShard {
         mutable std::mutex mtx;
         phmap::flat_hash_map<SchemaId, std::weak_ptr<const TabletSchema>> map;
     };
+=======
+    bool check_schema_unique_id(const TabletSchemaPB& schema_pb, const TabletSchemaCSPtr& schema_ptr);
+    bool check_schema_unique_id(const TabletSchemaCSPtr& in_schema, const TabletSchemaCSPtr& ori_schema);
+
+    struct Item {
+        std::weak_ptr<const TabletSchema> tablet_schema;
+        int64_t mem_usage = 0;
+    };
+
+    struct MapShard {
+        mutable std::mutex mtx;
+        phmap::flat_hash_map<SchemaId, Item> map;
+    };
+    using ShardMapIter = phmap::flat_hash_map<SchemaId, Item>::iterator;
+
+    void _insert(MapShard& shard, SchemaId id, const TabletSchemaPtr& tablet_schema);
+    void _replace(const ShardMapIter& iter, const TabletSchemaPtr& tablet_schema);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     MapShard* get_shard(SchemaId id) { return &_map_shards[id % kShardSize]; }
     const MapShard* get_shard(SchemaId id) const { return &_map_shards[id % kShardSize]; }
 
     MapShard _map_shards[kShardSize];
+<<<<<<< HEAD
+=======
+    Stats _stats;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 class GlobalTabletSchemaMap final : public TabletSchemaMap {

@@ -15,11 +15,16 @@ displayed_sidebar: docs
 ## 语法
 
 ```SQL
+<<<<<<< HEAD
 DROP TASK `<task_name>`
+=======
+DROP TASK `<task_name>` [FORCE]
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ```
 
 ## 参数说明
 
+<<<<<<< HEAD
 | **参数**  | **说明**       |
 | --------- | -------------- |
 | task_name | 待删除任务名。为避免解析失败，请使用反括号（`）包裹任务名。 |
@@ -27,6 +32,16 @@ DROP TASK `<task_name>`
 ## 使用说明
 
 您可以通过查询 Information Schema 中的元数据表 `tasks` 和 `task_runs` 来查看异步任务的信息。
+=======
+| **参数**  | **必须** | **说明**       |
+| --------- | ------- | -------------- |
+| task_name | 是      | 待删除任务名。为避免解析失败，请使用反括号（`）包裹任务名。 |
+| FORCE     | 否      | 强制删除任务。   |
+
+## 使用说明
+
+您可以通过查询 Information Schema 中的元数据视图 `tasks` 和 `task_runs` 来查看异步任务的信息。
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ```SQL
 SELECT * FROM INFORMATION_SCHEMA.tasks;
@@ -35,6 +50,16 @@ SELECT * FROM information_schema.task_runs;
 SELECT * FROM information_schema.task_runs WHERE task_name = '<task_name>';
 ```
 
+<<<<<<< HEAD
+=======
+您可以通过 SHOW MATERIALIZED VIEWS 语句获取物化视图刷新任务的 `task_name`。
+
+```SQL
+SHOW MATERIALIZED VIEWS;
+SHOW MATERIALIZED VIEWS WHERE name = '<mv_name>';
+```
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ## 示例
 
 ```Plain

@@ -49,6 +49,10 @@ Currently, StarRocks supports building partitioned materialized views on tables 
   - Currently, list partitioning and expression partitioning are not supported.
   - The two adjacent partitions of the base table must have consecutive ranges.
 - For multi-level partitioned base tables in external catalogs, only the primary level partitioning path can be used to create a partitioned materialized view. For example,  for a table partitioned in the `yyyyMMdd/hour` format, you can only build the materialized view partitioned by `yyyyMMdd`.
+<<<<<<< HEAD
+=======
+- From v3.2.3, StarRocks supports creating partitioned materialized views upon Iceberg tables with [Partition Transforms](https://iceberg.apache.org/spec/#partition-transforms), and the materialized views are partitioned by the column after the transformation. For more information, see [Data lake query acceleration with materialized views - Choose a suitabledata_lake_query_acceleration_with_materialized_views.mdterialized_views.md#choose-a-suitable-refresh-strategy).
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 :::
 
@@ -225,7 +229,10 @@ FROM par_tbl1
 GROUP BY datekey, k1;
 ```
 
+<<<<<<< HEAD
 <!--
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ### Align partitions with multiple base tables
 
 ![Partitioned Materialized View-3](../../../_assets/partitioned_mv-3.png)
@@ -270,7 +277,10 @@ GROUP BY
   par_tbl3.datekey_new,
   par_tbl3.k1;
 ```
+<<<<<<< HEAD
 -->
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ### Achieve incremental refresh and transparent rewrite
 

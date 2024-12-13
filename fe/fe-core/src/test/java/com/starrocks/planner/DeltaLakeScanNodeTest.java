@@ -17,7 +17,11 @@ package com.starrocks.planner;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.analysis.TupleId;
 import com.starrocks.catalog.DeltaLakeTable;
+<<<<<<< HEAD
 import com.starrocks.connector.Connector;
+=======
+import com.starrocks.connector.CatalogConnector;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.server.GlobalStateMgr;
@@ -32,7 +36,11 @@ import java.util.HashMap;
 public class DeltaLakeScanNodeTest {
     @Test
     public void testInit(@Mocked GlobalStateMgr globalStateMgr,
+<<<<<<< HEAD
                          @Mocked Connector connector,
+=======
+                         @Mocked CatalogConnector connector,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                          @Mocked DeltaLakeTable table) {
         String catalog = "XXX";
         CloudConfiguration cc = CloudConfigurationFactory.buildCloudConfigurationForStorage(new HashMap<>());
@@ -52,7 +60,11 @@ public class DeltaLakeScanNodeTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testNodeExplain(@Mocked GlobalStateMgr globalStateMgr, @Mocked Connector connector,
+=======
+    public void testNodeExplain(@Mocked GlobalStateMgr globalStateMgr, @Mocked CatalogConnector connector,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                             @Mocked DeltaLakeTable table) {
         String catalogName = "delta0";
         CloudConfiguration cloudConfiguration = CloudConfigurationFactory.

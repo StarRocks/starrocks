@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # minutes_sub
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Subtracts specified minutes from the date, accurate to the minute.
 
@@ -47,4 +51,8 @@ select minutes_sub('2022-01-01', 1);
 +------------------------------+
 | 2021-12-31 23:59:00          |
 +------------------------------+
+<<<<<<< HEAD
 ```
+=======
+```
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

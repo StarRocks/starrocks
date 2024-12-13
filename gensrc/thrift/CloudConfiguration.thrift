@@ -32,6 +32,11 @@ struct TCloudProperty {
 
 struct TCloudConfiguration {
     1: optional TCloudType cloud_type;
+<<<<<<< HEAD
     2: optional list<TCloudProperty> cloud_properties; // Deprecated
     3: optional map<string, string> cloud_properties_v2;
+=======
+    2: optional list<TCloudProperty> deprecated_cloud_properties; // Deprecated
+    3: optional map<string, string> cloud_properties;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

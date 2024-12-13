@@ -18,6 +18,7 @@
 #include "runtime/runtime_state.h"
 #include "runtime/string_value.h"
 #include "types/logical_type.h"
+<<<<<<< HEAD
 
 namespace starrocks {
 
@@ -25,14 +26,32 @@ SchemaScanner::ColumnDesc SchemaVariablesScanner::_s_vars_columns[] = {
         //   name,       type,          size
         {"VARIABLE_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
         {"VARIABLE_VALUE", TYPE_VARCHAR, sizeof(StringValue), false},
+=======
+#include "util/failpoint/fail_point.h"
+
+namespace starrocks {
+DEFINE_FAIL_POINT(schema_scan_rpc_failed);
+
+SchemaScanner::ColumnDesc SchemaVariablesScanner::_s_vars_columns[] = {
+        //   name,       type,          size
+        {"VARIABLE_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"VARIABLE_VALUE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 SchemaScanner::ColumnDesc SchemaVariablesScanner::_s_verbose_vars_columns[] = {
         //   name,       type,          size
+<<<<<<< HEAD
         {"VARIABLE_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
         {"VARIABLE_VALUE", TYPE_VARCHAR, sizeof(StringValue), false},
         {"DEFAULT_VALUE", TYPE_VARCHAR, sizeof(StringValue), false},
         {"IS_CHANGED", TYPE_BOOLEAN, 1, false},
+=======
+        {"VARIABLE_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"VARIABLE_VALUE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"DEFAULT_VALUE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"IS_CHANGED", TypeDescriptor::from_logical_type(TYPE_BOOLEAN), 1, false},
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 SchemaVariablesScanner::SchemaVariablesScanner(TVarType::type type)
@@ -56,11 +75,19 @@ Status SchemaVariablesScanner::start(RuntimeState* state) {
     }
     var_params.__set_threadId(_param->thread_id);
 
+<<<<<<< HEAD
     if (nullptr != _param->ip && 0 != _param->port) {
         RETURN_IF_ERROR(SchemaHelper::show_varialbes(*(_param->ip), _param->port, var_params, &_var_result));
     } else {
         return Status::InternalError("IP or port doesn't exists");
     }
+=======
+    // init schema scanner state
+    FAIL_POINT_TRIGGER_RETURN_ERROR(schema_scan_rpc_failed);
+    RETURN_IF_ERROR(SchemaScanner::init_schema_scanner_state(state));
+    RETURN_IF_ERROR(SchemaHelper::show_variables(_ss_state, var_params, &_var_result));
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     if (_type != TVarType::VERBOSE) {
         _begin = _var_result.variables.begin();
     } else {

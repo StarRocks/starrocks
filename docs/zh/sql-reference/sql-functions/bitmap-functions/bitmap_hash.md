@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # bitmap_hash
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 对任意类型的输入计算 32 位的哈希值，返回包含该哈希值的 bitmap。
 

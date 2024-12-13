@@ -17,13 +17,20 @@
 #include <sstream>
 #include <string>
 
+<<<<<<< HEAD
+=======
+#include "common/process_exit.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "http/http_channel.h"
 #include "http/http_request.h"
 #include "http/http_status.h"
 #include "util/defer_op.h"
 
 namespace starrocks {
+<<<<<<< HEAD
 extern std::atomic<bool> k_starrocks_exit_quick;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 std::string StopBeAction::construct_response_message(const std::string& msg) {
     std::stringstream ss;
@@ -38,6 +45,7 @@ std::string StopBeAction::construct_response_message(const std::string& msg) {
 void StopBeAction::handle(HttpRequest* req) {
     LOG(INFO) << "Accept one stop_be request " << req->debug_string();
 
+<<<<<<< HEAD
     DeferOp defer([&]() {
         if (!k_starrocks_exit_quick.load(std::memory_order_acquire)) {
             k_starrocks_exit_quick.store(true);
@@ -46,10 +54,20 @@ void StopBeAction::handle(HttpRequest* req) {
 
     std::string response_msg = construct_response_message("OK");
     if (k_starrocks_exit_quick.load(std::memory_order_acquire)) {
+=======
+    DeferOp defer([&]() { set_process_quick_exit(); });
+
+    std::string response_msg = construct_response_message("OK");
+    if (process_exit_in_progress()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         response_msg = construct_response_message("Be is shutting down");
     }
 
     HttpChannel::send_reply(req, HttpStatus::OK, response_msg);
 }
 
+<<<<<<< HEAD
 } // end namespace starrocks
+=======
+} // end namespace starrocks
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

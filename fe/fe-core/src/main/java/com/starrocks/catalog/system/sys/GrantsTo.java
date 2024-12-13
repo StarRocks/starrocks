@@ -15,6 +15,25 @@ package com.starrocks.catalog.system.sys;
 
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
+<<<<<<< HEAD
+=======
+import com.starrocks.authorization.ActionSet;
+import com.starrocks.authorization.AuthorizationMgr;
+import com.starrocks.authorization.CatalogPEntryObject;
+import com.starrocks.authorization.DbPEntryObject;
+import com.starrocks.authorization.FunctionPEntryObject;
+import com.starrocks.authorization.ObjectType;
+import com.starrocks.authorization.PipePEntryObject;
+import com.starrocks.authorization.PrivilegeBuiltinConstants;
+import com.starrocks.authorization.PrivilegeEntry;
+import com.starrocks.authorization.PrivilegeType;
+import com.starrocks.authorization.ResourceGroupPEntryObject;
+import com.starrocks.authorization.ResourcePEntryObject;
+import com.starrocks.authorization.StorageVolumePEntryObject;
+import com.starrocks.authorization.TablePEntryObject;
+import com.starrocks.authorization.UserPEntryObject;
+import com.starrocks.authorization.WarehousePEntryObject;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalCatalog;
@@ -28,6 +47,7 @@ import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+<<<<<<< HEAD
 import com.starrocks.privilege.ActionSet;
 import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.privilege.CatalogPEntryObject;
@@ -42,16 +62,26 @@ import com.starrocks.privilege.ResourcePEntryObject;
 import com.starrocks.privilege.StorageVolumePEntryObject;
 import com.starrocks.privilege.TablePEntryObject;
 import com.starrocks.privilege.UserPEntryObject;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.StorageVolumeMgr;
+<<<<<<< HEAD
+=======
+import com.starrocks.server.WarehouseManager;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TGetGrantsToRolesOrUserItem;
 import com.starrocks.thrift.TGetGrantsToRolesOrUserRequest;
 import com.starrocks.thrift.TGetGrantsToRolesOrUserResponse;
 import com.starrocks.thrift.TGrantsToType;
 import com.starrocks.thrift.TSchemaTableType;
+<<<<<<< HEAD
+=======
+import com.starrocks.warehouse.Warehouse;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -65,8 +95,16 @@ import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
 import static com.starrocks.catalog.system.SystemTable.builder;
 
 public class GrantsTo {
+<<<<<<< HEAD
     public static SystemTable createGrantsToRoles() {
         return new SystemTable(SystemId.GRANTS_TO_ROLES_ID, "grants_to_roles", Table.TableType.SCHEMA,
+=======
+    private static final String GRANTS_TO_ROLES = "grants_to_roles";
+    private static final String GRANTS_TO_USERS = "grants_to_users";
+
+    public static SystemTable createGrantsToRoles() {
+        return new SystemTable(SystemId.GRANTS_TO_ROLES_ID, GRANTS_TO_ROLES, Table.TableType.SCHEMA,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 builder()
                         .column("GRANTEE", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("OBJECT_CATALOG", ScalarType.createVarchar(NAME_CHAR_LEN))
@@ -80,7 +118,11 @@ public class GrantsTo {
     }
 
     public static SystemTable createGrantsToUsers() {
+<<<<<<< HEAD
         return new SystemTable(SystemId.GRANTS_TO_USERS_ID, "grants_to_users", Table.TableType.SCHEMA,
+=======
+        return new SystemTable(SystemId.GRANTS_TO_USERS_ID, GRANTS_TO_USERS, Table.TableType.SCHEMA,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 builder()
                         .column("GRANTEE", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("OBJECT_CATALOG", ScalarType.createVarchar(NAME_CHAR_LEN))
@@ -192,7 +234,12 @@ public class GrantsTo {
                         } else {
                             Database database;
                             if (CatalogMgr.isInternalCatalog(catalogName)) {
+<<<<<<< HEAD
                                 database = GlobalStateMgr.getCurrentState().getDb(Long.parseLong(dbPEntryObject.getUUID()));
+=======
+                                database = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                            .getDb(Long.parseLong(dbPEntryObject.getUUID()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                             } else {
                                 String dbName = ExternalCatalog.getDbNameFromUUID(dbPEntryObject.getUUID());
                                 database = metadataMgr.getDb(catalogName, dbName);
@@ -240,7 +287,11 @@ public class GrantsTo {
                         } else {
                             Database database;
                             if (CatalogMgr.isInternalCatalog(tablePEntryObject.getCatalogId())) {
+<<<<<<< HEAD
                                 database = GlobalStateMgr.getCurrentState()
+=======
+                                database = GlobalStateMgr.getCurrentState().getLocalMetastore()
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                         .getDb(Long.parseLong(tablePEntryObject.getDatabaseUUID()));
                             } else {
                                 String dbName = ExternalCatalog.getDbNameFromUUID(tablePEntryObject.getDatabaseUUID());
@@ -260,7 +311,12 @@ public class GrantsTo {
                                 objects.addAll(expandAllTables(metadataMgr, catalogName, dbName, privEntry.getKey()));
                             } else {
                                 if (CatalogMgr.isInternalCatalog(tablePEntryObject.getCatalogId())) {
+<<<<<<< HEAD
                                     Table table = database.getTable((Long.parseLong(tablePEntryObject.getTableUUID())));
+=======
+                                    Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                                .getTable(database.getId(), (Long.parseLong(tablePEntryObject.getTableUUID())));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                     if (table == null) {
                                         continue;
                                     }
@@ -318,7 +374,11 @@ public class GrantsTo {
                     if (databaseId == PrivilegeBuiltinConstants.ALL_DATABASE_ID) {
                         List<String> dbNames = metadataMgr.listDbNames(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
                         for (String dbName : dbNames) {
+<<<<<<< HEAD
                             Database database = GlobalStateMgr.getCurrentState().getDb(dbName);
+=======
+                            Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                             if (database == null) {
                                 continue;
                             }
@@ -332,7 +392,11 @@ public class GrantsTo {
                             }
                         }
                     } else {
+<<<<<<< HEAD
                         Database database = GlobalStateMgr.getCurrentState().getDb(databaseId);
+=======
+                        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(databaseId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         if (database == null) {
                             continue;
                         }
@@ -389,6 +453,31 @@ public class GrantsTo {
                         String storageVolumeName = storageVolumeMgr.getStorageVolumeName(storageVolumeId);
                         objects.add(Lists.newArrayList(null, null, storageVolumeName));
                     }
+<<<<<<< HEAD
+=======
+
+                } else if (ObjectType.PIPE.equals(privEntry.getKey())) {
+                    PipePEntryObject pipePEntryObject = (PipePEntryObject) privilegeEntry.getObject();
+                    objects.addAll(pipePEntryObject.expandObjectNames());
+                } else if (ObjectType.WAREHOUSE.equals(privEntry.getKey())) {
+                    WarehousePEntryObject warehousePEntryObject =
+                            (WarehousePEntryObject) privilegeEntry.getObject();
+                    long warehouseId = warehousePEntryObject.getId();
+                    if (warehouseId == PrivilegeBuiltinConstants.ALL_WAREHOUSES_ID) {
+                        WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+                        Set<String> allWarehouseNames = warehouseManager.getAllWarehouseNames();
+                        for (String warehouseName : allWarehouseNames) {
+                            objects.add(Lists.newArrayList(null, null, warehouseName));
+                        }
+                    } else {
+                        Warehouse warehouse =
+                                GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
+                        if (warehouse == null) {
+                            continue;
+                        }
+                        objects.add(Lists.newArrayList(null, null, warehouse.getName()));
+                    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
 
                 ActionSet actionSet = privilegeEntry.getActionSet();
@@ -461,7 +550,11 @@ public class GrantsTo {
                 }
 
                 if (objectType.equals(ObjectType.VIEW)) {
+<<<<<<< HEAD
                     if (table.isView()) {
+=======
+                    if (table.isOlapView()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         objects.add(Lists.newArrayList(catalogName, dbName, table.getName()));
                     }
                 } else if (objectType.equals(ObjectType.MATERIALIZED_VIEW)) {
@@ -469,7 +562,11 @@ public class GrantsTo {
                         objects.add(Lists.newArrayList(catalogName, dbName, table.getName()));
                     }
                 } else {
+<<<<<<< HEAD
                     if (!table.isView() && !table.isMaterializedView()) {
+=======
+                    if (!table.isOlapView() && !table.isMaterializedView()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         objects.add(Lists.newArrayList(catalogName, dbName, table.getName()));
                     }
                 }

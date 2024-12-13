@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # array_position
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 获取数组中某个元素位置，是的话返回位置，否则返回0.
 

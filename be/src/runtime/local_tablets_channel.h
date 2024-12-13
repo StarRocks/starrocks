@@ -35,7 +35,12 @@ class MemTracker;
 
 class LocalTabletsChannel : public TabletsChannel {
 public:
+<<<<<<< HEAD
     LocalTabletsChannel(LoadChannel* load_channel, const TabletsChannelKey& key, MemTracker* mem_tracker);
+=======
+    LocalTabletsChannel(LoadChannel* load_channel, const TabletsChannelKey& key, MemTracker* mem_tracker,
+                        RuntimeProfile* parent_profile);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ~LocalTabletsChannel() override;
 
     LocalTabletsChannel(const LocalTabletsChannel&) = delete;
@@ -45,6 +50,7 @@ public:
 
     const TabletsChannelKey& key() const { return _key; }
 
+<<<<<<< HEAD
     Status open(const PTabletWriterOpenRequest& params, std::shared_ptr<OlapTableSchemaParam> schema,
                 bool is_incremental) override;
 
@@ -52,6 +58,15 @@ public:
                    PTabletWriterAddBatchResult* response) override;
 
     Status incremental_open(const PTabletWriterOpenRequest& params,
+=======
+    Status open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
+                std::shared_ptr<OlapTableSchemaParam> schema, bool is_incremental) override;
+
+    void add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request, PTabletWriterAddBatchResult* response,
+                   bool* close_channel_ptr) override;
+
+    Status incremental_open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                             std::shared_ptr<OlapTableSchemaParam> schema) override;
 
     void add_segment(brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
@@ -63,6 +78,11 @@ public:
 
     void abort(const std::vector<int64_t>& tablet_ids, const std::string& reason) override;
 
+<<<<<<< HEAD
+=======
+    void update_profile() override;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MemTracker* mem_tracker() { return _mem_tracker; }
 
 private:
@@ -171,17 +191,35 @@ private:
     int _close_sender(const int64_t* partitions, size_t partitions_size);
 
     void _commit_tablets(const PTabletWriterAddChunkRequest& request,
+<<<<<<< HEAD
                          std::shared_ptr<LocalTabletsChannel::WriteContext> context);
+=======
+                         const std::shared_ptr<LocalTabletsChannel::WriteContext>& context);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     void _abort_replica_tablets(const PTabletWriterAddChunkRequest& request, const std::string& abort_reason,
                                 const std::unordered_map<int64_t, std::vector<int64_t>>& node_id_to_abort_tablets);
 
+<<<<<<< HEAD
+=======
+    void _flush_stale_memtables();
+
+    void _update_peer_replica_profile(DeltaWriter* writer, RuntimeProfile* profile);
+    void _update_primary_replica_profile(DeltaWriter* writer, RuntimeProfile* profile);
+    void _update_secondary_replica_profile(DeltaWriter* writer, RuntimeProfile* profile);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     LoadChannel* _load_channel;
 
     TabletsChannelKey _key;
 
     MemTracker* _mem_tracker;
 
+<<<<<<< HEAD
+=======
+    RuntimeProfile* _profile;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // initialized in open function
     int64_t _txn_id = -1;
     int64_t _index_id = -1;
@@ -215,9 +253,47 @@ private:
 
     mutable bthread::Mutex _status_lock;
     Status _status = Status::OK();
+<<<<<<< HEAD
 };
 
 std::shared_ptr<TabletsChannel> new_local_tablets_channel(LoadChannel* load_channel, const TabletsChannelKey& key,
                                                           MemTracker* mem_tracker);
+=======
+
+    std::set<int64_t> _immutable_partition_ids;
+
+    std::map<string, string> _column_to_expr_value;
+
+    // Profile counters
+    // Number of times that update_profile() is called
+    RuntimeProfile::Counter* _profile_update_counter = nullptr;
+    // Accumulated time for update_profile()
+    RuntimeProfile::Counter* _profile_update_timer = nullptr;
+    // Number of times that open() is called
+    RuntimeProfile::Counter* _open_counter = nullptr;
+    // Accumulated time of open()
+    RuntimeProfile::Counter* _open_timer = nullptr;
+    // Number of times that add_chunk() is called
+    RuntimeProfile::Counter* _add_chunk_counter = nullptr;
+    // Accumulated time of add_chunk()
+    RuntimeProfile::Counter* _add_chunk_timer = nullptr;
+    // Number of rows added to this channel
+    RuntimeProfile::Counter* _add_row_num = nullptr;
+    // Accumulated time to wait for memtable flush in add_chunk()
+    RuntimeProfile::Counter* _wait_flush_timer = nullptr;
+    // Accumulated time to wait for async delta writers in add_chunk()
+    RuntimeProfile::Counter* _wait_write_timer = nullptr;
+    // Accumulated time to wait for secondary replicas in add_chunk()
+    RuntimeProfile::Counter* _wait_replica_timer = nullptr;
+    // Accumulated time to wait for txn persist in add_chunk()
+    RuntimeProfile::Counter* _wait_txn_persist_timer = nullptr;
+
+    std::atomic<bool> _is_updating_profile{false};
+    std::unique_ptr<RuntimeProfile> _tablets_profile;
+};
+
+std::shared_ptr<TabletsChannel> new_local_tablets_channel(LoadChannel* load_channel, const TabletsChannelKey& key,
+                                                          MemTracker* mem_tracker, RuntimeProfile* parent_profile);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 } // namespace starrocks

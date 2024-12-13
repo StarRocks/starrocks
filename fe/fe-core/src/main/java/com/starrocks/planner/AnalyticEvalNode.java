@@ -47,7 +47,11 @@ import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TupleDescriptor;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.TAnalyticNode;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TNormalAnalyticNode;
@@ -125,7 +129,11 @@ public class AnalyticEvalNode extends PlanNode {
     }
 
     @Override
+<<<<<<< HEAD
     public void init(Analyzer analyzer) throws UserException {
+=======
+    public void init(Analyzer analyzer) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -312,8 +320,15 @@ public class AnalyticEvalNode extends PlanNode {
     }
 
     @Override
+<<<<<<< HEAD
     public boolean pushDownRuntimeFilters(DescriptorTable descTbl, RuntimeFilterDescription description, Expr probeExpr,
                                           List<Expr> partitionByExprs) {
+=======
+    public boolean pushDownRuntimeFilters(RuntimeFilterPushDownContext context, Expr probeExpr,
+                                          List<Expr> partitionByExprs) {
+        RuntimeFilterDescription description = context.getDescription();
+        DescriptorTable descTbl = context.getDescTbl();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (!canPushDownRuntimeFilter()) {
             return false;
         }
@@ -322,7 +337,11 @@ public class AnalyticEvalNode extends PlanNode {
             return false;
         }
 
+<<<<<<< HEAD
         return pushdownRuntimeFilterForChildOrAccept(descTbl, description, probeExpr,
+=======
+        return pushdownRuntimeFilterForChildOrAccept(context, probeExpr,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 candidatesOfSlotExpr(probeExpr, couldBound(description, descTbl)),
                 partitionByExprs, candidatesOfSlotExprs(partitionByExprs, couldBoundForPartitionExpr()), 0, true);
     }

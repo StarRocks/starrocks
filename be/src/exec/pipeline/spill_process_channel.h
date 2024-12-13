@@ -61,6 +61,7 @@ using SpillProcessChannelPtr = std::shared_ptr<SpillProcessChannel>;
 class SpillProcessChannelFactory {
 public:
     //
+<<<<<<< HEAD
     SpillProcessChannelFactory(size_t degree, std::shared_ptr<spill::IOTaskExecutor> executor)
             : _channels(degree), _executor(std::move(executor)) {}
 
@@ -71,13 +72,25 @@ public:
 private:
     std::vector<SpillProcessChannelPtr> _channels;
     std::shared_ptr<spill::IOTaskExecutor> _executor;
+=======
+    SpillProcessChannelFactory(size_t degree) : _channels(degree) {}
+
+    SpillProcessChannelPtr get_or_create(int32_t sequence);
+
+private:
+    std::vector<SpillProcessChannelPtr> _channels;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 using SpillProcessChannelFactoryPtr = std::shared_ptr<SpillProcessChannelFactory>;
 
 // SpillProcessOperator
 class SpillProcessChannel {
 public:
+<<<<<<< HEAD
     SpillProcessChannel(SpillProcessChannelFactory* factory) : _parent(factory) {}
+=======
+    SpillProcessChannel() {}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     bool add_spill_task(SpillProcessTask&& task) {
         DCHECK(!_is_finishing);
@@ -88,7 +101,11 @@ public:
     bool add_last_task(SpillProcessTask&& task) {
         DCHECK(!_is_finishing);
         _is_working = true;
+<<<<<<< HEAD
         auto defer = DeferOp([this]() { set_finishing(); });
+=======
+        auto defer = DeferOp([this]() { set_finishing_if_not_reuseable(); });
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return _spill_tasks.put(std::move(task));
     }
 
@@ -100,7 +117,17 @@ public:
     bool is_finishing() { return _is_finishing; }
     bool is_working() { return _is_working; }
 
+<<<<<<< HEAD
     auto& io_executor() { return _parent->executor(); }
+=======
+    void set_finishing_if_not_reuseable() {
+        if (!_is_reuseable) {
+            set_finishing();
+        }
+    }
+
+    void set_reuseable(bool reuseable) { _is_reuseable = reuseable; }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     SpillProcessTask& current_task() { return _current_task; }
 
@@ -116,25 +143,41 @@ public:
     Status execute(SpillProcessTasksBuilder& task_builder);
 
 private:
+<<<<<<< HEAD
+=======
+    bool _is_reuseable = false;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     bool _is_finishing = false;
     bool _is_working = false;
     std::shared_ptr<spill::Spiller> _spiller;
     UnboundedBlockingQueue<SpillProcessTask> _spill_tasks;
     SpillProcessTask _current_task;
+<<<<<<< HEAD
     SpillProcessChannelFactory* _parent;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 class SpillProcessTasksBuilder {
 public:
+<<<<<<< HEAD
     SpillProcessTasksBuilder(RuntimeState* state, std::shared_ptr<spill::IOTaskExecutor> executor)
             : _runtime_state(state), _io_executor(std::move(executor)) {}
+=======
+    SpillProcessTasksBuilder(RuntimeState* state) : _runtime_state(state) {}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     template <class Task>
     SpillProcessTasksBuilder& then(Task task) {
         auto runtime_state = this->_runtime_state;
+<<<<<<< HEAD
         auto& io_executor = this->_io_executor;
         std::function<StatusOr<ChunkPtr>()> spill_task = [runtime_state, io_executor, task]() -> StatusOr<ChunkPtr> {
             RETURN_IF_ERROR(task(runtime_state, io_executor));
+=======
+        std::function<StatusOr<ChunkPtr>()> spill_task = [runtime_state, task]() -> StatusOr<ChunkPtr> {
+            RETURN_IF_ERROR(task(runtime_state));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return Status::EndOfFile("eos");
         };
         _spill_tasks.emplace_back(std::move(spill_task));
@@ -144,9 +187,14 @@ public:
     template <class Task>
     void finally(Task task) {
         auto runtime_state = this->_runtime_state;
+<<<<<<< HEAD
         auto& io_executor = this->_io_executor;
         _final_task = [runtime_state, io_executor, task]() -> StatusOr<ChunkPtr> {
             RETURN_IF_ERROR(task(runtime_state, io_executor));
+=======
+        _final_task = [runtime_state, task]() -> StatusOr<ChunkPtr> {
+            RETURN_IF_ERROR(task(runtime_state));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return Status::EndOfFile("eos");
         };
     }
@@ -156,7 +204,10 @@ public:
 
 private:
     RuntimeState* _runtime_state;
+<<<<<<< HEAD
     std::shared_ptr<spill::IOTaskExecutor> _io_executor;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::vector<SpillProcessTask> _spill_tasks;
     SpillProcessTask _final_task;
 };

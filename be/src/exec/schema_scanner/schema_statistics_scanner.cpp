@@ -21,6 +21,7 @@ namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaStatisticsScanner::_s_cols_statistics[] = {
         //   name,       type,          size,                     is_null
+<<<<<<< HEAD
         {"TABLE_CATALOG", TYPE_VARCHAR, sizeof(StringValue), true},
         {"TABLE_SCHEMA", TYPE_VARCHAR, sizeof(StringValue), false},
         {"TABLE_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
@@ -37,6 +38,24 @@ SchemaScanner::ColumnDesc SchemaStatisticsScanner::_s_cols_statistics[] = {
         {"INDEX_TYPE", TYPE_VARCHAR, sizeof(StringValue), false},
         {"COMMENT", TYPE_VARCHAR, sizeof(StringValue), true},
         {"INDEX_COMMENT", TYPE_VARCHAR, sizeof(StringValue), false},
+=======
+        {"TABLE_CATALOG", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"TABLE_SCHEMA", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"TABLE_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"NON_UNIQUE", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"INDEX_SCHEMA", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"INDEX_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"SEQ_IN_INDEX", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"COLUMN_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"COLLATION", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"CARDINALITY", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
+        {"SUB_PART", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
+        {"PACKED", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"NULLABLE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"INDEX_TYPE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"COMMENT", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"INDEX_COMMENT", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 SchemaStatisticsScanner::SchemaStatisticsScanner()

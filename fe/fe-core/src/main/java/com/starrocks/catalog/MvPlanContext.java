@@ -14,6 +14,10 @@
 
 package com.starrocks.catalog;
 
+<<<<<<< HEAD
+=======
+import com.google.common.base.Preconditions;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -53,6 +57,7 @@ public class MvPlanContext {
         this.mvScanOpNum = 0;
     }
 
+<<<<<<< HEAD
     public MvPlanContext(
             OptExpression logicalPlan,
             List<ColumnRefOperator> outputColumns,
@@ -62,6 +67,20 @@ public class MvPlanContext {
         this.refFactory = refFactory;
         this.isValidMvPlan = true;
         this.mvScanOpNum = MvUtils.getOlapScanNode(logicalPlan).size();
+=======
+    public MvPlanContext(OptExpression logicalPlan,
+                         List<ColumnRefOperator> outputColumns,
+                         ColumnRefFactory refFactory,
+                         boolean isValidMvPlan,
+                         String invalidReason) {
+        Preconditions.checkState(logicalPlan != null);
+        this.logicalPlan = logicalPlan;
+        this.outputColumns = outputColumns;
+        this.refFactory = refFactory;
+        this.isValidMvPlan = isValidMvPlan;
+        this.mvScanOpNum = MvUtils.getOlapScanNode(logicalPlan).size();
+        this.invalidReason = invalidReason;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public OptExpression getLogicalPlan() {

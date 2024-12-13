@@ -76,15 +76,26 @@ public class ReplicationMgrTest {
         starRocksAssert = new StarRocksAssert(AnalyzeTestUtil.getConnectContext());
         starRocksAssert.withDatabase("test").useDatabase("test");
 
+<<<<<<< HEAD
         db = GlobalStateMgr.getCurrentState().getDb("test");
+=======
+        db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         String sql = "create table single_partition_duplicate_key (key1 int, key2 varchar(10))\n" +
                 "distributed by hash(key1) buckets 1\n" +
                 "properties('replication_num' = '1'); ";
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql,
                 AnalyzeTestUtil.getConnectContext());
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentState().createTable(createTableStmt);
         table = (OlapTable) db.getTable("single_partition_duplicate_key");
+=======
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
+
+        table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "single_partition_duplicate_key");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         srcTable = DeepCopy.copyWithGson(table, OlapTable.class);
 
         partition = table.getPartitions().iterator().next();
@@ -100,11 +111,23 @@ public class ReplicationMgrTest {
 
     @Before
     public void setUp() throws Exception {
+<<<<<<< HEAD
         partition.updateVersionForRestore(10);
         srcPartition.updateVersionForRestore(100);
 
         job = new ReplicationJob(null, "test_token", db.getId(), table, srcTable,
                 GlobalStateMgr.getCurrentSystemInfo());
+=======
+        partition.getDefaultPhysicalPartition().updateVersionForRestore(10);
+        srcPartition.getDefaultPhysicalPartition().updateVersionForRestore(100);
+        partition.getDefaultPhysicalPartition().setDataVersion(8);
+        partition.getDefaultPhysicalPartition().setNextDataVersion(9);
+        srcPartition.getDefaultPhysicalPartition().setDataVersion(98);
+        srcPartition.getDefaultPhysicalPartition().setNextDataVersion(99);
+
+        job = new ReplicationJob(null, "test_token", db.getId(), table, srcTable,
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         replicationMgr = new ReplicationMgr();
         replicationMgr.addReplicationJob(job);
     }
@@ -157,7 +180,14 @@ public class ReplicationMgrTest {
         replicationMgr.runAfterCatalogReady();
         Assert.assertEquals(ReplicationJobState.COMMITTED, job.getState());
 
+<<<<<<< HEAD
         Assert.assertEquals(partition.getCommittedVersion(), srcPartition.getVisibleVersion());
+=======
+        Assert.assertEquals(partition.getDefaultPhysicalPartition().getCommittedVersion(),
+                srcPartition.getDefaultPhysicalPartition().getVisibleVersion());
+        Assert.assertEquals(partition.getDefaultPhysicalPartition().getCommittedDataVersion(),
+                srcPartition.getDefaultPhysicalPartition().getDataVersion());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         replicationMgr.replayReplicationJob(job);
 
@@ -349,13 +379,23 @@ public class ReplicationMgrTest {
         Partition partition = table.getPartitions().iterator().next();
         Partition srcPartition = srcTable.getPartitions().iterator().next();
         partitionInfo.partition_id = partition.getId();
+<<<<<<< HEAD
         partitionInfo.src_version = srcPartition.getVisibleVersion();
+=======
+        partitionInfo.src_version = srcPartition.getDefaultPhysicalPartition().getVisibleVersion();
+        partitionInfo.src_version_epoch = srcPartition.getDefaultPhysicalPartition().getVersionEpoch();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         request.partition_replication_infos.put(partitionInfo.partition_id, partitionInfo);
 
         partitionInfo.index_replication_infos = new HashMap<Long, TIndexReplicationInfo>();
         TIndexReplicationInfo indexInfo = new TIndexReplicationInfo();
+<<<<<<< HEAD
         MaterializedIndex index = partition.getBaseIndex();
         MaterializedIndex srcIndex = srcPartition.getBaseIndex();
+=======
+        MaterializedIndex index = partition.getDefaultPhysicalPartition().getBaseIndex();
+        MaterializedIndex srcIndex = srcPartition.getDefaultPhysicalPartition().getBaseIndex();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         indexInfo.index_id = index.getId();
         indexInfo.src_schema_hash = srcTable.getSchemaHashByIndexId(srcIndex.getId());
         partitionInfo.index_replication_infos.put(indexInfo.index_id, indexInfo);

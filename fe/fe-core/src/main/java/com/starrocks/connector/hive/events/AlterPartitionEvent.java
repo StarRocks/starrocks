@@ -17,7 +17,11 @@ package com.starrocks.connector.hive.events;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+<<<<<<< HEAD
 import com.starrocks.connector.hive.CacheUpdateProcessor;
+=======
+import com.starrocks.connector.hive.HiveCacheUpdateProcessor;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.connector.hive.HiveCommonStats;
 import com.starrocks.connector.hive.HiveMetastoreApiConverter;
 import com.starrocks.connector.hive.HivePartitionName;
@@ -46,7 +50,11 @@ public class AlterPartitionEvent extends MetastoreTableEvent {
     // the Partition object after alter operation, as parsed from the NotificationEvent
     private final Partition partitionAfter;
 
+<<<<<<< HEAD
     private AlterPartitionEvent(NotificationEvent event, CacheUpdateProcessor cacheProcessor, String catalogName) {
+=======
+    private AlterPartitionEvent(NotificationEvent event, HiveCacheUpdateProcessor cacheProcessor, String catalogName) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         super(event, cacheProcessor, catalogName);
         Preconditions.checkState(getEventType() == ALTER_PARTITION);
         Preconditions.checkNotNull(event.getMessage());
@@ -70,7 +78,11 @@ public class AlterPartitionEvent extends MetastoreTableEvent {
     }
 
     public static List<MetastoreEvent> getEvents(NotificationEvent event,
+<<<<<<< HEAD
                                                  CacheUpdateProcessor cacheProcessor, String catalogName) {
+=======
+                                                 HiveCacheUpdateProcessor cacheProcessor, String catalogName) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return Lists.newArrayList(new AlterPartitionEvent(event, cacheProcessor, catalogName));
     }
 

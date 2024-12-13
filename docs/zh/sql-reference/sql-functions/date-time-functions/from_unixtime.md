@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # from_unixtime
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 将 UNIX 时间戳转化为对应的时间格式。返回的时间格式由 `string_format` 指定，默认为 `yyyy-MM-dd HH:mm:ss`，也支持 [date_format](./date_format.md) 中的格式。
 

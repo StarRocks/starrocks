@@ -137,11 +137,20 @@ public:
     using RowsetIterateFunc = std::function<bool(RowsetMetaSharedPtr rowset_meta)>;
     static Status rowset_iterate(DataDir* store, TTabletId tablet_id, const RowsetIterateFunc& func);
 
+<<<<<<< HEAD
+=======
+    static Status put_pending_rowset_meta(DataDir* store, WriteBatch* batch, TTabletId tablet_id, int64_t version,
+                                          const RowsetMetaPB& rowset);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // methods for operating pending commits
     static Status pending_rowset_commit(DataDir* store, TTabletId tablet_id, int64_t version,
                                         const RowsetMetaPB& rowset, const string& rowset_meta_key);
 
+<<<<<<< HEAD
     using PendingRowsetIterateFunc = std::function<bool(int64_t version, std::string_view rowset_meta_data)>;
+=======
+    using PendingRowsetIterateFunc = std::function<StatusOr<bool>(int64_t version, std::string_view rowset_meta_data)>;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     static Status pending_rowset_iterate(DataDir* store, TTabletId tablet_id, const PendingRowsetIterateFunc& func);
 
     // On success, store a pointer to `RowsetMeta` in |*meta| and return OK status.
@@ -203,7 +212,10 @@ public:
                                                             std::map<uint32_t, DeltaColumnGroupList>* dcgs);
 
     static Status delete_delta_column_group(KVStore* meta, TTabletId tablet_id, uint32_t rowset_id, uint32_t segments);
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     static Status delete_delta_column_group(KVStore* meta, WriteBatch* batch, const TabletSegmentId& tsid,
                                             int64_t version);
     static Status delete_delta_column_group(KVStore* meta, TTabletId tablet_id, RowsetId rowsetid, uint32_t segments);
@@ -265,6 +277,15 @@ public:
     static Status remove_table_persistent_index_meta(DataDir* store, TTableId table_id);
 
     static Status remove_tablet_persistent_index_meta(DataDir* store, TTabletId table_id);
+<<<<<<< HEAD
+=======
+
+    static Status get_committed_rowset_meta_value(DataDir* store, int64_t tablet_id, uint32_t rowset_seg_id,
+                                                  std::string* meta_value);
+
+    static Status get_pending_committed_rowset_meta_value(DataDir* store, int64_t tablet_id, int64_t version,
+                                                          std::string* meta_value);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 } // namespace starrocks

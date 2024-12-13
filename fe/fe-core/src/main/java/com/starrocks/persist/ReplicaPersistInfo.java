@@ -105,6 +105,10 @@ public class ReplicaPersistInfo implements Writable {
     private long dbId;
     @SerializedName("tb")
     private long tableId;
+<<<<<<< HEAD
+=======
+    // physical partition id
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @SerializedName("pt")
     private long partitionId;
     @SerializedName("idx")

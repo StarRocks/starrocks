@@ -22,6 +22,10 @@
 #include "column/datum_tuple.h"
 #include "common/logging.h"
 #include "fs/fs_util.h"
+<<<<<<< HEAD
+=======
+#include "fs/key_cache.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "gen_cpp/olap_file.pb.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
@@ -49,13 +53,17 @@ protected:
     void SetUp() override {
         _fs = FileSystem::CreateSharedFromString("posix://").value();
         ASSERT_OK(_fs->create_dir_recursive(kSegmentDir));
+<<<<<<< HEAD
 
         _page_cache_mem_tracker = std::make_unique<MemTracker>();
         StoragePageCache::create_global_cache(_page_cache_mem_tracker.get(), 1000000000);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     void TearDown() override {
         ASSERT_TRUE(fs::remove_all(kSegmentDir).ok());
+<<<<<<< HEAD
         StoragePageCache::release_global_cache();
     }
 
@@ -67,20 +75,46 @@ protected:
 
 TEST_F(SegmentRewriterTest, rewrite_test) {
     std::unique_ptr<TabletSchema> partial_tablet_schema = TabletSchemaHelper::create_tablet_schema(
+=======
+        StoragePageCache::instance()->prune();
+    }
+
+    const std::string kSegmentDir = "./segment_rewriter_test";
+
+    std::shared_ptr<FileSystem> _fs;
+};
+
+TEST_F(SegmentRewriterTest, rewrite_test) {
+    std::shared_ptr<TabletSchema> partial_tablet_schema = TabletSchemaHelper::create_tablet_schema(
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             {create_int_key_pb(1), create_int_key_pb(2), create_int_value_pb(4)});
 
     SegmentWriterOptions opts;
     opts.num_rows_per_block = 10;
 
+<<<<<<< HEAD
     std::string file_name = kSegmentDir + "/partial_rowset";
     ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(file_name));
 
     SegmentWriter writer(std::move(wfile), 0, partial_tablet_schema.get(), opts);
+=======
+    auto encryption_pair = KeyCache::instance().create_plain_random_encryption_meta_pair().value();
+    std::string file_name = kSegmentDir + "/partial_rowset";
+    WritableFileOptions wopts{.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE,
+                              .encryption_info = encryption_pair.info};
+    ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(wopts, file_name));
+
+    SegmentWriter writer(std::move(wfile), 0, partial_tablet_schema, opts);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ASSERT_OK(writer.init());
 
     int32_t chunk_size = config::vector_chunk_size;
     size_t num_rows = 10000;
+<<<<<<< HEAD
     auto partial_schema = ChunkHelper::convert_schema(*partial_tablet_schema);
+=======
+    auto partial_schema = ChunkHelper::convert_schema(partial_tablet_schema);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     auto partial_chunk = ChunkHelper::new_chunk(partial_schema, chunk_size);
 
     for (auto i = 0; i < num_rows % chunk_size; ++i) {
@@ -103,10 +137,18 @@ TEST_F(SegmentRewriterTest, rewrite_test) {
     partial_rowset_footer.set_position(footer_position);
     partial_rowset_footer.set_size(file_size - footer_position);
 
+<<<<<<< HEAD
     auto partial_segment = *Segment::open(_fs, FileInfo{file_name}, 0, partial_tablet_schema.get());
     ASSERT_EQ(partial_segment->num_rows(), num_rows);
 
     std::unique_ptr<TabletSchema> tablet_schema = TabletSchemaHelper::create_tablet_schema(
+=======
+    FileInfo src_file_info{.path = file_name, .encryption_meta = encryption_pair.encryption_meta};
+    auto partial_segment = *Segment::open(_fs, src_file_info, 0, partial_tablet_schema);
+    ASSERT_EQ(partial_segment->num_rows(), num_rows);
+
+    std::shared_ptr<TabletSchema> tablet_schema = TabletSchemaHelper::create_tablet_schema(
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             {create_int_key_pb(1), create_int_key_pb(2), create_int_value_pb(3), create_int_value_pb(4),
              create_int_value_pb(5)});
     std::string dst_file_name = kSegmentDir + "/rewrite_rowset";
@@ -123,17 +165,29 @@ TEST_F(SegmentRewriterTest, rewrite_test) {
     }
 
     FileInfo file_info{.path = dst_file_name};
+<<<<<<< HEAD
     ASSERT_OK(SegmentRewriter::rewrite(file_name, &file_info, *tablet_schema, read_column_ids, write_columns,
                                        partial_segment->id(), partial_rowset_footer));
 
     auto segment = *Segment::open(_fs, FileInfo{dst_file_name}, 0, tablet_schema.get());
+=======
+    ASSERT_OK(SegmentRewriter::rewrite_partial_update(src_file_info, &file_info, tablet_schema, read_column_ids,
+                                                      write_columns, partial_segment->id(), partial_rowset_footer));
+
+    auto segment = *Segment::open(_fs, FileInfo{.path = dst_file_name, .encryption_meta = file_info.encryption_meta}, 0,
+                                  tablet_schema);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ASSERT_EQ(segment->num_rows(), num_rows);
 
     SegmentReadOptions seg_options;
     seg_options.fs = _fs;
     OlapReaderStatistics stats;
     seg_options.stats = &stats;
+<<<<<<< HEAD
     auto schema = ChunkHelper::convert_schema(*tablet_schema);
+=======
+    auto schema = ChunkHelper::convert_schema(tablet_schema);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     auto res = segment->new_iterator(schema, seg_options);
     ASSERT_FALSE(res.status().is_end_of_file() || !res.ok() || res.value() == nullptr);
     auto seg_iterator = res.value();
@@ -157,6 +211,7 @@ TEST_F(SegmentRewriterTest, rewrite_test) {
         }
     }
     EXPECT_EQ(count, num_rows);
+<<<<<<< HEAD
 
     // add useless string to partial segment
     WritableFileOptions wopts{.sync_on_close = true, .mode = FileSystem::MUST_EXIST};
@@ -203,6 +258,8 @@ TEST_F(SegmentRewriterTest, rewrite_test) {
         }
     }
     EXPECT_EQ(count, num_rows);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 } // namespace starrocks

@@ -24,9 +24,19 @@ import static com.starrocks.catalog.system.SystemTable.MAX_FIELD_VARCHAR_LENGTH;
 import static com.starrocks.catalog.system.SystemTable.builder;
 
 public class EventsSystemTable {
+<<<<<<< HEAD
     public static SystemTable create() {
         return new SystemTable(SystemId.EVENTS_ID,
                 "events",
+=======
+    private static final String NAME = "events";
+
+    public static SystemTable create(String catalogName) {
+        return new SystemTable(
+                catalogName,
+                SystemId.EVENTS_ID,
+                NAME,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 Table.TableType.SCHEMA,
                 builder()
                         .column("EVENT_CATALOG", ScalarType.createVarchar(64))

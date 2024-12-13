@@ -25,7 +25,10 @@
 #include "util/race_detect.h"
 
 namespace starrocks::pipeline {
+<<<<<<< HEAD
 // TODO: implements reset_state
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 class SpillableAggregateDistinctBlockingSinkOperator : public AggregateDistinctBlockingSinkOperator {
 public:
     template <class... Args>
@@ -59,6 +62,14 @@ public:
         return 0;
     }
 
+<<<<<<< HEAD
+=======
+    Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) override;
+
+    // only the prepare/open phase calls are valid.
+    SpillProcessChannelPtr spill_channel() { return _aggregator->spill_channel(); }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 private:
     Status _spill_all_inputs(RuntimeState* state, const ChunkPtr& chunk);
     Status _spill_aggregated_data(RuntimeState* state);
@@ -95,7 +106,10 @@ private:
     SpillProcessChannelFactoryPtr _spill_channel_factory;
 };
 
+<<<<<<< HEAD
 // TODO: implements reset_state
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 class SpillableAggregateDistinctBlockingSourceOperator : public AggregateDistinctBlockingSourceOperator {
 public:
     template <class... Args>
@@ -117,10 +131,16 @@ public:
     void close(RuntimeState* state) override;
 
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
+<<<<<<< HEAD
     bool pending_finish() const override { return _aggregator->has_pending_restore(); }
 
 private:
 private:
+=======
+    Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) override;
+
+private:
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     StatusOr<ChunkPtr> _pull_spilled_chunk(RuntimeState* state);
 
     bool _is_finished = false;

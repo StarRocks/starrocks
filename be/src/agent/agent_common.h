@@ -36,6 +36,10 @@ enum class TaskWorkerType {
     REPORT_DISK_STATE,
     REPORT_OLAP_TABLE,
     REPORT_WORKGROUP,
+<<<<<<< HEAD
+=======
+    REPORT_DATACACHE_METRICS,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     UPLOAD,
     DOWNLOAD,
     MAKE_SNAPSHOT,
@@ -98,6 +102,10 @@ using CloneAgentTaskRequest = AgentTaskRequestWithReqBody<TCloneReq>;
 using StorageMediumMigrateTaskRequest = AgentTaskRequestWithReqBody<TStorageMediumMigrateReq>;
 using CheckConsistencyTaskRequest = AgentTaskRequestWithReqBody<TCheckConsistencyReq>;
 using CompactionTaskRequest = AgentTaskRequestWithReqBody<TCompactionReq>;
+<<<<<<< HEAD
+=======
+using CompactionControlTaskRequest = AgentTaskRequestWithReqBody<TCompactionControlReq>;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 using UploadAgentTaskRequest = AgentTaskRequestWithReqBody<TUploadReq>;
 using DownloadAgentTaskRequest = AgentTaskRequestWithReqBody<TDownloadReq>;
 using SnapshotAgentTaskRequest = AgentTaskRequestWithReqBody<TSnapshotRequest>;
@@ -107,5 +115,9 @@ using UpdateTabletMetaInfoAgentTaskRequest = AgentTaskRequestWithReqBody<TUpdate
 using DropAutoIncrementMapAgentTaskRequest = AgentTaskRequestWithReqBody<TDropAutoIncrementMapReq>;
 using RemoteSnapshotAgentTaskRequest = AgentTaskRequestWithReqBody<TRemoteSnapshotRequest>;
 using ReplicateSnapshotAgentTaskRequest = AgentTaskRequestWithReqBody<TReplicateSnapshotRequest>;
+<<<<<<< HEAD
+=======
+using UpdateSchemaTaskRequest = AgentTaskRequestWithReqBody<TUpdateSchemaReq>;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 } // namespace starrocks

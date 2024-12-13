@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # weeks_add
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Returns the value with the number of weeks added to date.
 
@@ -22,7 +26,11 @@ DATETIME weeks_add(DATETIME expr1, INT expr2);
 
 ## Return value
 
+<<<<<<< HEAD
 returns `DATETIME`.
+=======
+returns `DATETIME`. 
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 `NULL` is returned if the date does not exist.
 

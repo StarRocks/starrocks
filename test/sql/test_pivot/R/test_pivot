@@ -1,0 +1,84 @@
+-- name: test_pivot
+CREATE TABLE person (id INT, name STRING, age INT, class INT, address STRING) PROPERTIES( "replication_num" = "1" );
+-- result:
+-- !result
+INSERT INTO person VALUES
+    (100, 'John', 30, 1, 'Street 1'),
+    (200, 'Mary', NULL, 1, 'Street 2'),
+    (300, 'Mike', 80, 3, 'Street 3'),
+    (400, 'Dan', 50, 4, 'Street 4');
+-- result:
+-- !result
+SELECT * FROM person
+    PIVOT (
+        SUM(age) AS sum
+        FOR name IN ('John' AS john, 'Mike')
+    ) order by id;
+-- result:
+100	1	Street 1	30	None
+200	1	Street 2	None	None
+300	3	Street 3	None	80
+400	4	Street 4	None	None
+-- !result
+SELECT id, class, address,
+    sum(case when name = 'John' then age end) as john,
+    sum(case when name = 'Mike' then age end) as mike
+FROM person
+GROUP BY id, class, address
+ORDER BY id;
+-- result:
+100	1	Street 1	30	None
+200	1	Street 2	None	None
+300	3	Street 3	None	80
+400	4	Street 4	None	None
+-- !result
+SELECT * FROM person
+    PIVOT (
+        SUM(age) AS sum, avg(age) as avg
+        FOR name IN ('John' AS john, 'Mike')
+    ) order by id;
+-- result:
+100	1	Street 1	30	30.0	None	None
+200	1	Street 2	None	None	None	None
+300	3	Street 3	None	None	80	80.0
+400	4	Street 4	None	None	None	None
+-- !result
+SELECT id, class, address,
+    sum(case when name = 'John' then age end) as john_sum,
+    avg(case when name = 'John' then age end) as john_avg,
+    max(case when name = 'Mike' then age end) as mike_sum,
+    avg(case when name = 'Mike' then age end) as mike_avg
+FROM person
+GROUP BY id, class, address
+ORDER BY id;
+-- result:
+100	1	Street 1	30	30.0	None	None
+200	1	Street 2	None	None	None	None
+300	3	Street 3	None	None	80	80.0
+400	4	Street 4	None	None	None	None
+-- !result
+SELECT * FROM person
+    PIVOT (
+        SUM(age) AS sum, avg(age) as avg
+        FOR (name, class) IN (('John', 1) AS john, ('Mike', 3))
+    ) order by id;
+-- result:
+100	Street 1	30	30.0	None	None
+200	Street 2	None	None	None	None
+300	Street 3	None	None	80	80.0
+400	Street 4	None	None	None	None
+-- !result
+SELECT id, address,
+    sum(case when name = 'John' and class = 1 then age end) as john_sum,
+    avg(case when name = 'John' and class = 1 then age end) as john_avg,
+    max(case when name = 'Mike' and class = 3 then age end) as mike_sum,
+    avg(case when name = 'Mike' and class = 3 then age end) as mike_avg
+FROM person
+GROUP BY id, address
+ORDER BY id;
+-- result:
+100	Street 1	30	30.0	None	None
+200	Street 2	None	None	None	None
+300	Street 3	None	None	80	80.0
+400	Street 4	None	None	None	None
+-- !result

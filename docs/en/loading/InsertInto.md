@@ -26,7 +26,11 @@ StarRocks v2.4 further supports overwriting data into a table by using INSERT OV
 - You can submit an asynchronous INSERT task using [SUBMIT TASK](../sql-reference/sql-statements/loading_unloading/ETL/SUBMIT_TASK.md).
 - As for the current version of StarRocks, the INSERT transaction fails by default if the data of any rows does not comply with the schema of the table. For example, the INSERT transaction fails if the length of a field in any row exceeds the length limit for the mapping field in the table. You can set the session variable `enable_insert_strict` to `false` to allow the transaction to continue by filtering out the rows that mismatch the table.
 - If you execute the INSERT statement frequently to load small batches of data into StarRocks, excessive data versions are generated. It severely affects query performance. We recommend that, in production, you should not load data with the INSERT command too often or use it as a routine for data loading on a daily basis. If your application or analytic scenario demand solutions to loading streaming data or small data batches separately, we recommend you use Apache Kafka® as your data source and load the data via Routine Load.
+<<<<<<< HEAD
 - If you execute the INSERT OVERWRITE statement, StarRocks creates temporary partitions for the partitions which store the original data, inserts new data into the temporary partitions, and [swaps the original partitions with the temporary partitions](../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md#use-a-temporary-partition-to-replace-current-partition). All these operations are executed in the FE Leader node. Hence, if the FE Leader node crashes while executing INSERT OVERWRITE command, the whole load transaction will fail, and the temporary partitions will be truncated.
+=======
+- If you execute the INSERT OVERWRITE statement, StarRocks creates temporary partitions for the partitions which store the original data, inserts new data into the temporary partitions, and [swaps the original partitions with the temporary partitions](../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md#use-a-temporary-partition-to-replace-the-current-partition). All these operations are executed in the FE Leader node. Hence, if the FE Leader node crashes while executing INSERT OVERWRITE command, the whole load transaction will fail, and the temporary partitions will be truncated.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ## Preparation
 
@@ -111,7 +115,11 @@ DISTRIBUTED BY HASH(user);
 
 > **NOTICE**
 >
+<<<<<<< HEAD
 > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../table_design/data_distribution/Data_distribution.md#determine-the-number-of-buckets).
+=======
+> Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [set the number of buckets](../table_design/data_distribution/Data_distribution.md#set-the-number-of-buckets).
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ## Insert data via INSERT INTO VALUES
 
@@ -119,7 +127,11 @@ You can append one or more rows to a specific table by using INSERT INTO VALUES 
 
 > **CAUTION**
 >
+<<<<<<< HEAD
 > Inserting data via INSERT INTO VALUES merely applies to the situation when you need to verify a DEMO with a small dataset. It is not recommended for a massive testing or production environment. To load mass data into StarRocks, see [Ingestion Overview](./Loading_intro.md) for other options that suit your scenarios.
+=======
+> Inserting data via INSERT INTO VALUES merely applies to the situation when you need to verify a DEMO with a small dataset. It is not recommended for a massive testing or production environment. To load mass data into StarRocks, see [Loading options](Loading_intro.md) for other options that suit your scenarios.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 The following example inserts two rows into the data source table `source_wiki_edit` with the label `insert_load_wikipedia`. Label is the unique identification label for each data load transaction within the database.
 
@@ -192,6 +204,13 @@ WITH LABEL insert_load_wikipedia_3
 SELECT event_time, channel FROM source_wiki_edit;
 ```
 
+<<<<<<< HEAD
+=======
+:::note
+From v3.3.1, specifying a column list in the INSERT INTO statement on a Primary Key table will perform Partial Updates (instead of Full Upsert in earlier versions). If the column list is not specified, the system will perform Full Upsert.
+:::
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ### Insert data directly from files in an external source using FILES()
 
 From v3.1 onwards, StarRocks supports directly loading data from files on cloud storage using the INSERT command and the [FILES()](../sql-reference/sql-functions/table-functions/files.md) function, thereby you do not need to create an external catalog or file external table first. Besides, FILES() can automatically infer the table schema of the files, greatly simplifying the process of data loading.
@@ -215,7 +234,11 @@ You can overwrite a specific table with one or more rows by using INSERT OVERWRI
 
 > **CAUTION**
 >
+<<<<<<< HEAD
 > Overwriting data via INSERT OVERWRITE VALUES merely applies to the situation when you need to verify a DEMO with a small dataset. It is not recommended for a massive testing or production environment. To load mass data into StarRocks, see [Ingestion Overview](./Loading_intro.md) for other options that suit your scenarios.
+=======
+> Overwriting data via INSERT OVERWRITE VALUES merely applies to the situation when you need to verify a DEMO with a small dataset. It is not recommended for a massive testing or production environment. To load mass data into StarRocks, see [Loading options](Loading_intro.md) for other options that suit your scenarios.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Query the source table and the target table to make sure there is data in them.
 
@@ -427,7 +450,11 @@ AS INSERT OVERWRITE insert_wiki_edit
 SELECT * FROM source_wiki_edit;
 ```
 
+<<<<<<< HEAD
 You can check the status of an asynchronous INSERT task by querying the metadata table `task_runs` in Information Schema.
+=======
+You can check the status of an asynchronous INSERT task by querying the metadata view `task_runs` in Information Schema.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 The following example checks the status of the INSERT task `async`.
 
@@ -510,7 +537,11 @@ REJECTED_RECORD_PATH: NULL
 1 row in set (0.01 sec)
 ```
 
+<<<<<<< HEAD
 For information about the fields in the return results, see [Information Schema > loads](../sql-reference/information_schema.md#loads).
+=======
+For information about the fields in the return results, see [Information Schema > loads](../sql-reference/information_schema/loads.md).
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ### Check via curl command
 

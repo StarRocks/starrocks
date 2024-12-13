@@ -47,6 +47,13 @@ public class DistributionDesc implements ParseNode, Writable {
         throw new NotImplementedException();
     }
 
+<<<<<<< HEAD
+=======
+    public DistributionInfoType getType() {
+        return type;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public int getBuckets() {
         throw new NotImplementedException();
     }

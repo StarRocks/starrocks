@@ -162,7 +162,11 @@ static const std::vector<SlotDescriptor*>* create_tuple_desc_slots(RuntimeState*
     tuple_builder.build(&dtb);
     TDescriptorTable tdesc_tbl = dtb.desc_tbl();
     DescriptorTbl* desc_tbl = nullptr;
+<<<<<<< HEAD
     DescriptorTbl::create(state, &pool, tdesc_tbl, &desc_tbl, config::vector_chunk_size);
+=======
+    CHECK(DescriptorTbl::create(state, &pool, tdesc_tbl, &desc_tbl, config::vector_chunk_size).ok());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     return &(desc_tbl->get_tuple_descriptor(0)->slots());
 }
 
@@ -219,12 +223,20 @@ public:
         writer_context.partition_id = 10;
         writer_context.rowset_path_prefix = _root_path;
         writer_context.rowset_state = VISIBLE;
+<<<<<<< HEAD
         writer_context.tablet_schema = _schema.get();
+=======
+        writer_context.tablet_schema = _schema;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         writer_context.version.first = 10;
         writer_context.version.second = 10;
         ASSERT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &_writer).ok());
         _mem_table_sink = std::make_unique<MemTableRowsetWriterSink>(_writer.get());
+<<<<<<< HEAD
         _vectorized_schema = MemTable::convert_schema(_schema.get(), _slots);
+=======
+        _vectorized_schema = MemTable::convert_schema(_schema, _slots);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         _mem_table =
                 std::make_unique<MemTable>(1, &_vectorized_schema, _slots, _mem_table_sink.get(), _mem_tracker.get());
     }
@@ -247,7 +259,11 @@ public:
 };
 
 TEST_F(MemTableTest, testDupKeysInsertFlushRead) {
+<<<<<<< HEAD
     const string path = "./ut_dir/MemTableTest_testDupKeysInsertFlushRead";
+=======
+    const string path = "./MemTableTest_testDupKeysInsertFlushRead";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MySetUp(create_tablet_schema("pk int,name varchar,pv int", 1, KeysType::DUP_KEYS), "pk int,name varchar,pv int",
             path);
     const size_t n = 3000;
@@ -258,7 +274,12 @@ TEST_F(MemTableTest, testDupKeysInsertFlushRead) {
         indexes.emplace_back(i);
     }
     std::shuffle(indexes.begin(), indexes.end(), std::mt19937(std::random_device()()));
+<<<<<<< HEAD
     _mem_table->insert(*pchunk, indexes.data(), 0, indexes.size());
+=======
+    auto res = _mem_table->insert(*pchunk, indexes.data(), 0, indexes.size());
+    ASSERT_TRUE(res.ok());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ASSERT_TRUE(_mem_table->finalize().ok());
     ASSERT_OK(_mem_table->flush());
     RowsetSharedPtr rowset = *_writer->build();
@@ -291,7 +312,11 @@ TEST_F(MemTableTest, testDupKeysInsertFlushRead) {
 }
 
 TEST_F(MemTableTest, testUniqKeysInsertFlushRead) {
+<<<<<<< HEAD
     const string path = "./ut_dir/MemTableTest_testUniqKeysInsertFlushRead";
+=======
+    const string path = "./MemTableTest_testUniqKeysInsertFlushRead";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MySetUp(create_tablet_schema("pk int,name varchar,pv int", 1, KeysType::UNIQUE_KEYS), "pk int,name varchar,pv int",
             path);
     const size_t n = 1000;
@@ -306,7 +331,12 @@ TEST_F(MemTableTest, testUniqKeysInsertFlushRead) {
         indexes.emplace_back(i);
     }
     std::shuffle(indexes.begin(), indexes.end(), std::mt19937(std::random_device()()));
+<<<<<<< HEAD
     _mem_table->insert(*pchunk, indexes.data(), 0, indexes.size());
+=======
+    auto res = _mem_table->insert(*pchunk, indexes.data(), 0, indexes.size());
+    ASSERT_TRUE(res.ok());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ASSERT_TRUE(_mem_table->finalize().ok());
     ASSERT_OK(_mem_table->flush());
     RowsetSharedPtr rowset = *_writer->build();
@@ -338,7 +368,11 @@ TEST_F(MemTableTest, testUniqKeysInsertFlushRead) {
 }
 
 TEST_F(MemTableTest, testPrimaryKeysWithDeletes) {
+<<<<<<< HEAD
     const string path = "./ut_dir/MemTableTest_testPrimaryKeysWithDeletes";
+=======
+    const string path = "./MemTableTest_testPrimaryKeysWithDeletes";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MySetUp(create_tablet_schema("pk bigint,v1 int", 1, KeysType::PRIMARY_KEYS), "pk bigint,v1 int,__op tinyint", path);
     const size_t n = 1000;
     shared_ptr<Chunk> chunk = ChunkHelper::new_chunk(*_slots, n);
@@ -360,7 +394,12 @@ TEST_F(MemTableTest, testPrimaryKeysWithDeletes) {
         indexes.emplace_back(i);
     }
     std::shuffle(indexes.begin(), indexes.end(), std::mt19937(std::random_device()()));
+<<<<<<< HEAD
     _mem_table->insert(*chunk, indexes.data(), 0, indexes.size());
+=======
+    auto res = _mem_table->insert(*chunk, indexes.data(), 0, indexes.size());
+    ASSERT_TRUE(res.ok());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ASSERT_TRUE(_mem_table->finalize().ok());
     ASSERT_OK(_mem_table->flush());
     RowsetSharedPtr rowset = *_writer->build();
@@ -368,7 +407,11 @@ TEST_F(MemTableTest, testPrimaryKeysWithDeletes) {
 }
 
 TEST_F(MemTableTest, testPrimaryKeysNullableSortKey) {
+<<<<<<< HEAD
     const string path = "./ut_dir/MemTableTest_testPrimaryKeysNullableSortKey";
+=======
+    const string path = "./MemTableTest_testPrimaryKeysNullableSortKey";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     auto tablet_schema = create_tablet_schema("pk bigint,v1 int, v2 tinyint null", 1, KeysType::PRIMARY_KEYS, {2});
     MySetUp(tablet_schema, "pk bigint,v1 int, v2 tinyint null", path);
     const size_t n = 10;
@@ -391,7 +434,12 @@ TEST_F(MemTableTest, testPrimaryKeysNullableSortKey) {
         indexes.emplace_back(i);
     }
     std::shuffle(indexes.begin(), indexes.end(), std::mt19937(std::random_device()()));
+<<<<<<< HEAD
     _mem_table->insert(*chunk, indexes.data(), 0, indexes.size());
+=======
+    auto res = _mem_table->insert(*chunk, indexes.data(), 0, indexes.size());
+    ASSERT_TRUE(res.ok());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ASSERT_TRUE(_mem_table->finalize().ok());
     ASSERT_OK(_mem_table->flush());
     RowsetSharedPtr rowset = *_writer->build();
@@ -409,7 +457,11 @@ TEST_F(MemTableTest, testPrimaryKeysNullableSortKey) {
         expected_chunk->get_column_by_index(2)->append_datum(Datum(static_cast<int8_t>(2 * i + 1)));
     }
 
+<<<<<<< HEAD
     Schema read_schema = ChunkHelper::convert_schema(*tablet_schema);
+=======
+    Schema read_schema = ChunkHelper::convert_schema(tablet_schema);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     OlapReaderStatistics stats;
     RowsetReadOptions rs_opts;
     rs_opts.sorted = false;
@@ -433,7 +485,11 @@ TEST_F(MemTableTest, testPrimaryKeysNullableSortKey) {
 }
 
 TEST_F(MemTableTest, testPrimaryKeysSizeLimitSinglePK) {
+<<<<<<< HEAD
     const string path = "./ut_dir/MemTableTest_testPrimaryKeysSizeLimitSinglePK";
+=======
+    const string path = "./MemTableTest_testPrimaryKeysSizeLimitSinglePK";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MySetUp(create_tablet_schema("pk varchar,v1 int", 1, KeysType::PRIMARY_KEYS), "pk varchar,v1 int,__op tinyint",
             path);
     const size_t n = 1000;
@@ -458,12 +514,21 @@ TEST_F(MemTableTest, testPrimaryKeysSizeLimitSinglePK) {
         indexes.emplace_back(i);
     }
     std::shuffle(indexes.begin(), indexes.end(), std::mt19937(std::random_device()()));
+<<<<<<< HEAD
     _mem_table->insert(*chunk, indexes.data(), 0, indexes.size());
+=======
+    auto res = _mem_table->insert(*chunk, indexes.data(), 0, indexes.size());
+    ASSERT_TRUE(res.ok());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ASSERT_TRUE(_mem_table->finalize().ok());
 }
 
 TEST_F(MemTableTest, testPrimaryKeysSizeLimitCompositePK) {
+<<<<<<< HEAD
     const string path = "./ut_dir/MemTableTest_testPrimaryKeysSizeLimitCompositePK";
+=======
+    const string path = "./MemTableTest_testPrimaryKeysSizeLimitCompositePK";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MySetUp(create_tablet_schema("pk int, pk varchar, pk smallint, pk boolean,v1 int", 4, KeysType::PRIMARY_KEYS),
             "pk int, pk varchar, pk smallint, pk boolean ,v1 int,__op tinyint", path);
     const size_t n = 1000;
@@ -494,7 +559,12 @@ TEST_F(MemTableTest, testPrimaryKeysSizeLimitCompositePK) {
         indexes.emplace_back(i);
     }
     std::shuffle(indexes.begin(), indexes.end(), std::mt19937(std::random_device()()));
+<<<<<<< HEAD
     _mem_table->insert(*chunk, indexes.data(), 0, indexes.size());
+=======
+    auto res = _mem_table->insert(*chunk, indexes.data(), 0, indexes.size());
+    ASSERT_TRUE(res.ok());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ASSERT_FALSE(_mem_table->finalize().ok());
 }
 
@@ -510,7 +580,12 @@ TEST_F(MemTableTest, test_metrics) {
         indexes.emplace_back(i);
     }
     std::shuffle(indexes.begin(), indexes.end(), std::mt19937(std::random_device()()));
+<<<<<<< HEAD
     _mem_table->insert(*pchunk, indexes.data(), 0, indexes.size());
+=======
+    auto res = _mem_table->insert(*pchunk, indexes.data(), 0, indexes.size());
+    ASSERT_TRUE(res.ok());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ASSERT_TRUE(_mem_table->finalize().ok());
     ASSERT_OK(_mem_table->flush());
     // just verify the metrics have value, rather than verify it accurately

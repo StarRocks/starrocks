@@ -23,9 +23,19 @@ import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
 import static com.starrocks.catalog.system.SystemTable.builder;
 
 public class ReferentialConstraintsSystemTable {
+<<<<<<< HEAD
     public static SystemTable create() {
         return new SystemTable(SystemId.REFERENTIAL_CONSTRAINTS_ID,
                 "referential_constraints",
+=======
+    private static final String NAME = "referential_constraints";
+
+    public static SystemTable create(String catalogName) {
+        return new SystemTable(
+                catalogName,
+                SystemId.REFERENTIAL_CONSTRAINTS_ID,
+                NAME,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 Table.TableType.SCHEMA,
                 builder()
                         .column("CONSTRAINT_CATALOG", ScalarType.createVarchar(NAME_CHAR_LEN))

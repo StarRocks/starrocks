@@ -14,7 +14,12 @@
 
 package com.starrocks.qe;
 
+<<<<<<< HEAD
 import com.starrocks.rpc.FrontendServiceProxy;
+=======
+import com.starrocks.rpc.ThriftConnectionPool;
+import com.starrocks.rpc.ThriftRPCRequestExecutor;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.sql.ast.StatementBase;
@@ -26,6 +31,10 @@ import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+<<<<<<< HEAD
+=======
+import org.apache.spark.internal.config.R;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -61,14 +70,30 @@ public class KillQueryHandleTest {
         ctx1.getConnectScheduler().unregisterConnection(ctx1);
     }
 
+<<<<<<< HEAD
+=======
+    public static ConnectContext getConnectContext() {
+        return connectContext;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Test
     public void testKillStmt2(@Mocked SocketChannel socketChannel, @Mocked TMasterOpResult result)
             throws Exception {
         // test killing query is forwarded to fe and query is successfully killed
+<<<<<<< HEAD
         new MockUp(FrontendServiceProxy.class) {
             @Mock
             public <T> T call(TNetworkAddress address, int timeoutMs, int retryTimes,
                               FrontendServiceProxy.MethodCallable<T> callable) throws Exception {
+=======
+        new MockUp(ThriftRPCRequestExecutor.class) {
+            @Mock
+            public <T, SERVER_CLIENT extends org.apache.thrift.TServiceClient> T call(
+                    ThriftConnectionPool<SERVER_CLIENT> genericPool,
+                    TNetworkAddress address, int timeoutMs, int retryTimes,
+                    ThriftRPCRequestExecutor.MethodCallable<T, R> callable) throws Exception {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 result.state = "OK";
                 return (T) result;
             }
@@ -109,10 +134,19 @@ public class KillQueryHandleTest {
                 return "query xxx not found";
             }
         };
+<<<<<<< HEAD
         new MockUp(FrontendServiceProxy.class) {
             @Mock
             public <T> T call(TNetworkAddress address, int timeoutMs, int retryTimes,
                               FrontendServiceProxy.MethodCallable<T> callable) throws Exception {
+=======
+        new MockUp(ThriftRPCRequestExecutor.class) {
+            @Mock
+            public <T, SERVER_CLIENT extends org.apache.thrift.TServiceClient> T call(
+                    ThriftConnectionPool<SERVER_CLIENT> genericPool,
+                    TNetworkAddress address, int timeoutMs, int retryTimes,
+                    ThriftRPCRequestExecutor.MethodCallable<T, R> callable) throws Exception {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 result.state = "ERR";
                 return (T) result;
             }
@@ -133,7 +167,11 @@ public class KillQueryHandleTest {
 
         ConnectContext ctx = kill(ctx1.getQueryId().toString(), true);
         Assert.assertEquals(QueryState.MysqlStateType.ERR, ctx.getState().getStateType());
+<<<<<<< HEAD
         Assert.assertEquals("Failed to connect to fe 127.0.0.1:9020", ctx.getState().getErrorMessage());
+=======
+        Assert.assertTrue(ctx.getState().getErrorMessage().contains("Connection refused"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         ctx1.getConnectScheduler().unregisterConnection(ctx1);
     }
@@ -141,10 +179,19 @@ public class KillQueryHandleTest {
     @Test
     public void testKillStmtWhenForwardWithUnknownError(@Mocked SocketChannel socketChannel) throws Exception {
         // test killing query is forwarded to fe with unexpected error
+<<<<<<< HEAD
         new MockUp(FrontendServiceProxy.class) {
             @Mock
             public <T> T call(TNetworkAddress address, int timeoutMs, int retryTimes,
                               FrontendServiceProxy.MethodCallable<T> callable) throws Exception {
+=======
+        new MockUp(ThriftRPCRequestExecutor.class) {
+            @Mock
+            public <T, SERVER_CLIENT extends org.apache.thrift.TServiceClient> T call(
+                    ThriftConnectionPool<SERVER_CLIENT> genericPool,
+                    TNetworkAddress address, int timeoutMs, int retryTimes,
+                    ThriftRPCRequestExecutor.MethodCallable<T, R> callable) throws Exception {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 throw new Exception("Unknown error x");
             }
         };
@@ -158,10 +205,32 @@ public class KillQueryHandleTest {
         ctx1.getConnectScheduler().unregisterConnection(ctx1);
     }
 
+<<<<<<< HEAD
     private ConnectContext prepareConnectContext(SocketChannel socketChannel) {
         ConnectContext ctx1 = new ConnectContext(socketChannel) {
             @Override
             public void kill(boolean killConnection) {
+=======
+    @Test
+    public void testKillStmtWithCustomQueryId(@Mocked SocketChannel socketChannel) throws Exception {
+        // test killing query successfully
+        ConnectContext ctx1 = prepareConnectContext(socketChannel);
+        ctx1.getSessionVariable().setCustomQueryId("a_custom_query_id");
+
+        Assert.assertFalse(ctx1.isKilled());
+        ConnectContext ctx = kill("a_custom_query_id", false);
+        // isKilled is set
+        Assert.assertTrue(ctx1.isKilled());
+        Assert.assertEquals(QueryState.MysqlStateType.OK, ctx.getState().getStateType());
+
+        ctx1.getConnectScheduler().unregisterConnection(ctx1);
+    }
+
+    private ConnectContext prepareConnectContext(SocketChannel socketChannel) {
+        ConnectContext ctx1 = new ConnectContext(socketChannel) {
+            @Override
+            public void kill(boolean killConnection, String cancelledMessage) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 super.isKilled = true;
             }
         };

@@ -19,6 +19,10 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
+<<<<<<< HEAD
+=======
+import com.starrocks.analysis.UserVariableExpr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.MapType;
@@ -26,6 +30,11 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.qe.ConnectContext;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.sql.parser.SqlParser;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TExprNodeType;
@@ -214,4 +223,16 @@ public class ExpressionAnalyzerTest extends PlanTestBase {
             Assert.assertEquals(fnCoalesce.getReturnType(), dateTimeType);
         }
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testUserVariableExprAnalyzer() {
+        Expr expr = SqlParser.parseSqlToExpr("[1, 2, 3]", 32);
+        UserVariableExpr userVariableExpr = new UserVariableExpr("test", NodePosition.ZERO);
+        userVariableExpr.setValue(expr);
+        UserVariableExpr copy = (UserVariableExpr) userVariableExpr.clone();
+        Assert.assertEquals(userVariableExpr, copy);
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

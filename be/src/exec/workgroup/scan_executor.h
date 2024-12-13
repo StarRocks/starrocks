@@ -36,6 +36,15 @@ public:
 
     bool submit(ScanTask task);
 
+<<<<<<< HEAD
+=======
+    void force_submit(ScanTask task);
+
+    void bind_cpus(const CpuUtil::CpuIds& cpuids, const std::vector<CpuUtil::CpuIds>& borrowed_cpuids);
+
+    int64_t num_tasks() const;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 private:
     void worker_thread();
 

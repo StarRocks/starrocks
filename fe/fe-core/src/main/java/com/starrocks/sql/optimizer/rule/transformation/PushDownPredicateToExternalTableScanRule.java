@@ -45,6 +45,11 @@ public class PushDownPredicateToExternalTableScanRule extends TransformationRule
             new PushDownPredicateToExternalTableScanRule(OperatorType.LOGICAL_MYSQL_SCAN);
     public static final PushDownPredicateToExternalTableScanRule JDBC_SCAN =
             new PushDownPredicateToExternalTableScanRule(OperatorType.LOGICAL_JDBC_SCAN);
+<<<<<<< HEAD
+=======
+    public static final PushDownPredicateToExternalTableScanRule ODPS_SCAN =
+            new PushDownPredicateToExternalTableScanRule(OperatorType.LOGICAL_ODPS_SCAN);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public PushDownPredicateToExternalTableScanRule(OperatorType type) {
         super(RuleType.TF_PUSH_DOWN_PREDICATE_TO_EXTERNAL_TABLE_SCAN,

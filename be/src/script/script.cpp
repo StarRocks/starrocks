@@ -16,10 +16,21 @@
 
 #include <google/protobuf/util/json_util.h>
 
+<<<<<<< HEAD
 #include "common/greplog.h"
 #include "common/logging.h"
 #include "common/prof/heap_prof.h"
 #include "exec/schema_scanner/schema_be_tablets_scanner.h"
+=======
+#include <regex>
+
+#include "common/greplog.h"
+#include "common/logging.h"
+#include "common/prof/heap_prof.h"
+#include "common/vlog_cntl.h"
+#include "exec/schema_scanner/schema_be_tablets_scanner.h"
+#include "fs/key_cache.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "gen_cpp/olap_file.pb.h"
 #include "gutil/strings/substitute.h"
 #include "http/action/compaction_action.h"
@@ -27,6 +38,12 @@
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "storage/del_vector.h"
+<<<<<<< HEAD
+=======
+#include "storage/lake/tablet.h"
+#include "storage/lake/tablet_manager.h"
+#include "storage/lake/tablet_metadata.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "storage/primary_key_dump.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
@@ -34,6 +51,10 @@
 #include "storage/tablet_meta_manager.h"
 #include "storage/tablet_updates.h"
 #include "util/stack_util.h"
+<<<<<<< HEAD
+=======
+#include "util/url_coding.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "wrenbind17/wrenbind17.hpp"
 
 using namespace wrenbind17;
@@ -84,7 +105,11 @@ static std::string tablet_set_tablet_state(Tablet& tablet, int state) {
 }
 
 static const TabletSchema& tablet_tablet_schema(Tablet& tablet) {
+<<<<<<< HEAD
     return tablet.tablet_schema();
+=======
+    return tablet.unsafe_tablet_schema_ref();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 static uint64_t tablet_tablet_id(Tablet& tablet) {
@@ -99,12 +124,21 @@ static DataDir* tablet_data_dir(Tablet& tablet) {
     return tablet.data_dir();
 }
 
+<<<<<<< HEAD
 static uint64_t get_major(EditVersion& self) {
     return self.major();
 }
 
 static uint64_t get_minor(EditVersion& self) {
     return self.minor();
+=======
+static uint64_t get_major_number(EditVersion& self) {
+    return self.major_number();
+}
+
+static uint64_t get_minor_number(EditVersion& self) {
+    return self.minor_number();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 static void bind_common(ForeignModule& m) {
@@ -133,7 +167,11 @@ std::string exec(const std::string& cmd) {
     std::string ret;
 
     FILE* fp = popen(cmd.c_str(), "r");
+<<<<<<< HEAD
     if (fp == NULL) {
+=======
+    if (fp == nullptr) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ret = strings::Substitute("popen failed: $0 cmd: $1", strerror(errno), cmd);
         return ret;
     }
@@ -155,10 +193,29 @@ std::string exec(const std::string& cmd) {
     return ret;
 }
 
+<<<<<<< HEAD
+=======
+static std::string exec_whitelist(const std::string& cmd) {
+    static std::regex legal_cmd(R"((ls|cat|head|tail|grep|free|echo)[^<>\|;`\\]*)");
+    std::cmatch m;
+    if (!std::regex_match(cmd.c_str(), m, legal_cmd)) {
+        return "illegal cmd";
+    }
+    return exec(cmd);
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 static std::string io_profile_and_get_topn_stats(const std::string& mode, int seconds, size_t topn) {
     return IOProfiler::profile_and_get_topn_stats_str(mode, seconds, topn);
 }
 
+<<<<<<< HEAD
+=======
+static std::string key_cache_info() {
+    return KeyCache::instance().to_string();
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 void bind_exec_env(ForeignModule& m) {
     {
         auto& cls = m.klass<MemTracker>("MemTracker");
@@ -188,11 +245,19 @@ void bind_exec_env(ForeignModule& m) {
         cls.funcStaticExt<&grep_log_as_string>("grep_log_as_string");
         cls.funcStaticExt<&get_file_write_history>("get_file_write_history");
         cls.funcStaticExt<&unix_seconds>("unix_seconds");
+<<<<<<< HEAD
         cls.funcStaticExt<&list_stack_trace_of_long_wait_mutex>("list_stack_trace_of_long_wait_mutex");
+=======
+        // uncomment this to enable executing shell commands
+        // cls.funcStaticExt<&exec_whitelist>("exec");
+        cls.funcStaticExt<&list_stack_trace_of_long_wait_mutex>("list_stack_trace_of_long_wait_mutex");
+        cls.funcStaticExt<&key_cache_info>("key_cache_info");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     {
         auto& cls = m.klass<GlobalEnv>("GlobalEnv");
         REG_STATIC_METHOD(GlobalEnv, GetInstance);
+<<<<<<< HEAD
         REG_METHOD(GlobalEnv, process_mem_tracker);
         REG_METHOD(GlobalEnv, query_pool_mem_tracker);
         REG_METHOD(GlobalEnv, load_mem_tracker);
@@ -203,6 +268,42 @@ void bind_exec_env(ForeignModule& m) {
         REG_METHOD(GlobalEnv, compaction_mem_tracker);
         REG_METHOD(GlobalEnv, update_mem_tracker);
         REG_METHOD(GlobalEnv, clone_mem_tracker);
+=======
+
+        // level 0
+        REG_METHOD(GlobalEnv, process_mem_tracker);
+
+        // level 1
+        REG_METHOD(GlobalEnv, query_pool_mem_tracker);
+        REG_METHOD(GlobalEnv, load_mem_tracker);
+        REG_METHOD(GlobalEnv, metadata_mem_tracker);
+        REG_METHOD(GlobalEnv, compaction_mem_tracker);
+        REG_METHOD(GlobalEnv, schema_change_mem_tracker);
+        REG_METHOD(GlobalEnv, page_cache_mem_tracker);
+        REG_METHOD(GlobalEnv, jit_cache_mem_tracker);
+        REG_METHOD(GlobalEnv, update_mem_tracker);
+        REG_METHOD(GlobalEnv, chunk_allocator_mem_tracker);
+        REG_METHOD(GlobalEnv, passthrough_mem_tracker);
+        REG_METHOD(GlobalEnv, clone_mem_tracker);
+        REG_METHOD(GlobalEnv, consistency_mem_tracker);
+        REG_METHOD(GlobalEnv, connector_scan_pool_mem_tracker);
+        REG_METHOD(GlobalEnv, datacache_mem_tracker);
+
+        // level 2
+        REG_METHOD(GlobalEnv, tablet_metadata_mem_tracker);
+        REG_METHOD(GlobalEnv, rowset_metadata_mem_tracker);
+        REG_METHOD(GlobalEnv, segment_metadata_mem_tracker);
+        REG_METHOD(GlobalEnv, column_metadata_mem_tracker);
+
+        // level 3
+        REG_METHOD(GlobalEnv, tablet_schema_mem_tracker);
+        REG_METHOD(GlobalEnv, column_zonemap_index_mem_tracker);
+        REG_METHOD(GlobalEnv, ordinal_index_mem_tracker);
+        REG_METHOD(GlobalEnv, bitmap_index_mem_tracker);
+        REG_METHOD(GlobalEnv, bloom_filter_index_mem_tracker);
+        REG_METHOD(GlobalEnv, segment_zonemap_mem_tracker);
+        REG_METHOD(GlobalEnv, short_key_index_mem_tracker);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     {
         auto& cls = m.klass<HeapProf>("HeapProf");
@@ -214,6 +315,16 @@ void bind_exec_env(ForeignModule& m) {
         REG_METHOD(HeapProf, to_dot_format);
         REG_METHOD(HeapProf, dump_dot_snapshot);
     }
+<<<<<<< HEAD
+=======
+    {
+        auto& cls = m.klass<VLogCntl>("VLogCntl");
+        REG_STATIC_METHOD(VLogCntl, getInstance);
+        REG_METHOD(VLogCntl, enable);
+        REG_METHOD(VLogCntl, disable);
+        REG_METHOD(VLogCntl, setLogLevel);
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 class StorageEngineRef {
@@ -239,6 +350,25 @@ public:
         return ptr;
     }
 
+<<<<<<< HEAD
+=======
+    static std::string get_lake_tablet_metadata_json(int64_t tablet_id, int64_t version) {
+        auto tablet_manager = ExecEnv::GetInstance()->lake_tablet_manager();
+        RETURN_IF(nullptr == tablet_manager, "");
+        auto meta_st = tablet_manager->get_tablet_metadata(tablet_id, version, false);
+        RETURN_IF(!meta_st.ok(), meta_st.status().to_string());
+        return proto_to_json(*meta_st.value());
+    }
+
+    static std::string decode_encryption_meta(const std::string& meta_base64) {
+        EncryptionMetaPB pb;
+        std::string meta_bytes;
+        RETURN_IF(!base64_decode(meta_base64, &meta_bytes), "bad base64 string");
+        RETURN_IF(!pb.ParseFromString(meta_bytes), "parse encryption meta failed");
+        return proto_to_json(pb);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     static std::shared_ptr<TabletBasicInfo> get_tablet_info(int64_t tablet_id) {
         std::vector<TabletBasicInfo> tablet_infos;
         auto manager = StorageEngine::instance()->tablet_manager();
@@ -289,7 +419,11 @@ public:
             return "not support recover";
         }
         Status st = tablet->updates()->recover();
+<<<<<<< HEAD
         return strings::Substitute("recover tablet:$0 status:$1", std::to_string(tablet_id), st.get_error_msg());
+=======
+        return strings::Substitute("recover tablet:$0 status:$1", std::to_string(tablet_id), st.message());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     static std::string get_tablet_meta_json(int64_t tablet_id) {
@@ -340,6 +474,17 @@ public:
         return StorageEngine::instance()->get_manual_compaction_status();
     }
 
+<<<<<<< HEAD
+=======
+    static std::string ls_tablet_dir(int64_t tablet_id) {
+        auto tablet = get_tablet(tablet_id);
+        if (!tablet) {
+            return "tablet not found";
+        }
+        return exec_whitelist(strings::Substitute("ls -al $0", tablet->schema_hash_path()));
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     static std::string pk_dump(int64_t tablet_id) {
         auto tablet = get_tablet(tablet_id);
         if (!tablet) {
@@ -374,6 +519,12 @@ public:
             REG_VAR(TabletBasicInfo, create_time);
             REG_VAR(TabletBasicInfo, state);
             REG_VAR(TabletBasicInfo, type);
+<<<<<<< HEAD
+=======
+            REG_VAR(TabletBasicInfo, data_dir);
+            REG_VAR(TabletBasicInfo, shard_id);
+            REG_VAR(TabletBasicInfo, schema_hash);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         {
             auto& cls = m.klass<TabletSchema>("TabletSchema");
@@ -426,8 +577,13 @@ public:
         }
         {
             auto& cls = m.klass<EditVersion>("EditVersion");
+<<<<<<< HEAD
             cls.funcExt<&get_major>("major");
             cls.funcExt<&get_minor>("minor");
+=======
+            cls.funcExt<&get_major_number>("major_number");
+            cls.funcExt<&get_minor_number>("minor_number");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             cls.func<&EditVersion::to_string>("toString");
         }
         {
@@ -442,12 +598,20 @@ public:
             REG_VAR(EditVersionInfo, creation_time);
             REG_VAR(EditVersionInfo, rowsets);
             REG_VAR(EditVersionInfo, deltas);
+<<<<<<< HEAD
+=======
+            REG_VAR(EditVersionInfo, gtid);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             REG_METHOD(EditVersionInfo, get_compaction);
         }
         {
             auto& cls = m.klass<Rowset>("Rowset");
             REG_METHOD(Rowset, rowset_id_str);
+<<<<<<< HEAD
             REG_METHOD(Rowset, schema);
+=======
+            REG_METHOD(Rowset, schema_ref);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             REG_METHOD(Rowset, start_version);
             REG_METHOD(Rowset, end_version);
             REG_METHOD(Rowset, creation_time);
@@ -501,6 +665,11 @@ public:
             REG_STATIC_METHOD(StorageEngineRef, get_tablet_info);
             REG_STATIC_METHOD(StorageEngineRef, get_tablet_infos);
             REG_STATIC_METHOD(StorageEngineRef, get_tablet_meta_json);
+<<<<<<< HEAD
+=======
+            REG_STATIC_METHOD(StorageEngineRef, get_lake_tablet_metadata_json);
+            REG_STATIC_METHOD(StorageEngineRef, decode_encryption_meta);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             REG_STATIC_METHOD(StorageEngineRef, reset_delvec);
             REG_STATIC_METHOD(StorageEngineRef, get_tablet);
             REG_STATIC_METHOD(StorageEngineRef, drop_tablet);
@@ -511,6 +680,10 @@ public:
             REG_STATIC_METHOD(StorageEngineRef, submit_manual_compaction_task_for_tablet);
             REG_STATIC_METHOD(StorageEngineRef, get_manual_compaction_status);
             REG_STATIC_METHOD(StorageEngineRef, pk_dump);
+<<<<<<< HEAD
+=======
+            REG_STATIC_METHOD(StorageEngineRef, ls_tablet_dir);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             REG_STATIC_METHOD(StorageEngineRef, set_error_state);
             REG_STATIC_METHOD(StorageEngineRef, recover_tablet);
         }
@@ -524,7 +697,11 @@ Status execute_script(const std::string& script, std::string& output) {
     bind_common(m);
     bind_exec_env(m);
     StorageEngineRef::bind(m);
+<<<<<<< HEAD
     vm.runFromSource("main", R"(import "starrocks" for ExecEnv, GlobalEnv, HeapProf, StorageEngine)");
+=======
+    vm.runFromSource("main", R"(import "starrocks" for ExecEnv, GlobalEnv, HeapProf, StorageEngine, VLogCntl)");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     try {
         vm.runFromSource("main", script);
     } catch (const std::exception& e) {

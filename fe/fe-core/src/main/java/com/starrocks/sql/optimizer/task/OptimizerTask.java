@@ -52,7 +52,10 @@ public abstract class OptimizerTask {
             if (groupExpression.hasRuleExplored(rule)) {
                 continue;
             }
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (!rule.getPattern().matchWithoutChild(groupExpression)) {
                 continue;
             }

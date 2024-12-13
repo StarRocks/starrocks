@@ -14,7 +14,10 @@
 
 package com.starrocks.analysis;
 
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -22,6 +25,7 @@ import java.util.Map;
 
 public abstract class HintNode implements Comparable<HintNode>, ParseNode {
 
+<<<<<<< HEAD
     protected Map<String, String> value;
 
     protected final NodePosition pos;
@@ -31,6 +35,14 @@ public abstract class HintNode implements Comparable<HintNode>, ParseNode {
     protected HintNode(NodePosition pos, Map<String, String> value, String hintStr) {
         this.pos = pos;
         this.value = value;
+=======
+    protected final NodePosition pos;
+
+    protected final String hintStr;
+
+    protected HintNode(NodePosition pos, String hintStr) {
+        this.pos = pos;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.hintStr = hintStr;
     }
 
@@ -38,6 +50,7 @@ public abstract class HintNode implements Comparable<HintNode>, ParseNode {
         return Scope.QUERY;
     }
 
+<<<<<<< HEAD
     public Map<String, String> getValue() {
         return value;
     }
@@ -50,6 +63,13 @@ public abstract class HintNode implements Comparable<HintNode>, ParseNode {
     @Override
     public String toSql() {
         return "";
+=======
+    public abstract Map<String, String> getValue();
+
+    @Override
+    public String toSql() {
+        return hintStr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -71,7 +91,11 @@ public abstract class HintNode implements Comparable<HintNode>, ParseNode {
         // the entire query
         QUERY,
         // part of a query. Like hint in select * from (select hint from tbl),
+<<<<<<< HEAD
         // we may want the hint only takes effect in the subquery in the futuer.
+=======
+        // we may want the hint only takes effect in the subquery in the future.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         CLAUSE
     }
 }

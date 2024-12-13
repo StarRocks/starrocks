@@ -24,7 +24,11 @@ static constexpr int sleep_interval = 100 * 1000; // 100ms
 static constexpr int sleep_interval = 1 * 1000 * 1000; // 1 seconds
 #endif
 
+<<<<<<< HEAD
 void nap_sleep(int32_t sleep_secs, std::function<bool()> stop_condition) {
+=======
+void nap_sleep(int32_t sleep_secs, const std::function<bool()>& stop_condition) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     Awaitility await;
     await.timeout(sleep_secs * 1000LL * 1000LL).interval(sleep_interval);
     await.until(stop_condition);

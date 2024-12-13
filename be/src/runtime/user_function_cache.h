@@ -34,12 +34,21 @@
 
 #pragma once
 
+<<<<<<< HEAD
+=======
+#include <any>
+#include <functional>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include <memory>
 #include <mutex>
 #include <string>
 #include <unordered_map>
 
 #include "common/status.h"
+<<<<<<< HEAD
+=======
+#include "common/statusor.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 namespace starrocks {
 
@@ -56,8 +65,15 @@ struct UserFunctionCacheEntry;
 class UserFunctionCache {
 public:
     static constexpr const char* JAVA_UDF_SUFFIX = ".jar";
+<<<<<<< HEAD
     static constexpr int UDF_TYPE_UNKNOWN = -1;
     static constexpr int UDF_TYPE_JAVA = 1;
+=======
+    static constexpr const char* PY_UDF_SUFFIX = ".py.zip";
+    static constexpr int UDF_TYPE_UNKNOWN = -1;
+    static constexpr int UDF_TYPE_JAVA = 1;
+    static constexpr int UDF_TYPE_PYTHON = 2;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     using UserFunctionCacheEntryPtr = std::shared_ptr<UserFunctionCacheEntry>;
     // local_dir is the directory which contain cached library.
@@ -70,17 +86,34 @@ public:
     static UserFunctionCache* instance();
 
     Status get_libpath(int64_t fid, const std::string& url, const std::string& checksum, std::string* libpath);
+<<<<<<< HEAD
+=======
+    StatusOr<std::any> load_cacheable_java_udf(
+            int64_t fid, const std::string& url, const std::string& checksum,
+            const std::function<StatusOr<std::any>(const std::string& entry)>& loader);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     static int get_function_type(const std::string& url);
 
 private:
     Status _load_cached_lib();
     Status _load_entry_from_lib(const std::string& dir, const std::string& file);
+<<<<<<< HEAD
     Status _get_cache_entry(int64_t fid, const std::string& url, const std::string& checksum,
                             UserFunctionCacheEntryPtr* output_entry);
     Status _load_cache_entry(const std::string& url, UserFunctionCacheEntryPtr& entry);
     Status _download_lib(const std::string& url, UserFunctionCacheEntryPtr& entry);
     Status _load_cache_entry_internal(UserFunctionCacheEntryPtr& entry);
+=======
+    template <class Loader>
+    Status _get_cache_entry(int64_t fid, const std::string& url, const std::string& checksum,
+                            UserFunctionCacheEntryPtr* output_entry, Loader&& loader);
+    template <class Loader>
+    Status _load_cache_entry(const std::string& url, UserFunctionCacheEntryPtr& entry, Loader&& loader);
+    Status _download_lib(const std::string& url, UserFunctionCacheEntryPtr& entry);
+    template <class Loader>
+    Status _load_cache_entry_internal(const std::string& url, UserFunctionCacheEntryPtr& entry, Loader&& loader);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::string _make_lib_file(int64_t function_id, const std::string& checksum, const std::string& shuffix);
     void _destroy_cache_entry(UserFunctionCacheEntryPtr& entry);
 

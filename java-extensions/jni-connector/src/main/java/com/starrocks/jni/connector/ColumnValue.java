@@ -14,6 +14,12 @@
 
 package com.starrocks.jni.connector;
 
+<<<<<<< HEAD
+=======
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.List;
 
 public interface ColumnValue {
@@ -30,7 +36,10 @@ public interface ColumnValue {
     double getDouble();
 
     String getString(ColumnType.TypeValue type);
+<<<<<<< HEAD
     String getTimestamp(ColumnType.TypeValue type);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     byte[] getBytes();
 
     void unpackArray(List<ColumnValue> values);
@@ -40,4 +49,13 @@ public interface ColumnValue {
     void unpackStruct(List<Integer> structFieldIndex, List<ColumnValue> values);
 
     byte getByte();
+<<<<<<< HEAD
+=======
+
+    BigDecimal getDecimal();
+
+    LocalDate getDate();
+
+    LocalDateTime getDateTime(ColumnType.TypeValue type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

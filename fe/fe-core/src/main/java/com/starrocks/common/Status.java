@@ -57,6 +57,17 @@ public class Status {
     private TStatusCode errorCode; // anything other than OK
     private String errorMsg;
 
+<<<<<<< HEAD
+=======
+    public static Status internalError(String errorMsg) {
+        return new Status(TStatusCode.INTERNAL_ERROR, errorMsg);
+    }
+
+    public static Status thriftRPCError(String errorMsg) {
+        return new Status(TStatusCode.THRIFT_RPC_ERROR, errorMsg);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public Status() {
         this.errorCode = TStatusCode.OK;
         this.errorMsg = null;
@@ -78,10 +89,13 @@ public class Status {
         }
     }
 
+<<<<<<< HEAD
     public static Status internalError(String errorMsg) {
         return new Status(TStatusCode.INTERNAL_ERROR, errorMsg);
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public TStatus toThrift() {
         TStatus tstatus = new TStatus(errorCode);
         if (!StringUtils.isEmpty(errorMsg)) {
@@ -98,6 +112,13 @@ public class Status {
         return this.errorCode == TStatusCode.CANCELLED;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isTimeout() {
+        return this.errorCode == TStatusCode.TIMEOUT;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public boolean isRpcError() {
         return this.errorCode == TStatusCode.THRIFT_RPC_ERROR;
     }
@@ -119,7 +140,11 @@ public class Status {
         this.errorMsg = status.getErrorMsg();
     }
 
+<<<<<<< HEAD
     public void setStatus(String msg) {
+=======
+    public void setInternalErrorStatus(String msg) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (this.errorCode != TStatusCode.GLOBAL_DICT_ERROR) {
             this.errorCode = TStatusCode.INTERNAL_ERROR;
             this.errorMsg = msg;
@@ -138,6 +163,14 @@ public class Status {
         this.errorMsg = msg;
     }
 
+<<<<<<< HEAD
+=======
+    public void setTimeOutStatus(String msg) {
+        this.errorCode = TStatusCode.TIMEOUT;
+        this.errorMsg = msg;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void rewriteErrorMsg() {
         if (ok()) {
             return;

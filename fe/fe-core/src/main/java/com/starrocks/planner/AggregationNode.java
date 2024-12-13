@@ -50,7 +50,11 @@ import com.starrocks.analysis.TupleId;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
@@ -89,6 +93,10 @@ public class AggregationNode extends PlanNode {
     private String streamingPreaggregationMode = "auto";
 
     private boolean useSortAgg = false;
+<<<<<<< HEAD
+=======
+    private boolean usePerBucketOptimize = false;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     private boolean withLocalShuffle = false;
 
@@ -152,7 +160,11 @@ public class AggregationNode extends PlanNode {
     }
 
     @Override
+<<<<<<< HEAD
     public void init(Analyzer analyzer) throws UserException {
+=======
+    public void init(Analyzer analyzer) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public void setStreamingPreaggregationMode(String mode) {
@@ -163,6 +175,18 @@ public class AggregationNode extends PlanNode {
         this.useSortAgg = useSortAgg;
     }
 
+<<<<<<< HEAD
+=======
+    public void setUsePerBucketOptimize(boolean usePerBucketOptimize) {
+        this.usePerBucketOptimize = usePerBucketOptimize;
+    }
+
+    public void disablePhysicalPropertyOptimize() {
+        setUseSortAgg(false);
+        setUsePerBucketOptimize(false);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public void computeStats(Analyzer analyzer) {
     }
@@ -224,6 +248,10 @@ public class AggregationNode extends PlanNode {
             msg.agg_node.setSql_aggregate_functions(sqlAggFuncBuilder.toString());
         }
         msg.agg_node.setUse_sort_agg(useSortAgg);
+<<<<<<< HEAD
+=======
+        msg.agg_node.setUse_per_bucket_optimize(usePerBucketOptimize);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         List<Expr> groupingExprs = aggInfo.getGroupingExprs();
         if (groupingExprs != null) {
@@ -259,6 +287,10 @@ public class AggregationNode extends PlanNode {
         msg.agg_node.setAgg_func_set_version(FeConstants.AGG_FUNC_VERSION);
         msg.agg_node.setInterpolate_passthrough(
                 useStreamingPreagg && ConnectContext.get().getSessionVariable().isInterpolatePassthrough());
+<<<<<<< HEAD
+=======
+        msg.agg_node.setEnable_pipeline_share_limit(ConnectContext.get().getSessionVariable().getEnableAggregationPipelineShareLimit());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     protected String getDisplayLabelDetail() {
@@ -310,11 +342,14 @@ public class AggregationNode extends PlanNode {
     }
 
     @Override
+<<<<<<< HEAD
     public int getNumInstances() {
         return children.get(0).getNumInstances();
     }
 
     @Override
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public Optional<List<Expr>> candidatesOfSlotExpr(Expr expr, Function<Expr, Boolean> couldBound) {
         if (!couldBound.apply(expr)) {
             return Optional.empty();
@@ -335,8 +370,15 @@ public class AggregationNode extends PlanNode {
     }
 
     @Override
+<<<<<<< HEAD
     public boolean pushDownRuntimeFilters(DescriptorTable descTbl, RuntimeFilterDescription description, Expr probeExpr,
                                           List<Expr> partitionByExprs) {
+=======
+    public boolean pushDownRuntimeFilters(RuntimeFilterPushDownContext context, Expr probeExpr,
+                                          List<Expr> partitionByExprs) {
+        RuntimeFilterDescription description = context.getDescription();
+        DescriptorTable descTbl = context.getDescTbl();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (!canPushDownRuntimeFilter()) {
             return false;
         }
@@ -346,7 +388,11 @@ public class AggregationNode extends PlanNode {
         }
 
         Function<Expr, Boolean> couldBoundChecker = couldBound(description, descTbl);
+<<<<<<< HEAD
         return pushdownRuntimeFilterForChildOrAccept(descTbl, description, probeExpr,
+=======
+        return pushdownRuntimeFilterForChildOrAccept(context, probeExpr,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 candidatesOfSlotExpr(probeExpr, couldBoundChecker),
                 partitionByExprs, candidatesOfSlotExprs(partitionByExprs, couldBoundForPartitionExpr()), 0, true);
     }
@@ -457,4 +503,12 @@ public class AggregationNode extends PlanNode {
         return descriptorTable.getTupleDesc(tupleId).getSlots().subList(0, numGroupingExprs + numAggExprs)
                 .stream().map(SlotDescriptor::getId).collect(Collectors.toList());
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    public boolean needCollectExecStats() {
+        return true;
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

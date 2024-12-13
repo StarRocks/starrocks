@@ -16,6 +16,10 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.StringLiteral;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.ScalarType;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
@@ -77,4 +81,14 @@ public class AnalyzerUtilsTest {
         Assert.assertTrue(shouldReplaceExpr instanceof StringLiteral);
     }
 
+<<<<<<< HEAD
+=======
+    @Test
+    public void testConvertCatalogMaxStringToOlapMaxString() {
+        ScalarType catalogString = ScalarType.createDefaultCatalogString();
+        ScalarType convertedString = (ScalarType) AnalyzerUtils.transformTableColumnType(catalogString);
+        Assert.assertEquals(ScalarType.getOlapMaxVarcharLength(), convertedString.getLength());
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

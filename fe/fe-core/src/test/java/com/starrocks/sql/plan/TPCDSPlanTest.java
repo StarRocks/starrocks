@@ -34,6 +34,10 @@ public class TPCDSPlanTest extends TPCDSPlanTestBase {
 
     @Before
     public void setUp() {
+<<<<<<< HEAD
+=======
+        super.setUp();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         tpcdsStats = getTPCDSTableStats();
     }
 

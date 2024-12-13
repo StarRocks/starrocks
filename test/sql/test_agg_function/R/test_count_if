@@ -14,7 +14,10 @@ PARTITION p20220421 VALUES [("2022-04-21 00:00:00"), ("2022-04-22 00:00:00")))
 DISTRIBUTED BY HASH(`v1`) BUCKETS 4
 PROPERTIES (
 "replication_num" = "1",
+<<<<<<< HEAD
 "in_memory" = "false",
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
 "compression" = "LZ4"
@@ -83,4 +86,8 @@ select count_if(true), count_if(false), count_if('') from test_count_if;
 select count_if(v1 = 'a'), count(v1), count(if(v1 = 'a', 1, null)) from test_count_if;
 -- result:
 5	8	5
+<<<<<<< HEAD
 -- !result
+=======
+-- !result
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

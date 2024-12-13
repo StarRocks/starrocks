@@ -62,8 +62,17 @@ struct MinMaxAnyDispatcher {
                     "min", true, AggregateFactory::MakeMinAggregateFunction<lt>());
             resolver->add_aggregate_mapping<lt, lt, MaxAggregateData<lt>>(
                     "max", true, AggregateFactory::MakeMaxAggregateFunction<lt>());
+<<<<<<< HEAD
             resolver->add_aggregate_mapping<lt, lt, AnyValueAggregateData<lt>>(
                     "any_value", true, AggregateFactory::MakeAnyValueAggregateFunction<lt>());
+=======
+            // For json type, use `AnyValueSemiState` state to store the value as other semi structures.
+            // This is because any_value's agg state may be flat json and cannot extract `JsonValue` from it directly.
+            if (lt_is_aggregate<lt>) {
+                resolver->add_aggregate_mapping<lt, lt, AnyValueAggregateData<lt>>(
+                        "any_value", true, AggregateFactory::MakeAnyValueAggregateFunction<lt>());
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 };

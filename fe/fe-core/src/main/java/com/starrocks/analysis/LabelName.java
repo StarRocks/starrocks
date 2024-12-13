@@ -35,11 +35,18 @@
 package com.starrocks.analysis;
 
 import com.starrocks.cluster.ClusterNamespace;
+<<<<<<< HEAD
 import com.starrocks.sql.analyzer.FeNameFormat;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.analyzer.FeNameFormat;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.parser.NodePosition;
 import org.apache.commons.lang.builder.HashCodeBuilder;
 

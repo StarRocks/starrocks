@@ -35,9 +35,15 @@ public class AzureCloudConfiguration extends CloudConfiguration {
     public void toThrift(TCloudConfiguration tCloudConfiguration) {
         super.toThrift(tCloudConfiguration);
         tCloudConfiguration.setCloud_type(TCloudType.AZURE);
+<<<<<<< HEAD
         Map<String, String> properties = tCloudConfiguration.getCloud_properties_v2();
         azureStorageCloudCredential.toThrift(properties);
         tCloudConfiguration.setCloud_properties_v2(properties);
+=======
+        Map<String, String> properties = tCloudConfiguration.getCloud_properties();
+        azureStorageCloudCredential.toThrift(properties);
+        tCloudConfiguration.setCloud_properties(properties);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override

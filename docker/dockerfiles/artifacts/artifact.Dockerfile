@@ -11,13 +11,23 @@ ARG builder=starrocks/dev-env-ubuntu:latest
 ARG RELEASE_VERSION
 ARG BUILD_TYPE=Release
 ARG MAVEN_OPTS="-Dmaven.artifact.threads=128"
+<<<<<<< HEAD
+=======
+ARG BUILD_ROOT=/build
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 FROM ${builder} as fe-builder
 ARG RELEASE_VERSION
 ARG BUILD_TYPE
 ARG MAVEN_OPTS
+<<<<<<< HEAD
 COPY . /build/starrocks
 WORKDIR /build/starrocks
+=======
+ARG BUILD_ROOT
+COPY . ${BUILD_ROOT}
+WORKDIR ${BUILD_ROOT}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 # clean and build Frontend and Spark Dpp application
 RUN --mount=type=cache,target=/root/.m2/ STARROCKS_VERSION=${RELEASE_VERSION} BUILD_TYPE=${BUILD_TYPE} MAVEN_OPTS=${MAVEN_OPTS} ./build.sh --fe --clean
 
@@ -25,8 +35,14 @@ RUN --mount=type=cache,target=/root/.m2/ STARROCKS_VERSION=${RELEASE_VERSION} BU
 FROM ${builder} as broker-builder
 ARG RELEASE_VERSION
 ARG MAVEN_OPTS
+<<<<<<< HEAD
 COPY . /build/starrocks
 WORKDIR /build/starrocks
+=======
+ARG BUILD_ROOT
+COPY . ${BUILD_ROOT}
+WORKDIR ${BUILD_ROOT}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 # clean and build Frontend and Spark Dpp application
 RUN --mount=type=cache,target=/root/.m2/ cd fs_brokers/apache_hdfs_broker/ && STARROCKS_VERSION=${RELEASE_VERSION} MAVEN_OPTS=${MAVEN_OPTS} ./build.sh
 
@@ -34,6 +50,7 @@ RUN --mount=type=cache,target=/root/.m2/ cd fs_brokers/apache_hdfs_broker/ && ST
 FROM ${builder} as be-builder
 ARG RELEASE_VERSION
 ARG MAVEN_OPTS
+<<<<<<< HEAD
 # build Backend in different mode (build_type could be Release, DEBUG, or ASAN). Default value is Release.
 ARG BUILD_TYPE
 COPY . /build/starrocks
@@ -41,12 +58,28 @@ WORKDIR /build/starrocks
 RUN --mount=type=cache,target=/root/.m2/ STARROCKS_VERSION=${RELEASE_VERSION} BUILD_TYPE=${BUILD_TYPE} MAVEN_OPTS=${MAVEN_OPTS} ./build.sh --be --use-staros --clean -j `nproc`
 
 FROM ubuntu:22.04 as datadog-downloader
+=======
+ARG BUILD_ROOT
+# build Backend in different mode (build_type could be Release, DEBUG, or ASAN). Default value is Release.
+ARG BUILD_TYPE
+COPY . ${BUILD_ROOT}
+WORKDIR ${BUILD_ROOT}
+RUN --mount=type=cache,target=/root/.m2/ STARROCKS_VERSION=${RELEASE_VERSION} BUILD_TYPE=${BUILD_TYPE} MAVEN_OPTS=${MAVEN_OPTS} ./build.sh --be --enable-shared-data --clean -j `nproc`
+
+FROM ubuntu:22.04 as downloader
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 RUN apt-get update -y && apt-get install -y --no-install-recommends wget tar xz-utils
 
 # download the latest dd-java-agent
 ADD 'https://dtdg.co/latest-java-tracer' /datadog/dd-java-agent.jar
 
+<<<<<<< HEAD
+=======
+# download the latest arthas
+ADD 'https://arthas.aliyun.com/arthas-boot.jar' /arthas/arthas-boot.jar
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 # Get ddprof for BE profiling
 RUN imagearch=$(arch | sed 's/aarch64/arm64/; s/x86_64/amd64/') \
     && wget --no-check-certificate "https://github.com/DataDog/ddprof/releases/latest/download/ddprof-${imagearch}-linux.tar.xz" -O ddprof-linux.tar.xz \
@@ -56,15 +89,30 @@ RUN imagearch=$(arch | sed 's/aarch64/arm64/; s/x86_64/amd64/') \
 
 FROM busybox:latest
 ARG RELEASE_VERSION
+<<<<<<< HEAD
+=======
+ARG BUILD_ROOT
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 LABEL org.opencontainers.image.source="https://github.com/starrocks/starrocks"
 LABEL org.starrocks.version=${RELEASE_VERSION:-"UNKNOWN"}
 
+<<<<<<< HEAD
 COPY --from=fe-builder /build/starrocks/output /release/fe_artifacts
 COPY --from=be-builder /build/starrocks/output /release/be_artifacts
 COPY --from=broker-builder /build/starrocks/fs_brokers/apache_hdfs_broker/output /release/broker_artifacts
 
 COPY --from=datadog-downloader /datadog/dd-java-agent.jar /release/fe_artifacts/fe/datadog/dd-java-agent.jar
 COPY --from=datadog-downloader /datadog/ddprof /release/be_artifacts/be/datadog/ddprof
+=======
+COPY --from=fe-builder ${BUILD_ROOT}/output /release/fe_artifacts
+COPY --from=be-builder ${BUILD_ROOT}/output /release/be_artifacts
+COPY --from=broker-builder ${BUILD_ROOT}/fs_brokers/apache_hdfs_broker/output /release/broker_artifacts
+
+COPY --from=downloader /arthas/arthas-boot.jar /release/fe_artifacts/fe/arthas/arthas-boot.jar
+COPY --from=downloader /datadog/dd-java-agent.jar /release/fe_artifacts/fe/datadog/dd-java-agent.jar
+COPY --from=downloader /datadog/ddprof /release/be_artifacts/be/datadog/ddprof
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 WORKDIR /release

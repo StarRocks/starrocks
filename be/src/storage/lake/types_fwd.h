@@ -25,6 +25,15 @@ class DelVector;
 class ChunkIterator;
 class Schema;
 class Column;
+<<<<<<< HEAD
+=======
+class RowsetMetadataPB;
+
+using ChunkIteratorPtr = std::shared_ptr<ChunkIterator>;
+using RowsetMetadata = RowsetMetadataPB;
+using RowsetMetadataPtr = std::shared_ptr<const RowsetMetadata>;
+using RowsetMetadataUniquePtr = std::unique_ptr<const RowsetMetadata>;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 namespace lake {
 
@@ -32,11 +41,15 @@ class Rowset;
 class Tablet;
 class CompactionTask;
 class LocationProvider;
+<<<<<<< HEAD
 class RowsetMetadataPB;
 
 using ChunkIteratorPtr = std::shared_ptr<ChunkIterator>;
 using RowsetMetadata = RowsetMetadataPB;
 using RowsetMetadataPtr = std::shared_ptr<const starrocks::lake::RowsetMetadata>;
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 using RowsetPtr = std::shared_ptr<starrocks::lake::Rowset>;
 using SegmentPtr = std::shared_ptr<starrocks::Segment>;
 using TabletSchemaPtr = std::shared_ptr<const starrocks::TabletSchema>;

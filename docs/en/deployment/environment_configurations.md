@@ -58,7 +58,11 @@ If any of the above ports are occupied, you must find alternatives and specify t
 
 On the instances used for the CN deployment, you need to check the following ports:
 
+<<<<<<< HEAD
 - `9060`: CN Thrift server port (`be_port`) (From v3.1 onwards, this configuration item is renamed from `thrift_port` to `be_port`.)
+=======
+- `9060`: CN Thrift server port (`be_port`)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 - `8040`: CN HTTP server port (`be_http_port`)
 - `9050`: CN heartbeat service port (`heartbeat_service_port`)
 - `8060`: CN bRPC port (`brpc_port`)

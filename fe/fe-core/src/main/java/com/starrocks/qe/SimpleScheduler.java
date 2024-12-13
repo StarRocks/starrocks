@@ -34,6 +34,7 @@
 
 package com.starrocks.qe;
 
+<<<<<<< HEAD
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
@@ -44,12 +45,21 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
+=======
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
+import com.starrocks.common.Reference;
+import com.starrocks.server.RunMode;
+import com.starrocks.system.ComputeNode;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TScanRangeLocation;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+<<<<<<< HEAD
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -59,10 +69,15 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+=======
+import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 
 public class SimpleScheduler {
+<<<<<<< HEAD
     private static Logger LOG = LogManager.getLogger(SimpleScheduler.class);
     //count id for compute node get TNetworkAddress
     private static AtomicLong nextComputeNodeHostId = new AtomicLong(0);
@@ -78,6 +93,22 @@ public class SimpleScheduler {
         enableUpdateBlacklistThread = new AtomicBoolean(true);
         updateBlacklistThread = new UpdateBlacklistThread();
         updateBlacklistThread.start();
+=======
+    private static final Logger LOG = LogManager.getLogger(SimpleScheduler.class);
+    //count id for compute node get TNetworkAddress
+    private static final AtomicLong NEXT_COMPUTE_NODE_HOST_ID = new AtomicLong(0);
+    //count id for backend get TNetworkAddress
+    private static final AtomicLong NEXT_BACKEND_HOST_ID = new AtomicLong(0);
+
+    private static final HostBlacklist HOST_BLACKLIST = new HostBlacklist();
+
+    static {
+        HOST_BLACKLIST.startAutoUpdate();
+    }
+
+    public static HostBlacklist getHostBlacklist() {
+        return HOST_BLACKLIST;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Nullable
@@ -92,6 +123,7 @@ public class SimpleScheduler {
         LOG.debug("getHost nodeID={}, nodeSize={}", nodeId, computeNodes.size());
 
         ComputeNode node = computeNodes.get(nodeId);
+<<<<<<< HEAD
 
         lock.lock();
         try {
@@ -130,6 +162,41 @@ public class SimpleScheduler {
         } finally {
             lock.unlock();
         }
+=======
+        if (node != null && node.isAlive() && !HOST_BLACKLIST.contains(nodeId)) {
+            nodeIdRef.setRef(nodeId);
+            return new TNetworkAddress(node.getHost(), node.getBePort());
+        } else {
+            for (TScanRangeLocation location : locations) {
+                if (location.backend_id == nodeId) {
+                    continue;
+                }
+                // choose the first alive backend(in analysis stage, the locations are random)
+                ComputeNode candidateNode = computeNodes.get(location.backend_id);
+                if (candidateNode != null && candidateNode.isAlive()
+                        && !HOST_BLACKLIST.contains(location.backend_id)) {
+                    nodeIdRef.setRef(location.backend_id);
+                    return new TNetworkAddress(candidateNode.getHost(), candidateNode.getBePort());
+                }
+            }
+
+            // In shared data mode, we can select any alive node to replace the original dead node for query
+            if (RunMode.isSharedDataMode()) {
+                List<ComputeNode> allNodes = new ArrayList<>(computeNodes.size());
+                allNodes.addAll(computeNodes.values());
+                List<ComputeNode> candidateNodes = allNodes.stream()
+                        .filter(x -> x.getId() != nodeId && x.isAlive() &&
+                                !HOST_BLACKLIST.contains(x.getId())).collect(Collectors.toList());
+                if (!candidateNodes.isEmpty()) {
+                    // use modulo operation to ensure that the same node is selected for the dead node
+                    ComputeNode candidateNode = candidateNodes.get((int) (nodeId % candidateNodes.size()));
+                    nodeIdRef.setRef(candidateNode.getId());
+                    return new TNetworkAddress(candidateNode.getHost(), candidateNode.getBePort());
+                }
+            }
+        }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // no backend or compute node returned
         return null;
     }
@@ -161,7 +228,11 @@ public class SimpleScheduler {
         if (nodeMap == null || nodeMap.isEmpty()) {
             return null;
         }
+<<<<<<< HEAD
         return chooseNode(nodeMap.values().asList(), nextBackendHostId);
+=======
+        return chooseNode(nodeMap.values().asList(), NEXT_BACKEND_HOST_ID);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Nullable
@@ -169,7 +240,11 @@ public class SimpleScheduler {
         if (nodeMap == null || nodeMap.isEmpty()) {
             return null;
         }
+<<<<<<< HEAD
         return chooseNode(nodeMap.values().asList(), nextComputeNodeHostId);
+=======
+        return chooseNode(nodeMap.values().asList(), NEXT_COMPUTE_NODE_HOST_ID);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Nullable
@@ -177,7 +252,11 @@ public class SimpleScheduler {
         long id = nextId.getAndIncrement();
         for (int i = 0; i < nodes.size(); i++) {
             T node = nodes.get((int) (id % nodes.size()));
+<<<<<<< HEAD
             if (node != null && node.isAlive() && !blacklistNodes.containsKey(node.getId())) {
+=======
+            if (node != null && node.isAlive() && !HOST_BLACKLIST.contains(node.getId())) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 nextId.addAndGet(i); // skip failed nodes
                 return node;
             }
@@ -186,6 +265,7 @@ public class SimpleScheduler {
         return null;
     }
 
+<<<<<<< HEAD
     public static void addToBlacklist(Long backendID) {
         if (backendID == null) {
             return;
@@ -315,5 +395,23 @@ public class SimpleScheduler {
                 }
             }
         }
+=======
+    public static void addToBlocklist(Long backendID) {
+        HOST_BLACKLIST.add(backendID);
+    }
+
+    public static boolean isInBlocklist(long backendId) {
+        return HOST_BLACKLIST.contains(backendId);
+    }
+
+    // The function is used for unit test
+    @VisibleForTesting
+    public static boolean removeFromBlocklist(Long backendID) {
+        return HOST_BLACKLIST.remove(backendID);
+    }
+
+    public static void disableUpdateBlocklistThread() {
+        HOST_BLACKLIST.disableAutoUpdate();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }

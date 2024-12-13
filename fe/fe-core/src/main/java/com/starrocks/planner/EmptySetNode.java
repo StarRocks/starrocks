@@ -59,7 +59,10 @@ public class EmptySetNode extends PlanNode {
     public void computeStats(Analyzer analyzer) {
         avgRowSize = 0;
         cardinality = 0;
+<<<<<<< HEAD
         numNodes = 1;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -72,11 +75,14 @@ public class EmptySetNode extends PlanNode {
     }
 
     @Override
+<<<<<<< HEAD
     public boolean canUsePipeLine() {
         return true;
     }
 
     @Override
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public boolean canUseRuntimeAdaptiveDop() {
         return getChildren().stream().allMatch(PlanNode::canUseRuntimeAdaptiveDop);
     }

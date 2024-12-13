@@ -51,7 +51,10 @@ public class CountingLatchTest {
                     try {
                         int time = random.nextInt(100) + 1;
                         Thread.sleep(time);
+<<<<<<< HEAD
                         // System.out.println("thread sleeps for " + time + "ms");
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     } catch (InterruptedException e) {
                         throw new RuntimeException(e);
                     }

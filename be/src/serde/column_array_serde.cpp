@@ -178,7 +178,11 @@ public:
     static const uint8_t* deserialize(const uint8_t* buff, FixedLengthColumnBase<T>* column, const int encode_level) {
         uint32_t size = 0;
         buff = read_little_endian_32(buff, &size);
+<<<<<<< HEAD
         std::vector<T>& data = column->get_data();
+=======
+        auto& data = column->get_data();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         raw::make_room(&data, size / sizeof(T));
         if (EncodeContext::enable_encode_integer(encode_level) && size >= ENCODE_SIZE_LIMIT) {
             if (sizeof(T) == 4 && sorted) { // only support sorted 32-bit integers
@@ -290,7 +294,11 @@ template <typename T>
 class ObjectColumnSerde {
 public:
     static int64_t max_serialized_size(const ObjectColumn<T>& column) {
+<<<<<<< HEAD
         const std::vector<T>& pool = column.get_pool();
+=======
+        const auto& pool = column.get_pool();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         int64_t size = sizeof(uint32_t);
         for (const auto& obj : pool) {
             size += sizeof(uint64_t);
@@ -313,7 +321,11 @@ public:
         uint32_t num_objects = 0;
         buff = read_little_endian_32(buff, &num_objects);
         column->reset_column();
+<<<<<<< HEAD
         std::vector<T>& pool = column->get_pool();
+=======
+        auto& pool = column->get_pool();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         pool.reserve(num_objects);
         for (int i = 0; i < num_objects; i++) {
             uint64_t serialized_size = 0;
@@ -331,7 +343,11 @@ public:
 class JsonColumnSerde {
 public:
     static int64_t max_serialized_size(const JsonColumn& column) {
+<<<<<<< HEAD
         const std::vector<JsonValue>& pool = column.get_pool();
+=======
+        const auto& pool = column.get_pool();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         int64_t size = 0;
         size += sizeof(uint32_t); // format_version
         size += sizeof(uint32_t); // num_objects
@@ -366,7 +382,11 @@ public:
         CHECK_EQ(actual_version, kJsonMetaDefaultFormatVersion) << "Only format_version=1 is supported";
 
         column->reset_column();
+<<<<<<< HEAD
         std::vector<JsonValue>& pool = column->get_pool();
+=======
+        auto& pool = column->get_pool();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         pool.reserve(num_objects);
         for (int i = 0; i < num_objects; i++) {
             uint64_t serialized_size = 0;

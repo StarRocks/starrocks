@@ -16,7 +16,11 @@ Additionally, Broker Load supports data transformation at data loading and suppo
 
 <InsertPrivNote />
 
+<<<<<<< HEAD
 From v3.1 onwards, StarRocks supports directly loading the data of Parquet-formatted or ORC-formatted files from AWS S3 by using the INSERT command and the FILES keyword, saving you from the trouble of creating an external table first. For more information, see [INSERT > Insert data directly from files in an external source using FILES keyword](../loading/InsertInto.md#insert-data-directly-from-files-in-an-external-source-using-files).
+=======
+From v3.1 onwards, StarRocks supports directly loading the data of specific file formats from AWS S3 by using the INSERT command and the FILES keyword, saving you from the trouble of creating an external table first. For more information, see [INSERT > Insert data directly from files in an external source using FILES keyword](../loading/InsertInto.md#insert-data-directly-from-files-in-an-external-source-using-files).
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 This topic focuses on using [Broker Load](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md) to load data from cloud storage.
 
@@ -30,6 +34,11 @@ Broker Load supports the following data file formats:
 
 - ORC
 
+<<<<<<< HEAD
+=======
+- JSON (supported from v3.2.3 onwards)
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 > **NOTE**
 >
 > For CSV data, take note of the following points:
@@ -863,7 +872,11 @@ The following result is returned:
 REJECTED_RECORD_PATH: 172.26.95.92:/home/disk1/sr/be/storage/rejected_record/test_db/label_brokerload_unqualifiedtest_0728/6/404a20b1e4db4d27_8aa9af1e8d6d8bdc
 ```
 
+<<<<<<< HEAD
 For information about the fields in the return results, see [Information Schema > loads](../sql-reference/information_schema.md#loads).
+=======
+For information about the fields in the return results, see [Information Schema > loads](../sql-reference/information_schema/loads.md).
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ## Cancel a load job
 
@@ -874,7 +887,11 @@ For example, you can execute the following statement to cancel a load job, whose
 ```SQL
 CANCEL LOAD
 FROM test_db
+<<<<<<< HEAD
 WHERE LABEL = "label";
+=======
+WHERE LABEL = "label1";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ```
 
 ## Job splitting and concurrent running

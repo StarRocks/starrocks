@@ -24,7 +24,10 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Replica;
+<<<<<<< HEAD
 import com.starrocks.common.AnalysisException;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
@@ -52,7 +55,11 @@ public class AdminStmtAnalyzer {
         new AdminStmtAnalyzerVisitor().analyze(statementBase, session);
     }
 
+<<<<<<< HEAD
     static class AdminStmtAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+=======
+    static class AdminStmtAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         public void analyze(StatementBase statementBase, ConnectContext session) {
             visit(statementBase, session);
         }
@@ -132,11 +139,15 @@ public class AdminStmtAnalyzer {
             }
             adminShowReplicaStatusStmt.setDbName(dbName);
 
+<<<<<<< HEAD
             try {
                 CatalogUtils.checkIsLakeTable(dbName, tblName);
             } catch (AnalysisException e) {
                 throw new SemanticException(e.getMessage(), pos);
             }
+=======
+            CatalogUtils.checkIsLakeTable(dbName, tblName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
             List<String> partitions = Lists.newArrayList();
             PartitionNames partitionNames = adminShowReplicaStatusStmt.getTblRef().getPartitionNames();

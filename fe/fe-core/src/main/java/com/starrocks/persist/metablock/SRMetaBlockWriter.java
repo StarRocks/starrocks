@@ -15,6 +15,7 @@
 
 package com.starrocks.persist.metablock;
 
+<<<<<<< HEAD
 import com.starrocks.common.io.Text;
 import com.starrocks.persist.gson.GsonUtils;
 
@@ -90,4 +91,30 @@ public class SRMetaBlockWriter {
         SRMetaBlockFooter footer = new SRMetaBlockFooter(checkedOutputStream.getChecksum().getValue());
         Text.writeStringWithChecksum(checkedOutputStream, GsonUtils.GSON.toJson(footer));
     }
+=======
+import java.io.IOException;
+
+public interface SRMetaBlockWriter {
+    void writeJson(Object object) throws IOException, SRMetaBlockException;
+
+    void writeInt(int value) throws IOException, SRMetaBlockException;
+
+    void writeLong(long value) throws IOException, SRMetaBlockException;
+
+    void writeByte(byte value) throws IOException, SRMetaBlockException;
+
+    void writeShort(short value) throws IOException, SRMetaBlockException;
+
+    void writeDouble(double value) throws IOException, SRMetaBlockException;
+
+    void writeFloat(float value) throws IOException, SRMetaBlockException;
+
+    void writeChar(char value) throws IOException, SRMetaBlockException;
+
+    void writeBoolean(boolean value) throws IOException, SRMetaBlockException;
+
+    void writeString(String value) throws IOException, SRMetaBlockException;
+
+    void close() throws IOException, SRMetaBlockException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

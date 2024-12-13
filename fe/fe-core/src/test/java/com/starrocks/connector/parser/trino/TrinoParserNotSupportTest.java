@@ -38,6 +38,16 @@ public class TrinoParserNotSupportTest extends TrinoTestBase {
         analyzeFail(sql, "StarRocks does not support Window clause now");
     }
 
+<<<<<<< HEAD
+=======
+    // refer to https://trino.io/docs/current/sql/select.html#offset-clause
+    @Test
+    public void testOffsetWithoutLimit() {
+        String sql = "select v1 from t0 order by v1 offset 2";
+        analyzeFail(sql, "Trino Parser on StarRocks does not support OFFSET without LIMIT now");
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // refer to https://trino.io/docs/current/sql/select.html#limit-or-fetch-first-clause
     @Test
     public void testLimitAll() {
@@ -45,6 +55,7 @@ public class TrinoParserNotSupportTest extends TrinoTestBase {
         analyzeFail(sql, "Unsupported expression [ALL]");
     }
 
+<<<<<<< HEAD
     // refer to https://trino.io/docs/current/functions/comparison.html#is-distinct-from-and-is-not-distinct-from
     @Test
     public void testDistinctFrom() {
@@ -52,6 +63,8 @@ public class TrinoParserNotSupportTest extends TrinoTestBase {
         analyzeFail(sql, "Trino parser on StarRocks does not support the comparison type IS_DISTINCT_FROM");
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // refer to https://trino.io/docs/current/language/types.html#interval-year-to-month
     @Test
     public void testIntervalDataType() throws Exception {
@@ -62,6 +75,7 @@ public class TrinoParserNotSupportTest extends TrinoTestBase {
         getFragmentPlan(sql);
     }
 
+<<<<<<< HEAD
     // refer to https://trino.io/docs/current/language/types.html#row
     @Test
     public void testCastRowDataType() {
@@ -69,6 +83,8 @@ public class TrinoParserNotSupportTest extends TrinoTestBase {
         analyzeFail(sql, "does not support the type ROW(x BIGINT, y DOUBLE)");
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // refer to https://trino.io/docs/current/sql/select.html#tablesample
     @Test
     public void testSampleTable() {
@@ -81,7 +97,14 @@ public class TrinoParserNotSupportTest extends TrinoTestBase {
     @Test
     public void testTimeStampWithTimeZone() {
         String sql = "select TIMESTAMP '2014-03-14 09:30:00 Europe/Berlin'";
+<<<<<<< HEAD
         analyzeFail(sql, "Invalid date literal 2014-03-14 09:30:00 Europe/Berlin");
+=======
+        analyzeSuccess(sql);
+
+        sql = "select TIMESTAMP '2014-09-17 Europe/Berlin'";
+        analyzeSuccess(sql);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         sql = "SELECT TIMESTAMP '2014-03-14 09:30:00' AT TIME ZONE 'America/Los_Angeles'";
         analyzeFail(sql, "Unsupported expression [TIMESTAMP '2014-03-14 09:30:00' AT TIME ZONE 'America/Los_Angeles']");

@@ -37,6 +37,7 @@ package com.starrocks.analysis;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
+<<<<<<< HEAD
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.Type;
@@ -46,6 +47,17 @@ import com.starrocks.catalog.StructType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.catalog.ArrayType;
+import com.starrocks.catalog.MapType;
+import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.StructField;
+import com.starrocks.catalog.StructType;
+import com.starrocks.catalog.Type;
+import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.fs.HdfsUtil;
@@ -53,9 +65,15 @@ import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.parser.NodePosition;
+<<<<<<< HEAD
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.THdfsProperties;
 import com.starrocks.thrift.TCompressionType;
+=======
+import com.starrocks.thrift.TCompressionType;
+import com.starrocks.thrift.TFileFormatType;
+import com.starrocks.thrift.THdfsProperties;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.TParquetOptions;
 import com.starrocks.thrift.TResultFileSinkOptions;
 
@@ -77,9 +95,15 @@ public class OutFileClause implements ParseNode {
         PARQUET_COMPRESSION_TYPE_MAP.put("brotli", TCompressionType.BROTLI);
         PARQUET_COMPRESSION_TYPE_MAP.put("zstd", TCompressionType.ZSTD);
         PARQUET_COMPRESSION_TYPE_MAP.put("lz4", TCompressionType.LZ4);
+<<<<<<< HEAD
         PARQUET_COMPRESSION_TYPE_MAP.put("bz2", TCompressionType.BZIP2);
         PARQUET_COMPRESSION_TYPE_MAP.put("zlib", TCompressionType.ZLIB);
         PARQUET_COMPRESSION_TYPE_MAP.put("default", TCompressionType.DEFAULT_COMPRESSION);
+=======
+        PARQUET_COMPRESSION_TYPE_MAP.put("zlib", TCompressionType.ZLIB);
+        PARQUET_COMPRESSION_TYPE_MAP.put("uncompressed", TCompressionType.NO_COMPRESSION);
+        PARQUET_COMPRESSION_TYPE_MAP.put("none", TCompressionType.NO_COMPRESSION);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public static final Set<PrimitiveType> PARQUET_SUPPORTED_PRIMITIVE_TYPES = ImmutableSet.of(
@@ -281,7 +305,11 @@ public class OutFileClause implements ParseNode {
 
         if (properties.containsKey(PROP_MAX_FILE_SIZE)) {
             try {
+<<<<<<< HEAD
                 maxFileSizeBytes = ParseUtil.analyzeDataVolumn(properties.get(PROP_MAX_FILE_SIZE));
+=======
+                maxFileSizeBytes = ParseUtil.analyzeDataVolume(properties.get(PROP_MAX_FILE_SIZE));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             } catch (AnalysisException e) {
                 throw new SemanticException(e.getMessage());
             }
@@ -428,7 +456,11 @@ public class OutFileClause implements ParseNode {
                 THdfsProperties hdfsProperties = new THdfsProperties();
                 try {
                     HdfsUtil.getTProperties(filePath, brokerDesc, hdfsProperties);
+<<<<<<< HEAD
                 } catch (UserException e) {
+=======
+                } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     throw new SemanticException(e.getMessage());
                 }
                 sinkOptions.setHdfs_properties(hdfsProperties);

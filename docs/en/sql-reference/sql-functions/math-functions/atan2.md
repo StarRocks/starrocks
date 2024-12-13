@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # atan2
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Returns the arc tangent of `x` divided by `y`, that is, the arc tangent of `x/y`. The signs of the two parameters are used to determine the quadrant of the result.
 

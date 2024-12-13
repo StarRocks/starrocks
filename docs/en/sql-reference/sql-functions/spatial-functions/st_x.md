@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # ST_X
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 If point is of a valid Point type, return the corresponding X-coordinate value.
 

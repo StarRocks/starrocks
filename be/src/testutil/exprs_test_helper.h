@@ -14,7 +14,16 @@
 
 #pragma once
 
+<<<<<<< HEAD
 #include "column/chunk.h"
+=======
+#include <gtest/gtest.h>
+
+#include "column/chunk.h"
+#include "column/column_helper.h"
+#include "common/object_pool.h"
+#include "common/status.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "exprs/array_expr.h"
 #include "exprs/map_expr.h"
 #include "exprs/mock_vectorized_expr.h"
@@ -24,11 +33,30 @@
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
+<<<<<<< HEAD
+=======
+#include "testutil/assert.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 namespace starrocks {
 
 class ExprsTestHelper {
 public:
+<<<<<<< HEAD
+=======
+    template <LogicalType Type>
+    static TExpr create_column_ref_t_expr(SlotId slot_id, bool is_nullable) {
+        TExpr expr;
+        expr.nodes.emplace_back(TExprNode());
+        expr.nodes[0].__set_type(TypeDescriptor(Type).to_thrift());
+        expr.nodes[0].__set_node_type(TExprNodeType::SLOT_REF);
+        expr.nodes[0].__set_is_nullable(is_nullable);
+        expr.nodes[0].__set_slot_ref(TSlotRef());
+        expr.nodes[0].slot_ref.__set_slot_id(slot_id);
+        return expr;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     static TTypeDesc create_scalar_type_desc(const TPrimitiveType::type t_type) {
         TTypeDesc type;
 
@@ -165,7 +193,10 @@ public:
         return expr;
     }
 };
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 class TExprBuilder {
 public:
     TExprBuilder& operator<<(const LogicalType& slot_type) {

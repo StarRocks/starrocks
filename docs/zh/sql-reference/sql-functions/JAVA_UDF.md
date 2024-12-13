@@ -298,7 +298,11 @@ public class WindowSumInt {
 
 方法的含义
 
+<<<<<<< HEAD
 更新窗口数据。窗口函数的详细说明，请参见[窗口函数](../sql-reference/sql-functions/Window_function.md]。输入每一行数据，都会获取到对应窗口信息来更新中间结果。
+=======
+更新窗口数据。窗口函数的详细说明，请参见[窗口函数](./Window_function.md)。输入每一行数据，都会获取到对应窗口信息来更新中间结果。
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 - peer_group_start：是当前分区开始的位置。<br />分区：OVER子句中 PARTITION BY 指定分区列， 分区列的值相同的行被视为在同一个分区内。
 - peer_group_end：当前分区结束的位置。
@@ -353,7 +357,11 @@ mvn package
 mvn deploy 
 ```
 
+<<<<<<< HEAD
 您可以通过 Python 创建一个简易的 HTTP 服务器，并将文件上传至该服务器中。详细步骤参考 [通过 Python 搭建简易 http 服务器](https://blog.csdn.net/whatday/article/details/106550650)。
+=======
+您可以通过 Python 创建一个简易的 HTTP 服务器，并将文件上传至该服务器中。
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 > **说明**
 > 步骤六中， FE 会对 UDF 所在 Jar 包进行校验并计算校验值，BE 会下载 UDF 所在 Jar 包并执行。

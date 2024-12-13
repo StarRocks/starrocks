@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # bitmap_to_binary
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 将 Bitmap 根据 StarRocks 定义的规则，转换为二进制字符串。
 

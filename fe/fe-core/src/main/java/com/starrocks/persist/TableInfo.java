@@ -20,8 +20,13 @@ package com.starrocks.persist;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+<<<<<<< HEAD
 
 import java.io.DataInput;
+=======
+import com.starrocks.persist.gson.GsonUtils;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.io.DataOutput;
 import java.io.IOException;
 
@@ -106,6 +111,7 @@ public class TableInfo implements Writable {
 
     @Override
     public void write(DataOutput out) throws IOException {
+<<<<<<< HEAD
         out.writeLong(dbId);
         out.writeLong(tableId);
         out.writeLong(indexId);
@@ -131,5 +137,8 @@ public class TableInfo implements Writable {
         TableInfo info = new TableInfo();
         info.readFields(in);
         return info;
+=======
+        Text.writeString(out, GsonUtils.GSON.toJson(this));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }

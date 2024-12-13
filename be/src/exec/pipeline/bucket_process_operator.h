@@ -1,3 +1,20 @@
+<<<<<<< HEAD
+=======
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #pragma once
 
 #include <memory>
@@ -6,6 +23,10 @@
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/source_operator.h"
+<<<<<<< HEAD
+=======
+#include "exec/pipeline/spill_process_channel.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "runtime/runtime_state.h"
 #include "util/race_detect.h"
 
@@ -17,12 +38,31 @@ struct BucketProcessContext {
     std::atomic_bool finished{};
     std::atomic_bool all_input_finishing{};
     std::atomic_bool current_bucket_sink_finished{};
+<<<<<<< HEAD
     std::atomic_bool token{};
 
     OperatorPtr source;
     OperatorPtr sink;
 
     Status reset_operator_state(RuntimeState* state);
+=======
+    // The tokens BucketSink::set_finishing and BucketSource::pull_chunk may have races.
+    // the party that gets the token performs the final state recovery.
+    std::atomic_bool token{};
+    // The final condition for reset_version and sink_complete_version needs to satisfy sink_complete_version = reset_version + 1.
+    // This value is incremented every time operator->reset_state is executed.
+    std::atomic_int reset_version{};
+    // This value is incremented every time operator->set_finishing is executed.
+    std::atomic_int sink_complete_version{};
+
+    OperatorPtr source;
+    OperatorPtr sink;
+    SpillProcessChannelPtr spill_channel;
+
+    Status reset_operator_state(RuntimeState* state);
+
+    Status finish_current_sink(RuntimeState* state);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 using BucketProcessContextPtr = std::shared_ptr<BucketProcessContext>;
 
@@ -95,9 +135,14 @@ using BucketProcessContextFactoryPtr = std::shared_ptr<BucketProcessContextFacto
 
 class BucketProcessSinkOperatorFactory final : public OperatorFactory {
 public:
+<<<<<<< HEAD
     BucketProcessSinkOperatorFactory(int32_t id, int32_t plan_node_id,
                                      const BucketProcessContextFactoryPtr& context_factory,
                                      const OperatorFactoryPtr& factory);
+=======
+    BucketProcessSinkOperatorFactory(int32_t id, int32_t plan_node_id, BucketProcessContextFactoryPtr context_factory,
+                                     OperatorFactoryPtr factory);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     pipeline::OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
@@ -109,9 +154,14 @@ private:
 
 class BucketProcessSourceOperatorFactory final : public SourceOperatorFactory {
 public:
+<<<<<<< HEAD
     BucketProcessSourceOperatorFactory(int32_t id, int32_t plan_node_id,
                                        const BucketProcessContextFactoryPtr& context_factory,
                                        const OperatorFactoryPtr& factory);
+=======
+    BucketProcessSourceOperatorFactory(int32_t id, int32_t plan_node_id, BucketProcessContextFactoryPtr context_factory,
+                                       OperatorFactoryPtr factory);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     pipeline::OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;

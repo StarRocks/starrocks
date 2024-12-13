@@ -17,20 +17,34 @@ package com.starrocks.sql.optimizer.validate;
 import com.google.common.base.Joiner;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.Config;
+<<<<<<< HEAD
 import com.starrocks.metric.IMaterializedViewMetricsEntity;
 import com.starrocks.metric.MaterializedViewMetricsRegistry;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.PlannerProfile;
+=======
+import com.starrocks.common.profile.Tracers;
+import com.starrocks.metric.IMaterializedViewMetricsEntity;
+import com.starrocks.metric.MaterializedViewMetricsRegistry;
+import com.starrocks.qe.ConnectContext;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MaterializedViewRewriter;
 import com.starrocks.sql.optimizer.task.TaskContext;
+<<<<<<< HEAD
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.List;
 import java.util.Map;
+=======
+import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
+
+import java.util.List;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -80,7 +94,11 @@ public class MVRewriteValidator {
         List<MaterializedView> mvs = collectMaterializedViews(physicalPlan);
         // To avoid queries that query the materialized view directly, only consider materialized views
         // that are not used in rewriting before.
+<<<<<<< HEAD
         Set<Long> beforeTableIds = taskContext.getAllScanOperators().stream()
+=======
+        Set<Long> beforeTableIds = optimizerContext.getAllLogicalOlapScanOperators().stream()
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 .map(op -> op.getTable().getId())
                 .collect(Collectors.toSet());
         if (CollectionUtils.isNotEmpty(mvs)) {
@@ -99,6 +117,10 @@ public class MVRewriteValidator {
         if (!isUpdateMaterializedViewMetrics(connectContext)) {
             return;
         }
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // update considered metrics
         if (CollectionUtils.isNotEmpty(optimizerContext.getCandidateMvs())) {
             for (MaterializationContext mvContext : optimizerContext.getCandidateMvs()) {
@@ -130,7 +152,11 @@ public class MVRewriteValidator {
         }
 
         List<MaterializedView> mvs = collectMaterializedViews(physicalPlan);
+<<<<<<< HEAD
         Set<Long> beforeTableIds = taskContext.getAllScanOperators().stream()
+=======
+        Set<Long> beforeTableIds = taskContext.getOptimizerContext().getAllLogicalOlapScanOperators().stream()
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 .map(op -> op.getTable().getId())
                 .collect(Collectors.toSet());
 
@@ -144,6 +170,7 @@ public class MVRewriteValidator {
             taskContext.getOptimizerContext().getQueryTables().addAll(diffMVs);
         }
 
+<<<<<<< HEAD
         PlannerProfile.LogTracer tracer = PlannerProfile.getLogTracer("Summary");
         if (tracer == null) {
             return;
@@ -153,6 +180,12 @@ public class MVRewriteValidator {
             boolean hasRewriteSuccess = tracers.values().stream()
                     .anyMatch(t -> t.getLogs().stream().anyMatch(
                             log -> StringUtils.contains(log, MaterializedViewRewriter.REWRITE_SUCCESS)));
+=======
+        if (diffMVs.isEmpty()) {
+            boolean hasRewriteSuccess = Tracers.getAllVars().stream()
+                    .anyMatch(var -> StringUtils.contains(var.getValue().toString(),
+                            MaterializedViewRewriter.REWRITE_SUCCESS));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
             if (connectContext.getSessionVariable().isEnableMaterializedViewRewriteOrError()) {
                 String errorMessage = hasRewriteSuccess ?
@@ -166,13 +199,21 @@ public class MVRewriteValidator {
                 String logMessage = hasRewriteSuccess ?
                         "Query has already been successfully rewritten, but it is not chosen as the best plan by cost." :
                         "Query cannot be rewritten, please check the trace logs to find more information.";
+<<<<<<< HEAD
                 tracer.log(logMessage);
+=======
+                Tracers.log(Tracers.Module.MV, logMessage);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         } else {
             List<String> mvNames = diffMVs.stream().map(MaterializedView::getName).collect(Collectors.toList());
             String logMessage = "Query has already been successfully rewritten by: "
                     + Joiner.on(",").join(mvNames) + ".";
+<<<<<<< HEAD
             tracer.log(logMessage);
+=======
+            Tracers.log(Tracers.Module.MV, logMessage);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 }

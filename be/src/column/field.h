@@ -18,6 +18,10 @@
 #include <string>
 #include <string_view>
 #include <utility>
+<<<<<<< HEAD
+=======
+#include <vector>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 #include "column/vectorized_fwd.h"
 #include "storage/aggregate_type.h"
@@ -28,22 +32,53 @@
 namespace starrocks {
 
 class Datum;
+<<<<<<< HEAD
+=======
+class AggStateDesc;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 class Field {
 public:
     Field(ColumnId id, std::string_view name, TypeInfoPtr type, starrocks::StorageAggregateType agg,
+<<<<<<< HEAD
           uint8_t short_key_length, bool is_key, bool nullable)
             : _id(id),
               _agg_method(agg),
+=======
+          AggStateDesc* agg_state_desc, uint8_t short_key_length, bool is_key, bool nullable)
+            : _id(id),
+              _agg_method(agg),
+              _agg_state_desc(agg_state_desc),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
               _name(name),
               _type(std::move(type)),
               _sub_fields(nullptr),
               _short_key_length(short_key_length),
+<<<<<<< HEAD
               _flags(static_cast<uint8_t>((is_key << kIsKeyShift) | (nullable << kNullableShift))) {}
 
     // Non-key field of any type except for ARRAY
     Field(ColumnId id, std::string_view name, LogicalType type, int precision, int scale, bool nullable)
             : Field(id, name, get_type_info(type, precision, scale), STORAGE_AGGREGATE_NONE, 0, false, nullable) {}
+=======
+              _flags(static_cast<uint8_t>((is_key << kIsKeyShift) | (nullable << kNullableShift))) {
+        if (_agg_method == STORAGE_AGGREGATE_AGG_STATE_UNION) {
+            DCHECK(_agg_state_desc != nullptr);
+        }
+    }
+
+    // AggMethod is not STORAGE_AGGREGATE_AGG_STATE_UNION
+    Field(ColumnId id, std::string_view name, TypeInfoPtr type, starrocks::StorageAggregateType agg,
+          uint8_t short_key_length, bool is_key, bool nullable)
+            : Field(id, name, std::move(type), agg, nullptr, short_key_length, is_key, nullable) {
+        DCHECK(_agg_method != STORAGE_AGGREGATE_AGG_STATE_UNION);
+    }
+
+    // Non-key field of any type except for ARRAY
+    Field(ColumnId id, std::string_view name, LogicalType type, int precision, int scale, bool nullable)
+            : Field(id, name, get_type_info(type, precision, scale), STORAGE_AGGREGATE_NONE, nullptr, 0, false,
+                    nullable) {}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // Non-key field of any type except for DECIMAL32, DECIMAL64, DECIMAL128, and ARRAY
     Field(ColumnId id, std::string_view name, LogicalType type, bool nullable)
@@ -56,7 +91,11 @@ public:
 
     // Non-key field of any type
     Field(ColumnId id, std::string_view name, TypeInfoPtr type, bool nullable = true)
+<<<<<<< HEAD
             : Field(id, name, std::move(type), STORAGE_AGGREGATE_NONE, 0, false, nullable) {}
+=======
+            : Field(id, name, std::move(type), STORAGE_AGGREGATE_NONE, nullptr, 0, false, nullable) {}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     ~Field() { delete _sub_fields; }
 
@@ -65,9 +104,16 @@ public:
     Field(const Field& rhs)
             : _id(rhs._id),
               _agg_method(rhs._agg_method),
+<<<<<<< HEAD
               _name(rhs._name),
               _type(rhs._type),
               _sub_fields(rhs._sub_fields ? new Buffer<Field>(*rhs._sub_fields) : nullptr),
+=======
+              _agg_state_desc(rhs._agg_state_desc),
+              _name(rhs._name),
+              _type(rhs._type),
+              _sub_fields(rhs._sub_fields ? new std::vector<Field>(*rhs._sub_fields) : nullptr),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
               _short_key_length(rhs._short_key_length),
               _flags(rhs._flags),
               _uid(rhs._uid) {}
@@ -75,6 +121,10 @@ public:
     Field(Field&& rhs) noexcept
             : _id(rhs._id),
               _agg_method(rhs._agg_method),
+<<<<<<< HEAD
+=======
+              _agg_state_desc(rhs._agg_state_desc),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
               _name(std::move(rhs._name)),
               _type(std::move(rhs._type)),
               _sub_fields(rhs._sub_fields),
@@ -91,9 +141,16 @@ public:
             _name = rhs._name;
             _type = rhs._type;
             _agg_method = rhs._agg_method;
+<<<<<<< HEAD
             _short_key_length = rhs._short_key_length;
             _flags = rhs._flags;
             _sub_fields = rhs._sub_fields ? new Buffer<Field>(*rhs._sub_fields) : nullptr;
+=======
+            _agg_state_desc = rhs._agg_state_desc;
+            _short_key_length = rhs._short_key_length;
+            _flags = rhs._flags;
+            _sub_fields = rhs._sub_fields ? new std::vector<Field>(*rhs._sub_fields) : nullptr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             _uid = rhs._uid;
         }
         return *this;
@@ -105,6 +162,10 @@ public:
             _name = std::move(rhs._name);
             _type = std::move(rhs._type);
             _agg_method = rhs._agg_method;
+<<<<<<< HEAD
+=======
+            _agg_state_desc = rhs._agg_state_desc;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             _short_key_length = rhs._short_key_length;
             _flags = rhs._flags;
             _uid = rhs._uid;
@@ -155,8 +216,17 @@ public:
 
     void add_sub_field(const Field& sub_field);
 
+<<<<<<< HEAD
     const Field& sub_field(int i) const;
 
+=======
+    void set_sub_fields(const std::vector<Field>& sub_fields);
+
+    const Field& sub_field(int i) const;
+
+    std::vector<Field>& sub_fields() { return *_sub_fields; }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     const std::vector<Field>& sub_fields() const { return *_sub_fields; }
 
     bool has_sub_fields() const { return _sub_fields != nullptr; }
@@ -166,12 +236,19 @@ public:
     void set_uid(ColumnUID uid) { _uid = uid; }
     const ColumnUID& uid() const { return _uid; }
 
+<<<<<<< HEAD
     static FieldPtr convert_to_dict_field(const Field& field) {
         DCHECK(field.type()->type() == TYPE_VARCHAR);
         FieldPtr res = std::make_shared<Field>(field);
         res->_type = get_type_info(TYPE_INT);
         return res;
     }
+=======
+    void set_agg_state_desc(AggStateDesc* agg_state_desc) { _agg_state_desc = agg_state_desc; }
+    AggStateDesc* get_agg_state_desc() const { return _agg_state_desc; }
+
+    static FieldPtr convert_to_dict_field(const Field& field);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 private:
     constexpr static int kIsKeyShift = 0;
@@ -179,6 +256,11 @@ private:
 
     ColumnId _id = 0;
     starrocks::StorageAggregateType _agg_method;
+<<<<<<< HEAD
+=======
+    // agg_state_desc if agg_method is STORAGE_AGGREGATE_AGG_STATE_UNION
+    AggStateDesc* _agg_state_desc;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     CString _name;
     TypeInfoPtr _type = nullptr;
     std::vector<Field>* _sub_fields;
@@ -204,6 +286,17 @@ inline void Field::set_is_key(bool is_key) {
     }
 }
 
+<<<<<<< HEAD
+=======
+inline void Field::set_sub_fields(const std::vector<Field>& sub_fields) {
+    if (_sub_fields == nullptr) {
+        _sub_fields = new std::vector<Field>();
+    }
+    _sub_fields->clear();
+    _sub_fields->assign(sub_fields.begin(), sub_fields.end());
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 inline void Field::add_sub_field(const Field& sub_field) {
     if (_sub_fields == nullptr) {
         _sub_fields = new std::vector<Field>();
@@ -217,16 +310,29 @@ inline const Field& Field::sub_field(int i) const {
 
 inline FieldPtr Field::with_type(const TypeInfoPtr& type) {
     return std::make_shared<Field>(_id, std::string_view(_name.data(), _name.size()), type, _agg_method,
+<<<<<<< HEAD
                                    _short_key_length, is_key(), is_nullable());
 }
 
 inline FieldPtr Field::with_name(std::string_view name) {
     return std::make_shared<Field>(_id, name, _type, _agg_method, _short_key_length, is_key(), is_nullable());
+=======
+                                   _agg_state_desc, _short_key_length, is_key(), is_nullable());
+}
+
+inline FieldPtr Field::with_name(std::string_view name) {
+    return std::make_shared<Field>(_id, name, _type, _agg_method, _agg_state_desc, _short_key_length, is_key(),
+                                   is_nullable());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 inline FieldPtr Field::with_nullable(bool nullable) {
     return std::make_shared<Field>(_id, std::string_view(_name.data(), _name.size()), _type, _agg_method,
+<<<<<<< HEAD
                                    _short_key_length, is_key(), nullable);
+=======
+                                   _agg_state_desc, _short_key_length, is_key(), nullable);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 inline std::ostream& operator<<(std::ostream& os, const Field& field) {

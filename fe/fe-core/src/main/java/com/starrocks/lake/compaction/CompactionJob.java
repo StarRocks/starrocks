@@ -14,35 +14,71 @@
 
 package com.starrocks.lake.compaction;
 
+<<<<<<< HEAD
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.VisibleStateWaiter;
+=======
+import com.google.common.base.Preconditions;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.Table;
+import com.starrocks.proto.CompactStat;
+import com.starrocks.transaction.TabletCommitInfo;
+import com.starrocks.transaction.VisibleStateWaiter;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
+<<<<<<< HEAD
 import java.util.stream.Collectors;
 
 public class CompactionJob {
     private final Database db;
     private final Table table;
     private final Partition partition;
+=======
+import java.util.function.Predicate;
+import java.util.stream.Collectors;
+
+public class CompactionJob {
+    private static final Logger LOG = LogManager.getLogger(CompactionJob.class);
+    private final Database db;
+    private final Table table;
+    private final PhysicalPartition partition;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private final long txnId;
     private final long startTs;
     private volatile long commitTs;
     private volatile long finishTs;
     private VisibleStateWaiter visibleStateWaiter;
     private List<CompactionTask> tasks = Collections.emptyList();
+<<<<<<< HEAD
 
     public CompactionJob(Database db, Table table, Partition partition, long txnId) {
+=======
+    private boolean allowPartialSuccess = false;
+
+    public CompactionJob(Database db, Table table, PhysicalPartition partition, long txnId,
+            boolean allowPartialSuccess) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.db = Objects.requireNonNull(db, "db is null");
         this.table = Objects.requireNonNull(table, "table is null");
         this.partition = Objects.requireNonNull(partition, "partition is null");
         this.txnId = txnId;
         this.startTs = System.currentTimeMillis();
+<<<<<<< HEAD
+=======
+        this.commitTs = 0L;
+        this.finishTs = 0L;
+        this.allowPartialSuccess = allowPartialSuccess;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     Database getDb() {
@@ -57,12 +93,18 @@ public class CompactionJob {
         this.tasks = Objects.requireNonNull(tasks, "tasks is null");
     }
 
+<<<<<<< HEAD
     public boolean isFailed() {
         return tasks.stream().anyMatch(CompactionTask::isFailed);
     }
 
     public String getFailMessage() {
         CompactionTask task = tasks.stream().filter(CompactionTask::isFailed).findAny().orElse(null);
+=======
+    public String getFailMessage() {
+        CompactionTask task = tasks.stream().filter(t ->
+                t.getResult() != CompactionTask.TaskResult.ALL_SUCCESS).findAny().orElse(null);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return task != null ? task.getFailMessage() : null;
     }
 
@@ -82,12 +124,49 @@ public class CompactionJob {
         return tasks.stream().map(CompactionTask::buildTabletCommitInfo).flatMap(List::stream).collect(Collectors.toList());
     }
 
+<<<<<<< HEAD
     public boolean isCompleted() {
         return tasks.stream().allMatch(CompactionTask::isCompleted);
     }
 
     public int getNumTabletCompactionTasks() {
         return tasks.stream().filter(t -> !t.isDone()).mapToInt(CompactionTask::tabletCount).sum();
+=======
+    public CompactionTask.TaskResult getResult() {
+        int allSuccess = 0;
+        int partialSuccess = 0;
+        int noneSuccess = 0;
+        for (CompactionTask task : tasks) {
+            CompactionTask.TaskResult subTaskResult = task.getResult();
+            switch (subTaskResult) {
+                case NOT_FINISHED:
+                    return subTaskResult; // early return
+                case PARTIAL_SUCCESS:
+                    partialSuccess++;
+                    break;
+                case NONE_SUCCESS:
+                    noneSuccess++;
+                    break;
+                case ALL_SUCCESS:
+                    allSuccess++;
+                    break;
+                default:
+                    Preconditions.checkArgument(false, "unhandled compaction task result: %s", subTaskResult.name());
+                    break;
+            }
+        }
+        if (allSuccess == tasks.size()) {
+            return CompactionTask.TaskResult.ALL_SUCCESS;
+        } else if (noneSuccess == tasks.size()) {
+            return CompactionTask.TaskResult.NONE_SUCCESS;
+        } else {
+            return CompactionTask.TaskResult.PARTIAL_SUCCESS;
+        }
+    }
+
+    public int getNumTabletCompactionTasks() {
+        return tasks.stream().filter(Predicate.not(CompactionTask::isDone)).mapToInt(CompactionTask::tabletCount).sum();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public long getStartTs() {
@@ -114,15 +193,72 @@ public class CompactionJob {
         tasks.forEach(CompactionTask::abort);
     }
 
+<<<<<<< HEAD
     public Partition getPartition() {
+=======
+    public PhysicalPartition getPartition() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return partition;
     }
 
     public String getFullPartitionName() {
+<<<<<<< HEAD
         return String.format("%s.%s.%s", db.getFullName(), table.getName(), partition.getName());
+=======
+        return String.format("%s.%s.%s", db.getFullName(), table.getName(), partition.getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public String getDebugString() {
         return String.format("TxnId=%d partition=%s", txnId, getFullPartitionName());
     }
+<<<<<<< HEAD
+=======
+
+    public boolean getAllowPartialSuccess() {
+        return allowPartialSuccess;
+    }
+
+    public String getExecutionProfile() {
+        if (tasks.isEmpty() || finishTs == 0L) {
+            return "";
+        }
+        CompactStat stat = new CompactStat();
+        stat.subTaskCount = 0;
+        stat.readTimeRemote = 0L;
+        stat.readBytesRemote = 0L;
+        stat.readTimeLocal = 0L;
+        stat.readBytesLocal = 0L;
+        stat.inQueueTimeSec = 0;
+        for (CompactionTask task : tasks) {
+            List<CompactStat> subStats = task.getCompactStats();
+            if (subStats == null) {
+                continue;
+            }
+            int subTaskCount = 0;
+            for (CompactStat subStat : subStats) {
+                if (subStat.subTaskCount != null) {
+                    subTaskCount = subStat.subTaskCount;
+                }
+                if (subStat.readTimeRemote != null) {
+                    stat.readTimeRemote += subStat.readTimeRemote;
+                }
+                if (subStat.readBytesRemote != null) {
+                    stat.readBytesRemote += subStat.readBytesRemote;
+                }
+                if (subStat.readTimeLocal != null) {
+                    stat.readTimeLocal += subStat.readTimeLocal;
+                }
+                if (subStat.readBytesLocal != null) {
+                    stat.readBytesLocal += subStat.readBytesLocal;
+                }
+                if (subStat.inQueueTimeSec != null) {
+                    stat.inQueueTimeSec += subStat.inQueueTimeSec;
+                }
+            }
+            stat.subTaskCount += subTaskCount;
+        }
+        return new CompactionProfile(stat).toString();
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

@@ -37,7 +37,18 @@ public class CreateInsertOverwriteJobLog implements Writable {
     @SerializedName(value = "targetPartitionIds")
     private List<Long> targetPartitionIds;
 
+<<<<<<< HEAD
     public CreateInsertOverwriteJobLog(long jobId, long dbId, long tableId, List<Long> targetPartitionIds) {
+=======
+    @SerializedName(value = "dynamicOverwrite")
+    private boolean dynamicOverwrite = false;
+
+    public CreateInsertOverwriteJobLog() {
+    }
+
+    public CreateInsertOverwriteJobLog(long jobId, long dbId, long tableId,
+                                       List<Long> targetPartitionIds, boolean dynamicOverwrite) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.jobId = jobId;
         this.dbId = dbId;
         this.tableId = tableId;
@@ -60,6 +71,13 @@ public class CreateInsertOverwriteJobLog implements Writable {
         return targetPartitionIds;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isDynamicOverwrite() {
+        return dynamicOverwrite;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public String toString() {
         return "CreateInsertOverwriteJobInfo{" +

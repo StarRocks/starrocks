@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     p_brand,
@@ -29,6 +30,8 @@ order by
     p_brand,
     p_type,
     p_size ;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 [fragment statistics]
 PLAN FRAGMENT 0(F08)
 Output Exprs:9: p_brand | 10: p_type | 11: p_size | 23: count
@@ -185,7 +188,11 @@ TABLE: supplier
 NON-PARTITION PREDICATES: 21: s_comment LIKE '%Customer%Complaints%'
 partitions=1/1
 avgRowSize=105.0
+<<<<<<< HEAD
 numNodes=0
+=======
+dataCacheOptions={populate: false}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 cardinality: 250000
 column statistics:
 * s_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 250000.0] ESTIMATE
@@ -200,10 +207,17 @@ OutPut Exchange Id: 03
 2:HdfsScanNode
 TABLE: part
 NON-PARTITION PREDICATES: 9: p_brand != 'Brand#43', NOT (10: p_type LIKE 'PROMO BURNISHED%'), 11: p_size IN (31, 43, 9, 6, 18, 11, 25, 1)
+<<<<<<< HEAD
 MIN/MAX PREDICATES: 24: p_size >= 1, 25: p_size <= 43
 partitions=1/1
 avgRowSize=47.0
 numNodes=0
+=======
+MIN/MAX PREDICATES: 11: p_size >= 1, 11: p_size <= 43
+partitions=1/1
+avgRowSize=47.0
+dataCacheOptions={populate: false}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 cardinality: 2304000
 column statistics:
 * p_partkey-->[1.0, 2.0E7, 0.0, 8.0, 2304000.0] ESTIMATE
@@ -222,12 +236,20 @@ TABLE: partsupp
 NON-PARTITION PREDICATES: 1: ps_partkey IS NOT NULL
 partitions=1/1
 avgRowSize=16.0
+<<<<<<< HEAD
 numNodes=0
+=======
+dataCacheOptions={populate: false}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 cardinality: 80000000
 probe runtime filters:
 - filter_id = 0, probe_expr = (1: ps_partkey)
 column statistics:
 * ps_partkey-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
 * ps_suppkey-->[1.0, 1000000.0, 0.0, 8.0, 1000000.0] ESTIMATE
+<<<<<<< HEAD
 [end]
 
+=======
+[end]
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

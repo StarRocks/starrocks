@@ -46,6 +46,10 @@
 #include "column/schema.h"
 #include "gutil/endian.h"
 #include "gutil/stringprintf.h"
+<<<<<<< HEAD
+=======
+#include "storage/dictionary_cache_manager.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "storage/tablet_schema.h"
 #include "types/date_value.hpp"
 
@@ -217,6 +221,7 @@ inline void encode_slice(const Slice& s, std::string* dst, bool is_last) {
     }
 }
 
+<<<<<<< HEAD
 inline Status decode_slice(Slice* src, std::string* dest, bool is_last) {
     if (is_last) {
         dest->append(src->data, src->size);
@@ -236,6 +241,45 @@ inline Status decode_slice(Slice* src, std::string* dest, bool is_last) {
             dest->push_back((char)data[i]);
         }
         src->remove_prefix(len + 2);
+=======
+inline Status decode_slice(Slice* src, std::string* dest, Slice* dest_fast, bool is_last, bool fast_decode) {
+    if (is_last) {
+        if (!fast_decode) {
+            dest->append(src->data, src->size);
+        } else {
+            dest_fast->data = src->data;
+            dest_fast->size = src->size;
+        }
+    } else {
+        if (!fast_decode) {
+            auto* separator = static_cast<uint8_t*>(memmem(src->data, src->size, "\0\0", 2));
+            DCHECK(separator) << "bad encoded primary key, separator not found";
+            if (PREDICT_FALSE(separator == nullptr)) {
+                LOG(WARNING) << "bad encoded primary key, separator not found";
+                return Status::InvalidArgument("bad encoded primary key, separator not found");
+            }
+            auto* data = (uint8_t*)src->data;
+            int len = separator - data;
+            for (int i = 0; i < len; i++) {
+                if (i >= 1 && data[i - 1] == '\0' && data[i] == '\1') {
+                    continue;
+                }
+                dest->push_back((char)data[i]);
+            }
+            src->remove_prefix(len + 2);
+        } else {
+            void* separator = std::memchr(src->data, '\0', src->size);
+            DCHECK(separator) << "bad encoded primary key, separator not found";
+            if (PREDICT_FALSE(separator == nullptr)) {
+                LOG(WARNING) << "bad encoded primary key, separator not found";
+                return Status::InvalidArgument("bad encoded primary key, separator not found");
+            }
+
+            dest_fast->data = src->data;
+            dest_fast->size = (uint8_t*)separator - (uint8_t*)src->data;
+            src->remove_prefix(dest_fast->size + 2);
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     return Status::OK();
 }
@@ -423,8 +467,13 @@ static void prepare_ops_datas(const Schema& schema, const std::vector<ColumnId>&
             };
             break;
         default:
+<<<<<<< HEAD
             CHECK(false) << "type not supported for primary key encoding "
                          << logical_type_to_string(schema.field(j)->type()->type());
+=======
+            DCHECK(false) << "type not supported for primary key encoding "
+                          << logical_type_to_string(schema.field(j)->type()->type());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 }
@@ -449,7 +498,11 @@ void PrimaryKeyEncoder::encode(const Schema& schema, const Chunk& chunk, size_t 
             dest->append(*src, offset, len);
         }
     } else {
+<<<<<<< HEAD
         CHECK(dest->is_binary() || dest->is_large_binary()) << "dest column should be binary";
+=======
+        DCHECK(dest->is_binary() || dest->is_large_binary()) << "dest column should be binary";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         int ncol = schema.num_key_fields();
         std::vector<EncodeOp> ops(ncol);
         std::vector<const void*> datas(ncol);
@@ -482,9 +535,15 @@ void PrimaryKeyEncoder::encode(const Schema& schema, const Chunk& chunk, size_t 
     }
 }
 
+<<<<<<< HEAD
 void PrimaryKeyEncoder::encode_sort_key(const Schema& schema, const Chunk& chunk, size_t offset, size_t len,
                                         Column* dest) {
     CHECK(dest->is_binary() || dest->is_large_binary()) << "dest column should be binary";
+=======
+Status PrimaryKeyEncoder::encode_sort_key(const Schema& schema, const Chunk& chunk, size_t offset, size_t len,
+                                          Column* dest) {
+    RETURN_ERROR_IF_FALSE(dest->is_binary() || dest->is_large_binary());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     int ncol = schema.sort_key_idxes().size();
     std::vector<EncodeOp> ops(ncol);
     std::vector<const void*> datas(ncol);
@@ -553,6 +612,11 @@ void PrimaryKeyEncoder::encode_sort_key(const Schema& schema, const Chunk& chunk
             }
         }
     }
+<<<<<<< HEAD
+=======
+
+    return Status::OK();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 void PrimaryKeyEncoder::encode_selective(const Schema& schema, const Chunk& chunk, const uint32_t* indexes, size_t len,
@@ -562,7 +626,11 @@ void PrimaryKeyEncoder::encode_selective(const Schema& schema, const Chunk& chun
         auto& src = chunk.get_column_by_index(0);
         dest->append_selective(*src, indexes, 0, len);
     } else {
+<<<<<<< HEAD
         CHECK(dest->is_binary() || dest->is_large_binary()) << "dest column should be binary";
+=======
+        DCHECK(dest->is_binary() || dest->is_large_binary()) << "dest column should be binary";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         int ncol = schema.num_key_fields();
         std::vector<EncodeOp> ops(ncol);
         std::vector<const void*> datas(ncol);
@@ -651,12 +719,27 @@ bool PrimaryKeyEncoder::encode_exceed_limit(const Schema& schema, const Chunk& c
 }
 
 template <class T>
+<<<<<<< HEAD
 Status decode_internal(const Schema& schema, const T& bkeys, size_t offset, size_t len, Chunk* dest) {
     const int ncol = schema.num_key_fields();
     for (int i = 0; i < len; i++) {
         Slice s = bkeys.get_slice(offset + i);
         for (int j = 0; j < ncol; j++) {
             auto& column = *(dest->get_column_by_index(j));
+=======
+Status decode_internal(const Schema& schema, const T& bkeys, size_t offset, size_t len, Chunk* dest,
+                       std::vector<uint8_t>* value_encode_flags) {
+    const int ncol = schema.num_key_fields();
+    for (int i = 0; i < len; i++) {
+        Slice s = bkeys.get_slice(offset + i);
+        bool skip_decode = (value_encode_flags != nullptr && (*value_encode_flags)[i] == SKIP_DECODE_FLAG);
+        for (int j = 0; j < ncol; j++) {
+            auto& column = *(dest->get_column_by_index(j));
+            if (skip_decode) {
+                column.append_default();
+                continue;
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             switch (schema.field(j)->type()->type()) {
             case TYPE_BOOLEAN: {
                 auto& tc = down_cast<UInt8Column&>(column);
@@ -696,9 +779,22 @@ Status decode_internal(const Schema& schema, const T& bkeys, size_t offset, size
             } break;
             case TYPE_VARCHAR: {
                 auto& tc = down_cast<BinaryColumn&>(column);
+<<<<<<< HEAD
                 std::string v;
                 RETURN_IF_ERROR(decode_slice(&s, &v, j + 1 == ncol));
                 tc.append(v);
+=======
+                bool fast_decode = value_encode_flags != nullptr ? (bool)((*value_encode_flags)[i]) : false;
+                if (!fast_decode) {
+                    std::string v;
+                    RETURN_IF_ERROR(decode_slice(&s, &v, nullptr, j + 1 == ncol, false));
+                    tc.append(v);
+                } else {
+                    Slice v;
+                    RETURN_IF_ERROR(decode_slice(&s, nullptr, &v, j + 1 == ncol, true));
+                    tc.append(v);
+                }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             } break;
             case TYPE_DATE: {
                 auto& tc = down_cast<DateColumn&>(column);
@@ -706,25 +802,39 @@ Status decode_internal(const Schema& schema, const T& bkeys, size_t offset, size
                 decode_integral(&s, &v._julian);
                 tc.append(v);
             } break;
+<<<<<<< HEAD
             case TYPE_DATETIME_V1: {
+=======
+            case TYPE_DATETIME: {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 auto& tc = down_cast<TimestampColumn&>(column);
                 TimestampValue v;
                 decode_integral(&s, &v._timestamp);
                 tc.append(v);
             } break;
             default:
+<<<<<<< HEAD
                 CHECK(false) << "type not supported for primary key encoding";
+=======
+                RETURN_ERROR_IF_FALSE(false, "type not supported for primary key encoding");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
     }
     return Status::OK();
 }
 
+<<<<<<< HEAD
 Status PrimaryKeyEncoder::decode(const Schema& schema, const Column& keys, size_t offset, size_t len, Chunk* dest) {
+=======
+Status PrimaryKeyEncoder::decode(const Schema& schema, const Column& keys, size_t offset, size_t len, Chunk* dest,
+                                 std::vector<uint8_t>* value_encode_flags) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     if (schema.num_key_fields() == 1) {
         // simple decoding, src & dest should have same type
         dest->get_column_by_index(0)->append(keys, offset, len);
     } else {
+<<<<<<< HEAD
         CHECK(keys.is_binary() || keys.is_large_binary()) << "keys column should be binary";
         if (keys.is_binary()) {
             auto& bkeys = down_cast<const BinaryColumn&>(keys);
@@ -732,6 +842,15 @@ Status PrimaryKeyEncoder::decode(const Schema& schema, const Column& keys, size_
         } else {
             auto& bkeys = down_cast<const LargeBinaryColumn&>(keys);
             return decode_internal(schema, bkeys, offset, len, dest);
+=======
+        RETURN_ERROR_IF_FALSE(keys.is_binary() || keys.is_large_binary());
+        if (keys.is_binary()) {
+            auto& bkeys = down_cast<const BinaryColumn&>(keys);
+            return decode_internal(schema, bkeys, offset, len, dest, value_encode_flags);
+        } else {
+            auto& bkeys = down_cast<const LargeBinaryColumn&>(keys);
+            return decode_internal(schema, bkeys, offset, len, dest, value_encode_flags);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
     return Status::OK();

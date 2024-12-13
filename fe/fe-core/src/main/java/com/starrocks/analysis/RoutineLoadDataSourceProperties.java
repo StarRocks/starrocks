@@ -43,15 +43,21 @@ import com.starrocks.common.Pair;
 import com.starrocks.load.routineload.LoadDataSourceType;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.parser.NodePosition;
+<<<<<<< HEAD
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
 public class RoutineLoadDataSourceProperties implements ParseNode {
+<<<<<<< HEAD
     private static final Logger LOG = LogManager.getLogger(RoutineLoadDataSourceProperties.class);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     private static final ImmutableSet<String> CONFIGURABLE_KAFKA_PROPERTIES_SET = new ImmutableSet.Builder<String>()
             .add(CreateRoutineLoadStmt.KAFKA_PARTITIONS_PROPERTY)

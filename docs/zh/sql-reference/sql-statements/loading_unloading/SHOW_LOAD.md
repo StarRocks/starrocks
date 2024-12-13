@@ -6,7 +6,11 @@ displayed_sidebar: docs
 
 ## 功能
 
+<<<<<<< HEAD
 查看数据库中指定导入作业的相关信息，包括 [Broker Load](./BROKER_LOAD.md)、[INSERT](./INSERT.md) 和 [Spark Load](./SPARK_LOAD.md)。您还可以使用 `curl` 命令查看这些导入作业的相关信息。注意，从 3.1 版本起，对于 Broker Load 和 Insert 导入，推荐您通过 [SELECT](../table_bucket_part_index/SELECT.md) 语句从 `information_schema` 数据库中的 [`loads`](../../../sql-reference/information_schema.md#loads) 表来查看作业结果。详请参见[从 HDFS 导入](../../../loading/hdfs_load.md)、[从云存储导入](../../../loading/cloud_storage_load.md)、[通过 INSERT 语句导入数据](../../../loading/InsertInto.md)和[使用 Apache Spark™ 批量导入](../../../loading/SparkLoad.md)。
+=======
+查看数据库中指定导入作业的相关信息，包括 [Broker Load](BROKER_LOAD.md)、[INSERT](INSERT.md) 和 [Spark Load](SPARK_LOAD.md)。您还可以使用 `curl` 命令查看这些导入作业的相关信息。注意，从 3.1 版本起，对于 Broker Load 和 Insert 导入，推荐您通过 [SELECT](../table_bucket_part_index/SELECT.md) 语句从 `information_schema` 数据库中的 [`loads`](../../information_schema/loads.md) 表来查看作业结果。详请参见[从 HDFS 导入](../../../loading/hdfs_load.md)、[从云存储导入](../../../loading/cloud_storage_load.md)、[通过 INSERT 语句导入数据](../../../loading/InsertInto.md)和[使用 Apache Spark™ 批量导入](../../../loading/SparkLoad.md)。
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 除了以上三种导入方式， StarRocks 还支持 Stream Load 和 Routine Load，其中 Stream Load 是同步操作，会直接返回结果，不会通过 SHOW LOAD 展示。Routine Load 可通过 [SHOW ROUTINE LOAD](routine_load/SHOW_ROUTINE_LOAD.md) 查看导入作业的相关信息。
 
@@ -41,7 +45,11 @@ SHOW LOAD [ FROM db_name ]
 
 ## 返回结果说明
 
+<<<<<<< HEAD
 ```undefined
+=======
+```plain
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 +-------+-------+-------+----------+------+---------+----------+----------+------------+--------------+---------------+---------------+----------------+-----+------------+
 | JobId | Label | State | Progress | Type | Priority | EtlInfo | TaskInfo | ErrorMsg | CreateTime | EtlStartTime | EtlFinishTime | LoadStartTime | LoadFinishTime | URL | JobDetails |
 +-------+-------+-------+----------+------+---------+----------+----------+------------+--------------+---------------+---------------+----------------+-----+------------+
@@ -84,7 +92,11 @@ SHOW LOAD [ FROM db_name ]
 
 示例一：查看当前数据库中的所有导入作业。
 
+<<<<<<< HEAD
 ```undefined
+=======
+```plain
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 SHOW LOAD\G;
 *************************** 1. row ***************************
          JobId: 976331
@@ -107,7 +119,11 @@ LoadFinishTime: 2022-10-17 19:35:06
 
 示例二：查看当前数据库中的导入作业。导入作业的标签中需包含字符串 `null`，且仅展示 2 个作业。
 
+<<<<<<< HEAD
 ```undefined
+=======
+```plain
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 SHOW LOAD 
 WHERE LABEL LIKE "null" 
 LIMIT 2;
@@ -122,7 +138,11 @@ LIMIT 2;
 
 示例三： 查看数据库 `example_db` 中的导入作业。导入作业的标签中需包含字符串 `table`，且按 `LoadStartTime` 降序排序。
 
+<<<<<<< HEAD
 ```undefined
+=======
+```plain
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 SHOW LOAD FROM example_db 
 WHERE LABEL Like "table" 
 ORDER BY LoadStartTime DESC;
@@ -137,7 +157,11 @@ ORDER BY LoadStartTime DESC;
 
 示例四：查看数据库 `example_db` 中的导入作业。导入作业的标签需为 `duplicate_table_with_null`，状态需为 `FINISHED`。
 
+<<<<<<< HEAD
 ```undefined
+=======
+```plain
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 SHOW LOAD FROM example_db 
 WHERE LABEL = "duplicate_table_with_null" AND STATE = "FINISHED";
 
@@ -150,7 +174,11 @@ WHERE LABEL = "duplicate_table_with_null" AND STATE = "FINISHED";
 
 示例五：查看数据库 `example_db` 中的导入作业。导入作业需按 `CreateTime` 升序排序，并从偏移量 1 开始显示 2 条查询结果。
 
+<<<<<<< HEAD
 ```undefined
+=======
+```sql
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 SHOW LOAD FROM example_db 
 ORDER BY CreateTime ASC 
 LIMIT 2 OFFSET 1;
@@ -158,7 +186,11 @@ LIMIT 2 OFFSET 1;
 
 或
 
+<<<<<<< HEAD
 ```undefined
+=======
+```sql
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 SHOW LOAD FROM example_db 
 ORDER BY CreateTime ASC 
 LIMIT 1,2;
@@ -166,7 +198,11 @@ LIMIT 1,2;
 
 返回结果如下：
 
+<<<<<<< HEAD
 ```undefined
+=======
+```plain
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 +-------+---------------------------------------------+----------+---------------------+--------+---------------------------------------------------------+---------------------------------------------------------------------------------------------------------+----------+---------------------+---------------------+---------------------+---------------------+---------------------+--------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 | JobId | Label                                       | State    | Progress            | Type   | EtlInfo                                                 | TaskInfo                                                                                                | ErrorMsg | CreateTime          | EtlStartTime        | EtlFinishTime       | LoadStartTime       | LoadFinishTime      | URL                                                                            | JobDetails                                                                                                                                                                                            |
 +-------+---------------------------------------------+----------+---------------------+--------+---------------------------------------------------------+---------------------------------------------------------------------------------------------------------+----------+---------------------+---------------------+---------------------+---------------------+---------------------+--------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+

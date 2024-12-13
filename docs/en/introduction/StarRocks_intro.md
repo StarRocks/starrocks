@@ -21,4 +21,7 @@ Join our [web forum](https://forum.starrocks.io/) for asking general questions. 
 <FeatureList language="English" />
 
 ---
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

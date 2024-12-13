@@ -38,7 +38,11 @@ public class LimitImplementationRule extends ImplementationRule {
         LogicalLimitOperator limit = (LogicalLimitOperator) input.getOp();
         if (!limit.isGlobal()) {
             throw new StarRocksPlannerException(ErrorType.INTERNAL_ERROR,
+<<<<<<< HEAD
                     "cannot contains local limit operator in implementation phase.\n%s", input.explain());
+=======
+                    "cannot contains local limit operator in implementation phase.\n%s", input.debugString());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return Lists.newArrayList(OptExpression
                 .create(new PhysicalLimitOperator(limit.getOffset(), limit.getLimit(), limit.getProjection()),

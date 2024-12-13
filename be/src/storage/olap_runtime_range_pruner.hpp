@@ -30,17 +30,29 @@ namespace starrocks {
 namespace detail {
 struct RuntimeColumnPredicateBuilder {
     template <LogicalType ltype>
+<<<<<<< HEAD
     StatusOr<std::vector<std::unique_ptr<ColumnPredicate>>> operator()(const ColumnIdToGlobalDictMap* global_dictmaps,
                                                                        PredicateParser* parser,
                                                                        const RuntimeFilterProbeDescriptor* desc,
                                                                        const SlotDescriptor* slot) {
+=======
+    StatusOr<std::vector<const ColumnPredicate*>> operator()(const ColumnIdToGlobalDictMap* global_dictmaps,
+                                                             PredicateParser* parser,
+                                                             const RuntimeFilterProbeDescriptor* desc,
+                                                             const SlotDescriptor* slot, int32_t driver_sequence,
+                                                             ObjectPool* pool) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // keep consistent with ColumnRangeBuilder
         if constexpr (ltype == TYPE_TIME || ltype == TYPE_NULL || ltype == TYPE_JSON || lt_is_float<ltype> ||
                       lt_is_binary<ltype>) {
             DCHECK(false) << "unreachable path";
             return Status::NotSupported("unreachable path");
         } else {
+<<<<<<< HEAD
             std::vector<std::unique_ptr<ColumnPredicate>> preds;
+=======
+            std::vector<const ColumnPredicate*> preds;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
             // Treat tinyint and boolean as int
             constexpr LogicalType limit_type = ltype == TYPE_TINYINT || ltype == TYPE_BOOLEAN ? TYPE_INT : ltype;
@@ -61,12 +73,17 @@ struct RuntimeColumnPredicateBuilder {
             RangeType& range = full_range;
             range.set_index_filter_only(true);
 
+<<<<<<< HEAD
             const JoinRuntimeFilter* rf = desc->runtime_filter();
+=======
+            const JoinRuntimeFilter* rf = desc->runtime_filter(driver_sequence);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
             // applied global-dict optimized column
             if constexpr (ltype == TYPE_VARCHAR) {
                 auto cid = parser->column_id(*slot);
                 if (auto iter = global_dictmaps->find(cid); iter != global_dictmaps->end()) {
+<<<<<<< HEAD
                     build_minmax_range<RangeType, value_type, LowCardDictType, GlobalDictCodeDecoder>(range, rf,
                                                                                                       iter->second);
                 } else {
@@ -74,6 +91,15 @@ struct RuntimeColumnPredicateBuilder {
                 }
             } else {
                 build_minmax_range<RangeType, value_type, mapping_type, DummyDecoder>(range, rf, nullptr);
+=======
+                    build_minmax_range<RangeType, limit_type, LowCardDictType, GlobalDictCodeDecoder>(range, rf,
+                                                                                                      iter->second);
+                } else {
+                    build_minmax_range<RangeType, limit_type, mapping_type, DummyDecoder>(range, rf, nullptr);
+                }
+            } else {
+                build_minmax_range<RangeType, limit_type, mapping_type, DummyDecoder>(range, rf, nullptr);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
 
             std::vector<TCondition> filters;
@@ -85,10 +111,17 @@ struct RuntimeColumnPredicateBuilder {
             }
 
             for (auto& f : filters) {
+<<<<<<< HEAD
                 std::unique_ptr<ColumnPredicate> p(parser->parse_thrift_cond(f));
                 VLOG(1) << "build runtime predicate:" << p->debug_string();
                 p->set_index_filter_only(f.is_index_filter_only);
                 preds.emplace_back(std::move(p));
+=======
+                ColumnPredicate* p = pool->add(parser->parse_thrift_cond(f));
+                VLOG(2) << "build runtime predicate:" << p->debug_string();
+                p->set_index_filter_only(f.is_index_filter_only);
+                preds.emplace_back(p);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
 
             return preds;
@@ -134,13 +167,46 @@ struct RuntimeColumnPredicateBuilder {
             return decoder->decode(code);
         }
 
+<<<<<<< HEAD
+=======
+        template <LogicalType Type>
+        ColumnPtr min_const_column(const TypeDescriptor& col_type) {
+            auto min_decode_value = min_value();
+            if constexpr (lt_is_decimal<Type>) {
+                return ColumnHelper::create_const_decimal_column<Type>(min_decode_value, col_type.precision,
+                                                                       col_type.scale, 1);
+            } else {
+                return ColumnHelper::create_const_column<Type>(min_decode_value, 1);
+            }
+        }
+
+        template <LogicalType Type>
+        ColumnPtr max_const_column(const TypeDescriptor& col_type) {
+            auto max_decode_value = max_value();
+            if constexpr (lt_is_decimal<Type>) {
+                return ColumnHelper::create_const_decimal_column<Type>(max_decode_value, col_type.precision,
+                                                                       col_type.scale, 1);
+            } else {
+                return ColumnHelper::create_const_column<Type>(max_decode_value, 1);
+            }
+        }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private:
         const RuntimeFilter* runtime_filter;
         const Decoder* decoder;
     };
 
+<<<<<<< HEAD
     template <class Range, class value_type, LogicalType mapping_type, template <class> class Decoder, class... Args>
     static void build_minmax_range(Range& range, const JoinRuntimeFilter* rf, Args&&... args) {
+=======
+    template <class Range, LogicalType SlotType, LogicalType mapping_type, template <class> class Decoder,
+              class... Args>
+    static void build_minmax_range(Range& range, const JoinRuntimeFilter* rf, Args&&... args) {
+        using ValueType = typename RunTimeTypeTraits<SlotType>::CppType;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         const RuntimeBloomFilter<mapping_type>* filter = down_cast<const RuntimeBloomFilter<mapping_type>*>(rf);
         using DecoderType = Decoder<typename RunTimeTypeTraits<mapping_type>::CppType>;
         DecoderType decoder(std::forward<Args>(args)...);
@@ -152,7 +218,11 @@ struct RuntimeColumnPredicateBuilder {
             min_op = to_olap_filter_type(TExprOpcode::GT, false);
         }
         auto min_value = parser.min_value();
+<<<<<<< HEAD
         range.add_range(min_op, static_cast<value_type>(min_value));
+=======
+        (void)range.add_range(min_op, static_cast<ValueType>(min_value));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         SQLFilterOp max_op;
         if (filter->right_close_interval()) {
@@ -162,7 +232,11 @@ struct RuntimeColumnPredicateBuilder {
         }
 
         auto max_value = parser.max_value();
+<<<<<<< HEAD
         range.add_range(max_op, static_cast<value_type>(max_value));
+=======
+        (void)range.add_range(max_op, static_cast<ValueType>(max_value));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 };
 } // namespace detail
@@ -176,6 +250,7 @@ inline Status OlapRuntimeScanRangePruner::_update(const ColumnIdToGlobalDictMap*
         // 1. runtime filter arrived
         // 2. runtime filter updated and read rows greater than rf_update_threhold
         // we will filter by index
+<<<<<<< HEAD
         if (auto rf = _unarrived_runtime_filters[i]->runtime_filter()) {
             size_t rf_version = rf->rf_version();
             if (_arrived_runtime_filters_masks[i] == 0 ||
@@ -184,6 +259,17 @@ inline Status OlapRuntimeScanRangePruner::_update(const ColumnIdToGlobalDictMap*
                 auto raw_predicates = _as_raw_predicates(predicates);
                 if (!raw_predicates.empty()) {
                     RETURN_IF_ERROR(updater(raw_predicates.front()->column_id(), raw_predicates));
+=======
+        if (auto rf = _unarrived_runtime_filters[i]->runtime_filter(_driver_sequence)) {
+            size_t rf_version = rf->rf_version();
+            if (!_arrived_runtime_filters_masks[i] ||
+                (rf_version > _rf_versions[i] && raw_read_rows - _raw_read_rows > rf_update_threshold)) {
+                ObjectPool pool;
+
+                ASSIGN_OR_RETURN(auto predicates, _get_predicates(global_dictmaps, i, &pool));
+                if (!predicates.empty()) {
+                    RETURN_IF_ERROR(updater(predicates.front()->column_id(), predicates));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
                 _arrived_runtime_filters_masks[i] = true;
                 _rf_versions[i] = rf_version;
@@ -195,6 +281,7 @@ inline Status OlapRuntimeScanRangePruner::_update(const ColumnIdToGlobalDictMap*
     return Status::OK();
 }
 
+<<<<<<< HEAD
 inline auto OlapRuntimeScanRangePruner::_get_predicates(const ColumnIdToGlobalDictMap* global_dictmaps, size_t idx)
         -> StatusOr<PredicatesPtrs> {
     auto rf = _unarrived_runtime_filters[idx]->runtime_filter();
@@ -213,6 +300,17 @@ inline auto OlapRuntimeScanRangePruner::_as_raw_predicates(
         res.push_back(predicate.get());
     }
     return res;
+=======
+inline auto OlapRuntimeScanRangePruner::_get_predicates(const ColumnIdToGlobalDictMap* global_dictmaps, size_t idx,
+                                                        ObjectPool* pool) -> StatusOr<PredicatesRawPtrs> {
+    auto rf = _unarrived_runtime_filters[idx]->runtime_filter(_driver_sequence);
+    if (rf->has_null()) return PredicatesRawPtrs{};
+    // convert to olap filter
+    auto slot_desc = _slot_descs[idx];
+    return type_dispatch_predicate<StatusOr<PredicatesRawPtrs>>(
+            slot_desc->type().type, false, detail::RuntimeColumnPredicateBuilder(), global_dictmaps, _parser,
+            _unarrived_runtime_filters[idx], slot_desc, _driver_sequence, pool);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 inline void OlapRuntimeScanRangePruner::_init(const UnarrivedRuntimeFilterList& params) {
@@ -222,6 +320,10 @@ inline void OlapRuntimeScanRangePruner::_init(const UnarrivedRuntimeFilterList& 
             _slot_descs.emplace_back(params.slot_descs[i]);
             _arrived_runtime_filters_masks.emplace_back();
             _rf_versions.emplace_back();
+<<<<<<< HEAD
+=======
+            _driver_sequence = params.driver_sequence;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 }

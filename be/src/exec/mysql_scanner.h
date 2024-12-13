@@ -40,6 +40,10 @@
 #include <vector>
 
 #include "common/status.h"
+<<<<<<< HEAD
+=======
+#include "util/slice.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 #ifndef __StarRocksMysql
 #define __StarRocksMysql void

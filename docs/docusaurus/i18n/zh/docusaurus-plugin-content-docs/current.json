@@ -1,7 +1,12 @@
 {
   "version.label": {
+<<<<<<< HEAD
     "message": "Stable-3.1",
     "description": "The label for version 3.1"
+=======
+    "message": "current",
+    "description": "The label for version current"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
   },
   "sidebar.docs.category.Introduction to StarRocks": {
     "message": "产品简介",
@@ -550,6 +555,7 @@
   "sidebar.docs.category.系统元数据库": {
     "message": "系统元数据库",
     "description": "The label for category 系统元数据库 in sidebar docs"
+<<<<<<< HEAD
   },
   "sidebar.docs.category.Query Data Lakes": {
     "message": "查询数据湖",
@@ -558,5 +564,7 @@
   "sidebar.docs.category.Index": {
     "message": "索引",
     "description": "The label for category Index in sidebar docs"
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
   }
 }

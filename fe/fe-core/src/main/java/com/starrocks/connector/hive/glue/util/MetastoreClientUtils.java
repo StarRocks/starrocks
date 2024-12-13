@@ -83,7 +83,11 @@ public final class MetastoreClientUtils {
      *
      * @param table
      */
+<<<<<<< HEAD
     public static void validateGlueTable(com.amazonaws.services.glue.model.Table table) {
+=======
+    public static void validateGlueTable(software.amazon.awssdk.services.glue.model.Table table) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         checkNotNull(table, "table cannot be null");
 
         for (HiveTableValidator validator : HiveTableValidator.values()) {

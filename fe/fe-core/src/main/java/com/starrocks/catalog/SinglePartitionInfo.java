@@ -34,7 +34,10 @@
 
 package com.starrocks.catalog;
 
+<<<<<<< HEAD
 import java.io.DataInput;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.io.DataOutput;
 import java.io.IOException;
 
@@ -43,18 +46,24 @@ public class SinglePartitionInfo extends PartitionInfo {
         super(PartitionType.UNPARTITIONED);
     }
 
+<<<<<<< HEAD
     public static PartitionInfo read(DataInput in) throws IOException {
         PartitionInfo partitionInfo = new SinglePartitionInfo();
         partitionInfo.readFields(in);
         return partitionInfo;
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public void write(DataOutput out) throws IOException {
         super.write(out);
     }
+<<<<<<< HEAD
 
     public void readFields(DataInput in) throws IOException {
         super.readFields(in);
     }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

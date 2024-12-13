@@ -39,24 +39,41 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.Gson;
 import com.starrocks.analysis.TableName;
+<<<<<<< HEAD
+=======
+import com.starrocks.authorization.AccessDeniedException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+<<<<<<< HEAD
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.memory.MemoryTrackable;
+<<<<<<< HEAD
+=======
+import com.starrocks.persist.ImageWriter;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
+<<<<<<< HEAD
 import com.starrocks.privilege.AccessDeniedException;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
@@ -66,8 +83,11 @@ import com.starrocks.sql.common.MetaUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+<<<<<<< HEAD
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -136,8 +156,13 @@ public class ExportMgr implements MemoryTrackable {
         return job;
     }
 
+<<<<<<< HEAD
     public ExportJob getExportJob(String dbName, UUID queryId) throws AnalysisException {
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+=======
+    public ExportJob getExportJob(String dbName, UUID queryId) {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         MetaUtils.checkDbNullAndReport(db, dbName);
         long dbId = db.getId();
         ExportJob matchedJob = null;
@@ -156,7 +181,11 @@ public class ExportMgr implements MemoryTrackable {
         return matchedJob;
     }
 
+<<<<<<< HEAD
     public void cancelExportJob(CancelExportStmt stmt) throws UserException {
+=======
+    public void cancelExportJob(CancelExportStmt stmt) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ExportJob matchedJob = getExportJob(stmt.getDbName(), stmt.getQueryId());
         UUID queryId = stmt.getQueryId();
         if (matchedJob == null) {
@@ -181,6 +210,26 @@ public class ExportMgr implements MemoryTrackable {
         return result;
     }
 
+<<<<<<< HEAD
+=======
+    public ExportJob getExportByQueryId(UUID queryId) {
+        if (queryId == null) {
+            return null;
+        }
+        readLock();
+        try {
+            for (ExportJob job : idToJob.values()) {
+                if (queryId.equals(job.getQueryId())) {
+                    return job;
+                }
+            }
+        } finally {
+            readUnlock();
+        }
+        return null;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // NOTE: jobid and states may both specified, or only one of them, or neither
     public List<List<String>> getExportJobInfosByIdOrState(
             long dbId, long jobId, Set<ExportJob.JobState> states, UUID queryId,
@@ -220,7 +269,11 @@ public class ExportMgr implements MemoryTrackable {
                 TableName tableName = job.getTableName();
                 if (tableName == null || tableName.getTbl().equals("DUMMY")) {
                     // forward compatibility, no table name is saved before
+<<<<<<< HEAD
                     Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+=======
+                    Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     if (db == null) {
                         continue;
                     }
@@ -399,6 +452,7 @@ public class ExportMgr implements MemoryTrackable {
         return size;
     }
 
+<<<<<<< HEAD
     public long loadExportJob(DataInputStream dis, long checksum) throws IOException, DdlException {
         long currentTimeMs = System.currentTimeMillis();
         long newChecksum = checksum;
@@ -439,6 +493,12 @@ public class ExportMgr implements MemoryTrackable {
         int numJson = 1 + idToJob.size();
         SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.EXPORT_MGR, numJson);
         writer.writeJson(idToJob.size());
+=======
+    public void saveExportJobV2(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
+        int numJson = 1 + idToJob.size();
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.EXPORT_MGR, numJson);
+        writer.writeInt(idToJob.size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         for (ExportJob job : idToJob.values()) {
             writer.writeJson(job);
         }
@@ -446,6 +506,7 @@ public class ExportMgr implements MemoryTrackable {
     }
 
     public void loadExportJobV2(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+<<<<<<< HEAD
         int size = reader.readInt();
         long currentTimeMs = System.currentTimeMillis();
         for (int i = 0; i < size; i++) {
@@ -457,6 +518,18 @@ public class ExportMgr implements MemoryTrackable {
             }
             unprotectAddJob(job);
         }
+=======
+        long currentTimeMs = System.currentTimeMillis();
+
+        reader.readCollection(ExportJob.class, job -> {
+            // discard expired job right away
+            if (isJobExpired(job, currentTimeMs)) {
+                LOG.info("discard expired job: {}", job);
+                return;
+            }
+            unprotectAddJob(job);
+        });
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override

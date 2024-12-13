@@ -60,6 +60,10 @@ ALTER RESOURCE GROUP rg1 DROP ALL;
 
 ```SQL
 ALTER RESOURCE GROUP rg1 WITH (
+<<<<<<< HEAD
     'cpu_core_limit' = '20'
+=======
+    'cpu_weight' = '10'
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 );
 ```

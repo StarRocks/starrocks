@@ -14,12 +14,42 @@
 package com.starrocks.http;
 
 import com.starrocks.http.action.QueryProfileAction;
+<<<<<<< HEAD
 import org.junit.Assert;
 import org.junit.Test;
 
 import java.lang.reflect.Method;
 
 public class QueryProfileActionTest {
+=======
+import okhttp3.Request;
+import okhttp3.Response;
+import org.junit.Assert;
+import org.junit.Test;
+
+import java.io.IOException;
+import java.lang.reflect.Method;
+
+public class QueryProfileActionTest extends StarRocksHttpTestCase {
+
+    private static final String QUERY_PLAN_URI = "/query_profile";
+
+    private void sendHttp() throws IOException {
+        Request request = new Request.Builder()
+                .get()
+                .addHeader("Authorization", rootAuth)
+                .url("http://localhost:" + HTTP_PORT + QUERY_PLAN_URI + "?query_id=<>")
+                .build();
+        Response response = networkClient.newCall(request).execute();
+        String respStr = response.body().string();
+        Assert.assertTrue(respStr.contains("query id &lt;&gt; not found."));
+    }
+
+    @Test
+    public void testQueryProfile() throws IOException {
+        sendHttp();
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     @Test
     public void testEscapeHtmlInPreTag() throws Exception {

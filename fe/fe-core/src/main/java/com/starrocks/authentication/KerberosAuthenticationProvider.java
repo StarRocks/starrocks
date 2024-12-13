@@ -16,8 +16,13 @@ package com.starrocks.authentication;
 import com.starrocks.common.Config;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.mysql.privilege.AuthPlugin;
+<<<<<<< HEAD
 import com.starrocks.mysql.privilege.Password;
 import com.starrocks.server.GlobalStateMgr;
+=======
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.UserAuthOption;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.UserIdentity;
 
 import java.lang.reflect.Method;
@@ -26,18 +31,33 @@ public class KerberosAuthenticationProvider implements AuthenticationProvider {
     public static final String PLUGIN_NAME = AuthPlugin.AUTHENTICATION_KERBEROS.name();
 
     @Override
+<<<<<<< HEAD
     public UserAuthenticationInfo validAuthenticationInfo(UserIdentity userIdentity, String password,
                                                           String textForAuthPlugin) throws AuthenticationException {
+=======
+    public UserAuthenticationInfo analyzeAuthOption(UserIdentity userIdentity, UserAuthOption userAuthOption)
+            throws AuthenticationException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (!GlobalStateMgr.getCurrentState().getAuthenticationMgr().isSupportKerberosAuth()) {
             throw new AuthenticationException("Not support kerberos authentication");
         }
 
         UserAuthenticationInfo info = new UserAuthenticationInfo();
+<<<<<<< HEAD
         info.setPassword(MysqlPassword.EMPTY_PASSWORD);
         if (textForAuthPlugin == null) {
             info.setTextForAuthPlugin(Config.authentication_kerberos_service_principal.split("@")[1]);
         } else {
             info.setTextForAuthPlugin(textForAuthPlugin);
+=======
+        info.setAuthPlugin(PLUGIN_NAME);
+        info.setPassword(MysqlPassword.EMPTY_PASSWORD);
+        info.setOrigUserHost(userIdentity.getUser(), userIdentity.getHost());
+        if (userAuthOption == null || userAuthOption.getAuthString() == null) {
+            info.setTextForAuthPlugin(Config.authentication_kerberos_service_principal.split("@")[1]);
+        } else {
+            info.setTextForAuthPlugin(userAuthOption.getAuthString());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return info;
     }
@@ -63,6 +83,7 @@ public class KerberosAuthenticationProvider implements AuthenticationProvider {
                     "by kerberos, msg: " + e.getMessage());
         }
     }
+<<<<<<< HEAD
 
     @Override
     public UserAuthenticationInfo upgradedFromPassword(UserIdentity userIdentity, Password password)
@@ -74,4 +95,6 @@ public class KerberosAuthenticationProvider implements AuthenticationProvider {
         ret.setTextForAuthPlugin(password.getUserForAuthPlugin());
         return ret;
     }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

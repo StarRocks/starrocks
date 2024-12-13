@@ -31,6 +31,11 @@ public:
 
     bool is_finished() const override { return (_is_finished || _limit == 0) && _cur_chunk == nullptr; }
 
+<<<<<<< HEAD
+=======
+    bool ignore_empty_eos() const override { return false; }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     Status set_finishing(RuntimeState* state) override {
         _is_finished = true;
         return Status::OK();
@@ -40,6 +45,11 @@ public:
 
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
+<<<<<<< HEAD
+=======
+    void update_exec_stats(RuntimeState* state) override;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 private:
     bool _is_finished = false;
     std::atomic<int64_t>& _limit;
@@ -57,6 +67,11 @@ public:
         return std::make_shared<LimitOperator>(this, _id, _plan_node_id, driver_sequence, _limit);
     }
 
+<<<<<<< HEAD
+=======
+    int64_t limit() const { return _limit; }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 private:
     std::atomic<int64_t> _limit;
 };

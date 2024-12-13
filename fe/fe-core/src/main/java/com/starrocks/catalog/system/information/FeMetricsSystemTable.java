@@ -24,9 +24,17 @@ import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
 import static com.starrocks.catalog.system.SystemTable.builder;
 
 public class FeMetricsSystemTable {
+<<<<<<< HEAD
     public static SystemTable create() {
         return new SystemTable(SystemId.FE_METRICS_ID,
                 "fe_metrics",
+=======
+    public static final String NAME = "fe_metrics";
+
+    public static SystemTable create() {
+        return new SystemTable(SystemId.FE_METRICS_ID,
+                NAME,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 Table.TableType.SCHEMA,
                 builder()
                         .column("FE_ID", ScalarType.createVarchar(NAME_CHAR_LEN))

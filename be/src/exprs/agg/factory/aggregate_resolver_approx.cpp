@@ -38,6 +38,12 @@ struct HLLUnionBuilder {
 
             resolver->add_aggregate_mapping<lt, TYPE_BIGINT, HyperLogLog>(
                     "approx_count_distinct", false, AggregateFactory::MakeHllNdvAggregateFunction<lt>());
+<<<<<<< HEAD
+=======
+
+            resolver->add_aggregate_mapping_variadic<lt, TYPE_BIGINT, HLLSketchState>(
+                    "ds_hll_count_distinct", false, AggregateFactory::MakeHllSketchAggregateFunction<lt>());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 };

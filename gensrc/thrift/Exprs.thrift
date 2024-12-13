@@ -82,6 +82,7 @@ enum TExprNodeType {
   MAP_ELEMENT_EXPR,
   BINARY_LITERAL,
   MAP_EXPR,
+<<<<<<< HEAD
 }
 
 //enum TAggregationOp {
@@ -101,6 +102,18 @@ enum TExprNodeType {
 //  2: required bool is_distinct
 //  3: required TAggregationOp op
 //}
+=======
+  DICT_QUERY_EXPR,
+
+  // query DICTIONARY object
+  DICTIONARY_GET_EXPR,
+  
+  JIT_EXPR,
+
+  MATCH_EXPR,
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 struct TAggregateExpr {
   // Indicates whether this expr is the merge() of an aggregation.
   1: required bool is_merge_agg
@@ -188,6 +201,25 @@ struct TFunctionCallExpr {
   2: optional i32 vararg_start_idx
 }
 
+<<<<<<< HEAD
+=======
+struct TDictQueryExpr {
+  1: required string db_name
+  2: required string tbl_name
+  3: required map<i64, i64> partition_version
+  4: required list<string> key_fields
+  5: required string value_field
+  6: required bool strict_mode
+}
+
+struct TDictionaryGetExpr {
+  1: optional i64 dict_id
+  2: optional i64 txn_id
+  3: optional i32 key_size
+  4: optional bool null_if_not_exist
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 // This is essentially a union over the subclasses of Expr.
 struct TExprNode {
   1: required TExprNodeType node_type
@@ -229,16 +261,33 @@ struct TExprNode {
   // Used for SubfieldExpr
   30: optional list<string> used_subfield_names;
   31: optional TBinaryLiteral binary_literal;
+<<<<<<< HEAD
+=======
+  32: optional bool copy_flag;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
   // used for CollectionElementAt
   35: optional bool check_is_out_of_bounds
 
   // For vector query engine
+<<<<<<< HEAD
   50: optional bool use_vectorized
+=======
+  50: optional bool use_vectorized  // Deprecated
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
   51: optional bool has_nullable_child
   52: optional bool is_nullable
   53: optional Types.TTypeDesc child_type_desc
   54: optional bool is_monotonic
+<<<<<<< HEAD
+=======
+
+  55: optional TDictQueryExpr dict_query_expr
+
+  56: optional TDictionaryGetExpr dictionary_get_expr
+  // whether this expr is only used in index
+  57: optional bool is_index_only_filter
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 struct TPartitionLiteral {

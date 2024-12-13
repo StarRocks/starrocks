@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     c_custkey,
@@ -30,6 +31,8 @@ group by
     c_comment
 order by
     revenue desc limit 20;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 [fragment]
 PLAN FRAGMENT 0
 OUTPUT EXPRS:1: C_CUSTKEY | 2: C_NAME | 43: sum | 6: C_ACCTBAL | 38: N_NAME | 3: C_ADDRESS | 5: C_PHONE | 8: C_COMMENT
@@ -101,7 +104,10 @@ tabletRatio=10/10
 tabletList=10162,10164,10166,10168,10170,10172,10174,10176,10178,10180
 cardinality=15000000
 avgRowSize=217.0
+<<<<<<< HEAD
 numNodes=0
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 PLAN FRAGMENT 2
 OUTPUT EXPRS:
@@ -120,7 +126,10 @@ tabletRatio=1/1
 tabletList=10185
 cardinality=25
 avgRowSize=29.0
+<<<<<<< HEAD
 numNodes=0
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 PLAN FRAGMENT 3
 OUTPUT EXPRS:
@@ -157,7 +166,10 @@ tabletRatio=20/20
 tabletList=10213,10215,10217,10219,10221,10223,10225,10227,10229,10231 ...
 cardinality=200000000
 avgRowSize=25.0
+<<<<<<< HEAD
 numNodes=0
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 PLAN FRAGMENT 4
 OUTPUT EXPRS:
@@ -181,6 +193,9 @@ tabletRatio=10/10
 tabletList=10139,10141,10143,10145,10147,10149,10151,10153,10155,10157
 cardinality=5738046
 avgRowSize=20.0
+<<<<<<< HEAD
 numNodes=0
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 [end]
 

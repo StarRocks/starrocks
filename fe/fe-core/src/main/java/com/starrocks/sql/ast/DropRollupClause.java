@@ -15,10 +15,14 @@
 
 package com.starrocks.sql.ast;
 
+<<<<<<< HEAD
 import com.google.common.base.Strings;
 import com.starrocks.alter.AlterOpType;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.common.AnalysisException;
+=======
+import com.starrocks.alter.AlterOpType;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Map;
@@ -36,6 +40,7 @@ public class DropRollupClause extends AlterTableClause {
         super(AlterOpType.DROP_ROLLUP, pos);
         this.rollupName = rollupName;
         this.properties = properties;
+<<<<<<< HEAD
         this.needTableStable = false;
     }
 
@@ -47,6 +52,10 @@ public class DropRollupClause extends AlterTableClause {
     }
 
     @Override
+=======
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public Map<String, String> getProperties() {
         return this.properties;
     }

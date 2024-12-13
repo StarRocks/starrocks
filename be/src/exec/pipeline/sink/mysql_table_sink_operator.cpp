@@ -38,8 +38,11 @@ public:
 
     ~MysqlTableSinkIOBuffer() override = default;
 
+<<<<<<< HEAD
     Status prepare(RuntimeState* state, RuntimeProfile* parent_profile) override;
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     void close(RuntimeState* state) override;
 
 private:
@@ -53,6 +56,7 @@ private:
     FragmentContext* _fragment_ctx;
 };
 
+<<<<<<< HEAD
 Status MysqlTableSinkIOBuffer::prepare(RuntimeState* state, RuntimeProfile* parent_profile) {
     bool expected = false;
     if (!_is_prepared.compare_exchange_strong(expected, true)) {
@@ -73,6 +77,8 @@ Status MysqlTableSinkIOBuffer::prepare(RuntimeState* state, RuntimeProfile* pare
     return Status::OK();
 }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 void MysqlTableSinkIOBuffer::close(RuntimeState* state) {
     _writer.reset();
     SinkIOBuffer::close(state);

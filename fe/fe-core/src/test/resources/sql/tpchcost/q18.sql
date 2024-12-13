@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     c_name,
@@ -31,6 +32,8 @@ group by
 order by
     o_totalprice desc,
     o_orderdate limit 100;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 [fragment]
 PLAN FRAGMENT 0
 OUTPUT EXPRS:2: C_NAME | 1: C_CUSTKEY | 10: O_ORDERKEY | 14: O_ORDERDATE | 13: O_TOTALPRICE | 56: sum
@@ -81,7 +84,10 @@ rollup: lineitem
 tabletRatio=20/20
 cardinality=600000000
 avgRowSize=16.0
+<<<<<<< HEAD
 numNodes=0
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 PLAN FRAGMENT 2
 OUTPUT EXPRS:
@@ -126,7 +132,10 @@ rollup: orders
 tabletRatio=10/10
 cardinality=150000000
 avgRowSize=28.0
+<<<<<<< HEAD
 numNodes=0
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 PLAN FRAGMENT 3
 OUTPUT EXPRS:
@@ -144,7 +153,10 @@ rollup: customer
 tabletRatio=10/10
 cardinality=15000000
 avgRowSize=33.0
+<<<<<<< HEAD
 numNodes=0
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 PLAN FRAGMENT 4
 OUTPUT EXPRS:
@@ -170,6 +182,9 @@ rollup: lineitem
 tabletRatio=20/20
 cardinality=600000000
 avgRowSize=16.0
+<<<<<<< HEAD
 numNodes=0
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 [end]
 

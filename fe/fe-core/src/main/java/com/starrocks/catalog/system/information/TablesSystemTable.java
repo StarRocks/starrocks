@@ -26,9 +26,16 @@ import static com.starrocks.catalog.system.SystemTable.builder;
 
 public class TablesSystemTable {
     public static final int MY_CS_NAME_SIZE = 32;
+<<<<<<< HEAD
 
     public static SystemTable create() {
         return new SystemTable(SystemId.TABLES_ID, "tables", Table.TableType.SCHEMA, builder()
+=======
+    private static final String NAME = "tables";
+
+    public static SystemTable create(String catalogName) {
+        return new SystemTable(catalogName, SystemId.TABLES_ID, NAME, Table.TableType.SCHEMA, builder()
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 .column("TABLE_CATALOG", ScalarType.createVarchar(FN_REFLEN))
                 .column("TABLE_SCHEMA", ScalarType.createVarchar(NAME_CHAR_LEN))
                 .column("TABLE_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))

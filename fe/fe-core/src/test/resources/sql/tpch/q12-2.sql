@@ -36,5 +36,9 @@ TOP-N (order by [[25: L_SHIPMODE ASC NULLS FIRST]])
                     INNER JOIN (join-predicate [1: O_ORDERKEY = 11: L_ORDERKEY] post-join-predicate [null])
                         SCAN (columns[1: O_ORDERKEY, 6: O_ORDERPRIORITY] predicate[null])
                         EXCHANGE SHUFFLE[11]
+<<<<<<< HEAD
                             SCAN (columns[21: L_SHIPDATE, 22: L_COMMITDATE, 23: L_RECEIPTDATE, 25: L_SHIPMODE, 11: L_ORDERKEY] predicate[25: L_SHIPMODE IN (MAIL, SHIP) AND 22: L_COMMITDATE < 23: L_RECEIPTDATE AND 21: L_SHIPDATE < 22: L_COMMITDATE AND 23: L_RECEIPTDATE >= 1994-01-01 AND 23: L_RECEIPTDATE <= 1994-12-31])
+=======
+                            SCAN (columns[21: L_SHIPDATE, 22: L_COMMITDATE, 23: L_RECEIPTDATE, 25: L_SHIPMODE, 11: L_ORDERKEY] predicate[25: L_SHIPMODE IN (MAIL, SHIP) AND 22: L_COMMITDATE < 23: L_RECEIPTDATE AND 21: L_SHIPDATE < 22: L_COMMITDATE AND 23: L_RECEIPTDATE >= 1994-01-01 AND 23: L_RECEIPTDATE < 1995-01-01])
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 [end]

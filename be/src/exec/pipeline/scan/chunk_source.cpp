@@ -19,8 +19,15 @@
 #include "common/statusor.h"
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
 #include "exec/pipeline/scan/scan_operator.h"
+<<<<<<< HEAD
 #include "exec/workgroup/work_group.h"
 #include "runtime/runtime_state.h"
+=======
+#include "exec/workgroup/scan_task_queue.h"
+#include "exec/workgroup/work_group.h"
+#include "runtime/runtime_state.h"
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 namespace starrocks::pipeline {
 
 ChunkSource::ChunkSource(ScanOperator* scan_op, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
@@ -54,7 +61,11 @@ Status ChunkSource::buffer_next_batch_chunks_blocking(RuntimeState* state, size_
     }
 
     int64_t time_spent_ns = 0;
+<<<<<<< HEAD
     auto [tablet_id, version] = _morsel->get_lane_owner_and_version();
+=======
+    auto [owner_id, version] = _morsel->get_lane_owner_and_version();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     for (size_t i = 0; i < batch_size && !state->is_cancelled(); ++i) {
         {
             SCOPED_RAW_TIMER(&time_spent_ns);
@@ -73,16 +84,24 @@ Status ChunkSource::buffer_next_batch_chunks_blocking(RuntimeState* state, size_
             if (!_status.ok()) {
                 // end of file is normal case, need process chunk
                 if (_status.is_end_of_file()) {
+<<<<<<< HEAD
                     chunk->owner_info().set_owner_id(tablet_id, true);
                     _chunk_buffer.put(_scan_operator_seq, std::move(chunk), std::move(_chunk_token));
                 } else if (_status.is_time_out()) {
                     chunk->owner_info().set_owner_id(tablet_id, false);
+=======
+                    chunk->owner_info().set_owner_id(owner_id, true);
+                    _chunk_buffer.put(_scan_operator_seq, std::move(chunk), std::move(_chunk_token));
+                } else if (_status.is_time_out()) {
+                    chunk->owner_info().set_owner_id(owner_id, false);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     _chunk_buffer.put(_scan_operator_seq, std::move(chunk), std::move(_chunk_token));
                     _status = Status::OK();
                 }
                 break;
             }
 
+<<<<<<< HEAD
             chunk->owner_info().set_owner_id(tablet_id, false);
             _chunk_buffer.put(_scan_operator_seq, std::move(chunk), std::move(_chunk_token));
         }
@@ -92,6 +111,17 @@ Status ChunkSource::buffer_next_batch_chunks_blocking(RuntimeState* state, size_
         }
 
         if (running_wg != nullptr && time_spent_ns >= YIELD_PREEMPT_MAX_TIME_SPENT &&
+=======
+            chunk->owner_info().set_owner_id(owner_id, false);
+            _chunk_buffer.put(_scan_operator_seq, std::move(chunk), std::move(_chunk_token));
+        }
+
+        if (time_spent_ns >= workgroup::WorkGroup::YIELD_MAX_TIME_SPENT) {
+            break;
+        }
+
+        if (running_wg != nullptr && time_spent_ns >= workgroup::WorkGroup::YIELD_PREEMPT_MAX_TIME_SPENT &&
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             _scan_sched_entity(running_wg)->in_queue()->should_yield(running_wg, time_spent_ns)) {
             break;
         }
@@ -99,4 +129,16 @@ Status ChunkSource::buffer_next_batch_chunks_blocking(RuntimeState* state, size_
     return _status;
 }
 
+<<<<<<< HEAD
+=======
+const workgroup::WorkGroupScanSchedEntity* ChunkSource::_scan_sched_entity(const workgroup::WorkGroup* wg) const {
+    DCHECK(wg != nullptr);
+    if (_scan_op->sched_entity_type() == workgroup::ScanSchedEntityType::CONNECTOR) {
+        return wg->connector_scan_sched_entity();
+    } else {
+        return wg->scan_sched_entity();
+    }
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // namespace starrocks::pipeline

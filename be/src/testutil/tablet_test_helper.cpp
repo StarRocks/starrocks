@@ -40,7 +40,11 @@ std::shared_ptr<RowsetWriter> TabletTestHelper::create_rowset_writer(const Table
     writer_context.tablet_id = tablet.tablet_id();
     writer_context.tablet_schema_hash = tablet.schema_hash();
     writer_context.rowset_path_prefix = tablet.schema_hash_path();
+<<<<<<< HEAD
     writer_context.tablet_schema = &tablet.tablet_schema();
+=======
+    writer_context.tablet_schema = tablet.tablet_schema();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     writer_context.rowset_state = VISIBLE;
     writer_context.version = version;
     std::unique_ptr<RowsetWriter> rowset_writer;
@@ -87,7 +91,11 @@ std::vector<ChunkIteratorPtr> TabletTestHelper::create_segment_iterators(const T
     RowsetReadOptions rowset_opts;
     rowset_opts.version = version.second;
     rowset_opts.stats = _stats;
+<<<<<<< HEAD
     auto st = new_rowset->get_segment_iterators(*tablet.tablet_schema().schema(), rowset_opts, &seg_iters);
+=======
+    auto st = new_rowset->get_segment_iterators(*tablet.tablet_schema()->schema(), rowset_opts, &seg_iters);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     CHECK(st.ok());
     return seg_iters;
 }

@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
 package com.starrocks.statistic;
 
@@ -28,10 +29,19 @@ import com.starrocks.statistic.StatsConstants.ScheduleType;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+=======
+package com.starrocks.statistic;
+
+import com.starrocks.catalog.Type;
+import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.qe.ConnectContext;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
+<<<<<<< HEAD
 public class AnalyzeJob implements Writable {
 
     @SerializedName("id")
@@ -192,4 +202,54 @@ public class AnalyzeJob implements Writable {
                 ", reason='" + reason + '\'' +
                 '}';
     }
+=======
+public interface AnalyzeJob {
+    long getId();
+
+    void setId(long id);
+
+    boolean isNative();
+
+    String getCatalogName() throws MetaNotFoundException;
+
+    String getDbName() throws MetaNotFoundException;
+
+    String getTableName() throws MetaNotFoundException;
+
+    List<String> getColumns();
+
+    List<Type> getColumnTypes();
+
+    StatsConstants.AnalyzeType getAnalyzeType();
+
+    StatsConstants.ScheduleType getScheduleType();
+
+    LocalDateTime getWorkTime();
+
+    void setWorkTime(LocalDateTime workTime);
+
+    String getReason();
+
+    void setReason(String reason);
+
+    StatsConstants.ScheduleStatus getStatus();
+
+    void setStatus(StatsConstants.ScheduleStatus status);
+
+    Map<String, String> getProperties();
+
+    boolean isAnalyzeAllDb();
+
+    boolean isAnalyzeAllTable();
+
+    List<StatisticsCollectJob> instantiateJobs();
+
+    default void run(ConnectContext statsConnectContext, StatisticExecutor statisticExecutor) {
+        run(statsConnectContext, statisticExecutor, instantiateJobs());
+    }
+
+    void run(ConnectContext statsConnectContext,
+             StatisticExecutor statisticExecutor,
+             List<StatisticsCollectJob> jobs);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

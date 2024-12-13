@@ -36,7 +36,11 @@ package com.starrocks.persist;
 
 import com.google.common.collect.Lists;
 import com.starrocks.qe.SessionVariable;
+<<<<<<< HEAD
 import com.starrocks.qe.VariableMgr;
+=======
+import com.starrocks.server.GlobalStateMgr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.junit.After;
 import org.junit.Test;
 
@@ -64,7 +68,11 @@ public class GlobalVarPersistInfoTest {
         file.createNewFile();
         DataOutputStream out = new DataOutputStream(new FileOutputStream(file));
 
+<<<<<<< HEAD
         SessionVariable sessionVariable = VariableMgr.newSessionVariable();
+=======
+        SessionVariable sessionVariable = GlobalStateMgr.getCurrentState().getVariableMgr().newSessionVariable();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<String> varNames = Lists.newArrayList();
         varNames.add("exec_mem_limit");
         varNames.add("default_rowset_type");

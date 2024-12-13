@@ -15,6 +15,10 @@
 
 package com.starrocks.sql.ast;
 
+<<<<<<< HEAD
+=======
+import com.google.common.base.Joiner;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
@@ -125,4 +129,16 @@ public class HashDistributionDesc extends DistributionDesc {
             distributionColumnNames.add(Text.readString(in));
         }
     }
+<<<<<<< HEAD
+=======
+ 
+    @Override
+    public String toString() {
+        if (numBucket > 0) {
+            return "DISTRIBUTED BY HASH(" + Joiner.on(", ").join(distributionColumnNames) + ") BUCKETS " + numBucket;
+        } else {
+            return "DISTRIBUTED BY HASH(" + Joiner.on(", ").join(distributionColumnNames) + ")";
+        }
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

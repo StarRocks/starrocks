@@ -115,7 +115,11 @@ public:
         writer_context.partition_id = 0;
         writer_context.rowset_path_prefix = tablet->schema_hash_path();
         writer_context.rowset_state = COMMITTED;
+<<<<<<< HEAD
         writer_context.tablet_schema = &tablet->tablet_schema();
+=======
+        writer_context.tablet_schema = tablet->tablet_schema();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         writer_context.version.first = 0;
         writer_context.version.second = 0;
         writer_context.segments_overlap = NONOVERLAPPING;
@@ -236,8 +240,12 @@ TEST_F(RowsetMergerTest, horizontal_merge) {
     const int num_segment = 1 + rand() % max_segments;
     const int N = 500000 + rand() % 1000000;
     MergeConfig cfg;
+<<<<<<< HEAD
     cfg.chunk_size = 1000 + rand() % 2000;
     LOG(INFO) << "merge test #rowset:" << num_segment << " #row:" << N << " chunk_size:" << cfg.chunk_size;
+=======
+    LOG(INFO) << "merge test #rowset:" << num_segment << " #row:" << N;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     vector<uint32_t> rssids(N);
     vector<vector<int64_t>> segments(num_segment);
     for (int i = 0; i < N; i++) {
@@ -285,7 +293,10 @@ TEST_F(RowsetMergerTest, vertical_merge) {
     const int num_segment = 2 + rand() % max_segments;
     const int N = 500000 + rand() % 1000000;
     MergeConfig cfg;
+<<<<<<< HEAD
     cfg.chunk_size = 1000 + rand() % 2000;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     cfg.algorithm = VERTICAL_COMPACTION;
     vector<uint32_t> rssids(N);
     vector<vector<int64_t>> segments(num_segment);
@@ -343,13 +354,20 @@ TEST_F(RowsetMergerTest, horizontal_merge_seq) {
     const int num_segment = 1 + rand() % max_segments;
     const int N = 500000 + rand() % 1000000;
     MergeConfig cfg;
+<<<<<<< HEAD
     cfg.chunk_size = 100 + rand() % 2000;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // small size test
     //    const int num_segment = 3;
     //    const int N = 30;
     //    MergeConfig cfg;
+<<<<<<< HEAD
     //    cfg.chunk_size = 20;
     LOG(INFO) << "seq merge test #rowset:" << num_segment << " #row:" << N << " chunk_size:" << cfg.chunk_size;
+=======
+    LOG(INFO) << "seq merge test #rowset:" << num_segment << " #row:" << N;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     vector<uint32_t> rssids(N);
     vector<vector<int64_t>> segments(num_segment);
     for (int i = 0; i < N; i++) {
@@ -396,7 +414,10 @@ TEST_F(RowsetMergerTest, vertical_merge_seq) {
     const int num_segment = 2 + rand() % max_segments;
     const int N = 500000 + rand() % 1000000;
     MergeConfig cfg;
+<<<<<<< HEAD
     cfg.chunk_size = 100 + rand() % 2000;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     cfg.algorithm = VERTICAL_COMPACTION;
     vector<uint32_t> rssids(N);
     vector<vector<int64_t>> segments(num_segment);

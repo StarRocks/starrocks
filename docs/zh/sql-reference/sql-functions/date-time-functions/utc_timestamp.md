@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # utc_timestamp
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 返回当前 UTC 日期时间。
 

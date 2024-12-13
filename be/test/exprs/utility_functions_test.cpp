@@ -21,6 +21,10 @@
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "exprs/function_context.h"
+<<<<<<< HEAD
+=======
+#include "runtime/runtime_state.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "types/logical_type.h"
 #include "util/random.h"
 #include "util/time.h"
@@ -56,6 +60,11 @@ TEST_F(UtilityFunctionsTest, versionTest) {
 TEST_F(UtilityFunctionsTest, sleepTest) {
     FunctionContext* ctx = FunctionContext::create_test_context();
     auto ptr = std::unique_ptr<FunctionContext>(ctx);
+<<<<<<< HEAD
+=======
+    RuntimeState state;
+    ptr->set_runtime_state(&state);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // test sleep
     {

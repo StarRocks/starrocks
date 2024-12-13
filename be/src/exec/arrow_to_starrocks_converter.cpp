@@ -149,6 +149,7 @@ struct ArrowConverter {
     }
 };
 
+<<<<<<< HEAD
 static void simd_offsets_copy(uint32_t* dst_array, const int32_t* src_array, const size_t num_elements,
                               const uint32_t dst_base, const uint32_t src_base) {
     static constexpr size_t element_size = sizeof(uint32_t);
@@ -196,6 +197,18 @@ void offsets_copy(const T* arrow_offsets_data, T arrow_base_offset, size_t num_e
             // that would cause underflow for unsigned int;
             offsets_data[i] = base_offset + (arrow_offsets_data[i] - arrow_base_offset);
         }
+=======
+// {List, Binary, String}Type in arrow use int32_t as offset type, so offsets can be copied via SIMD,
+// Large{List, Binary, String}Type use int64_t, so must copy offset elements one by one.
+template <typename T>
+void offsets_copy(const T* __restrict arrow_offsets_data, T arrow_base_offset, size_t num_elements,
+                  uint32_t* __restrict offsets_data, uint32_t base_offset) {
+    for (auto i = 0; i < num_elements; ++i) {
+        // never change following code to
+        // base_offsets - arrow_base_offset + arrow_offsets_data[i],
+        // that would cause underflow for unsigned int;
+        offsets_data[i] = base_offset + (arrow_offsets_data[i] - arrow_base_offset);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }
 
@@ -416,11 +429,15 @@ struct ArrowConverter<ArrowTypeId::DECIMAL, LT, is_nullable, is_strict, guard::G
         if constexpr (is_aligned) {
             *dst = *(int128_t*)src;
         } else {
+<<<<<<< HEAD
 #if defined(__SSE2__)
             _mm_store_si128((__m128i*)dst, _mm_loadu_si128((__m128i_u*)src));
 #else
             strings::memcpy_inlined(dst, src, sizeof(int128_t));
 #endif
+=======
+            memcpy(dst, src, sizeof(int128_t));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 

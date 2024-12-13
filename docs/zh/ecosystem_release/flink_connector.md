@@ -8,8 +8,13 @@ displayed_sidebar: docs
 
 **使用文档：**
 
+<<<<<<< HEAD
 - [使用 Flink connector 导入数据至 StarRocks](../loading/Flink-connector-starrocks.md)
 - [使用 Flink connector 从 StarRocks 读取数据](../unloading/Flink_connector.md)
+=======
+- [使用 Flink connector 导入数据至 StarRocks](https://docs.starrocks.io/zh/docs/loading/Flink-connector-starrocks/)
+- [使用 Flink connector 从 StarRocks 读取数据](https://docs.starrocks.io/zh/docs/unloading/Flink_connector/)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 **源码下载地址：**[starrocks-connector-for-apache-flink](https://github.com/StarRocks/starrocks-connector-for-apache-flink)
 
@@ -23,8 +28,13 @@ displayed_sidebar: docs
 您可以通过以下方式获取 Flink connector 的 JAR 包：
 
 - 从 [Maven Central Repository](https://repo1.maven.org/maven2/com/starrocks) 直接下载编译好的 JAR 包。
+<<<<<<< HEAD
 - 在 Maven 项目的 pom 文件添加 Flink connector 为依赖项，作为依赖下载。具体方式，参见[使用文档](../loading/Flink-connector-starrocks.md)。
 - 使用源码手动编译成 JAR 包。具体方式，参见[使用文档](../loading/Flink-connector-starrocks.md)。
+=======
+- 在 Maven 项目的 pom 文件添加 Flink connector 为依赖项，作为依赖下载。具体方式，参见[使用文档](https://docs.starrocks.io/zh/docs/loading/Flink-connector-starrocks/)。
+- 使用源码手动编译成 JAR 包。具体方式，参见[使用文档](https://docs.starrocks.io/zh/docs/loading/Flink-connector-starrocks/)。
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 **版本要求：**
 
@@ -42,9 +52,38 @@ displayed_sidebar: docs
 
 ### 1.2
 
+<<<<<<< HEAD
 #### 1.2.9
 
 本版本发布包含如下新增特性和问题修复。值得注意的变化是，Flink connector 已与 Flink CDC 3.0 集成，可轻松地从 CDC 数据源（如 MySQL、Kafka）构建流式 ELT 管道到 StarRocks。更多信息，您参见 [Flink CDC 同步（支持 schema change）](../loading/Flink-connector-starrocks.md#flink-cdc同步支持-schema-change)。
+=======
+#### 1.2.10
+
+**新增特性**
+
+- 支持读取 JSON 列。[#334](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/334)
+- 支持读取 ARRAY、STRUCT 和 MAP 列。[#347](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/347)
+- 支持在使用 JSON 格式导入数据时进行 LZ4 压缩。[#354](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/354)
+- 支持 Flink 1.19。[#379](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/379)
+
+**功能优化**
+
+- 支持配置 Socket 超时时间。[#319](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/319)
+- Stream Load 事务接口支持异步 `prepare` 和 `commit` 操作。[#328](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/328)
+- 支持将 StarRocks 表中的部分列映射到 Flink 源表。[#352](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/352)
+- 支持在使用 Stream Load 事务接口时指定 Warehouse。[#361](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/361)
+
+**问题修复**
+
+修复了如下问题：
+
+- `StarRocksDynamicLookupFunction` 中的 `StarRocksSourceBeReader` 在数据读取完成后未关闭。[#351](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/351)
+- 将空 JSON 字符串导入到 JSON 列时会抛出异常。[#380](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/380)
+
+#### 1.2.9
+
+本版本发布包含如下新增特性和问题修复。值得注意的变化是，Flink connector 已与 Flink CDC 3.0 集成，可轻松地从 CDC 数据源（如 MySQL、Kafka）构建流式 ELT 管道到 StarRocks。更多信息，您参见 [Flink CDC 同步（支持 schema change）](https://docs.starrocks.io/zh/docs/loading/Flink-connector-starrocks/#使用-flink-cdc-30-同步数据支持-schema-change)。
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 **新增特性**
 
@@ -62,7 +101,11 @@ displayed_sidebar: docs
 本版本发布包含如下功能优化和问题修复。其中重点优化如下：
 
 - 支持 Flink 1.16 和 1.17。
+<<<<<<< HEAD
 - Sink 语义配置为 exactly-once 时建议设置 `sink.label-prefix`。使用说明，参考 [Exactly Once](../loading/Flink-connector-starrocks.md#exactly-once)。
+=======
+- Sink 语义配置为 exactly-once 时建议设置 `sink.label-prefix`。使用说明，参考 [Exactly Once](https://docs.starrocks.io/zh/docs/loading/Flink-connector-starrocks/#exactly-once)。
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 **功能优化**
 

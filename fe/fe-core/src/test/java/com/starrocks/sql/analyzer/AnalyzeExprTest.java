@@ -407,6 +407,10 @@ public class AnalyzeExprTest {
         analyzeSuccess("select map{NULL:NULL}");
         analyzeSuccess("select map<int,map<varchar,int>>{2:map{3:3}}");
         analyzeSuccess("select map<int,map<int,int>>{2:map{'3':3}}");
+<<<<<<< HEAD
+=======
+        analyzeSuccess("select map<int,map<int,int>>{map{3:3}:2}"); // runtime error will report when cast
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         analyzeSuccess("select map<int,map<int,int>>{'2s':map{3:3}}");
 
         analyzeFail("select map(null)");
@@ -499,6 +503,13 @@ public class AnalyzeExprTest {
         analyzeFail("select array_sortby('[a,b]','[1,2]')");
         analyzeFail("select array_sum('[1,2]')");
         analyzeFail("select array_to_bitmap('[1,2]')");
+<<<<<<< HEAD
+=======
+        analyzeFail("select array_sortby([1, 2, 3])");
+        analyzeFail("select array_sortby([1, 2, 3], [1, 2, 3], 'a')");
+        analyzeFail("select array_sortby([map{'a':1, 'b':2, 'c':3}], " +
+                "[map{'a':1, 'b':2, 'c':3}], [map{'c':4, 'd':5, 'e':6}])");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -525,4 +536,14 @@ public class AnalyzeExprTest {
         analyzeFail("select map(parse_json('{\"a\": 1}'), map(1,2))");
     }
 
+<<<<<<< HEAD
+=======
+    @Test
+    public void testNgramSearch() {
+        analyzeFail("select ngram_search('abc', 'a')");
+        analyzeFail("select ngram_search(date('2020-06-23'), \"2020\", 4);");
+        analyzeFail("select ngram_search(th,th,4) from tall;");
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

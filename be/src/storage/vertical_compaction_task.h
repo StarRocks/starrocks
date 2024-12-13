@@ -27,7 +27,11 @@ namespace starrocks {
 class RowsetWriter;
 class TabletReader;
 class RowSourceMaskBuffer;
+<<<<<<< HEAD
 class RowSourceMask;
+=======
+struct RowSourceMask;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 // need a factory of compaction task
 class VerticalCompactionTask : public CompactionTask {

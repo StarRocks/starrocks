@@ -35,6 +35,10 @@
 #pragma once
 
 #include <functional>
+<<<<<<< HEAD
+=======
+#include <map>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 #include "gen_cpp/PlanNodes_types.h"
 #include "http/http_handler.h"
@@ -70,6 +74,11 @@ private:
     Status _execute_plan_fragment(StreamLoadContext* ctx);
     Status _process_put(HttpRequest* http_req, StreamLoadContext* ctx);
 
+<<<<<<< HEAD
+=======
+    Status _handle_batch_write(HttpRequest* http_req, StreamLoadContext* ctx);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 private:
     ExecEnv* _exec_env;
     ConcurrentLimiter* _http_concurrent_limiter = nullptr;

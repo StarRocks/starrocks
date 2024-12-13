@@ -42,7 +42,11 @@ public class CatalogAnalyzer {
         new CatalogAnalyzerVisitor().visit(stmt, session);
     }
 
+<<<<<<< HEAD
     static class CatalogAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+=======
+    static class CatalogAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         public void analyze(ShowStmt statement, ConnectContext session) {
             visit(statement, session);
         }

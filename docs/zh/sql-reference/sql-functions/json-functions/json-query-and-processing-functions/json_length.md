@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # json_length
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 返回 JSON 字符串的长度。如果指定了 `path`，则返回 `path` 指定的值的长度。
 

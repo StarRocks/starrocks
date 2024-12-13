@@ -54,6 +54,10 @@ import io.netty.handler.codec.http.HttpMethod;
 import org.apache.commons.validator.routines.UrlValidator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+<<<<<<< HEAD
+=======
+import org.owasp.encoder.Encode;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -77,7 +81,13 @@ public class SystemAction extends WebBaseAction {
         if (Strings.isNullOrEmpty(currentPath)) {
             currentPath = "/";
         }
+<<<<<<< HEAD
         appendSystemInfo(response.getContent(), currentPath, currentPath);
+=======
+        // HTML encode the path to prevent XSS
+        String encodePath = Encode.forHtml(currentPath);
+        appendSystemInfo(response.getContent(), encodePath, encodePath);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         getPageFooter(response.getContent());
         writeResponse(request, response);

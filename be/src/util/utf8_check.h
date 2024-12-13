@@ -36,10 +36,21 @@
 
 #include <cstddef>
 
+<<<<<<< HEAD
 namespace starrocks {
 // check utf8 code using simd instructions
 // Return true - success,  false fail
 bool validate_utf8(const char* src, size_t len);
+=======
+#include "simdutf.h"
+
+namespace starrocks {
+// check utf8 code using simd instructions
+// Return true - success,  false fail
+inline bool validate_utf8(const char* src, size_t len) {
+    return simdutf::validate_utf8(src, len);
+}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 // chech utf8 use naive c++
 bool validate_utf8_naive(const char* data, size_t len);
 } // namespace starrocks

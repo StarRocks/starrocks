@@ -29,6 +29,7 @@ import java.util.Map;
 import java.util.Optional;
 
 public class JDBCPartitionTraits extends DefaultTraits {
+<<<<<<< HEAD
 
     @Override
     public boolean supportPartitionRefresh() {
@@ -44,6 +45,11 @@ public class JDBCPartitionTraits extends DefaultTraits {
     @Override
     public String getTableName() {
         return ((JDBCTable) table).getJdbcTable();
+=======
+    @Override
+    public String getTableName() {
+        return table.getCatalogTableName();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -61,7 +67,11 @@ public class JDBCPartitionTraits extends DefaultTraits {
     @Override
     public Map<String, Range<PartitionKey>> getPartitionKeyRange(Column partitionColumn, Expr partitionExpr)
             throws AnalysisException {
+<<<<<<< HEAD
         return PartitionUtil.getRangePartitionMapOfExternalTable(
+=======
+        return PartitionUtil.getRangePartitionMapOfJDBCTable(
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 table, partitionColumn, getPartitionNames(), partitionExpr);
     }
 

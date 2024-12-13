@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # parse_json
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 将字符串类型的数据构造为 JSON 类型的数据。
 

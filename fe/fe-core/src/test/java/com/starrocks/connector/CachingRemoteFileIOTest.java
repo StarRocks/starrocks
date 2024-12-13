@@ -17,10 +17,13 @@ package com.starrocks.connector;
 
 import com.google.common.collect.Lists;
 import com.starrocks.common.FeConstants;
+<<<<<<< HEAD
 import com.starrocks.connector.CachingRemoteFileIO;
 import com.starrocks.connector.RemoteFileBlockDesc;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemotePathKey;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.connector.hive.HiveRemoteFileIO;
 import com.starrocks.connector.hive.MockedRemoteFileSystem;
 import org.apache.hadoop.conf.Configuration;
@@ -73,5 +76,11 @@ public class CachingRemoteFileIOTest {
         Map<RemotePathKey, List<RemoteFileDesc>> presentRemoteFileInfos =
                 cachingFileIO.getPresentRemoteFiles(Lists.newArrayList(pathKey));
         Assert.assertEquals(1, presentRemoteFileInfos.size());
+<<<<<<< HEAD
+=======
+
+        queryLevelCache.updateRemoteFiles(pathKey);
+        queryLevelCache.invalidatePartition(pathKey);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }

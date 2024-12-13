@@ -14,12 +14,17 @@
 
 #pragma once
 
+<<<<<<< HEAD
+=======
+#include <limits>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include <memory>
 
 #include "column/vectorized_fwd.h"
 #include "exec/sort_exec_exprs.h"
 #include "exec/sorting/sorting.h"
 #include "exec/spill/block_manager.h"
+<<<<<<< HEAD
 
 namespace starrocks::spill {
 struct SpilledChunkBuildSchema {
@@ -29,6 +34,24 @@ struct SpilledChunkBuildSchema {
     size_t column_number() const { return _chunk->num_columns(); }
 
 private:
+=======
+#include "exec/workgroup/work_group_fwd.h"
+
+namespace starrocks::spill {
+struct SpilledChunkBuildSchema {
+    void set_schema(const ChunkPtr& chunk) {
+        _chunk = chunk->clone_empty(0);
+        _sample_chunk_memory_usage = chunk->memory_usage();
+    }
+    bool empty() { return _chunk->num_columns() == 0; }
+    ChunkUniquePtr new_chunk() { return _chunk->clone_unique(); }
+    size_t column_number() const { return _chunk->num_columns(); }
+    size_t chunk_avg_mem_size() const { return _sample_chunk_memory_usage; }
+
+private:
+    // Now we'll use the first chunk to represent the average chunk memory size.
+    size_t _sample_chunk_memory_usage{};
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ChunkPtr _chunk{new Chunk()};
 };
 
@@ -91,9 +114,20 @@ struct SpilledOptions {
     size_t min_spilled_size = 1 * 1024 * 1024;
 
     bool read_shared = false;
+<<<<<<< HEAD
     int encode_level = 0;
 
     BlockManager* block_manager = nullptr;
+=======
+    bool enable_block_compaction = false;
+    int encode_level = 0;
+
+    BlockManager* block_manager = nullptr;
+    workgroup::WorkGroupPtr wg;
+
+    bool enable_buffer_read = false;
+    size_t max_read_buffer_bytes = UINT64_MAX;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 // spill strategy

@@ -51,9 +51,12 @@ public:
     virtual bool has_more() = 0;
 
 protected:
+<<<<<<< HEAD
     virtual Status _get_tablet(const TInternalScanRange* scan_range) = 0;
     virtual Status _init_meta_reader_params() = 0;
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     RuntimeState* _runtime_state{nullptr};
 
     bool _is_open = false;

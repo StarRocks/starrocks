@@ -45,6 +45,10 @@ public abstract class AgentTask {
 
     protected long dbId;
     protected long tableId;
+<<<<<<< HEAD
+=======
+    // physical partition id
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     protected long partitionId;
     protected long indexId;
     protected long tabletId;

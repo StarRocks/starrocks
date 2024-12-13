@@ -18,6 +18,10 @@ package com.starrocks.sql.plan;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.sql.analyzer.SemanticException;
+<<<<<<< HEAD
+=======
+import org.junit.Assert;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -94,13 +98,21 @@ public class JsonTypeTest extends PlanTestBase {
         assertPlanContains("select cast(parse_json('1') -> '$.k1' as int) ",
                 "json_query(parse_json('1'), '$.k1')");
         assertPlanContains("select cast(v_json -> '$.k1' as int) from tjson_test",
+<<<<<<< HEAD
                 "json_query(2: v_json, '$.k1')");
+=======
+                "CAST(get_json_int(2: v_json, '$.k1') AS INT)");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
     public void testPredicateImplicitCast() throws Exception {
         assertPlanContains("select parse_json('1') between 0.5 and 0.9",
+<<<<<<< HEAD
                 "CAST(3: parse_json AS DOUBLE)");
+=======
+                "CAST(parse_json('1') AS DOUBLE)");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         List<String> operators = Arrays.asList("<", "<=", "=", ">=", "!=");
         for (String operator : operators) {
@@ -115,7 +127,12 @@ public class JsonTypeTest extends PlanTestBase {
         }
 
         assertPlanContains("select parse_json('1') in (1, 2, 3)", "IN");
+<<<<<<< HEAD
         assertPlanContains("select parse_json('1') in (parse_json('1'), parse_json('2'))", "OR");
+=======
+        assertPlanContains("select parse_json('1') in (parse_json('1'), parse_json('2'))",
+                "parse_json('1') IN (parse_json('1'), parse_json('2'))");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     /**
@@ -193,7 +210,11 @@ public class JsonTypeTest extends PlanTestBase {
     public void testCastJsonArray() throws Exception {
         assertPlanContains("select json_array(parse_json('1'), parse_json('2'))",
                 "json_array(parse_json('1'), parse_json('2'))");
+<<<<<<< HEAD
         assertPlanContains("select json_array(1, 1)", "json_array(3: cast, 3: cast)");
+=======
+        assertPlanContains("select json_array(1, 1)", "json_array(CAST(1 AS JSON), CAST(1 AS JSON))");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         assertPlanContains("select json_array(1, '1')", "json_array(CAST(1 AS JSON), CAST('1' AS JSON))");
         assertPlanContains("select json_array(1.1)", "json_array(CAST(1.1 AS JSON))");
         assertPlanContains("select json_array(NULL)", "NULL");
@@ -229,4 +250,36 @@ public class JsonTypeTest extends PlanTestBase {
                 "Getting analyzing error from line 1, column 7 to line 1, column 50. Detail message: " +
                         "Invalid type cast from json to array<array<int(11)>> in sql `json_array(1, 2, 3)`.");
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testFlatJsonMeta() throws Exception {
+        String sql = "select flat_json_meta(v_json) from tjson_test[_META_]";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  group by: flat_json_meta");
+
+        sql = "select flat_json_meta(v_json), count(1) from tjson_test[_META_]";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  output: count(1)\n" +
+                "  |  group by: flat_json_meta");
+
+        sql = "select array_join(flat_json_meta(v_json), ', '), count(1) from tjson_test[_META_]";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "array_join(14: flat_json_meta, ', ')");
+
+        Assert.assertThrows(SemanticException.class, () -> getFragmentPlan(
+                "select flat_json_meta(12) from tjson_test[_META_]"));
+
+        Assert.assertThrows(SemanticException.class, () -> getFragmentPlan(
+                "select flat_json_meta(v_json) from tjson_test[_META_] group by v_INT"));
+
+        Assert.assertThrows(SemanticException.class, () -> getFragmentPlan(
+                "select flat_json_meta(json_query(v_json, '$.v1')) from tjson_test[_META_]"));
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

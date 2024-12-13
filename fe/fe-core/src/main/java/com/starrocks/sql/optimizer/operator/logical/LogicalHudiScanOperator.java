@@ -61,6 +61,14 @@ public class LogicalHudiScanOperator extends LogicalScanOperator {
         this.predicates = predicates;
     }
 
+<<<<<<< HEAD
+=======
+    @Override
+    public boolean isEmptyOutputRows() {
+        return !table.isUnPartitioned() && predicates.getSelectedPartitionIds().isEmpty();
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public boolean hasUnknownColumn() {
         return hasUnknownColumn;
     }

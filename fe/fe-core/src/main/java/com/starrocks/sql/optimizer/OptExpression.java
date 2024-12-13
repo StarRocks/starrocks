@@ -12,15 +12,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 package com.starrocks.sql.optimizer;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.common.DebugOperatorTracer;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.LogicalProperty;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.Operator;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.operator.UKFKConstraints;
+import com.starrocks.sql.optimizer.property.DomainProperty;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.optimizer.rule.mv.KeyInference;
 import com.starrocks.sql.optimizer.rule.mv.MVOperatorProperty;
 import com.starrocks.sql.optimizer.rule.mv.ModifyInference;
@@ -55,8 +67,25 @@ public class OptExpression {
     private List<PhysicalPropertySet> requiredProperties;
     // MV Operator property, inferred from best plan
     private MVOperatorProperty mvOperatorProperty;
+<<<<<<< HEAD
     private PhysicalPropertySet outputProperty;
 
+=======
+
+    // the actual output property of this expression
+    private PhysicalPropertySet outputProperty;
+
+    private UKFKConstraints constraints;
+
+    private Boolean isShortCircuit = false;
+
+    // the flag if its parent has required data distribution property for this expression
+    private boolean existRequiredDistribution = true;
+
+    private OptExpression() {
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public OptExpression(Operator op) {
         this.op = op;
         this.inputs = Lists.newArrayList();
@@ -68,6 +97,16 @@ public class OptExpression {
         return expr;
     }
 
+<<<<<<< HEAD
+=======
+    public static OptExpression createForShortCircuit(Operator op, OptExpression input, boolean isShortCircuit) {
+        OptExpression expr = new OptExpression(op);
+        expr.inputs = Lists.newArrayList(input);
+        expr.setShortCircuit(isShortCircuit);
+        return expr;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static OptExpression create(Operator op, List<OptExpression> inputs) {
         OptExpression expr = new OptExpression(op);
         expr.inputs = inputs;
@@ -131,6 +170,13 @@ public class OptExpression {
         return op.getRowOutputInfo(inputs);
     }
 
+<<<<<<< HEAD
+=======
+    public DomainProperty getDomainProperty() {
+        return op.getDomainProperty(inputs);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void clearStatsAndInitOutputInfo() {
         for (OptExpression optExpression : inputs) {
             optExpression.clearStatsAndInitOutputInfo();
@@ -157,6 +203,17 @@ public class OptExpression {
         return this.outputProperty;
     }
 
+<<<<<<< HEAD
+=======
+    public UKFKConstraints getConstraints() {
+        return constraints;
+    }
+
+    public void setConstraints(UKFKConstraints constraints) {
+        this.constraints = constraints;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // This function assume the child expr logical property has been derived
     public void deriveLogicalPropertyItself() {
         ExpressionContext context = new ExpressionContext(this);
@@ -198,11 +255,23 @@ public class OptExpression {
         this.cost = cost;
     }
 
+<<<<<<< HEAD
+=======
+    public Boolean getShortCircuit() {
+        return isShortCircuit;
+    }
+
+    public void setShortCircuit(Boolean shortCircuit) {
+        isShortCircuit = shortCircuit;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public String toString() {
         return op + " child size " + inputs.size();
     }
 
+<<<<<<< HEAD
     public String explain() {
         return explain("", "");
     }
@@ -215,10 +284,41 @@ public class OptExpression {
         String childDetailPrefix = detailPrefix + "    ";
         for (OptExpression input : inputs) {
             sb.append(input.explain(childHeadlinePrefix, childDetailPrefix));
+=======
+    public String debugString() {
+        return debugString("", "", Integer.MAX_VALUE);
+    }
+
+    public String debugString(int limitLine) {
+        return debugString("", "", limitLine);
+    }
+
+    public boolean isExistRequiredDistribution() {
+        return existRequiredDistribution;
+    }
+
+    public void setExistRequiredDistribution(boolean existRequiredDistribution) {
+        this.existRequiredDistribution = existRequiredDistribution;
+    }
+
+    private String debugString(String headlinePrefix, String detailPrefix, int limitLine) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(headlinePrefix).append(op.accept(new DebugOperatorTracer(), null));
+        limitLine -= 1;
+        if (limitLine <= 0 || inputs.isEmpty()) {
+            return sb.toString();
+        }
+        String childHeadlinePrefix = detailPrefix + "->  ";
+        String childDetailPrefix = detailPrefix + "    ";
+        for (OptExpression input : inputs) {
+            sb.append('\n');
+            sb.append(input.debugString(childHeadlinePrefix, childDetailPrefix, limitLine));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return sb.toString();
     }
 
+<<<<<<< HEAD
     public static Builder buildWithOpAndInputs(Operator op, List<OptExpression> inputs) {
         return new Builder(op, inputs);
     }
@@ -247,30 +347,78 @@ public class OptExpression {
 
         public Builder setLogicalProperty(LogicalProperty property) {
             this.property = property;
+=======
+    public static Builder builder() {
+        return new Builder();
+    }
+
+    public static final class Builder {
+        private OptExpression optExpression = new OptExpression();
+
+        public Builder with(OptExpression other) {
+            optExpression.op = other.op;
+            optExpression.inputs = other.inputs;
+            optExpression.property = other.property;
+            optExpression.statistics = other.statistics;
+            optExpression.cost = other.cost;
+            optExpression.planCount = other.planCount;
+            optExpression.groupExpression = other.groupExpression;
+            optExpression.requiredProperties = other.requiredProperties;
+            optExpression.mvOperatorProperty = other.mvOperatorProperty;
+            optExpression.outputProperty = other.outputProperty;
+            return this;
+        }
+
+        public Builder setOp(Operator op) {
+            optExpression.op = op;
+            return this;
+        }
+
+        public Builder setInputs(List<OptExpression> inputs) {
+            optExpression.inputs = inputs;
+            return this;
+        }
+
+        public Builder setLogicalProperty(LogicalProperty property) {
+            optExpression.property = property;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return this;
         }
 
         public Builder setStatistics(Statistics statistics) {
+<<<<<<< HEAD
             this.statistics = statistics;
+=======
+            optExpression.statistics = statistics;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return this;
         }
 
         public Builder setCost(double cost) {
+<<<<<<< HEAD
             this.cost = cost;
+=======
+            optExpression.cost = cost;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return this;
         }
 
         public Builder setRequiredProperties(List<PhysicalPropertySet> requiredProperties) {
+<<<<<<< HEAD
             this.requiredProperties = requiredProperties;
             return this;
         }
 
         public Builder setOutputProperty(PhysicalPropertySet outputProperty) {
             this.outputProperty = outputProperty;
+=======
+            optExpression.requiredProperties = requiredProperties;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return this;
         }
 
         public OptExpression build() {
+<<<<<<< HEAD
             Preconditions.checkState(op != null);
             OptExpression result = OptExpression.create(op, inputs);
             result.setStatistics(statistics);
@@ -282,4 +430,11 @@ public class OptExpression {
         }
     }
 
+=======
+            OptExpression tmp = optExpression;
+            optExpression = null;
+            return tmp;
+        }
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

@@ -16,6 +16,7 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.MaterializedView;
+<<<<<<< HEAD
 import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.hive.MockedHiveMetadata;
 import com.starrocks.server.GlobalStateMgr;
@@ -24,6 +25,23 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+=======
+import com.starrocks.catalog.Partition;
+import com.starrocks.common.FeConstants;
+import com.starrocks.connector.hive.HiveMetaClient;
+import com.starrocks.connector.hive.MockedHiveMetadata;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.plan.ConnectorPlanTestBase;
+import com.starrocks.sql.plan.PlanTestBase;
+import org.junit.After;
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.BeforeClass;
+import org.junit.Test;
+
+import java.time.Instant;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
     private static MockedHiveMetadata mockedHiveMetadata;
 
@@ -35,7 +53,13 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
         starRocksAssert.withTable(cluster, "test_base_part");
         starRocksAssert.withTable(cluster, "table_with_partition");
         starRocksAssert.withTable(cluster, "table_with_day_partition");
+<<<<<<< HEAD
 
+=======
+        starRocksAssert.withTable(cluster, "table_with_datetime_partition");
+
+        ConnectorPlanTestBase.mockHiveCatalog(connectContext);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         mockedHiveMetadata =
                 (MockedHiveMetadata) connectContext.getGlobalStateMgr().getMetadataMgr().
                         getOptionalMetadata(MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME).get();
@@ -43,6 +67,19 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
                 ImmutableList.of("l_shipdate=" + HiveMetaClient.PARTITION_NULL_VALUE));
     }
 
+<<<<<<< HEAD
+=======
+    @Before
+    public void before() {
+        startCaseTime = Instant.now().getEpochSecond();
+    }
+
+    @After
+    public void after() throws Exception {
+        PlanTestBase.cleanupEphemeralMVs(starRocksAssert, startCaseTime);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Test
     public void testPartialPartition1() throws Exception {
         createAndRefreshMv("create materialized view partial_mv" +
@@ -151,7 +188,11 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
 
         String query9 = "select sum(c3) from test_base_part";
         String plan9 = getFragmentPlan(query9);
+<<<<<<< HEAD
         PlanTestBase.assertNotContains("partial_mv_5");
+=======
+        PlanTestBase.assertNotContains(plan9, "partial_mv_5");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         dropMv("test", "partial_mv_5");
     }
 
@@ -248,6 +289,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
                 " (2,1,1),(2,1,2),(2,2,1),(2,2,2),\n" +
                 " (3,1,1),(3,1,2),(3,2,1),(3,2,2);");
         createAndRefreshMv("CREATE MATERIALIZED VIEW ttl_mv_2\n" +
+<<<<<<< HEAD
                 "               PARTITION BY k1\n" +
                 "               DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
                 "               REFRESH ASYNC\n" +
@@ -255,6 +297,15 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
                 "               \"partition_ttl_number\"=\"4\"\n" +
                 "               )\n" +
                 "               AS SELECT k1, sum(v1) as sum_v1 FROM ttl_base_table group by k1;");
+=======
+                " PARTITION BY k1\n" +
+                " DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
+                " REFRESH ASYNC\n" +
+                " PROPERTIES(\n" +
+                " 'partition_ttl_number'='4' \n" +
+                " )\n" +
+                "AS SELECT k1, sum(v1) as sum_v1 FROM ttl_base_table group by k1;");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         MaterializedView ttlMv2 = getMv("test", "ttl_mv_2");
         GlobalStateMgr.getCurrentState().getDynamicPartitionScheduler().runOnceForTest();
         Assert.assertEquals(4, ttlMv2.getPartitions().size());
@@ -362,13 +413,19 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
     public void testHivePartialPartitionWithTTL() throws Exception {
         starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
         createAndRefreshMv("CREATE MATERIALIZED VIEW `hive_parttbl_mv`\n" +
+<<<<<<< HEAD
                         "COMMENT \"MATERIALIZED_VIEW\"\n" +
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         "PARTITION BY (`l_shipdate`)\n" +
                         "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
                         "REFRESH MANUAL\n" +
                         "PROPERTIES (\n" +
+<<<<<<< HEAD
                         "\"replication_num\" = \"1\",\n" +
                         "\"force_external_table_query_rewrite\" = \"true\",\n" +
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         "\"partition_ttl_number\" = \"3\"\n" +
                         ")\n" +
                         "AS SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` as a;");
@@ -398,6 +455,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
     public void testHivePartialPartition1() throws Exception {
         starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
         createAndRefreshMv("CREATE MATERIALIZED VIEW `hive_parttbl_mv`\n" +
+<<<<<<< HEAD
                         "COMMENT \"MATERIALIZED_VIEW\"\n" +
                         "PARTITION BY (`l_shipdate`)\n" +
                         "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
@@ -407,6 +465,11 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
                         "\"force_external_table_query_rewrite\" = \"true\",\n" +
                         "\"storage_medium\" = \"HDD\"\n" +
                         ")\n" +
+=======
+                        "PARTITION BY (`l_shipdate`)\n" +
+                        "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
+                        "REFRESH MANUAL\n" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         "AS SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` as a;");
 
         String query = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par`";
@@ -434,6 +497,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
     @Test
     public void testHivePartialPartition2() throws Exception {
         createAndRefreshMv("CREATE MATERIALIZED VIEW `hive_parttbl_mv_2`\n" +
+<<<<<<< HEAD
                         "COMMENT \"MATERIALIZED_VIEW\"\n" +
                         "PARTITION BY (`l_shipdate`)\n" +
                         "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
@@ -443,22 +507,42 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
                         "\"force_external_table_query_rewrite\" = \"true\",\n" +
                         "\"storage_medium\" = \"HDD\"\n" +
                         ")\n" +
+=======
+                        "PARTITION BY (`l_shipdate`)\n" +
+                        "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
+                        "REFRESH MANUAL\n" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         "AS SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` " +
                         "where l_orderkey > 100;");
         String query = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` " +
                 "where l_orderkey > 100;";
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         String plan = getFragmentPlan(query);
         PlanTestBase.assertContains(plan, "hive_parttbl_mv_2");
 
         mockedHiveMetadata.updatePartitions("partitioned_db", "lineitem_par",
                 ImmutableList.of("l_shipdate=1998-01-02"));
         plan = getFragmentPlan(query);
+<<<<<<< HEAD
         PlanTestBase.assertContains(plan, "hive_parttbl_mv_2", "lineitem_par",
                 "PARTITION PREDICATES: (((23: l_shipdate < '1998-01-03') OR (23: l_shipdate >= '1998-01-06'))" +
                         " AND (23: l_shipdate >= '1998-01-02')) OR (23: l_shipdate IS NULL)",
                 "NON-PARTITION PREDICATES: 21: l_orderkey > 100");
 
+=======
+        PlanTestBase.assertContains(plan, "     TABLE: hive_parttbl_mv_2\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=5/6\n" +
+                "     rollup: hive_parttbl_mv_2");
+        PlanTestBase.assertContains(plan, "     TABLE: lineitem_par\n" +
+                "     PARTITION PREDICATES: 25: l_shipdate IN ('1998-01-02')\n" +
+                "     NON-PARTITION PREDICATES: 23: l_orderkey > 100\n" +
+                "     MIN/MAX PREDICATES: 23: l_orderkey > 100\n" +
+                "     partitions=1/6");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         dropMv("test", "hive_parttbl_mv_2");
     }
 
@@ -466,6 +550,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
     public void testHivePartialPartition3() throws Exception {
         // test partition prune
         createAndRefreshMv("CREATE MATERIALIZED VIEW `hive_parttbl_mv_3`\n" +
+<<<<<<< HEAD
                         "COMMENT \"MATERIALIZED_VIEW\"\n" +
                         "PARTITION BY (`l_shipdate`)\n" +
                         "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
@@ -475,6 +560,11 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
                         "\"force_external_table_query_rewrite\" = \"true\",\n" +
                         "\"storage_medium\" = \"HDD\"\n" +
                         ")\n" +
+=======
+                        "PARTITION BY (`l_shipdate`)\n" +
+                        "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
+                        "REFRESH MANUAL\n" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         "AS SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` " +
                         "where l_shipdate > '1998-01-02';");
         String query = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` ";
@@ -487,6 +577,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
     @Test
     public void testHivePartialPartition4() throws Exception {
         createAndRefreshMv("CREATE MATERIALIZED VIEW `hive_parttbl_mv_4`\n" +
+<<<<<<< HEAD
                         "COMMENT \"MATERIALIZED_VIEW\"\n" +
                         "PARTITION BY (`l_shipdate`)\n" +
                         "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
@@ -496,6 +587,11 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
                         "\"force_external_table_query_rewrite\" = \"true\",\n" +
                         "\"storage_medium\" = \"HDD\"\n" +
                         ")\n" +
+=======
+                        "PARTITION BY (`l_shipdate`)\n" +
+                        "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
+                        "REFRESH MANUAL\n" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         "AS SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` " +
                         "where l_shipdate < '1998-01-02' and l_orderkey = 100;");
         String query = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` ";
@@ -508,6 +604,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
 
     @Test
     public void testHivePartialPartition5() throws Exception {
+<<<<<<< HEAD
         connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
         createAndRefreshMv("CREATE MATERIALIZED VIEW `hive_parttbl_mv_5`\n" +
                         "COMMENT \"MATERIALIZED_VIEW\"\n" +
@@ -518,6 +615,13 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
                         "\"replication_num\" = \"1\",\n" +
                         "\"force_external_table_query_rewrite\" = \"true\"" +
                         ")\n" +
+=======
+        connectContext.getSessionVariable().setEnableMaterializedViewTransparentUnionRewrite(false);
+        createAndRefreshMv("CREATE MATERIALIZED VIEW `hive_parttbl_mv_5`\n" +
+                        "PARTITION BY date_trunc('month', o_orderdate)\n" +
+                        "DISTRIBUTED BY HASH(`o_orderkey`) BUCKETS 10\n" +
+                        "REFRESH MANUAL\n" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         "AS SELECT `o_orderkey`, `o_orderstatus`, `o_orderdate`  FROM `hive0`.`partitioned_db`.`orders`");
 
         String query = "SELECT `o_orderkey`, `o_orderstatus`, `o_orderdate`  FROM `hive0`.`partitioned_db`.`orders`";
@@ -556,7 +660,11 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
                 "partitions=1/36");
 
         dropMv("test", "hive_parttbl_mv_5");
+<<<<<<< HEAD
         connectContext.getSessionVariable().setMaterializedViewRewriteMode("default");
+=======
+        connectContext.getSessionVariable().setEnableMaterializedViewTransparentUnionRewrite(true);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -566,6 +674,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
                     "(1000, 1, 2, 3),(2000, 1, 2, 3),(2500, 1, 2, 3)");
 
             createAndRefreshMv("CREATE MATERIALIZED VIEW `partial_mv_12`\n" +
+<<<<<<< HEAD
                     "COMMENT \"MATERIALIZED_VIEW\"\n" +
                     "PARTITION BY (`c3`)\n" +
                     "DISTRIBUTED BY HASH(`c1`) BUCKETS 6\n" +
@@ -578,6 +687,13 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
                     "FROM `test_base_part`\n" +
                     "WHERE `c3` is null\n" +
                     "GROUP BY `c3`, `c1`;");
+=======
+                    "PARTITION BY (`c3`)\n" +
+                    "DISTRIBUTED BY HASH(`c1`) BUCKETS 6\n" +
+                    "REFRESH MANUAL\n" +
+                    "AS SELECT `c1`, `c3`, sum(`c4`) AS `total`\n" +
+                    " FROM `test_base_part` WHERE `c3` is null GROUP BY `c3`, `c1`;");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
             String query = "select c1, c3, sum(c4) from test_base_part group by c1, c3;";
             String plan = getFragmentPlan(query);
@@ -590,6 +706,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
                     "(1000, 1, 2, 3),(2000, 1, 2, 3),(2500, 1, 2, 3)");
 
             createAndRefreshMv("CREATE MATERIALIZED VIEW `partial_mv_13`\n" +
+<<<<<<< HEAD
                     "COMMENT \"MATERIALIZED_VIEW\"\n" +
                     "PARTITION BY (`c3`)\n" +
                     "DISTRIBUTED BY HASH(`c1`) BUCKETS 6\n" +
@@ -602,6 +719,13 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
                     "FROM `test_base_part`\n" +
                     "WHERE `c3` is null\n" +
                     "GROUP BY `c3`, `c1`;");
+=======
+                    "PARTITION BY (`c3`)\n" +
+                    "DISTRIBUTED BY HASH(`c1`) BUCKETS 6\n" +
+                    "REFRESH MANUAL\n" +
+                    "AS SELECT `c1`, `c3`, sum(`c4`) AS `total`\n" +
+                    "FROM `test_base_part` WHERE `c3` is null GROUP BY `c3`, `c1`;");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
             // test update for null partition
             executeInsertSql(connectContext, "insert into test_base_part values(null, 1, null, 3)");
@@ -620,6 +744,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
 
         // Disable
         createAndRefreshMv("CREATE MATERIALIZED VIEW `hive_query_rewrite`\n" +
+<<<<<<< HEAD
                         "COMMENT \"MATERIALIZED_VIEW\"\n" +
                         "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
                         "REFRESH MANUAL\n" +
@@ -628,6 +753,10 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
                         "'query_rewrite_consistency' = 'checked', " +
                         "\"force_external_table_query_rewrite\" = \"disable\"\n" +
                         ")\n" +
+=======
+                        "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
+                        "REFRESH MANUAL\n" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         "AS SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` as a;");
 
         MaterializedView ttlMv = getMv("test", mvName);
@@ -636,11 +765,16 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
 
         String query = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` " +
                 "where l_shipdate >= '1998-01-04'";
+<<<<<<< HEAD
         PlanTestBase.assertNotContains(getFragmentPlan(query), mvName);
+=======
+        PlanTestBase.assertContains(getFragmentPlan(query), mvName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         dropMv("test", mvName);
 
         // Checked
         createAndRefreshMv("CREATE MATERIALIZED VIEW `hive_query_rewrite`\n" +
+<<<<<<< HEAD
                         "COMMENT \"MATERIALIZED_VIEW\"\n" +
                         "DISTRIBUTED BY HASH(`l_shipdate`) BUCKETS 10\n" +
                         "REFRESH DEFERRED MANUAL\n" +
@@ -648,6 +782,10 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
                         "\"replication_num\" = \"1\",\n" +
                         "\"force_external_table_query_rewrite\" = \"checked\"\n" +
                         ")\n" +
+=======
+                        "DISTRIBUTED BY HASH(`l_shipdate`) BUCKETS 10\n" +
+                        "REFRESH DEFERRED MANUAL\n" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         "AS SELECT `l_shipdate`, sum(`l_orderkey`)  FROM `hive0`.`partitioned_db`.`lineitem_par` " +
                         "GROUP BY l_shipdate");
 
@@ -663,6 +801,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
 
         // Loose
         createAndRefreshMv("CREATE MATERIALIZED VIEW `hive_query_rewrite`\n" +
+<<<<<<< HEAD
                         "COMMENT \"MATERIALIZED_VIEW\"\n" +
                         "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
                         "REFRESH DEFERRED MANUAL\n" +
@@ -670,6 +809,10 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
                         "\"replication_num\" = \"1\",\n" +
                         "\"force_external_table_query_rewrite\" = \"loose\"\n" +
                         ")\n" +
+=======
+                        "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
+                        "REFRESH DEFERRED MANUAL\n" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         "AS SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` as a;");
 
         query = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` " +
@@ -691,12 +834,17 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
         {
             // default
             createAndRefreshMv("CREATE MATERIALIZED VIEW `hive_query_rewrite`\n" +
+<<<<<<< HEAD
                             "COMMENT \"MATERIALIZED_VIEW\"\n" +
                             "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
                             "REFRESH MANUAL\n" +
                             "PROPERTIES (\n" +
                             "\"replication_num\" = \"1\"\n" +
                             ")\n" +
+=======
+                            "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
+                            "REFRESH MANUAL\n" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                             "AS SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  " +
                             "FROM `hive0`.`partitioned_db`.`lineitem_par` as a;");
 
@@ -706,13 +854,18 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
 
             String query = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` " +
                     "where l_shipdate >= '1998-01-04'";
+<<<<<<< HEAD
             PlanTestBase.assertNotContains(getFragmentPlan(query), mvName);
+=======
+            PlanTestBase.assertContains(getFragmentPlan(query), mvName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             dropMv("test", mvName);
         }
 
         {
             // Disable
             createAndRefreshMv("CREATE MATERIALIZED VIEW `hive_query_rewrite`\n" +
+<<<<<<< HEAD
                             "COMMENT \"MATERIALIZED_VIEW\"\n" +
                             "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
                             "REFRESH MANUAL\n" +
@@ -720,6 +873,10 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
                             "\"replication_num\" = \"1\",\n" +
                             "'query_rewrite_consistency' = 'disable' " +
                             ")\n" +
+=======
+                            "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
+                            "REFRESH MANUAL\n" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                             "AS SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  " +
                             "FROM `hive0`.`partitioned_db`.`lineitem_par` as a;");
 
@@ -729,13 +886,18 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
 
             String query = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` " +
                     "where l_shipdate >= '1998-01-04'";
+<<<<<<< HEAD
             PlanTestBase.assertNotContains(getFragmentPlan(query), mvName);
+=======
+            PlanTestBase.assertContains(getFragmentPlan(query), mvName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             dropMv("test", mvName);
         }
 
         {
             // Checked
             createAndRefreshMv("CREATE MATERIALIZED VIEW `hive_query_rewrite`\n" +
+<<<<<<< HEAD
                     "COMMENT \"MATERIALIZED_VIEW\"\n" +
                     "DISTRIBUTED BY HASH(`l_shipdate`) BUCKETS 10\n" +
                     "REFRESH DEFERRED MANUAL\n" +
@@ -743,6 +905,10 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
                     "\"replication_num\" = \"1\",\n" +
                     "\"query_rewrite_consistency\" = \"checked\"\n" +
                     ")\n" +
+=======
+                    "DISTRIBUTED BY HASH(`l_shipdate`) BUCKETS 10\n" +
+                    "REFRESH DEFERRED MANUAL\n" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     "AS SELECT `l_shipdate`, sum(`l_orderkey`)  FROM `hive0`.`partitioned_db`.`lineitem_par` " +
                     "GROUP BY l_shipdate");
 
@@ -753,13 +919,18 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
             refreshMaterializedView("test", mvName);
             query =
                     "SELECT `l_shipdate`, sum(`l_orderkey`)  FROM `hive0`.`partitioned_db`.`lineitem_par` GROUP BY l_shipdate";
+<<<<<<< HEAD
             PlanTestBase.assertNotContains(getFragmentPlan(query), mvName);
+=======
+            PlanTestBase.assertContains(getFragmentPlan(query), mvName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             dropMv("test", mvName);
 
         }
         {
             // Loose
             createAndRefreshMv("CREATE MATERIALIZED VIEW `hive_query_rewrite`\n" +
+<<<<<<< HEAD
                             "COMMENT \"MATERIALIZED_VIEW\"\n" +
                             "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
                             "REFRESH DEFERRED MANUAL\n" +
@@ -767,6 +938,10 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
                             "\"replication_num\" = \"1\",\n" +
                             "\"query_rewrite_consistency\" = \"loose\"\n" +
                             ")\n" +
+=======
+                            "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
+                            "REFRESH DEFERRED MANUAL\n" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                             "AS SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  " +
                             "FROM `hive0`.`partitioned_db`.`lineitem_par` as a;");
 
@@ -783,6 +958,39 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testPartitionQueryRewriteSkipEmptyPartitions() throws Exception {
+        starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
+        {
+            // Loose, empty mv partitions should be skipped
+            starRocksAssert.withRefreshedMaterializedView("create materialized view test_loose_mv" +
+                    " partition by id_date" +
+                    " distributed by random" +
+                    " REFRESH ASYNC\n" +
+                    " PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\",\n" +
+                    "\"query_rewrite_consistency\" = \"loose\"," +
+                    "\"auto_refresh_partitions_limit\" = \"1\"" +
+                    ")\n" +
+                    " as" +
+                    " select id_date, sum(t1b) from table_with_day_partition group by id_date");
+            MaterializedView mv = starRocksAssert.getMv("test", "test_loose_mv");
+            mv.getPartition("p19910330").getDefaultPhysicalPartition()
+                    .setVisibleVersion(Partition.PARTITION_INIT_VERSION, System.currentTimeMillis());
+            String query5 = "select id_date, sum(t1b) from table_with_day_partition" +
+                    " where id_date >= '1991-03-30' and id_date < '1991-04-03' group by id_date";
+            FeConstants.runningUnitTest = false;
+            String plan = getFragmentPlan(query5);
+            FeConstants.runningUnitTest = true;
+            PlanTestBase.assertContains(plan, "test_loose_mv", "partitions=3/4",
+                    "table_with_day_partition", "partitions=1/4", "UNION");
+            dropMv("test", "test_loose_mv");
+        }
+    }
+
+    @Test
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void testPartialPartitionRewriteWithDateTruncExpr1() throws Exception {
         starRocksAssert.withTable("CREATE TABLE base_tbl1 (\n" +
                 " k1 datetime,\n" +
@@ -836,7 +1044,17 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
                     " WHERE date_trunc('minute', `k1`) >= '2020-01-01 00:00:00'" +
                     " group by ds";
             String plan = getFragmentPlan(query);
+<<<<<<< HEAD
             PlanTestBase.assertNotContains(plan, "test_mv1");
+=======
+            PlanTestBase.assertContains(plan, "     TABLE: test_mv1\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     partitions=1/3");
+            PlanTestBase.assertContains(plan, "     TABLE: base_tbl1\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     PREDICATES: date_trunc('minute', 10: k1) >= '2020-01-01 00:00:00'\n" +
+                    "     partitions=1/3");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         {
@@ -846,7 +1064,18 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
                     "   date_trunc('minute', `k1`) <= '2020-03-01 00:00:00' " +
                     " group by ds";
             String plan = getFragmentPlan(query);
+<<<<<<< HEAD
             PlanTestBase.assertNotContains(plan, "test_mv1");
+=======
+            PlanTestBase.assertContains(plan, "     TABLE: base_tbl1\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     PREDICATES: date_trunc('minute', 10: k1) >= '2020-01-01 00:00:00', " +
+                    "date_trunc('minute', 10: k1) <= '2020-03-01 00:00:00'\n" +
+                    "     partitions=1/3");
+            PlanTestBase.assertContains(plan, "     TABLE: test_mv1\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     partitions=1/3");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         dropMv("test", "test_mv1");
@@ -889,7 +1118,11 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
         {
             String query = "select date_trunc('minute', `k1`) AS ds, sum(v1) " +
                     " FROM base_tbl1 where date_trunc('minute', `k1`)  = '2020-02-11' group by ds";
+<<<<<<< HEAD
             String plan = getFragmentPlan(query);
+=======
+            String plan = getFragmentPlan(query, "MV");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             PlanTestBase.assertContains(plan, "test_mv1", "ds = '2020-02-11 00:00:00'");
         }
 
@@ -923,7 +1156,11 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
                     " WHERE date_trunc('minute', `k1`) <= '2020-03-01 00:00:00' " +
                     " group by ds";
             String plan = getFragmentPlan(query);
+<<<<<<< HEAD
             PlanTestBase.assertNotContains(plan, "test_mv1", "UNION");
+=======
+            PlanTestBase.assertContains(plan, "test_mv1", "UNION");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         {
@@ -933,7 +1170,11 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
                     "   date_trunc('minute', `k1`) <= '2020-03-01 00:00:00' " +
                     " group by ds";
             String plan = getFragmentPlan(query);
+<<<<<<< HEAD
             PlanTestBase.assertNotContains(plan, "test_mv1", "UNION");
+=======
+            PlanTestBase.assertContains(plan, "test_mv1", "UNION");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         dropMv("test", "test_mv1");
@@ -988,7 +1229,11 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
                     " where time_slice(k1, interval 1 hour) >= '2020-02-11 00:00:00' " +
                     " group by ds";
             String plan = getFragmentPlan(query);
+<<<<<<< HEAD
             PlanTestBase.assertNotContains(plan, "test_mv1");
+=======
+            PlanTestBase.assertContains(plan, "test_mv1");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         {
@@ -998,7 +1243,21 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
                     " and time_slice(k1, interval 1 hour) <= '2020-03-01 00:00:00' " +
                     " group by ds";
             String plan = getFragmentPlan(query);
+<<<<<<< HEAD
             PlanTestBase.assertNotContains(plan, "test_mv1");
+=======
+            PlanTestBase.assertContains(plan, "test_mv1");
+            // partition p2 has already been updated, so the mv should not be used anymore
+            PlanTestBase.assertContains(plan, "     TABLE: test_mv1\n" +
+                            "     PREAGGREGATION: ON\n" +
+                            "     PREDICATES: 8: ds >= '2020-02-11 00:00:00', 8: ds <= '2020-03-01 00:00:00'\n" +
+                            "     partitions=0/61");
+            PlanTestBase.assertContains(plan, "     TABLE: base_tbl1\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     PREDICATES: time_slice(10: k1, 1, 'hour', 'floor') >= '2020-02-11 00:00:00', " +
+                    "time_slice(10: k1, 1, 'hour', 'floor') <= '2020-03-01 00:00:00'\n" +
+                    "     partitions=1/3");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         dropMv("test", "test_mv1");
@@ -1091,4 +1350,90 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
         dropMv("test", "test_mv1");
         starRocksAssert.dropTable("base_tbl1");
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testViewBaseMvRewriteOnHive() throws Exception {
+        String view = "create view hive_view_1 " +
+                "as " +
+                "SELECT `o_orderkey`, `o_orderstatus`, `o_orderdate`  FROM `hive0`.`partitioned_db`.`orders`";
+        starRocksAssert.withView(view);
+        String mv = "CREATE MATERIALIZED VIEW `view_based_mv_1`\n" +
+                "PARTITION BY date_trunc('month', o_orderdate)\n" +
+                "DISTRIBUTED BY HASH(`o_orderkey`) BUCKETS 10\n" +
+                "REFRESH MANUAL\n" +
+                "AS SELECT `o_orderkey`, `o_orderstatus`, `o_orderdate`  FROM hive_view_1";
+        starRocksAssert.withMaterializedView(mv);
+        refreshMaterializedView("test", "view_based_mv_1");
+        {
+            String query = "SELECT `o_orderkey`, `o_orderstatus`, `o_orderdate`  FROM hive_view_1";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "view_based_mv_1");
+        }
+        starRocksAssert.dropMaterializedView("view_based_mv_1");
+    }
+
+    @Test
+    public void testViewBaseMvRewriteWithPartitionExpr() throws Exception {
+        connectContext.getSessionVariable().setEnableViewBasedMvRewrite(true);
+        {
+            starRocksAssert.withView("create view view_with_expr" +
+                    " as" +
+                    " SELECT DATE_TRUNC('DAY', `id_datetime`) AS `day_date`, \n" +
+                    "  COUNT(`t1a`) AS `cnt` \n" +
+                    "FROM `table_with_datetime_partition` \n" +
+                    "GROUP BY DATE_TRUNC('DAY', `id_datetime`)");
+            createAndRefreshMv("create materialized view mv_on_view_1" +
+                            " partition by day_date" +
+                            " distributed by hash(`day_date`)" +
+                            " refresh deferred manual" +
+                            " as" +
+                            " select * from view_with_expr");
+            cluster.runSql("test", "insert into table_with_datetime_partition partition(p19910330)" +
+                    " values(\"varchar12\", '1991-03-30', 2, 2, 1)");
+            String query5 = "select * from view_with_expr";
+            String plan5 = getFragmentPlan(query5);
+            PlanTestBase.assertContains(plan5, "mv_on_view_1");
+            PlanTestBase.assertContains(plan5, "UNION",
+                    "     TABLE: table_with_datetime_partition\n" +
+                            "     PREAGGREGATION: ON\n" +
+                            "     partitions=1/4");
+            PlanTestBase.assertContains(plan5, "     TABLE: mv_on_view_1\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     partitions=3/4");
+            dropMv("test", "mv_on_view_1");
+            starRocksAssert.dropView("view_with_expr");
+        }
+
+        {
+            starRocksAssert.withView("create view view_with_expr" +
+                    " as" +
+                    " SELECT DATE_TRUNC('DAY', `id_date`) AS `day_date`, \n" +
+                    "  COUNT(`t1a`) AS `cnt` \n" +
+                    "FROM `table_with_day_partition` \n" +
+                    "GROUP BY DATE_TRUNC('DAY', `id_date`)");
+            createAndRefreshMv("create materialized view mv_on_view_1" +
+                            " partition by day_date" +
+                            " distributed by hash(`day_date`)" +
+                            " as" +
+                            " select * from view_with_expr");
+            cluster.runSql("test", "insert into table_with_day_partition partition(p19910330)" +
+                    " values(\"varchar12\", '1991-03-30', 2, 2, 1)");
+            String query5 = "select * from view_with_expr";
+            String plan5 = getFragmentPlan(query5);
+            PlanTestBase.assertContains(plan5, "mv_on_view_1");
+            PlanTestBase.assertContains(plan5, "UNION",
+                    "     TABLE: mv_on_view_1\n" +
+                            "     PREAGGREGATION: ON\n" +
+                            "     partitions=3/4");
+            PlanTestBase.assertContains(plan5, "     TABLE: table_with_day_partition\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     partitions=1/4");
+            dropMv("test", "mv_on_view_1");
+            starRocksAssert.dropView("view_with_expr");
+        }
+        connectContext.getSessionVariable().setEnableViewBasedMvRewrite(false);
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # subdivide_bitmap
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 将大 bitmap 拆成多个子 bitmap。
 

@@ -26,6 +26,12 @@ import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import com.google.common.collect.Table;
 import com.google.gson.annotations.SerializedName;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.MaterializedIndexMeta;
+import com.starrocks.catalog.Type;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.io.FastByteArrayOutputStream;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -47,6 +53,12 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
+<<<<<<< HEAD
+=======
+import static com.starrocks.catalog.KeysType.PRIMARY_KEYS;
+import static com.starrocks.thrift.TStorageType.COLUMN;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 /*
  * This unit test provides examples about how to make a class serializable.
  *
@@ -485,4 +497,26 @@ public class GsonSerializationTest {
         Assert.assertEquals(2, newPrePost.a);
         Assert.assertTrue(newPrePost.b.equals("2"));
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testMaterializedIndexMetaGsonProcess() throws Exception {
+        MaterializedIndexMeta indexMeta = new MaterializedIndexMeta(1, Lists.newArrayList(new Column("k1", Type.INT)), 1, 1,
+                (short) 1, COLUMN, PRIMARY_KEYS, null);
+        FastByteArrayOutputStream byteArrayOutputStream = new FastByteArrayOutputStream();
+        try (DataOutputStream out = new DataOutputStream(byteArrayOutputStream)) {
+            indexMeta.write(out);
+            out.flush();
+        }
+
+        MaterializedIndexMeta copied = null;
+        try (DataInputStream in = new DataInputStream(byteArrayOutputStream.getInputStream())) {
+            copied = MaterializedIndexMeta.read(in);
+        }
+        byteArrayOutputStream.close();
+        Assert.assertTrue(copied.sortKeyIdxes == null);
+        Assert.assertTrue(copied.sortKeyUniqueIds == null);
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

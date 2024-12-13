@@ -15,6 +15,10 @@ package com.starrocks.qe;
 
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.TableName;
+<<<<<<< HEAD
+=======
+import com.starrocks.authorization.IdGenerator;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.MaterializedView;
@@ -23,10 +27,17 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.ConnectorTblMetaInfoMgr;
+<<<<<<< HEAD
 import com.starrocks.privilege.IdGenerator;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.MetadataMgr;
+=======
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
+import com.starrocks.server.MetadataMgr;
+import com.starrocks.server.TemporaryTableMgr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -45,7 +56,11 @@ public class ShowTableMockMeta extends MetadataMgr {
     private final Map<String, Table> externalTbSet;
 
     public ShowTableMockMeta(LocalMetastore localMetastore, ConnectorMgr connectorMgr) {
+<<<<<<< HEAD
         super(localMetastore, connectorMgr, new ConnectorTblMetaInfoMgr());
+=======
+        super(localMetastore, new TemporaryTableMgr(), connectorMgr, new ConnectorTblMetaInfoMgr());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.localMetastore = localMetastore;
         idGenerator = new IdGenerator();
 
@@ -130,6 +145,7 @@ public class ShowTableMockMeta extends MetadataMgr {
     }
 
     @Override
+<<<<<<< HEAD
     public Table getTable(Long databaseId, Long tableId) {
         for (Table table : tableMap.values()) {
             if (table.getId() == tableId) {
@@ -141,6 +157,8 @@ public class ShowTableMockMeta extends MetadataMgr {
     }
 
     @Override
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public List<String> listTableNames(String catalogName, String dbName) {
         if (catalogName.equals("hive_catalog")) {
             return new ArrayList<>(externalTbSet.keySet());

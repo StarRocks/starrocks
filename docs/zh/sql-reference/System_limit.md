@@ -8,7 +8,11 @@ displayed_sidebar: docs
 
 - StarRocks 采用 MySQL 协议进行通信，用户可通过 MySQL Client 或者 JDBC 连接到 StarRocks 集群。选择 MySQL Client 版本时建议采用 5.1 及之后的版本，5.1 之前版本不支持长度超过 16 个字符的用户名。
 
+<<<<<<< HEAD
 - 对名称的要求，包括数据目录名 (Catalog)、数据库名、表名、视图名、分区名、列名、用户名、角色名等：
+=======
+- 对名称的要求，包括数据目录名 (catalog)、数据库名、表名、视图名、分区名、列名、索引名、用户名、角色名、仓库名 (repository)、资源名 (resource)、存储卷名 (Storage Volume)、Pipe 名等：
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
   - 只能由数字 (0-9)、字母 (a-z或A-Z)，以及下划线 (\_) 组成。**用户名 (username) 可以使用纯数字命名。**
   - 可以以字母或下划线开头。
   - 长度不能超过 64 个字符。**几个特殊情况：**
@@ -18,7 +22,10 @@ displayed_sidebar: docs
   - 列名（包括列别名）、分区名、索引名大小写**不敏感**，其他名称大小写**敏感**。
 
 - 对标签（Label）名的要求：
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
   导入数据时可指定任务的标签（Label）。标签名可由数字 (0-9)、字母（a-z或A-Z），以及下划线(\_)组成，且长度不能超过 128 个字符。标签名以字母或下划线开头。
 
 - 建表时，Key 列不能使用 FLOAT 或者 DOUBLE 类型，可用 DECIMAL 类型表示小数。

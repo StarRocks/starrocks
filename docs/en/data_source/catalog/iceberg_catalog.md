@@ -1,10 +1,23 @@
 ---
 displayed_sidebar: docs
 toc_max_heading_level: 5
+<<<<<<< HEAD
 ---
 
 # Iceberg catalog
 
+=======
+keywords: ['iceberg']
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+import QSTip from '../../_assets/commonMarkdown/quickstart-iceberg-tip.mdx'
+
+# Iceberg catalog
+
+<QSTip />
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 An Iceberg catalog is a type of external catalog that is supported by StarRocks from v2.4 onwards. With Iceberg catalogs, you can:
 
 - Directly query data stored in Iceberg without the need to manually create tables.
@@ -17,6 +30,7 @@ To ensure successful SQL workloads on your Iceberg cluster, your StarRocks clust
 
 - Metastore like Hive metastore, AWS Glue, or Tabular
 
+<<<<<<< HEAD
   > **NOTE**
   >
   > - If you choose AWS S3 as storage, you can use HMS or AWS Glue as metastore. If you choose any other storage system, you can only use HMS as metastore.
@@ -37,6 +51,36 @@ To ensure successful SQL workloads on your Iceberg cluster, your StarRocks clust
 Before you create an Iceberg catalog, make sure your StarRocks cluster can integrate with the storage system and metastore of your Iceberg cluster.
 
 ### AWS IAM
+=======
+:::note
+
+- If you choose AWS S3 as storage, you can use HMS or AWS Glue as metastore. If you choose any other storage system, you can only use HMS as metastore.
+- If you choose Tabular as metastore, you need to use the Iceberg REST catalog.
+
+:::
+
+## Usage notes
+
+Take note of the following points when you use StarRocks to query data from Iceberg:
+
+| **File format** | **Compression format**                                   | **Iceberg table version**                                           |
+| --------------- | ---------------------------------------------- | ------------------------------------------------------------ |
+| Parquet         | SNAPPY, LZ4, ZSTD, GZIP, and NO_COMPRESSION      | <ul><li>v1 tables: supported. </li><li>v2 tables: supported from StarRocks v3.1 onwards in which queries on these v2 tables support position deletes. In v3.1.10, v3.2.5, v3.3 and their later versions, queries on v2 tables also support equality deletes. </li></ul> |
+| ORC             | ZLIB, SNAPPY, LZO, LZ4, ZSTD, and NO_COMPRESSION | <ul><li>v1 tables: supported. </li><li>v2 tables: supported from StarRocks v3.0 onwards in which queries on these v2 tables support position deletes. In v3.1.8, v3.2.3, v3.3 and their later versions, queries on v2 tables also support equality deletes. </li></ul> |
+
+## Integration preparation
+
+Before you create an Iceberg catalog, make sure your StarRocks cluster can integrate with the storage system and metastore of your Iceberg cluster.
+
+---
+
+### Storage
+
+Select the tab that matches your storage type:
+
+<Tabs groupId="storage">
+<TabItem value="AWS" label="AWS S3" default>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 If your Iceberg cluster uses AWS S3 as storage or AWS Glue as metastore, choose your suitable authentication method and make the required preparations to ensure that your StarRocks cluster can access the related AWS cloud resources.
 
@@ -50,7 +94,13 @@ Of the above-mentioned three authentication methods, instance profile is the mos
 
 For more information, see [Preparation for authentication in AWS IAM](../../integrations/authenticate_to_aws_resources.md#preparations).
 
+<<<<<<< HEAD
 ### HDFS
+=======
+</TabItem>
+
+<TabItem value="HDFS" label="HDFS" >
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 If you choose HDFS as storage, configure your StarRocks cluster as follows:
 
@@ -60,17 +110,38 @@ If you choose HDFS as storage, configure your StarRocks cluster as follows:
   - High availability (HA) is enabled for your HDFS cluster: Add the **hdfs-site.xml** file of your HDFS cluster to the **$FE_HOME/conf** path of each FE and to the **$BE_HOME/conf** path of each BE or the **$CN_HOME/conf** path of each CN.
   - View File System (ViewFs) is enabled for your HDFS cluster: Add the **core-site.xml** file of your HDFS cluster to the **$FE_HOME/conf** path of each FE and to the **$BE_HOME/conf** path of each BE or the **$CN_HOME/conf** path of each CN.
 
+<<<<<<< HEAD
 > **NOTE**
 >
 > If an error indicating an unknown host is returned when you send a query, you must add the mapping between the host names and IP addresses of your HDFS cluster nodes to the **/etc/hosts** path.
 
 ### Kerberos authentication
+=======
+:::tip
+
+If an error indicating an unknown host is returned when you send a query, you must add the mapping between the host names and IP addresses of your HDFS cluster nodes to the **/etc/hosts** path.
+
+:::
+
+---
+
+#### Kerberos authentication
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 If Kerberos authentication is enabled for your HDFS cluster or Hive metastore, configure your StarRocks cluster as follows:
 
 - Run the `kinit -kt keytab_path principal` command on each FE and each BE or CN to obtain Ticket Granting Ticket (TGT) from Key Distribution Center (KDC). To run this command, you must have the permissions to access your HDFS cluster and Hive metastore. Note that accessing KDC with this command is time-sensitive. Therefore, you need to use cron to run this command periodically.
 - Add `JAVA_OPTS="-Djava.security.krb5.conf=/etc/krb5.conf"` to the **$FE_HOME/conf/fe.conf** file of each FE and to the **$BE_HOME/conf/be.conf** file of each BE or the **$CN_HOME/conf/cn.conf** file of each CN. In this example, `/etc/krb5.conf` is the save path of the **krb5.conf** file. You can modify the path based on your needs.
 
+<<<<<<< HEAD
+=======
+</TabItem>
+
+</Tabs>
+
+---
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ## Create an Iceberg catalog
 
 ### Syntax
@@ -82,10 +153,20 @@ PROPERTIES
 (
     "type" = "iceberg",
     MetastoreParams,
+<<<<<<< HEAD
     StorageCredentialParams
 )
 ```
 
+=======
+    StorageCredentialParams,
+    MetadataUpdateParams
+)
+```
+
+---
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ### Parameters
 
 #### catalog_name
@@ -105,7 +186,14 @@ The type of your data source. Set the value to `iceberg`.
 
 #### MetastoreParams
 
+<<<<<<< HEAD
 A set of parameters about how StarRocks integrates with the metastore of your data source.
+=======
+A set of parameters about how StarRocks integrates with the metastore of your data source. Choose the tab that matches your metastore type:
+
+<Tabs groupId="metastore">
+<TabItem value="HIVE" label="Hive metastore" default>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ##### Hive metastore
 
@@ -116,6 +204,7 @@ If you choose Hive metastore as the metastore of your data source, configure `Me
 "hive.metastore.uris" = "<hive_metastore_uri>"
 ```
 
+<<<<<<< HEAD
 > **NOTE**
 >
 > Before querying Iceberg data, you must add the mapping between the host names and IP addresses of your Hive metastore nodes to the `/etc/hosts` path. Otherwise, StarRocks may fail to access your Hive metastore when you start a query.
@@ -126,6 +215,28 @@ The following table describes the parameter you need to configure in `MetastoreP
 | ----------------------------------- | -------- | ------------------------------------------------------------ |
 | iceberg.catalog.type                | Yes      | The type of metastore that you use for your Iceberg cluster. Set the value to `hive`. |
 | hive.metastore.uris                 | Yes      | The URI of your Hive metastore. Format: `thrift://<metastore_IP_address>:<metastore_port>`.<br />If high availability (HA) is enabled for your Hive metastore, you can specify multiple metastore URIs and separate them with commas (`,`), for example, `"thrift://<metastore_IP_address_1>:<metastore_port_1>,thrift://<metastore_IP_address_2>:<metastore_port_2>,thrift://<metastore_IP_address_3>:<metastore_port_3>"`. |
+=======
+:::note
+
+Before querying Iceberg data, you must add the mapping between the host names and IP addresses of your Hive metastore nodes to the `/etc/hosts` path. Otherwise, StarRocks may fail to access your Hive metastore when you start a query.
+
+:::
+
+The following table describes the parameter you need to configure in `MetastoreParams`.
+
+##### iceberg.catalog.type
+
+Required: Yes
+Description: The type of metastore that you use for your Iceberg cluster. Set the value to `hive`. 
+
+##### hive.metastore.uris
+
+Required: Yes
+Description: The URI of your Hive metastore. Format: `thrift://<metastore_IP_address>:<metastore_port>`.<br />If high availability (HA) is enabled for your Hive metastore, you can specify multiple metastore URIs and separate them with commas (`,`), for example, `"thrift://<metastore_IP_address_1>:<metastore_port_1>,thrift://<metastore_IP_address_2>:<metastore_port_2>,thrift://<metastore_IP_address_3>:<metastore_port_3>"`. 
+
+</TabItem>
+<TabItem value="GLUE" label="AWS Glue">
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ##### AWS Glue
 
@@ -158,6 +269,7 @@ If you choose AWS Glue as the metastore of your data source, which is supported 
   "aws.glue.region" = "<aws_s3_region>"
   ```
 
+<<<<<<< HEAD
 The following table describes the parameters you need to configure in `MetastoreParams`.
 
 | Parameter                     | Required | Description                                                  |
@@ -174,10 +286,53 @@ For information about how to choose an authentication method for accessing AWS G
 ##### Tabular
 
 If you use Tabular as metastore, you must specify the metastore type as REST (`"iceberg.catalog.type" = "rest"`). Configure `MetastoreParams` as follows:
+=======
+`MetastoreParams` for AWS Glue:
+
+###### iceberg.catalog.type
+
+Required: Yes
+Description: The type of metastore that you use for your Iceberg cluster. Set the value to `glue`. 
+
+###### aws.glue.use_instance_profile
+
+Required: Yes
+Description: Specifies whether to enable the instance profile-based authentication method and the assumed role-based authentication method. Valid values: `true` and `false`. Default value: `false`.
+
+###### aws.glue.iam_role_arn
+
+Required: No
+Description: The ARN of the IAM role that has privileges on your AWS Glue Data Catalog. If you use the assumed role-based authentication method to access AWS Glue, you must specify this parameter.
+
+###### aws.glue.region
+
+Required: Yes
+Description: The region in which your AWS Glue Data Catalog resides. Example: `us-west-1`.
+
+###### aws.glue.access_key
+
+Required: No
+Description: The access key of your AWS IAM user. If you use the IAM user-based authentication method to access AWS Glue, you must specify this parameter.
+
+###### aws.glue.secret_key
+
+Required: No
+Description: The secret key of your AWS IAM user. If you use the IAM user-based authentication method to access AWS Glue, you must specify this parameter.
+
+For information about how to choose an authentication method for accessing AWS Glue and how to configure an access control policy in the AWS IAM Console, see [Authentication parameters for accessing AWS Glue](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue).
+
+</TabItem>
+<TabItem value="REST" label="REST">
+
+##### REST
+
+If you use REST as metastore, you must specify the metastore type as REST (`"iceberg.catalog.type" = "rest"`). Configure `MetastoreParams` as follows:
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ```SQL
 "iceberg.catalog.type" = "rest",
 "iceberg.catalog.uri" = "<rest_server_api_endpoint>",
+<<<<<<< HEAD
 "iceberg.catalog.credential" = "<credential>",
 "iceberg.catalog.warehouse" = "<identifier_or_path_to_warehouse>"
 ```
@@ -190,6 +345,67 @@ The following table describes the parameters you need to configure in `Metastore
 | iceberg.catalog.uri        | Yes      | The URI of the Tabular service endpoint. Example: `https://api.tabular.io/ws`.      |
 | iceberg.catalog.credential | Yes      | The authentication information of the Tabular service.                                        |
 | iceberg.catalog.warehouse  | No       | The warehouse location or identifier of the Iceberg catalog. Example: `s3://my_bucket/warehouse_location` or `sandbox`. |
+=======
+"iceberg.catalog.security" = "oauth2",
+"iceberg.catalog.oauth2.credential" = "<credential>",
+"iceberg.catalog.warehouse" = "<identifier_or_path_to_warehouse>"
+```
+
+`MetastoreParams` for REST catalog:
+
+###### iceberg.catalog.type
+
+Required: Yes
+Description: The type of metastore that you use for your Iceberg cluster. Set the value to `rest`.
+
+###### iceberg.catalog.uri
+
+Required: Yes
+Description: The URI of the REST service endpoint. Example: `https://api.tabular.io/ws`. 
+
+###### iceberg.catalog.security
+
+Required: No
+
+Description: The type of authorization protocol to use. Default: `NONE`. Valid value: `OAUTH2`, which requires either a `token` or `credential`.
+
+###### iceberg.catalog.oauth2.token
+
+Required: No
+
+Description: The bearer token used for interactions with the server. A `token` or `credential` is required for `OAUTH2` authorization protocol. Example: `AbCdEf123456`.
+
+###### iceberg.catalog.oauth2.credential
+
+Required: No
+
+Description: The credential to exchange for a token in the OAuth2 client credentials flow with the server. A `token` or `credential` is required for `OAUTH2` authorization protocol. Example: `AbCdEf123456`.
+
+###### iceberg.catalog.oauth2.scope
+
+Required: No
+
+Description: Scope to be used when communicating with the REST Catalog. Applicable only when `credential` is used.
+
+###### iceberg.catalog.oauth2.server-uri
+
+Required: No
+
+Description: The endpoint to retrieve access token from OAuth2 Server.
+
+###### iceberg.catalog.vended-credentials-enabled
+
+Required: No
+
+Description: Whether to support querying objects under nested namespace. Default: `true`.
+
+###### iceberg.catalog.warehouse
+
+Required: No
+Description: The warehouse location or identifier of the Iceberg catalog. Example: `s3://my_bucket/warehouse_location` or `sandbox`.
+
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 The following example creates an Iceberg catalog named `tabular` that uses Tabular as metastore:
 
@@ -204,6 +420,42 @@ PROPERTIES
     "iceberg.catalog.warehouse" = "sandbox"
 );
 ```
+<<<<<<< HEAD
+=======
+The following example creates an Iceberg catalog named `smith_polaris` that uses Polaris as metastore:
+
+```sql
+CREATE EXTERNAL CATALOG smith_polaris 
+PROPERTIES (   
+    "iceberg.catalog.uri"  = "http://xxx.xx.xx.xxx:8181/api/catalog", 
+    "type"  =  "iceberg",   
+    "iceberg.catalog.type"  =  "rest",   
+    "iceberg.catalog.warehouse" = "starrocks_catalog",
+    "iceberg.catalog.security" = "oauth2",
+    "iceberg.catalog.oauth2.credential" = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "iceberg.catalog.oauth2.scope"='PRINCIPAL_ROLE:ALL'
+ );
+
+# `ns1.ns2.tpch_namespace` is a nested namespace
+create table smith_polaris.`ns1.ns2.tpch_namespace`.tbl (c1 string);
+
+mysql> select * from smith_polaris.`ns1.ns2.tpch_namespace`.tbl;
++------+
+| c1   |
++------+
+| 1    |
+| 2    |
+| 3    |
++------+
+3 rows in set (0.34 sec)
+```
+
+</TabItem>
+
+</Tabs>
+
+---
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 #### `StorageCredentialParams`
 
@@ -215,6 +467,14 @@ Note the following points:
 
 - If you use Tabular as metastore, you do not need to configure `StorageCredentialParams` and can skip this section. If you use HMS or AWS Glue as metastore, you must configure `StorageCredentialParams`.
 
+<<<<<<< HEAD
+=======
+Choose the tab that matches your storage type:
+
+<Tabs groupId="storage">
+<TabItem value="AWS" label="AWS S3" default>
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ##### AWS S3
 
 If you choose AWS S3 as storage for your Iceberg cluster, take one of the following actions:
@@ -243,6 +503,7 @@ If you choose AWS S3 as storage for your Iceberg cluster, take one of the follow
   "aws.s3.region" = "<aws_s3_region>"
   ```
 
+<<<<<<< HEAD
 The following table describes the parameters you need to configure in `StorageCredentialParams`.
 
 | Parameter                   | Required | Description                                                  |
@@ -255,6 +516,47 @@ The following table describes the parameters you need to configure in `StorageCr
 
 For information about how to choose an authentication method for accessing AWS S3 and how to configure an access control policy in AWS IAM Console, see [Authentication parameters for accessing AWS S3](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3).
 
+=======
+`StorageCredentialParams` for AWS S3:
+
+###### aws.s3.use_instance_profile
+
+Required: Yes
+Description:  Specifies whether to enable the instance profile-based authentication method and the assumed role-based authentication method. Valid values: `true` and `false`. Default value: `false`. 
+
+###### aws.s3.iam_role_arn
+
+Required: No
+Description: The ARN of the IAM role that has privileges on your AWS S3 bucket. If you use the assumed role-based authentication method to access AWS S3, you must specify this parameter.
+
+###### aws.s3.region
+
+Required: Yes
+Description:  The region in which your AWS S3 bucket resides. Example: `us-west-1`.
+
+###### aws.s3.access_key
+
+Required: No
+Description: The access key of your IAM user. If you use the IAM user-based authentication method to access AWS S3, you must specify this parameter.
+
+###### aws.s3.secret_key
+
+Required: No
+Description:  The secret key of your IAM user. If you use the IAM user-based authentication method to access AWS S3, you must specify this parameter.
+
+For information about how to choose an authentication method for accessing AWS S3 and how to configure an access control policy in AWS IAM Console, see [Authentication parameters for accessing AWS S3](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3).
+
+</TabItem>
+
+<TabItem value="HDFS" label="HDFS" >
+
+When using HDFS storage skip the storage credentials.
+
+</TabItem>
+
+<TabItem value="MINIO" label="MinIO" >
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ##### S3-compatible storage system
 
 Iceberg catalogs support S3-compatible storage systems from v2.5 onwards.
@@ -269,6 +571,7 @@ If you choose an S3-compatible storage system, such as MinIO, as storage for you
 "aws.s3.secret_key" = "<iam_user_secret_key>"
 ```
 
+<<<<<<< HEAD
 The following table describes the parameters you need to configure in `StorageCredentialParams`.
 
 | Parameter                        | Required | Description                                                  |
@@ -278,6 +581,38 @@ The following table describes the parameters you need to configure in `StorageCr
 | aws.s3.endpoint                  | Yes      | The endpoint that is used to connect to your S3-compatible storage system instead of AWS S3. |
 | aws.s3.access_key                | Yes      | The access key of your IAM user. |
 | aws.s3.secret_key                | Yes      | The secret key of your IAM user. |
+=======
+`StorageCredentialParams` for MinIO and other S3 compatible systems:
+
+###### aws.s3.enable_ssl
+
+Required: Yes
+Description:  Specifies whether to enable SSL connection.<br />Valid values: `true` and `false`. Default value: `true`.
+
+###### aws.s3.enable_path_style_access
+
+Required: Yes
+Description: Specifies whether to enable path-style access.<br />Valid values: `true` and `false`. Default value: `false`. For MinIO, you must set the value to `true`.<br />Path-style URLs use the following format: `https://s3.<region_code>.amazonaws.com/<bucket_name>/<key_name>`. For example, if you create a bucket named `DOC-EXAMPLE-BUCKET1` in the US West (Oregon) Region, and you want to access the `alice.jpg` object in that bucket, you can use the following path-style URL: `https://s3.us-west-2.amazonaws.com/DOC-EXAMPLE-BUCKET1/alice.jpg`.
+
+###### aws.s3.endpoint
+
+Required: Yes
+Description: The endpoint that is used to connect to your S3-compatible storage system instead of AWS S3.
+
+###### aws.s3.access_key
+
+Required: Yes
+Description: The access key of your IAM user.
+
+###### aws.s3.secret_key
+
+Required: Yes
+Description: The secret key of your IAM user.
+
+</TabItem>
+
+<TabItem value="AZURE" label="Microsoft Azure Blob Storage" >
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ##### Microsoft Azure Storage
 
@@ -294,6 +629,7 @@ If you choose Blob Storage as storage for your Iceberg cluster, take one of the 
   "azure.blob.shared_key" = "<storage_account_shared_key>"
   ```
 
+<<<<<<< HEAD
   The following table describes the parameters you need to configure in `StorageCredentialParams`.
 
   | **Parameter**              | **Required** | **Description**                              |
@@ -301,6 +637,8 @@ If you choose Blob Storage as storage for your Iceberg cluster, take one of the 
   | azure.blob.storage_account | Yes          | The username of your Blob Storage account.   |
   | azure.blob.shared_key      | Yes          | The shared key of your Blob Storage account. |
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 - To choose the SAS Token authentication method, configure `StorageCredentialParams` as follows:
 
   ```SQL
@@ -309,6 +647,7 @@ If you choose Blob Storage as storage for your Iceberg cluster, take one of the 
   "azure.blob.sas_token" = "<storage_account_SAS_token>"
   ```
 
+<<<<<<< HEAD
   The following table describes the parameters you need to configure in `StorageCredentialParams`.
 
   | **Parameter**             | **Required** | **Description**                                              |
@@ -316,6 +655,34 @@ If you choose Blob Storage as storage for your Iceberg cluster, take one of the 
   | azure.blob.storage_account| Yes          | The username of your Blob Storage account.                   |
   | azure.blob.container      | Yes          | The name of the blob container that stores your data.        |
   | azure.blob.sas_token      | Yes          | The SAS token that is used to access your Blob Storage account. |
+=======
+`StorageCredentialParams` for Microsoft Azure:
+
+###### azure.blob.storage_account
+
+Required: Yes
+Description: The username of your Blob Storage account.
+
+###### azure.blob.shared_key
+
+Required: Yes
+Description: The shared key of your Blob Storage account.
+
+###### azure.blob.account_name
+
+Required: Yes
+Description: The username of your Blob Storage account.
+
+###### azure.blob.container
+
+Required: Yes
+Description: The name of the blob container that stores your data.
+
+###### azure.blob.sas_token
+
+Required: Yes
+Description: The SAS token that is used to access your Blob Storage account.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ###### Azure Data Lake Storage Gen1
 
@@ -327,11 +694,15 @@ If you choose Data Lake Storage Gen1 as storage for your Iceberg cluster, take o
   "azure.adls1.use_managed_service_identity" = "true"
   ```
 
+<<<<<<< HEAD
   The following table describes the parameters you need to configure in `StorageCredentialParams`.
 
   | **Parameter**                            | **Required** | **Description**                                              |
   | ---------------------------------------- | ------------ | ------------------------------------------------------------ |
   | azure.adls1.use_managed_service_identity | Yes          | Specifies whether to enable the Managed Service Identity authentication method. Set the value to `true`. |
+=======
+Or:
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 - To choose the Service Principal authentication method, configure `StorageCredentialParams` as follows:
 
@@ -341,6 +712,7 @@ If you choose Data Lake Storage Gen1 as storage for your Iceberg cluster, take o
   "azure.adls1.oauth2_endpoint" = "<OAuth_2.0_authorization_endpoint_v2>"
   ```
 
+<<<<<<< HEAD
   The following table describes the parameters you need to configure in `StorageCredentialParams`.
 
   | **Parameter**                 | **Required** | **Description**                                              |
@@ -349,6 +721,8 @@ If you choose Data Lake Storage Gen1 as storage for your Iceberg cluster, take o
   | azure.adls1.oauth2_credential | Yes          | The value of the new client (application) secret created.    |
   | azure.adls1.oauth2_endpoint   | Yes          | The OAuth 2.0 token endpoint (v1) of the service principal or application. |
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ###### Azure Data Lake Storage Gen2
 
 If you choose Data Lake Storage Gen2 as storage for your Iceberg cluster, take one of the following actions:
@@ -361,6 +735,7 @@ If you choose Data Lake Storage Gen2 as storage for your Iceberg cluster, take o
   "azure.adls2.oauth2_client_id" = "<service_client_id>"
   ```
 
+<<<<<<< HEAD
   The following table describes the parameters you need to configure in `StorageCredentialParams`.
 
   | **Parameter**                           | **Required** | **Description**                                              |
@@ -368,6 +743,9 @@ If you choose Data Lake Storage Gen2 as storage for your Iceberg cluster, take o
   | azure.adls2.oauth2_use_managed_identity | Yes          | Specifies whether to enable the Managed Identity authentication method. Set the value to `true`. |
   | azure.adls2.oauth2_tenant_id            | Yes          | The ID of the tenant whose data you want to access.          |
   | azure.adls2.oauth2_client_id            | Yes          | The client (application) ID of the managed identity.         |
+=======
+  Or:
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 - To choose the Shared Key authentication method, configure `StorageCredentialParams` as follows:
 
@@ -376,12 +754,16 @@ If you choose Data Lake Storage Gen2 as storage for your Iceberg cluster, take o
   "azure.adls2.shared_key" = "<storage_account_shared_key>"
   ```
 
+<<<<<<< HEAD
   The following table describes the parameters you need to configure in `StorageCredentialParams`.
 
   | **Parameter**               | **Required** | **Description**                                              |
   | --------------------------- | ------------ | ------------------------------------------------------------ |
   | azure.adls2.storage_account | Yes          | The username of your Data Lake Storage Gen2 storage account. |
   | azure.adls2.shared_key      | Yes          | The shared key of your Data Lake Storage Gen2 storage account. |
+=======
+  Or:
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 - To choose the Service Principal authentication method, configure `StorageCredentialParams` as follows:
 
@@ -391,6 +773,7 @@ If you choose Data Lake Storage Gen2 as storage for your Iceberg cluster, take o
   "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>"
   ```
 
+<<<<<<< HEAD
   The following table describes the parameters you need to configure `in StorageCredentialParams`.
 
   | **Parameter**                      | **Required** | **Description**                                              |
@@ -398,6 +781,11 @@ If you choose Data Lake Storage Gen2 as storage for your Iceberg cluster, take o
   | azure.adls2.oauth2_client_id       | Yes          | The client (application) ID of the service principal.        |
   | azure.adls2.oauth2_client_secret   | Yes          | The value of the new client (application) secret created.    |
   | azure.adls2.oauth2_client_endpoint | Yes          | The OAuth 2.0 token endpoint (v1) of the service principal or application. |
+=======
+</TabItem>
+
+<TabItem value="GCS" label="Google GCS" >
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ##### Google GCS
 
@@ -411,12 +799,15 @@ If you choose Google GCS as storage for your Iceberg cluster, take one of the fo
   "gcp.gcs.use_compute_engine_service_account" = "true"
   ```
 
+<<<<<<< HEAD
   The following table describes the parameters you need to configure in `StorageCredentialParams`.
 
   | **Parameter**                              | **Default value** | **Value** **example** | **Description**                                              |
   | ------------------------------------------ | ----------------- | --------------------- | ------------------------------------------------------------ |
   | gcp.gcs.use_compute_engine_service_account | false             | true                  | Specifies whether to directly use the service account that is bound to your Compute Engine. |
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 - To choose the service account-based authentication method, configure `StorageCredentialParams` as follows:
 
   ```SQL
@@ -425,6 +816,7 @@ If you choose Google GCS as storage for your Iceberg cluster, take one of the fo
   "gcp.gcs.service_account_private_key" = "<google_service_private_key>"
   ```
 
+<<<<<<< HEAD
   The following table describes the parameters you need to configure in `StorageCredentialParams`.
 
   | **Parameter**                          | **Default value** | **Value** **example**                                        | **Description**                                              |
@@ -433,6 +825,8 @@ If you choose Google GCS as storage for your Iceberg cluster, take one of the fo
   | gcp.gcs.service_account_private_key_id | ""                | "61d257bd8479547cb3e04f0b9b6b9ca07af3b7ea"                   | The private key ID in the JSON file generated at the creation of the service account. |
   | gcp.gcs.service_account_private_key    | ""                | "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n"  | The private key in the JSON file generated at the creation of the service account. |
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 - To choose the impersonation-based authentication method, configure `StorageCredentialParams` as follows:
 
   - Make a VM instance impersonate a service account:
@@ -442,6 +836,7 @@ If you choose Google GCS as storage for your Iceberg cluster, take one of the fo
     "gcp.gcs.impersonation_service_account" = "<assumed_google_service_account_email>"
     ```
 
+<<<<<<< HEAD
     The following table describes the parameters you need to configure in `StorageCredentialParams`.
 
     | **Parameter**                              | **Default value** | **Value** **example** | **Description**                                              |
@@ -449,6 +844,8 @@ If you choose Google GCS as storage for your Iceberg cluster, take one of the fo
     | gcp.gcs.use_compute_engine_service_account | false             | true                  | Specifies whether to directly use the service account that is bound to your Compute Engine. |
     | gcp.gcs.impersonation_service_account      | ""                | "hello"               | The service account that you want to impersonate.            |
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
   - Make a service account (temporarily named as meta service account) impersonate another service account (temporarily named as data service account):
 
     ```SQL
@@ -458,6 +855,7 @@ If you choose Google GCS as storage for your Iceberg cluster, take one of the fo
     "gcp.gcs.impersonation_service_account" = "<data_google_service_account_email>"
     ```
 
+<<<<<<< HEAD
     The following table describes the parameters you need to configure in `StorageCredentialParams`.
 
     | **Parameter**                          | **Default value** | **Value** **example**                                        | **Description**                                              |
@@ -484,6 +882,59 @@ PROPERTIES
     "hive.metastore.uris" = "thrift://xx.xx.xx:9083"
 );
 ```
+=======
+`StorageCredentialParams` for Google GCS:
+
+###### gcp.gcs.service_account_email
+
+Default value: ""
+Example: "[user@hello.iam.gserviceaccount.com](mailto:user@hello.iam.gserviceaccount.com)"
+Description: The email address in the JSON file generated at the creation of the service account.
+
+###### gcp.gcs.service_account_private_key_id
+
+Default value: ""
+Example: "61d257bd8479547cb3e04f0b9b6b9ca07af3b7ea"
+Description: The private key ID in the JSON file generated at the creation of the service account.
+
+###### gcp.gcs.service_account_private_key
+
+Default value: ""
+Example: "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n"  
+Description:  The private key in the JSON file generated at the creation of the service account.
+
+###### gcp.gcs.impersonation_service_account
+
+Default value: ""  
+Example: "hello"  
+Description: The service account that you want to impersonate.
+
+</TabItem>
+
+</Tabs>
+
+---
+
+#### MetadataUpdateParams
+
+A set of parameters about how StarRocks update the cache of the Iceberg metadata. This parameter set is optional.
+
+From v3.3.3 onwards, StarRocks supports the [periodic metadata refresh strategy](#appendix-periodic-metadata-refresh-strategy). In most cases, you can ignore `MetadataUpdateParams` and do not need to tune the policy parameters in it, because the default values of these parameters already provide you with an out-of-the-box performance. You can adjust the Iceberg metadata caching plan using the system variable [`plan_mode`](../../sql-reference/System_variable.md#plan_mode).
+
+| **Parameter**                                 | **Default**           | **Description**                                              |
+| :-------------------------------------------- | :-------------------- | :----------------------------------------------------------- |
+| enable_iceberg_metadata_cache                 | true                  | Whether to cache Iceberg-related metadata, including Table Cache, Partition Name Cache, and the Data File Cache and Delete Data File Cache in Manifest. |
+| iceberg_manifest_cache_with_column_statistics | false                 | Whether to cache the statistics of columns.                  |
+| iceberg_manifest_cache_max_num                | 100000                | The maximum number of Manifest files that can be cached.     |
+| refresh_iceberg_manifest_min_length           | 2 * 1024 * 1024       | The minimum Manifest file length that triggers a Data File Cache refresh. |
+
+### Examples
+
+The following examples create an Iceberg catalog named `iceberg_catalog_hms` or `iceberg_catalog_glue`, depending on the type of metastore you use, to query data from your Iceberg cluster. Chose the tab that matches your storage type:
+
+<Tabs groupId="storage">
+<TabItem value="AWS" label="AWS S3" default>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 #### AWS S3
 
@@ -588,6 +1039,30 @@ PROPERTIES
       "aws.s3.region" = "us-west-2"
   );
   ```
+<<<<<<< HEAD
+=======
+</TabItem>
+
+<TabItem value="HDFS" label="HDFS" >
+
+#### HDFS
+
+If you use HDFS as storage, run a command like below:
+
+```SQL
+CREATE EXTERNAL CATALOG iceberg_catalog_hms
+PROPERTIES
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083"
+);
+```
+
+</TabItem>
+
+<TabItem value="MINIO" label="MinIO" >
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 #### S3-compatible storage system
 
@@ -607,6 +1082,12 @@ PROPERTIES
     "aws.s3.secret_key" = "<iam_user_secret_key>"
 );
 ```
+<<<<<<< HEAD
+=======
+</TabItem>
+
+<TabItem value="AZURE" label="Microsoft Azure Blob Storage" >
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 #### Microsoft Azure Storage
 
@@ -717,6 +1198,13 @@ PROPERTIES
   );
   ```
 
+<<<<<<< HEAD
+=======
+</TabItem>
+
+<TabItem value="GCS" label="Google GCS" >
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #### Google GCS
 
 - If you choose the VM-based authentication method, run a command like below:
@@ -778,8 +1266,20 @@ PROPERTIES
         "gcp.gcs.impersonation_service_account" = "<data_google_service_account_email>"
     );
     ```
+<<<<<<< HEAD
 
 ## View Iceberg catalogs
+=======
+</TabItem>
+
+</Tabs>
+ 
+ ---
+
+## Use your catalog
+
+### View Iceberg catalogs
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 You can use [SHOW CATALOGS](../../sql-reference/sql-statements/Catalog/SHOW_CATALOGS.md) to query all catalogs in the current StarRocks cluster:
 
@@ -793,7 +1293,13 @@ You can also use [SHOW CREATE CATALOG](../../sql-reference/sql-statements/Catalo
 SHOW CREATE CATALOG iceberg_catalog_glue;
 ```
 
+<<<<<<< HEAD
 ## Switch to an Iceberg Catalog and a database in it
+=======
+---
+
+### Switch to an Iceberg Catalog and a database in it
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 You can use one of the following methods to switch to an Iceberg catalog and a database in it:
 
@@ -811,8 +1317,15 @@ You can use one of the following methods to switch to an Iceberg catalog and a d
   ```SQL
   USE <catalog_name>.<db_name>
   ```
+<<<<<<< HEAD
 
 ## Drop an Iceberg catalog
+=======
+ 
+---
+
+### Drop an Iceberg catalog
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 You can use [DROP CATALOG](../../sql-reference/sql-statements/Catalog/DROP_CATALOG.md) to drop an external catalog.
 
@@ -822,7 +1335,13 @@ The following example drops an Iceberg catalog named `iceberg_catalog_glue`:
 DROP Catalog iceberg_catalog_glue;
 ```
 
+<<<<<<< HEAD
 ## View the schema of an Iceberg table
+=======
+---
+
+### View the schema of an Iceberg table
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 You can use one of the following syntaxes to view the schema of an Iceberg table:
 
@@ -838,7 +1357,13 @@ You can use one of the following syntaxes to view the schema of an Iceberg table
   SHOW CREATE TABLE <catalog_name>.<database_name>.<table_name>
   ```
 
+<<<<<<< HEAD
 ## Query an Iceberg table
+=======
+---
+
+### Query an Iceberg table
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 1. Use [SHOW DATABASES](../../sql-reference/sql-statements/Database/SHOW_DATABASES.md) to view the databases in your Iceberg cluster:
 
@@ -854,6 +1379,7 @@ You can use one of the following syntaxes to view the schema of an Iceberg table
    SELECT count(*) FROM <table_name> LIMIT 10
    ```
 
+<<<<<<< HEAD
 ## Create an Iceberg database
 
 Similar to the internal catalog of StarRocks, if you have the [CREATE DATABASE](../../administration/user_privs/privilege_item.md#catalog) privilege on an Iceberg catalog, you can use the [CREATE DATABASE](../../sql-reference/sql-statements/Database/CREATE_DATABASE.md) statement to create databases in that Iceberg catalog. This feature is supported from v3.1 onwards.
@@ -861,6 +1387,19 @@ Similar to the internal catalog of StarRocks, if you have the [CREATE DATABASE](
 > **NOTE**
 >
 > You can grant and revoke privileges by using [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) and [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md).
+=======
+---
+
+### Create an Iceberg database
+
+Similar to the internal catalog of StarRocks, if you have the [CREATE DATABASE](../../administration/user_privs/privilege_item.md#catalog) privilege on an Iceberg catalog, you can use the [CREATE DATABASE](../../sql-reference/sql-statements/Database/CREATE_DATABASE.md) statement to create databases in that Iceberg catalog. This feature is supported from v3.1 onwards.
+
+:::tip
+
+You can grant and revoke privileges by using [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) and [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md).
+
+:::
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 [Switch to an Iceberg catalog](#switch-to-an-iceberg-catalog-and-a-database-in-it), and then use the following statement to create an Iceberg database in that catalog:
 
@@ -873,6 +1412,7 @@ You can use the `location` parameter to specify the file path in which you want 
 
 The `prefix` varies based on the storage system you use:
 
+<<<<<<< HEAD
 | **Storage system**                                         | **`Prefix` value**                                       |
 | ---------------------------------------------------------- | ------------------------------------------------------------ |
 | HDFS                                                       | `hdfs`                                                       |
@@ -890,6 +1430,44 @@ Similar to the internal databases of StarRocks, if you have the [DROP](../../adm
 >
 > You can grant and revoke privileges by using [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) and [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md).
 
+=======
+#### HDFS
+
+`Prefix` value: `hdfs`
+
+#### Google GCS
+
+`Prefix` value: `gs`
+
+#### Azure Blob Storage
+
+`Prefix` value:
+
+- If your storage account allows access over HTTP, the `prefix` is `wasb`.
+- If your storage account allows access over HTTPS, the `prefix` is `wasbs`.
+
+#### Azure Data Lake Storage Gen1
+
+`Prefix` value: `adl`
+
+#### Azure Data Lake Storage Gen2
+
+`Prefix` value:
+
+- If your storage account allows access over HTTP, the`prefix` is `abfs`.
+- If your storage account allows access over HTTPS, the `prefix` is `abfss`.
+
+#### AWS S3 or other S3-compatible storage (for example, MinIO)
+
+`Prefix` value: `s3`
+
+---
+
+### Drop an Iceberg database
+
+Similar to the internal databases of StarRocks, if you have the [DROP](../../administration/user_privs/privilege_item.md#database) privilege on an Iceberg database, you can use the [DROP DATABASE](../../sql-reference/sql-statements/Database/DROP_DATABASE.md) statement to drop that Iceberg database. This feature is supported from v3.1 onwards. You can only drop empty databases.
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 When you drop an Iceberg database, the database's file path on your HDFS cluster or cloud storage will not be dropped along with the database.
 
 [Switch to an Iceberg catalog](#switch-to-an-iceberg-catalog-and-a-database-in-it), and then use the following statement to drop an Iceberg database in that catalog:
@@ -898,6 +1476,7 @@ When you drop an Iceberg database, the database's file path on your HDFS cluster
 DROP DATABASE <database_name>;
 ```
 
+<<<<<<< HEAD
 ## Create an Iceberg table
 
 Similar to the internal databases of StarRocks, if you have the [CREATE TABLE](../../administration/user_privs/privilege_item.md#database) privilege on an Iceberg database, you can use the [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) or [CREATE TABLE AS SELECT ../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.mdELECT.md) statement to create a table in that Iceberg database. This feature is supported from v3.1 onwards.
@@ -909,6 +1488,17 @@ Similar to the internal databases of StarRocks, if you have the [CREATE TABLE](.
 [Switch to an Iceberg catalog and a database in it](#switch-to-an-iceberg-catalog-and-a-database-in-it), and then use the following syntax to create an Iceberg table in that database.
 
 ### Syntax
+=======
+---
+
+### Create an Iceberg table
+
+Similar to the internal databases of StarRocks, if you have the [CREATE TABLE](../../administration/user_privs/privilege_item.md#database) privilege on an Iceberg database, you can use the [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) or [CREATE TABLE AS SELECT ../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.mdELECT.md) statement to create a table in that Iceberg database. This feature is supported from v3.1 onwards.
+
+[Switch to an Iceberg catalog and a database in it](#switch-to-an-iceberg-catalog-and-a-database-in-it), and then use the following syntax to create an Iceberg table in that database.
+
+#### Syntax
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ```SQL
 CREATE TABLE [IF NOT EXISTS] [database.]table_name
@@ -919,9 +1509,15 @@ partition_column_definition1,partition_column_definition2...])
 [AS SELECT query]
 ```
 
+<<<<<<< HEAD
 ### Parameters
 
 #### column_definition
+=======
+#### Parameters
+
+##### column_definition
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 The syntax of `column_definition` is as follows:
 
@@ -929,6 +1525,7 @@ The syntax of `column_definition` is as follows:
 col_name col_type [COMMENT 'comment']
 ```
 
+<<<<<<< HEAD
 The following table describes the parameters.
 
 | **Parameter**     | **Description**                                              |
@@ -941,6 +1538,15 @@ The following table describes the parameters.
 > All non-partition columns must use `NULL` as the default value. This means that you must specify `DEFAULT "NULL"` for each of the non-partition columns in the table creation statement. Additionally, partition columns must be defined following non-partition columns and cannot use `NULL` as the default value.
 
 #### partition_desc
+=======
+:::note
+
+All non-partition columns must use `NULL` as the default value. This means that you must specify `DEFAULT "NULL"` for each of the non-partition columns in the table creation statement. Additionally, partition columns must be defined following non-partition columns and cannot use `NULL` as the default value.
+
+:::
+
+##### partition_desc
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 The syntax of `partition_desc` is as follows:
 
@@ -950,21 +1556,50 @@ PARTITION BY (par_col1[, par_col2...])
 
 Currently StarRocks only supports [identity transforms](https://iceberg.apache.org/spec/#partitioning), which means that StarRocks creates a partition for each unique partition value.
 
+<<<<<<< HEAD
 > **NOTICE**
 >
 > Partition columns must be defined following non-partition columns. Partition columns support all data types excluding FLOAT, DOUBLE, DECIMAL, and DATETIME and cannot use `NULL` as the default value.
 
 #### PROPERTIES
+=======
+:::note
+
+Partition columns must be defined following non-partition columns. Partition columns support all data types excluding FLOAT, DOUBLE, DECIMAL, and DATETIME and cannot use `NULL` as the default value.
+
+:::
+
+##### PROPERTIES
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 You can specify the table attributes in the `"key" = "value"` format in `PROPERTIES`. See [Iceberg table attributes](https://iceberg.apache.org/docs/latest/configuration/).
 
 The following table describes a few key properties.
 
+<<<<<<< HEAD
 | **Property**      | **Description**                                              |
 | ----------------- | ------------------------------------------------------------ |
 | location          | The file path in which you want to create the Iceberg table. When you use HMS as metastore, you do not need to specify the `location` parameter, because StarRocks will create the table in the default file path of the current Iceberg catalog. When you use AWS Glue as metastore:<ul><li>If you have specified the `location` parameter for the database in which you want to create the table, you do not need to specify the `location` parameter for the table. As such, the table defaults to the file path of the database to which it belongs. </li><li>If you have not specified the `location` for the database in which you want to create the table, you must specify the `location` parameter for the table.</li></ul> |
 | file_format       | The file format of the Iceberg table. Only the Parquet format is supported. Default value: `parquet`. |
 | compression_codec | The compression algorithm used for the Iceberg table. The supported compression algorithms are SNAPPY, GZIP, ZSTD, and LZ4. Default value: `gzip`. |
+=======
+###### location
+
+Description: The file path in which you want to create the Iceberg table. When you use HMS as metastore, you do not need to specify the `location` parameter, because StarRocks will create the table in the default file path of the current Iceberg catalog. When you use AWS Glue as metastore:
+
+- If you have specified the `location` parameter for the database in which you want to create the table, you do not need to specify the `location` parameter for the table. As such, the table defaults to the file path of the database to which it belongs.
+- If you have not specified the `location` for the database in which you want to create the table, you must specify the `location` parameter for the table.
+
+###### file_format
+
+Description: The file format of the Iceberg table. Only the Parquet format is supported. Default value: `parquet`.
+
+###### compression_codec
+
+Description: The compression algorithm used for the Iceberg table. The supported compression algorithms are SNAPPY, GZIP, ZSTD, and LZ4. Default value: `gzip`. This property is deprecated in v3.2.3, since which version the compression algorithm used for sinking data to Iceberg tables is uniformly controlled by the session variable [connector_sink_compression_codec](../../sql-reference/System_variable.md#connector_sink_compression_codec).
+
+---
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ### Examples
 
@@ -998,6 +1633,7 @@ The following table describes a few key properties.
    AS SELECT * from employee;
    ```
 
+<<<<<<< HEAD
 ## Sink data to an Iceberg table
 
 Similar to the internal tables of StarRocks, if you have the [INSERT](../../administration/user_privs/privilege_item.md#table) privilege on an Iceberg table, you can use the [INSERT](../../sql-reference/sql-statements/loading_unloading/INSERT.md) statement to sink the data of a StarRocks table to that Iceberg table (currently only Parquet-formatted Iceberg tables are supported). This feature is supported from v3.1 onwards.
@@ -1009,6 +1645,17 @@ Similar to the internal tables of StarRocks, if you have the [INSERT](../../admi
 [Switch to an Iceberg catalog and a database in it](#switch-to-an-iceberg-catalog-and-a-database-in-it), and then use the following syntax to sink the data of StarRocks table to a Parquet-formatted Iceberg table in that database.
 
 ### Syntax
+=======
+---
+
+### Sink data to an Iceberg table
+
+Similar to the internal tables of StarRocks, if you have the [INSERT](../../administration/user_privs/privilege_item.md#table) privilege on an Iceberg table, you can use the [INSERT](../../sql-reference/sql-statements/loading_unloading/INSERT.md) statement to sink the data of a StarRocks table to that Iceberg table (currently only Parquet-formatted Iceberg tables are supported). This feature is supported from v3.1 onwards.
+
+[Switch to an Iceberg catalog and a database in it](#switch-to-an-iceberg-catalog-and-a-database-in-it), and then use the following syntax to sink the data of StarRocks table to a Parquet-formatted Iceberg table in that database.
+
+#### Syntax
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ```SQL
 INSERT {INTO | OVERWRITE} <table_name>
@@ -1021,6 +1668,7 @@ PARTITION (par_col1=<value> [, par_col2=<value>...])
 { VALUES ( { expression | DEFAULT } [, ...] ) [, ...] | query }
 ```
 
+<<<<<<< HEAD
 > **NOTICE**
 >
 > Partition columns do not allow `NULL` values. Therefore, you must make sure that no empty values are loaded into the partition columns of the Iceberg table.
@@ -1038,6 +1686,45 @@ PARTITION (par_col1=<value> [, par_col2=<value>...])
 | PARTITION   | The partitions into which you want to load data. You must specify all partition columns of the Iceberg table in this property. The partition columns that you specify in this property can be in a different sequence than the partition columns that you have defined in the table creation statement. If you specify this property, you cannot specify the `column_name` property. |
 
 ### Examples
+=======
+:::note
+
+Partition columns do not allow `NULL` values. Therefore, you must make sure that no empty values are loaded into the partition columns of the Iceberg table.
+
+:::
+
+#### Parameters
+
+##### INTO
+
+To append the data of the StarRocks table to the Iceberg table.
+
+##### OVERWRITE
+
+To overwrite the existing data of the Iceberg table with the data of the StarRocks table.
+
+##### column_name
+
+The name of the destination column to which you want to load data. You can specify one or more columns. If you specify multiple columns, separate them with commas (`,`). You can only specify columns that actually exist in the Iceberg table, and the destination columns that you specify must include the partition columns of the Iceberg table. The destination columns you specify are mapped one on one in sequence to the columns of the StarRocks table, regardless of what the destination column names are. If no destination columns are specified, the data is loaded into all columns of the Iceberg table. If a non-partition column of the StarRocks table cannot be mapped to any column of the Iceberg table, StarRocks writes the default value `NULL` to the Iceberg table column. If the INSERT statement contains a query statement whose returned column types differ from the data types of the destination columns, StarRocks performs an implicit conversion on the mismatched columns. If the conversion fails, a syntax parsing error will be returned.
+
+##### expression
+
+Expression that assigns values to the destination column.
+
+##### DEFAULT
+
+Assigns a default value to the destination column.
+
+##### query
+
+Query statement whose result will be loaded into the Iceberg table. It can be any SQL statement supported by StarRocks.
+
+##### PARTITION
+
+The partitions into which you want to load data. You must specify all partition columns of the Iceberg table in this property. The partition columns that you specify in this property can be in a different sequence than the partition columns that you have defined in the table creation statement. If you specify this property, you cannot specify the `column_name` property.
+
+#### Examples
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 1. Insert three data rows into the `partition_tbl_1` table:
 
@@ -1087,6 +1774,7 @@ PARTITION (par_col1=<value> [, par_col2=<value>...])
    INSERT OVERWRITE partition_tbl_1 partition(dt='2023-09-01',id=1) SELECT 'close';
    ```
 
+<<<<<<< HEAD
 ## Drop an Iceberg table
 
 Similar to the internal tables of StarRocks, if you have the [DROP](../../administration/user_privs/privilege_item.md#table) privilege on an Iceberg table, you can use the [DROP TABLE](../../sql-reference/sql-statements/table_bucket_part_index/DROP_TABLE.md) statement to drop that Iceberg table. This feature is supported from v3.1 onwards.
@@ -1095,6 +1783,14 @@ Similar to the internal tables of StarRocks, if you have the [DROP](../../admini
 >
 > You can grant and revoke privileges by using [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) and [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md).
 
+=======
+---
+
+### Drop an Iceberg table
+
+Similar to the internal tables of StarRocks, if you have the [DROP](../../administration/user_privs/privilege_item.md#table) privilege on an Iceberg table, you can use the [DROP TABLE](../../sql-reference/sql-statements/table_bucket_part_index/DROP_TABLE.md) statement to drop that Iceberg table. This feature is supported from v3.1 onwards.
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 When you drop an Iceberg table, the table's file path and data on your HDFS cluster or cloud storage will not be dropped along with the table.
 
 When you forcibly drop an Iceberg table (namely, with the `FORCE` keyword specified in the DROP TABLE statement), the table's data on your HDFS cluster or cloud storage will be dropped along with the table, but the table's file path is retained.
@@ -1105,7 +1801,13 @@ When you forcibly drop an Iceberg table (namely, with the `FORCE` keyword specif
 DROP TABLE <table_name> [FORCE];
 ```
 
+<<<<<<< HEAD
 ## Configure metadata caching
+=======
+---
+
+### Configure metadata caching
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 The metadata files of your Iceberg cluster may be stored in remote storage such as AWS S3 or HDFS. By default, StarRocks caches Iceberg metadata in memory. To accelerate queries, StarRocks adopts a two-level metadata caching mechanism, with which it can cache metadata both in memory and on disk. For each initial query, StarRocks caches their computation results. If any subsequent query that is semantically equivalent to a previous query is issued, StarRocks first attempts to retrieve the requested metadata from its caches, and it retrieves the metadata from the remote storage only when the metadata cannot be hit in its caches.
 
@@ -1114,6 +1816,7 @@ StarRocks uses the Least Recently Used (LRU) algorithm to cache and evict data. 
 - StarRocks first attempts to retrieve the requested metadata from the memory. If the metadata cannot be hit in the memory, StarRock attempts to retrieve the metadata from the disks. The metadata that StarRocks has retrieved from the disks will be loaded into the memory. If the metadata cannot be hit in the disks either, StarRock retrieves the metadata from the remote storage and caches the retrieved metadata in the memory.
 - StarRocks writes the metadata evicted out of the memory into the disks, but it directly discards the metadata evicted out of the disks.
 
+<<<<<<< HEAD
 FE configuration items that you can use to configure your Iceberg metadata caching mechanism:
 
 ##### enable_iceberg_metadata_disk_cache
@@ -1157,3 +1860,84 @@ Description: The amount of time after which a cache entry on disk expires counti
 Unit: Bytes
 Default value: `8388608`, equivalent to 8 MB
 Description: The maximum size of a file that can be cached. Files whose size exceeds the value of this parameter cannot be cached. If a query requests these files, StarRocks retrieves them from the remote storage.
+=======
+From v3.3.3 onwards, StarRocks supports the [periodic metadata refresh strategy](#appendix-periodic-metadata-refresh-strategy). You can adjust the Iceberg metadata caching plan using the system variable [`plan_mode`](../../sql-reference/System_variable.md#plan_mode).
+
+#### FE Configurations on Iceberg metadata caching
+
+##### enable_iceberg_metadata_disk_cache
+
+- Unit: N/A
+- Default value: `false`
+- Description: Specifies whether to enable the disk cache.
+
+##### iceberg_metadata_cache_disk_path
+
+- Unit: N/A
+- Default value: `StarRocksFE.STARROCKS_HOME_DIR + "/caches/iceberg"`
+- Description: The save path of cached metadata files on disk.
+
+##### iceberg_metadata_disk_cache_capacity
+
+- Unit: Bytes
+- Default value: `2147483648`, equivalent to 2 GB
+- Description: The maximum size of cached metadata allowed on disk.
+
+##### iceberg_metadata_memory_cache_capacity
+
+- Unit: Bytes
+- Default value: `536870912`, equivalent to 512 MB
+- Description: The maximum size of cached metadata allowed in memory.
+
+##### iceberg_metadata_memory_cache_expiration_seconds
+
+- Unit: Seconds  
+- Default value: `86500`
+- Description: The amount of time after which a cache entry in memory expires counting from its last access.
+
+##### iceberg_metadata_disk_cache_expiration_seconds
+
+- Unit: Seconds  
+- Default value: `604800`, equivalent to one week
+- Description: The amount of time after which a cache entry on disk expires counting from its last access.
+
+##### iceberg_metadata_cache_max_entry_size
+
+- Unit: Bytes
+- Default value: `8388608`, equivalent to 8 MB
+- Description: The maximum size of a file that can be cached. Files whose size exceeds the value of this parameter cannot be cached. If a query requests these files, StarRocks retrieves them from the remote storage.
+
+##### enable_background_refresh_connector_metadata
+
+- Unit: -
+- Default value: true
+- Description: Whether to enable the periodic Iceberg metadata cache refresh. After it is enabled, StarRocks polls the metastore (Hive Metastore or AWS Glue) of your Iceberg cluster, and refreshes the cached metadata of the frequently accessed Iceberg catalogs to perceive data changes. `true` indicates to enable the Iceberg metadata cache refresh, and `false` indicates to disable it.
+
+##### background_refresh_metadata_interval_millis
+
+- Unit: Millisecond
+- Default value: 600000
+- Description: The interval between two consecutive Iceberg metadata cache refreshes. - Unit: millisecond.
+
+##### background_refresh_metadata_time_secs_since_last_access_sec
+
+- Unit: Second
+- Default value: 86400
+- Description: The expiration time of an Iceberg metadata cache refresh task. For the Iceberg catalog that has been accessed, if it has not been accessed for more than the specified time, StarRocks stops refreshing its cached metadata. For the Iceberg catalog that has not been accessed, StarRocks will not refresh its cached metadata.
+
+## Appendix: Periodic Metadata Refresh Strategy
+
+- **Distributed Plan for Large volume of Metadata**
+
+  To handle large volume of metadata effectively, StarRocks employs a distributed approach using multiple BE and CN nodes. This method leverages the parallel computing capabilities of modern query engines, which can distribute tasks such as reading, decompressing, and filtering manifest files across multiple nodes. By processing these manifest files in parallel, the time required for metadata retrieval is significantly reduced, leading to faster job planning. This is particularly beneficial for large queries involving numerous manifest files, as it eliminates single-point bottlenecks and enhances overall query execution efficiency.
+
+- **Local Plan for Small volume of Metadata**
+
+  For smaller queries, where the repeated decompression and parsing of manifest files can introduce unnecessary delays, a different strategy is employed. StarRocks caches deserialized memory objects, especially Avro files, to address this issue. By storing these deserialized files in memory, the system can bypass the decompression and parsing stages for subsequent queries. This caching mechanism allows direct access to the required metadata, significantly reducing retrieval times. As a result, the system becomes more responsive and better suited to meet high query demands and materialized view rewriting needs.
+
+- **Adaptive Metadata Retrieval Strategy** (Default)
+
+  StarRocks is designed to automatically select the appropriate metadata retrieval method based on various factors, including the number of FE and BE/CN nodes, their CPU core counts, and the number of manifest files required for the current query. This adaptive approach ensures that the system dynamically optimizes metadata retrieval without the need for manual adjustment of metadata-related parameters. By doing so, StarRocks provides a seamless experience, balancing between distributed and local plans to achieve optimal query performance under different conditions.
+
+You can adjust the Iceberg metadata caching plan using the system variable [`plan_mode`](../../sql-reference/System_variable.md#plan_mode).
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

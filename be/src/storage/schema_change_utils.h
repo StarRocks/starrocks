@@ -40,7 +40,12 @@ struct SchemaChangeParams {
     TabletSharedPtr new_tablet;
     std::vector<std::unique_ptr<TabletReader>> rowset_readers;
     Version version;
+<<<<<<< HEAD
     // TabletSchema base_tablet_schema;
+=======
+    int64_t gtid = 0;
+    TabletSchemaCSPtr base_tablet_schema = nullptr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::vector<RowsetSharedPtr> rowsets_to_change;
     bool sc_sorting = false;
     bool sc_directly = false;
@@ -57,9 +62,15 @@ struct SchemaChangeParams {
 
 class ChunkChanger {
 public:
+<<<<<<< HEAD
     ChunkChanger(const TabletSchema& base_schema, const TabletSchema& new_schema,
                  std::vector<std::string>& base_table_column_names, TAlterJobType::type alter_job_type);
     ChunkChanger(const TabletSchema& base_schema, const TabletSchema& new_schema);
+=======
+    ChunkChanger(const TabletSchemaCSPtr& base_schema, const TabletSchemaCSPtr& new_schema,
+                 std::vector<std::string>& base_table_column_names, TAlterJobType::type alter_job_type);
+    ChunkChanger(const TabletSchemaCSPtr& new_schema);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ~ChunkChanger();
 
     ColumnMapping* get_mutable_column_mapping(size_t column_index);
@@ -86,7 +97,11 @@ public:
 
     Status fill_generated_columns(ChunkPtr& new_chunk);
 
+<<<<<<< HEAD
     void init_runtime_state(TQueryOptions query_options, TQueryGlobals query_globals);
+=======
+    void init_runtime_state(const TQueryOptions& query_options, const TQueryGlobals& query_globals);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     Status append_generated_columns(ChunkPtr& read_chunk, ChunkPtr& new_chunk,
                                     const std::vector<uint32_t>& all_ref_columns_ids, int base_schema_columns);
@@ -104,10 +119,17 @@ public:
     }
 
 private:
+<<<<<<< HEAD
     Buffer<uint8_t> _execute_where_expr(ChunkPtr& chunk);
 
 private:
     const TabletSchema& _base_schema;
+=======
+    StatusOr<Buffer<uint8_t>> _execute_where_expr(ChunkPtr& chunk);
+
+private:
+    TabletSchemaCSPtr _base_schema;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::vector<std::string> _base_table_column_names;
     TAlterJobType::type _alter_job_type = TAlterJobType::SCHEMA_CHANGE;
 
@@ -142,7 +164,11 @@ public:
                                          MaterializedViewParamMap* materialized_view_param_map,
                                          std::unique_ptr<TExpr>& where_expr);
 
+<<<<<<< HEAD
     static Status parse_request(const TabletSchema& base_schema, const TabletSchema& new_schema,
+=======
+    static Status parse_request(const TabletSchemaCSPtr& base_schema, const TabletSchemaCSPtr& new_schema,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                 ChunkChanger* chunk_changer,
                                 const MaterializedViewParamMap& materialized_view_param_map,
                                 const std::unique_ptr<TExpr>& where_expr, bool has_delete_predicates, bool* sc_sorting,
@@ -153,15 +179,24 @@ private:
     static Status init_column_mapping(ColumnMapping* column_mapping, const TabletColumn& column_schema,
                                       const std::string& value);
 
+<<<<<<< HEAD
     static Status parse_request_normal(const TabletSchema& base_schema, const TabletSchema& new_schema,
+=======
+    static Status parse_request_normal(const TabletSchemaCSPtr& base_schema, const TabletSchemaCSPtr& new_schema,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                        ChunkChanger* chunk_changer,
                                        const MaterializedViewParamMap& materialized_view_param_map,
                                        const std::unique_ptr<TExpr>& where_expr, bool has_delete_predicates,
                                        bool* sc_sorting, bool* sc_directly,
                                        std::unordered_set<int>* materialized_column_idxs);
 
+<<<<<<< HEAD
     static Status parse_request_for_pk(const TabletSchema& base_schema, const TabletSchema& new_schema,
                                        bool* sc_sorting, bool* sc_directly);
+=======
+    static Status parse_request_for_sort_key(const TabletSchemaCSPtr& base_schema, const TabletSchemaCSPtr& new_schema,
+                                             bool* sc_sorting, bool* sc_directly);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 } // namespace starrocks

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # array_contains
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 检查数组中是否包含某个元素，是的话返回 1，否则返回 0。
 

@@ -19,6 +19,11 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.ast.StatementBase;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.RuleType;
@@ -28,17 +33,40 @@ import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 public class MaterializedViewOptimizer {
     public MvPlanContext optimize(MaterializedView mv,
                                   ConnectContext connectContext) {
+<<<<<<< HEAD
+=======
+        return optimize(mv, connectContext, true);
+    }
+
+    public MvPlanContext optimize(MaterializedView mv,
+                                  ConnectContext connectContext,
+                                  boolean inlineView) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // optimize the sql by rule and disable rule based materialized view rewrite
         OptimizerConfig optimizerConfig = new OptimizerConfig(OptimizerConfig.OptimizerAlgorithm.RULE_BASED);
         // Disable partition prune for mv's plan so no needs  to compensate pruned predicates anymore.
         // Only needs to compensate mv's ref-base-table's partition predicates when mv's freshness cannot be satisfied.
         optimizerConfig.disableRuleSet(RuleSetType.PARTITION_PRUNE);
         optimizerConfig.disableRuleSet(RuleSetType.ALL_MV_REWRITE);
+<<<<<<< HEAD
         optimizerConfig.disableRule(RuleType.TF_REWRITE_GROUP_BY_COUNT_DISTINCT);
+=======
+        // INTERSECT_REWRITE is used for INTERSECT related plan optimize, which can not be SPJG;
+        // And INTERSECT_REWRITE should be based on PARTITION_PRUNE rule set.
+        // So exclude it
+        optimizerConfig.disableRuleSet(RuleSetType.INTERSECT_REWRITE);
+        optimizerConfig.disableRule(RuleType.TF_REWRITE_GROUP_BY_COUNT_DISTINCT);
+        optimizerConfig.disableRule(RuleType.TF_PRUNE_EMPTY_SCAN);
+        optimizerConfig.disableRule(RuleType.TF_MV_TEXT_MATCH_REWRITE_RULE);
+        optimizerConfig.disableRule(RuleType.TF_MV_TRANSPARENT_REWRITE_RULE);
+        optimizerConfig.disableRule(RuleType.TF_ELIMINATE_AGG);
+        optimizerConfig.disableRule(RuleType.TF_PULL_UP_PREDICATE_SCAN);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // For sync mv, no rewrite query by original sync mv rule to avoid useless rewrite.
         if (mv.getRefreshScheme().isSync()) {
             optimizerConfig.disableRule(RuleType.TF_MATERIALIZED_VIEW);
         }
+<<<<<<< HEAD
 
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
         String mvSql = mv.getViewDefineSql();
@@ -52,5 +80,45 @@ public class MaterializedViewOptimizer {
             return new MvPlanContext(false, MvUtils.getInvalidReason(mvPlan));
         }
         return new MvPlanContext(mvPlan, plans.second.getOutputColumn(), columnRefFactory);
+=======
+        ColumnRefFactory columnRefFactory = new ColumnRefFactory();
+        String mvSql = mv.getViewDefineSql();
+        // parse mv's defined query
+        StatementBase stmt = MvUtils.parse(mv, mvSql, connectContext);
+        if (stmt == null) {
+            return new MvPlanContext(false, "MV Plan parse failed");
+        }
+        // check whether mv's defined query contains non-deterministic functions
+        Pair<Boolean, String> containsNonDeterministicFunctions = AnalyzerUtils.containsNonDeterministicFunction(stmt);
+        if (containsNonDeterministicFunctions != null && containsNonDeterministicFunctions.first) {
+            String invalidPlanReason = String.format("MV contains non-deterministic functions(%s)",
+                    containsNonDeterministicFunctions.second);
+            return new MvPlanContext(false, invalidPlanReason);
+        }
+        int originAggPushDownMode = connectContext.getSessionVariable().getCboPushDownAggregateMode();
+        if (originAggPushDownMode != -1) {
+            connectContext.getSessionVariable().setCboPushDownAggregateMode(-1);
+        }
+
+        try {
+            // get optimized plan of mv's defined query
+            Pair<OptExpression, LogicalPlan> plans =
+                    MvUtils.getRuleOptimizedLogicalPlan(stmt, columnRefFactory, connectContext, optimizerConfig, inlineView);
+            if (plans == null) {
+                return new MvPlanContext(false, "No query plan for it");
+            }
+            OptExpression mvPlan = plans.first;
+            boolean isValidPlan = MvUtils.isValidMVPlan(mvPlan);
+            // not set it invalid plan if text match rewrite is on because text match rewrite can support all query pattern.
+            String invalidPlanReason = "";
+            if (!isValidPlan) {
+                invalidPlanReason = MvUtils.getInvalidReason(mvPlan, inlineView);
+            }
+            return new MvPlanContext(mvPlan, plans.second.getOutputColumn(), columnRefFactory, isValidPlan, invalidPlanReason);
+        } finally {
+            connectContext.getSessionVariable().setCboPushDownAggregateMode(originAggPushDownMode);
+        }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }

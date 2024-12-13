@@ -31,7 +31,11 @@ namespace starrocks {
 class MemPool;
 class MysqlRowBuffer;
 class Slice;
+<<<<<<< HEAD
 class TypeDescriptor;
+=======
+struct TypeDescriptor;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 // Forward declaration
 class Datum;
@@ -97,6 +101,11 @@ public:
 
     virtual bool is_array() const { return false; }
 
+<<<<<<< HEAD
+=======
+    virtual bool is_array_view() const { return false; }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     virtual bool is_map() const { return false; }
 
     virtual bool is_struct() const { return false; }
@@ -167,7 +176,11 @@ public:
     // for example: column(1,2)->replicate({0,2,5}) = column(1,1,2,2,2)
     // FixedLengthColumn, BinaryColumn and ConstColumn override this function for better performance.
     // TODO(fzh): optimize replicate() for ArrayColumn, ObjectColumn and others.
+<<<<<<< HEAD
     virtual ColumnPtr replicate(const std::vector<uint32_t>& offsets) {
+=======
+    virtual ColumnPtr replicate(const Buffer<uint32_t>& offsets) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         auto dest = this->clone_empty();
         auto dest_size = offsets.size() - 1;
         DCHECK(this->size() >= dest_size) << "The size of the source column is less when duplicating it.";
@@ -177,6 +190,10 @@ public:
         }
         return dest;
     }
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // Update elements to default value which hit by the filter
     virtual void fill_default(const Filter& filter) = 0;
 
@@ -188,7 +205,11 @@ public:
     //      src_column data: [5, 6]
     // After call this function, column data will be set as [5, 1, 2, 6, 4]
     // The values in indexes is incremented
+<<<<<<< HEAD
     virtual Status update_rows(const Column& src, const uint32_t* indexes) = 0;
+=======
+    virtual void update_rows(const Column& src, const uint32_t* indexes) = 0;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // This function will append data from src according to the input indexes. 'indexes' contains
     // the row index of the src.
@@ -201,7 +222,13 @@ public:
     // This function will copy the [3, 2] row of src to this column.
     virtual void append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) = 0;
 
+<<<<<<< HEAD
     void append_selective(const Column& src, const Buffer<uint32_t>& indexes) {
+=======
+    template <typename Container, typename T = typename Container::value_type>
+    void append_selective(const Column& src, const Container& indexes) {
+        static_assert(std::is_same<T, uint32_t>::value, "The type of indexes must be uint32_t");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return append_selective(src, indexes.data(), 0, static_cast<uint32_t>(indexes.size()));
     }
 
@@ -213,19 +240,54 @@ public:
     // Return false if this is a non-nullable column, i.e, if `is_nullable` return false.
     virtual bool append_nulls(size_t count) = 0;
 
+<<<<<<< HEAD
     // Append multiple strings into this column.
     // Return false if the column is not a binary column.
     [[nodiscard]] virtual bool append_strings(const Buffer<Slice>& strs) = 0;
+=======
+    template <typename Container, typename T = typename Container::value_type>
+    bool append_strings(const Container& strs) {
+        static_assert(std::is_same<T, Slice>::value, "Container::value_type must be Slice");
+        return append_strings(strs.data(), strs.size());
+    }
+    // Append multiple strings into this column.
+    // Return false if the column is not a binary column.
+    [[nodiscard]] virtual bool append_strings(const Slice* data, size_t size) { return false; }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // Like append_strings. To achieve higher performance, this function will read 16 bytes out of
     // bounds. So the caller must make sure that no invalid address access exception occurs for
     // out-of-bounds reads
+<<<<<<< HEAD
     [[nodiscard]] virtual bool append_strings_overflow(const Buffer<Slice>& strs, size_t max_length) { return false; }
+=======
+    template <typename Container, typename T = typename Container::value_type>
+    bool append_strings_overflow(const Container& strs, size_t max_length) {
+        static_assert(std::is_same<T, Slice>::value, "Container::value_type must be Slice");
+        return append_strings_overflow(strs.data(), strs.size(), max_length);
+    }
+
+    [[nodiscard]] virtual bool append_strings_overflow(const Slice* data, size_t size, size_t max_length) {
+        return false;
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // Like `append_strings` but the corresponding storage of each slice is adjacent to the
     // next one's, the implementation can take advantage of this feature, e.g, copy the whole
     // memory at once.
+<<<<<<< HEAD
     [[nodiscard]] virtual bool append_continuous_strings(const Buffer<Slice>& strs) { return append_strings(strs); }
+=======
+    template <typename Container, typename T = typename Container::value_type>
+    [[nodiscard]] bool append_continuous_strings(const Container& strs) {
+        static_assert(std::is_same<T, Slice>::value, "Container::value_type must be Slice");
+        return append_continuous_strings(strs.data(), strs.size());
+    }
+
+    [[nodiscard]] virtual bool append_continuous_strings(const Slice* data, size_t size) {
+        return append_strings(data, size);
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     [[nodiscard]] virtual bool append_continuous_fixed_length_strings(const char* data, size_t size, int fixed_length) {
         return false;
@@ -316,7 +378,11 @@ public:
     inline size_t filter(const Filter& filter, size_t count) { return filter_range(filter, 0, count); }
 
     // get rid of the case where the map/array is null but the map/array'elements are not empty.
+<<<<<<< HEAD
     bool empty_null_in_complex_column(const Filter& null_data, const std::vector<uint32_t>& offsets);
+=======
+    bool empty_null_in_complex_column(const Filter& null_data, const Buffer<uint32_t>& offsets);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // FIXME: Many derived implementation assume |to| equals to size().
     virtual size_t filter_range(const Filter& filter, size_t from, size_t to) = 0;
@@ -355,7 +421,11 @@ public:
     virtual int64_t xor_checksum(uint32_t from, uint32_t to) const = 0;
 
     // Push one row to MysqlRowBuffer
+<<<<<<< HEAD
     virtual void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const = 0;
+=======
+    virtual void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol = false) const = 0;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     void set_delete_state(DelCondSatisfied delete_state) { _delete_state = delete_state; }
 
@@ -394,7 +464,11 @@ public:
     // The interface will not free memory!!!
     virtual void reset_column() { _delete_state = DEL_NOT_SATISFIED; }
 
+<<<<<<< HEAD
     virtual bool capacity_limit_reached(std::string* msg = nullptr) const = 0;
+=======
+    virtual Status capacity_limit_reached() const = 0;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     virtual Status accept(ColumnVisitor* visitor) const = 0;
 

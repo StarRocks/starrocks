@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # pmod
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 取模函数，返回两个数相除之后的正余数。
 

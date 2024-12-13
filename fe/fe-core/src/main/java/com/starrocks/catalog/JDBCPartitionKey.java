@@ -15,7 +15,10 @@
 
 package com.starrocks.catalog;
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.google.common.collect.ImmutableList;
 
 import java.util.List;

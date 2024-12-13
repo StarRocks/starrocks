@@ -26,6 +26,10 @@ import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.CloneExpr;
 import com.starrocks.analysis.CollectionElementExpr;
 import com.starrocks.analysis.CompoundPredicate;
+<<<<<<< HEAD
+=======
+import com.starrocks.analysis.DictQueryExpr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
@@ -35,7 +39,13 @@ import com.starrocks.analysis.InformationFunction;
 import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LiteralExpr;
+<<<<<<< HEAD
 import com.starrocks.analysis.OrderByElement;
+=======
+import com.starrocks.analysis.MatchExpr;
+import com.starrocks.analysis.OrderByElement;
+import com.starrocks.analysis.Parameter;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.Subquery;
@@ -46,6 +56,10 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.AstVisitor;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.DictionaryGetExpr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.LambdaFunctionExpr;
 import com.starrocks.sql.ast.QueryStatement;
@@ -107,13 +121,21 @@ public class AggregationAnalyzer {
     /**
      * visitor returns true if all expressions are constant with respect to the group.
      */
+<<<<<<< HEAD
     private class VerifyExpressionVisitor extends AstVisitor<Boolean, Void> {
+=======
+    private class VerifyExpressionVisitor implements AstVisitor<Boolean, Void> {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         @Override
         public Boolean visit(ParseNode expr) {
             if (groupingExpressions.stream().anyMatch(expr::equals)) {
                 return true;
             }
+<<<<<<< HEAD
             return super.visit(expr);
+=======
+            return expr.accept(this, null);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         @Override
@@ -125,6 +147,12 @@ public class AggregationAnalyzer {
 
         @Override
         public Boolean visitExpression(Expr node, Void context) {
+<<<<<<< HEAD
+=======
+            if (node instanceof Parameter) {
+                return true;
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             throw new SemanticException(node.toSql() + " must appear in the GROUP BY clause or be used in an aggregate function",
                     node.getPos());
         }
@@ -261,8 +289,12 @@ public class AggregationAnalyzer {
                         node.getPos());
             }
 
+<<<<<<< HEAD
             if (node.getChildren().stream().anyMatch(argument ->
                     !analyzeState.getColumnReferences().containsKey(argument) || !isGroupingKey(argument))) {
+=======
+            if (node.getChildren().stream().anyMatch(argument -> !analyzeState.getGroupBy().contains(argument))) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 throw new SemanticException(PARSER_ERROR_MSG.argsCanOnlyFromGroupBy(), node.getPos());
             }
 
@@ -290,6 +322,14 @@ public class AggregationAnalyzer {
         }
 
         @Override
+<<<<<<< HEAD
+=======
+        public Boolean visitMatchExpr(MatchExpr node, Void context) {
+            return visit(node.getChild(0));
+        }
+
+        @Override
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         public Boolean visitLiteral(LiteralExpr node, Void context) {
             return true;
         }
@@ -343,5 +383,18 @@ public class AggregationAnalyzer {
         public Boolean visitCloneExpr(CloneExpr node, Void context) {
             return visit(node.getChild(0));
         }
+<<<<<<< HEAD
+=======
+
+        @Override
+        public Boolean visitDictQueryExpr(DictQueryExpr node, Void context) {
+            return node.getChildren().stream().allMatch(this::visit);
+        }
+
+        @Override
+        public Boolean visitDictionaryGetExpr(DictionaryGetExpr node, Void context) {
+            return node.getChildren().stream().allMatch(this::visit);
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }

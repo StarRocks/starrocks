@@ -494,7 +494,11 @@ Status CSVReader::next_record(Record* record) {
     }
     char* d;
     size_t pos = 0;
+<<<<<<< HEAD
     while ((d = _buff.find(_parse_options.row_delimiter, pos)) == nullptr) {
+=======
+    while ((d = _find_line_delimiter(_buff, pos)) == nullptr) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         pos = _buff.available();
         _buff.compact();
         if (_buff.free_space() == 0) {
@@ -593,4 +597,11 @@ void CSVReader::split_record(const Record& record, Fields* columns) const {
     }
 }
 
+<<<<<<< HEAD
+=======
+size_t CSVReader::buff_capacity() const {
+    return _buff.capacity();
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // namespace starrocks

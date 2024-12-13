@@ -18,7 +18,11 @@ package com.starrocks.sql.ast;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.sql.parser.NodePosition;
 
+<<<<<<< HEAD
 public class SyncRefreshSchemeDesc extends RefreshSchemeDesc {
+=======
+public class SyncRefreshSchemeDesc extends RefreshSchemeClause {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public SyncRefreshSchemeDesc() {
         this(NodePosition.ZERO);
@@ -27,6 +31,10 @@ public class SyncRefreshSchemeDesc extends RefreshSchemeDesc {
     public SyncRefreshSchemeDesc(NodePosition pos) {
         super(MaterializedView.RefreshType.SYNC, pos, MaterializedView.RefreshMoment.IMMEDIATE);
     }
+<<<<<<< HEAD
 
 }
 
+=======
+}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

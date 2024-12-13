@@ -24,9 +24,17 @@ import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
 import static com.starrocks.catalog.system.SystemTable.builder;
 
 public class BeThreadsSystemTable {
+<<<<<<< HEAD
     public static SystemTable create() {
         return new SystemTable(SystemId.BE_THREADS_ID,
                 "be_threads",
+=======
+    private static final String NAME = "be_threads";
+
+    public static SystemTable create() {
+        return new SystemTable(SystemId.BE_THREADS_ID,
+                NAME,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 Table.TableType.SCHEMA,
                 builder()
                         .column("BE_ID", ScalarType.createType(PrimitiveType.BIGINT))
@@ -36,6 +44,10 @@ public class BeThreadsSystemTable {
                         .column("TID", ScalarType.createType(PrimitiveType.BIGINT))
                         .column("IDLE", ScalarType.createType(PrimitiveType.BOOLEAN))
                         .column("FINISHED_TASKS", ScalarType.createType(PrimitiveType.BIGINT))
+<<<<<<< HEAD
+=======
+                        .column("BOUND_CPUS", ScalarType.createType(PrimitiveType.BIGINT))
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         .build(), TSchemaTableType.SCH_BE_THREADS);
     }
 }

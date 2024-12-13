@@ -37,6 +37,11 @@ package com.starrocks.http.rest;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
@@ -63,10 +68,18 @@ public class ShowDataAction extends RestBaseAction {
 
     public long getDataSizeOfDatabase(Database db) {
         long totalSize = 0;
+<<<<<<< HEAD
         db.readLock();
         try {
             // sort by table name
             List<Table> tables = db.getTables();
+=======
+        Locker locker = new Locker();
+        locker.lockDatabase(db.getId(), LockType.READ);
+        try {
+            // sort by table name
+            List<Table> tables = GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             for (Table table : tables) {
                 if (!table.isNativeTableOrMaterializedView()) {
                     continue;
@@ -75,7 +88,11 @@ public class ShowDataAction extends RestBaseAction {
                 totalSize += tableSize;
             } // end for tables
         } finally {
+<<<<<<< HEAD
             db.readUnlock();
+=======
+            locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return totalSize;
     }
@@ -83,7 +100,11 @@ public class ShowDataAction extends RestBaseAction {
     @Override
     public void execute(BaseRequest request, BaseResponse response) {
         String dbName = request.getSingleParameter("db");
+<<<<<<< HEAD
         ConcurrentHashMap<String, Database> fullNameToDb = GlobalStateMgr.getCurrentState().getFullNameToDb();
+=======
+        ConcurrentHashMap<String, Database> fullNameToDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getFullNameToDb();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         long totalSize = 0;
         if (dbName != null) {
             Database db = fullNameToDb.get(dbName);

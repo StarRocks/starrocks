@@ -21,6 +21,10 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.util.ArrayList;
+<<<<<<< HEAD
+=======
+import java.util.HashSet;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.List;
 
 public class SimpleSelectorTest {
@@ -40,7 +44,11 @@ public class SimpleSelectorTest {
     @Test
     public void testEmpty() {
         List<PartitionStatistics> statisticsList = new ArrayList<>();
+<<<<<<< HEAD
         Assert.assertEquals(0, selector.select(statisticsList).size());
+=======
+        Assert.assertEquals(0, selector.select(statisticsList, new HashSet<Long>()).size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -53,7 +61,11 @@ public class SimpleSelectorTest {
         statistics.setCompactionVersion(new PartitionVersion(1, 0));
         statisticsList.add(statistics);
 
+<<<<<<< HEAD
         Assert.assertEquals(0, selector.select(statisticsList).size());
+=======
+        Assert.assertEquals(0, selector.select(statisticsList, new HashSet<Long>()).size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -63,16 +75,30 @@ public class SimpleSelectorTest {
         final PartitionIdentifier partitionIdentifier1 = new PartitionIdentifier(1, 2, 3);
         PartitionStatistics statistics1 = new PartitionStatistics(partitionIdentifier1);
         statistics1.setCompactionVersion(new PartitionVersion(1, 0));
+<<<<<<< HEAD
+=======
+        statistics1.setCompactionScore(new Quantiles(0.0, 0.0, 0.0));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         statistics1.setCurrentVersion(new PartitionVersion(MIN_COMPACTION_VERSIONS, System.currentTimeMillis()));
         statisticsList.add(statistics1);
 
         final PartitionIdentifier partitionIdentifier2 = new PartitionIdentifier(1, 2, 4);
         PartitionStatistics statistics2 = new PartitionStatistics(partitionIdentifier2);
         statistics2.setCompactionVersion(new PartitionVersion(1, 0));
+<<<<<<< HEAD
         statistics2.setCurrentVersion(new PartitionVersion(MIN_COMPACTION_VERSIONS + 1, System.currentTimeMillis()));
         statisticsList.add(statistics2);
 
         Assert.assertSame(statistics2, selector.select(statisticsList).get(0));
+=======
+        statistics2.setCompactionScore(new Quantiles(0.0, 0.0, 0.0));
+        statistics2.setCurrentVersion(new PartitionVersion(MIN_COMPACTION_VERSIONS + 1, System.currentTimeMillis()));
+        statisticsList.add(statistics2);
+
+        PartitionStatisticsSnapshot stat = new PartitionStatisticsSnapshot(statistics2);
+        Assert.assertEquals(stat.getPartition(),
+                            selector.select(statisticsList, new HashSet<Long>()).get(0).getPartition());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -82,15 +108,28 @@ public class SimpleSelectorTest {
         final PartitionIdentifier partitionIdentifier = new PartitionIdentifier(1, 2, 4);
         PartitionStatistics statistics = new PartitionStatistics(partitionIdentifier);
         statistics.setCompactionVersion(new PartitionVersion(1, 0));
+<<<<<<< HEAD
+=======
+        statistics.setCompactionScore(new Quantiles(0.0, 0.0, 0.0));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         statistics.setCurrentVersion(new PartitionVersion(MIN_COMPACTION_VERSIONS + 1, System.currentTimeMillis()));
         statisticsList.add(statistics);
 
         statistics.setNextCompactionTime(System.currentTimeMillis() + 60 * 1000);
+<<<<<<< HEAD
 
         Assert.assertEquals(0, selector.select(statisticsList).size());
 
         statistics.setNextCompactionTime(System.currentTimeMillis() - 10);
 
         Assert.assertSame(statistics, selector.select(statisticsList).get(0));
+=======
+        Assert.assertEquals(0, selector.select(statisticsList, new HashSet<Long>()).size());
+
+        statistics.setNextCompactionTime(System.currentTimeMillis() - 10);
+        PartitionStatisticsSnapshot stat = new PartitionStatisticsSnapshot(statistics);
+        Assert.assertEquals(stat.getPartition(),
+                            selector.select(statisticsList, new HashSet<Long>()).get(0).getPartition());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }

@@ -48,14 +48,22 @@ public class PushDownProjectLimitRule extends TransformationRule {
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
         LogicalLimitOperator limit = (LogicalLimitOperator) input.getInputs().get(0).getOp();
+<<<<<<< HEAD
         return limit.isGlobal() && !limit.hasOffset();
+=======
+        return limit.isGlobal();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
     public List<OptExpression> transform(OptExpression project, OptimizerContext context) {
         LogicalLimitOperator limit = (LogicalLimitOperator) project.getInputs().get(0).getOp();
+<<<<<<< HEAD
         LogicalLimitOperator newLimit = LogicalLimitOperator.global(limit.getLimit());
         return Lists.newArrayList(OptExpression.create(newLimit,
+=======
+        return Lists.newArrayList(OptExpression.create(limit,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 OptExpression.create(project.getOp(), project.getInputs().get(0).getInputs())));
     }
 }

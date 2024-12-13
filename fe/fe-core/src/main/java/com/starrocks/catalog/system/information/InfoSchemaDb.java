@@ -22,11 +22,19 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
+<<<<<<< HEAD
+=======
+import static com.starrocks.catalog.InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
+import static com.starrocks.server.CatalogMgr.isInternalCatalog;
+import static java.util.Objects.requireNonNull;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 // Information schema used for MySQL compatible.
 public class InfoSchemaDb extends Database {
     public static final String DATABASE_NAME = "information_schema";
 
     public InfoSchemaDb() {
+<<<<<<< HEAD
         super(SystemId.INFORMATION_SCHEMA_DB_ID, DATABASE_NAME);
         super.registerTableUnlocked(TablesSystemTable.create());
         super.registerTableUnlocked(PartitionsSystemTableSystemTable.create());
@@ -68,6 +76,66 @@ public class InfoSchemaDb extends Database {
         super.registerTableUnlocked(BeBvarsSystemTable.create());
         super.registerTableUnlocked(BeCloudNativeCompactionsSystemTable.create());
         super.registerTableUnlocked(PartitionsMetaSystemTable.create());
+=======
+        this(DEFAULT_INTERNAL_CATALOG_NAME);
+    }
+
+    public InfoSchemaDb(String catalogName) {
+        super(SystemId.INFORMATION_SCHEMA_DB_ID, DATABASE_NAME);
+        requireNonNull(catalogName, "catalogName is null");
+        super.setCatalogName(catalogName);
+
+        super.registerTableUnlocked(TablesSystemTable.create(catalogName));
+        super.registerTableUnlocked(PartitionsSystemTableSystemTable.create(catalogName));
+        super.registerTableUnlocked(TablePrivilegesSystemTable.create(catalogName));
+        super.registerTableUnlocked(ColumnPrivilegesSystemTable.create(catalogName));
+        super.registerTableUnlocked(ReferentialConstraintsSystemTable.create(catalogName));
+        super.registerTableUnlocked(KeyColumnUsageSystemTable.create(catalogName));
+        super.registerTableUnlocked(RoutinesSystemTable.create(catalogName));
+        super.registerTableUnlocked(SchemataSystemTable.create(catalogName));
+        super.registerTableUnlocked(ColumnsSystemTable.create(catalogName));
+        super.registerTableUnlocked(CharacterSetsSystemTable.create(catalogName));
+        super.registerTableUnlocked(CollationsSystemTable.create(catalogName));
+        super.registerTableUnlocked(TableConstraintsSystemTable.create(catalogName));
+        super.registerTableUnlocked(EnginesSystemTable.create(catalogName));
+        super.registerTableUnlocked(UserPrivilegesSystemTable.create(catalogName));
+        super.registerTableUnlocked(SchemaPrivilegesSystemTable.create(catalogName));
+        super.registerTableUnlocked(StatisticsSystemTable.create(catalogName));
+        super.registerTableUnlocked(TriggersSystemTable.create(catalogName));
+        super.registerTableUnlocked(EventsSystemTable.create(catalogName));
+        super.registerTableUnlocked(ViewsSystemTable.create(catalogName));
+
+        // tables that are only displayed in internal catalog
+        if (isInternalCatalog(catalogName)) {
+            super.registerTableUnlocked(TablesConfigSystemTable.create());
+            super.registerTableUnlocked(SessionVariablesSystemTable.create());
+            super.registerTableUnlocked(VerboseSessionVariablesSystemTable.create());
+            super.registerTableUnlocked(GlobalVariablesSystemTable.create());
+            super.registerTableUnlocked(TasksSystemTable.create());
+            super.registerTableUnlocked(TaskRunsSystemTable.getInstance());
+            super.registerTableUnlocked(MaterializedViewsSystemTable.create());
+            super.registerTableUnlocked(LoadsSystemTable.create());
+            super.registerTableUnlocked(LoadTrackingLogsSystemTable.create());
+            super.registerTableUnlocked(RoutineLoadJobsSystemTable.create());
+            super.registerTableUnlocked(StreamLoadsSystemTable.create());
+            super.registerTableUnlocked(BeCompactionsSystemTable.create());
+            super.registerTableUnlocked(BeTabletsSystemTable.create());
+            super.registerTableUnlocked(BeMetricsSystemTable.create());
+            super.registerTableUnlocked(FeMetricsSystemTable.create());
+            super.registerTableUnlocked(BeTxnsSystemTable.create());
+            super.registerTableUnlocked(BeConfigsSystemTable.create());
+            super.registerTableUnlocked(FeTabletSchedulesSystemTable.create());
+            super.registerTableUnlocked(BeThreadsSystemTable.create());
+            super.registerTableUnlocked(BeLogsSystemTable.create());
+            super.registerTableUnlocked(BeBvarsSystemTable.create());
+            super.registerTableUnlocked(BeCloudNativeCompactionsSystemTable.create());
+            super.registerTableUnlocked(PipeFileSystemTable.create());
+            super.registerTableUnlocked(PipesSystemTable.create());
+            super.registerTableUnlocked(BeDataCacheMetricsTable.create());
+            super.registerTableUnlocked(PartitionsMetaSystemTable.create());
+            super.registerTableUnlocked(TemporaryTablesTable.create());
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -95,4 +163,14 @@ public class InfoSchemaDb extends Database {
         }
         return DATABASE_NAME.equalsIgnoreCase(dbName);
     }
+<<<<<<< HEAD
+=======
+
+    public static boolean isInfoSchemaDb(Long dbID) {
+        if (dbID == null) {
+            return false;
+        }
+        return dbID.equals(SystemId.INFORMATION_SCHEMA_DB_ID);
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

@@ -36,6 +36,10 @@ package com.starrocks.http.rest;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+<<<<<<< HEAD
+=======
+import com.starrocks.authorization.AccessDeniedException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
@@ -47,6 +51,11 @@ import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.ListComparator;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
@@ -82,7 +91,11 @@ public class MigrationAction extends RestBaseAction {
     }
 
     @Override
+<<<<<<< HEAD
     protected void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException {
+=======
+    protected void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException, AccessDeniedException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         UserIdentity currentUser = ConnectContext.get().getCurrentUserIdentity();
         checkUserOwnsAdminRole(currentUser);
 
@@ -93,16 +106,28 @@ public class MigrationAction extends RestBaseAction {
             throw new DdlException("Missing params. Need database name");
         }
 
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (db == null) {
             throw new DdlException("Database[" + dbName + "] does not exist");
         }
 
         List<List<Comparable>> rows = Lists.newArrayList();
+<<<<<<< HEAD
         db.readLock();
         try {
             if (!Strings.isNullOrEmpty(tableName)) {
                 Table table = db.getTable(tableName);
+=======
+        Locker locker = new Locker();
+        locker.lockDatabase(db.getId(), LockType.READ);
+        try {
+            if (!Strings.isNullOrEmpty(tableName)) {
+                Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (table == null) {
                     throw new DdlException("Table[" + tableName + "] does not exist");
                 }
@@ -115,7 +140,11 @@ public class MigrationAction extends RestBaseAction {
 
                 for (Partition partition : olapTable.getPartitions()) {
                     String partitionName = partition.getName();
+<<<<<<< HEAD
                     MaterializedIndex baseIndex = partition.getBaseIndex();
+=======
+                    MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getBaseIndex();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     for (Tablet tablet : baseIndex.getTablets()) {
                         List<Comparable> row = Lists.newArrayList();
                         row.add(tableName);
@@ -131,7 +160,11 @@ public class MigrationAction extends RestBaseAction {
                 }
             } else {
                 // get all olap table
+<<<<<<< HEAD
                 for (Table table : db.getTables()) {
+=======
+                for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     if (table.getType() != TableType.OLAP) {
                         continue;
                     }
@@ -141,7 +174,11 @@ public class MigrationAction extends RestBaseAction {
 
                     for (Partition partition : olapTable.getPartitions()) {
                         String partitionName = partition.getName();
+<<<<<<< HEAD
                         MaterializedIndex baseIndex = partition.getBaseIndex();
+=======
+                        MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getBaseIndex();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         for (Tablet tablet : baseIndex.getTablets()) {
                             List<Comparable> row = Lists.newArrayList();
                             row.add(tableName);
@@ -159,7 +196,11 @@ public class MigrationAction extends RestBaseAction {
             }
 
         } finally {
+<<<<<<< HEAD
             db.readUnlock();
+=======
+            locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         ListComparator<List<Comparable>> comparator = new ListComparator<List<Comparable>>(0, 1, 2);

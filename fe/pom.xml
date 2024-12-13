@@ -41,6 +41,7 @@ under the License.
     <properties>
         <starrocks.home>${basedir}/../</starrocks.home>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+<<<<<<< HEAD
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>1.8</maven.compiler.target>
         <jprotobuf.version>2.4.12</jprotobuf.version>
@@ -59,6 +60,31 @@ under the License.
         <sonar.host.url>https://sonarcloud.io</sonar.host.url>
         <hikaricp.version>3.4.5</hikaricp.version>
         <kafka-clients.version>3.4.0</kafka-clients.version>
+=======
+        <maven.compiler.source>11</maven.compiler.source>
+        <maven.compiler.target>11</maven.compiler.target>
+        <jprotobuf.version>2.4.23</jprotobuf.version>
+        <log4j.version>2.19.0</log4j.version>
+        <jackson.version>2.15.2</jackson.version>
+        <spark.version>3.4.3</spark.version>
+        <tomcat.version>8.5.70</tomcat.version>
+        <parquet.version>1.14.0</parquet.version>
+        <hadoop.version>3.4.0</hadoop.version>
+        <gcs.connector.version>hadoop3-2.2.11</gcs.connector.version>
+        <skip.plugin>false</skip.plugin>
+        <hudi.version>0.15.0</hudi.version>
+        <hive-apache.version>3.1.2-22</hive-apache.version>
+        <dlf-metastore-client.version>0.2.14</dlf-metastore-client.version>
+        <sonar.organization>starrocks</sonar.organization>
+        <sonar.host.url>https://sonarcloud.io</sonar.host.url>
+        <odps.version>0.48.7-public</odps.version>
+        <kudu.version>1.17.0</kudu.version>
+        <hikaricp.version>3.4.5</hikaricp.version>
+        <kafka-clients.version>3.4.0</kafka-clients.version>
+        <arrow.version>18.0.0</arrow.version>
+        <protobuf.version>3.25.1</protobuf.version>
+        <grpc.version>1.63.0</grpc.version>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     </properties>
 
     <profiles>
@@ -111,12 +137,31 @@ under the License.
             </activation>
 
             <repositories>
+<<<<<<< HEAD
+=======
+                <!-- keep the central repository the first one among all repositories -->
+                <repository>
+                    <id>central</id>
+                    <name>central maven repo https</name>
+                    <url>https://repo.maven.apache.org/maven2/</url>
+                </repository>
+                <!-- for java-cup -->
+                <repository>
+                    <id>cloudera-public</id>
+                    <url>https://repository.cloudera.com/repository/public/</url>
+                </repository>
+                <repository>
+                    <id>cloudera</id>
+                    <url>https://repository.cloudera.com/repository/cloudera-repos/</url>
+                </repository>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 <!-- for leveldbjni-all-1.8.jar,commons-crypto-1.0.0.jar on aarch64-->
                 <repository>
                     <id>kunpeng</id>
                     <url>https://mirror.iscas.ac.cn/kunpeng/maven/</url>
                 </repository>
 
+<<<<<<< HEAD
                 <repository>
                     <id>central</id>
                     <name>central maven repo https</name>
@@ -137,17 +182,28 @@ under the License.
                     <id>oracleReleases</id>
                     <url>https://download.oracle.com/maven</url>
                 </repository>
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             </repositories>
 
             <pluginRepositories>
                 <pluginRepository>
+<<<<<<< HEAD
                     <id>spring-plugins</id>
                     <url>https://repo.spring.io/plugins-release/</url>
+=======
+                    <id>central</id>
+                    <url>https://repo.maven.apache.org/maven2/</url>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 </pluginRepository>
                 <!-- for cup-maven-plugin -->
                 <pluginRepository>
                     <id>cloudera-public</id>
+<<<<<<< HEAD
                     <url>https://repository.cloudera.com/artifactory/public/</url>
+=======
+                    <url>https://repository.cloudera.com/repository/public/</url>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 </pluginRepository>
             </pluginRepositories>
         </profile>
@@ -155,6 +211,10 @@ under the License.
 
     <dependencyManagement>
         <dependencies>
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             <dependency>
                 <groupId>com.starrocks</groupId>
                 <artifactId>plugin-common</artifactId>
@@ -214,11 +274,26 @@ under the License.
                 <version>2.3</version>
             </dependency>
 
+<<<<<<< HEAD
             <!-- https://mvnrepository.com/artifact/commons-net/commons-net -->
             <dependency>
                 <groupId>commons-net</groupId>
                 <artifactId>commons-net</artifactId>
                 <version>3.9.0</version>
+=======
+            <!-- https://mvnrepository.com/artifact/org.apache.kudu/kudu-client -->
+            <dependency>
+                <groupId>org.apache.kudu</groupId>
+                <artifactId>kudu-client</artifactId>
+                <version>${kudu.version}</version>
+            </dependency>
+
+            <!-- https://mvnrepository.com/artifact/com.github.seancfoley/ipaddress -->
+            <dependency>
+                <groupId>com.github.seancfoley</groupId>
+                <artifactId>ipaddress</artifactId>
+                <version>5.4.2</version>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/commons-validator/commons-validator -->
@@ -294,7 +369,11 @@ under the License.
             <dependency>
                 <groupId>com.starrocks</groupId>
                 <artifactId>starrocks-bdb-je</artifactId>
+<<<<<<< HEAD
                 <version>18.3.16</version>
+=======
+                <version>18.3.20</version>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/de.jflex/jflex -->
@@ -318,7 +397,21 @@ under the License.
                 <groupId>com.baidu</groupId>
                 <artifactId>jprotobuf</artifactId>
                 <version>${jprotobuf.version}</version>
+<<<<<<< HEAD
                 <classifier>jar-with-dependencies</classifier>
+=======
+            </dependency>
+
+            <!--Only used to compile protobuf-->
+            <!--jar-with-dependencies contains CVE problems, so set scope with provided to download it.-->
+            <!-- https://mvnrepository.com/artifact/com.baidu/jprotobuf -->
+            <dependency>
+                <groupId>com.baidu</groupId>
+                <artifactId>jprotobuf</artifactId>
+                <version>${jprotobuf.version}</version>
+                <classifier>jar-with-dependencies</classifier>
+                <scope>provided</scope>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/com.baidu/jprotobuf-rpc-common -->
@@ -328,10 +421,25 @@ under the License.
                 <version>1.9</version>
             </dependency>
 
+<<<<<<< HEAD
             <dependency>
                 <groupId>commons-io</groupId>
                 <artifactId>commons-io</artifactId>
                 <version>2.7</version>
+=======
+            <!-- https://mvnrepository.com/artifact/com.baidu/jprotobuf-precompile-plugin -->
+            <dependency>
+                <groupId>com.baidu</groupId>
+                <artifactId>jprotobuf-precompile-plugin</artifactId>
+                <version>2.2.12</version>
+                <scope>provided</scope>
+            </dependency>
+
+            <dependency>
+                <groupId>commons-io</groupId>
+                <artifactId>commons-io</artifactId>
+                <version>2.16.1</version>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/com.baidu/jprotobuf-rpc-core -->
@@ -366,7 +474,11 @@ under the License.
             <dependency>
                 <groupId>org.apache.thrift</groupId>
                 <artifactId>libthrift</artifactId>
+<<<<<<< HEAD
                 <version>0.13.0</version>
+=======
+                <version>0.20.0</version>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.apache.logging.log4j/log4j-api -->
@@ -390,6 +502,15 @@ under the License.
                 <version>${log4j.version}</version>
             </dependency>
 
+<<<<<<< HEAD
+=======
+            <dependency>
+                <groupId>org.apache.logging.log4j</groupId>
+                <artifactId>log4j-layout-template-json</artifactId>
+                <version>${log4j.version}</version>
+            </dependency>
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             <!-- https://mvnrepository.com/artifact/org.apache.logging.log4j/log4j-1.2-api -->
             <dependency>
                 <groupId>org.apache.logging.log4j</groupId>
@@ -401,14 +522,31 @@ under the License.
             <dependency>
                 <groupId>io.netty</groupId>
                 <artifactId>netty-all</artifactId>
+<<<<<<< HEAD
                 <version>4.1.61.Final</version>
+=======
+                <!--same with hadoop 3.4.0-->
+                <version>4.1.100.Final</version>
+            </dependency>
+
+            <!-- https://mvnrepository.com/artifact/org.apache.orc/orc-mapreduce/1.8.7 -->
+            <dependency>
+                <groupId>org.apache.orc</groupId>
+                <artifactId>orc-mapreduce</artifactId>
+                <version>1.8.7</version>
+                <scope>provided</scope>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/com.google.protobuf/protobuf-java -->
             <dependency>
                 <groupId>com.google.protobuf</groupId>
                 <artifactId>protobuf-java</artifactId>
+<<<<<<< HEAD
                 <version>3.16.3</version>
+=======
+                <version>3.25.5</version>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/com.squareup.okhttp3/okhttp -->
@@ -456,7 +594,11 @@ under the License.
             <dependency>
                 <groupId>org.jboss.xnio</groupId>
                 <artifactId>xnio-nio</artifactId>
+<<<<<<< HEAD
                 <version>3.8.10.Final</version>
+=======
+                <version>3.8.16.Final</version>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             </dependency>
 
             <!-- support jdk9 -->
@@ -521,7 +663,10 @@ under the License.
                 <groupId>org.apache.spark</groupId>
                 <artifactId>spark-sql_2.12</artifactId>
                 <version>${spark.version}</version>
+<<<<<<< HEAD
                 <scope>provided</scope>
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.apache.spark/spark-catalyst -->
@@ -529,7 +674,10 @@ under the License.
                 <groupId>org.apache.spark</groupId>
                 <artifactId>spark-catalyst_2.12</artifactId>
                 <version>${spark.version}</version>
+<<<<<<< HEAD
                 <scope>provided</scope>
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/io.trino.hive/hive-apache -->
@@ -537,6 +685,19 @@ under the License.
                 <groupId>io.trino.hive</groupId>
                 <artifactId>hive-apache</artifactId>
                 <version>${hive-apache.version}</version>
+<<<<<<< HEAD
+=======
+                <exclusions>
+                    <exclusion>
+                        <groupId>org.apache.parquet</groupId>
+                        <artifactId>*</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>org.apache.avro</groupId>
+                        <artifactId>*</artifactId>
+                    </exclusion>
+                </exclusions>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/com.aliyun.datalake/metastore-client-hive3 -->
@@ -564,6 +725,7 @@ under the License.
                 </exclusions>
             </dependency>
 
+<<<<<<< HEAD
             <!-- https://mvnrepository.com/artifact/org.apache.parquet/parquet-column -->
             <dependency>
                 <groupId>org.apache.parquet</groupId>
@@ -572,6 +734,8 @@ under the License.
                 <scope>provided</scope>
             </dependency>
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             <!-- https://mvnrepository.com/artifact/org.apache.parquet/parquet-hadoop -->
             <dependency>
                 <groupId>org.apache.parquet</groupId>
@@ -588,6 +752,25 @@ under the License.
                 <scope>provided</scope>
             </dependency>
 
+<<<<<<< HEAD
+=======
+            <!-- https://mvnrepository.com/artifact/org.apache.parquet/parquet-column -->
+            <dependency>
+                <groupId>org.apache.parquet</groupId>
+                <artifactId>parquet-column</artifactId>
+                <version>${parquet.version}</version>
+                <scope>provided</scope>
+            </dependency>
+
+            <!-- https://mvnrepository.com/artifact/org.apache.parquet/parquet-avro -->
+            <dependency>
+                <groupId>org.apache.parquet</groupId>
+                <artifactId>parquet-avro</artifactId>
+                <version>${parquet.version}</version>
+                <scope>provided</scope>
+            </dependency>
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             <!-- https://mvnrepository.com/artifact/commons-collections/commons-collections -->
             <dependency>
                 <groupId>commons-collections</groupId>
@@ -636,6 +819,21 @@ under the License.
                 </exclusions>
             </dependency>
 
+<<<<<<< HEAD
+=======
+            <dependency>
+                <groupId>org.apache.hadoop</groupId>
+                <artifactId>hadoop-client-api</artifactId>
+                <version>${hadoop.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.hadoop</groupId>
+                <artifactId>hadoop-client-runtime</artifactId>
+                <version>${hadoop.version}</version>
+            </dependency>
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             <!-- https://mvnrepository.com/artifact/org.apache.hadoop/hadoop-aws -->
             <dependency>
                 <groupId>org.apache.hadoop</groupId>
@@ -643,6 +841,30 @@ under the License.
                 <version>${hadoop.version}</version>
             </dependency>
 
+<<<<<<< HEAD
+=======
+            <!-- https://mvnrepository.com/artifact/org.apache.hadoop/hadoop-aliyun -->
+            <dependency>
+                <groupId>org.apache.hadoop</groupId>
+                <artifactId>hadoop-aliyun</artifactId>
+                <version>${hadoop.version}</version>
+            </dependency>
+
+            <!-- https://mvnrepository.com/artifact/com.qcloud.cos/hadoop-cos -->
+            <dependency>
+                <groupId>com.qcloud.cos</groupId>
+                <artifactId>hadoop-cos</artifactId>
+                <version>3.3.0-8.3.2</version>
+            </dependency>
+
+            <!-- https://mvnrepository.com/artifact/com.qcloud/chdfs_hadoop_plugin_network -->
+            <dependency>
+                <groupId>com.qcloud</groupId>
+                <artifactId>chdfs_hadoop_plugin_network</artifactId>
+                <version>3.2</version>
+            </dependency>
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             <!-- https://mvnrepository.com/artifact/org.apache.hadoop/hadoop-azure-datalake -->
             <dependency>
                 <groupId>org.apache.hadoop</groupId>
@@ -679,6 +901,16 @@ under the License.
                 <version>${hudi.version}</version>
             </dependency>
 
+<<<<<<< HEAD
+=======
+            <!-- https://mvnrepository.com/artifact/org.apache.hudi/hudi-io -->
+            <dependency>
+                <groupId>org.apache.hudi</groupId>
+                <artifactId>hudi-io</artifactId>
+                <version>${hudi.version}</version>
+            </dependency>
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             <!-- https://mvnrepository.com/artifact/org.apache.hudi/hudi-hadoop-mr -->
             <dependency>
                 <groupId>org.apache.hudi</groupId>
@@ -694,11 +926,19 @@ under the License.
                 <scope>import</scope>
             </dependency>
 
+<<<<<<< HEAD
             <!-- https://mvnrepository.com/artifact/com.mysql/mysql-connector-j -->
             <dependency>
                 <groupId>com.mysql</groupId>
                 <artifactId>mysql-connector-j</artifactId>
                 <version>8.0.33</version>
+=======
+            <!-- https://mvnrepository.com/artifact/org.mariadb.jdbc/mariadb-java-client -->
+            <dependency>
+                <groupId>org.mariadb.jdbc</groupId>
+                <artifactId>mariadb-java-client</artifactId>
+                <version>3.3.2</version>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.postgresql/postgresql -->
@@ -708,6 +948,38 @@ under the License.
                 <version>42.4.4</version>
             </dependency>
 
+<<<<<<< HEAD
+=======
+            <!-- https://mvnrepository.com/artifact/com.clickhouse/clickhouse-jdbc -->
+            <!-- we need clickhouse driver for jdbc connector -->
+            <dependency>
+                <groupId>com.clickhouse</groupId>
+                <artifactId>clickhouse-jdbc</artifactId>
+                <version>0.4.6</version>
+            </dependency>
+			
+			<!-- https://mvnrepository.com/artifact/com.oracle.database.jdbc/ojdbc10 -->
+            <dependency>
+                <groupId>com.oracle.database.jdbc</groupId>
+                <artifactId>ojdbc10</artifactId>
+                <version>19.18.0.0</version>
+            </dependency>
+
+            <!-- https://mvnrepository.com/artifact/com.oracle.database.nls/orai18n -->
+            <dependency>
+                <groupId>com.oracle.database.nls</groupId>
+                <artifactId>orai18n</artifactId>
+                <version>19.18.0.0</version>
+            </dependency>
+
+            <!-- https://mvnrepository.com/artifact/com.microsoft.sqlserver/mssql-jdbc/12.4.2.jre11 -->
+            <dependency>
+                <groupId>com.microsoft.sqlserver</groupId>
+                <artifactId>mssql-jdbc</artifactId>
+                <version>12.4.2.jre11</version>
+            </dependency>
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             <!-- https://mvnrepository.com/artifact/com.mockrunner/mockrunner-jdbc -->
             <dependency>
                 <groupId>com.mockrunner</groupId>
@@ -730,6 +1002,91 @@ under the License.
                 <version>4.0.9</version>
             </dependency>
 
+<<<<<<< HEAD
+=======
+            <dependency>
+                <groupId>io.airlift</groupId>
+                <artifactId>concurrent</artifactId>
+                <version>202</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.aliyun.odps</groupId>
+                <artifactId>odps-sdk-core</artifactId>
+                <version>${odps.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.aliyun.odps</groupId>
+                <artifactId>odps-sdk-table-api</artifactId>
+                <version>${odps.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.grpc</groupId>
+                <artifactId>grpc-api</artifactId>
+                <version>${grpc.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.grpc</groupId>
+                <artifactId>grpc-netty-shaded</artifactId>
+                <version>${grpc.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.grpc</groupId>
+                <artifactId>grpc-protobuf</artifactId>
+                <version>${grpc.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.grpc</groupId>
+                <artifactId>grpc-stub</artifactId>
+                <version>${grpc.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.grpc</groupId>
+                <artifactId>grpc-core</artifactId>
+                <version>${grpc.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.arrow</groupId>
+                <artifactId>arrow-vector</artifactId>
+                <version>${arrow.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.arrow</groupId>
+                <artifactId>arrow-memory-netty</artifactId>
+                <version>${arrow.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.arrow</groupId>
+                <artifactId>flight-sql</artifactId>
+                <version>${arrow.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.arrow</groupId>
+                <artifactId>flight-core</artifactId>
+                <version>${arrow.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.arrow</groupId>
+                <artifactId>flight-sql-jdbc-driver</artifactId>
+                <version>${arrow.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.arrow</groupId>
+                <artifactId>arrow-jdbc</artifactId>
+                <version>${arrow.version}</version>
+            </dependency>
+
+            <!-- https://mvnrepository.com/artifact/org.owasp.encoder/encoder -->
+            <dependency>
+                <groupId>org.owasp.encoder</groupId>
+                <artifactId>encoder</artifactId>
+                <version>1.3.1</version>
+            </dependency>
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         </dependencies>
     </dependencyManagement>
 

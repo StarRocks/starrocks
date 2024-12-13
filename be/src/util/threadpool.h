@@ -34,6 +34,11 @@
 
 #pragma once
 
+<<<<<<< HEAD
+=======
+#include <fmt/format.h>
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include <atomic>
 #include <boost/intrusive/list.hpp>
 #include <boost/intrusive/list_hook.hpp>
@@ -48,6 +53,13 @@
 
 #include "common/status.h"
 #include "gutil/ref_counted.h"
+<<<<<<< HEAD
+=======
+#include "util/bthreads/semaphore.h"
+// resolve `barrier` macro conflicts with boost/thread.hpp header file
+#undef barrier
+#include "cpu_util.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "util/metrics.h"
 #include "util/monotime.h"
 #include "util/priority_queue.h"
@@ -119,9 +131,17 @@ public:
     ThreadPoolBuilder& set_max_threads(int max_threads);
     ThreadPoolBuilder& set_max_queue_size(int max_queue_size);
     ThreadPoolBuilder& set_idle_timeout(const MonoDelta& idle_timeout);
+<<<<<<< HEAD
 
     // Instantiate a new ThreadPool with the existing builder arguments.
     [[nodiscard]] Status build(std::unique_ptr<ThreadPool>* pool) const;
+=======
+    ThreadPoolBuilder& set_cpuids(const CpuUtil::CpuIds& cpuids);
+    ThreadPoolBuilder& set_borrowed_cpuids(const std::vector<CpuUtil::CpuIds>& borrowed_cpuids);
+
+    // Instantiate a new ThreadPool with the existing builder arguments.
+    Status build(std::unique_ptr<ThreadPool>* pool) const;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 private:
     friend class ThreadPool;
@@ -130,6 +150,11 @@ private:
     int _max_threads;
     int _max_queue_size;
     MonoDelta _idle_timeout;
+<<<<<<< HEAD
+=======
+    CpuUtil::CpuIds _cpuids;
+    std::vector<CpuUtil::CpuIds> _borrowed_cpuids;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     ThreadPoolBuilder(const ThreadPoolBuilder&) = delete;
     const ThreadPoolBuilder& operator=(const ThreadPoolBuilder&) = delete;
@@ -191,10 +216,17 @@ public:
     void shutdown();
 
     // Submits a Runnable class.
+<<<<<<< HEAD
     [[nodiscard]] Status submit(std::shared_ptr<Runnable> r, Priority pri = LOW_PRIORITY);
 
     // Submits a function bound using std::bind(&FuncName, args...).
     [[nodiscard]] Status submit_func(std::function<void()> f, Priority pri = LOW_PRIORITY);
+=======
+    Status submit(std::shared_ptr<Runnable> r, Priority pri = LOW_PRIORITY);
+
+    // Submits a function bound using std::bind(&FuncName, args...).
+    Status submit_func(std::function<void()> f, Priority pri = LOW_PRIORITY);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // Waits until all the tasks are completed.
     void wait();
@@ -204,7 +236,11 @@ public:
     [[nodiscard]] bool wait_for(const MonoDelta& delta);
 
     // dynamic update max threads num
+<<<<<<< HEAD
     [[nodiscard]] Status update_max_threads(int max_threads);
+=======
+    Status update_max_threads(int max_threads);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // dynamic update min threads num
     Status update_min_threads(int max_threads);
@@ -253,6 +289,11 @@ public:
 
     int64_t total_execute_time_ns() const { return _total_execute_time_ns.value(); }
 
+<<<<<<< HEAD
+=======
+    void bind_cpus(const CpuUtil::CpuIds& cpuids, const std::vector<CpuUtil::CpuIds>& borrowed_cpuids);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 private:
     friend class ThreadPoolBuilder;
     friend class ThreadPoolToken;
@@ -377,6 +418,12 @@ private:
     // ExecutionMode::CONCURRENT token used by the pool for tokenless submission.
     std::unique_ptr<ThreadPoolToken> _tokenless;
 
+<<<<<<< HEAD
+=======
+    CpuUtil::CpuIds _cpuids;
+    std::vector<CpuUtil::CpuIds> _borrowed_cpuids;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // Total number of tasks that have finished
     CoreLocalCounter<int64_t> _total_executed_tasks{MetricUnit::NOUNIT};
 
@@ -404,10 +451,17 @@ public:
     ~ThreadPoolToken();
 
     // Submits a Runnable class with specified priority.
+<<<<<<< HEAD
     [[nodiscard]] Status submit(std::shared_ptr<Runnable> r, ThreadPool::Priority pri = ThreadPool::LOW_PRIORITY);
 
     // Submits a function bound using std::bind(&FuncName, args...)  with specified priority.
     [[nodiscard]] Status submit_func(std::function<void()> f, ThreadPool::Priority pri = ThreadPool::LOW_PRIORITY);
+=======
+    Status submit(std::shared_ptr<Runnable> r, ThreadPool::Priority pri = ThreadPool::LOW_PRIORITY);
+
+    // Submits a function bound using std::bind(&FuncName, args...)  with specified priority.
+    Status submit_func(std::function<void()> f, ThreadPool::Priority pri = ThreadPool::LOW_PRIORITY);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // Marks the token as unusable for future submissions. Any queued tasks not
     // yet running are destroyed. If tasks are in flight, Shutdown() will wait
@@ -500,4 +554,39 @@ private:
     const ThreadPoolToken& operator=(const ThreadPoolToken&) = delete;
 };
 
+<<<<<<< HEAD
+=======
+// A class use to limit the number of tasks submitted to the thread pool.
+class ConcurrencyLimitedThreadPoolToken {
+public:
+    explicit ConcurrencyLimitedThreadPoolToken(ThreadPool* pool, int max_concurrency)
+            : _pool(pool), _sem(std::make_shared<bthreads::CountingSemaphore<>>(max_concurrency)) {}
+
+    DISALLOW_COPY_AND_MOVE(ConcurrencyLimitedThreadPoolToken);
+
+    Status submit_func(std::function<void()> task, std::chrono::system_clock::time_point deadline) {
+        if (!_sem->try_acquire_until(deadline)) {
+            auto t = MilliSecondsSinceEpochFromTimePoint(deadline);
+            return Status::TimedOut(fmt::format("acquire semaphore reached deadline={}", t));
+        }
+        auto task_with_semaphore_release = [sem = _sem, task = std::move(task)]() {
+            task();
+            // The `ConcurrencyLimitedThreadPoolToken` object may have been destroyed
+            // before `release()` the semaphore, so we use `std::shared_ptr` to manage
+            // the semaphore to ensure it's still alive when calling `release()`.
+            sem->release();
+        };
+        auto st = _pool->submit_func(std::move(task_with_semaphore_release));
+        if (!st.ok()) {
+            _sem->release();
+        }
+        return st;
+    }
+
+private:
+    ThreadPool* _pool;
+    std::shared_ptr<bthreads::CountingSemaphore<>> _sem;
+};
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // namespace starrocks

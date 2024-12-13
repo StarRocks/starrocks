@@ -35,6 +35,11 @@
 package com.starrocks.http.action;
 
 import com.google.common.base.Strings;
+<<<<<<< HEAD
+=======
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.PrivilegeType;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.proc.ProcNodeInterface;
@@ -47,8 +52,11 @@ import com.starrocks.http.BaseResponse;
 import com.starrocks.http.HttpAuthManager;
 import com.starrocks.http.HttpAuthManager.SessionValue;
 import com.starrocks.http.rest.RestBaseResult;
+<<<<<<< HEAD
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.PrivilegeType;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
@@ -272,6 +280,11 @@ public class WebBaseAction extends BaseAction {
         String key = UUID.randomUUID().toString();
         DefaultCookie cookie = new DefaultCookie(STARROCKS_SESSION_ID, key);
         cookie.setMaxAge(STARROCKS_SESSION_EXPIRED_TIME);
+<<<<<<< HEAD
+=======
+        cookie.setPath("/");
+        cookie.setHttpOnly(true);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         response.addCookie(cookie);
         HttpAuthManager.getInstance().addSessionValue(key, value);
     }
@@ -307,9 +320,12 @@ public class WebBaseAction extends BaseAction {
                     .append("ha")
                     .append("</a></li>");
         }
+<<<<<<< HEAD
         sb.append("<li id=\"nav_help\"><a href=\"/help\">")
                 .append("help")
                 .append("</a></li></tr>");
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         sb.append(NAVIGATION_BAR_SUFFIX);
     }
@@ -357,7 +373,11 @@ public class WebBaseAction extends BaseAction {
                 node = instance.open(path);
             }
         } catch (AnalysisException e) {
+<<<<<<< HEAD
             LOG.warn(e.getMessage());
+=======
+            LOG.warn(e.getMessage(), e);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return null;
         }
         return node;

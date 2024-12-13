@@ -58,10 +58,17 @@ public class UpdateDbUsedDataQuotaDaemon extends FrontendDaemon {
 
     private void updateAllDatabaseUsedDataQuota() {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+<<<<<<< HEAD
         List<Long> dbIdList = globalStateMgr.getDbIds();
         GlobalTransactionMgr globalTransactionMgr = globalStateMgr.getGlobalTransactionMgr();
         for (Long dbId : dbIdList) {
             Database db = globalStateMgr.getDb(dbId);
+=======
+        List<Long> dbIdList = globalStateMgr.getLocalMetastore().getDbIds();
+        GlobalTransactionMgr globalTransactionMgr = globalStateMgr.getGlobalTransactionMgr();
+        for (Long dbId : dbIdList) {
+            Database db = globalStateMgr.getLocalMetastore().getDb(dbId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (db == null) {
                 LOG.warn("Database [" + dbId + "] doese not exist, skip to update database used data quota");
                 continue;

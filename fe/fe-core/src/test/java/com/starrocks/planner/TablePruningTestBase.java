@@ -23,17 +23,26 @@ import com.starrocks.utframe.UtFrameUtils;
 import joptsimple.internal.Strings;
 import kotlin.text.Charsets;
 import org.apache.commons.io.IOUtils;
+<<<<<<< HEAD
 import org.apache.hadoop.io.Text;
 import org.junit.Assert;
 
 import java.io.File;
 import java.io.FileInputStream;
+=======
+import org.junit.Assert;
+
+import java.io.File;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.file.Files;
 import java.util.Arrays;
+<<<<<<< HEAD
 import java.util.Collections;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
@@ -139,6 +148,11 @@ public class TablePruningTestBase {
                               Consumer<SessionVariable> svSetter) {
         try {
             svSetter.accept(ctx.getSessionVariable());
+<<<<<<< HEAD
+=======
+            ctx.getSessionVariable().setOptimizerExecuteTimeout(30000);
+            ctx.getSessionVariable().setEnablePredicateMoveAround(true);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
             int realNumOfHashJoin =
                     (int) Arrays.stream(plan.split("\n")).filter(ln -> HashJoinPattern.matcher(ln).find()).count();

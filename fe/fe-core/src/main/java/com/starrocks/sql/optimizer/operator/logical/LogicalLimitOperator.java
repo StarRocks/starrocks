@@ -22,9 +22,18 @@ import com.starrocks.sql.optimizer.RowOutputInfo;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
+<<<<<<< HEAD
 
 import java.util.ArrayList;
 import java.util.List;
+=======
+import com.starrocks.sql.optimizer.property.DomainProperty;
+import org.apache.commons.collections4.CollectionUtils;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 public class LogicalLimitOperator extends LogicalOperator {
     public enum Phase {
@@ -37,7 +46,11 @@ public class LogicalLimitOperator extends LogicalOperator {
 
     private Phase phase;
 
+<<<<<<< HEAD
     public LogicalLimitOperator(long limit, long offset, Phase phase) {
+=======
+    private LogicalLimitOperator(long limit, long offset, Phase phase) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         super(OperatorType.LOGICAL_LIMIT);
         Preconditions.checkState(limit < 0 || limit + offset >= 0,
                 String.format("limit(%d) + offset(%d) is too large and yields an overflow result(%d)", limit, offset,
@@ -63,20 +76,27 @@ public class LogicalLimitOperator extends LogicalOperator {
         return new LogicalLimitOperator(limit, offset, Phase.INIT);
     }
 
+<<<<<<< HEAD
     public static LogicalLimitOperator global(long limit) {
         return global(limit, DEFAULT_OFFSET);
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static LogicalLimitOperator global(long limit, long offset) {
         return new LogicalLimitOperator(limit, offset, Phase.GLOBAL);
     }
 
     public static LogicalLimitOperator local(long limit) {
+<<<<<<< HEAD
         return local(limit, DEFAULT_OFFSET);
     }
 
     public static LogicalLimitOperator local(long limit, long offset) {
         return new LogicalLimitOperator(limit, offset, Phase.LOCAL);
+=======
+        return new LogicalLimitOperator(limit, DEFAULT_OFFSET, Phase.LOCAL);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public boolean hasOffset() {
@@ -117,6 +137,17 @@ public class LogicalLimitOperator extends LogicalOperator {
         return projectInputRow(inputs.get(0).getRowOutputInfo());
     }
 
+<<<<<<< HEAD
+=======
+    @Override
+    public DomainProperty deriveDomainProperty(List<OptExpression> inputs) {
+        if (CollectionUtils.isEmpty(inputs)) {
+            return new DomainProperty(Map.of());
+        }
+        return inputs.get(0).getDomainProperty();
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public <R, C> R accept(OptExpressionVisitor<R, C> visitor, OptExpression optExpression, C context) {
         return visitor.visitLogicalLimit(optExpression, context);
     }

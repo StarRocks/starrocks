@@ -14,7 +14,10 @@
 
 package com.starrocks.task;
 
+<<<<<<< HEAD
 import com.starrocks.task.AgentTask;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.TReplicateSnapshotRequest;
 import com.starrocks.thrift.TSnapshotInfo;
 import com.starrocks.thrift.TTabletType;
@@ -35,11 +38,20 @@ public class ReplicateSnapshotTask extends AgentTask {
     private final int srcSchemaHash;
     private final long srcVisibleVersion;
     private final List<TSnapshotInfo> srcSnapshotInfos;
+<<<<<<< HEAD
 
     public ReplicateSnapshotTask(long backendId, long dbId, long tableId, long partitionId, long indexId, long tabletId,
             TTabletType tabletType, long transactionId, int schemaHash, long visibleVersion,
             String srcToken, long srcTabletId, TTabletType srcTabletType, int srcSchemaHash,
             long srcVisibleVersion, List<TSnapshotInfo> srcSnapshotInfos) {
+=======
+    private final byte[] encryptionMeta;
+
+    public ReplicateSnapshotTask(long backendId, long dbId, long tableId, long partitionId, long indexId, long tabletId,
+                                 TTabletType tabletType, long transactionId, int schemaHash, long visibleVersion, String srcToken,
+                                 long srcTabletId, TTabletType srcTabletType, int srcSchemaHash, long srcVisibleVersion,
+                                 List<TSnapshotInfo> srcSnapshotInfos, byte[] encryptionMeta) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         super(null, backendId, TTaskType.REPLICATE_SNAPSHOT, dbId, tableId, partitionId, indexId, tabletId, tabletId,
                 System.currentTimeMillis());
         this.transactionId = transactionId;
@@ -52,6 +64,10 @@ public class ReplicateSnapshotTask extends AgentTask {
         this.srcSchemaHash = srcSchemaHash;
         this.srcVisibleVersion = srcVisibleVersion;
         this.srcSnapshotInfos = srcSnapshotInfos;
+<<<<<<< HEAD
+=======
+        this.encryptionMeta = encryptionMeta;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public TReplicateSnapshotRequest toThrift() {
@@ -71,6 +87,10 @@ public class ReplicateSnapshotTask extends AgentTask {
         request.setSrc_schema_hash(srcSchemaHash);
         request.setSrc_visible_version(srcVisibleVersion);
         request.setSrc_snapshot_infos(srcSnapshotInfos);
+<<<<<<< HEAD
+=======
+        request.setEncryption_meta(encryptionMeta);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         return request;
     }

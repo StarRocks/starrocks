@@ -17,8 +17,12 @@ package com.starrocks.planner;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.analysis.TupleId;
 import com.starrocks.catalog.HudiTable;
+<<<<<<< HEAD
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.connector.Connector;
+=======
+import com.starrocks.connector.CatalogConnector;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.server.GlobalStateMgr;
@@ -31,7 +35,11 @@ import java.util.HashMap;
 public class HudiScanNodeTest {
     @Test
     public void testInit(@Mocked GlobalStateMgr globalStateMgr,
+<<<<<<< HEAD
                          @Mocked Connector connector,
+=======
+                         @Mocked CatalogConnector connector,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                          @Mocked HudiTable table) {
         String catalog = "XXX";
         CloudConfiguration cc = CloudConfigurationFactory.buildCloudConfigurationForStorage(new HashMap<>());

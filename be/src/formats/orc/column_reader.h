@@ -161,6 +161,18 @@ private:
                                         const size_t column_start, const size_t size);
 };
 
+<<<<<<< HEAD
+=======
+class TimeColumnReader : public PrimitiveColumnReader {
+public:
+    TimeColumnReader(const TypeDescriptor& type, const orc::Type* orc_type, bool nullable, OrcChunkReader* reader)
+            : PrimitiveColumnReader(type, orc_type, nullable, reader) {}
+    ~TimeColumnReader() override = default;
+
+    Status get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size) override;
+};
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 class DecimalColumnReader : public PrimitiveColumnReader {
 public:
     DecimalColumnReader(const TypeDescriptor& type, const orc::Type* orc_type, bool nullable, OrcChunkReader* reader)

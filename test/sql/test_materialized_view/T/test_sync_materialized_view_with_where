@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 -- name: test_sync_materialized_view_rewrite @sequential
+=======
+-- name: test_sync_materialized_view_with_where @sequential
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 CREATE TABLE `duplicate_tbl` (
     `k1` date NULL COMMENT "",   
     `k2` datetime NULL COMMENT "",   

@@ -1,0 +1,1031 @@
+-- name: test_parse_and_rewrite_or_predicate
+
+-- Setup configs.
+set scan_or_to_union_limit = 1;
+-- set enable_show_predicate_tree_in_profile = true;
+set enable_profile = true;
+set enable_async_profile=false;
+
+-- Prepare tables and data.
+CREATE TABLE __row_util_base (
+  k1 bigint NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 32
+PROPERTIES (
+    "replication_num" = "1"
+);
+insert into __row_util_base select generate_series from TABLE(generate_series(0, 10000 - 1));
+insert into __row_util_base select * from __row_util_base; -- 20000
+insert into __row_util_base select * from __row_util_base; -- 40000
+insert into __row_util_base select * from __row_util_base; -- 80000
+insert into __row_util_base select * from __row_util_base; -- 160000
+insert into __row_util_base select * from __row_util_base; -- 320000
+insert into __row_util_base select * from __row_util_base; -- 640000
+insert into __row_util_base select * from __row_util_base; -- 1280000
+
+CREATE TABLE __row_util (
+  idx bigint NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`idx`)
+DISTRIBUTED BY HASH(`idx`) BUCKETS 32
+PROPERTIES (
+    "replication_num" = "1"
+);
+insert into __row_util select row_number() over() as idx from __row_util_base;
+
+
+CREATE TABLE t1 (
+  k1 bigint NULL,
+  c_int_1_seq bigint NULL,
+  c_int_2_seq bigint NULL,
+
+  c_str_1_seq String NULL,
+  c_str_2_seq String NULL,
+
+  c_str_3_low1 String NULL,
+  c_str_4_low2 String NULL,
+
+  c_str_5_low_non_null1 String NOT NULL,
+  c_str_6_low_non_null2 String NOT NULL,
+
+  c_str_7_seq_non_null1 String NOT NULL,
+  c_str_8_seq_non_null2 String NOT NULL,
+
+  c_date_1_seq date NULL,
+  c_date_2_seq date NULL,
+  c_datetime_1_seq datetime NULL,
+  c_datetime_2_seq datetime NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 32
+PROPERTIES (
+    "replication_num" = "1"
+);
+
+insert into t1
+select 
+    idx,
+    idx + 1280000,
+    idx + 1280000*2,
+
+    concat('abc1-', idx),
+    concat('abc2-', idx),
+    case when idx % 3 = 0 then 'a1' when idx % 3 = 1 then 'b1' else 'c1' end,
+    case when idx < 1280000/4 then 'a2' when idx < 1280000/4*2 then 'b2' when idx < 1280000/4*3 then 'c2' else 'd2' end,
+
+    case when idx % 3 = 0 then 'a1' when idx % 3 = 1 then 'b1' else 'c1' end,
+    case when idx < 1280000/4 then 'a2' when idx < 1280000/4*2 then 'b2' when idx < 1280000/4*3 then 'c2' else 'd2' end,
+    concat('abc1-', idx),
+    concat('abc2-', idx),
+
+    cast(date_sub('2023-11-02', interval cast(idx % 100 as int) day) as date),
+    cast(date_sub('2023-11-02', interval cast(idx % 1000 as int) day) as date),
+    
+    date_sub('2023-11-02', interval cast(idx % (100 * 3600 * 24) as int) second),
+    date_sub('2023-11-02', interval cast(idx % (1000 * 3600 * 24) as int) second)
+from __row_util ;
+
+insert into t1 (k1, c_str_5_low_non_null1, c_str_6_low_non_null2, c_str_7_seq_non_null1, c_str_8_seq_non_null2) select null, '<null>', '<null>', '<null>', '<null>';
+insert into t1 (k1, c_str_5_low_non_null1, c_str_6_low_non_null2, c_str_7_seq_non_null1, c_str_8_seq_non_null2) select null, '<null>', '<null>', '<null>', '<null>';
+
+
+CREATE TABLE t2 (
+  k1 bigint NULL,
+  c_int_1_seq bigint SUM NULL,
+  c_int_2_seq bigint SUM NULL,
+  c_str_1_seq String MAX NULL,
+  c_str_2_seq String MAX NULL,
+  c_str_3_low1 String MAX NULL,
+  c_str_4_low2 String MAX NULL,
+
+  c_str_5_low_non_null1 String MAX NOT NULL,
+  c_str_6_low_non_null2 String MAX NOT NULL,
+
+  c_str_7_seq_non_null1 String MAX NOT NULL,
+  c_str_8_seq_non_null2 String MAX NOT NULL,
+
+  c_date_1_seq date MAX NULL,
+  c_date_2_seq date MAX NULL,
+  c_datetime_1_seq datetime MAX NULL,
+  c_datetime_2_seq datetime MAX NULL
+) ENGINE=OLAP
+AGGREGATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 32
+PROPERTIES (
+    "replication_num" = "1"
+);
+insert into t2 select * from t1;
+insert into t2 select * from t1;
+
+create view __pred_profile(idx, k, v) as 
+select 1, 2, 3;
+
+-- TODO: use the real profile view
+-- create view __pred_profile(idx, k, v) as 
+-- with 
+--   __pred_profile as (
+--       select last_query_id() as query_id, unnest as line from (values(1))t(v) join unnest(split(get_query_profile(last_query_id()), "\n") )
+--   ),
+--   result as (
+--     select 1 as idx, "PushdownPredicates" as k, regexp_extract(line, ".*- PushdownPredicates: (?:.*\\()?(\\d+)\\)?", 1) as v from __pred_profile where line like "%- PushdownPredicates%"
+--     UNION ALL
+--     select 2, "NonPushdownPredicates" as k, regexp_extract(line, ".*- NonPushdownPredicates: (?:.*\\()?(\\d+)\\)?", 1) as v from __pred_profile where line like "%- NonPushdownPredicates%"
+    
+--     UNION ALL
+--     select 3, "PushdownPredicateTree" as k, regexp_extract(line, ".*- PushdownPredicateTree: (.*)", 1) as v from __pred_profile where line like "%- PushdownPredicateTree%"
+--     UNION ALL
+--     select 4, "NonPushdownPredicateTree" as k, regexp_extract(line, ".*- NonPushdownPredicateTree: (.*)?", 1) as v from __pred_profile where line like "%- NonPushdownPredicateTree%"
+--   )
+-- select * from result order by idx, k, v;
+
+
+-- 1. Base test.
+select *
+from t1
+where 
+  k1 = 1 or c_int_1_seq = 1280000+2 
+order by k1;
+ select * from __pred_profile order by idx, k, v;
+
+
+-- 2. Test whether the predicates can be parsed.
+select *
+from t1
+where 
+  k1 = 1 or c_int_1_seq = 1280000+2 or k1 + c_int_1_seq = 1280000+3+3;
+ select * from __pred_profile order by idx, k, v;
+
+
+select *
+from t1
+where 
+  (k1 = 1 or c_int_1_seq = 1280000+2 or k1 + c_int_1_seq = 1280000+3+3) and (k1 < 3);
+ select * from __pred_profile order by idx, k, v;
+
+
+select *
+from t1
+where 
+  c_int_1_seq = 1280000+2 and (k1 = 1 or (k1 < 3 and k1 + c_int_1_seq = 1280000+3+3));
+ select * from __pred_profile order by idx, k, v;
+
+
+select *
+from t2
+where 
+  (k1 = 1 or c_int_1_seq = 1280000+2) and (k1 < 3)
+order by k1;
+ select * from __pred_profile order by k, v;
+
+
+select *
+from t2
+where 
+  ((k1 = 1 or k1=2 ) and k1 < 3) or (k1 = 4)
+order by k1;
+ select * from __pred_profile order by k, v;
+
+
+-- 3. Test parse or predicate by value ranges.
+
+-- single.
+
+-- normalize_in_or_equal_predicate
+-- AND
+select count(1) from t1 where c_int_1_seq in (1280000+10, 1280000+100, 1280000+1000, 180000+10000);
+ select * from __pred_profile order by idx, k, v;
+select count(1) from t1 where c_int_1_seq in (1280000+10, 1280000+100, 1280000+1000, 180000+10000, null);
+ select * from __pred_profile order by idx, k, v;
+
+select count(1) from t1 where c_int_1_seq = 1280000+10;
+ select * from __pred_profile order by idx, k, v;
+select count(1) from t1 where 1280000+10 = c_int_1_seq;
+ select * from __pred_profile order by idx, k, v;
+
+select count(1) from t1 where c_str_1_seq = 'abc1-128';
+ select * from __pred_profile order by idx, k, v;
+select count(1) from t1 where c_str_3_low1 = 'a1';
+ select * from __pred_profile order by idx, k, v;
+
+select count(1) from t1 where c_date_1_seq in ('2023-11-01','2023-10-10', '2023-09-10', '2023-10-09 01:00:00', '2023-10-10 01:00:00');
+ select * from __pred_profile order by idx, k, v;
+
+select count(1) from t1 where c_date_1_seq = '2023-11-01';
+ select * from __pred_profile order by idx, k, v;
+select count(1) from t1 where c_date_1_seq = '2023-11-01 01:00:00';
+ select * from __pred_profile order by idx, k, v;
+
+select count(1) from t1 where c_datetime_2_seq in ('2023-11-01', '2023-11-01 01:00:00', '2023-10-10', '2023-09-10', '2023-10-09 01:00:00', '2023-10-10 01:00:00');
+ select * from __pred_profile order by idx, k, v;
+select count(1) from t1 where c_datetime_2_seq = '2023-11-01';
+ select * from __pred_profile order by idx, k, v;
+
+-- OR
+select count(1) from t1 where c_str_1_seq = 'not-found' or c_int_1_seq in (1280000+10, 1280000+100, 1280000+1000, 180000+10000);
+ select * from __pred_profile order by idx, k, v;
+select count(1) from t1 where c_str_1_seq = 'not-found' or c_int_1_seq in (1280000+10, 1280000+100, 1280000+1000, 180000+10000, null);
+ select * from __pred_profile order by idx, k, v;
+
+select count(1) from t1 where c_str_1_seq = 'not-found' or c_int_1_seq = 1280000+10;
+ select * from __pred_profile order by idx, k, v;
+select count(1) from t1 where c_str_1_seq = 'not-found' or 1280000+10 = c_int_1_seq;
+ select * from __pred_profile order by idx, k, v;
+
+select count(1) from t1 where c_str_1_seq = 'not-found' or c_str_1_seq = 'abc1-128';
+ select * from __pred_profile order by idx, k, v;
+select count(1) from t1 where c_str_1_seq = 'not-found' or c_str_3_low1 = 'a1';
+ select * from __pred_profile order by idx, k, v;
+
+select count(1) from t1 where c_str_1_seq = 'not-found' or c_date_1_seq in ('2023-11-01','2023-10-10', '2023-09-10', '2023-10-09 01:00:00', '2023-10-10 01:00:00');
+ select * from __pred_profile order by idx, k, v;
+
+select count(1) from t1 where c_str_1_seq = 'not-found' or c_date_1_seq = '2023-11-01';
+ select * from __pred_profile order by idx, k, v;
+select count(1) from t1 where c_str_1_seq = 'not-found' or c_date_1_seq = '2023-11-01 01:00:00';
+ select * from __pred_profile order by idx, k, v;
+
+select count(1) from t1 where c_str_1_seq = 'not-found' or c_datetime_2_seq in ('2023-11-01', '2023-11-01 01:00:00', '2023-10-10', '2023-09-10', '2023-10-09 01:00:00', '2023-10-10 01:00:00');
+ select * from __pred_profile order by idx, k, v;
+select count(1) from t1 where c_str_1_seq = 'not-found' or c_datetime_2_seq = '2023-11-01';
+ select * from __pred_profile order by idx, k, v;
+
+-- normalize_binary_predicate
+-- AND
+select count(1) from t1 where c_int_1_seq < 1280000+20;
+ select * from __pred_profile order by idx, k, v;
+select count(1) from t1 where c_int_1_seq <= 1280000+20;
+ select * from __pred_profile order by idx, k, v;
+select count(1) from t1 where 1280000+20 > c_int_1_seq;
+ select * from __pred_profile order by idx, k, v;
+select count(1) from t1 where 1280000+20 >= c_int_1_seq;
+ select * from __pred_profile order by idx, k, v;
+
+select count(1) from t1 where c_int_1_seq != 1280000+20;
+ select * from __pred_profile order by idx, k, v;
+select count(1) from t1 where 1280000+20 != c_int_1_seq;
+ select * from __pred_profile order by idx, k, v;
+
+select count(1) from t1 where c_date_1_seq > '2023-11-01';
+ select * from __pred_profile order by idx, k, v;
+select count(1) from t1 where c_date_1_seq > '2023.11.01 01:00:00';
+ select * from __pred_profile order by idx, k, v;
+select count(1) from t1 where c_date_1_seq >= '2023-11-01';
+ select * from __pred_profile order by idx, k, v;
+select count(1) from t1 where c_date_1_seq >= '2023.11.01 01:00:00';
+ select * from __pred_profile order by idx, k, v;
+select count(1) from t1 where c_date_1_seq < '2023-11-01';
+ select * from __pred_profile order by idx, k, v;
+select count(1) from t1 where c_date_1_seq < '2023.11.01 01:00:00';
+ select * from __pred_profile order by idx, k, v;
+select count(1) from t1 where c_date_1_seq <= '2023-11-01';
+ select * from __pred_profile order by idx, k, v;
+select count(1) from t1 where c_date_1_seq <= '2023.11.01 01:00:00';
+ select * from __pred_profile order by idx, k, v;
+
+select count(1) from t1 where c_datetime_2_seq > '2023-11-01';
+ select * from __pred_profile order by idx, k, v;
+select count(1) from t1 where c_datetime_2_seq >= '2023-11-01';
+ select * from __pred_profile order by idx, k, v;
+select count(1) from t1 where c_datetime_2_seq < '2023-11-01';
+ select * from __pred_profile order by idx, k, v;
+select count(1) from t1 where c_datetime_2_seq <= '2023-11-01';
+
+-- OR
+select count(1) from t1 where c_str_1_seq = 'not-found' or c_int_1_seq < 1280000+20;
+ select * from __pred_profile order by k, v;
+select count(1) from t1 where c_str_1_seq = 'not-found' or c_int_1_seq <= 1280000+20;
+ select * from __pred_profile order by k, v;
+select count(1) from t1 where c_str_1_seq = 'not-found' or 1280000+20 > c_int_1_seq;
+ select * from __pred_profile order by k, v;
+select count(1) from t1 where c_str_1_seq = 'not-found' or 1280000+20 >= c_int_1_seq;
+ select * from __pred_profile order by k, v;
+
+select count(1) from t1 where c_str_1_seq = 'not-found' or c_int_1_seq != 1280000+20;
+ select * from __pred_profile order by k, v;
+select count(1) from t1 where c_str_1_seq = 'not-found' or 1280000+20 != c_int_1_seq;
+ select * from __pred_profile order by k, v;
+
+select count(1) from t1 where c_str_1_seq = 'not-found' or c_date_1_seq > '2023-11-01';
+ select * from __pred_profile order by k, v;
+select count(1) from t1 where c_str_1_seq = 'not-found' or c_date_1_seq > '2023.11.01 01:00:00';
+ select * from __pred_profile order by k, v;
+select count(1) from t1 where c_str_1_seq = 'not-found' or c_date_1_seq >= '2023-11-01';
+ select * from __pred_profile order by k, v;
+select count(1) from t1 where c_str_1_seq = 'not-found' or c_date_1_seq >= '2023.11.01 01:00:00';
+ select * from __pred_profile order by k, v;
+select count(1) from t1 where c_str_1_seq = 'not-found' or c_date_1_seq < '2023-11-01';
+ select * from __pred_profile order by k, v;
+select count(1) from t1 where c_str_1_seq = 'not-found' or c_date_1_seq < '2023.11.01 01:00:00';
+ select * from __pred_profile order by k, v;
+select count(1) from t1 where c_str_1_seq = 'not-found' or c_date_1_seq <= '2023-11-01';
+ select * from __pred_profile order by k, v;
+select count(1) from t1 where c_str_1_seq = 'not-found' or c_date_1_seq <= '2023.11.01 01:00:00';
+ select * from __pred_profile order by k, v;
+
+select count(1) from t1 where c_str_1_seq = 'not-found' or c_datetime_2_seq > '2023-11-01';
+ select * from __pred_profile order by k, v;
+select count(1) from t1 where c_str_1_seq = 'not-found' or c_datetime_2_seq >= '2023-11-01';
+ select * from __pred_profile order by k, v;
+select count(1) from t1 where c_str_1_seq = 'not-found' or c_datetime_2_seq < '2023-11-01';
+ select * from __pred_profile order by k, v;
+select count(1) from t1 where c_str_1_seq = 'not-found' or c_datetime_2_seq <= '2023-11-01';
+ select * from __pred_profile order by k, v;
+
+-- normalize_not_in_or_not_equal_predicate
+-- AND
+select count(1) from t1 where c_int_1_seq not in (1280000+10, 1280000+100, 1280000+1000, 180000+10000);
+ select * from __pred_profile order by k, v;
+select count(1) from t1 where c_int_1_seq not in (1280000+10, 1280000+100, 1280000+1000, 180000+10000, null);
+ select * from __pred_profile order by k, v;
+
+select count(1) from t1 where c_int_1_seq != 1280000+10;
+ select * from __pred_profile order by k, v;
+select count(1) from t1 where 1280000+10 != c_int_1_seq;
+ select * from __pred_profile order by k, v;
+
+select count(1) from t1 where c_str_1_seq != 'abc1-128';
+ select * from __pred_profile order by k, v;
+
+select count(1) from t1 where c_date_1_seq not in ('2023-11-01','2023-10-10', '2023-09-10', '2023-10-09 01:00:00', '2023-10-10 01:00:00');
+ select * from __pred_profile order by k, v;
+
+select count(1) from t1 where c_date_1_seq != '2023-11-01';
+ select * from __pred_profile order by k, v;
+select count(1) from t1 where c_date_1_seq != '2023-11-01 01:00:00';
+ select * from __pred_profile order by k, v;
+
+select count(1) from t1 where c_datetime_2_seq not in ('2023-11-01', '2023-11-01 01:00:00', '2023-10-10', '2023-09-10', '2023-10-09 01:00:00', '2023-10-10 01:00:00');
+ select * from __pred_profile order by k, v;
+select count(1) from t1 where c_datetime_2_seq != '2023-11-01';
+ select * from __pred_profile order by k, v;
+
+-- OR
+select count(1) from t1 where c_str_1_seq = 'not-found' or c_int_1_seq not in (1280000+10, 1280000+100, 1280000+1000, 180000+10000);
+ select * from __pred_profile order by k, v;
+select count(1) from t1 where c_str_1_seq = 'not-found' or c_int_1_seq not in (1280000+10, 1280000+100, 1280000+1000, 180000+10000, null);
+ select * from __pred_profile order by k, v;
+
+select count(1) from t1 where c_str_1_seq = 'not-found' or c_int_1_seq != 1280000+10;
+ select * from __pred_profile order by k, v;
+select count(1) from t1 where c_str_1_seq = 'not-found' or 1280000+10 != c_int_1_seq;
+ select * from __pred_profile order by k, v;
+
+select count(1) from t1 where c_str_1_seq = 'not-found' or c_str_1_seq != 'abc1-128';
+ select * from __pred_profile order by k, v;
+
+select count(1) from t1 where c_str_1_seq = 'not-found' or c_date_1_seq not in ('2023-11-01','2023-10-10', '2023-09-10', '2023-10-09 01:00:00', '2023-10-10 01:00:00');
+ select * from __pred_profile order by k, v;
+
+select count(1) from t1 where c_str_1_seq = 'not-found' or c_date_1_seq != '2023-11-01';
+ select * from __pred_profile order by k, v;
+select count(1) from t1 where c_str_1_seq = 'not-found' or c_date_1_seq != '2023-11-01 01:00:00';
+ select * from __pred_profile order by k, v;
+
+select count(1) from t1 where c_str_1_seq = 'not-found' or c_datetime_2_seq not in ('2023-11-01', '2023-11-01 01:00:00', '2023-10-10', '2023-09-10', '2023-10-09 01:00:00', '2023-10-10 01:00:00');
+ select * from __pred_profile order by k, v;
+select count(1) from t1 where c_str_1_seq = 'not-found' or c_datetime_2_seq != '2023-11-01';
+ select * from __pred_profile order by k, v;
+
+
+-- normalize_is_null_predicate
+-- AND
+select count(1) from t1 where c_int_1_seq is null;
+ select * from __pred_profile order by k, v;
+select count(1) from t1 where c_int_1_seq is not null;
+ select * from __pred_profile order by k, v;
+select count(1) from t1 where c_int_1_seq is not null and c_int_1_seq is null;
+ select * from __pred_profile order by k, v;
+-- OR
+select count(1) from t1 where c_str_1_seq = 'not-found' or c_int_1_seq is null;
+ select * from __pred_profile order by k, v;
+select count(1) from t1 where c_str_1_seq = 'not-found' or c_int_1_seq is not null;
+  select * from __pred_profile order by k, v;
+select count(1) from t1 where c_int_1_seq is not null or c_int_1_seq is null;  
+  select * from __pred_profile order by k, v;
+
+
+-- composed.
+-- AND
+-- in point + in point
+select count(1) from t1 where 
+  c_int_1_seq in (1280000+10, 1280000+100, 1280000+1000, 180000+10000)
+  and c_int_1_seq in (1280000+10, 1280000+100);
+ select * from __pred_profile order by k, v;
+-- in point + not in point
+select count(1) from t1 where 
+  c_int_1_seq in (1280000+10, 1280000+100, 1280000+1000, 180000+10000)
+  and c_int_1_seq not in (1280000+10, 1280000+100, 1280000+300);
+ select * from __pred_profile order by k, v;
+-- in point + range <
+select count(1) from t1 where 
+  c_int_1_seq in (1280000+10, 1280000+100, 1280000+1000, 180000+10000)
+  and c_int_1_seq < 1280000+1000;
+ select * from __pred_profile order by k, v;
+-- in point + range <=
+select count(1) from t1 where 
+  c_int_1_seq in (1280000+10, 1280000+100, 1280000+1000, 180000+10000)
+  and c_int_1_seq <= 1280000+1000;
+ select * from __pred_profile order by k, v;
+-- in point + range >
+select count(1) from t1 where 
+  c_int_1_seq in (1280000+10, 1280000+100, 1280000+1000, 180000+10000)
+  and c_int_1_seq > 1280000+100;
+ select * from __pred_profile order by k, v;
+-- in point + range >=
+select count(1) from t1 where 
+  c_int_1_seq in (1280000+10, 1280000+100, 1280000+1000, 180000+10000)
+  and c_int_1_seq > 1280000+100;
+ select * from __pred_profile order by k, v;
+
+-- range + range overlap
+select count(1) from t1 where 
+  c_int_1_seq > 1280000+1000
+  and c_int_1_seq < 1280000+10000;
+ select * from __pred_profile order by k, v;
+-- range + range overlap to point
+select count(1) from t1 where 
+  c_int_1_seq >= 1280000+10000
+  and c_int_1_seq <= 1280000+10000;
+ select * from __pred_profile order by k, v;
+-- range + range non-overlap
+select count(1) from t1 where 
+  c_int_1_seq < 1280000+1000
+  and c_int_1_seq > 1280000+10000;
+ select * from __pred_profile order by k, v;
+
+-- range < + not in point
+select count(1) from t1 where 
+  c_int_1_seq not in (1280000+10, 1280000+100, 1280000+1000, 180000+10000)
+  and c_int_1_seq < 1280000+1000;
+ select * from __pred_profile order by k, v;
+
+
+-- OR
+-- in point + in point
+select count(1) from t1 where 
+  c_int_1_seq not in (1280000+10, 1280000+100, 1280000+1000, 180000+10000)
+  or c_int_1_seq not in (1280000+10, 1280000+100);
+ select * from __pred_profile order by k, v;
+-- in point + not in point
+select count(1) from t1 where 
+  c_int_1_seq not in (1280000+10, 1280000+100, 1280000+1000, 180000+10000)
+  or c_int_1_seq in (1280000+10, 1280000+100, 1280000+300);
+ select * from __pred_profile order by k, v;
+-- in point + range <
+select count(1) from t1 where 
+  c_int_1_seq not in (1280000+10, 1280000+100, 1280000+1000, 180000+10000)
+  or c_int_1_seq >= 1280000+1000;
+ select * from __pred_profile order by k, v;
+-- in point + range <=
+select count(1) from t1 where 
+  c_int_1_seq not in (1280000+10, 1280000+100, 1280000+1000, 180000+10000)
+  or c_int_1_seq > 1280000+500;
+ select * from __pred_profile order by k, v;
+-- in point + range >
+select count(1) from t1 where 
+  c_int_1_seq not in (1280000+10, 1280000+100, 1280000+1000, 180000+10000)
+  or c_int_1_seq <= 1280000+100;
+ select * from __pred_profile order by k, v;
+-- in point + range >=
+select count(1) from t1 where 
+  c_int_1_seq not in (1280000+10, 1280000+100, 1280000+1000, 180000+10000)
+  or c_int_1_seq < 1280000+100;
+ select * from __pred_profile order by k, v;
+
+-- range + range overlap
+select count(1) from t1 where 
+  c_int_1_seq <= 1280000+1000
+  or c_int_1_seq >= 1280000+10000;
+ select * from __pred_profile order by k, v;
+-- range + range overlap to point
+select count(1) from t1 where 
+  c_int_1_seq < 1280000+10000
+  or c_int_1_seq > 1280000+10000;
+ select * from __pred_profile order by k, v;
+-- range + range non-overlap
+select count(1) from t1 where 
+  c_int_1_seq >= 1280000+1000
+  or c_int_1_seq <= 1280000+10000;
+ select * from __pred_profile order by k, v;
+
+-- range < + not in point
+select count(1) from t1 where 
+  c_int_1_seq in (1280000+10, 1280000+100, 1280000+1000, 180000+10000)
+  or c_int_1_seq >= 1280000+1000;
+ select * from __pred_profile order by k, v;
+
+
+-- others.
+
+select *
+from t1
+where 
+  (k1 in (123, 456) or c_int_1_seq = 1280000+2 or k1 in (1, 2)) and (c_str_3_low1 = 'a1' or c_str_4_low2 = 'a2');
+ select * from __pred_profile order by k, v;
+
+
+select count(1)
+from t1
+where 
+  (k1 > 100 or k1 < 1000) or c_int_1_seq = 1280000+2;
+ select * from __pred_profile order by k, v;
+
+select count(1)
+from t1
+where 
+  (k1 < 100 or k1 > 1000 or c_int_1_seq = 1280000+2) and (c_str_3_low1 = 'a1' or c_str_4_low2 = 'a2');
+ select * from __pred_profile order by k, v;
+
+
+select count(1)
+from t1
+where 
+  (k1 > 1000 or k1 = 10000 or k1 < 100) or c_int_1_seq = 1280000+2 ;
+ select * from __pred_profile order by k, v;
+
+
+select count(1)
+from t1
+where 
+  ((k1 > 1000 or k1 not in (999)) or (k1 < 100 or k1 not in (1))) or c_int_1_seq = 1280000+2 ;
+ select * from __pred_profile order by k, v;
+
+
+select count(1)
+from t1
+where 
+  ((k1 > 1000 or k1 not in (999)) or (k1 < 100 or k1 not in (1)) or k1 is null) or c_int_1_seq = 1280000+2 or (c_int_2_seq is null or c_int_2_seq is not null);
+ select * from __pred_profile order by k, v;
+
+
+select count(1)
+from t1
+where 
+  ((k1 > 1000 or k1 not in (999)) or (k1 < 100 or k1 not in (1)) or k1 is null);
+ select * from __pred_profile order by k, v;
+
+
+select count(1)
+from t1
+where 
+  c_int_1_seq = 1280000+2 or (c_int_2_seq is null or c_int_2_seq is not null);
+ select * from __pred_profile order by k, v;
+
+-- normalize_join_runtime_filter.
+
+with 
+  w1 as (select * from t1 where k1 < 1280000 / 4),
+  w2 as (select * from t1 where k1 < 10),
+  w3 as (select * from t1 where c_int_1_seq = 1280000+2 or (c_int_2_seq is null or c_int_2_seq is not null))
+select count(1) 
+from 
+  w3
+    join [colocate] w1 on w3.k1 = w1.k1
+    join [colocate] w2 on w3.k1 = w2.k1;
+ select * from __pred_profile order by k, v;
+
+
+with 
+  w1 as (select * from t1 where k1 < 1280000 / 4),
+  w2 as (select * from t1 where k1 < 10),
+  w3 as (select * from t1 where c_int_1_seq = 1280000+2 or (c_int_2_seq is null or c_int_2_seq is not null))
+select count(1) 
+from 
+  w3
+    join [broadcast] w1 on w3.k1 = w1.k1
+    join [broadcast] w2 on w3.k1 = w2.k1;
+ select * from __pred_profile order by k, v;
+
+
+with 
+  w1 as (select * from t1 where k1 < 1280000 / 4),
+  w2 as (select * from t1 where k1 < 10),
+  w3 as (select * from t1 where c_int_1_seq = 1280000+2 or (c_int_2_seq is null or c_int_2_seq is not null))
+select /*+SET_VAR(runtime_filter_scan_wait_time=20000)*/ count(1) 
+from 
+  w3
+    join [shuffle] w1 on w3.k1 = w1.k1
+    join [shuffle] w2 on w3.k1 = w2.k1;
+ select * from __pred_profile order by k, v;
+
+
+-- 4. Test ZonemapPredicatesRewriter.
+
+select count(1)
+from t1
+where 
+  (c_int_1_seq * 2 < 1280000 * 2 * 11 / 10);
+ select * from __pred_profile order by k, v;
+
+
+select count(1)
+from t1
+where 
+  (c_int_1_seq * 2 = 1280000 * 2 * 11 / 10);
+ select * from __pred_profile order by k, v;
+
+
+select count(1)
+from t1
+where 
+  (c_int_1_seq * 2 = 1280000 * 2 * 11 / 10) or (c_int_1_seq * 2 < 1280000 * 2 * 11 / 10);
+ select * from __pred_profile order by k, v;
+
+
+select count(1)
+from t1
+where 
+  (c_int_1_seq * 2 = 1280000 * 2 * 11 / 10) and (c_int_1_seq * 2 < 1280000 * 2 * 12 / 10);
+ select * from __pred_profile order by k, v;
+
+
+select count(1)
+from t1
+where 
+  ((c_int_1_seq * 2 = 1280000 * 2 * 11 / 10) and (c_int_1_seq * 2 < 1280000 * 2 * 12 / 10)) or
+   (c_int_1_seq * 2 = 1280000 * 2 * 11 / 10) or (c_int_1_seq * 2 < 1280000 * 2 * 11 / 10);
+ select * from __pred_profile order by k, v;
+
+
+select count(1)
+from t1
+where 
+  (c_int_1_seq < 1) or year(c_date_2_seq) = 2022;
+ select * from __pred_profile order by k, v;
+
+select count(1)
+from t1
+where 
+  (c_int_1_seq < 1) or year(c_date_2_seq) = 1998;
+ select * from __pred_profile order by k, v;
+
+
+-- 5. Test GlobalDictPredicatesRewriter.
+CREATE TABLE t1_copy (
+  k1 bigint NULL,
+  c_int_1_seq bigint NULL,
+  c_int_2_seq bigint NULL,
+  c_str_1_seq String NULL,
+  c_str_2_seq String NULL,
+  c_str_3_low1 String NULL,
+  c_str_4_low2 String NULL,
+  c_date_1_seq date NULL,
+  c_date_2_seq date NULL,
+  c_datetime_1_seq datetime NULL,
+  c_datetime_2_seq datetime NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 32
+PROPERTIES (
+    "replication_num" = "1"
+);
+insert into t1_copy select * from t1;
+
+analyze table t1_copy;
+
+select count(1) from t1_copy;
+select count(1) from t1_copy where c_str_3_low1 = 'a1';
+select count(1) from t1_copy where c_str_3_low1 = 'b1';
+
+delete from t1_copy where c_str_3_low1 = 'a1';
+
+select count(1) from t1_copy;
+select count(1) from t1_copy where c_str_3_low1 = 'a1';
+select count(1) from t1_copy where c_str_3_low1 = 'b1';
+
+delete from t1_copy where c_str_3_low1 = 'b1';
+
+select count(1) from t1_copy;
+select count(1) from t1_copy where c_str_3_low1 = 'a1';
+select count(1) from t1_copy where c_str_3_low1 = 'b1';
+
+truncate table t1_copy;
+insert into t1_copy select * from t1;
+
+select count(1) from t1_copy;
+select count(1) from t1_copy where c_str_3_low1 = 'a1';
+select count(1) from t1_copy where c_str_3_low1 = 'b1';
+
+
+-- 6. Test ColumnPredicateRewriter.
+
+-- EQ
+-- FALSE
+select count(1) from t1 where c_str_3_low1 = 'not-found';
+ select * from __pred_profile order by k, v;
+-- CHANGED
+select count(1) from t1 where c_str_1_seq = 'abc1-69';
+ select * from __pred_profile order by k, v;
+
+
+-- NE
+-- TRUE
+select count(1) from t1 where c_str_5_low_non_null1 != 'not-found';
+ select * from __pred_profile order by k, v;
+-- IS NOT NULL
+select count(1) from t1 where c_str_3_low1 != 'not-found';
+ select * from __pred_profile order by k, v;
+-- CHANGED
+select count(1) from t1 where c_str_1_seq != 'abc1-69';
+ select * from __pred_profile order by k, v;
+
+
+-- IN
+-- FALSE
+select count(1) from t1 where c_str_3_low1 in ('not-found1', 'not-found2');
+ select * from __pred_profile order by k, v;
+-- CHANGED
+select count(1) from t1 where c_str_3_low1 in ('not-found1', 'not-found2', 'a1');
+ select * from __pred_profile order by k, v;
+select count(1) from t1 where c_str_1_seq in ('not-found1', 'not-found2', 'abc1-69');
+ select * from __pred_profile order by k, v;
+
+
+-- NOT IN
+-- TRUE
+select count(1) from t1 where c_str_5_low_non_null1 not in ('not-found1', 'not-found2');
+ select * from __pred_profile order by k, v;
+-- IS NOT NULL
+select count(1) from t1 where c_str_3_low1 not in ('not-found1', 'not-found2');
+ select * from __pred_profile order by k, v;
+-- CHANGED
+select count(1) from t1 where c_str_3_low1 not in ('not-found1', 'not-found2', 'a1');
+ select * from __pred_profile order by k, v;
+select count(1) from t1 where c_str_1_seq not in ('not-found1', 'not-found2', 'abc1-69', 'abc1-89');
+ select * from __pred_profile order by k, v;
+
+
+-- GT
+-- FALSE
+select count(1) from t1 where c_str_3_low1 > 'zzzz';
+ select * from __pred_profile order by k, v;
+-- CHANGED
+select count(1) from t1 where c_str_3_low1 > 'a1';
+ select * from __pred_profile order by k, v;
+select count(1) from t1 where c_str_3_low1 > 'a0';
+ select * from __pred_profile order by k, v;
+
+-- GE
+-- FALSE
+select count(1) from t1 where c_str_3_low1 >= 'zzzz';
+ select * from __pred_profile order by k, v;
+-- CHANGED
+select count(1) from t1 where c_str_3_low1 >= 'a1';
+ select * from __pred_profile order by k, v;
+select count(1) from t1 where c_str_3_low1 >= 'a2';
+ select * from __pred_profile order by k, v;
+select count(1) from t1 where c_str_3_low1 >= 'a0';
+ select * from __pred_profile order by k, v;
+
+
+-- LT
+-- FALSE
+select count(1) from t1 where c_str_3_low1 < 'a0';
+ select * from __pred_profile order by k, v;
+-- ';' < '<'
+select count(1) from t1 where c_str_5_low_non_null1 < ';';
+ select * from __pred_profile order by k, v;
+-- CHANGED
+select count(1) from t1 where c_str_3_low1 < 'a2';
+ select * from __pred_profile order by k, v;
+select count(1) from t1 where c_str_1_seq < 'abc1-69';
+ select * from __pred_profile order by k, v;
+
+
+-- LE
+-- FALSE
+select count(1) from t1 where c_str_3_low1 <= ';';
+ select * from __pred_profile order by k, v;
+-- ';' < '<'
+select count(1) from t1 where c_str_5_low_non_null1 <= ';';
+ select * from __pred_profile order by k, v;
+-- CHANGED
+select count(1) from t1 where c_str_3_low1 <= 'b2';
+ select * from __pred_profile order by k, v;
+select count(1) from t1 where c_str_1_seq <= 'abc1-69';
+ select * from __pred_profile order by k, v;
+
+
+-- ExprPredicate
+-- FALSE
+select count(1) from t1 where concat(c_str_3_low1, '1') < 'a0';
+ select * from __pred_profile order by k, v;
+select count(1) from t1 where concat(c_str_5_low_non_null1, '1') < ';';
+ select * from __pred_profile order by k, v;
+-- TRUE
+select count(1) from t1 where concat(c_str_5_low_non_null1, '1') < 'zzzz';
+ select * from __pred_profile order by k, v;
+-- CHANGED
+select count(1) from t1 where concat(c_str_3_low1, '1') < 'b1';
+ select * from __pred_profile order by k, v;
+select count(1) from t1 where concat(c_str_5_low_non_null1, '1') < 'b1';
+ select * from __pred_profile order by k, v;
+
+
+-- NEEDN't rewrite
+select count(1) from t1 where c_int_1_seq < 'a0';
+ select * from __pred_profile order by k, v;
+
+
+-- AND
+-- partial TRUE + CHANGED
+select count(1) from t1 
+where 
+    concat(c_str_5_low_non_null1, '1') < 'zzzz'
+    and c_str_3_low1 = 'a1';
+ select * from __pred_profile order by k, v;
+
+-- partial TRUE + UNCHANGED
+select count(1) from t1 
+where 
+    concat(c_str_5_low_non_null1, '1') < 'zzzz'
+    and c_int_1_seq = 'a1';
+ select * from __pred_profile order by k, v;
+
+-- all TRUE
+select count(1) from t1 
+where 
+    concat(c_str_5_low_non_null1, '1') < 'zzzz'
+    and c_str_5_low_non_null1 not in ('not-found1', 'not-found2');
+ select * from __pred_profile order by k, v;
+
+-- FALSE
+select count(1) from t1 
+where 
+    c_str_5_low_non_null1 < ';'
+    and c_str_3_low1 = 'a1';
+ select * from __pred_profile order by k, v;
+
+-- TRUE, CHANGED, UNCHANGED, FALSE
+select count(1) from t1 
+where 
+    concat(c_str_5_low_non_null1, '1') < 'zzzz'
+    and c_str_3_low1 = 'a1'
+    and  c_str_5_low_non_null1 < ';'
+    and c_int_1_seq = 'a1';
+ select * from __pred_profile order by k, v;
+
+
+-- OR
+-- partial TRUE + CHANGED
+select count(1) from t1 
+where 
+    concat(c_str_5_low_non_null1, '1') < 'zzzz'
+    or c_str_3_low1 = 'a1';
+ select * from __pred_profile order by k, v;
+
+-- partial TRUE + UNCHANGED
+select count(1) from t1 
+where 
+    concat(c_str_5_low_non_null1, '1') < 'zzzz'
+    or c_int_1_seq = 'a1';
+ select * from __pred_profile order by k, v;
+
+-- all TRUE
+select count(1) from t1 
+where 
+    concat(c_str_5_low_non_null1, '1') < 'zzzz'
+    or c_str_5_low_non_null1 not in ('not-found1', 'not-found2');
+ select * from __pred_profile order by k, v;
+
+-- partial FALSE + CHANGED
+select count(1) from t1 
+where 
+    c_str_5_low_non_null1 < ';'
+    or c_str_3_low1 = 'a1';
+ select * from __pred_profile order by k, v;
+
+-- all FALSE
+select count(1) from t1 
+where 
+    c_str_5_low_non_null1 < ';'
+    or concat(c_str_3_low1, '1') < 'a0';
+ select * from __pred_profile order by k, v;
+
+select count(1) from t1 
+where 
+    c_str_5_low_non_null1 < ';'
+    or concat(c_str_5_low_non_null1, '1') < ';';
+ select * from __pred_profile order by k, v;
+
+
+-- FALSE, CHANGED, UNCHANGED, TRUE
+select count(1) from t1 
+where 
+    c_str_5_low_non_null1 < ';'
+    or c_int_1_seq = 'a1'
+    or c_str_3_low1 = 'a1'
+    or concat(c_str_5_low_non_null1, '1') < 'zzzz';
+ select * from __pred_profile order by k, v;
+
+
+-- NESTED AND
+-- partial TRUE + CHANGED
+select count(1) from t1 
+where 
+    (concat(c_str_5_low_non_null1, '1') < 'zzzz'
+    and c_str_3_low1 = 'a1') 
+    or c_int_2_seq = 'a1';
+ select * from __pred_profile order by k, v;
+
+-- partial TRUE + UNCHANGED
+select count(1) from t1 
+where 
+    (concat(c_str_5_low_non_null1, '1') < 'zzzz'
+    and c_int_1_seq = 'a1') 
+    or c_int_2_seq = 'a1';
+ select * from __pred_profile order by k, v;
+
+-- all TRUE
+select count(1) from t1 
+where 
+    (concat(c_str_5_low_non_null1, '1') < 'zzzz'
+    and c_str_5_low_non_null1 not in ('not-found1', 'not-found2')) 
+    or c_int_2_seq = 'a1';
+ select * from __pred_profile order by k, v;
+
+-- FALSE
+select count(1) from t1 
+where 
+    (c_str_5_low_non_null1 < ';'
+    and c_str_3_low1 = 'a1') 
+    or c_int_2_seq = 'a1';
+ select * from __pred_profile order by k, v;
+
+select count(1) from t1 
+where 
+    (c_str_5_low_non_null1 < ';'
+    and c_str_3_low1 = 'a1') 
+    or c_int_2_seq = 'a1';
+ select * from __pred_profile order by k, v;
+
+-- TRUE, CHANGED, UNCHANGED, FALSE
+select count(1) from t1 
+where 
+    (concat(c_str_5_low_non_null1, '1') < 'zzzz'
+    and c_str_3_low1 = 'a1'
+    and  c_str_5_low_non_null1 < ';'
+    and c_int_1_seq = 'a1') 
+    or c_str_6_low_non_null2 < ';';
+ select * from __pred_profile order by k, v;
+
+
+-- NESTED OR
+-- partial TRUE + CHANGED
+select count(1) from t1 
+where 
+    (concat(c_str_5_low_non_null1, '1') < 'zzzz'
+    or c_str_3_low1 = 'a1')
+    and c_int_2_seq > 1;
+ select * from __pred_profile order by k, v;
+
+-- partial TRUE + UNCHANGED
+select count(1) from t1 
+where 
+    (concat(c_str_5_low_non_null1, '1') < 'zzzz'
+    or c_int_1_seq = 'a1')
+    and c_int_2_seq > 1;
+ select * from __pred_profile order by k, v;
+
+-- all TRUE
+select count(1) from t1 
+where 
+    (concat(c_str_5_low_non_null1, '1') < 'zzzz'
+    or c_str_5_low_non_null1 not in ('not-found1', 'not-found2'))
+    and concat(c_str_6_low_non_null2, '1') < 'zzzz';
+ select * from __pred_profile order by k, v;
+
+-- partial FALSE + CHANGED
+select count(1) from t1 
+where 
+    (c_str_5_low_non_null1 < ';'
+    or c_str_3_low1 = 'a1')
+    and c_int_2_seq > 1;
+ select * from __pred_profile order by k, v;
+
+-- all FALSE
+select count(1) from t1 
+where 
+    (c_str_5_low_non_null1 < ';'
+    or concat(c_str_3_low1, '1') < 'a0')
+    and c_int_2_seq > 1;
+ select * from __pred_profile order by k, v;
+
+select count(1) from t1 
+where 
+    (c_str_5_low_non_null1 < ';'
+    or concat(c_str_5_low_non_null1, '1') < ';')
+    and c_int_2_seq > 1;
+ select * from __pred_profile order by k, v;
+
+
+-- FALSE, CHANGED, UNCHANGED, TRUE
+select count(1) from t1 
+where 
+    (c_str_5_low_non_null1 < ';'
+    or c_int_1_seq = 'a1'
+    or c_str_3_low1 = 'a1'
+    or concat(c_str_5_low_non_null1, '1') < 'zzzz')
+    and c_int_2_seq > 1;
+ select * from __pred_profile order by k, v;

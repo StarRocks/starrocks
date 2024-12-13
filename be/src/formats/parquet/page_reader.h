@@ -14,9 +14,19 @@
 
 #pragma once
 
+<<<<<<< HEAD
 #include <cstdint>
 
 #include "common/status.h"
+=======
+#include <stddef.h>
+
+#include <cstdint>
+#include <string_view>
+
+#include "common/status.h"
+#include "common/statusor.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "gen_cpp/parquet_types.h"
 #include "io/seekable_input_stream.h"
 
@@ -55,8 +65,23 @@ public:
         return _stream->seek(offset);
     }
 
+<<<<<<< HEAD
     uint64_t get_offset() const { return _offset; }
 
+=======
+    uint64_t get_next_header_pos() const { return _next_header_pos; }
+
+    uint64_t get_offset() const { return _offset; }
+
+    Status next_page() { return seek_to_offset(_next_header_pos); }
+
+    bool is_last_page() { return _num_values_read >= _num_values_total || _next_read_page_idx >= _page_num; }
+
+    void set_page_num(size_t page_num) { _page_num = page_num; }
+
+    void set_next_read_page_idx(size_t cur_page_idx) { _next_read_page_idx = cur_page_idx; }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 private:
     io::SeekableInputStream* const _stream;
     tparquet::PageHeader _cur_header;
@@ -68,6 +93,12 @@ private:
     uint64_t _num_values_read = 0;
     const uint64_t _num_values_total = 0;
     HdfsScanStats* _stats;
+<<<<<<< HEAD
+=======
+
+    size_t _page_num = 0xffffffff;
+    size_t _next_read_page_idx = 0;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 } // namespace starrocks::parquet

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # database
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 查询当前会话所在的数据库。如果未选定数据库，返回空值。
 

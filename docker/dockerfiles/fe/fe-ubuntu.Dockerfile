@@ -58,6 +58,10 @@ COPY --from=artifacts --chown=$USER:$GROUP /release/fe_artifacts/ $STARROCKS_ROO
 COPY --chown=$USER:$GROUP docker/dockerfiles/fe/*.sh $STARROCKS_ROOT/
 
 # Create directory for FE metadata
+<<<<<<< HEAD
 RUN mkdir -p /opt/starrocks/fe/meta
+=======
+RUN mkdir -p $STARROCKS_ROOT/fe/meta
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 USER $RUN_AS_USER

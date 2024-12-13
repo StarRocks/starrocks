@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 -- name: test_mv_refresh_with_event_trigger_and_nested_mvs
+=======
+-- name: test_mv_refresh_with_event_trigger_and_nested_mvs @slow
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 create database db_${uuid0};
 use db_${uuid0};
@@ -51,9 +55,12 @@ as select * from test_mv3;
 
 set enable_materialized_view_rewrite = false;
 INSERT INTO t1 VALUES ('2020-10-22','2020-10-22 12:12:12','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889);
+<<<<<<< HEAD
 function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv1", 1)
 function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv2", 1)
 function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv3", 1)
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv4", 1)
 select max(k2) from test_mv1;
 select max(k2) from test_mv2;
@@ -61,9 +68,12 @@ select max(k2) from test_mv3;
 select max(k2) from test_mv4;
 
 INSERT INTO t1 VALUES ('2020-10-24','2020-10-24 12:13:13','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889);
+<<<<<<< HEAD
 function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv1", 2)
 function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv2", 2)
 function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv3", 2)
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv4", 2)
 select max(k2) from test_mv1;
 select max(k2) from test_mv2;
@@ -71,9 +81,12 @@ select max(k2) from test_mv3;
 select max(k2) from test_mv4;
 
 INSERT INTO t1 VALUES ('2020-10-24','2020-10-24 13:13:13','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889);
+<<<<<<< HEAD
 function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv1", 3)
 function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv2", 3)
 function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv3", 3)
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv4", 3)
 select max(k2) from test_mv1;
 select max(k2) from test_mv2;
@@ -81,15 +94,19 @@ select max(k2) from test_mv3;
 select max(k2) from test_mv4;
 
 INSERT INTO t1 VALUES ('2020-10-24','2020-10-24 14:13:13','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889);
+<<<<<<< HEAD
 function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv1", 4)
 function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv2", 4)
 function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv3", 4)
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv4", 4)
 select max(k2) from test_mv1;
 select max(k2) from test_mv2;
 select max(k2) from test_mv3;
 select max(k2) from test_mv4;
 
+<<<<<<< HEAD
 INSERT INTO t1 VALUES ('2020-10-24','2020-10-24 15:13:13','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889);
 function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv1", 5)
 function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv2", 5)
@@ -115,3 +132,6 @@ drop materialized view test_mv2;
 drop materialized view test_mv3;
 drop materialized view test_mv4;
 drop table t1;
+=======
+drop database db_${uuid0} force;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

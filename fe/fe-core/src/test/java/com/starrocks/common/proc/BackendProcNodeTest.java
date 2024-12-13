@@ -82,7 +82,11 @@ public class BackendProcNodeTest {
                 minTimes = 0;
                 result = editLog;
 
+<<<<<<< HEAD
                 GlobalStateMgr.getCurrentInvertedIndex();
+=======
+                GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 minTimes = 0;
                 result = tabletInvertedIndex;
 

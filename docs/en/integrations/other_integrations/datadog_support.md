@@ -4,7 +4,11 @@ description: Monitor with Datadog
 sidebar_label: Datadog
 ---
 
+<<<<<<< HEAD
 # Integrate Datadog with StarRocks
+=======
+# Monitor with Datadog
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 This topic describes how to integrate your StarRocks cluster with [Datadog](https://www.datadoghq.com/), a monitoring and security platform.
 

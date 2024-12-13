@@ -37,6 +37,7 @@ package com.starrocks.catalog;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
+<<<<<<< HEAD
 import com.starrocks.analysis.IndexDef;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Partition;
@@ -46,18 +47,32 @@ import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.FastByteArrayOutputStream;
+=======
+import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.backup.mv.MvRestoreContext;
+import com.starrocks.catalog.Table.TableType;
+import com.starrocks.common.AnalysisException;
+import com.starrocks.common.FeConstants;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UnitTestUtil;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.IndexDef;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.Test;
 import org.threeten.extra.PeriodDuration;
 
+<<<<<<< HEAD
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.io.IOException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -71,6 +86,29 @@ import java.util.stream.Collectors;
 public class OlapTableTest {
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testSetIdForRestore() {
+        Database db = UnitTestUtil.createDb(1, 2, 3, 4, 5, 6, 7, KeysType.AGG_KEYS);
+        List<Table> tables = db.getTables();
+        final long id = 0;
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            long getNextId() {
+                return id;
+            }
+        };
+
+        for (Table table : tables) {
+            if (table.getType() != TableType.OLAP) {
+                continue;
+            }
+            ((OlapTable) table).resetIdsForRestore(GlobalStateMgr.getCurrentState(), db, 3, new MvRestoreContext());
+        }
+    }
+
+    @Test
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void testTableWithLocalTablet() throws IOException {
         new MockUp<GlobalStateMgr>() {
             @Mock
@@ -87,6 +125,7 @@ public class OlapTableTest {
                 continue;
             }
             OlapTable tbl = (OlapTable) table;
+<<<<<<< HEAD
             tbl.setIndexes(Lists.newArrayList(new Index("index", Lists.newArrayList("col"),
                     IndexDef.IndexType.BITMAP, "xxxxxx")));
             System.out.println("orig table id: " + tbl.getId());
@@ -108,6 +147,11 @@ public class OlapTableTest {
             for (Tablet tablet : newIndex.getTablets()) {
                 Assert.assertTrue(tablet instanceof LocalTablet);
             }
+=======
+            tbl.setIndexes(Lists.newArrayList(new Index("index", Lists.newArrayList(ColumnId.create("col")),
+                    IndexDef.IndexType.BITMAP, "xxxxxx")));
+            System.out.println("orig table id: " + tbl.getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             MvId mvId1 = new MvId(db.getId(), 10L);
             tbl.addRelatedMaterializedView(mvId1);
             MvId mvId2 = new MvId(db.getId(), 20L);
@@ -134,7 +178,11 @@ public class OlapTableTest {
         olapTable.copyOnlyForQuery(copied);
 
         Assert.assertEquals(olapTable.hasDelete(), copied.hasDelete());
+<<<<<<< HEAD
         Assert.assertEquals(olapTable.hasForbitGlobalDict(), copied.hasForbitGlobalDict());
+=======
+        Assert.assertEquals(olapTable.hasForbiddenGlobalDict(), copied.hasForbiddenGlobalDict());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals(olapTable, copied);
     }
 
@@ -165,12 +213,20 @@ public class OlapTableTest {
         p2.pushColumn(LiteralExpr.create(LocalDate.now().toString(), Type.DATE), PrimitiveType.DATE);
         rangePartitionInfo.setRange(1, false, Range.openClosed(p1, p2));
 
+<<<<<<< HEAD
         OlapTable olapTable = new OlapTable(1, "test", new ArrayList<>(), KeysType.AGG_KEYS,
+=======
+        OlapTable olapTable = new OlapTable(1, "test", partitionColumns, KeysType.AGG_KEYS,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 (PartitionInfo) rangePartitionInfo, null);
         olapTable.setTableProperty(new TableProperty(new HashMap<>()));
         olapTable.setDataCachePartitionDuration(TimeUtils.parseHumanReadablePeriodOrDuration("25 hour"));
 
+<<<<<<< HEAD
         Partition partition = new Partition(1, "p1", null, null);
+=======
+        Partition partition = new Partition(1, 11, "p1", null, null);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertTrue(olapTable.isEnableFillDataCache(partition));
 
         new MockUp<Range<PartitionKey>>() {
@@ -202,12 +258,20 @@ public class OlapTableTest {
                 PrimitiveType.DATE);
         rangePartitionInfo.setRange(1, false, Range.openClosed(p1, p2));
 
+<<<<<<< HEAD
         OlapTable olapTable = new OlapTable(1, "test", new ArrayList<>(), KeysType.AGG_KEYS,
+=======
+        OlapTable olapTable = new OlapTable(1, "test", partitionColumns, KeysType.AGG_KEYS,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 (PartitionInfo) rangePartitionInfo, null);
         olapTable.setTableProperty(new TableProperty(new HashMap<>()));
         olapTable.setDataCachePartitionDuration(TimeUtils.parseHumanReadablePeriodOrDuration("25 hour"));
 
+<<<<<<< HEAD
         Partition partition = new Partition(1, "p1", null, null);
+=======
+        Partition partition = new Partition(1, 11, "p1", null, null);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertFalse(olapTable.isEnableFillDataCache(partition));
     }
 
@@ -235,7 +299,11 @@ public class OlapTableTest {
         listPartitionInfo.setMultiValues(1L, multiValuesList1);
         OlapTable olapTable = new OlapTable(1L, "tb1", partitionColumns, null, (PartitionInfo) listPartitionInfo, null);
         olapTable.setTableProperty(new TableProperty(new HashMap<>()));
+<<<<<<< HEAD
         Partition partition1 = new Partition(1L, "p1", null, null);
+=======
+        Partition partition1 = new Partition(1L, 11, "p1", null, null);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // Datacache.partition_duration is not set, cache is valid
         Assert.assertTrue(olapTable.isEnableFillDataCache(partition1));
@@ -248,7 +316,11 @@ public class OlapTableTest {
         List<List<String>> multiValuesList2 = new ArrayList<>(Arrays.asList(multiValues2));
         listPartitionInfo.setMultiValues(2L, multiValuesList2);
         olapTable.setDataCachePartitionDuration(TimeUtils.parseHumanReadablePeriodOrDuration("28 hour"));
+<<<<<<< HEAD
         Partition partition2 = new Partition(2L, "p2", null, null);
+=======
+        Partition partition2 = new Partition(2L, 21, "p2", null, null);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // cache is valid
         Assert.assertTrue(olapTable.isEnableFillDataCache(partition2));
@@ -274,7 +346,11 @@ public class OlapTableTest {
         listPartitionInfo.setMultiValues(1L, multiValuesList1);
         OlapTable olapTable = new OlapTable(1L, "tb1", partitionColumns, null, (PartitionInfo) listPartitionInfo, null);
         olapTable.setTableProperty(new TableProperty(new HashMap<>()));
+<<<<<<< HEAD
         Partition partition1 = new Partition(1L, "p1", null, null);
+=======
+        Partition partition1 = new Partition(1L, 11, "p1", null, null);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // Datacache.partition_duration is not set, cache is valid
         Assert.assertTrue(olapTable.isEnableFillDataCache(partition1));
@@ -287,7 +363,11 @@ public class OlapTableTest {
         List<List<String>> multiValuesList2 = new ArrayList<>(Arrays.asList(multiValues2));
         listPartitionInfo.setMultiValues(2L, multiValuesList2);
         olapTable.setDataCachePartitionDuration(TimeUtils.parseHumanReadablePeriodOrDuration("28  hour"));
+<<<<<<< HEAD
         Partition partition2 = new Partition(2L, "p2", null, null);
+=======
+        Partition partition2 = new Partition(2L, 21, "p2", null, null);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // cache is valid
         Assert.assertTrue(olapTable.isEnableFillDataCache(partition2));
@@ -312,7 +392,11 @@ public class OlapTableTest {
         listPartitionInfo.setValues(1L, values1);
         OlapTable olapTable = new OlapTable(1L, "tb1", partitionColumns, null, (PartitionInfo) listPartitionInfo, null);
         olapTable.setTableProperty(new TableProperty(new HashMap<>()));
+<<<<<<< HEAD
         Partition partition1 = new Partition(1L, "p1", null, null);
+=======
+        Partition partition1 = new Partition(1L, 11, "p1", null, null);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // Datacache.partition_duration is not set, cache is valid
         Assert.assertTrue(olapTable.isEnableFillDataCache(partition1));
@@ -324,7 +408,11 @@ public class OlapTableTest {
         List<String> values2 = new ArrayList<>(Arrays.asList(LocalDate.now().toString()));
         listPartitionInfo.setValues(2L, values2);
         olapTable.setDataCachePartitionDuration(TimeUtils.parseHumanReadablePeriodOrDuration("28 hour"));
+<<<<<<< HEAD
         Partition partition2 = new Partition(2L, "p2", null, null);
+=======
+        Partition partition2 = new Partition(2L, 21, "p2", null, null);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // cache is valid
         Assert.assertTrue(olapTable.isEnableFillDataCache(partition2));
@@ -354,7 +442,11 @@ public class OlapTableTest {
         listPartitionInfo.setMultiValues(1L, multiValuesList1);
         OlapTable olapTable = new OlapTable(1L, "tb1", partitionColumns, null, (PartitionInfo) listPartitionInfo, null);
         olapTable.setTableProperty(new TableProperty(new HashMap<>()));
+<<<<<<< HEAD
         Partition partition = new Partition(1L, "p1", null, null);
+=======
+        Partition partition = new Partition(1L, 11, "p1", null, null);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // Datacache.partition_duration is not set, cache is valid
         Assert.assertTrue(olapTable.isEnableFillDataCache(partition));
@@ -364,11 +456,19 @@ public class OlapTableTest {
         Assert.assertFalse(olapTable.isEnableFillDataCache(partition));
 
         List<String> multiValues2 = new ArrayList<>(Arrays.asList("abcd",
+<<<<<<< HEAD
                 LocalDateTime.now().format(DateUtils.DATE_TIME_FORMATTER_UNIX), "2024-01-01"));
         List<List<String>> multiValuesList2 = new ArrayList<>(Arrays.asList(multiValues2));
         listPartitionInfo.setMultiValues(2L, multiValuesList2);
         olapTable.setDataCachePartitionDuration(TimeUtils.parseHumanReadablePeriodOrDuration("28 hour"));
         Partition partition2 = new Partition(2L, "p2", null, null);
+=======
+                DateUtils.formatDateTimeUnix(LocalDateTime.now()), "2024-01-01"));
+        List<List<String>> multiValuesList2 = new ArrayList<>(Arrays.asList(multiValues2));
+        listPartitionInfo.setMultiValues(2L, multiValuesList2);
+        olapTable.setDataCachePartitionDuration(TimeUtils.parseHumanReadablePeriodOrDuration("28 hour"));
+        Partition partition2 = new Partition(2L, 21, "p2", null, null);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // cache is valid
         Assert.assertTrue(olapTable.isEnableFillDataCache(partition2));
@@ -390,10 +490,29 @@ public class OlapTableTest {
         listPartitionInfo.setMultiValues(1L, multiValuesList1);
         OlapTable olapTable = new OlapTable(1L, "tb1", partitionColumns, null, (PartitionInfo) listPartitionInfo, null);
         olapTable.setTableProperty(new TableProperty(new HashMap<>()));
+<<<<<<< HEAD
         Partition partition1 = new Partition(1L, "p1", null, null);
+=======
+        Partition partition1 = new Partition(1L, 11, "p1", null, null);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         olapTable.setDataCachePartitionDuration(TimeUtils.parseHumanReadablePeriodOrDuration("25 hour"));
 
         // cache is valid
         Assert.assertTrue(olapTable.isEnableFillDataCache(partition1));
     }
+<<<<<<< HEAD
 }
+=======
+
+    @Test
+    public void testGetPhysicalPartitionByName() {
+        Database db = UnitTestUtil.createDb(1, 2, 3, 4, 5, 6, 7, KeysType.AGG_KEYS);
+        List<Table> tables = db.getTables();
+        for (Table table : tables) {
+            OlapTable olapTable = (OlapTable) table;
+            PhysicalPartition partition = olapTable.getPhysicalPartition("not_existed_name");
+            Assert.assertNull(partition);
+        }
+    }
+}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

@@ -55,7 +55,11 @@ value_item ::=
 
 | 参数                | 是否必填 | 参数                                                         |
 | ------------------- | -------- | ------------------------------------------------------------ |
+<<<<<<< HEAD
 | `partition_columns` | 是       | 分区列。<br />分区列的值支持为字符串（除 BINARY）、日期（DATE 和 DATETIME）、整数和布尔值。分区列的值不支持为 `NULL`。 |
+=======
+| `partition_columns` | 是       | 分区列。<br />分区列的值支持为字符串（除 BINARY）、日期（DATE 和 DATETIME）、整数和布尔值。自 v3.3.3 起，分区列的值支持为 `NULL`。 |
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 | `partition_name`    | 是       | 分区名称。建议您按照业务场景设置合理的分区名称，便于区别不同分区包含的数据分类。 |
 | `value_list`        |          | 分区中分区列的枚举值列表。                                   |
 
@@ -109,8 +113,16 @@ DISTRIBUTED BY HASH(`id`);
 
 ## 使用限制
 
+<<<<<<< HEAD
 - 不支持[动态](./dynamic_partitioning.md)和[批量创建](./Data_distribution.md#range-分区) List 分区。
 - StarRocks [存算分离模式](../../deployment/deploy_shared_data.md)从 3.1.1 版本开始支持该功能。
 - 使用 `ALTER TABLE <table_name> DROP PARTITION <partition_name>;` 分区直接被删除并且不能被恢复。
 - List 分区暂时不支持[备份与恢复](../../administration/management/Backup_and_restore.md)。
 - [异步物化视图](../../using_starrocks/async_mv/Materialized_view.md)暂不支持基于使用 List 分区的基表创建。
+=======
+- 不支持[动态](./dynamic_partitioning.md) List 分区。
+- StarRocks 存算分离模式 从 3.1.1 版本开始支持该功能。
+- 使用 `ALTER TABLE <table_name> DROP PARTITION <partition_name>;` 分区直接被删除并且不能被恢复。
+- List 分区表暂时不支持[备份与恢复](../../administration/management/Backup_and_restore.md)。
+- 从 3.3.5 版本开始，[异步物化视图](../../using_starrocks/async_mv/Materialized_view.md)支持基于使用 List 分区的基表创建。
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

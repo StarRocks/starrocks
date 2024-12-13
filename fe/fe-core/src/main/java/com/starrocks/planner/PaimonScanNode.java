@@ -12,14 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
 package com.starrocks.planner;
 
+=======
+package com.starrocks.planner;
+
+import com.google.common.annotations.VisibleForTesting;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
+<<<<<<< HEAD
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.connector.Connector;
@@ -28,13 +35,35 @@ import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.paimon.PaimonConnector;
 import com.starrocks.connector.paimon.PaimonSplitsInfo;
 import com.starrocks.credential.CloudConfiguration;
+=======
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.PaimonTable;
+import com.starrocks.catalog.Type;
+import com.starrocks.connector.CatalogConnector;
+import com.starrocks.connector.ConnectorMetadatRequestContext;
+import com.starrocks.connector.GetRemoteFilesParams;
+import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.paimon.PaimonRemoteFileDesc;
+import com.starrocks.connector.paimon.PaimonSplitsInfo;
+import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.thrift.TExplainLevel;
+<<<<<<< HEAD
 import com.starrocks.thrift.THdfsScanNode;
 import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TNetworkAddress;
+=======
+import com.starrocks.thrift.THdfsFileFormat;
+import com.starrocks.thrift.THdfsScanNode;
+import com.starrocks.thrift.THdfsScanRange;
+import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TPaimonDeletionFile;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRange;
@@ -45,6 +74,11 @@ import org.apache.logging.log4j.Logger;
 import org.apache.paimon.data.BinaryRow;
 import org.apache.paimon.io.DataFileMeta;
 import org.apache.paimon.table.source.DataSplit;
+<<<<<<< HEAD
+=======
+import org.apache.paimon.table.source.DeletionFile;
+import org.apache.paimon.table.source.RawFile;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.paimon.table.source.Split;
 import org.apache.paimon.utils.InstantiationUtil;
 
@@ -52,8 +86,15 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
+<<<<<<< HEAD
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
+=======
+import java.util.Optional;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
+import javax.annotation.Nullable;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import static com.starrocks.thrift.TExplainLevel.VERBOSE;
 import static java.nio.charset.StandardCharsets.UTF_8;
@@ -85,7 +126,11 @@ public class PaimonScanNode extends ScanNode {
         if (catalog == null) {
             return;
         }
+<<<<<<< HEAD
         Connector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalog);
+=======
+        CatalogConnector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalog);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Preconditions.checkState(connector != null,
                 String.format("connector of catalog %s should not be null", catalog));
         cloudConfiguration = connector.getMetadata().getCloudConfiguration();
@@ -106,18 +151,38 @@ public class PaimonScanNode extends ScanNode {
         return scanRangeLocationsList;
     }
 
+<<<<<<< HEAD
     public void setupScanRangeLocations(TupleDescriptor tupleDescriptor, ScalarOperator predicate) {
         List<String> fieldNames =
                 tupleDescriptor.getSlots().stream().map(s -> s.getColumn().getName()).collect(Collectors.toList());
         List<RemoteFileInfo> fileInfos = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFileInfos(
                 paimonTable.getCatalogName(), paimonTable, null, -1, predicate, fieldNames);
         RemoteFileDesc remoteFileDesc = fileInfos.get(0).getFiles().get(0);
+=======
+    public long getEstimatedLength(long rowCount, TupleDescriptor tupleDescriptor) {
+        List<Column> dataColumns = tupleDescriptor.getSlots().stream().map(s -> s.getColumn())
+                .collect(Collectors.toList());
+        long rowSize = dataColumns.stream().mapToInt(column -> column.getType().getTypeSize()).sum();
+
+        return rowCount * rowSize;
+    }
+
+    public void setupScanRangeLocations(TupleDescriptor tupleDescriptor, ScalarOperator predicate) {
+        List<String> fieldNames =
+                tupleDescriptor.getSlots().stream().map(s -> s.getColumn().getName()).collect(Collectors.toList());
+        GetRemoteFilesParams params =
+                GetRemoteFilesParams.newBuilder().setPredicate(predicate).setFieldNames(fieldNames).build();
+        List<RemoteFileInfo> fileInfos =
+                GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFiles(paimonTable, params);
+        PaimonRemoteFileDesc remoteFileDesc = (PaimonRemoteFileDesc) fileInfos.get(0).getFiles().get(0);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         PaimonSplitsInfo splitsInfo = remoteFileDesc.getPaimonSplitsInfo();
         String predicateInfo = encodeObjectToString(splitsInfo.getPredicate());
         List<Split> splits = splitsInfo.getPaimonSplits();
 
         if (splits.isEmpty()) {
             LOG.warn("There is no paimon splits on {}.{} and predicate: [{}]",
+<<<<<<< HEAD
                     paimonTable.getDbName(), paimonTable.getTableName(), predicate);
             return;
         }
@@ -130,21 +195,160 @@ public class PaimonScanNode extends ScanNode {
             if (!selectedPartitions.containsKey(partitionValue)) {
                 selectedPartitions.put(partitionValue, nextPartitionId());
             }
+=======
+                    paimonTable.getCatalogDBName(), paimonTable.getCatalogTableName(), predicate);
+            return;
+        }
+
+        boolean forceJNIReader = ConnectContext.get().getSessionVariable().getPaimonForceJNIReader();
+        Map<BinaryRow, Long> selectedPartitions = Maps.newHashMap();
+        for (Split split : splits) {
+            if (split instanceof DataSplit) {
+                DataSplit dataSplit = (DataSplit) split;
+                Optional<List<RawFile>> optionalRawFiles = dataSplit.convertToRawFiles();
+                if (!forceJNIReader && optionalRawFiles.isPresent()) {
+                    List<RawFile> rawFiles = optionalRawFiles.get();
+                    boolean validFormat = rawFiles.stream().allMatch(p -> fromType(p.format()) != THdfsFileFormat.UNKNOWN);
+                    if (validFormat) {
+                        Optional<List<DeletionFile>> deletionFiles = dataSplit.deletionFiles();
+                        for (int i = 0; i < rawFiles.size(); i++) {
+                            if (deletionFiles.isPresent()) {
+                                splitRawFileScanRangeLocations(rawFiles.get(i), deletionFiles.get().get(i));
+                            } else {
+                                splitRawFileScanRangeLocations(rawFiles.get(i), null);
+                            }
+                        }
+                    } else {
+                        long totalFileLength = getTotalFileLength(dataSplit);
+                        addSplitScanRangeLocations(dataSplit, predicateInfo, totalFileLength);
+                    }
+                } else {
+                    long totalFileLength = getTotalFileLength(dataSplit);
+                    addSplitScanRangeLocations(dataSplit, predicateInfo, totalFileLength);
+                }
+                BinaryRow partitionValue = dataSplit.partition();
+                if (!selectedPartitions.containsKey(partitionValue)) {
+                    selectedPartitions.put(partitionValue, nextPartitionId());
+                }
+            } else {
+                // paimon system table
+                long length = getEstimatedLength(split.rowCount(), tupleDescriptor);
+                addSplitScanRangeLocations(split, predicateInfo, length);
+            }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         scanNodePredicates.setSelectedPartitionIds(selectedPartitions.values());
     }
 
+<<<<<<< HEAD
     private void addScanRangeLocations(DataSplit split, String predicateInfo) {
+=======
+    private THdfsFileFormat fromType(String type) {
+        THdfsFileFormat tHdfsFileFormat;
+        switch (type) {
+            case "orc":
+                tHdfsFileFormat = THdfsFileFormat.ORC;
+                break;
+            case "parquet":
+                tHdfsFileFormat = THdfsFileFormat.PARQUET;
+                break;
+            default:
+                tHdfsFileFormat = THdfsFileFormat.UNKNOWN;
+        }
+        return tHdfsFileFormat;
+    }
+
+    public void splitRawFileScanRangeLocations(RawFile rawFile, @Nullable DeletionFile deletionFile) {
+        SessionVariable sv = SessionVariable.DEFAULT_SESSION_VARIABLE;
+        long splitSize = sv.getConnectorMaxSplitSize();
+        long totalSize = rawFile.length();
+        long offset = rawFile.offset();
+        boolean needSplit = totalSize > splitSize;
+        if (needSplit) {
+            splitScanRangeLocations(rawFile, offset, totalSize, splitSize, deletionFile);
+        } else {
+            addRawFileScanRangeLocations(rawFile, deletionFile);
+        }
+    }
+
+    @VisibleForTesting
+    public void splitScanRangeLocations(RawFile rawFile,
+                                        long offset,
+                                        long length,
+                                        long splitSize,
+                                        @Nullable DeletionFile deletionFile) {
+        long remainingBytes = length;
+        do {
+            if (remainingBytes < 2 * splitSize) {
+                addRawFileScanRangeLocations(rawFile, offset + length - remainingBytes, remainingBytes, deletionFile);
+                remainingBytes = 0;
+            } else {
+                addRawFileScanRangeLocations(rawFile, offset + length - remainingBytes, splitSize, deletionFile);
+                remainingBytes -= splitSize;
+            }
+        } while (remainingBytes > 0);
+    }
+
+    private void addRawFileScanRangeLocations(RawFile rawFile, @Nullable DeletionFile deletionFile) {
+        addRawFileScanRangeLocations(rawFile, rawFile.offset(), rawFile.length(), deletionFile);
+    }
+
+    private void addRawFileScanRangeLocations(RawFile rawFile,
+                                              long offset,
+                                              long length,
+                                              @Nullable DeletionFile deletionFile) {
+        TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
+
+        THdfsScanRange hdfsScanRange = new THdfsScanRange();
+        hdfsScanRange.setUse_paimon_jni_reader(false);
+        hdfsScanRange.setFull_path(rawFile.path());
+        hdfsScanRange.setOffset(offset);
+        hdfsScanRange.setFile_length(rawFile.length());
+        hdfsScanRange.setLength(length);
+        hdfsScanRange.setFile_format(fromType(rawFile.format()));
+
+        if (null != deletionFile) {
+            TPaimonDeletionFile paimonDeletionFile = new TPaimonDeletionFile();
+            paimonDeletionFile.setPath(deletionFile.path());
+            paimonDeletionFile.setOffset(deletionFile.offset());
+            paimonDeletionFile.setLength(deletionFile.length());
+            hdfsScanRange.setPaimon_deletion_file(paimonDeletionFile);
+        }
+
+        TScanRange scanRange = new TScanRange();
+        scanRange.setHdfs_scan_range(hdfsScanRange);
+        scanRangeLocations.setScan_range(scanRange);
+
+        TScanRangeLocation scanRangeLocation = new TScanRangeLocation(new TNetworkAddress("-1", -1));
+        scanRangeLocations.addToLocations(scanRangeLocation);
+
+        scanRangeLocationsList.add(scanRangeLocations);
+    }
+
+    @VisibleForTesting
+    public void addSplitScanRangeLocations(Split split, String predicateInfo, long totalFileLength) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
 
         THdfsScanRange hdfsScanRange = new THdfsScanRange();
         hdfsScanRange.setUse_paimon_jni_reader(true);
         hdfsScanRange.setPaimon_split_info(encodeObjectToString(split));
         hdfsScanRange.setPaimon_predicate_info(predicateInfo);
+<<<<<<< HEAD
         long totalFileLength = getTotalFileLength(split);
         hdfsScanRange.setFile_length(totalFileLength);
         hdfsScanRange.setLength(totalFileLength);
 
+=======
+        hdfsScanRange.setFile_length(totalFileLength);
+        hdfsScanRange.setLength(totalFileLength);
+        // Only uses for hasher in HDFSBackendSelector to select BE
+        if (split instanceof DataSplit) {
+            DataSplit dataSplit = (DataSplit) split;
+            hdfsScanRange.setRelative_path(String.valueOf(dataSplit.hashCode()));
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         TScanRange scanRange = new TScanRange();
         scanRange.setHdfs_scan_range(hdfsScanRange);
         scanRangeLocations.setScan_range(scanRange);
@@ -190,7 +394,12 @@ public class PaimonScanNode extends ScanNode {
         }
 
         List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
+<<<<<<< HEAD
                 paimonTable.getCatalogName(), paimonTable.getDbName(), paimonTable.getTableName());
+=======
+                paimonTable.getCatalogName(), paimonTable.getCatalogDBName(), paimonTable.getCatalogTableName(),
+                ConnectorMetadatRequestContext.DEFAULT);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         output.append(prefix).append(
                 String.format("partitions=%s/%s", scanNodePredicates.getSelectedPartitionIds().size(),
@@ -203,6 +412,7 @@ public class PaimonScanNode extends ScanNode {
             output.append("\n");
         }
 
+<<<<<<< HEAD
         output.append(prefix).append(String.format("avgRowSize=%s", avgRowSize));
         output.append("\n");
 
@@ -214,6 +424,18 @@ public class PaimonScanNode extends ScanNode {
                 Type type = slotDescriptor.getOriginType();
                 if (type.isComplexType()) {
                     output.append(prefix).append(String.format("Pruned type: %d <-> [%s]\n", slotDescriptor.getId().asInt(), type));
+=======
+        output.append(prefix).append(String.format("avgRowSize=%s\n", avgRowSize));
+
+        if (detailLevel == TExplainLevel.VERBOSE) {
+            HdfsScanNode.appendDataCacheOptionsInExplain(output, prefix, dataCacheOptions);
+
+            for (SlotDescriptor slotDescriptor : desc.getSlots()) {
+                Type type = slotDescriptor.getOriginType();
+                if (type.isComplexType()) {
+                    output.append(prefix)
+                            .append(String.format("Pruned type: %d <-> [%s]\n", slotDescriptor.getId().asInt(), type));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
             }
         }
@@ -222,11 +444,14 @@ public class PaimonScanNode extends ScanNode {
     }
 
     @Override
+<<<<<<< HEAD
     public int getNumInstances() {
         return scanRangeLocationsList.size();
     }
 
     @Override
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     protected void toThrift(TPlanNode msg) {
         msg.node_type = TPlanNodeType.HDFS_SCAN_NODE;
         THdfsScanNode tHdfsScanNode = new THdfsScanNode();
@@ -242,12 +467,19 @@ public class PaimonScanNode extends ScanNode {
 
         HdfsScanNode.setScanOptimizeOptionToThrift(tHdfsScanNode, this);
         HdfsScanNode.setCloudConfigurationToThrift(tHdfsScanNode, cloudConfiguration);
+<<<<<<< HEAD
         HdfsScanNode.setMinMaxConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
     }
 
     @Override
     public boolean canUsePipeLine() {
         return true;
+=======
+        HdfsScanNode.setNonEvalPartitionConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
+        HdfsScanNode.setMinMaxConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
+        HdfsScanNode.setNonPartitionConjunctsToThrift(msg, this, this.getScanNodePredicates());
+        HdfsScanNode.setDataCacheOptionsToThrift(tHdfsScanNode, dataCacheOptions);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override

@@ -50,6 +50,13 @@ public class ConnectorTableInfo {
         return CollectionUtils.isEmpty(relatedMaterializedViews);
     }
 
+<<<<<<< HEAD
+=======
+    public Set<MvId> getRelatedMaterializedViews() {
+        return relatedMaterializedViews;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public String toString() {
         return "ConnectorTableInfo {" +

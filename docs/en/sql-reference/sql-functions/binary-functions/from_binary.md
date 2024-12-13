@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # from_binary
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Converts a binary value to a VARCHAR string based on the specified binary format (`binary_type`). The following binary formats are supported: `hex`, `encode64`, and `utf8`. If no `binary_type` is specified, `hex` is the default.
 

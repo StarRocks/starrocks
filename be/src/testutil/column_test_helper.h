@@ -37,7 +37,11 @@ public:
             return data;
         } else if constexpr (std::is_same_v<T, Slice>) {
             auto data = BinaryColumn::create();
+<<<<<<< HEAD
             data->append_strings(values);
+=======
+            data->append_strings(values.data(), values.size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return data;
         } else if constexpr (std::is_same_v<T, double>) {
             auto data = DoubleColumn ::create();

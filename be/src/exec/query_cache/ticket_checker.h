@@ -20,6 +20,11 @@
 #include <unordered_map>
 
 #include "gutil/macros.h"
+<<<<<<< HEAD
+=======
+#include "util/spinlock.h"
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 namespace starrocks::query_cache {
 
 // TicketChecker is used to count down EOS chunk of the SplitMorsels generated from the same
@@ -62,8 +67,21 @@ public:
     // test if all_ready_bit is on, returning true means that morsel splitting is done.
     bool are_all_ready(TicketIdType id);
 
+<<<<<<< HEAD
 private:
     DISALLOW_COPY_AND_MOVE(TicketChecker);
+=======
+    // if all id in check are ready. return true
+    bool are_all_left(TicketIdType id);
+
+    // there are more tickets of this `id`
+    // and we have to clear ALL_READY_BIT;
+    void more_tickets(TicketIdType id);
+
+private:
+    DISALLOW_COPY_AND_MOVE(TicketChecker);
+    SpinLock _lock;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::unordered_map<int64_t, Ticket> _tickets;
 };
 } // namespace starrocks::query_cache

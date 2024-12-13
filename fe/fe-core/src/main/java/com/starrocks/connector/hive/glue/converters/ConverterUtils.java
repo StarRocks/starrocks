@@ -15,8 +15,13 @@
 
 package com.starrocks.connector.hive.glue.converters;
 
+<<<<<<< HEAD
 import com.amazonaws.services.glue.model.Table;
 import com.google.gson.Gson;
+=======
+import com.google.gson.Gson;
+import software.amazon.awssdk.services.glue.model.Table;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 public class ConverterUtils {
 

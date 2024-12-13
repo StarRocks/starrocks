@@ -18,6 +18,11 @@ import com.google.common.base.Strings;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
+<<<<<<< HEAD
+=======
+import com.starrocks.connector.ConnectorProperties;
+import com.starrocks.connector.ConnectorType;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.credential.CloudConfiguration;
@@ -25,8 +30,14 @@ import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.credential.CloudType;
 import com.starrocks.credential.aliyun.AliyunCloudConfiguration;
 import com.starrocks.credential.aliyun.AliyunCloudCredential;
+<<<<<<< HEAD
 import com.starrocks.credential.aws.AWSCloudConfiguration;
 import com.starrocks.credential.aws.AWSCloudCredential;
+=======
+import com.starrocks.credential.aws.AwsCloudConfiguration;
+import com.starrocks.credential.aws.AwsCloudCredential;
+import org.apache.hadoop.conf.Configuration;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.paimon.catalog.Catalog;
 import org.apache.paimon.catalog.CatalogContext;
 import org.apache.paimon.catalog.CatalogFactory;
@@ -41,12 +52,18 @@ import static org.apache.paimon.options.CatalogOptions.URI;
 import static org.apache.paimon.options.CatalogOptions.WAREHOUSE;
 
 public class PaimonConnector implements Connector {
+<<<<<<< HEAD
     private static final String PAIMON_CATALOG_TYPE = "paimon.catalog.type";
     private static final String PAIMON_CATALOG_WAREHOUSE = "paimon.catalog.warehouse";
+=======
+    public static final String PAIMON_CATALOG_TYPE = "paimon.catalog.type";
+    public static final String PAIMON_CATALOG_WAREHOUSE = "paimon.catalog.warehouse";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private static final String HIVE_METASTORE_URIS = "hive.metastore.uris";
     private static final String DLF_CATGALOG_ID = "dlf.catalog.id";
     private final HdfsEnvironment hdfsEnvironment;
     private Catalog paimonNativeCatalog;
+<<<<<<< HEAD
     private final String catalogType;
     private final String metastoreUris;
     private final String warehousePath;
@@ -61,6 +78,21 @@ public class PaimonConnector implements Connector {
         this.catalogType = properties.get(PAIMON_CATALOG_TYPE);
         this.metastoreUris = properties.get(HIVE_METASTORE_URIS);
         this.warehousePath = properties.get(PAIMON_CATALOG_WAREHOUSE);
+=======
+    private final String catalogName;
+    private final Options paimonOptions;
+    private final ConnectorProperties connectorProperties;
+
+    public PaimonConnector(ConnectorContext context) {
+        Map<String, String> properties = context.getProperties();
+        this.connectorProperties = new ConnectorProperties(ConnectorType.PAIMON, properties);
+        this.catalogName = context.getCatalogName();
+        CloudConfiguration cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
+        this.hdfsEnvironment = new HdfsEnvironment(cloudConfiguration);
+        String catalogType = properties.get(PAIMON_CATALOG_TYPE);
+        String metastoreUris = properties.get(HIVE_METASTORE_URIS);
+        String warehousePath = properties.get(PAIMON_CATALOG_WAREHOUSE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         this.paimonOptions = new Options();
         if (Strings.isNullOrEmpty(catalogType)) {
@@ -85,7 +117,13 @@ public class PaimonConnector implements Connector {
                 && !catalogType.equalsIgnoreCase("dlf")) {
             throw new StarRocksConnectorException("The property %s must be set.", PAIMON_CATALOG_WAREHOUSE);
         }
+<<<<<<< HEAD
         paimonOptions.setString(WAREHOUSE.key(), warehousePath);
+=======
+        if (!Strings.isNullOrEmpty(warehousePath)) {
+            paimonOptions.setString(WAREHOUSE.key(), warehousePath);
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         initFsOption(cloudConfiguration);
         String keyPrefix = "paimon.option.";
         Set<String> optionKeys = properties.keySet().stream().filter(k -> k.startsWith(keyPrefix)).collect(Collectors.toSet());
@@ -97,10 +135,17 @@ public class PaimonConnector implements Connector {
 
     public void initFsOption(CloudConfiguration cloudConfiguration) {
         if (cloudConfiguration.getCloudType() == CloudType.AWS) {
+<<<<<<< HEAD
             AWSCloudConfiguration awsCloudConfiguration = (AWSCloudConfiguration) cloudConfiguration;
             paimonOptions.set("s3.connection.ssl.enabled", String.valueOf(awsCloudConfiguration.getEnableSSL()));
             paimonOptions.set("s3.path.style.access", String.valueOf(awsCloudConfiguration.getEnablePathStyleAccess()));
             AWSCloudCredential awsCloudCredential = awsCloudConfiguration.getAWSCloudCredential();
+=======
+            AwsCloudConfiguration awsCloudConfiguration = (AwsCloudConfiguration) cloudConfiguration;
+            paimonOptions.set("s3.connection.ssl.enabled", String.valueOf(awsCloudConfiguration.getEnableSSL()));
+            paimonOptions.set("s3.path.style.access", String.valueOf(awsCloudConfiguration.getEnablePathStyleAccess()));
+            AwsCloudCredential awsCloudCredential = awsCloudConfiguration.getAwsCloudCredential();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (!awsCloudCredential.getEndpoint().isEmpty()) {
                 paimonOptions.set("s3.endpoint", awsCloudCredential.getEndpoint());
             }
@@ -132,13 +177,23 @@ public class PaimonConnector implements Connector {
 
     public Catalog getPaimonNativeCatalog() {
         if (paimonNativeCatalog == null) {
+<<<<<<< HEAD
             this.paimonNativeCatalog = CatalogFactory.createCatalog(CatalogContext.create(getPaimonOptions()));
+=======
+            Configuration configuration = new Configuration();
+            hdfsEnvironment.getCloudConfiguration().applyToConfiguration(configuration);
+            this.paimonNativeCatalog = CatalogFactory.createCatalog(CatalogContext.create(getPaimonOptions(), configuration));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return paimonNativeCatalog;
     }
 
     @Override
     public ConnectorMetadata getMetadata() {
+<<<<<<< HEAD
         return new PaimonMetadata(catalogName, hdfsEnvironment, getPaimonNativeCatalog(), getPaimonOptions());
+=======
+        return new PaimonMetadata(catalogName, hdfsEnvironment, getPaimonNativeCatalog(), connectorProperties);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }

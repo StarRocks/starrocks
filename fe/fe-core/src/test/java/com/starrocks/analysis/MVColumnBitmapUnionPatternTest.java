@@ -40,7 +40,10 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.sql.analyzer.mvpattern.MVColumnBitmapUnionPattern;
+<<<<<<< HEAD
 import mockit.Expectations;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import mockit.Injectable;
 import org.junit.Assert;
 import org.junit.Test;

@@ -17,9 +17,18 @@ package com.starrocks.lake.compaction;
 
 import java.util.Collection;
 import java.util.List;
+<<<<<<< HEAD
+=======
+import java.util.Set;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import javax.validation.constraints.NotNull;
 
 public interface Selector {
     @NotNull
+<<<<<<< HEAD
     List<PartitionStatistics> select(@NotNull Collection<PartitionStatistics> statistics);
+=======
+    List<PartitionStatisticsSnapshot> select(@NotNull Collection<PartitionStatistics> statistics,
+                                             @NotNull Set<Long> excludeTables);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

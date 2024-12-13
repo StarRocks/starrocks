@@ -17,7 +17,10 @@ package com.starrocks.scheduler.mv;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
+<<<<<<< HEAD
 import com.starrocks.analysis.KeysDesc;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.CatalogUtils;
@@ -33,6 +36,10 @@ import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DistributionDesc;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.KeysDesc;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.common.EngineType;
 import com.starrocks.sql.common.UnsupportedException;
@@ -120,7 +127,11 @@ class IMTCreator {
         for (CreateTableStmt create : createTables) {
             LOG.info("creating IMT {} for MV {}", create.getTableName(), view.getName());
             try {
+<<<<<<< HEAD
                 GlobalStateMgr.getCurrentState().createTable(create);
+=======
+                GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(create);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             } catch (DdlException e) {
                 // TODO(murphy) cleanup created IMT, or make it atomic
                 LOG.warn("create IMT {} failed due to ", create.getTableName(), e);

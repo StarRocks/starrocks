@@ -305,7 +305,10 @@ select date_diff('month', lhs, rhs) from t1;
 -- !result
 select date_diff('invalid-type', lhs, rhs) from t1;
 -- result:
+<<<<<<< HEAD
 [REGEX].*type column should be one of day/hour/minute/second/millisecond*
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result
 select date_diff(NULL, lhs, rhs) from t1;
 -- result:
@@ -738,4 +741,8 @@ None	year	2017-02-28
 None	year	2017-02-28
 None	year	2017-02-28
 None	year	2017-06-30
+<<<<<<< HEAD
 -- !result
+=======
+-- !result
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

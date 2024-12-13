@@ -25,6 +25,11 @@ mysql_lib.py
 import pymysql as _mysql
 from pymysql.constants import CLIENT
 
+<<<<<<< HEAD
+=======
+from lib import close_conn
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 class MysqlLib(object):
     """MysqlLib class"""
@@ -52,4 +57,9 @@ class MysqlLib(object):
 
     def close(self):
         if self.connector != "":
+<<<<<<< HEAD
             self.connector.close()
+=======
+            close_conn(self.connector, "MySQL")
+            self.connector = ""
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

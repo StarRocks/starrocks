@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
@@ -20,6 +23,7 @@ import com.starrocks.sql.parser.NodePosition;
 import java.util.List;
 
 public class AddBackendClause extends BackendClause {
+<<<<<<< HEAD
 
     public AddBackendClause(List<String> hostPorts) {
         super(hostPorts, NodePosition.ZERO);
@@ -29,4 +33,26 @@ public class AddBackendClause extends BackendClause {
         super(hostPorts, pos);
     }
 
+=======
+    private final String warehouse;
+
+    public AddBackendClause(List<String> hostPorts, String warehouse) {
+        super(hostPorts, NodePosition.ZERO);
+        this.warehouse = warehouse;
+    }
+
+    public AddBackendClause(List<String> hostPorts, String warehouse, NodePosition pos) {
+        super(hostPorts, pos);
+        this.warehouse = warehouse;
+    }
+
+    public String getWarehouse() {
+        return warehouse;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitAddBackendClause(this, context);
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

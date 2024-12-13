@@ -15,10 +15,13 @@
 
 package com.starrocks.connector.hive.glue.metastore;
 
+<<<<<<< HEAD
 import com.amazonaws.services.glue.model.Database;
 import com.amazonaws.services.glue.model.DatabaseInput;
 import com.amazonaws.services.glue.model.Table;
 import com.amazonaws.services.glue.model.TableInput;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Ticker;
 import com.google.common.cache.Cache;
@@ -27,6 +30,13 @@ import com.starrocks.connector.hive.glue.util.AWSGlueConfig;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+<<<<<<< HEAD
+=======
+import software.amazon.awssdk.services.glue.model.Database;
+import software.amazon.awssdk.services.glue.model.DatabaseInput;
+import software.amazon.awssdk.services.glue.model.Table;
+import software.amazon.awssdk.services.glue.model.TableInput;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import java.util.ArrayList;
 import java.util.List;
@@ -218,7 +228,11 @@ public class AWSGlueMetastoreCacheDecorator extends AWSGlueMetastoreBaseDecorato
     public void updateTable(String dbName, TableInput tableInput) {
         super.updateTable(dbName, tableInput);
         if (tableCacheEnabled) {
+<<<<<<< HEAD
             purgeTableFromCache(dbName, tableInput.getName());
+=======
+            purgeTableFromCache(dbName, tableInput.name());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -238,8 +252,13 @@ public class AWSGlueMetastoreCacheDecorator extends AWSGlueMetastoreBaseDecorato
     private void cacheAllDatabases(List<Database> allDatabases) {
         List<String> allNames = new ArrayList<>();
         for (Database db : allDatabases) {
+<<<<<<< HEAD
             databaseCache.put(db.getName(), db);
             allNames.add(db.getName());
+=======
+            databaseCache.put(db.name(), db);
+            allNames.add(db.name());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         databasesCache.put(databasesCacheKey, allNames);
     }

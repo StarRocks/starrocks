@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # months_add
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 给日期添加指定的月数，精确到月。
 

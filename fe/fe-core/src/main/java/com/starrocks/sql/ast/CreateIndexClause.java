@@ -16,7 +16,10 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.alter.AlterOpType;
+<<<<<<< HEAD
 import com.starrocks.analysis.IndexDef;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.Index;
 import com.starrocks.sql.parser.NodePosition;
 

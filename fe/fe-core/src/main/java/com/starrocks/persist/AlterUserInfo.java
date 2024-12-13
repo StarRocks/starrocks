@@ -26,6 +26,10 @@ import com.starrocks.sql.ast.UserIdentity;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+<<<<<<< HEAD
+=======
+import java.util.Map;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 public class AlterUserInfo implements Writable {
     @SerializedName(value = "u")
@@ -33,11 +37,25 @@ public class AlterUserInfo implements Writable {
     @SerializedName(value = "a")
     UserAuthenticationInfo authenticationInfo;
 
+<<<<<<< HEAD
+=======
+    @SerializedName(value = "p")
+    Map<String, String> properties;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public AlterUserInfo(UserIdentity userIdentity, UserAuthenticationInfo authenticationInfo) {
         this.userIdentity = userIdentity;
         this.authenticationInfo = authenticationInfo;
     }
 
+<<<<<<< HEAD
+=======
+    public AlterUserInfo(UserIdentity userIdentity, UserAuthenticationInfo authenticationInfo, Map<String, String> properties) {
+        this(userIdentity, authenticationInfo);
+        this.properties = properties;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public UserIdentity getUserIdentity() {
         return userIdentity;
     }
@@ -46,6 +64,13 @@ public class AlterUserInfo implements Writable {
         return authenticationInfo;
     }
 
+<<<<<<< HEAD
+=======
+    public Map<String, String> getProperties() {
+        return properties;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public void write(DataOutput out) throws IOException {
         Text.writeString(out, GsonUtils.GSON.toJson(this));

@@ -11,8 +11,12 @@ s5  struct<c0 INT,c1 STRUCT<c INT, b string>>
 DUPLICATE KEY(pk)
 DISTRIBUTED BY HASH(pk) BUCKETS 3
 PROPERTIES (
+<<<<<<< HEAD
 "replication_num" = "1",
 "in_memory" = "false"
+=======
+"replication_num" = "1"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 );
 -- result:
 -- !result
@@ -362,4 +366,8 @@ E: (1064, "Getting syntax error at line 1, column 61. Detail message: Unexpected
 select t.s1, s.s1 from struct_test t full join struct_test s where s.s1 <= t.s1 order by t.pk;
 -- result:
 E: (1064, "Getting syntax error at line 1, column 61. Detail message: Unexpected input 'where', the most similar input is {'ON', 'USING'}.")
+<<<<<<< HEAD
 -- !result
+=======
+-- !result
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

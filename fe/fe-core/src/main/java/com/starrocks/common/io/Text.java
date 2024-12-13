@@ -177,7 +177,11 @@ public class Text implements Writable {
             return -1; // not found
         } catch (CharacterCodingException e) {
             // can't get here
+<<<<<<< HEAD
             LOG.warn(e);
+=======
+            LOG.warn("Failed to execute find", e);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return -1;
         }
     }

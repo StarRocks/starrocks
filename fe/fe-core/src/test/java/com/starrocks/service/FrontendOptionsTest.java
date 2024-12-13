@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 package com.starrocks.service;
 
 import com.starrocks.common.Config;
@@ -29,6 +32,10 @@ import java.io.FileNotFoundException;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.lang.reflect.Field;
+<<<<<<< HEAD
+=======
+import java.net.Inet4Address;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
@@ -40,7 +47,11 @@ import java.util.Properties;
 public class FrontendOptionsTest {
 
     @Mocked
+<<<<<<< HEAD
     InetAddress addr;
+=======
+    Inet4Address addr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     private boolean useFqdn = true;
     private boolean useFqdnFile = true;
@@ -50,6 +61,10 @@ public class FrontendOptionsTest {
 
         List<String> priorityCidrs = FrontendOptions.PRIORITY_CIDRS;
         priorityCidrs.add("192.168.5.136/32");
+<<<<<<< HEAD
+=======
+        priorityCidrs.add("2001:db8::/32");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         FrontendOptions frontendOptions = new FrontendOptions();
         boolean inPriorNetwork = frontendOptions.isInPriorNetwork("127.0.0.1");
@@ -57,11 +72,31 @@ public class FrontendOptionsTest {
 
         inPriorNetwork = frontendOptions.isInPriorNetwork("192.168.5.136");
         Assert.assertEquals(true, inPriorNetwork);
+<<<<<<< HEAD
 
     }
 
     private void mockNet() {
         new MockUp<InetAddress>() {
+=======
+        
+        inPriorNetwork = frontendOptions.isInPriorNetwork("2001:db8::1");
+        Assert.assertTrue(inPriorNetwork);
+    }
+
+    @Test
+    public void cidrTest2() {
+        List<String> priorityCidrs = FrontendOptions.PRIORITY_CIDRS;
+        priorityCidrs.add("2408:4001:258::/48");
+
+        FrontendOptions frontendOptions = new FrontendOptions();
+        boolean inPriorNetwork = frontendOptions.isInPriorNetwork("2408:4001:258:3780:f3f4:5acd:d53d:fa23");
+        Assert.assertEquals(true, inPriorNetwork);
+    }
+
+    private void mockNet() {
+        new MockUp<Inet4Address>() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             @Mock
             public InetAddress getLocalHost() throws UnknownHostException {
                 return addr;
@@ -150,6 +185,11 @@ public class FrontendOptionsTest {
 
     @Test(expected = IllegalAccessException.class)
     public void testGetStartWithFQDNThrowUnknownHostException() {
+<<<<<<< HEAD
+=======
+        String oldVal = Config.priority_networks;
+        Config.priority_networks = "";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         testInitAddrUseFqdnCommonMock();
         List<InetAddress> hosts = NetUtils.getHosts();
         new MockUp<InetAddress>() {
@@ -159,6 +199,10 @@ public class FrontendOptionsTest {
             }
         };
         FrontendOptions.initAddrUseFqdn(hosts);
+<<<<<<< HEAD
+=======
+        Config.priority_networks = oldVal;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test(expected = IllegalAccessException.class)

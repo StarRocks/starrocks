@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+<<<<<<< HEAD
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
@@ -27,6 +28,16 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
+=======
+import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MvRefreshArbiter;
+import com.starrocks.catalog.MvUpdateInfo;
+import com.starrocks.catalog.Table;
+import com.starrocks.common.Pair;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.qe.ConnectContext;
@@ -37,6 +48,10 @@ import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -46,6 +61,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.parser.ParsingException;
+<<<<<<< HEAD
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TExplainLevel;
@@ -53,13 +69,28 @@ import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
+=======
+import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.UtFrameUtils;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
+<<<<<<< HEAD
 
 import java.sql.SQLException;
+=======
+import org.junit.ClassRule;
+import org.junit.rules.TemporaryFolder;
+
+import java.sql.SQLException;
+import java.time.Instant;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.List;
 import java.util.Set;
 
@@ -68,22 +99,42 @@ public class MvRewriteTestBase {
     protected static ConnectContext connectContext;
     protected static PseudoCluster cluster;
     protected static StarRocksAssert starRocksAssert;
+<<<<<<< HEAD
+=======
+    @ClassRule
+    public static TemporaryFolder temp = new TemporaryFolder();
+
+    protected static long startSuiteTime = 0;
+    protected long startCaseTime = 0;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     protected static String DB_NAME = "test";
 
     @BeforeClass
     public static void beforeClass() throws Exception {
+<<<<<<< HEAD
         PseudoCluster.getOrCreateWithRandomPort(true, 1);
         GlobalStateMgr.getCurrentState().getTabletChecker().setInterval(100);
         cluster = PseudoCluster.getInstance();
 
         connectContext = UtFrameUtils.createDefaultCtx();
         ConnectorPlanTestBase.mockCatalog(connectContext);
+=======
+        startSuiteTime = Instant.now().getEpochSecond();
+
+        CachingMvPlanContextBuilder.getInstance().rebuildCache();
+        PseudoCluster.getOrCreateWithRandomPort(true, 1);
+        GlobalStateMgr.getCurrentState().getTabletChecker().setInterval(500);
+        cluster = PseudoCluster.getInstance();
+
+        connectContext = UtFrameUtils.createDefaultCtx();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withDatabase(DB_NAME).useDatabase(DB_NAME);
 
         // set default config for async mvs
         UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
+<<<<<<< HEAD
 
         new MockUp<PlanTestBase>() {
             /**
@@ -94,10 +145,13 @@ public class MvRewriteTestBase {
                 return true;
             }
         };
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @AfterClass
     public static void tearDown() throws Exception {
+<<<<<<< HEAD
         PseudoCluster.getInstance().shutdown(true);
     }
 
@@ -110,6 +164,12 @@ public class MvRewriteTestBase {
             for (Replica replica : replicas) {
                 replica.updateVersionInfo(version, -1, version);
             }
+=======
+        try {
+            PseudoCluster.getInstance().shutdown(true);
+        } catch (Exception e) {
+            // ignore exception
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -119,9 +179,30 @@ public class MvRewriteTestBase {
         return s;
     }
 
+<<<<<<< HEAD
     public static Table getTable(String dbName, String mvName) {
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         Table table = db.getTable(mvName);
+=======
+    public String getFragmentPlan(String sql, String traceModule) throws Exception {
+        return getFragmentPlan(sql, TExplainLevel.NORMAL, traceModule);
+    }
+
+    public String getFragmentPlan(String sql, TExplainLevel level, String traceModule) throws Exception {
+        Pair<String, Pair<ExecPlan, String>> result =
+                UtFrameUtils.getFragmentPlanWithTrace(connectContext, sql, traceModule);
+        Pair<ExecPlan, String> execPlanWithQuery = result.second;
+        String traceLog = execPlanWithQuery.second;
+        if (!Strings.isNullOrEmpty(traceLog)) {
+            System.out.println(traceLog);
+        }
+        return execPlanWithQuery.first.getExplainString(level);
+    }
+
+    public static Table getTable(String dbName, String mvName) {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), mvName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertNotNull(table);
         return table;
     }
@@ -133,6 +214,16 @@ public class MvRewriteTestBase {
         return mv;
     }
 
+<<<<<<< HEAD
+=======
+    protected void refreshMaterializedViewWithPartition(String dbName, String mvName, String partitionStart,
+                                                        String partitionEnd) throws SQLException {
+        cluster.runSql(dbName, String.format("refresh materialized view %s partition start (\"%s\") " +
+                "end (\"%s\") with sync mode", mvName, partitionStart, partitionEnd));
+        cluster.runSql(dbName, String.format("analyze table %s with sync mode", mvName));
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     protected void refreshMaterializedView(String dbName, String mvName) throws SQLException {
         cluster.runSql(dbName, String.format("refresh materialized view %s with sync mode", mvName));
         cluster.runSql(dbName, String.format("analyze table %s with sync mode", mvName));
@@ -173,7 +264,11 @@ public class MvRewriteTestBase {
         cluster.runSql(dbName, String.format("refresh materialized view %s with sync mode", mvName));
     }
 
+<<<<<<< HEAD
     protected static void dropMv(String dbName, String mvName) throws Exception {
+=======
+    public static void dropMv(String dbName, String mvName) throws Exception {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         starRocksAssert.dropMaterializedView(mvName);
     }
 
@@ -218,14 +313,82 @@ public class MvRewriteTestBase {
         }
     }
 
+<<<<<<< HEAD
     public static Set<String> getPartitionNamesToRefreshForMv(MaterializedView mv) {
         Set<String> toRefreshPartitions = Sets.newHashSet();
         mv.getPartitionNamesToRefreshForMv(toRefreshPartitions, true);
         return toRefreshPartitions;
+=======
+    public static MvUpdateInfo getMvUpdateInfo(MaterializedView mv) {
+        return MvRefreshArbiter.getMVTimelinessUpdateInfo(mv, true);
+    }
+
+    public static Set<String> getPartitionNamesToRefreshForMv(MaterializedView mv) {
+        MvUpdateInfo mvUpdateInfo = MvRefreshArbiter.getMVTimelinessUpdateInfo(mv, true);
+        Preconditions.checkState(mvUpdateInfo != null);
+        return mvUpdateInfo.getMvToRefreshPartitionNames();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public static void executeInsertSql(ConnectContext connectContext, String sql) throws Exception {
         connectContext.setQueryId(UUIDUtil.genUUID());
+<<<<<<< HEAD
         new StmtExecutor(connectContext, sql).execute();
+=======
+        StatementBase statement = SqlParser.parseSingleStatement(sql, connectContext.getSessionVariable().getSqlMode());
+        new StmtExecutor(connectContext, statement).execute();
+    }
+
+    /**
+     * Add list partition with one value
+     * @param tbl table name
+     * @param pName partition name
+     * @param pVal partition value
+     */
+    protected void addListPartition(String tbl, String pName, String pVal) {
+        String addPartitionSql = String.format("ALTER TABLE %s ADD PARTITION %s VALUES IN ('%s')", tbl, pName, pVal);
+        System.out.println(addPartitionSql);
+
+        StatementBase stmt = SqlParser.parseSingleStatement(addPartitionSql, connectContext.getSessionVariable().getSqlMode());
+        try {
+            new StmtExecutor(connectContext, stmt).execute();
+        } catch (Exception e) {
+            Assert.fail("add partition failed:" + e);
+        }
+    }
+
+    /**
+     * Add list partition with two values
+     * @param tbl table name
+     * @param pName partition name
+     * @param pVal1 the first partition value
+     * @param pVal2 the second partition value
+     */
+    protected void addListPartition(String tbl, String pName, String pVal1, String pVal2) {
+        String addPartitionSql = String.format("ALTER TABLE %s ADD PARTITION %s VALUES IN (('%s', '%s'))", tbl, pName, pVal1,
+                pVal2);
+        System.out.println(addPartitionSql);
+        StatementBase stmt = SqlParser.parseSingleStatement(addPartitionSql, connectContext.getSessionVariable().getSqlMode());
+        try {
+            new StmtExecutor(connectContext, stmt).execute();
+        } catch (Exception e) {
+            Assert.fail("add partition failed:" + e);
+        }
+    }
+
+    public static String getAggFunction(String funcName, String aggArg) {
+        if (funcName.equals(FunctionSet.ARRAY_AGG)) {
+            funcName = String.format("array_agg(distinct %s)", aggArg);
+        } else if (funcName.equals(FunctionSet.BITMAP_UNION)) {
+            funcName = String.format("bitmap_union(to_bitmap(%s))", aggArg);
+        } else if (funcName.equals(FunctionSet.PERCENTILE_UNION)) {
+            funcName = String.format("percentile_union(percentile_hash(%s))", aggArg);
+        } else if (funcName.equals(FunctionSet.HLL_UNION)) {
+            funcName = String.format("hll_union(hll_hash(%s))", aggArg);
+        } else {
+            funcName = String.format("%s(%s)", funcName, aggArg);
+        }
+        return funcName;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }

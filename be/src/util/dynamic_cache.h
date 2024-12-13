@@ -187,7 +187,11 @@ public:
         auto v = itr->second;
         auto entry = *v;
         if (entry->_ref != 1) {
+<<<<<<< HEAD
             VLOG(1) << "try_remove_by_key() failed: cache entry ref != 1 " << entry->_value;
+=======
+            VLOG(2) << "try_remove_by_key() failed: cache entry ref != 1 " << entry->_value;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return false;
         } else {
             _map.erase(itr);

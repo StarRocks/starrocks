@@ -32,7 +32,15 @@ if not os.environ.get("version"):
     version = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
     os.environ["version"] = version
 
+<<<<<<< HEAD
 from lib import sr_sql_lib
+=======
+from lib import sr_sql_lib, ColorEnum
+from lib.sr_sql_lib import self_print
+
+
+DEFAULT_TIMEOUT = 600
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 
 def print_help():
@@ -65,7 +73,11 @@ if __name__ == "__main__":
     record = False
     dirname = None
     concurrency = 8
+<<<<<<< HEAD
     timeout = 1200
+=======
+    timeout = DEFAULT_TIMEOUT
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     file_filter = ".*"
     case_filter = ".*"
     collect = False
@@ -92,7 +104,12 @@ if __name__ == "__main__":
         "skip_reruns",
         "config=",
         "keep_alive",
+<<<<<<< HEAD
         "run_info="
+=======
+        "run_info=",
+        "log_filtered"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ]
 
     case_dir = None
@@ -105,6 +122,11 @@ if __name__ == "__main__":
 
     cluster = "native"
 
+<<<<<<< HEAD
+=======
+    log_filtered = False
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     try:
         opts, args = getopt.getopt(sys.argv[1:], args, detail_args)
     except Exception as e:
@@ -162,6 +184,12 @@ if __name__ == "__main__":
         if opt == "--run_info":
             run_info = arg
 
+<<<<<<< HEAD
+=======
+        if opt == "--log_filtered":
+            log_filtered = True
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     # merge cluster info to attr
     cluster_attr = "!cloud" if cluster == "native" else "!native"
     attr = f"{attr},{cluster_attr}".strip(",")
@@ -183,11 +211,19 @@ if __name__ == "__main__":
     os.environ["config_path"] = config
     os.environ["keep_alive"] = str(keep_alive)
     os.environ['run_info'] = run_info
+<<<<<<< HEAD
+=======
+    os.environ['log_filtered'] = str(log_filtered)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     argv = [
         "nosetests",
         "test_sql_cases.py",
+<<<<<<< HEAD
         "-vv",
+=======
+        "-v",
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         "-s",
         "--nologcapture",
     ]
@@ -208,11 +244,20 @@ if __name__ == "__main__":
     argv += ["--processes=%s" % concurrency]
 
     # timeout setting of each case
+<<<<<<< HEAD
     if timeout <= 0:
         print("-t|--timeout must > 0!")
         print_help()
         sys.exit(4)
     argv += ["--process-timeout=%s" % timeout]
+=======
+    if not 0 < timeout <= 10 * 60:
+        print("-t|--timeout(s) must be in (0, 10min]!")
+        print_help()
+        sys.exit(4)
+    argv += ["--process-timeout=%s" % timeout]
+    argv += ["--process-restartworker"]
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     # test xml
     if not record:
@@ -221,10 +266,18 @@ if __name__ == "__main__":
     if collect:
         argv += ["--collect-only"]
 
+<<<<<<< HEAD
     print("Test cmd: %s" % " ".join(argv))
+=======
+    self_print("Test cmd: %s" % " ".join(argv), ColorEnum.GREEN)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     nose.run(argv=argv)
 
     # record mode
     if record and not collect:
+<<<<<<< HEAD
         sr_sql_lib.StarrocksSQLApiLib().save_r_into_file(part)
+=======
+        sr_sql_lib.StarrocksSQLApiLib().save_r_into_file(part)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

@@ -109,7 +109,11 @@ Stream Load 事务接口具有如下优势：
    4,Julia,25
    ```
 
+<<<<<<< HEAD
 2. 在数据库 `test_db` 中创建一张名为 `table1` 的主键模型表。表包含 `id`、`name` 和 `score` 三列，主键为 `id` 列，如下所示：
+=======
+2. 在数据库 `test_db` 中创建一张名为 `table1` 的主键表。表包含 `id`、`name` 和 `score` 三列，主键为 `id` 列，如下所示：
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
    ```SQL
    CREATE TABLE `table1`

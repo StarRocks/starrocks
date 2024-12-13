@@ -20,10 +20,16 @@
 
 #include "util/random.h"
 
+<<<<<<< HEAD
 #include <limits.h>
 #include <stdint.h>
 #include <string.h>
 
+=======
+#include <climits>
+#include <cstdint>
+#include <cstring>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include <thread>
 #include <utility>
 

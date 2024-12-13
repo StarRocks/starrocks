@@ -15,7 +15,12 @@
 package com.starrocks.transaction;
 
 import com.google.common.collect.Lists;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.system.ComputeNode;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.TUniqueId;
 import org.junit.After;
 import org.junit.Assert;
@@ -28,7 +33,13 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
+<<<<<<< HEAD
 import java.util.List;
+=======
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.UUID;
 
 public class TransactionStateBatchTest {
@@ -41,7 +52,11 @@ public class TransactionStateBatchTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testSerDe() throws IOException, UserException {
+=======
+    public void testSerDe() throws IOException, StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // 1. Write objects to file
         File file = new File(fileName);
         file.createNewFile();
@@ -88,4 +103,48 @@ public class TransactionStateBatchTest {
         in.close();
     }
 
+<<<<<<< HEAD
+=======
+    @Test
+    public void testPutBeTablets() {
+        Long dbId = 1000L;
+        Long tableId = 20000L;
+        UUID uuid = UUID.randomUUID();
+        List<TransactionState> transactionStateList = new ArrayList<TransactionState>();
+        TransactionState transactionState1 = new TransactionState(dbId, Lists.newArrayList(tableId),
+                3000, "label1", new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits()),
+                TransactionState.LoadJobSourceType.BACKEND_STREAMING,
+                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.BE, "127.0.0.1"), 50000L,
+                60 * 1000L);
+        uuid = UUID.randomUUID();
+        TransactionState transactionState2 = new TransactionState(dbId, Lists.newArrayList(tableId),
+                3001, "label2", new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits()),
+                TransactionState.LoadJobSourceType.BACKEND_STREAMING,
+                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.BE, "127.0.0.1"), 50000L,
+                60 * 1000L);
+        transactionStateList.add(transactionState1);
+        transactionStateList.add(transactionState2);
+        TransactionStateBatch stateBatch = new TransactionStateBatch(transactionStateList);
+
+        long partitionId1 = 1;
+        long partitionId2 = 2;
+        Map<ComputeNode, List<Long>> nodeToTablets1 = new HashMap<>();
+        ComputeNode node1 = new ComputeNode(1, "host", 9050);
+        ComputeNode node2 = new ComputeNode(2, "host", 9050);
+        nodeToTablets1.put(node1, Lists.newArrayList(1L, 2L));
+        nodeToTablets1.put(node2, Lists.newArrayList(3L, 4L));
+        Map<ComputeNode, List<Long>> nodeToTablets2 = new HashMap<>();
+        nodeToTablets2.put(node1, Lists.newArrayList(2L, 3L, 4L));
+
+        stateBatch.putBeTablets(partitionId1, nodeToTablets1);
+        stateBatch.putBeTablets(partitionId1, nodeToTablets2);
+        Assert.assertEquals(1, stateBatch.getPartitionToTablets().size());
+        Assert.assertEquals(4, stateBatch.getPartitionToTablets().get(partitionId1).get(node1).size());
+        Assert.assertEquals(2, stateBatch.getPartitionToTablets().get(partitionId1).get(node2).size());
+
+        stateBatch.putBeTablets(partitionId2, nodeToTablets2);
+        Assert.assertEquals(2, stateBatch.getPartitionToTablets().size());
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

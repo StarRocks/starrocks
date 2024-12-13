@@ -66,7 +66,11 @@ public class ExternalCatalogTableBasicInfo implements BasicTable {
     }
 
     @Override
+<<<<<<< HEAD
     public boolean isView() {
+=======
+    public boolean isOlapView() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return false;
     }
 

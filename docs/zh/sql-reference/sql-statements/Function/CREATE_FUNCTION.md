@@ -23,7 +23,12 @@ displayed_sidebar: docs
 ## 语法
 
 ```SQL
+<<<<<<< HEAD
 CREATE [GLOBAL][AGGREGATE | TABLE] FUNCTION function_name(arg_type [, ...])
+=======
+CREATE [OR REPLACE] [GLOBAL] [AGGREGATE | TABLE] FUNCTION function_name
+(arg_type [, ...])
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 RETURNS return_type
 [PROPERTIES ("key" = "value" [, ...]) ]
 ```
@@ -32,10 +37,18 @@ RETURNS return_type
 
 | **参数**      | **必选** | **说明**                                                     |
 | ------------- | -------- | ------------------------------------------------------------ |
+<<<<<<< HEAD
+=======
+| OR REPLACE    | 否       | 如已存在有同样签名（Function Signature）的函数，则替换该函数。从 3.4 版本开始支持。              |
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 | GLOBAL        | 否       | 如需创建全局 UDF，需指定该关键字。从 3.0 版本开始支持。              |
 | AGGREGATE     | 否       | 如要创建 UDAF 和 UDWF，需指定该关键字。                         |
 | TABLE         | 否       | 如要创建 UDTF，需指定该关键字。                              |
 | function_name | 是       | 函数名，可以包含数据库名称，比如，`db1.my_func`。如果 `function_name` 中包含了数据库名称，那么该 UDF 会创建在对应的数据库中，否则该 UDF 会创建在当前数据库。新函数名和参数不能与目标数据库中已有的函数相同，否则会创建失败；如只有函数名相同，参数不同，则可以创建成功。 |
 | arg_type      | 是       | 函数的参数类型。具体支持的数据类型，请参见 [Java UDF](../../sql-functions/JAVA_UDF.md#类型映射关系)。 |
+<<<<<<< HEAD
 | return_type      | 是       | 函数的返回值类型。具体支持的数据类型，请参见 [Java UDF](../../sql-functions/JAVA_UDF.md#类型映射关系)。 |
+=======
+| return_type   | 是       | 函数的返回值类型。具体支持的数据类型，请参见 [Java UDF](../../sql-functions/JAVA_UDF.md#类型映射关系)。 |
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 | properties    | 是       | 函数相关属性。创建不同类型的 UDF 需配置不同的属性，详情和示例请参考 [Java UDF](../../sql-functions/JAVA_UDF.md#步骤六在-starrocks-中创建-udf)。 |

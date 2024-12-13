@@ -22,8 +22,12 @@ import java.util.Map;
 
 public class TaskRunBuilder {
     private final Task task;
+<<<<<<< HEAD
     private Map<String, String> properties;
     private Constants.TaskType type;
+=======
+    private Map<String, String> properties = new HashMap<>();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private ConnectContext connectContext;
     private ExecuteOption executeOption = new ExecuteOption(false);
 
@@ -47,10 +51,19 @@ public class TaskRunBuilder {
         taskRun.setTaskId(task.getId());
         taskRun.setProperties(mergeProperties());
         taskRun.setTask(task);
+<<<<<<< HEAD
         taskRun.setType(getTaskType());
         taskRun.setExecuteOption(executeOption);
         if (task.getSource().equals(Constants.TaskSource.MV)) {
             taskRun.setProcessor(new PartitionBasedMvRefreshProcessor());
+=======
+        taskRun.setExecuteOption(executeOption);
+        taskRun.setType(getTaskType());
+        if (task.getSource().equals(Constants.TaskSource.MV)) {
+            taskRun.setProcessor(new PartitionBasedMvRefreshProcessor());
+        } else if (task.getSource().equals(Constants.TaskSource.DATACACHE_SELECT)) {
+            taskRun.setProcessor(new DataCacheSelectProcessor());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } else {
             taskRun.setProcessor(new SqlTaskRunProcessor());
         }
@@ -66,6 +79,7 @@ public class TaskRunBuilder {
     }
 
     private Map<String, String> mergeProperties() {
+<<<<<<< HEAD
         if (task.getProperties() == null) {
             return properties;
         }
@@ -73,6 +87,20 @@ public class TaskRunBuilder {
             return task.getProperties();
         }
         Map<String, String> result = new HashMap<>();
+=======
+        Map<String, String> result = new HashMap<>();
+        if (task.getProperties() == null && properties == null) {
+            return result;
+        }
+        if (task.getProperties() == null) {
+            result.putAll(properties);
+            return result;
+        }
+        if (properties == null) {
+            result.putAll(task.getProperties());
+            return result;
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         result.putAll(task.getProperties());
         result.putAll(properties);
         return result;
@@ -83,6 +111,7 @@ public class TaskRunBuilder {
         return this;
     }
 
+<<<<<<< HEAD
     public TaskRunBuilder type(ExecuteOption option) {
         if (option.isManual()) {
             this.type = Constants.TaskType.MANUAL;
@@ -90,6 +119,8 @@ public class TaskRunBuilder {
         return this;
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public Long getTaskId() {
         return task.getId();
     }

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # month
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Returns the month for a given date. The return value ranges from 1 to 12.
 

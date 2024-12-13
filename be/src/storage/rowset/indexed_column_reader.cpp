@@ -106,9 +106,15 @@ Status IndexedColumnReader::new_iterator(const IndexReadOptions& opts, std::uniq
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+<<<<<<< HEAD
 IndexedColumnIterator::IndexedColumnIterator(const IndexedColumnReader* reader, const IndexReadOptions& opts)
         : _reader(reader),
           _opts(opts),
+=======
+IndexedColumnIterator::IndexedColumnIterator(const IndexedColumnReader* reader, IndexReadOptions opts)
+        : _reader(reader),
+          _opts(std::move(opts)),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
           _ordinal_iter(&reader->_ordinal_index_reader),
           _value_iter(&reader->_value_index_reader) {}
 
@@ -190,7 +196,11 @@ Status IndexedColumnIterator::seek_at_or_after(const void* key, bool* exact_matc
 
     // seek inside data page
     RETURN_IF_ERROR(_data_page->data_decoder()->seek_at_or_after_value(key, exact_match));
+<<<<<<< HEAD
     _data_page->seek(_data_page->data_decoder()->current_index());
+=======
+    RETURN_IF_ERROR(_data_page->seek(_data_page->data_decoder()->current_index()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     _current_ordinal = _data_page->first_ordinal() + _data_page->offset();
     DCHECK(_data_page->contains(_current_ordinal));
     _seeked = true;

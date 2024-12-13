@@ -23,7 +23,13 @@ class GlobalDictDecoder {
 public:
     virtual ~GlobalDictDecoder() = default;
 
+<<<<<<< HEAD
     virtual Status decode(Column* in, Column* out) = 0;
+=======
+    virtual Status decode_string(Column* in, Column* out) = 0;
+
+    virtual Status decode_array(Column* in, Column* out) = 0;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 using GlobalDictDecoderPtr = std::unique_ptr<GlobalDictDecoder>;

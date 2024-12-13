@@ -6,7 +6,11 @@ displayed_sidebar: docs
 
 ## 功能
 
+<<<<<<< HEAD
 查看指定数据库中的恢复任务。更多信息，请见 [备份和恢复](../../../administration/management/Backup_and_restore.md)。
+=======
+查看指定数据库中的恢复任务。更多信息，请见 备份和恢复。
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 > **说明**
 >

@@ -19,6 +19,10 @@ import com.google.common.collect.Queues;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.proto.PPlanFragmentCancelReason;
+<<<<<<< HEAD
+=======
+import com.starrocks.qe.scheduler.Coordinator;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

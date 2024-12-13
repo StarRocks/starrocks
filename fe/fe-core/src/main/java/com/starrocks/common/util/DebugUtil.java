@@ -37,6 +37,10 @@ package com.starrocks.common.util;
 import com.google.common.base.Joiner;
 import com.starrocks.common.Pair;
 import com.starrocks.proto.PUniqueId;
+<<<<<<< HEAD
+=======
+import com.starrocks.qe.ConnectContext;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.TUniqueId;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 
@@ -162,12 +166,30 @@ public class DebugUtil {
         return printId(uuid);
     }
 
+<<<<<<< HEAD
     public static String getStackTrace(Throwable e) {
         StringWriter sw = new StringWriter();
+=======
+    /**
+     * Get the stack trace of a throwable object.
+     * see {@link ExceptionUtils#getStackTrace(Throwable)}
+     * @param e the throwable object
+     * @return the stack trace of the throwable object
+     */
+    public static String getStackTrace(final Throwable e) {
+        final StringWriter sw = new StringWriter();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         e.printStackTrace(new PrintWriter(sw));
         return sw.toString();
     }
 
+<<<<<<< HEAD
+=======
+    /**
+     * Get the root cause stack trace of a throwable object.
+     * @param e the throwable object
+     */
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static String getRootStackTrace(Throwable e) {
         if (e == null) {
             return "";
@@ -175,4 +197,18 @@ public class DebugUtil {
         String[] stacks = ExceptionUtils.getRootCauseStackTrace(e);
         return Joiner.on("\n").join(stacks);
     }
+<<<<<<< HEAD
+=======
+
+    /**
+     * Get the query-id for current session
+     */
+    public static String getSessionQueryId() {
+        ConnectContext ctx = ConnectContext.get();
+        if (ctx == null || ctx.getQueryId() == null) {
+            return null;
+        }
+        return printId(ctx.getQueryId());
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

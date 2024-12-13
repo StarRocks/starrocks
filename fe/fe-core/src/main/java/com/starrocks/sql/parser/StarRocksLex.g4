@@ -28,6 +28,10 @@ ACCESS: 'ACCESS';
 ACTIVE: 'ACTIVE';
 ADD: 'ADD';
 ADMIN: 'ADMIN';
+<<<<<<< HEAD
+=======
+ADVISOR: 'ADVISOR';
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 AFTER: 'AFTER';
 AGGREGATE: 'AGGREGATE';
 ALL: 'ALL';
@@ -56,14 +60,26 @@ BIGINT: 'BIGINT';
 BINARY: 'BINARY';
 BITMAP: 'BITMAP';
 BITMAP_UNION: 'BITMAP_UNION';
+<<<<<<< HEAD
+=======
+BLACKHOLE: 'BLACKHOLE';
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 BLACKLIST: 'BLACKLIST';
 BODY: 'BODY';
 BOOLEAN: 'BOOLEAN';
 BOTH: 'BOTH';
+<<<<<<< HEAD
+=======
+BRANCH: 'BRANCH';
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 BROKER: 'BROKER';
 BUCKETS: 'BUCKETS';
 BUILTIN: 'BUILTIN';
 BY: 'BY';
+<<<<<<< HEAD
+=======
+CACHE: 'CACHE';
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 CANCEL: 'CANCEL';
 CASE: 'CASE';
 CAST: 'CAST';
@@ -76,6 +92,10 @@ CHARACTER: 'CHARACTER';
 CHARSET: 'CHARSET';
 CHECK: 'CHECK';
 CLEAN: 'CLEAN';
+<<<<<<< HEAD
+=======
+CLEAR: 'CLEAR';
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 CLUSTER : 'CLUSTER';
 CLUSTERS : 'CLUSTERS';
 COLLATE: 'COLLATE';
@@ -106,11 +126,20 @@ CURRENT_TIME: 'CURRENT_TIME';
 CURRENT_TIMESTAMP: 'CURRENT_TIMESTAMP';
 CURRENT_USER: 'CURRENT_USER';
 DATA: 'DATA';
+<<<<<<< HEAD
+=======
+DATACACHE: 'DATACACHE';
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 DATABASE: 'DATABASE';
 DATABASES: 'DATABASES';
 DATE: 'DATE';
 DATETIME: 'DATETIME';
 DAY: 'DAY';
+<<<<<<< HEAD
+=======
+DAYS: 'DAYS';
+DEALLOCATE : 'DEALLOCATE';
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 DECIMAL: 'DECIMAL';
 DECIMALV2: 'DECIMALV2';
 DECIMAL32: 'DECIMAL32';
@@ -121,9 +150,18 @@ DEFAULT: 'DEFAULT';
 DELETE: 'DELETE';
 DENSE_RANK: 'DENSE_RANK';
 DEFERRED: 'DEFERRED';
+<<<<<<< HEAD
 NTILE: 'NTILE';
 DESC: 'DESC';
 DESCRIBE: 'DESCRIBE';
+=======
+DICTIONARY: 'DICTIONARY';
+DICTIONARY_GET: 'DICTIONARY_GET';
+NTILE: 'NTILE';
+DESC: 'DESC';
+DESCRIBE: 'DESCRIBE';
+DISABLE: 'DISABLE';
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 DISTINCT: 'DISTINCT';
 DISTRIBUTED: 'DISTRIBUTED';
 DISTRIBUTION: 'DISTRIBUTION';
@@ -133,6 +171,10 @@ DUAL: 'DUAL';
 DUPLICATE: 'DUPLICATE';
 DYNAMIC: 'DYNAMIC';
 ELSE: 'ELSE';
+<<<<<<< HEAD
+=======
+ENABLE: 'ENABLE';
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ENCLOSE: 'ENCLOSE';
 END: 'END';
 ENGINE: 'ENGINE';
@@ -148,6 +190,11 @@ EXPORT: 'EXPORT';
 EXTERNAL: 'EXTERNAL';
 EXTRACT: 'EXTRACT';
 EVERY: 'EVERY';
+<<<<<<< HEAD
+=======
+FAILPOINT: 'FAILPOINT';
+FAILPOINTS: 'FAILPOINTS';
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 FALSE: 'FALSE';
 FIELDS: 'FIELDS';
 FILE: 'FILE';
@@ -186,6 +233,10 @@ HLL: 'HLL';
 HLL_UNION: 'HLL_UNION';
 HOST: 'HOST';
 HOUR: 'HOUR';
+<<<<<<< HEAD
+=======
+HOURS: 'HOURS';
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 HUB: 'HUB';
 IDENTIFIED: 'IDENTIFIED';
 IF: 'IF';
@@ -210,6 +261,10 @@ INTERMEDIATE: 'INTERMEDIATE';
 INTERSECT: 'INTERSECT';
 INTERVAL: 'INTERVAL';
 INTO: 'INTO';
+<<<<<<< HEAD
+=======
+GIN: 'GIN';
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 OVERWRITE: 'OVERWRITE';
 IS: 'IS';
 ISOLATION: 'ISOLATION';
@@ -238,12 +293,20 @@ LOCALTIME: 'LOCALTIME';
 LOCALTIMESTAMP: 'LOCALTIMESTAMP';
 LOCATION: 'LOCATION';
 LOCATIONS: 'LOCATIONS';
+<<<<<<< HEAD
+=======
+LOGS: 'LOGS';
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 LOGICAL: 'LOGICAL';
 MANUAL: 'MANUAL';
 MAP: 'MAP';
 MAPPING: 'MAPPING';
 MAPPINGS: 'MAPPINGS';
 MASKING: 'MASKING';
+<<<<<<< HEAD
+=======
+MATCH: 'MATCH';
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 MATERIALIZED: 'MATERIALIZED';
 MAX: 'MAX';
 MAXVALUE: 'MAXVALUE';
@@ -252,6 +315,10 @@ MICROSECOND: 'MICROSECOND';
 MILLISECOND: 'MILLISECOND';
 MIN: 'MIN';
 MINUTE: 'MINUTE';
+<<<<<<< HEAD
+=======
+MINUTES: 'MINUTES';
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 MINUS: 'MINUS';
 META: 'META';
 MOD: 'MOD';
@@ -261,6 +328,10 @@ MONTH: 'MONTH';
 NAME: 'NAME';
 NAMES: 'NAMES';
 NEGATIVE: 'NEGATIVE';
+<<<<<<< HEAD
+=======
+NGRAMBF: 'NGRAMBF';
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 NO: 'NO';
 NODE: 'NODE';
 NODES: 'NODES';
@@ -277,6 +348,10 @@ ON: 'ON';
 ONLY: 'ONLY';
 OPEN: 'OPEN';
 OPERATE: 'OPERATE';
+<<<<<<< HEAD
+=======
+OPTIMIZE: 'OPTIMIZE';
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 OPTIMIZER: 'OPTIMIZER';
 OPTION: 'OPTION';
 OR: 'OR';
@@ -284,6 +359,10 @@ ORDER: 'ORDER';
 OUTER: 'OUTER';
 OUTFILE: 'OUTFILE';
 OVER: 'OVER';
+<<<<<<< HEAD
+=======
+PARAMETER: '?';
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 PARTITION: 'PARTITION';
 PARTITIONS: 'PARTITIONS';
 PASSWORD: 'PASSWORD';
@@ -293,6 +372,7 @@ PENDING: 'PENDING';
 PERCENT_RANK: 'PERCENT_RANK';
 PERCENTILE: 'PERCENTILE';
 PERCENTILE_UNION: 'PERCENTILE_UNION';
+<<<<<<< HEAD
 PLUGIN: 'PLUGIN';
 PLUGINS: 'PLUGINS';
 POLICY: 'POLICY';
@@ -300,6 +380,22 @@ POLICIES: 'POLICIES';
 PRECEDING: 'PRECEDING';
 PRIMARY: 'PRIMARY';
 PRIVILEGES: 'PRIVILEGES';
+=======
+PLAN: 'PLAN';
+PLUGIN: 'PLUGIN';
+PLUGINS: 'PLUGINS';
+PIPE: 'PIPE';
+PIPES: 'PIPES';
+PIVOT: 'PIVOT';
+POLICY: 'POLICY';
+POLICIES: 'POLICIES';
+PRECEDING: 'PRECEDING';
+PREPARE: 'PREPARE';
+PRIMARY: 'PRIMARY';
+PRIORITY: 'PRIORITY';
+PRIVILEGES: 'PRIVILEGES';
+PROBABILITY: 'PROBABILITY';
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 PROC: 'PROC';
 PROCEDURE: 'PROCEDURE';
 PROCESSLIST: 'PROCESSLIST';
@@ -317,6 +413,10 @@ RANDOM: 'RANDOM';
 RANGE: 'RANGE';
 RANK: 'RANK';
 READ: 'READ';
+<<<<<<< HEAD
+=======
+REASON: 'REASON';
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 RECOVER: 'RECOVER';
 REFRESH: 'REFRESH';
 REWRITE: 'REWRITE';
@@ -335,7 +435,14 @@ RESOURCE: 'RESOURCE';
 RESOURCES: 'RESOURCES';
 RESTORE: 'RESTORE';
 RESUME: 'RESUME';
+<<<<<<< HEAD
 RETURNS: 'RETURNS';
+=======
+RETAIN: 'RETAIN';
+RETENTION: 'RETENTION';
+RETURNS: 'RETURNS';
+RETRY: 'RETRY';
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 REVOKE: 'REVOKE';
 REVERT: 'REVERT';
 RIGHT: 'RIGHT';
@@ -348,8 +455,16 @@ ROUTINE: 'ROUTINE';
 ROW: 'ROW';
 ROWS: 'ROWS';
 ROW_NUMBER: 'ROW_NUMBER';
+<<<<<<< HEAD
 RUNNING: 'RUNNING';
 SAMPLE: 'SAMPLE';
+=======
+RULE: 'RULE';
+RULES: 'RULES';
+RUNNING: 'RUNNING';
+SAMPLE: 'SAMPLE';
+SCHEDULE: 'SCHEDULE';
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 SCHEDULER: 'SCHEDULER';
 SCHEMA: 'SCHEMA';
 SCHEMAS: 'SCHEMAS';
@@ -368,6 +483,10 @@ SKIP_HEADER: 'SKIP_HEADER';
 SHOW: 'SHOW';
 SMALLINT: 'SMALLINT';
 SNAPSHOT: 'SNAPSHOT';
+<<<<<<< HEAD
+=======
+SNAPSHOTS: 'SNAPSHOTS';
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 SQLBLACKLIST: 'SQLBLACKLIST';
 START: 'START';
 STATS: 'STATS';
@@ -389,12 +508,20 @@ TABLE: 'TABLE';
 TABLES: 'TABLES';
 TABLET: 'TABLET';
 TABLETS: 'TABLETS';
+<<<<<<< HEAD
+=======
+TAG: 'TAG';
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 TASK: 'TASK';
 TEMPORARY: 'TEMPORARY';
 TERMINATED: 'TERMINATED';
 THAN: 'THAN';
 THEN: 'THEN';
 TIME: 'TIME';
+<<<<<<< HEAD
+=======
+TIMES: 'TIMES';
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 TIMESTAMP: 'TIMESTAMP';
 TIMESTAMPADD: 'TIMESTAMPADD';
 TIMESTAMPDIFF: 'TIMESTAMPDIFF';
@@ -426,6 +553,10 @@ VALUES: 'VALUES';
 VARBINARY: 'VARBINARY';
 VARCHAR: 'VARCHAR';
 VARIABLES: 'VARIABLES';
+<<<<<<< HEAD
+=======
+VECTOR: 'VECTOR';
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 VERBOSE: 'VERBOSE';
 VERSION: 'VERSION';
 VIEW: 'VIEW';
@@ -447,6 +578,12 @@ LOCK: 'LOCK';
 UNLOCK: 'UNLOCK';
 LOW_PRIORITY: 'LOW_PRIORITY';
 DISK: 'DISK';
+<<<<<<< HEAD
+=======
+BEFORE: 'BEFORE';
+DOUBLE_DOLLAR: '$$';
+FIELD: 'FIELD';
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 EQ  : '=';
 NEQ : '<>' | '!=';
@@ -455,6 +592,10 @@ LTE : '<=';
 GT  : '>';
 GTE : '>=';
 EQ_FOR_NULL: '<=>';
+<<<<<<< HEAD
+=======
+ARRAY_ELEMENT: '[*]';
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 PLUS_SYMBOL: '+';
 MINUS_SYMBOL: '-';
@@ -557,3 +698,10 @@ DOTDOTDOT: '...';
 WS
     : [ \r\n\t\u3000]+ -> channel(HIDDEN)
     ;
+<<<<<<< HEAD
+=======
+
+ATTACHMENT
+    : DOUBLE_DOLLAR .*? DOUBLE_DOLLAR
+    ;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

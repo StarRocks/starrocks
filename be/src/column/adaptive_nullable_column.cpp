@@ -140,11 +140,16 @@ bool AdaptiveNullableColumn::append_nulls(size_t count) {
     return true;
 }
 
+<<<<<<< HEAD
 bool AdaptiveNullableColumn::append_strings(const Buffer<Slice>& strs) {
+=======
+bool AdaptiveNullableColumn::append_strings(const Slice* data, size_t size) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     if (_data_column->is_binary()) {
         switch (_state) {
         case State::kUninitialized: {
             _state = State::kNotConstant;
+<<<<<<< HEAD
             std::ignore = _data_column->append_strings(strs);
             _size = strs.size();
             break;
@@ -157,21 +162,45 @@ bool AdaptiveNullableColumn::append_strings(const Buffer<Slice>& strs) {
         case State::kMaterialized: {
             std::ignore = _data_column->append_strings(strs);
             null_column_data().resize(_null_column->size() + strs.size(), 0);
+=======
+            std::ignore = _data_column->append_strings(data, size);
+            _size = size;
+            break;
+        }
+        case State::kNotConstant: {
+            std::ignore = _data_column->append_strings(data, size);
+            _size += size;
+            break;
+        }
+        case State::kMaterialized: {
+            std::ignore = _data_column->append_strings(data, size);
+            null_column_data().resize(_null_column->size() + size, 0);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             DCHECK_EQ(_null_column->size(), _data_column->size());
             break;
         }
         default: {
             materialized_nullable();
+<<<<<<< HEAD
             std::ignore = _data_column->append_strings(strs);
             null_column_data().resize(_null_column->size() + strs.size(), 0);
+=======
+            std::ignore = _data_column->append_strings(data, size);
+            null_column_data().resize(_null_column->size() + size, 0);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             DCHECK_EQ(_null_column->size(), _data_column->size());
             break;
         }
         }
     } else {
         materialized_nullable();
+<<<<<<< HEAD
         if (_data_column->append_strings(strs)) {
             null_column_data().resize(_null_column->size() + strs.size(), 0);
+=======
+        if (_data_column->append_strings(data, size)) {
+            null_column_data().resize(_null_column->size() + size, 0);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return true;
         }
         DCHECK_EQ(_null_column->size(), _data_column->size());
@@ -180,20 +209,34 @@ bool AdaptiveNullableColumn::append_strings(const Buffer<Slice>& strs) {
     return true;
 }
 
+<<<<<<< HEAD
 bool AdaptiveNullableColumn::append_strings_overflow(const Buffer<Slice>& strs, size_t max_length) {
     materialized_nullable();
     if (_data_column->append_strings_overflow(strs, max_length)) {
         null_column_data().resize(_null_column->size() + strs.size(), 0);
+=======
+bool AdaptiveNullableColumn::append_strings_overflow(const Slice* data, size_t size, size_t max_length) {
+    materialized_nullable();
+    if (_data_column->append_strings_overflow(data, size, max_length)) {
+        null_column_data().resize(_null_column->size() + size, 0);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return true;
     }
     DCHECK_EQ(_null_column->size(), _data_column->size());
     return false;
 }
 
+<<<<<<< HEAD
 bool AdaptiveNullableColumn::append_continuous_strings(const Buffer<Slice>& strs) {
     materialized_nullable();
     if (_data_column->append_continuous_strings(strs)) {
         null_column_data().resize(_null_column->size() + strs.size(), 0);
+=======
+bool AdaptiveNullableColumn::append_continuous_strings(const Slice* data, size_t size) {
+    materialized_nullable();
+    if (_data_column->append_continuous_strings(data, size)) {
+        null_column_data().resize(_null_column->size() + size, 0);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return true;
     }
     DCHECK_EQ(_null_column->size(), _data_column->size());
@@ -239,9 +282,15 @@ void AdaptiveNullableColumn::update_has_null() {
     _has_null = SIMD::contain_nonzero(_null_column->get_data(), 0);
 }
 
+<<<<<<< HEAD
 Status AdaptiveNullableColumn::update_rows(const Column& src, const uint32_t* indexes) {
     materialized_nullable();
     return NullableColumn::update_rows(src, indexes);
+=======
+void AdaptiveNullableColumn::update_rows(const Column& src, const uint32_t* indexes) {
+    materialized_nullable();
+    NullableColumn::update_rows(src, indexes);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 int AdaptiveNullableColumn::compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const {
@@ -301,9 +350,15 @@ int64_t AdaptiveNullableColumn::xor_checksum(uint32_t from, uint32_t to) const {
     return NullableColumn::xor_checksum(from, to);
 }
 
+<<<<<<< HEAD
 void AdaptiveNullableColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const {
     materialized_nullable();
     NullableColumn::put_mysql_row_buffer(buf, idx);
+=======
+void AdaptiveNullableColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol) const {
+    materialized_nullable();
+    NullableColumn::put_mysql_row_buffer(buf, idx, is_binary_protocol);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 } // namespace starrocks

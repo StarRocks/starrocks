@@ -81,13 +81,21 @@ bool MapConverter::split_map_key_value(Slice s, std::vector<Slice>& keys, std::v
             if (i == last_index) { // size should not be 0
                 return false;
             }
+<<<<<<< HEAD
             keys.push_back(Slice(s.data + last_index, i - last_index));
+=======
+            keys.emplace_back(s.data + last_index, i - last_index);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             last_index = i + 1;
         } else if (!in_quote && map_nest_level == 0 && c == _map_delimiter) {
             if (i == last_index) {
                 return false;
             }
+<<<<<<< HEAD
             values.push_back(Slice(s.data + last_index, i - last_index));
+=======
+            values.emplace_back(s.data + last_index, i - last_index);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             last_index = i + 1;
         }
     }
@@ -95,7 +103,11 @@ bool MapConverter::split_map_key_value(Slice s, std::vector<Slice>& keys, std::v
         if (i == last_index) {
             return false;
         }
+<<<<<<< HEAD
         values.push_back(Slice(s.data + last_index, i - last_index));
+=======
+        values.emplace_back(s.data + last_index, i - last_index);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     if (map_nest_level != 0 || in_quote || values.size() != keys.size()) {
         return false;

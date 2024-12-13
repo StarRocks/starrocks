@@ -18,6 +18,10 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.qe.SessionVariable;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
+<<<<<<< HEAD
+=======
+import org.junit.Test;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 public class JoinLocalShuffleTest extends PlanTestBase {
 
@@ -36,7 +40,11 @@ public class JoinLocalShuffleTest extends PlanTestBase {
     // @Test
     public void joinWithAgg() throws Exception {
         SessionVariable sv = connectContext.getSessionVariable();
+<<<<<<< HEAD
         String sql = "select sum(v1), sum(v2), sum(v4), sum(v5), v3 from t0 join t1 on t0.v3 = t1.v6 group by v3";
+=======
+        String sql = "select sum(v1), sum(v2), sum(v4), v5 from t0 join t1 on t0.v3 = t1.v6 group by v5";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         {
             sv.setNewPlanerAggStage(1);
             String plan = getVerboseExplain(sql);
@@ -49,4 +57,16 @@ public class JoinLocalShuffleTest extends PlanTestBase {
         }
         sv.setNewPlanerAggStage(0);
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void joinUnderExchange() throws Exception {
+        SessionVariable sv = connectContext.getSessionVariable();
+        sv.setInterpolatePassthrough(true);
+        String sql = "select l.* from t0 l join [shuffle] t1 on upper(v1) = v5 join [shuffle] t2 on lower(v1) = v9";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "can local shuffle: true");
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

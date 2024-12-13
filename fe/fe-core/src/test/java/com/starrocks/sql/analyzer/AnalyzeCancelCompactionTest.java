@@ -37,4 +37,8 @@ public class AnalyzeCancelCompactionTest {
 
         analyzeFail("CANCEL COMPACTION WHERE TXN_ID = \"xxx\"", "Where clause should looks like: TXN_ID = compaction_txn_id.");
     }
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

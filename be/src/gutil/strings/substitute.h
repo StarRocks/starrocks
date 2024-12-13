@@ -2,6 +2,10 @@
 
 #include <cstring>
 #include <string>
+<<<<<<< HEAD
+=======
+#include <string_view>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 using std::string;
 
 #include "gutil/basictypes.h"
@@ -75,6 +79,11 @@ public:
             : text_(value), size_(value == nullptr ? 0 : strlen(text_)) {}
     inline SubstituteArg(const string& value) // NOLINT(runtime/explicit)
             : text_(value.data()), size_(value.size()) {}
+<<<<<<< HEAD
+=======
+    inline SubstituteArg(std::string_view value) // NOLINT(runtime/explicit)
+            : text_(value.data()), size_(value.size()) {}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     inline SubstituteArg(const StringPiece& value) // NOLINT(runtime/explicit)
             : text_(value.data()), size_(value.size()) {}
 

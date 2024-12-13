@@ -20,6 +20,7 @@
 
 namespace starrocks {
 
+<<<<<<< HEAD
 namespace lake {
 class TabletMetadataPB;
 }
@@ -27,6 +28,13 @@ class TabletMetadataPB;
 class ListRowsets final : public TableFunction {
     struct MyState final : public TableFunctionState {
         std::shared_ptr<const lake::TabletMetadataPB> metadata;
+=======
+class TabletMetadataPB;
+
+class ListRowsets final : public TableFunction {
+    struct MyState final : public TableFunctionState {
+        std::shared_ptr<const TabletMetadataPB> metadata;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         ~MyState() override = default;
 

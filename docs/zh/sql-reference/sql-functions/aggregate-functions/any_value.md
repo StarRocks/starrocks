@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # any_value
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 在包含 `GROUP BY` 的聚合查询中，该函数用于从每个聚合分组中**随机**选择一行返回。
 
@@ -32,21 +36,36 @@ CREATE TABLE t0(
   b BIGINT,
   c SMALLINT,
   d ARRAY<INT>,
+<<<<<<< HEAD
   e JSON
+=======
+  e JSON,
+  f MAP<INT, INT>,
+  g STRUCT<a STRING, b INT>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 )
 DUPLICATE KEY(a)
 DISTRIBUTED BY HASH(a);
 
 INSERT INTO t0 VALUES
+<<<<<<< HEAD
 (1, 1, 1, [2,3,4], parse_json('{"a":1, "b":true}')),
 (1, 2, 1, [2,3,5], parse_json('{"a":2, "b":true}')),
 (2, 1, 1, [2,3,6], parse_json('{"a":3, "b":true}')),
 (2, 2, 2, [2,4,5], parse_json('{"a":4, "b":false}')),
 (3, 1, 1, [3,3,5], parse_json('{"a":5, "b":false}'));
+=======
+(1, 1, 1, [2,3,4],parse_json('{"a":1, "b":true}'), map{1:1,3:4}, row(1, 2)),
+(1, 2, 1, [2,3,5],parse_json('{"a":2, "b":true}'), map{1:2,3:3},row(2, 2)),
+(2, 1, 1, [2,3,6],parse_json('{"a":3, "b":true}'), map{2:1,3:2},row(3, 2)),
+(2, 2, 2, [2,4,5],parse_json('{"a":4, "b":false}'),map{1:3,3:1},row(4, 2)),
+(3, 1, 1, [3,3,5],parse_json('{"a":5, "b":false}'),map{2:1,3:3},row(1, 2));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ```
 
 ```plain text
 mysql> select * from t0 order by a;
+<<<<<<< HEAD
 +------+------+------+---------+----------------------+
 | a    | b    | c    | d       | e                    |
 +------+------+------+---------+----------------------+
@@ -56,6 +75,17 @@ mysql> select * from t0 order by a;
 |    2 |    2 |    2 | [2,4,5] | {"a": 4, "b": false} | 
 |    3 |    1 |    1 | [3,3,5] | {"a": 5, "b": false} | 
 +------+------+------+---------+----------------------+
+=======
++------+------+------+---------+----------------------+-----------+-----------------+
+| a    | b    | c    | d       | e                    | f         | g               |
++------+------+------+---------+----------------------+-----------+-----------------+
+|    1 |    1 |    1 | [2,3,4] | {"a": 1, "b": true}  | {1:1,3:4} | {"a":"1","b":2} |
+|    1 |    2 |    1 | [2,3,5] | {"a": 2, "b": true}  | {1:2,3:3} | {"a":"2","b":2} |
+|    2 |    1 |    1 | [2,3,6] | {"a": 3, "b": true}  | {2:1,3:2} | {"a":"3","b":2} |
+|    2 |    2 |    2 | [2,4,5] | {"a": 4, "b": false} | {1:3,3:1} | {"a":"4","b":2} |
+|    3 |    1 |    1 | [3,3,5] | {"a": 5, "b": false} | {2:1,3:3} | {"a":"1","b":2} |
++------+------+------+---------+----------------------+-----------+-----------------+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 5 rows in set (0.01 sec)
 ```
 
@@ -71,4 +101,17 @@ mysql> select a,any_value(b),sum(c) from t0 group by a;
 |    3 |              1 |        1 |
 +------+----------------+----------+
 3 rows in set (0.01 sec)
+<<<<<<< HEAD
+=======
+
+mysql> select a,any_value(d),sum(b) from t0 group by a;
++------+--------------+--------+
+| a    | any_value(d) | sum(b) |
++------+--------------+--------+
+|    3 | [3,3,5]      |      1 |
+|    1 | [2,3,4]      |      3 |
+|    2 | [2,3,6]      |      3 |
++------+--------------+--------+
+2 rows in set (0.01 sec)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ```

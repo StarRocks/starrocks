@@ -104,7 +104,11 @@ public:
 
     void fill_default(const Filter& filter) override;
 
+<<<<<<< HEAD
     Status update_rows(const Column& src, const uint32_t* indexes) override;
+=======
+    void update_rows(const Column& src, const uint32_t* indexes) override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     void append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) override;
 
@@ -112,8 +116,11 @@ public:
 
     [[nodiscard]] bool append_nulls(size_t count) override;
 
+<<<<<<< HEAD
     [[nodiscard]] bool append_strings(const Buffer<Slice>& strs) override;
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     [[nodiscard]] size_t append_numbers(const void* buff, size_t length) override;
 
     void append_value_multiple_times(const void* value, size_t count) override;
@@ -151,7 +158,11 @@ public:
 
     int64_t xor_checksum(uint32_t from, uint32_t to) const override;
 
+<<<<<<< HEAD
     void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const override;
+=======
+    void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is) const override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     std::string debug_item(size_t idx) const override;
 
@@ -171,7 +182,11 @@ public:
 
     void reset_column() override;
 
+<<<<<<< HEAD
     bool capacity_limit_reached(std::string* msg = nullptr) const override;
+=======
+    Status capacity_limit_reached() const override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     void check_or_die() const override;
 

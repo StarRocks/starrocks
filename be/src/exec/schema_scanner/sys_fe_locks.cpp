@@ -23,6 +23,7 @@
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SysFeLocks::_s_columns[] = {
+<<<<<<< HEAD
         {"lock_type", TYPE_VARCHAR, sizeof(StringValue), true},
         {"lock_object", TYPE_VARCHAR, sizeof(StringValue), true},
         {"lock_mode", TYPE_VARCHAR, sizeof(StringValue), true},
@@ -31,6 +32,16 @@ SchemaScanner::ColumnDesc SysFeLocks::_s_columns[] = {
         {"thread_info", TYPE_VARCHAR, sizeof(StringValue), true},
         {"granted", TYPE_BOOLEAN, sizeof(bool), true},
         {"waiter_list", TYPE_VARCHAR, sizeof(StringValue), true},
+=======
+        {"lock_type", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"lock_object", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"lock_mode", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"start_time", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
+        {"hold_time_ms", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(long), true},
+        {"thread_info", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"granted", TypeDescriptor::from_logical_type(TYPE_BOOLEAN), sizeof(bool), true},
+        {"waiter_list", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 };
 
@@ -43,12 +54,20 @@ Status SysFeLocks::start(RuntimeState* state) {
     RETURN_IF(!_param->ip || !_param->port, Status::InternalError("IP or port not exists"));
 
     RETURN_IF_ERROR(SchemaScanner::start(state));
+<<<<<<< HEAD
+=======
+    RETURN_IF_ERROR(SchemaScanner::init_schema_scanner_state(state));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     TAuthInfo auth = build_auth_info();
     TFeLocksReq request;
     request.__set_auth_info(auth);
+<<<<<<< HEAD
 
     return (SchemaHelper::list_fe_locks(*(_param->ip), _param->port, request, &_result));
+=======
+    return SchemaHelper::list_fe_locks(_ss_state, request, &_result);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 Status SysFeLocks::_fill_chunk(ChunkPtr* chunk) {

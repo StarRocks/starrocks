@@ -20,6 +20,10 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Type;
+<<<<<<< HEAD
+=======
+import com.starrocks.connector.TableVersionRange;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.connector.iceberg.TableTestBase;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -31,13 +35,25 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+<<<<<<< HEAD
+=======
+import java.math.BigDecimal;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+<<<<<<< HEAD
 import java.util.stream.Collectors;
 
+=======
+import java.util.Optional;
+import java.util.stream.Collectors;
+
+import static com.starrocks.connector.iceberg.cost.IcebergFileStats.convertObjectToOptionalDouble;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public class IcebergStatisticProviderTest extends TableTestBase {
     private static StarRocksAssert starRocksAssert;
 
@@ -52,18 +68,32 @@ public class IcebergStatisticProviderTest extends TableTestBase {
     }
 
     @Test
+<<<<<<< HEAD
     public void testMakeTableStatistics() {
         IcebergStatisticProvider statisticProvider = new IcebergStatisticProvider();
         table.newFastAppend().appendFile(FILE_A).commit();
         IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "db_name",
                 "table_name", Lists.newArrayList(), table, Maps.newHashMap());
+=======
+    public void testUnknownTableStatistics() {
+        IcebergStatisticProvider statisticProvider = new IcebergStatisticProvider();
+        mockedNativeTableA.newFastAppend().appendFile(FILE_A).commit();
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "db_name",
+                "table_name", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Map<ColumnRefOperator, Column> colRefToColumnMetaMap = new HashMap<ColumnRefOperator, Column>();
         ColumnRefOperator columnRefOperator1 = new ColumnRefOperator(3, Type.INT, "id", true);
         ColumnRefOperator columnRefOperator2 = new ColumnRefOperator(4, Type.STRING, "data", true);
         colRefToColumnMetaMap.put(columnRefOperator1, new Column("id", Type.INT));
         colRefToColumnMetaMap.put(columnRefOperator2, new Column("data", Type.STRING));
 
+<<<<<<< HEAD
         Statistics statistics = statisticProvider.getTableStatistics(icebergTable, colRefToColumnMetaMap, null, null);
+=======
+        TableVersionRange version = TableVersionRange.withEnd(Optional.of(
+                mockedNativeTableA.currentSnapshot().snapshotId()));
+        Statistics statistics = statisticProvider.getTableStatistics(icebergTable, colRefToColumnMetaMap, null, null, version);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals(1.0, statistics.getOutputRowCount(), 0.001);
     }
 
@@ -91,4 +121,34 @@ public class IcebergStatisticProviderTest extends TableTestBase {
         Map<Integer, Object> result = IcebergFileStats.toMap(idToTypeMapping, bounds);
         Assert.assertNotNull(result);
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testGetEmptyTableStatistics() {
+        IcebergStatisticProvider statisticProvider = new IcebergStatisticProvider();
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "db_name",
+                "table_name", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
+        Map<ColumnRefOperator, Column> colRefToColumnMetaMap = new HashMap<ColumnRefOperator, Column>();
+        ColumnRefOperator columnRefOperator1 = new ColumnRefOperator(3, Type.INT, "id", true);
+        ColumnRefOperator columnRefOperator2 = new ColumnRefOperator(4, Type.STRING, "data", true);
+        colRefToColumnMetaMap.put(columnRefOperator1, new Column("id", Type.INT));
+        colRefToColumnMetaMap.put(columnRefOperator2, new Column("data", Type.STRING));
+        Statistics statistics = statisticProvider.getTableStatistics(icebergTable, colRefToColumnMetaMap,
+                null, null, TableVersionRange.empty());
+        Assert.assertEquals(1.0, statistics.getOutputRowCount(), 0.001);
+    }
+
+    @Test
+    public void testDoubleValue() {
+        Assert.assertEquals(1.0, convertObjectToOptionalDouble(Types.BooleanType.get(), true).get(), 0.001);
+        Assert.assertEquals(1.0, convertObjectToOptionalDouble(Types.IntegerType.get(), 1).get(), 0.001);
+        Assert.assertEquals(1.0, convertObjectToOptionalDouble(Types.LongType.get(), 1L).get(), 0.001);
+        Assert.assertEquals(1.0, convertObjectToOptionalDouble(Types.FloatType.get(), Float.valueOf("1")).get(), 0.001);
+        Assert.assertEquals(1.0, convertObjectToOptionalDouble(Types.DoubleType.get(), 1.0).get(), 0.001);
+        Assert.assertEquals(121.0, convertObjectToOptionalDouble(Types.DecimalType.of(5, 2), new BigDecimal(121)).get(), 0.001);
+        Assert.assertFalse(convertObjectToOptionalDouble(Types.BinaryType.get(), "11").isPresent());
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

@@ -53,8 +53,12 @@ public class FileTableScanNodeTest {
                     }
                 }
                 blockDescList.add(new Block());
+<<<<<<< HEAD
                 RemoteFileDesc fileDesc =
                         new RemoteFileDesc("aa", "snappy", 0, 0, ImmutableList.copyOf(blockDescList), null);
+=======
+                RemoteFileDesc fileDesc = new RemoteFileDesc("aa", "snappy", 0, 0, ImmutableList.copyOf(blockDescList));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 fileDescList.add(fileDesc);
                 return fileDescList;
             }

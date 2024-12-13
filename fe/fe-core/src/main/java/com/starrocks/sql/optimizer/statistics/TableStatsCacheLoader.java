@@ -15,7 +15,11 @@
 package com.starrocks.sql.optimizer.statistics;
 
 import com.github.benmanes.caffeine.cache.AsyncCacheLoader;
+<<<<<<< HEAD
 import com.google.api.client.util.Lists;
+=======
+import com.google.common.collect.Lists;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.statistic.StatisticExecutor;
@@ -37,6 +41,7 @@ public class TableStatsCacheLoader implements AsyncCacheLoader<TableStatsCacheKe
     @Override
     public @NonNull CompletableFuture<Optional<Long>> asyncLoad(@NonNull TableStatsCacheKey cacheKey, @
             NonNull Executor executor) {
+<<<<<<< HEAD
         return CompletableFuture.supplyAsync(() -> {
             try {
                 ConnectContext connectContext = StatisticUtils.buildConnectContext();
@@ -56,6 +61,11 @@ public class TableStatsCacheLoader implements AsyncCacheLoader<TableStatsCacheKe
                 ConnectContext.remove();
             }
         }, executor);
+=======
+
+        return asyncLoadAll(Lists.newArrayList(cacheKey), executor)
+                .thenApply(x -> x.get(cacheKey));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override

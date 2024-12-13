@@ -12,13 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 package com.starrocks.sql.optimizer.operator.physical;
 
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.RowOutputInfo;
+<<<<<<< HEAD
 import com.starrocks.sql.optimizer.base.GatherDistributionSpec;
+=======
+import com.starrocks.sql.optimizer.base.DistributionSpec;
+import com.starrocks.sql.optimizer.operator.Operator;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
@@ -29,12 +37,23 @@ public class PhysicalLimitOperator extends PhysicalOperator {
     private final long offset;
 
     public PhysicalLimitOperator(long offset, long limit, Projection projection) {
+<<<<<<< HEAD
         super(OperatorType.PHYSICAL_LIMIT, GatherDistributionSpec.createGatherDistributionSpec(limit));
+=======
+        super(OperatorType.PHYSICAL_LIMIT, DistributionSpec.createGatherDistributionSpec());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.offset = offset;
         this.limit = limit;
         this.projection = projection;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean hasOffset() {
+        return offset != Operator.DEFAULT_OFFSET;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public long getOffset() {
         return offset;
     }

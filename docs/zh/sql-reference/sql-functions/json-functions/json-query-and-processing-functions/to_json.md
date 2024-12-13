@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # to_json
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 将 Map 或 Struct 类型的数据转换成 JSON 数据。
 

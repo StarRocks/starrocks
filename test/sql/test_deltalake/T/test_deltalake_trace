@@ -1,0 +1,34 @@
+-- name: test_deltalake_trace
+
+create external catalog delta_test_${uuid0} PROPERTIES (
+    "type"="deltalake",
+    "hive.metastore.uris"="${deltalake_catalog_hive_metastore_uris}",
+    "enable_deltalake_json_meta_cache" = "false",
+    "enable_deltalake_checkpoint_meta_cache" = "false",
+    "aws.s3.access_key"="${oss_ak}",
+    "aws.s3.secret_key"="${oss_sk}",
+    "aws.s3.endpoint"="${oss_endpoint}"
+);
+
+set enable_connector_incremental_scan_ranges = false;
+set enable_profile=true;
+
+function: assert_trace_times_contains("select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_timestamp;", "TraceDefaultJsonHandler.ReadJsonFile")
+function: assert_trace_times_contains("select * from delta_test_${uuid0}.delta_oss_db.delta_legacy_checkpoint limit 10;", "TraceDefaultParquetHandler.readParquetFile")
+
+drop catalog delta_test_${uuid0};
+
+create external catalog delta_test_${uuid0} PROPERTIES (
+    "type"="deltalake",
+    "hive.metastore.uris"="${deltalake_catalog_hive_metastore_uris}",
+    "enable_deltalake_json_meta_cache" = "true",
+    "enable_deltalake_checkpoint_meta_cache" = "true",
+    "aws.s3.access_key"="${oss_ak}",
+    "aws.s3.secret_key"="${oss_sk}",
+    "aws.s3.endpoint"="${oss_endpoint}"
+);
+
+function: assert_trace_times_contains("select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_timestamp;", "DeltaLakeJsonHandler.readParseJsonFile")
+function: assert_trace_times_contains("select * from delta_test_${uuid0}.delta_oss_db.delta_legacy_checkpoint limit 10;", "DeltaLakeParquetHandler.readParquetFileAndGetColumnarBatch")
+
+drop catalog delta_test_${uuid0};

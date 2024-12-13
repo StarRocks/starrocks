@@ -48,6 +48,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+<<<<<<< HEAD
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.FrontendDaemon;
@@ -57,6 +58,14 @@ import com.starrocks.persist.RecoverInfo;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.persist.gson.GsonUtils;
+=======
+import com.starrocks.common.ThreadPoolManager;
+import com.starrocks.common.io.Text;
+import com.starrocks.common.io.Writable;
+import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.persist.ImageWriter;
+import com.starrocks.persist.RecoverInfo;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -69,6 +78,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+<<<<<<< HEAD
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInput;
@@ -77,11 +87,20 @@ import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+=======
+import java.io.DataOutput;
+import java.io.IOException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+<<<<<<< HEAD
+=======
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
@@ -106,6 +125,18 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
     private final com.google.common.collect.Table<Long, String, RecycleTableInfo> nameToTableInfo;
     private final Map<Long, RecyclePartitionInfo> idToPartition;
 
+<<<<<<< HEAD
+=======
+    private Map<RecyclePartitionInfo, CompletableFuture<Boolean>> asyncDeleteForPartitions;
+    private Map<RecycleTableInfo, CompletableFuture<Boolean>> asyncDeleteForTables;
+
+    private static final ExecutorService ASYNC_REMOVE_PARTITION_EXECUTOR = ThreadPoolManager.newDaemonFixedThreadPool(
+                Config.lake_remove_partition_thread_num, Integer.MAX_VALUE, "lake-remove-partition-pool", true);
+
+    private static final ExecutorService ASYNC_REMOVE_TABLE_EXECUTOR = ThreadPoolManager.newDaemonFixedThreadPool(
+                Config.lake_remove_table_thread_num, Integer.MAX_VALUE, "lake-remove-table-pool", true);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     protected Map<Long, Long> idToRecycleTime;
 
     // The real recycle time will extend by LATE_RECYCLE_INTERVAL_SECONDS when enable `eraseLater`.
@@ -124,6 +155,11 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         idToPartition = Maps.newHashMap();
         idToRecycleTime = Maps.newHashMap();
         enableEraseLater = new HashSet<>();
+<<<<<<< HEAD
+=======
+        asyncDeleteForPartitions = Maps.newHashMap();
+        asyncDeleteForTables = Maps.newHashMap();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     private void removeRecycleMarkers(Long id) {
@@ -213,6 +249,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
                 .collect(Collectors.toList());
     }
 
+<<<<<<< HEAD
     public synchronized void recyclePartition(long dbId, long tableId,
                                                  Partition partition, Range<PartitionKey> range,
                                                  DataProperty dataProperty,
@@ -230,6 +267,24 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         idToRecycleTime.put(partition.getId(), System.currentTimeMillis());
         idToPartition.put(partition.getId(), partitionInfo);
         LOG.info("recycle partition[{}-{}]", partition.getId(), partition.getName());
+=======
+    public synchronized void recyclePartition(RecyclePartitionInfo recyclePartitionInfo) {
+        Preconditions.checkState(!idToPartition.containsKey(recyclePartitionInfo.getPartition().getId()));
+
+        long dbId = recyclePartitionInfo.getDbId();
+        long tableId = recyclePartitionInfo.getTableId();
+        Partition partition = recyclePartitionInfo.getPartition();
+        long partitionId = partition.getId();
+        String partitionName = partition.getName();
+
+        disableRecoverPartitionWithSameName(dbId, tableId, partitionName);
+
+        long recycleTime = recyclePartitionInfo.isRecoverable() ? System.currentTimeMillis() : 0;
+        idToRecycleTime.put(partitionId, recycleTime);
+        idToPartition.put(partitionId, recyclePartitionInfo);
+        LOG.info("Finished put partition '{}' to recycle bin. dbId: {} tableId: {} partitionId: {} recoverable: {}",
+                partitionName, dbId, tableId, partitionId, recyclePartitionInfo.isRecoverable());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public synchronized Partition getPartition(long partitionId) {
@@ -240,6 +295,22 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         return null;
     }
 
+<<<<<<< HEAD
+=======
+    public PhysicalPartition getPhysicalPartition(long physicalPartitionId) {
+        for (Partition partition : idToPartition.values().stream()
+                .map(RecyclePartitionInfo::getPartition)
+                .collect(Collectors.toList())) {
+            for (PhysicalPartition subPartition : partition.getSubPartitions()) {
+                if (subPartition.getId() == physicalPartitionId) {
+                    return subPartition;
+                }
+            }
+        }
+        return null;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public synchronized short getPartitionReplicationNum(long partitionId) {
         RecyclePartitionInfo partitionInfo = idToPartition.get(partitionId);
         if (partitionInfo != null) {
@@ -250,6 +321,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
 
     public synchronized Range<PartitionKey> getPartitionRange(long partitionId) {
         RecyclePartitionInfo partitionInfo = idToPartition.get(partitionId);
+<<<<<<< HEAD
         if (partitionInfo != null) {
             if (partitionInfo instanceof RecyclePartitionInfoV1) {
                 return ((RecyclePartitionInfoV1) partitionInfo).getRange();
@@ -258,6 +330,9 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
             }
         }
         return null;
+=======
+        return partitionInfo != null ? partitionInfo.getRange() : null;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public synchronized DataProperty getPartitionDataProperty(long partitionId) {
@@ -283,6 +358,17 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
                 .collect(Collectors.toList());
     }
 
+<<<<<<< HEAD
+=======
+    public synchronized List<PhysicalPartition> getPhysicalPartitions(long tableId) {
+        return idToPartition.values().stream()
+                .filter(v -> (v.getTableId() == tableId))
+                .map(RecyclePartitionInfo::getPartition)
+                .flatMap(p -> p.getSubPartitions().stream())
+                .collect(Collectors.toList());
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     /**
      * if we can erase this instance, we should check if anyone enable erase later.
      * Only used by main loop.
@@ -297,14 +383,21 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         return latencyMs > expireMs;
     }
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private synchronized boolean canEraseTable(RecycleTableInfo tableInfo, long currentTimeMs) {
         if (timeExpired(tableInfo.getTable().getId(), currentTimeMs)) {
             return true;
         }
 
         // database is force dropped, the table can not be recovered, erase it.
+<<<<<<< HEAD
         if (GlobalStateMgr.getCurrentState().getDbIncludeRecycleBin(tableInfo.getDbId()) == null) {
+=======
+        if (GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIncludeRecycleBin(tableInfo.getDbId()) == null) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return true;
         }
         return false;
@@ -316,13 +409,22 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         }
 
         // database is force dropped, the partition can not be recovered, erase it.
+<<<<<<< HEAD
         Database database = GlobalStateMgr.getCurrentState().getDbIncludeRecycleBin(partitionInfo.getDbId());
+=======
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIncludeRecycleBin(partitionInfo.getDbId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (database == null) {
             return true;
         }
 
         // table is force dropped, the partition can not be recovered, erase it.
+<<<<<<< HEAD
         if (GlobalStateMgr.getCurrentState().getTableIncludeRecycleBin(database, partitionInfo.getTableId()) == null) {
+=======
+        if (GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTableIncludeRecycleBin(database, partitionInfo.getTableId()) == null) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return true;
         }
 
@@ -362,7 +464,11 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
                 dbIter.remove();
                 removeRecycleMarkers(entry.getKey());
 
+<<<<<<< HEAD
                 GlobalStateMgr.getCurrentState().onEraseDatabase(db.getId());
+=======
+                GlobalStateMgr.getCurrentState().getLocalMetastore().onEraseDatabase(db.getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 GlobalStateMgr.getCurrentState().getEditLog().logEraseDb(db.getId());
                 LOG.info("erase db[{}-{}] finished", db.getId(), db.getOriginName());
                 currentEraseOpCnt++;
@@ -383,7 +489,11 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
                 iterator.remove();
                 removeRecycleMarkers(entry.getKey());
 
+<<<<<<< HEAD
                 GlobalStateMgr.getCurrentState().onEraseDatabase(db.getId());
+=======
+                GlobalStateMgr.getCurrentState().getLocalMetastore().onEraseDatabase(db.getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 LOG.info("erase database[{}-{}], because db with the same name db is recycled", db.getId(), dbName);
             }
         }
@@ -393,7 +503,11 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         idToDatabase.remove(dbId);
         idToRecycleTime.remove(dbId);
 
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentState().onEraseDatabase(dbId);
+=======
+        GlobalStateMgr.getCurrentState().getLocalMetastore().onEraseDatabase(dbId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         LOG.info("replay erase db[{}] finished", dbId);
     }
 
@@ -442,6 +556,16 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         }
     }
 
+<<<<<<< HEAD
+=======
+    private void disablePartitionRecovery(long partitionId) {
+        RecyclePartitionInfo info = idToPartition.get(partitionId);
+        if (info != null) {
+            info.setRecoverable(false);
+        }
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     static void logDisableTableRecovery(List<Long> tableIds) {
         if (tableIds.isEmpty()) {
             return;
@@ -492,15 +616,46 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
 
         List<Long> finishedTables = Lists.newArrayList();
         for (RecycleTableInfo info : tableToErase) {
+<<<<<<< HEAD
             boolean succ = info.table.deleteFromRecycleBin(info.dbId, false);
+=======
+            boolean finished = false;
+            CompletableFuture<Boolean> future = asyncDeleteForTables.get(info);
+            if (future == null) {
+                asyncDeleteForTables.put(info, CompletableFuture.supplyAsync(() -> {
+                    return info.table.deleteFromRecycleBin(info.dbId, false);
+                }, ASYNC_REMOVE_TABLE_EXECUTOR));
+            } else if (future.isDone()) {
+                try {
+                    finished = future.get();
+                } catch (Exception e) {
+                    finished = false;
+                    LOG.warn("erase table failed in Recycle Bin, DB id: {}, table name: {}, error message: {}",
+                             info.getDbId(), info.getTable().getName(), e.getMessage());
+                }
+
+                if (!finished) {
+                    // finish with error, re-submit in next round
+                    asyncDeleteForTables.remove(info);
+                }
+            }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (!info.table.isDeleteRetryable()) {
                 // Nothing to do
                 continue;
             }
             Preconditions.checkState(!info.isRecoverable());
+<<<<<<< HEAD
             if (succ) {
                 finishedTables.add(info.table.getId());
             } else {
+=======
+            if (finished) {
+                finishedTables.add(info.table.getId());
+            } else if (asyncDeleteForTables.get(info) == null) {
+                // treated as error if task is not running
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 setNextEraseMinTime(info.table.getId(), System.currentTimeMillis() + FAIL_RETRY_INTERVAL);
             }
         }
@@ -509,6 +664,14 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         logEraseTables(finishedTables);
     }
 
+<<<<<<< HEAD
+=======
+    public synchronized void replayDisablePartitionRecovery(long partitionId) {
+        disablePartitionRecovery(partitionId);
+        LOG.info("Finished replay disable partition recovery. partitionId: {}", partitionId);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public synchronized void replayDisableTableRecovery(List<Long> tableIds) {
         disableTableRecovery(tableIds);
         LOG.info("Finished replay disable table recovery. table id list: {}", StringUtils.join(tableIds, ","));
@@ -531,6 +694,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
             Partition partition = partitionInfo.getPartition();
 
             long partitionId = entry.getKey();
+<<<<<<< HEAD
             if (canErasePartition(partitionInfo, currentTimeMs)) {
                 GlobalStateMgr.getCurrentState().onErasePartition(partition);
                 // erase partition
@@ -540,14 +704,58 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
                 // log
                 GlobalStateMgr.getCurrentState().getEditLog().logErasePartition(partitionId);
                 LOG.info("erase partition[{}-{}] finished", partitionId, partition.getName());
+=======
+            if (!canErasePartition(partitionInfo, currentTimeMs)) {
+                continue;
+            }
+
+            boolean finished = false;
+            CompletableFuture<Boolean> future = asyncDeleteForPartitions.get(partitionInfo);
+            if (future == null) {
+                asyncDeleteForPartitions.put(partitionInfo, CompletableFuture.supplyAsync(() -> {
+                    return partitionInfo.delete();
+                }, ASYNC_REMOVE_PARTITION_EXECUTOR));
+            } else if (future.isDone()) {
+                try {
+                    finished = future.get();
+                } catch (Exception e) {
+                    finished = false;
+                    LOG.warn("erase partition failed in Recycle Bin, DB id: {}, table id: {}, partition name: " +
+                             "{}, partition id: {}, error message: {}", partitionInfo.getDbId(), partitionInfo.getTableId(),
+                             partitionInfo.getPartition().getName(), partitionInfo.getPartition().getId(), e.getMessage());
+                }
+
+                if (!finished) {
+                    // finish with error, re-submit in next round
+                    asyncDeleteForPartitions.remove(partitionInfo);
+                }
+            }
+
+            if (finished) {
+                iterator.remove();
+                removeRecycleMarkers(partitionId);
+
+                GlobalStateMgr.getCurrentState().getEditLog().logErasePartition(partitionId);
+
+                LOG.info("Removed partition '{}' from recycle bin. dbId: {} tableId: {} partitionId: {}",
+                        partition.getName(), partitionInfo.getDbId(), partitionInfo.getTableId(), partitionId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 currentEraseOpCnt++;
                 if (currentEraseOpCnt >= MAX_ERASE_OPERATIONS_PER_CYCLE) {
                     break;
                 }
+<<<<<<< HEAD
+=======
+            } else if (asyncDeleteForPartitions.get(partitionInfo) == null) {
+                // treated as error if task is not running
+                Preconditions.checkState(!partitionInfo.isRecoverable());
+                setNextEraseMinTime(partitionId, System.currentTimeMillis() + FAIL_RETRY_INTERVAL);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         } // end for partitions
     }
 
+<<<<<<< HEAD
     private synchronized void erasePartitionWithSameName(long dbId, long tableId, String partitionName) {
         Iterator<Map.Entry<Long, RecyclePartitionInfo>> iterator = idToPartition.entrySet().iterator();
         while (iterator.hasNext()) {
@@ -565,6 +773,18 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
                 LOG.info("erase partition[{}-{}] finished, because partition with the same name is recycled",
                         partition.getId(), partitionName);
             }
+=======
+    private synchronized void disableRecoverPartitionWithSameName(long dbId, long tableId, String partitionName) {
+        for (Map.Entry<Long, RecyclePartitionInfo> entry : idToPartition.entrySet()) {
+            RecyclePartitionInfo partitionInfo = entry.getValue();
+            if (partitionInfo.getDbId() != dbId || partitionInfo.getTableId() != tableId ||
+                    !partitionInfo.getPartition().getName().equalsIgnoreCase(partitionName)) {
+                continue;
+            }
+            partitionInfo.setRecoverable(false);
+            idToRecycleTime.replace(partitionInfo.getPartition().getId(), 0L);
+            break;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -574,7 +794,11 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
 
         Partition partition = partitionInfo.getPartition();
         if (!isCheckpointThread()) {
+<<<<<<< HEAD
             GlobalStateMgr.getCurrentState().onErasePartition(partition);
+=======
+            GlobalStateMgr.getCurrentState().getLocalMetastore().onErasePartition(partition);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         LOG.info("replay erase partition[{}-{}] finished", partitionId, partition.getName());
@@ -699,9 +923,13 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         // make sure to get db write lock
         RecyclePartitionInfo recoverPartitionInfo = null;
 
+<<<<<<< HEAD
         Iterator<Map.Entry<Long, RecyclePartitionInfo>> iterator = idToPartition.entrySet().iterator();
         while (iterator.hasNext()) {
             Map.Entry<Long, RecyclePartitionInfo> entry = iterator.next();
+=======
+        for (Map.Entry<Long, RecyclePartitionInfo> entry : idToPartition.entrySet()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             RecyclePartitionInfo partitionInfo = entry.getValue();
 
             if (partitionInfo.getTableId() != table.getId()) {
@@ -712,11 +940,20 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
                 continue;
             }
 
+<<<<<<< HEAD
+=======
+            if (!partitionInfo.isRecoverable()) {
+                LOG.info("Found a partition named '{}', but it cannot be recovered", partitionName);
+                continue;
+            }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             recoverPartitionInfo = partitionInfo;
             break;
         }
 
         if (recoverPartitionInfo == null) {
+<<<<<<< HEAD
             throw new DdlException("No partition named " + partitionName + " in table " + table.getName());
         }
 
@@ -747,6 +984,15 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
             partitionInfo.setDataCacheInfo(partitionId,
                     ((RecyclePartitionInfoV2) recoverPartitionInfo).getDataCacheInfo());
         }
+=======
+            throw new DdlException(String.format("No partition named '%s' in recycle bin that belongs to table '%s'",
+                    partitionName, table.getName()));
+        }
+
+        recoverPartitionInfo.recover(table);
+
+        long partitionId = recoverPartitionInfo.getPartition().getId();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // remove from recycle bin
         idToPartition.remove(partitionId);
@@ -755,7 +1001,12 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         // log
         RecoverInfo recoverInfo = new RecoverInfo(dbId, table.getId(), partitionId);
         GlobalStateMgr.getCurrentState().getEditLog().logRecoverPartition(recoverInfo);
+<<<<<<< HEAD
         LOG.info("recover partition[{}], name: {}", partitionId, partitionName);
+=======
+        LOG.info("Recovered partition '{}' of table '{}'. dbId={} tableId={} partitionId={}", partitionName,
+                table.getName(), dbId, table.getId(), partitionId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     // The caller should keep db write lock
@@ -772,11 +1023,15 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
 
             table.addPartition(partitionInfo.getPartition());
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) table.getPartitionInfo();
+<<<<<<< HEAD
             if (partitionInfo instanceof RecyclePartitionInfoV1) {
                 rangePartitionInfo.setRange(partitionId, false, ((RecyclePartitionInfoV1) partitionInfo).getRange());
             } else {
                 rangePartitionInfo.setRange(partitionId, false, ((RecycleRangePartitionInfo) partitionInfo).getRange());
             }
+=======
+            rangePartitionInfo.setRange(partitionId, false, partitionInfo.getRange());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             rangePartitionInfo.setDataProperty(partitionId, partitionInfo.getDataProperty());
             rangePartitionInfo.setReplicationNum(partitionId, partitionInfo.getReplicationNum());
             rangePartitionInfo.setIsInMemory(partitionId, partitionInfo.isInMemory());
@@ -799,7 +1054,11 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
     public void addTabletToInvertedIndex() {
         // no need to handle idToDatabase. Database is already empty before being put here
 
+<<<<<<< HEAD
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+=======
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // idToTable
         for (RecycleTableInfo tableInfo : idToTableInfo.values()) {
             Table table = tableInfo.getTable();
@@ -818,6 +1077,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
                     continue;
                 }
                 TStorageMedium medium = dataProperty.getStorageMedium();
+<<<<<<< HEAD
                 for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.ALL)) {
                     long indexId = index.getId();
                     int schemaHash = olapTable.getSchemaHashByIndexId(indexId);
@@ -833,6 +1093,26 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
                         }
                     }
                 } // end for indices
+=======
+                for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                    long physicalPartitionId = physicalPartition.getId();
+                    for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.ALL)) {
+                        long indexId = index.getId();
+                        int schemaHash = olapTable.getSchemaHashByIndexId(indexId);
+                        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, physicalPartitionId, indexId, schemaHash, medium,
+                                table.isCloudNativeTable());
+                        for (Tablet tablet : index.getTablets()) {
+                            long tabletId = tablet.getId();
+                            invertedIndex.addTablet(tabletId, tabletMeta);
+                            if (table.isOlapTableOrMaterializedView()) {
+                                for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
+                                    invertedIndex.addReplica(tabletId, replica);
+                                }
+                            }
+                        }
+                    } // end for indices
+                }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             } // end for partitions
         }
 
@@ -846,7 +1126,11 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
             // we need to get olap table to get schema hash info
             // first find it in globalStateMgr. if not found, it should be in recycle bin
             OlapTable olapTable = null;
+<<<<<<< HEAD
             Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+=======
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (db == null) {
                 // just log. db should be in recycle bin
                 if (!idToDatabase.containsKey(dbId)) {
@@ -856,7 +1140,11 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
                     continue;
                 }
             } else {
+<<<<<<< HEAD
                 olapTable = (OlapTable) db.getTable(tableId);
+=======
+                olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
 
             if (olapTable == null) {
@@ -873,6 +1161,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
             // storage medium should be got from RecyclePartitionInfo, not from olap table. because olap table
             // does not have this partition any more
             TStorageMedium medium = partitionInfo.getDataProperty().getStorageMedium();
+<<<<<<< HEAD
             for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.ALL)) {
                 long indexId = index.getId();
                 int schemaHash = olapTable.getSchemaHashByIndexId(indexId);
@@ -888,6 +1177,26 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
                     }
                 }
             } // end for indices
+=======
+            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                long physicalPartitionId = physicalPartition.getId();
+                for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.ALL)) {
+                    long indexId = index.getId();
+                    int schemaHash = olapTable.getSchemaHashByIndexId(indexId);
+                    TabletMeta tabletMeta = new TabletMeta(dbId, tableId, physicalPartitionId, indexId, schemaHash, medium,
+                            olapTable.isCloudNativeTable());
+                    for (Tablet tablet : index.getTablets()) {
+                        long tabletId = tablet.getId();
+                        invertedIndex.addTablet(tabletId, tabletMeta);
+                        if (olapTable.isOlapTableOrMaterializedView()) {
+                            for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
+                                invertedIndex.addReplica(tabletId, replica);
+                            }
+                        }
+                    }
+                } // end for indices
+            } // end for partitions
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -910,9 +1219,51 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
             eraseDatabase(currentTimeMs);
             removeInvalidateReference();
         } catch (InterruptedException e) {
+<<<<<<< HEAD
             LOG.warn(e);
         }
 
+=======
+            LOG.warn("Failed to execute runAfterCatalogReady", e);
+        }
+    }
+
+    @VisibleForTesting
+    synchronized boolean isContainedInidToRecycleTime(long id) {
+        return idToRecycleTime.get(id) != null;
+    }
+
+    @VisibleForTesting
+    synchronized boolean recyclePartitionInfoIsEmpty() {
+        return idToPartition.isEmpty();
+    }
+
+    @VisibleForTesting
+    synchronized RecyclePartitionInfo getRecyclePartitionInfo(long id) {
+        return idToPartition.get(id);
+    }
+
+    @VisibleForTesting
+    synchronized RecycleTableInfo getRecycleTableInfo(long id) {
+        for (Map<Long, RecycleTableInfo> tableEntry : idToTableInfo.rowMap().values()) {
+            if (tableEntry.get(id) != null) {
+                return tableEntry.get(id);
+            }
+        }
+        return null;
+    }
+
+    @VisibleForTesting
+    synchronized boolean isDeletingPartition(long id) {
+        RecyclePartitionInfo info = getRecyclePartitionInfo(id);
+        return info != null && asyncDeleteForPartitions.get(info) != null;
+    }
+
+    @VisibleForTesting
+    synchronized boolean isDeletingTable(long id) {
+        RecycleTableInfo info = getRecycleTableInfo(id);
+        return info != null && asyncDeleteForTables.get(info) != null;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -949,6 +1300,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         }
     }
 
+<<<<<<< HEAD
     public void readFields(DataInput in) throws IOException {
         int count = in.readInt();
         for (int i = 0; i < count; i++) {
@@ -995,6 +1347,8 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         }
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static class RecycleDatabaseInfo implements Writable {
         @SerializedName("d")
         private Database db;
@@ -1028,6 +1382,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
                 Text.writeString(out, tableName);
             }
         }
+<<<<<<< HEAD
 
         public void readFields(DataInput in) throws IOException {
             db = Database.read(in);
@@ -1038,6 +1393,8 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
                 tableNames.add(tableName);
             }
         }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     static class RecycleTableInfo implements Writable {
@@ -1083,6 +1440,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
             out.writeLong(dbId);
             table.write(out);
         }
+<<<<<<< HEAD
 
         public void readFields(DataInput in) throws IOException {
             dbId = in.readLong();
@@ -1258,12 +1616,15 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         public void gsonPostProcess() throws IOException {
             range = deserializeRange(serializedRange);
         }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public synchronized List<Long> getAllDbIds() {
         return Lists.newArrayList(idToDatabase.keySet());
     }
 
+<<<<<<< HEAD
     public long loadRecycleBin(DataInputStream dis, long checksum) throws IOException {
         readFields(dis);
         if (!isCheckpointThread()) {
@@ -1290,18 +1651,34 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.CATALOG_RECYCLE_BIN, numJson);
 
         writer.writeJson(idToDatabase.size());
+=======
+    public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
+        int numJson = 1 + idToDatabase.size() + 1 + idToTableInfo.size()
+                + 1 + idToPartition.size() + 1;
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.CATALOG_RECYCLE_BIN, numJson);
+
+        writer.writeInt(idToDatabase.size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         for (RecycleDatabaseInfo recycleDatabaseInfo : idToDatabase.values()) {
             writer.writeJson(recycleDatabaseInfo);
         }
 
+<<<<<<< HEAD
         writer.writeJson(idToTableInfo.size());
+=======
+        writer.writeInt(idToTableInfo.size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         for (Map<Long, RecycleTableInfo> tableEntry : idToTableInfo.rowMap().values()) {
             for (RecycleTableInfo recycleTableInfo : tableEntry.values()) {
                 writer.writeJson(recycleTableInfo);
             }
         }
 
+<<<<<<< HEAD
         writer.writeJson(idToPartition.size());
+=======
+        writer.writeInt(idToPartition.size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         for (RecyclePartitionInfo recyclePartitionInfo : idToPartition.values()) {
             if (recyclePartitionInfo instanceof RecyclePartitionInfoV1) {
                 RecyclePartitionInfoV1 recyclePartitionInfoV1 = (RecyclePartitionInfoV1) recyclePartitionInfo;
@@ -1322,6 +1699,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
     }
 
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+<<<<<<< HEAD
         int idToDatabaseSize = reader.readInt();
         for (int i = 0; i < idToDatabaseSize; ++i) {
             RecycleDatabaseInfo recycleDatabaseInfo = reader.readJson(RecycleDatabaseInfo.class);
@@ -1340,6 +1718,20 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
             RecycleRangePartitionInfo recycleRangePartitionInfo = reader.readJson(RecycleRangePartitionInfo.class);
             idToPartition.put(recycleRangePartitionInfo.partition.getId(), recycleRangePartitionInfo);
         }
+=======
+        reader.readCollection(RecycleDatabaseInfo.class, recycleDatabaseInfo -> {
+            idToDatabase.put(recycleDatabaseInfo.db.getId(), recycleDatabaseInfo);
+        });
+
+        reader.readCollection(RecycleTableInfo.class, recycleTableInfo -> {
+            idToTableInfo.put(recycleTableInfo.dbId, recycleTableInfo.table.getId(), recycleTableInfo);
+            nameToTableInfo.put(recycleTableInfo.getDbId(), recycleTableInfo.getTable().getName(), recycleTableInfo);
+        });
+
+        reader.readCollection(RecyclePartitionInfoV2.class, recyclePartitionInfo -> {
+            idToPartition.put(recyclePartitionInfo.partition.getId(), recyclePartitionInfo);
+        });
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         idToRecycleTime = (Map<Long, Long>) reader.readJson(new TypeToken<Map<Long, Long>>() {
         }.getType());
@@ -1351,7 +1743,11 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         // create DatabaseTransactionMgr for db in recycle bin.
         // these dbs do not exist in `idToDb` of the globalStateMgr.
         for (Long dbId : getAllDbIds()) {
+<<<<<<< HEAD
             GlobalStateMgr.getCurrentGlobalTransactionMgr().addDatabaseTransactionMgr(dbId);
+=======
+            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().addDatabaseTransactionMgr(dbId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 

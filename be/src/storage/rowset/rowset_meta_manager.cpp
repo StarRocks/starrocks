@@ -103,4 +103,14 @@ Status RowsetMetaManager::traverse_rowset_metas(
     return meta->iterate(META_COLUMN_FAMILY_INDEX, ROWSET_PREFIX, traverse_rowset_meta_func);
 }
 
+<<<<<<< HEAD
+=======
+Status RowsetMetaManager::get_rowset_meta_value(KVStore* meta, const TabletUid& tablet_uid, const RowsetId& rowset_id,
+                                                std::string* value) {
+    std::string key = get_rowset_meta_key(tablet_uid, rowset_id);
+    RETURN_IF_ERROR(meta->get(META_COLUMN_FAMILY_INDEX, key, value));
+    return Status::OK();
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // namespace starrocks

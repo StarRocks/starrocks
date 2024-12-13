@@ -186,4 +186,16 @@ public class OffHeapTable {
         }
     }
 
+<<<<<<< HEAD
+=======
+    // for test only.
+    public boolean checkNullsLength() {
+        for (OffHeapColumnVector c : vectors) {
+            if (!c.checkNullsLength()) {
+                return false;
+            }
+        }
+        return true;
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

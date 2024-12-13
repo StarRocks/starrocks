@@ -33,7 +33,10 @@ public class OuterJoinReorderTest extends PlanTestBase {
         FeConstants.runningUnitTest = true;
     }
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @ParameterizedTest(name = "sql_{index}: {0}.")
     @MethodSource("joinAssocRuleSqls")
     void joinAssociativityRuleSql(String sql, String expectedPlan) throws Exception {
@@ -41,7 +44,10 @@ public class OuterJoinReorderTest extends PlanTestBase {
         assertContains(plan, expectedPlan);
     }
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static Stream<Arguments> joinAssocRuleSqls() {
         List<String> sqlList = Lists.newArrayList();
         List<String> planList = Lists.newArrayList();
@@ -69,12 +75,20 @@ public class OuterJoinReorderTest extends PlanTestBase {
                 "on (ref_2.v8 = ref_3.v10) inner join t4 as ref_4 on (ref_2.v9 = ref_4.v14) " +
                 "where (space(cast(ref_4.v15 as INT)) <= ref_4.v14) or ( ref_1.v5 = tan(cast(ref_1.v6 as DOUBLE))) " +
                 "limit 111;");
+<<<<<<< HEAD
         planList.add("13:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 8: v7 = 17: cast\n" +
                 "  |  other join predicates: (CAST(space(CAST(16: v15 AS INT)) AS DOUBLE) <= CAST(15: v14 AS DOUBLE))" +
                 " OR (CAST(6: v5 AS DOUBLE) = tan(CAST(7: v6 AS DOUBLE)))");
+=======
+        planList.add("7:NESTLOOP JOIN\n" +
+                "  |  join op: INNER JOIN\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  other join predicates: (CAST(space(CAST(16: v15 AS INT)) AS DOUBLE) <= CAST(15: v14 AS DOUBLE)) " +
+                "OR (CAST(6: v5 AS DOUBLE) = tan(CAST(7: v6 AS DOUBLE)))");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         sqlList.add("select tmp.a, t0.v3 from t0 left join (select * from test_all_type, unnest(split(t1a, ',')) " +
                 "as unnest_tbl(a)) tmp on t0.v1 = tmp.a join t1 on t0.v2 = t1.v4");
@@ -107,7 +121,11 @@ public class OuterJoinReorderTest extends PlanTestBase {
                 "  3:HASH JOIN");
         sqlList.add("select t0.* from t0 left join t1 on t0.v1 = t1.v4 join t2 on t0.v1 = t2.v7 " +
                 "where t0.v2 in (select max(v10) from t3) and t1.v5 is null;");
+<<<<<<< HEAD
         planList.add("14:HASH JOIN\n" +
+=======
+        planList.add(" 14:HASH JOIN\n" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "  |  join op: LEFT SEMI JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 2: v2 = 13: max\n" +

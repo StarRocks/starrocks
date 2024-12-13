@@ -42,6 +42,15 @@ public class FeConstants {
     public static final String DPP_VERSION = "3_2_0";
     // bloom filter false positive probability
     public static final double DEFAULT_BLOOM_FILTER_FPP = 0.05;
+<<<<<<< HEAD
+=======
+
+    // NGRAM Bloom filter's default gram number
+    public static final int DEFAULT_GRAM_NUM = 2;
+
+    public static final Boolean NGRAM_CASE_SENSITIVE = true;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // general model
     @Deprecated
     // for rollback compatible
@@ -71,6 +80,7 @@ public class FeConstants {
     public static int checkpoint_interval_second = 60; // 1 minutes
     // set this flag true to skip some step when running FE unit test
     public static boolean runningUnitTest = false;
+<<<<<<< HEAD
     // Set this flag false to suppress showing local shuffle columns in verbose explain, when running FE unit tests.
     public static boolean showScanNodeLocalShuffleColumnsInExplain = true;
     // set to true when replay from query dump
@@ -80,10 +90,33 @@ public class FeConstants {
     // set false to resolve ut
     public static boolean enablePruneEmptyOutputScan = true;
     public static boolean showJoinLocalShuffleInExplain = true;
+=======
+    // set this flat true to enable unit statistics mock
+    public static boolean enableUnitStatistics = false;
+    // set this flag false to skip test view in plan test
+    public static boolean unitTestView = true;
+    // Set this flag false to suppress showing local shuffle columns in verbose explain, when running FE unit tests.
+    public static boolean showScanNodeLocalShuffleColumnsInExplain = true;
+
+    // Set this flag false to suppress showing fragment cost, when running FE unit tests.
+    public static boolean showFragmentCost = true;
+
+    // set to true when replay from query dump
+    public static boolean isReplayFromQueryDump = false;
+    // set false to resolve ut
+    public static boolean enablePruneEmptyOutputScan = true;
+    public static boolean showJoinLocalShuffleInExplain = true;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // Every 3GB, corresponds a new tablet. Assume compression ratio equals to 3,
     // the raw data of one tablet equals to 10GB approximately
     public static final long AUTO_DISTRIBUTION_UNIT = 3221225472L;
 
+<<<<<<< HEAD
+=======
+    public static final String GENERATED_PARTITION_COLUMN_PREFIX = "__generated_partition_column_";
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // Max counter num of TOP K function
     public static final int MAX_COUNTER_NUM_OF_TOP_K = 100000;
 

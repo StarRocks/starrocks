@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # round, dround
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Rounds a number to a specified number of digits.
 

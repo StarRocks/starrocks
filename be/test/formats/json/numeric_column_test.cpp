@@ -103,7 +103,11 @@ TEST_F(AddNumericColumnTest, test_add_int64_overflow) {
     auto doc = parser.iterate(json);
     simdjson::ondemand::value val = doc.find_field("f_int64");
     auto st = add_numeric_column<int64_t>(column.get(), t, "f_int64", &val);
+<<<<<<< HEAD
     ASSERT_TRUE(st.is_data_quality_error());
+=======
+    ASSERT_TRUE(st.is_invalid_argument());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 TEST_F(AddNumericColumnTest, test_add_int64_overflow2) {
@@ -119,6 +123,22 @@ TEST_F(AddNumericColumnTest, test_add_int64_overflow2) {
     ASSERT_TRUE(st.is_invalid_argument());
 }
 
+<<<<<<< HEAD
+=======
+TEST_F(AddNumericColumnTest, test_add_int64_overflow3) {
+    auto column = FixedLengthColumn<int64_t>::create();
+    TypeDescriptor t(TYPE_BIGINT);
+
+    simdjson::ondemand::parser parser;
+    auto json = R"(  { "f_int64": 18446744073709551616} )"_padded;
+    auto doc = parser.iterate(json);
+    simdjson::ondemand::value val = doc.find_field("f_int64");
+
+    auto st = add_numeric_column<int64_t>(column.get(), t, "f_int64", &val);
+    ASSERT_TRUE(st.is_invalid_argument());
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 TEST_F(AddNumericColumnTest, test_add_int128) {
     auto column = FixedLengthColumn<int128_t>::create();
     TypeDescriptor t(TYPE_LARGEINT);
@@ -134,9 +154,13 @@ TEST_F(AddNumericColumnTest, test_add_int128) {
     ASSERT_EQ("[9223372036854775808]", column->debug_string());
 }
 
+<<<<<<< HEAD
 // Currently simdjson can not parse number < -9223372036854775808 (lower bound of int64_t)
 // or > 18446744073709551615 (upper bound of uint64_t)
 TEST_F(AddNumericColumnTest, test_add_int128_invalid) {
+=======
+TEST_F(AddNumericColumnTest, test_add_int128_big_integer) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     auto column = FixedLengthColumn<int128_t>::create();
     TypeDescriptor t(TYPE_LARGEINT);
 
@@ -146,14 +170,26 @@ TEST_F(AddNumericColumnTest, test_add_int128_invalid) {
     simdjson::ondemand::value val = doc.find_field("f_int128");
 
     auto st = add_numeric_column<int128_t>(column.get(), t, "f_int128", &val);
+<<<<<<< HEAD
     ASSERT_TRUE(st.is_data_quality_error());
 
+=======
+    ASSERT_TRUE(st.ok());
+    ASSERT_EQ("[-9223372036854775809]", column->debug_string());
+
+    column->reset_column();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     json = R"(  { "f_int128": 18446744073709551616} )"_padded;
     doc = parser.iterate(json);
     val = doc.find_field("f_int128");
 
     st = add_numeric_column<int128_t>(column.get(), t, "f_int128", &val);
+<<<<<<< HEAD
     ASSERT_TRUE(st.is_data_quality_error());
+=======
+    ASSERT_TRUE(st.ok());
+    ASSERT_EQ("[18446744073709551616]", column->debug_string());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 } // namespace starrocks

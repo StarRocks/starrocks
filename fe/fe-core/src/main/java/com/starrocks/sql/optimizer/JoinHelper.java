@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 package com.starrocks.sql.optimizer;
 
 import com.google.common.base.Preconditions;
@@ -106,7 +109,12 @@ public class JoinHelper {
             if (leftChildColumns.containsAll(leftUsedColumns) && rightChildColumns.containsAll(rightUsedColumns)) {
                 leftOnCols.add(new DistributionCol(leftUsedColumns.getFirstId(), nullStrict, leftTableAggStrict));
                 rightOnCols.add(new DistributionCol(rightUsedColumns.getFirstId(), nullStrict, rightTableAggStrict));
+<<<<<<< HEAD
             } else if (leftChildColumns.containsAll(rightUsedColumns) && rightChildColumns.containsAll(leftUsedColumns)) {
+=======
+            } else if (leftChildColumns.containsAll(rightUsedColumns) &&
+                    rightChildColumns.containsAll(leftUsedColumns)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 leftOnCols.add(new DistributionCol(rightUsedColumns.getFirstId(), nullStrict, leftTableAggStrict));
                 rightOnCols.add(new DistributionCol(leftUsedColumns.getFirstId(), nullStrict, rightTableAggStrict));
             } else {
@@ -180,6 +188,10 @@ public class JoinHelper {
         return Pair.create(lhsEqRhsOnPredicates, onPredicates);
     }
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     /**
      * Conditions should contain:
      * 1. binary predicate operator is EQ or EQ_FOR_NULL type

@@ -22,6 +22,10 @@
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/location_provider.h"
+<<<<<<< HEAD
+=======
+#include "storage/lake/tablet.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake_meta_reader.h"
 #include "testutil/id_generator.h"
@@ -40,7 +44,11 @@ struct MockLakeMetaScanner : public LakeMetaScanner {
 public:
     MockLakeMetaScanner(LakeMetaScanNode* parent) : LakeMetaScanner(parent) {}
 
+<<<<<<< HEAD
     std::shared_ptr<LakeMetaReader> reader() { return _reader; }
+=======
+    const std::unique_ptr<LakeMetaReader>& reader() { return _reader; }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     int64_t tablet_id() const { return _tablet_id; }
     bool is_opened() const { return _is_open; }
 };
@@ -49,19 +57,31 @@ class LakeMetaScannerTest : public ::testing::Test {
 public:
     LakeMetaScannerTest() : _tablet_id(next_id()) {
         // setup TabletManager
+<<<<<<< HEAD
         _location_provider = std::make_unique<lake::FixedLocationProvider>(kRootLocation);
         _tablet_mgr = ExecEnv::GetInstance()->lake_tablet_manager();
         _backup_location_provider = _tablet_mgr->TEST_set_location_provider(_location_provider.get());
+=======
+        _location_provider = std::make_shared<lake::FixedLocationProvider>(kRootLocation);
+        _tablet_mgr = ExecEnv::GetInstance()->lake_tablet_manager();
+        _backup_location_provider = _tablet_mgr->TEST_set_location_provider(_location_provider);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         FileSystem::Default()->create_dir_recursive(lake::join_path(kRootLocation, lake::kSegmentDirectoryName));
         FileSystem::Default()->create_dir_recursive(lake::join_path(kRootLocation, lake::kMetadataDirectoryName));
         FileSystem::Default()->create_dir_recursive(lake::join_path(kRootLocation, lake::kTxnLogDirectoryName));
 
+<<<<<<< HEAD
         auto st = _tablet_mgr->delete_tablet(_tablet_id);
         EXPECT_TRUE(st.ok());
 
         {
             // create the tablet with its schema prepared
             lake::TabletMetadata metadata;
+=======
+        {
+            // create the tablet with its schema prepared
+            TabletMetadata metadata;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             metadata.set_id(_tablet_id);
             metadata.set_version(2);
 
@@ -79,21 +99,32 @@ public:
             auto st = _tablet_mgr->put_tablet_metadata(metadata);
             EXPECT_TRUE(st.ok());
 
+<<<<<<< HEAD
             auto tablet_or = _tablet_mgr->get_tablet(_tablet_id);
             EXPECT_TRUE(tablet_or.ok());
             auto st2 = tablet_or->get_schema();
             EXPECT_TRUE(st2.ok());
+=======
+            auto tablet_or = _tablet_mgr->get_tablet(_tablet_id, 2);
+            EXPECT_TRUE(tablet_or.ok());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         _state = _pool.add(new RuntimeState(TQueryGlobals()));
 
         std::vector<::starrocks::TTupleId> tuple_ids{0};
+<<<<<<< HEAD
         std::vector<bool> nullable_tuples{true};
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         _tnode = std::make_unique<TPlanNode>();
         _tnode->__set_node_id(1);
         _tnode->__set_node_type(TPlanNodeType::LAKE_SCAN_NODE);
         _tnode->__set_row_tuples(tuple_ids);
+<<<<<<< HEAD
         _tnode->__set_nullable_tuples(nullable_tuples);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         _tnode->__set_limit(-1);
 
         TDescriptorTableBuilder table_desc_builder;
@@ -116,6 +147,7 @@ public:
         (void)_tablet_mgr->TEST_set_location_provider(_backup_location_provider);
     }
 
+<<<<<<< HEAD
     void TearDown() override { (void)_tablet_mgr->delete_tablet(_tablet_id); }
 
 public:
@@ -123,6 +155,13 @@ public:
     lake::TabletManager* _tablet_mgr;
     std::unique_ptr<lake::LocationProvider> _location_provider;
     lake::LocationProvider* _backup_location_provider;
+=======
+public:
+    constexpr static const char* const kRootLocation = "./LakeMetaScannerTest";
+    lake::TabletManager* _tablet_mgr;
+    std::shared_ptr<lake::LocationProvider> _location_provider;
+    std::shared_ptr<lake::LocationProvider> _backup_location_provider;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     int64_t _tablet_id;
 
     ObjectPool _pool;
@@ -145,19 +184,33 @@ TEST_F(LakeMetaScannerTest, test_init_lazy_and_real) {
     EXPECT_TRUE(scanner.reader().get() == nullptr);
     EXPECT_EQ(range->tablet_id, scanner.tablet_id());
 
+<<<<<<< HEAD
     std::shared_ptr<LakeMetaReader> mock_reader(new MockLakeMetaReader);
     SyncPoint::GetInstance()->SetCallBack("lake_meta_scanner:open_mock_reader", [=](void* arg) {
         std::shared_ptr<LakeMetaReader>* reader = static_cast<std::shared_ptr<LakeMetaReader>*>(arg);
         // non-empty reader
         EXPECT_TRUE((*reader).get() != nullptr);
         *reader = mock_reader;
+=======
+    std::unique_ptr<LakeMetaReader> mock_reader(new MockLakeMetaReader);
+    LakeMetaReader* raw_reader_ptr = mock_reader.get();
+    SyncPoint::GetInstance()->SetCallBack("lake_meta_scanner:open_mock_reader", [&](void* arg) {
+        auto* reader = static_cast<std::unique_ptr<LakeMetaReader>*>(arg);
+        // non-empty reader
+        EXPECT_TRUE((*reader).get() != nullptr);
+        *reader = std::move(mock_reader);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     });
     SyncPoint::GetInstance()->EnableProcessing();
 
     auto st2 = scanner.open(nullptr);
     // after open() called, reader is created
     EXPECT_TRUE(st2.ok()) << st2;
+<<<<<<< HEAD
     EXPECT_EQ(mock_reader.get(), scanner.reader().get());
+=======
+    EXPECT_EQ(raw_reader_ptr, scanner.reader().get());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     EXPECT_TRUE(scanner.is_opened());
 
     SyncPoint::GetInstance()->ClearCallBack("lake_meta_scanner:open_mock_reader");

@@ -14,8 +14,16 @@
 
 #include "service/service_be/internal_service.h"
 
+<<<<<<< HEAD
 #include <gtest/gtest.h>
 
+=======
+#include <brpc/controller.h>
+#include <gtest/gtest.h>
+
+#include "common/utils.h"
+#include "exec/tablet_sink_index_channel.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "runtime/exec_env.h"
 
 namespace starrocks {
@@ -31,4 +39,121 @@ TEST_F(InternalServiceTest, test_get_info_timeout_invalid) {
     ASSERT_TRUE(st.is_time_out());
 }
 
+<<<<<<< HEAD
+=======
+class MockClosure : public ::google::protobuf::Closure {
+public:
+    MockClosure() = default;
+    ~MockClosure() override = default;
+
+    void Run() override { _run.store(true); }
+
+    bool has_run() { return _run.load(); }
+
+private:
+    std::atomic_bool _run = false;
+};
+
+TEST_F(InternalServiceTest, test_tablet_writer_add_chunks_via_http) {
+    BackendInternalServiceImpl<PInternalService> service(ExecEnv::GetInstance());
+    {
+        PHttpRequest request;
+        PTabletWriterAddBatchResult response;
+        brpc::Controller cntl;
+        MockClosure closure;
+        service.tablet_writer_add_chunks_via_http(&cntl, &request, &response, &closure);
+        auto st = Status(response.status());
+        ASSERT_FALSE(st.ok());
+    }
+    {
+        brpc::Controller cntl;
+        PTabletWriterAddChunksRequest req;
+        auto* r = req.add_requests();
+        r->set_txn_id(1000);
+        r->set_index_id(2000);
+        r->set_sender_id(3000);
+        serialize_to_iobuf<PTabletWriterAddChunksRequest>(req, &cntl.request_attachment());
+        PHttpRequest request;
+        PTabletWriterAddBatchResult response;
+        MockClosure closure;
+        service.tablet_writer_add_chunks_via_http(&cntl, &request, &response, &closure);
+        auto st = Status(response.status());
+        ASSERT_FALSE(st.ok());
+        ASSERT_TRUE(response.status().error_msgs().at(0).find("no associated load channel") != std::string::npos);
+    }
+    {
+        PHttpRequest request;
+        PTabletWriterAddBatchResult response;
+        brpc::Controller cntl;
+        MockClosure closure;
+        service.PInternalServiceImplBase::tablet_writer_add_chunks_via_http(&cntl, &request, &response, &closure);
+        auto st = Status(response.status());
+        ASSERT_TRUE(st.is_not_supported());
+    }
+}
+
+TEST_F(InternalServiceTest, test_tablet_writer_add_chunk_via_http) {
+    BackendInternalServiceImpl<PInternalService> service(ExecEnv::GetInstance());
+    {
+        PHttpRequest request;
+        PTabletWriterAddBatchResult response;
+        brpc::Controller cntl;
+        MockClosure closure;
+        service.tablet_writer_add_chunk_via_http(&cntl, &request, &response, &closure);
+        auto st = Status(response.status());
+        ASSERT_FALSE(st.ok());
+    }
+    {
+        PHttpRequest request;
+        PTabletWriterAddBatchResult response;
+        brpc::Controller cntl;
+        size_t request_size = 123; // fake
+        cntl.request_attachment().append(&request_size, sizeof(request_size));
+        MockClosure closure;
+        service.tablet_writer_add_chunk_via_http(&cntl, &request, &response, &closure);
+        auto st = Status(response.status());
+        ASSERT_FALSE(st.ok());
+    }
+    {
+        brpc::Controller cntl;
+        PTabletWriterAddChunksRequest req;
+        auto* r = req.add_requests();
+        r->set_txn_id(1000);
+        r->set_index_id(2000);
+        r->set_sender_id(3000);
+        serialize_to_iobuf<PTabletWriterAddChunksRequest>(req, &cntl.request_attachment());
+        PHttpRequest request;
+        PTabletWriterAddBatchResult response;
+        MockClosure closure;
+        service.tablet_writer_add_chunk_via_http(&cntl, &request, &response, &closure);
+        auto st = Status(response.status());
+        ASSERT_FALSE(st.ok());
+    }
+    {
+        brpc::Controller cntl;
+        PTabletWriterAddChunkRequest req;
+        req.set_txn_id(1000);
+        req.set_index_id(2000);
+        req.set_sender_id(3000);
+        serialize_to_iobuf<PTabletWriterAddChunkRequest>(req, &cntl.request_attachment());
+        PHttpRequest request;
+        PTabletWriterAddBatchResult response;
+        MockClosure closure;
+        service.tablet_writer_add_chunk_via_http(&cntl, &request, &response, &closure);
+        auto st = Status(response.status());
+        ASSERT_FALSE(st.ok());
+        ASSERT_TRUE(response.status().error_msgs().at(0).find("no associated load channel") != std::string::npos);
+    }
+    {
+        PHttpRequest request;
+        PTabletWriterAddBatchResult response;
+        brpc::Controller cntl;
+        MockClosure closure;
+        service.PInternalServiceImplBase::tablet_writer_add_chunk_via_http(&cntl, &request, &response, &closure);
+        auto st = Status(response.status());
+        ASSERT_TRUE(st.is_not_supported());
+    }
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // namespace starrocks

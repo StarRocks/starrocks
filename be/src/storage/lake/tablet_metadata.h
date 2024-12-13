@@ -18,10 +18,18 @@
 
 #include "gen_cpp/lake_types.pb.h"
 
+<<<<<<< HEAD
 namespace starrocks::lake {
+=======
+namespace starrocks {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 using TabletMetadata = TabletMetadataPB;
 using TabletMetadataPtr = std::shared_ptr<const TabletMetadata>;
 using MutableTabletMetadataPtr = std::shared_ptr<TabletMetadata>;
 
+<<<<<<< HEAD
 } // namespace starrocks::lake
+=======
+} // namespace starrocks
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

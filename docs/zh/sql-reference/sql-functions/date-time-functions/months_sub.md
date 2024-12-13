@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # months_sub
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 从日期中减去指定的月数。
 

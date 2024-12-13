@@ -94,7 +94,11 @@ DescriptorTbl* DescriptorTblBuilder::build() {
     }
 
     Status status = DescriptorTbl::create(_state, _obj_pool, thrift_desc_tbl, &desc_tbl, config::vector_chunk_size);
+<<<<<<< HEAD
     DCHECK(status.ok());
+=======
+    CHECK(status.ok());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     return desc_tbl;
 }
 

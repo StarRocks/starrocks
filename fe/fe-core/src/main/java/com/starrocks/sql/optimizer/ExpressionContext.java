@@ -68,7 +68,11 @@ public class ExpressionContext {
 
         rootProperty = groupExpression.getGroup().getLogicalProperty();
         statistics = groupExpression.getGroup().getStatistics();
+<<<<<<< HEAD
         groupMvStatistics = groupExpression.getGroup().getGroupExpressionStatistics();
+=======
+        groupMvStatistics = groupExpression.getGroup().getGroupMvStatistics();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // Add child property and statistics
         for (Group group : groupExpression.getInputs()) {
@@ -77,6 +81,13 @@ public class ExpressionContext {
         }
     }
 
+<<<<<<< HEAD
+=======
+    public OptExpression getOptExpression() {
+        return expression;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public Operator getOp() {
         if (expression != null) {
             return expression.getOp();
@@ -84,6 +95,13 @@ public class ExpressionContext {
         return groupExpression.getOp();
     }
 
+<<<<<<< HEAD
+=======
+    public OptExpression getExpression() {
+        return expression;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public int arity() {
         if (expression != null) {
             return expression.arity();

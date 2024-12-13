@@ -50,4 +50,12 @@ public class PseudoType extends Type {
     protected String toSql(int depth) {
         return toString();
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    protected String toTypeString(int depth) {
+        return toString();
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

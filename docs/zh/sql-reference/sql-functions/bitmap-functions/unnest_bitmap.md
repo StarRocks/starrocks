@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # unnest_bitmap
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 unnest_bitmap 是一种表函数 (table function)，用于将一个 bitmap 展开成多行。
 

@@ -25,6 +25,10 @@
 #include "gutil/casts.h"
 
 namespace starrocks {
+<<<<<<< HEAD
+=======
+class RuntimeState;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 // DictMappingExpr.
 // The original expression will be rewritten as a dictionary mapping function in the global field optimization.
 // child(0) was input lowcardinality dictionary column (input was ID type).
@@ -39,6 +43,11 @@ public:
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new DictMappingExpr(*this)); }
 
+<<<<<<< HEAD
+=======
+    Status open(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) override;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
 
     template <class Rewrite>
@@ -56,17 +65,37 @@ public:
     }
 
     SlotId slot_id() {
+<<<<<<< HEAD
         DCHECK_EQ(children().size(), 2);
+=======
+        DCHECK_GE(children().size(), 2);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return down_cast<const ColumnRef*>(get_child(0))->slot_id();
     }
 
     int get_slot_ids(std::vector<SlotId>* slot_ids) const override { return get_child(1)->get_slot_ids(slot_ids); }
 
+<<<<<<< HEAD
+=======
+    void set_output_id(SlotId id) { _output_id = id; }
+
+    SlotId get_output_id() const { return _output_id; }
+
+    void disable_open_rewrite() { _open_rewrite = false; }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 private:
     std::shared_ptr<std::once_flag> _rewrite_once_flag = std::make_shared<std::once_flag>();
     Status _rewrite_status;
     // used for dictionary expression calculation.
     // the input columns are dictionary columns
     Expr* dict_func_expr = nullptr;
+<<<<<<< HEAD
+=======
+
+    SlotId _output_id = -1;
+
+    bool _open_rewrite = true;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 } // namespace starrocks

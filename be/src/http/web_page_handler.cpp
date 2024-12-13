@@ -64,6 +64,10 @@ WebPageHandler::WebPageHandler(EvHttpServer* server) : _http_server(server) {
     // Make WebPageHandler to be static file handler, static files, e.g. css, png, will be handled by WebPageHandler.
     _http_server->register_static_file_handler(this);
 
+<<<<<<< HEAD
+=======
+    // NOLINT
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     TemplatePageHandlerCallback root_callback = std::bind<void>(std::mem_fn(&WebPageHandler::root_handler), this,
                                                                 std::placeholders::_1, std::placeholders::_2);
     register_template_page("/", "Home", root_callback, false /* is_on_nav_bar */);

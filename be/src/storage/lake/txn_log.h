@@ -18,10 +18,21 @@
 
 #include "gen_cpp/lake_types.pb.h"
 
+<<<<<<< HEAD
 namespace starrocks::lake {
+=======
+namespace starrocks {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 using TxnLog = TxnLogPB;
 using TxnLogPtr = std::shared_ptr<const TxnLog>;
 using MutableTxnLogPtr = std::shared_ptr<TxnLog>;
+<<<<<<< HEAD
 
 } // namespace starrocks::lake
+=======
+using CombinedTxnLog = CombinedTxnLogPB;
+using CombinedTxnLogPtr = std::shared_ptr<const CombinedTxnLog>;
+
+} // namespace starrocks
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

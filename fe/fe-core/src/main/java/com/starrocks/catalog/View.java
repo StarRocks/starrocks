@@ -39,8 +39,12 @@ import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.TableName;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.QueryStatement;
@@ -49,9 +53,12 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+<<<<<<< HEAD
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.List;
 import java.util.Map;
 
@@ -136,13 +143,24 @@ public class View extends Table {
         return inlineViewDef;
     }
 
+<<<<<<< HEAD
+=======
+    public long getSqlMode() {
+        return sqlMode;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     /**
      * Initializes the originalViewDef, inlineViewDef, and queryStmt members
      * by parsing the expanded view definition SQL-string.
      * Throws a TableLoadingException if there was any error parsing the
      * SQL or if the view definition did not parse into a QueryStmt.
      */
+<<<<<<< HEAD
     public synchronized QueryStatement init() throws UserException {
+=======
+    public synchronized QueryStatement init() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Preconditions.checkNotNull(inlineViewDef);
         // Parse the expanded view definition SQL-string into a QueryStmt and
         // populate a view definition.
@@ -150,6 +168,7 @@ public class View extends Table {
         try {
             node = com.starrocks.sql.parser.SqlParser.parse(inlineViewDef, sqlMode).get(0);
         } catch (Exception e) {
+<<<<<<< HEAD
             LOG.info("stmt is {}", inlineViewDef);
             LOG.info("exception because: ", e);
             LOG.info("msg is {}", inlineViewDef);
@@ -162,6 +181,18 @@ public class View extends Table {
         if (!(node instanceof QueryStatement)) {
             throw new UserException(String.format("View definition of %s " +
                     "is not a query statement", name));
+=======
+            LOG.warn("view-definition: {}. got exception: {}", inlineViewDef, e.getMessage(), e);
+            // Do not pass e as the exception cause because it might reveal the existence
+            // of tables that the user triggering this load may not have privileges on.
+            throw new StarRocksException(
+                    String.format("Failed to parse view: %s. Its definition is:%n%s ", name, inlineViewDef));
+        }
+        // Make sure the view definition parses to a query statement.
+        if (!(node instanceof QueryStatement)) {
+            throw new StarRocksException(String.format("View %s without query statement. Its definition is:%n%s",
+                    name, inlineViewDef));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return (QueryStatement) node;
     }
@@ -175,6 +206,7 @@ public class View extends Table {
 
         return Lists.newArrayList(this.tableRefsCache);
     }
+<<<<<<< HEAD
 
     @Override
     public void write(DataOutput out) throws IOException {
@@ -191,4 +223,6 @@ public class View extends Table {
         inlineViewDef = Text.readString(in);
         inlineViewDef = inlineViewDef.replaceAll("default_cluster:", "");
     }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

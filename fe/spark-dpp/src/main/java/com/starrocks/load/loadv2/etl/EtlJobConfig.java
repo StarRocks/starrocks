@@ -437,7 +437,11 @@ public class EtlJobConfig implements Serializable {
 
     public static class EtlPartition implements Serializable {
         @SerializedName(value = "partitionId")
+<<<<<<< HEAD
         public long partitionId;
+=======
+        public long physicalPartitionId;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         @SerializedName(value = "startKeys")
         public List<Object> startKeys;
         @SerializedName(value = "endKeys")
@@ -451,9 +455,15 @@ public class EtlJobConfig implements Serializable {
         @SerializedName(value = "bucketNum")
         public int bucketNum;
 
+<<<<<<< HEAD
         public EtlPartition(long partitionId, List<Object> startKeys, List<Object> endKeys,
                             boolean isMinPartition, boolean isMaxPartition, int bucketNum) {
             this.partitionId = partitionId;
+=======
+        public EtlPartition(long physicalPartitionId, List<Object> startKeys, List<Object> endKeys,
+                            boolean isMinPartition, boolean isMaxPartition, int bucketNum) {
+            this.physicalPartitionId = physicalPartitionId;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             this.startKeys = startKeys;
             this.endKeys = endKeys;
             this.isMinPartition = isMinPartition;
@@ -461,8 +471,13 @@ public class EtlJobConfig implements Serializable {
             this.bucketNum = bucketNum;
         }
 
+<<<<<<< HEAD
         public EtlPartition(long partitionId, List<List<Object>> inKeys, int bucketNum) {
             this.partitionId = partitionId;
+=======
+        public EtlPartition(long physicalPartitionId, List<List<Object>> inKeys, int bucketNum) {
+            this.physicalPartitionId = physicalPartitionId;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             this.inKeys = inKeys;
             this.bucketNum = bucketNum;
         }
@@ -470,7 +485,11 @@ public class EtlJobConfig implements Serializable {
         @Override
         public String toString() {
             return "EtlPartition{" +
+<<<<<<< HEAD
                     "partitionId=" + partitionId +
+=======
+                    "partitionId=" + physicalPartitionId +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     ", startKeys=" + startKeys +
                     ", endKeys=" + endKeys +
                     ", isMinPartition=" + isMinPartition +

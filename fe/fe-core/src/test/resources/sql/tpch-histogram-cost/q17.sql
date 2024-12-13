@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
         sum(l_extendedprice) / 7.0 as avg_yearly
@@ -16,6 +17,8 @@ where
     where
             l_partkey = p_partkey
 ) ;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 [fragment statistics]
 PLAN FRAGMENT 0(F04)
 Output Exprs:49: expr
@@ -82,6 +85,10 @@ OutPut Exchange Id: 12
 |
 7:SORT
 |  order by: [18, INT, false] ASC
+<<<<<<< HEAD
+=======
+|  analytic partition by: [18: P_PARTKEY, INT, false]
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 |  offset: 0
 |  cardinality: 614017
 |  column statistics:
@@ -139,7 +146,11 @@ probe runtime filters:
 - filter_id = 0, probe_expr = (2: L_PARTKEY)
 column statistics:
 * L_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
+<<<<<<< HEAD
 * L_QUANTITY-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
+=======
+* L_QUANTITY-->[1.0, 50.0, 0.0, 8.0, 50.0] MCV: [[35.00:12075300][25.00:12063500][32.00:12063000][23.00:12059300][16.00:12051800]] ESTIMATE
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
 
 PLAN FRAGMENT 3(F01)
@@ -164,6 +175,11 @@ actualRows=0, avgRowSize=28.0
 cardinality: 20467
 column statistics:
 * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 20467.238] ESTIMATE
+<<<<<<< HEAD
 * P_BRAND-->[-Infinity, Infinity, 0.0, 10.0, 1.0] ESTIMATE
 * P_CONTAINER-->[-Infinity, Infinity, 0.0, 10.0, 1.0] ESTIMATE
+=======
+* P_BRAND-->[-Infinity, Infinity, 0.0, 10.0, 1.0] MCV: [[Brand#35:823300][Brand#12:816700][Brand#52:815800][Brand#33:814100][Brand#53:808800]] ESTIMATE
+* P_CONTAINER-->[-Infinity, Infinity, 0.0, 10.0, 1.0] MCV: [[SM DRUM:515300][JUMBO JAR:511500][LG JAR:510300][LG BOX:509600][MED CAN:509100]] ESTIMATE
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 [end]

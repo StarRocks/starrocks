@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.hive.glue.metastore;
 
+<<<<<<< HEAD
 import com.amazonaws.ClientConfiguration;
 import com.amazonaws.auth.AWSCredentialsProvider;
 import com.amazonaws.client.builder.AwsClientBuilder;
@@ -32,6 +33,20 @@ import org.apache.hadoop.hive.metastore.api.MetaException;
 import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+=======
+import com.google.common.base.Preconditions;
+import com.starrocks.credential.CloudConfigurationFactory;
+import com.starrocks.credential.aws.AwsCloudCredential;
+import org.apache.hadoop.hive.conf.HiveConf;
+import org.apache.hadoop.hive.metastore.api.MetaException;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
+import software.amazon.awssdk.services.glue.GlueClient;
+import software.amazon.awssdk.services.glue.GlueClientBuilder;
+
+import java.net.URI;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 public final class AWSGlueClientFactory implements GlueClientFactory {
 
@@ -45,6 +60,7 @@ public final class AWSGlueClientFactory implements GlueClientFactory {
     }
 
     @Override
+<<<<<<< HEAD
     public AWSGlue newClient() throws MetaException {
         AWSCloudCredential glueCloudCredential = CloudConfigurationFactory.buildGlueCloudCredential(conf);
         try {
@@ -90,10 +106,30 @@ public final class AWSGlueClientFactory implements GlueClientFactory {
             return glueClientBuilder.build();
         } catch (Exception e) {
             String message = "Unable to build AWSGlueClient: " + e;
+=======
+    public GlueClient newClient() throws MetaException {
+        AwsCloudCredential glueCloudCredential = CloudConfigurationFactory.buildGlueCloudCredential(conf);
+        try {
+            GlueClientBuilder glueClientBuilder = GlueClient.builder();
+            if (glueCloudCredential != null) {
+                AwsCredentialsProvider awsCredentialsProvider = glueCloudCredential.generateAWSCredentialsProvider();
+                glueClientBuilder = glueClientBuilder.credentialsProvider(awsCredentialsProvider);
+
+                glueClientBuilder.region(glueCloudCredential.tryToResolveRegion());
+
+                if (!glueCloudCredential.getEndpoint().isEmpty()) {
+                    glueClientBuilder.endpointOverride(URI.create(glueCloudCredential.getEndpoint()));
+                }
+            }
+            return glueClientBuilder.build();
+        } catch (Exception e) {
+            String message = "Unable to build GlueClient: " + e;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             LOGGER.error(message, e);
             throw new MetaException(message);
         }
     }
+<<<<<<< HEAD
 
     private AWSCredentialsProvider getAWSCredentialsProvider(HiveConf conf) {
         Class<? extends AWSCredentialsProviderFactory> providerFactoryClass = conf
@@ -120,4 +156,6 @@ public final class AWSGlueClientFactory implements GlueClientFactory {
         return Strings.isNullOrEmpty(System.getProperty(propertyName)) ?
                 conf.get(propertyName) : System.getProperty(propertyName);
     }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

@@ -56,6 +56,7 @@ import java.util.List;
 import java.util.TimeZone;
 
 public class EsUtil {
+<<<<<<< HEAD
 
     public static void analyzePartitionAndDistributionDesc(PartitionDesc partitionDesc,
                                                            DistributionDesc distributionDesc) {
@@ -63,12 +64,16 @@ public class EsUtil {
             return;
         }
 
+=======
+    public static void analyzePartitionDesc(PartitionDesc partitionDesc) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (partitionDesc != null) {
             if (!(partitionDesc instanceof RangePartitionDesc)) {
                 throw new SemanticException("Elasticsearch table only permit range partition");
             }
 
             RangePartitionDesc rangePartitionDesc = (RangePartitionDesc) partitionDesc;
+<<<<<<< HEAD
             analyzePartitionDesc(rangePartitionDesc);
         }
 
@@ -85,6 +90,22 @@ public class EsUtil {
         if (partDesc.getPartitionColNames().size() > 1) {
             throw new SemanticException(
                     "Elasticsearch table's parition column could only be a single column");
+=======
+            if (rangePartitionDesc.getPartitionColNames() == null || rangePartitionDesc.getPartitionColNames().isEmpty()) {
+                throw new SemanticException("No partition columns.");
+            }
+
+            if (rangePartitionDesc.getPartitionColNames().size() > 1) {
+                throw new SemanticException(
+                        "Elasticsearch table's parition column could only be a single column");
+            }
+        }
+    }
+
+    public static void analyzeDistributionDesc(DistributionDesc distributionDesc) {
+        if (distributionDesc != null) {
+            throw new SemanticException("could not support distribution clause");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -171,7 +192,11 @@ public class EsUtil {
             case "text":
             case "ip":
             default:
+<<<<<<< HEAD
                 return ScalarType.createDefaultExternalTableString();
+=======
+                return ScalarType.createDefaultCatalogString();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 

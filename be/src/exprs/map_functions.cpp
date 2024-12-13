@@ -241,7 +241,11 @@ StatusOr<ColumnPtr> MapFunctions::map_filter(FunctionContext* context, const Col
     return dest_column;
 }
 
+<<<<<<< HEAD
 void MapFunctions::_filter_map_items(const MapColumn* src_column, const ColumnPtr raw_filter, MapColumn* dest_column,
+=======
+void MapFunctions::_filter_map_items(const MapColumn* src_column, const ColumnPtr& raw_filter, MapColumn* dest_column,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                      NullColumn* dest_null_map) {
     ArrayColumn* filter;
     NullColumn* filter_null_map = nullptr;
@@ -254,7 +258,11 @@ void MapFunctions::_filter_map_items(const MapColumn* src_column, const ColumnPt
     } else {
         filter = down_cast<ArrayColumn*>(raw_filter.get());
     }
+<<<<<<< HEAD
     std::vector<uint32_t> indexes;
+=======
+    Buffer<uint32_t> indexes;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // only keep the elements whose filter is not null and not 0.
     for (size_t i = 0; i < src_column->size(); ++i) {
         if (dest_null_map == nullptr || !dest_null_map->get_data()[i]) {         // dest_null_map[i] is not null

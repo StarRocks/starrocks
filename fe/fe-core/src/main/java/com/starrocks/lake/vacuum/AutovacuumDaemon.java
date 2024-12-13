@@ -18,24 +18,44 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
+<<<<<<< HEAD
 import com.starrocks.catalog.Partition;
+=======
+import com.starrocks.catalog.PhysicalPartition;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.FrontendDaemon;
+<<<<<<< HEAD
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
+=======
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.lake.LakeTablet;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.proto.VacuumRequest;
 import com.starrocks.proto.VacuumResponse;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
 import com.starrocks.system.ComputeNode;
+=======
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.system.ComputeNode;
+import com.starrocks.warehouse.Warehouse;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.hadoop.util.BlockingThreadPoolExecutorService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+<<<<<<< HEAD
+=======
+import java.util.ArrayList;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -64,13 +84,20 @@ public class AutovacuumDaemon extends FrontendDaemon {
 
     @Override
     protected void runAfterCatalogReady() {
+<<<<<<< HEAD
         List<Long> dbIds = GlobalStateMgr.getCurrentState().getDbIds();
         for (Long dbId : dbIds) {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+=======
+        List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds();
+        for (Long dbId : dbIds) {
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (db == null) {
                 continue;
             }
 
+<<<<<<< HEAD
             List<Table> tables;
             db.readLock();
             try {
@@ -78,6 +105,13 @@ public class AutovacuumDaemon extends FrontendDaemon {
                         .collect(Collectors.toList());
             } finally {
                 db.readUnlock();
+=======
+            List<Table> tables = new ArrayList<>();
+            for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
+                if (table.isCloudNativeTableOrMaterializedView()) {
+                    tables.add(table);
+                }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
 
             for (Table table : tables) {
@@ -88,6 +122,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
 
     private void vacuumTable(Database db, Table baseTable) {
         OlapTable table = (OlapTable) baseTable;
+<<<<<<< HEAD
         List<Partition> partitions;
         long current = System.currentTimeMillis();
         long staleTime = current - Config.lake_autovacuum_stale_partition_threshold * MILLISECONDS_PER_HOUR;
@@ -95,23 +130,44 @@ public class AutovacuumDaemon extends FrontendDaemon {
         db.readLock();
         try {
             partitions = table.getPartitions().stream()
+=======
+        List<PhysicalPartition> partitions;
+        long current = System.currentTimeMillis();
+        long staleTime = current - Config.lake_autovacuum_stale_partition_threshold * MILLISECONDS_PER_HOUR;
+
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(baseTable.getId()), LockType.READ);
+        try {
+            partitions = table.getPhysicalPartitions().stream()
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     .filter(p -> p.getVisibleVersionTime() > staleTime)
                     .filter(p -> p.getVisibleVersion() > 1) // filter out empty partition
                     .filter(p -> current >=
                             p.getLastVacuumTime() + Config.lake_autovacuum_partition_naptime_seconds * 1000)
                     .collect(Collectors.toList());
         } finally {
+<<<<<<< HEAD
             db.readUnlock();
         }
 
         for (Partition partition : partitions) {
+=======
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(baseTable.getId()), LockType.READ);
+        }
+
+        for (PhysicalPartition partition : partitions) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (vacuumingPartitions.add(partition.getId())) {
                 executorService.execute(() -> vacuumPartition(db, table, partition));
             }
         }
     }
 
+<<<<<<< HEAD
     private void vacuumPartition(Database db, OlapTable table, Partition partition) {
+=======
+    private void vacuumPartition(Database db, OlapTable table, PhysicalPartition partition) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         try {
             vacuumPartitionImpl(db, table, partition);
         } finally {
@@ -119,7 +175,11 @@ public class AutovacuumDaemon extends FrontendDaemon {
         }
     }
 
+<<<<<<< HEAD
     private void vacuumPartitionImpl(Database db, OlapTable table, Partition partition) {
+=======
+    private void vacuumPartitionImpl(Database db, OlapTable table, PhysicalPartition partition) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<Tablet> tablets;
         long visibleVersion;
         long minRetainVersion;
@@ -127,7 +187,12 @@ public class AutovacuumDaemon extends FrontendDaemon {
         long minActiveTxnId = computeMinActiveTxnId(db, table);
         Map<ComputeNode, List<Long>> nodeToTablets = new HashMap<>();
 
+<<<<<<< HEAD
         db.readLock();
+=======
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         try {
             tablets = partition.getBaseIndex().getTablets();
             visibleVersion = partition.getVisibleVersion();
@@ -136,11 +201,22 @@ public class AutovacuumDaemon extends FrontendDaemon {
                 minRetainVersion = Math.max(1, visibleVersion - Config.lake_autovacuum_max_previous_versions);
             }
         } finally {
+<<<<<<< HEAD
             db.readUnlock();
         }
 
         for (Tablet tablet : tablets) {
             ComputeNode node = Utils.chooseNode((LakeTablet) tablet);
+=======
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+        }
+
+        for (Tablet tablet : tablets) {
+            WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+            Warehouse warehouse = warehouseManager.getBackgroundWarehouse();
+            ComputeNode node = warehouseManager.getComputeNodeAssignedToTablet(warehouse.getName(), (LakeTablet) tablet);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (node == null) {
                 return;
             }
@@ -169,7 +245,11 @@ public class AutovacuumDaemon extends FrontendDaemon {
                 responseFutures.add(service.vacuum(vacuumRequest));
             } catch (RpcException e) {
                 LOG.error("failed to send vacuum request for partition {}.{}.{}", db.getFullName(), table.getName(),
+<<<<<<< HEAD
                         partition.getName(), e);
+=======
+                        partition.getId(), e);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 hasError = true;
                 break;
             }
@@ -180,7 +260,11 @@ public class AutovacuumDaemon extends FrontendDaemon {
                 VacuumResponse response = responseFuture.get();
                 if (response.status.statusCode != 0) {
                     hasError = true;
+<<<<<<< HEAD
                     LOG.warn("Vacuumed {}.{}.{} with error: {}", db.getFullName(), table.getName(), partition.getName(),
+=======
+                    LOG.warn("Vacuumed {}.{}.{} with error: {}", db.getFullName(), table.getName(), partition.getId(),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                             response.status.errorMsgs.get(0));
                 } else {
                     vacuumedFiles += response.vacuumedFiles;
@@ -191,7 +275,11 @@ public class AutovacuumDaemon extends FrontendDaemon {
                 Thread.currentThread().interrupt();
                 hasError = true;
             } catch (ExecutionException e) {
+<<<<<<< HEAD
                 LOG.error("failed to vacuum {}.{}.{}: {}", db.getFullName(), table.getName(), partition.getName(),
+=======
+                LOG.error("failed to vacuum {}.{}.{}: {}", db.getFullName(), table.getName(), partition.getId(),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         e.getMessage());
                 hasError = true;
             }
@@ -200,12 +288,20 @@ public class AutovacuumDaemon extends FrontendDaemon {
         partition.setLastVacuumTime(startTime);
         LOG.info("Vacuumed {}.{}.{} hasError={} vacuumedFiles={} vacuumedFileSize={} " +
                         "visibleVersion={} minRetainVersion={} minActiveTxnId={} cost={}ms",
+<<<<<<< HEAD
                 db.getFullName(), table.getName(), partition.getName(), hasError, vacuumedFiles, vacuumedFileSize,
+=======
+                db.getFullName(), table.getName(), partition.getId(), hasError, vacuumedFiles, vacuumedFileSize,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 visibleVersion, minRetainVersion, minActiveTxnId, System.currentTimeMillis() - startTime);
     }
 
     private static long computeMinActiveTxnId(Database db, Table table) {
+<<<<<<< HEAD
         long a = GlobalStateMgr.getCurrentGlobalTransactionMgr().getMinActiveTxnIdOfDatabase(db.getId());
+=======
+        long a = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getMinActiveTxnIdOfDatabase(db.getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Optional<Long> b =
                 GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getActiveTxnIdOfTable(table.getId());
         return Math.min(a, b.orElse(Long.MAX_VALUE));

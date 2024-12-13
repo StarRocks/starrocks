@@ -104,7 +104,11 @@ public:
     merge_path::MergePathCascadeMerger* get_merge_path_merger(RuntimeState* state);
     void close_stream_recvr();
 
+<<<<<<< HEAD
     SourceOperatorFactory::AdaptiveState adaptive_state() const override { return AdaptiveState::ACTIVE; }
+=======
+    SourceOperatorFactory::AdaptiveState adaptive_initial_state() const override { return AdaptiveState::ACTIVE; }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 private:
     const int32_t _num_sender;

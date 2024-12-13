@@ -35,6 +35,10 @@ private:
     int _table_index{0};
     TGetDbsResult _db_result;
     TListTableStatusResult _table_result;
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     static SchemaScanner::ColumnDesc _s_tbls_columns[];
 };
 

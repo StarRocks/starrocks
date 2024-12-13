@@ -20,6 +20,10 @@ namespace starrocks {
 
 class LoadChannel;
 class MemTracker;
+<<<<<<< HEAD
+=======
+class RuntimeProfile;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 struct TabletsChannelKey;
 
 namespace lake {
@@ -27,6 +31,11 @@ class TabletManager;
 }
 
 std::shared_ptr<TabletsChannel> new_lake_tablets_channel(LoadChannel* load_channel, lake::TabletManager* tablet_manager,
+<<<<<<< HEAD
                                                          const TabletsChannelKey& key, MemTracker* mem_tracker);
+=======
+                                                         const TabletsChannelKey& key, MemTracker* mem_tracker,
+                                                         RuntimeProfile* parent_profile);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 } // namespace starrocks

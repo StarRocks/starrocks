@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 package com.starrocks.planner;
 
 import com.google.common.base.Preconditions;
@@ -46,6 +49,10 @@ public class MultiCastPlanFragment extends PlanFragment {
         this.children.addAll(planFragment.getChildren());
         this.setLoadGlobalDicts(planFragment.loadGlobalDicts);
         this.setQueryGlobalDicts(planFragment.queryGlobalDicts);
+<<<<<<< HEAD
+=======
+        this.setQueryGlobalDictExprs(planFragment.queryGlobalDictExprs);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public List<PlanFragment> getDestFragmentList() {
@@ -94,12 +101,15 @@ public class MultiCastPlanFragment extends PlanFragment {
     }
 
     @Override
+<<<<<<< HEAD
     public int getNumNodes() {
         Preconditions.checkState(false);
         return 0;
     }
 
     @Override
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void setOutputPartition(DataPartition outputPartition) {
         Preconditions.checkState(false);
     }
@@ -109,4 +119,12 @@ public class MultiCastPlanFragment extends PlanFragment {
         Preconditions.checkState(false);
     }
 
+<<<<<<< HEAD
+=======
+    @Override
+    public void reset() {
+        MultiCastDataSink multiSink = (MultiCastDataSink) getSink();
+        multiSink.getDestinations().forEach(List::clear);
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

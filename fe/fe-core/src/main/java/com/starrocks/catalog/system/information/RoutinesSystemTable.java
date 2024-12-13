@@ -24,9 +24,19 @@ import static com.starrocks.catalog.system.SystemTable.builder;
 import static com.starrocks.thrift.TSchemaTableType.SCH_PROCEDURES;
 
 public class RoutinesSystemTable {
+<<<<<<< HEAD
     public static SystemTable create() {
         return new SystemTable(SystemId.ROUTINES_ID,
                 "routines",
+=======
+    private static final String NAME = "routines";
+
+    public static SystemTable create(String catalogName) {
+        return new SystemTable(
+                catalogName,
+                SystemId.ROUTINES_ID,
+                NAME,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 Table.TableType.SCHEMA,
                 builder()
                         .column("SPECIFIC_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))

@@ -15,12 +15,24 @@
 #include "storage/tablet_reader.h"
 
 #include <algorithm>
+<<<<<<< HEAD
 #include <utility>
 
+=======
+#include <cstddef>
+#include <utility>
+#include <vector>
+
+#include "column/column_access_path.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "column/datum_convert.h"
 #include "common/status.h"
 #include "gen_cpp/tablet_schema.pb.h"
 #include "gutil/stl_util.h"
+<<<<<<< HEAD
+=======
+#include "primary_key_encoder.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "service/backend_options.h"
 #include "storage/aggregate_iterator.h"
 #include "storage/chunk_helper.h"
@@ -30,14 +42,21 @@
 #include "storage/delete_predicates.h"
 #include "storage/empty_iterator.h"
 #include "storage/merge_iterator.h"
+<<<<<<< HEAD
 #include "storage/predicate_parser.h"
 #include "storage/primary_key_encoder.h"
+=======
+#include "storage/olap_common.h"
+#include "storage/predicate_parser.h"
+#include "storage/rowset/column_reader.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/seek_range.h"
 #include "storage/tablet.h"
 #include "storage/tablet_updates.h"
 #include "storage/types.h"
 #include "storage/union_iterator.h"
+<<<<<<< HEAD
 
 namespace starrocks {
 
@@ -49,14 +68,41 @@ TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, Schem
 
 TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, Schema schema,
                            const std::vector<RowsetSharedPtr>& captured_rowsets)
+=======
+#include "types/logical_type.h"
+#include "util/json_flattener.h"
+
+namespace starrocks {
+
+TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, Schema schema,
+                           const TabletSchemaCSPtr& tablet_schema)
+        : ChunkIterator(std::move(schema)),
+          _tablet(std::move(tablet)),
+          _version(version),
+          _delete_predicates_version(version) {
+    _tablet_schema = !tablet_schema ? _tablet->tablet_schema() : tablet_schema;
+}
+
+TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, Schema schema,
+                           std::vector<RowsetSharedPtr> captured_rowsets, const TabletSchemaCSPtr* tablet_schema)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         : ChunkIterator(std::move(schema)),
           _tablet(std::move(tablet)),
           _version(version),
           _delete_predicates_version(version),
+<<<<<<< HEAD
           _rowsets(captured_rowsets) {}
 
 TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, Schema schema, bool is_key,
                            RowSourceMaskBuffer* mask_buffer)
+=======
+          _rowsets(std::move(captured_rowsets)) {
+    _tablet_schema = tablet_schema ? *tablet_schema : _tablet->tablet_schema();
+}
+
+TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, Schema schema, bool is_key,
+                           RowSourceMaskBuffer* mask_buffer, const TabletSchemaCSPtr& tablet_schema)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         : ChunkIterator(std::move(schema)),
           _tablet(std::move(tablet)),
           _version(version),
@@ -65,6 +111,16 @@ TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, Schem
           _is_key(is_key),
           _mask_buffer(mask_buffer) {
     DCHECK(_mask_buffer);
+<<<<<<< HEAD
+=======
+    _tablet_schema = !tablet_schema ? _tablet->tablet_schema() : tablet_schema;
+}
+
+TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, const TabletSchemaCSPtr& tablet_schema,
+                           Schema schema)
+        : ChunkIterator(std::move(schema)), _tablet(std::move(tablet)), _version(version) {
+    _tablet_schema = tablet_schema;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 void TabletReader::close() {
@@ -76,13 +132,22 @@ void TabletReader::close() {
     Rowset::release_readers(_rowsets);
     _rowsets.clear();
     _obj_pool.clear();
+<<<<<<< HEAD
+=======
+    _tablet_schema.reset();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 Status TabletReader::prepare() {
     SCOPED_RAW_TIMER(&_stats.get_rowsets_ns);
     Status st = Status::OK();
     // Non-empty rowsets indicate that it is captured before creating this TabletReader.
+<<<<<<< HEAD
     if (_rowsets.empty()) {
+=======
+    // _use_gtid is used to indicate that the rowsets are captured by gtid.
+    if (_rowsets.empty() && !_use_gtid) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         std::shared_lock l(_tablet->get_header_lock());
         st = _tablet->capture_consistent_rowsets(_version, &_rowsets);
         if (!st.ok()) {
@@ -95,9 +160,16 @@ Status TabletReader::prepare() {
     }
     _stats.rowsets_read_count += _rowsets.size();
     Rowset::acquire_readers(_rowsets);
+<<<<<<< HEAD
     // ensure all input rowsets are loaded into memory
     for (const auto& rowset : _rowsets) {
         rowset->load();
+=======
+
+    // ensure all input rowsets are loaded into memory
+    for (const auto& rowset : _rowsets) {
+        RETURN_IF_ERROR(rowset->load());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     return st;
 }
@@ -112,20 +184,94 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
         _reader_params = &read_params;
         return Status::OK();
     }
+<<<<<<< HEAD
+=======
+
+    RETURN_IF_ERROR(_init_compaction_column_paths(read_params));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     Status st = _init_collector(read_params);
     return st;
 }
 
+<<<<<<< HEAD
 Status TabletReader::_init_collector_for_pk_index_read() {
     DCHECK(_reader_params != nullptr);
     // get pk eq predicates, and convert these predicates to encoded pk column
     const auto& tablet_schema = _tablet->tablet_schema();
     vector<ColumnId> pk_column_ids;
     for (size_t i = 0; i < tablet_schema.num_key_columns(); i++) {
+=======
+Status TabletReader::_init_compaction_column_paths(const TabletReaderParams& read_params) {
+    if (!config::enable_compaction_flat_json || !is_compaction(read_params.reader_type) ||
+        read_params.column_access_paths == nullptr) {
+        return Status::OK();
+    }
+
+    if (!read_params.column_access_paths->empty()) {
+        VLOG(3) << "Compaction flat json paths exists: " << read_params.column_access_paths->size();
+        return Status::OK();
+    }
+
+    DCHECK(is_compaction(read_params.reader_type) && read_params.column_access_paths != nullptr &&
+           read_params.column_access_paths->empty());
+    int num_readers = 0;
+    for (const auto& rowset : _rowsets) {
+        auto segments = rowset->segments();
+        std::for_each(segments.begin(), segments.end(),
+                      [&](const auto& segment) { num_readers += segment->num_rows() > 0 ? 1 : 0; });
+    }
+
+    std::vector<const ColumnReader*> readers;
+    for (size_t i = 0; i < _tablet_schema->num_columns(); i++) {
+        const auto& col = _tablet_schema->column(i);
+        auto col_name = std::string(col.name());
+        if (_schema.get_field_by_name(col_name) == nullptr || col.type() != LogicalType::TYPE_JSON) {
+            continue;
+        }
+        readers.clear();
+        for (const auto& rowset : _rowsets) {
+            for (const auto& segment : rowset->segments()) {
+                if (segment->num_rows() == 0) {
+                    continue;
+                }
+                auto reader = segment->column_with_uid(col.unique_id());
+                if (reader != nullptr && reader->column_type() == LogicalType::TYPE_JSON &&
+                    nullptr != reader->sub_readers() && !reader->sub_readers()->empty()) {
+                    readers.emplace_back(reader);
+                }
+            }
+        }
+        if (readers.size() == num_readers) {
+            // must all be flat json type
+            JsonPathDeriver deriver;
+            deriver.derived(readers);
+            auto paths = deriver.flat_paths();
+            auto types = deriver.flat_types();
+
+            VLOG(3) << "Compaction flat json column: " << JsonFlatPath::debug_flat_json(paths, types, true);
+            ASSIGN_OR_RETURN(auto res, ColumnAccessPath::create(TAccessPathType::ROOT, col_name, i));
+            for (size_t j = 0; j < paths.size(); j++) {
+                ColumnAccessPath::insert_json_path(res.get(), types[j], paths[j]);
+            }
+            res->set_from_compaction(true);
+            read_params.column_access_paths->emplace_back(std::move(res));
+        }
+    }
+    return Status::OK();
+}
+
+Status TabletReader::_init_collector_for_pk_index_read() {
+    DCHECK(_reader_params != nullptr);
+    // get pk eq predicates, and convert these predicates to encoded pk column
+    const auto& tablet_schema = _tablet_schema;
+    vector<ColumnId> pk_column_ids;
+    for (size_t i = 0; i < tablet_schema->num_key_columns(); i++) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         pk_column_ids.emplace_back(i);
     }
     auto pk_schema = ChunkHelper::convert_schema(tablet_schema, pk_column_ids);
     auto keys = ChunkHelper::new_chunk(pk_schema, 1);
+<<<<<<< HEAD
     PredicateMap pushdown_predicates;
     size_t num_pk_eq_predicates = 0;
     for (const ColumnPredicate* pred : _reader_params->predicates) {
@@ -151,6 +297,44 @@ Status TabletReader::_init_collector_for_pk_index_read() {
         CHECK(false) << "create column for primary key encoder failed tablet_id:" << _tablet->tablet_id();
     }
     PrimaryKeyEncoder::encode(*tablet_schema.schema(), *keys, 0, keys->num_rows(), pk_column.get());
+=======
+    size_t num_pk_eq_predicates = 0;
+
+    PredicateAndNode pushdown_pred_root;
+    overloaded visitor{
+            [&](const PredicateColumnNode& child_node) {
+                const auto* col_pred = child_node.col_pred();
+                const auto cid = col_pred->column_id();
+                if (cid < tablet_schema->num_key_columns() && col_pred->type() == PredicateType::kEQ) {
+                    auto& column = keys->get_column_by_id(cid);
+                    if (column->size() != 0) {
+                        return Status::NotSupported(
+                                strings::Substitute("multiple eq predicates on same pk column columnId=$0", cid));
+                    }
+                    column->append_datum(col_pred->value());
+                    num_pk_eq_predicates++;
+                } else {
+                    pushdown_pred_root.add_child(child_node);
+                }
+                return Status::OK();
+            },
+            [&]<CompoundNodeType Type>(const PredicateCompoundNode<Type>& child_node) {
+                pushdown_pred_root.add_child(child_node);
+                return Status::OK();
+            },
+    };
+    for (const auto& child : _reader_params->pred_tree.root().children()) {
+        RETURN_IF_ERROR(child.visit(visitor));
+    }
+
+    if (num_pk_eq_predicates != tablet_schema->num_key_columns()) {
+        return Status::NotSupported(strings::Substitute("should have eq predicates on all pk columns current: $0 < $1",
+                                                        num_pk_eq_predicates, tablet_schema->num_key_columns()));
+    }
+    std::unique_ptr<Column> pk_column;
+    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(*tablet_schema->schema(), &pk_column));
+    PrimaryKeyEncoder::encode(*tablet_schema->schema(), *keys, 0, keys->num_rows(), pk_column.get());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // get rowid using pk index
     std::vector<uint64_t> rowids(1);
@@ -177,7 +361,11 @@ Status TabletReader::_init_collector_for_pk_index_read() {
     RETURN_IF_ERROR(_tablet->updates()->get_rowset_and_segment_idx_by_rssid(rssid, &rowset, &segment_idx));
 
     RowsetReadOptions rs_opts;
+<<<<<<< HEAD
     rs_opts.predicates = pushdown_predicates;
+=======
+    rs_opts.pred_tree = PredicateTree::create(std::move(pushdown_pred_root));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     rs_opts.sorted = false;
     rs_opts.reader_type = _reader_params->reader_type;
     rs_opts.chunk_size = _reader_params->chunk_size;
@@ -186,21 +374,37 @@ Status TabletReader::_init_collector_for_pk_index_read() {
     rs_opts.runtime_state = _reader_params->runtime_state;
     rs_opts.profile = _reader_params->profile;
     rs_opts.use_page_cache = _reader_params->use_page_cache;
+<<<<<<< HEAD
     rs_opts.tablet_schema = &_tablet->tablet_schema();
+=======
+    rs_opts.tablet_schema = _tablet_schema;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     rs_opts.global_dictmaps = _reader_params->global_dictmaps;
     rs_opts.unused_output_column_ids = _reader_params->unused_output_column_ids;
     rs_opts.runtime_range_pruner = _reader_params->runtime_range_pruner;
     // single row fetch, no need to use delvec
     rs_opts.is_primary_keys = false;
+<<<<<<< HEAD
 
     rs_opts.rowid_range_option = std::make_shared<RowidRangeOption>();
     auto rowid_range = std::make_shared<SparseRange>();
+=======
+    rs_opts.use_vector_index = _reader_params->use_vector_index;
+    rs_opts.vector_search_option = _reader_params->vector_search_option;
+
+    rs_opts.rowid_range_option = std::make_shared<RowidRangeOption>();
+    auto rowid_range = std::make_shared<SparseRange<>>();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     rowid_range->add({rowid, rowid + 1});
     if (segment_idx >= rowset->num_segments()) {
         return Status::InternalError(strings::Substitute("segment_idx out of range tablet:$0 $1 >= $2",
                                                          _tablet->tablet_id(), segment_idx, rowset->num_segments()));
     }
+<<<<<<< HEAD
     rs_opts.rowid_range_option->add(rowset.get(), rowset->segments()[segment_idx].get(), rowid_range);
+=======
+    rs_opts.rowid_range_option->add(rowset.get(), rowset->segments()[segment_idx].get(), rowid_range, true);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     std::vector<ChunkIteratorPtr> iters;
     RETURN_IF_ERROR(rowset->get_segment_iterators(schema(), rs_opts, &iters));
@@ -242,6 +446,7 @@ Status TabletReader::do_get_next(Chunk* chunk, std::vector<RowSourceMask>* sourc
 
 Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std::vector<ChunkIteratorPtr>* iters) {
     RowsetReadOptions rs_opts;
+<<<<<<< HEAD
     KeysType keys_type = _tablet->tablet_schema().keys_type();
     RETURN_IF_ERROR(_init_predicates(params));
     RETURN_IF_ERROR(_init_delete_predicates(params, &_delete_predicates));
@@ -250,6 +455,17 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     rs_opts.predicates = _pushdown_predicates;
     RETURN_IF_ERROR(ZonemapPredicatesRewriter::rewrite_predicate_map(&_obj_pool, rs_opts.predicates,
                                                                      &rs_opts.predicates_for_zone_map));
+=======
+    KeysType keys_type = _tablet_schema->keys_type();
+    RETURN_IF_ERROR(_init_predicates(params));
+    RETURN_IF_ERROR(_init_delete_predicates(params, &_delete_predicates));
+    RETURN_IF_ERROR(parse_seek_range(_tablet_schema, params.range, params.end_range, params.start_key, params.end_key,
+                                     &rs_opts.ranges, &_mempool));
+    rs_opts.pred_tree = params.pred_tree;
+    PredicateTree pred_tree_for_zone_map;
+    RETURN_IF_ERROR(ZonemapPredicatesRewriter::rewrite_predicate_tree(&_obj_pool, rs_opts.pred_tree,
+                                                                      rs_opts.pred_tree_for_zone_map));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     rs_opts.sorted = (keys_type != DUP_KEYS && keys_type != PRIMARY_KEYS) && !params.skip_aggregation;
     rs_opts.reader_type = params.reader_type;
     rs_opts.chunk_size = params.chunk_size;
@@ -258,17 +474,28 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     rs_opts.runtime_state = params.runtime_state;
     rs_opts.profile = params.profile;
     rs_opts.use_page_cache = params.use_page_cache;
+<<<<<<< HEAD
     rs_opts.tablet_schema = &_tablet->tablet_schema();
+=======
+    rs_opts.tablet_schema = _tablet_schema;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     rs_opts.global_dictmaps = params.global_dictmaps;
     rs_opts.unused_output_column_ids = params.unused_output_column_ids;
     rs_opts.runtime_range_pruner = params.runtime_range_pruner;
     rs_opts.column_access_paths = params.column_access_paths;
+<<<<<<< HEAD
+=======
+    rs_opts.use_vector_index = params.use_vector_index;
+    rs_opts.vector_search_option = params.vector_search_option;
+    rs_opts.sample_options = params.sample_options;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     if (keys_type == KeysType::PRIMARY_KEYS) {
         rs_opts.is_primary_keys = true;
         rs_opts.version = _version.second;
     }
     rs_opts.meta = _tablet->data_dir()->get_meta();
     rs_opts.rowid_range_option = params.rowid_range_option;
+<<<<<<< HEAD
     rs_opts.short_key_ranges = params.short_key_ranges;
     if (keys_type == PRIMARY_KEYS || keys_type == DUP_KEYS) {
         rs_opts.asc_hint = _is_asc_hint;
@@ -277,6 +504,25 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     SCOPED_RAW_TIMER(&_stats.create_segment_iter_ns);
     for (auto& rowset : _rowsets) {
         if (params.rowid_range_option != nullptr && !params.rowid_range_option->match_rowset(rowset.get())) {
+=======
+    rs_opts.short_key_ranges_option = params.short_key_ranges_option;
+    if (keys_type == PRIMARY_KEYS || keys_type == DUP_KEYS) {
+        rs_opts.asc_hint = _is_asc_hint;
+    }
+    rs_opts.prune_column_after_index_filter = params.prune_column_after_index_filter;
+    rs_opts.enable_gin_filter = params.enable_gin_filter;
+    rs_opts.has_preaggregation = true;
+    if ((is_compaction(params.reader_type) || params.sorted_by_keys_per_tablet)) {
+        rs_opts.has_preaggregation = true;
+    } else if (keys_type == PRIMARY_KEYS || keys_type == DUP_KEYS ||
+               (keys_type == UNIQUE_KEYS && params.skip_aggregation)) {
+        rs_opts.has_preaggregation = false;
+    }
+
+    SCOPED_RAW_TIMER(&_stats.create_segment_iter_ns);
+    for (auto& rowset : _rowsets) {
+        if (params.rowid_range_option != nullptr && !params.rowid_range_option->contains_rowset(rowset.get())) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             continue;
         }
 
@@ -302,10 +548,17 @@ Status TabletReader::_init_collector(const TabletReaderParams& params) {
 
     // If |keys_type| is UNIQUE_KEYS and |params.skip_aggregation| is true, must disable aggregate totally.
     // If |keys_type| is AGG_KEYS and |params.skip_aggregation| is true, aggregate is an optional operation.
+<<<<<<< HEAD
     KeysType keys_type = _tablet->tablet_schema().keys_type();
     const auto skip_aggr = params.skip_aggregation;
     const auto select_all_keys = _schema.num_key_fields() == _tablet->num_key_columns();
     DCHECK_LE(_schema.num_key_fields(), _tablet->num_key_columns());
+=======
+    KeysType keys_type = _tablet_schema->keys_type();
+    const auto skip_aggr = params.skip_aggregation;
+    const auto select_all_keys = _schema.num_key_fields() == _tablet_schema->num_key_columns();
+    DCHECK_LE(_schema.num_key_fields(), _tablet_schema->num_key_columns());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     if (seg_iters.empty()) {
         _collect_iter = new_empty_iterator(_schema, params.chunk_size);
@@ -452,14 +705,21 @@ Status TabletReader::_init_collector(const TabletReaderParams& params) {
 }
 
 Status TabletReader::_init_predicates(const TabletReaderParams& params) {
+<<<<<<< HEAD
     for (const ColumnPredicate* pred : params.predicates) {
         _pushdown_predicates[pred->column_id()].emplace_back(pred);
     }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     return Status::OK();
 }
 
 Status TabletReader::_init_delete_predicates(const TabletReaderParams& params, DeletePredicates* dels) {
+<<<<<<< HEAD
     PredicateParser pred_parser(_tablet->tablet_schema());
+=======
+    OlapPredicateParser pred_parser(_tablet_schema);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     std::shared_lock header_lock(_tablet->get_header_lock());
     for (const DeletePredicatePB& pred_pb : _tablet->delete_predicates()) {
@@ -474,8 +734,13 @@ Status TabletReader::_init_delete_predicates(const TabletReaderParams& params, D
                 LOG(WARNING) << "invalid delete condition: " << pred_pb.sub_predicates(i) << "]";
                 return Status::InternalError("invalid delete condition string");
             }
+<<<<<<< HEAD
             if (_tablet->tablet_schema().field_index(cond.column_name) >= _tablet->num_key_columns() &&
                 _tablet->keys_type() != DUP_KEYS) {
+=======
+            if (_tablet_schema->field_index(cond.column_name) >= _tablet_schema->num_key_columns() &&
+                _tablet_schema->keys_type() != DUP_KEYS) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 LOG(WARNING) << "ignore delete condition of non-key column: " << pred_pb.sub_predicates(i);
                 continue;
             }
@@ -526,12 +791,20 @@ Status TabletReader::_init_delete_predicates(const TabletReaderParams& params, D
 }
 
 // convert an OlapTuple to SeekTuple.
+<<<<<<< HEAD
 Status TabletReader::_to_seek_tuple(const TabletSchema& tablet_schema, const OlapTuple& input, SeekTuple* tuple,
+=======
+Status TabletReader::_to_seek_tuple(const TabletSchemaCSPtr& tablet_schema, const OlapTuple& input, SeekTuple* tuple,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                     MemPool* mempool) {
     Schema schema;
     std::vector<Datum> values;
     values.reserve(input.size());
+<<<<<<< HEAD
     const auto& sort_key_idxes = tablet_schema.sort_key_idxes();
+=======
+    const auto& sort_key_idxes = tablet_schema->sort_key_idxes();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     DCHECK(sort_key_idxes.empty() || sort_key_idxes.size() >= input.size());
 
     if (sort_key_idxes.size() > 0) {
@@ -541,9 +814,15 @@ Status TabletReader::_to_seek_tuple(const TabletSchema& tablet_schema, const Ola
     }
     for (size_t i = 0; i < input.size(); i++) {
         int idx = sort_key_idxes.empty() ? i : sort_key_idxes[i];
+<<<<<<< HEAD
         auto f = std::make_shared<Field>(ChunkHelper::convert_field(idx, tablet_schema.column(idx)));
         schema.append(f);
         values.emplace_back(Datum());
+=======
+        auto f = std::make_shared<Field>(ChunkHelper::convert_field(idx, tablet_schema->column(idx)));
+        schema.append(f);
+        values.emplace_back();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (input.is_null(i)) {
             continue;
         }
@@ -562,7 +841,11 @@ Status TabletReader::_to_seek_tuple(const TabletSchema& tablet_schema, const Ola
 }
 
 // convert vector<OlapTuple> to vector<SeekRange>
+<<<<<<< HEAD
 Status TabletReader::parse_seek_range(const TabletSharedPtr& tablet,
+=======
+Status TabletReader::parse_seek_range(const TabletSchemaCSPtr& tablet_schema,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                       TabletReaderParams::RangeStartOperation range_start_op,
                                       TabletReaderParams::RangeEndOperation range_end_op,
                                       const std::vector<OlapTuple>& range_start_key,
@@ -584,8 +867,13 @@ Status TabletReader::parse_seek_range(const TabletSharedPtr& tablet,
     for (size_t i = 0; i < n; i++) {
         SeekTuple lower;
         SeekTuple upper;
+<<<<<<< HEAD
         RETURN_IF_ERROR(_to_seek_tuple(tablet->tablet_schema(), range_start_key[i], &lower, mempool));
         RETURN_IF_ERROR(_to_seek_tuple(tablet->tablet_schema(), range_end_key[i], &upper, mempool));
+=======
+        RETURN_IF_ERROR(_to_seek_tuple(tablet_schema, range_start_key[i], &lower, mempool));
+        RETURN_IF_ERROR(_to_seek_tuple(tablet_schema, range_end_key[i], &upper, mempool));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ranges->emplace_back(SeekRange{std::move(lower), std::move(upper)});
         ranges->back().set_inclusive_lower(lower_inclusive);
         ranges->back().set_inclusive_upper(upper_inclusive);

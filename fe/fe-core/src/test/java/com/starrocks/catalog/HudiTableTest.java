@@ -18,8 +18,13 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.DdlException;
+<<<<<<< HEAD
 import com.starrocks.connector.ColumnTypeConverter;
 import com.starrocks.connector.Connector;
+=======
+import com.starrocks.connector.CatalogConnector;
+import com.starrocks.connector.ColumnTypeConverter;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.hive.HiveMetaClient;
@@ -27,6 +32,10 @@ import com.starrocks.connector.hive.HiveMetastoreTest;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
+=======
+import com.starrocks.server.HudiTableFactory;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.TableFactoryProvider;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -43,9 +52,19 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+<<<<<<< HEAD
 import java.util.List;
 import java.util.Map;
 
+=======
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import static com.starrocks.server.ExternalTableFactory.RESOURCE;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public class HudiTableTest {
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
@@ -97,8 +116,13 @@ public class HudiTableTest {
                 .setHudiProperties(properties);
         HudiTable oTable = tableBuilder.build();
 
+<<<<<<< HEAD
         Assert.assertEquals("db0", oTable.getDbName());
         Assert.assertEquals("table0", oTable.getTableName());
+=======
+        Assert.assertEquals("db0", oTable.getCatalogDBName());
+        Assert.assertEquals("table0", oTable.getCatalogTableName());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals(new Column("col1", Type.INT, true), oTable.getColumn("col1"));
         Assert.assertEquals("table0:" + createTime, oTable.getTableIdentifier());
         Assert.assertTrue(oTable.toString().contains("HudiTable{resourceName='catalog', catalogName='catalog', " +
@@ -183,7 +207,11 @@ public class HudiTableTest {
         Assert.assertEquals(ColumnTypeConverter.fromHudiType(Schema.create(Schema.Type.DOUBLE)),
                 ScalarType.createType(PrimitiveType.DOUBLE));
         Assert.assertEquals(ColumnTypeConverter.fromHudiType(Schema.create(Schema.Type.STRING)),
+<<<<<<< HEAD
                 ScalarType.createDefaultExternalTableString());
+=======
+                ScalarType.createDefaultCatalogString());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals(ColumnTypeConverter.fromHudiType(
                         Schema.createArray(Schema.create(Schema.Type.INT))),
                 new ArrayType(ScalarType.createType(PrimitiveType.INT)));
@@ -192,7 +220,11 @@ public class HudiTableTest {
                 ScalarType.createType(PrimitiveType.VARCHAR));
         Assert.assertEquals(ColumnTypeConverter.fromHudiType(
                         Schema.createMap(Schema.create(Schema.Type.INT))),
+<<<<<<< HEAD
                 new MapType(ScalarType.createDefaultExternalTableString(), ScalarType.createType(PrimitiveType.INT)));
+=======
+                new MapType(ScalarType.createDefaultCatalogString(), ScalarType.createType(PrimitiveType.INT)));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals(ColumnTypeConverter.fromHudiType(
                         Schema.createUnion(Schema.create(Schema.Type.INT))),
                 ScalarType.createType(PrimitiveType.INT));
@@ -201,7 +233,11 @@ public class HudiTableTest {
     @Test
     public void testToThrift(
             @Mocked ConnectorMgr connectorMgr,
+<<<<<<< HEAD
             @Mocked Connector catalogConnector,
+=======
+            @Mocked CatalogConnector catalogConnector,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             @Mocked ConnectorMetadata connectorMetadata,
             @Mocked HoodieTableMetaClient hoodieTableMetaClient) {
         new Expectations() {
@@ -246,4 +282,35 @@ public class HudiTableTest {
         Assert.assertEquals("db0", tTableDescriptor.getDbName());
         Assert.assertEquals("table0", tTableDescriptor.getTableName());
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testCreateTableResourceName() throws DdlException {
+        String resourceName = "Hudi_resource_29bb53dc_7e04_11ee_9b35_00163e0e489a";
+        Map<String, String> properties = new HashMap() {
+            {
+                put(RESOURCE, resourceName);
+            }
+        };
+        HudiTable.Builder tableBuilder = HudiTable.builder()
+                .setId(1000)
+                .setTableName("supplier")
+                .setCatalogName("hudi_catalog")
+                .setHiveDbName("hudi_oss_tpch_1g_parquet_gzip")
+                .setHiveTableName("supplier")
+                .setResourceName(resourceName)
+                .setFullSchema(new ArrayList<>())
+                .setDataColNames(new ArrayList<>())
+                .setPartitionColNames(Lists.newArrayList())
+                .setCreateTime(10)
+                .setHudiProperties(new HashMap<>());
+        HudiTable oTable = tableBuilder.build();
+
+        HudiTable.Builder newBuilder = HudiTable.builder();
+        HudiTableFactory.copyFromCatalogTable(newBuilder, oTable, properties);
+        HudiTable table = newBuilder.build();
+        Assert.assertEquals(table.getResourceName(), resourceName);
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

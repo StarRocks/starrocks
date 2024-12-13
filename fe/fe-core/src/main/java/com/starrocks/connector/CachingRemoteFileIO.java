@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 package com.starrocks.connector;
 
 import com.google.common.cache.CacheBuilder;
@@ -21,9 +24,18 @@ import com.google.common.cache.LoadingCache;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.UncheckedExecutionException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+<<<<<<< HEAD
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+=======
+import org.apache.hadoop.fs.FileStatus;
+import org.apache.hadoop.fs.Path;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+import java.io.IOException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executor;
@@ -43,6 +55,7 @@ public class CachingRemoteFileIO implements RemoteFileIO {
     private final LoadingCache<RemotePathKey, List<RemoteFileDesc>> cache;
 
     protected CachingRemoteFileIO(RemoteFileIO fileIO,
+<<<<<<< HEAD
                                Executor executor,
                                long expireAfterWriteSec,
                                long refreshIntervalSec,
@@ -54,6 +67,25 @@ public class CachingRemoteFileIO implements RemoteFileIO {
 
     public static CachingRemoteFileIO createCatalogLevelInstance(RemoteFileIO fileIO, Executor executor,
                                                         long expireAfterWrite, long refreshInterval, long maxSize) {
+=======
+                                  Executor executor,
+                                  long expireAfterWriteSec,
+                                  long refreshIntervalSec,
+                                  long maxSize) {
+        this.fileIO = fileIO;
+        this.cache = newCacheBuilder(expireAfterWriteSec, refreshIntervalSec, maxSize)
+                .build(asyncReloading(new CacheLoader<RemotePathKey, List<RemoteFileDesc>>() {
+                    @Override
+                    public List<RemoteFileDesc> load(RemotePathKey key) throws Exception {
+                        List<RemoteFileDesc> res = loadRemoteFiles(key);
+                        return res;
+                    }
+                }, executor));
+    }
+
+    public static CachingRemoteFileIO createCatalogLevelInstance(RemoteFileIO fileIO, Executor executor,
+                                                                 long expireAfterWrite, long refreshInterval, long maxSize) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return new CachingRemoteFileIO(fileIO, executor, expireAfterWrite, refreshInterval, maxSize);
     }
 
@@ -102,7 +134,15 @@ public class CachingRemoteFileIO implements RemoteFileIO {
     }
 
     public void updateRemoteFiles(RemotePathKey pathKey) {
+<<<<<<< HEAD
         cache.put(pathKey, loadRemoteFiles(pathKey));
+=======
+        if (fileIO instanceof CachingRemoteFileIO) {
+            ((CachingRemoteFileIO) fileIO).updateRemoteFiles(pathKey);
+        } else {
+            cache.put(pathKey, loadRemoteFiles(pathKey));
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public synchronized void invalidateAll() {
@@ -133,4 +173,12 @@ public class CachingRemoteFileIO implements RemoteFileIO {
         cacheBuilder.maximumSize(maximumSize);
         return cacheBuilder;
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    public FileStatus[] getFileStatus(Path... files) throws IOException {
+        return fileIO.getFileStatus(files);
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

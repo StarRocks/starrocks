@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # map_values
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Returns an array of all the values in the specified map.
 

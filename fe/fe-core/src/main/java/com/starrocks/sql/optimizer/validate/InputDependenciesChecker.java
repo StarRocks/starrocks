@@ -130,6 +130,13 @@ public class InputDependenciesChecker implements PlanValidator.Checker {
                 predicateCols.except(ColumnRefSet.createByIds(optExpression.getRowOutputInfo()
                         .getOriginalColOutputInfo().keySet()));
                 usedCols.union(predicateCols);
+<<<<<<< HEAD
+=======
+                if (optExpression.getOp().getPredicateCommonOperators() != null) {
+                    // predicate cols may be also from common exprs
+                    inputCols.union(optExpression.getOp().getPredicateCommonOperators().keySet());
+                }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
             checkInputCols(inputCols, usedCols, optExpression);
         }
@@ -196,7 +203,11 @@ public class InputDependenciesChecker implements PlanValidator.Checker {
             missedCols.except(inputCols);
             if (!missedCols.isEmpty()) {
                 String message = String.format("Invalid plan:%s%s%s The required cols %s cannot obtain from input cols %s.",
+<<<<<<< HEAD
                         System.lineSeparator(), optExpr.explain(), PREFIX, missedCols, inputCols);
+=======
+                        System.lineSeparator(), optExpr.debugString(), PREFIX, missedCols, inputCols);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 throw new StarRocksPlannerException(message, ErrorType.INTERNAL_ERROR);
             }
         }
@@ -205,7 +216,11 @@ public class InputDependenciesChecker implements PlanValidator.Checker {
             if (!outputCol.getType().isFullyCompatible(inputCol.getType())) {
                 String message = String.format("Invalid plan:%s%s%s Type of output col %s is not fully compatible with " +
                                 "type of input col %s.",
+<<<<<<< HEAD
                         System.lineSeparator(), optExpression.explain(), PREFIX, outputCol, inputCol);
+=======
+                        System.lineSeparator(), optExpression.debugString(), PREFIX, outputCol, inputCol);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 throw new StarRocksPlannerException(message, ErrorType.INTERNAL_ERROR);
             }
         }
@@ -213,7 +228,11 @@ public class InputDependenciesChecker implements PlanValidator.Checker {
         private void checkChildNumberOfSet(int inputSize, int requiredSize, OptExpression optExpression) {
             if (inputSize != requiredSize) {
                 String message = String.format("Invalid plan:%s%s%s. The required number of children is %d but found %d.",
+<<<<<<< HEAD
                         System.lineSeparator(), optExpression.explain(), PREFIX, requiredSize, inputSize);
+=======
+                        System.lineSeparator(), optExpression.debugString(), PREFIX, requiredSize, inputSize);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 throw new StarRocksPlannerException(message, ErrorType.INTERNAL_ERROR);
             }
         }

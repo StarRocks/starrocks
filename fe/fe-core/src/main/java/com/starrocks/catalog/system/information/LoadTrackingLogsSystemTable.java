@@ -25,15 +25,30 @@ import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
 import static com.starrocks.catalog.system.SystemTable.builder;
 
 public class LoadTrackingLogsSystemTable {
+<<<<<<< HEAD
     public static SystemTable create() {
         return new SystemTable(SystemId.LOAD_TRACKING_LOGS_ID,
                 "load_tracking_logs",
                 Table.TableType.SCHEMA,
                 builder()
+=======
+    public static final String NAME = "load_tracking_logs";
+
+    public static SystemTable create() {
+        return new SystemTable(SystemId.LOAD_TRACKING_LOGS_ID,
+                NAME,
+                Table.TableType.SCHEMA,
+                builder()
+                        .column("ID", ScalarType.createType(PrimitiveType.BIGINT))
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         .column("JOB_ID", ScalarType.createType(PrimitiveType.BIGINT))
                         .column("LABEL", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("DATABASE_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("TRACKING_LOG", ScalarType.createVarchar(MAX_FIELD_VARCHAR_LENGTH))
+<<<<<<< HEAD
+=======
+                        .column("TYPE", ScalarType.createVarchar(NAME_CHAR_LEN))
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         .build(), TSchemaTableType.SCH_LOAD_TRACKING_LOGS);
     }
 }

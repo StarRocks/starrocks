@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # date_trunc
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 根据指定的精度级别 `fmt`，将一个日期时间截断。
 
@@ -127,7 +131,11 @@ select date_trunc("quarter", "2020-11-04 11:12:13");
 
 示例七：将输入的时间截断至一年第一天。
 
+<<<<<<< HEAD
 ```undefined
+=======
+```plain
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 select date_trunc("year", "2020-11-04 11:12:13");
 +-------------------------------------------+
 | date_trunc('year', '2020-11-04 11:12:13') |

@@ -22,6 +22,13 @@ E.g.:
 ```shell
 DOCKER_BUILDKIT=1 docker build --rm=true --build-arg distro=centos7 -f dev-env.Dockerfile -t ghcr.io/starrocks/starrocks/dev-env-centos7:main ../../..
 ```
+<<<<<<< HEAD
+=======
+### 1.3 Build ubuntu dev env image with a Github token
+```
+DOCKER_BUILDKIT=1 docker build --rm=true --build-arg GITHUB_TOKEN=${GITHUB_TOKEN} -f dev-env.Dockerfile -t ghcr.io/OWNER/starrocks/dev-env-ubuntu:<tag> ../../..
+```
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ## 2 Publish image to ghcr
 ```

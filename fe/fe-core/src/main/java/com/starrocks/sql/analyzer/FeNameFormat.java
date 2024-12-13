@@ -15,6 +15,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
+<<<<<<< HEAD
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.CaseSensibility;
@@ -25,29 +26,61 @@ import com.starrocks.mysql.privilege.Role;
 
 import java.util.HashSet;
 import java.util.Set;
+=======
+import com.google.common.collect.Sets;
+import com.starrocks.alter.SchemaChangeHandler;
+import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
+import com.starrocks.common.FeConstants;
+import com.starrocks.server.RunMode;
+
+import java.util.Set;
+import java.util.regex.Pattern;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 public class FeNameFormat {
     private FeNameFormat() {
     }
 
     private static final String LABEL_REGEX = "^[-\\w]{1,128}$";
+<<<<<<< HEAD
     public static final String COMMON_NAME_REGEX = "^[a-zA-Z]\\w{0,63}$|^_[a-zA-Z0-9]\\w{0,62}$";
 
     // The length of db name is 256
     public static final String DB_NAME_REGEX = "^[a-zA-Z]\\w{0,255}$|^_[a-zA-Z0-9]\\w{0,254}$";
 
+=======
+
+    public static final char[] SPECIAL_CHARACTERS_IN_DB_NAME = new char[] {'-', '~', '!', '@', '#', '$',
+            '%', '^', '&', '<', '>', '=', '+'};
+    public static final String COMMON_NAME_REGEX = "^[a-zA-Z]\\w{0,63}$|^_[a-zA-Z0-9]\\w{0,62}$";
+
+    // The length of db name is 256
+    public static String DB_NAME_REGEX = "";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static final String TABLE_NAME_REGEX = "^[^\0]{1,1024}$";
 
     // Now we can not accept all characters because current design of delete save delete cond contains column name,
     // so it can not distinguish whether it is an operator or a column name
     // the future new design will improve this problem and open this limitation
+<<<<<<< HEAD
     private static final String COLUMN_NAME_REGEX = "^[^\0=<>!\\*]{1,1024}$";
+=======
+    private static final String SHARED_NOTHING_COLUMN_NAME_REGEX = "^[^\0=<>!\\*]{1,1024}$";
+
+    private static final String SHARED_DATE_COLUMN_NAME_REGEX = "^[^\0]{1,1024}$";
+
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // The username by kerberos authentication may include the host name, so additional adaptation is required.
     private static final String MYSQL_USER_NAME_REGEX = "^\\w{1,64}/?[.\\w-]{0,63}$";
 
     public static final String FORBIDDEN_PARTITION_NAME = "placeholder_";
 
+<<<<<<< HEAD
     private static final Set<String> FORBIDDEN_COLUMN_NAMES;
 
     static {
@@ -58,6 +91,31 @@ public class FeNameFormat {
 
     public static void checkDbName(String dbName) {
         if (Strings.isNullOrEmpty(dbName) || !dbName.matches(DB_NAME_REGEX)) {
+=======
+    public static final Set<String> FORBIDDEN_COLUMN_NAMES;
+
+    static {
+        FORBIDDEN_COLUMN_NAMES = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+        FORBIDDEN_COLUMN_NAMES.add("__op");
+        FORBIDDEN_COLUMN_NAMES.add("__row");
+        String allowedSpecialCharacters = "";
+        for (Character c : SPECIAL_CHARACTERS_IN_DB_NAME) {
+            allowedSpecialCharacters += c;
+        }
+
+        DB_NAME_REGEX = "^[a-zA-Z][\\w" + Pattern.quote(allowedSpecialCharacters) + "]{0,255}$|" +
+                "^_[a-zA-Z0-9][\\w" + Pattern.quote(allowedSpecialCharacters) + "]{0,254}$";
+
+    }
+
+    // The length of db name is 256.
+    public static void checkDbName(String dbName) {
+        if (Strings.isNullOrEmpty(dbName)) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_DB_NAME, dbName);
+        }
+
+        if (!dbName.matches(DB_NAME_REGEX)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_DB_NAME, dbName);
         }
     }
@@ -79,6 +137,7 @@ public class FeNameFormat {
     }
 
     public static void checkColumnName(String columnName) {
+<<<<<<< HEAD
         if (Strings.isNullOrEmpty(columnName) || !columnName.matches(COLUMN_NAME_REGEX)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_COLUMN_NAME, columnName);
         }
@@ -86,6 +145,28 @@ public class FeNameFormat {
             ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_COLUMN_NAME, columnName);
         }
         if (columnName.startsWith(SchemaChangeHandler.SHADOW_NAME_PRFIX_V1)) {
+=======
+        checkColumnName(columnName, false);
+    }
+
+    public static void checkColumnName(String columnName, boolean isPartitionColumn) {
+        if (Strings.isNullOrEmpty(columnName)) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_COLUMN_NAME, columnName);
+        }
+        String pattern;
+        if (RunMode.isSharedNothingMode()) {
+            pattern = SHARED_NOTHING_COLUMN_NAME_REGEX;
+        } else {
+            pattern = SHARED_DATE_COLUMN_NAME_REGEX;
+        }
+
+        if (!columnName.matches(pattern)) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_COLUMN_NAME, columnName);
+        }
+
+
+        if (columnName.startsWith(SchemaChangeHandler.SHADOW_NAME_PREFIX)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_COLUMN_NAME, columnName);
         }
 
@@ -93,7 +174,16 @@ public class FeNameFormat {
             if (FORBIDDEN_COLUMN_NAMES.contains(columnName)) {
                 throw new SemanticException(
                         "Column name [" + columnName + "] is a system reserved name. " +
+<<<<<<< HEAD
                         "If you are sure you want to use it, please set FE configuration allow_system_reserved_names");
+=======
+                                "Please choose a different one.");
+            }
+            if (!isPartitionColumn && columnName.startsWith(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX)) {
+                throw new SemanticException(
+                        "Column name [" + columnName + "] starts with " + FeConstants.GENERATED_PARTITION_COLUMN_PREFIX +
+                                " is a system reserved name. Please choose a different one.");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
     }
@@ -114,6 +204,7 @@ public class FeNameFormat {
         if (Strings.isNullOrEmpty(role) || !role.matches(COMMON_NAME_REGEX)) {
             throw new SemanticException("invalid role format: " + role);
         }
+<<<<<<< HEAD
 
         boolean res;
         if (CaseSensibility.ROLE.getCaseSensibility()) {
@@ -126,6 +217,8 @@ public class FeNameFormat {
         if (res) {
             throw new SemanticException(errMsg + ": " + role);
         }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public static void checkResourceName(String resourceName) {

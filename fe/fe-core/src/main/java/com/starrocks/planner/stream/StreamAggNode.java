@@ -106,11 +106,14 @@ public class StreamAggNode extends PlanNode {
     }
 
     @Override
+<<<<<<< HEAD
     public boolean canUsePipeLine() {
         return getChildren().stream().allMatch(PlanNode::canUsePipeLine);
     }
 
     @Override
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public boolean extractConjunctsToNormalize(FragmentNormalizer normalizer) {
         List<Expr> conjuncts = normalizer.getConjunctsByPlanNodeId(this);
         normalizer.filterOutPartColRangePredicates(getId(), conjuncts,

@@ -46,7 +46,11 @@ namespace starrocks {
 class TypeInfo;
 using TypeInfoPtr = std::shared_ptr<TypeInfo>;
 
+<<<<<<< HEAD
 class BloomFilterOptions;
+=======
+struct BloomFilterOptions;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 class WritableFile;
 
 class BloomFilterIndexWriter {

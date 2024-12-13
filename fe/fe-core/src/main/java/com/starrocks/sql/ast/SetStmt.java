@@ -36,6 +36,7 @@ public class SetStmt extends StatementBase {
     }
 
     @Override
+<<<<<<< HEAD
     public boolean needAuditEncryption() {
         for (SetListItem var : setListItems) {
             if (var instanceof SetPassVar) {
@@ -46,6 +47,8 @@ public class SetStmt extends StatementBase {
     }
 
     @Override
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public RedirectStatus getRedirectStatus() {
         if (setListItems != null) {
             for (SetListItem var : setListItems) {

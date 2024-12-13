@@ -39,6 +39,10 @@ import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.analysis.LabelName;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.LoadPriority;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.PropertyAnalyzer;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.Load;
@@ -109,6 +113,13 @@ public class LoadStmt extends DdlStmt {
     public static final String BOS_ACCESSKEY = "bos_accesskey";
     public static final String BOS_SECRET_ACCESSKEY = "bos_secret_accesskey";
 
+<<<<<<< HEAD
+=======
+    public static final String STRIP_OUTER_ARRAY = "strip_outer_array";
+    public static final String JSONPATHS = "jsonpaths";
+    public static final String JSONROOT = "json_root";
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // mini load params
     public static final String KEY_IN_PARAM_COLUMNS = "columns";
     public static final String KEY_IN_PARAM_SET = "set";
@@ -145,6 +156,13 @@ public class LoadStmt extends DdlStmt {
             .add(PARTIAL_UPDATE_MODE)
             .add(SPARK_LOAD_SUBMIT_TIMEOUT)
             .add(MERGE_CONDITION)
+<<<<<<< HEAD
+=======
+            .add(STRIP_OUTER_ARRAY)
+            .add(JSONPATHS)
+            .add(JSONROOT)
+            .add(PropertyAnalyzer.PROPERTIES_WAREHOUSE)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             .build();
 
     public LoadStmt(LabelName label, List<DataDescription> dataDescriptions, BrokerDesc brokerDesc,
@@ -329,6 +347,7 @@ public class LoadStmt extends DdlStmt {
         }
     }
 
+<<<<<<< HEAD
     @Override
     public boolean needAuditEncryption() {
         if (brokerDesc != null || resourceDesc != null) {
@@ -337,6 +356,8 @@ public class LoadStmt extends DdlStmt {
         return false;
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public String getVersion() {
         return version;
     }

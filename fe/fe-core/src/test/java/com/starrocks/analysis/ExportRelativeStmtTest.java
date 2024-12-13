@@ -9,6 +9,10 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CancelExportStmt;
 import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.ShowExportStmt;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.common.AuditEncryptionChecker;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.system.BrokerHbResponse;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -42,7 +46,11 @@ public class ExportRelativeStmtTest {
                 "WITH BROKER \"broker\" (\"username\"=\"test\", \"password\"=\"test\");";
         ExportStmt stmt = (ExportStmt) analyzeSuccess(originStmt);
         Assert.assertNotNull(stmt.getRedirectStatus());
+<<<<<<< HEAD
         Assert.assertTrue(stmt.needAuditEncryption());
+=======
+        Assert.assertTrue(AuditEncryptionChecker.needEncrypt(stmt));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertNotNull(stmt.getRowDelimiter());
         Assert.assertNotNull(stmt.getTblName());
         Assert.assertEquals("EXPORT TABLE `test`.`tall`\n" +
@@ -51,6 +59,16 @@ public class ExportRelativeStmtTest {
                 " WITH BROKER 'broker' (\"password\" = \"***\", \"username\" = \"test\")", stmt.toString());
         Assert.assertEquals(stmt.getPath(), "hdfs://hdfs_host:port/a/b/c/");
 
+<<<<<<< HEAD
+=======
+        // run with sync mode
+        originStmt = "EXPORT TABLE tall TO \"hdfs://hdfs_host:port/a/b/c/\" " +
+                "WITH SYNC MODE " +
+                "WITH BROKER \"broker\" (\"username\"=\"test\", \"password\"=\"test\");";
+        stmt = (ExportStmt) analyzeSuccess(originStmt);
+        Assert.assertTrue(stmt.getSync());
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // partition data
         originStmt = "EXPORT TABLE tp PARTITION (p1,p2) TO \"hdfs://hdfs_host:port/a/b/c/test_data_\" PROPERTIES " +
                 "(\"column_separator\"=\",\") WITH BROKER \"broker\" (\"username\"=\"test\", \"password\"=\"test\");";

@@ -31,6 +31,10 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "testutil/assert.h"
+<<<<<<< HEAD
+=======
+#include "util/failpoint/fail_point.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 using namespace std;
 
@@ -39,7 +43,11 @@ namespace starrocks {
 class UpdateManagerTest : public testing::Test {
 public:
     void SetUp() override {
+<<<<<<< HEAD
         _root_path = "./ut_dir/olap_update_manager_test";
+=======
+        _root_path = "./olap_update_manager_test";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         fs::remove_all(_root_path);
         fs::create_directories(_root_path);
         _meta = std::make_unique<KVStore>(_root_path);
@@ -58,7 +66,11 @@ public:
         writer_context.partition_id = 0;
         writer_context.rowset_path_prefix = _tablet->schema_hash_path();
         writer_context.rowset_state = COMMITTED;
+<<<<<<< HEAD
         writer_context.tablet_schema = &_tablet->tablet_schema();
+=======
+        writer_context.tablet_schema = _tablet->tablet_schema();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         writer_context.version.first = 0;
         writer_context.version.second = 0;
         writer_context.segments_overlap = NONOVERLAPPING;
@@ -212,4 +224,27 @@ TEST_F(UpdateManagerTest, testSetEmptyCachedDeltaColumnGroup) {
     ASSERT_TRUE(dcgs.empty());
 }
 
+<<<<<<< HEAD
+=======
+TEST_F(UpdateManagerTest, test_on_rowset_finished) {
+    srand(time(nullptr));
+    create_tablet(rand(), rand());
+    const int N = 10;
+    std::vector<int64_t> keys;
+    for (int i = 0; i < N; i++) {
+        keys.push_back(i);
+    }
+    auto rs0 = create_rowset(keys);
+    ASSERT_TRUE(_update_manager->on_rowset_finished(_tablet.get(), rs0.get()).ok());
+    PFailPointTriggerMode trigger_mode;
+    trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
+    auto fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get("on_rowset_finished_failed_due_to_mem");
+    fp->setMode(trigger_mode);
+    auto rs1 = create_rowset(keys);
+    ASSERT_TRUE(_update_manager->on_rowset_finished(_tablet.get(), rs1.get()).ok());
+    trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
+    fp->setMode(trigger_mode);
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // namespace starrocks

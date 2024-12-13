@@ -550,7 +550,11 @@ public final class SparkDpp implements java.io.Serializable {
                             long hashValue = DppUtils.getHashValue(row, distributeColumns, dstTableSchema);
                             int bucketId =
                                     (int) ((hashValue & 0xffffffff) % partitionInfo.partitions.get(pid).bucketNum);
+<<<<<<< HEAD
                             long partitionId = partitionInfo.partitions.get(pid).partitionId;
+=======
+                            long partitionId = partitionInfo.partitions.get(pid).physicalPartitionId;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                             // bucketKey is partitionId_bucketId
                             String bucketKey = partitionId + "_" + bucketId;
 
@@ -1229,7 +1233,11 @@ public final class SparkDpp implements java.io.Serializable {
                 int reduceNum = 0;
                 for (EtlJobConfig.EtlPartition partition : partitionInfo.partitions) {
                     for (int i = 0; i < partition.bucketNum; i++) {
+<<<<<<< HEAD
                         bucketKeyMap.put(partition.partitionId + "_" + i, reduceNum);
+=======
+                        bucketKeyMap.put(partition.physicalPartitionId + "_" + i, reduceNum);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         reduceNum++;
                     }
                 }
@@ -1266,7 +1274,11 @@ public final class SparkDpp implements java.io.Serializable {
                     int partitionSize = partitionInfo.partitions.size();
                     for (int i = 0; i < partitionSize; ++i) {
                         EtlJobConfig.EtlPartition partition = partitionInfo.partitions.get(i);
+<<<<<<< HEAD
                         if (fileGroup.partitions.contains(partition.partitionId)) {
+=======
+                        if (fileGroup.partitions.contains(partition.physicalPartitionId)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                             fileGroupPartitions.add(partition);
                             if (!partitionRangeKeys.isEmpty()) {
                                 fileGroupPartitionRangeKeys.add(partitionRangeKeys.get(i));

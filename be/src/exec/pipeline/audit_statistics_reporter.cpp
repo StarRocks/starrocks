@@ -20,6 +20,7 @@
 #include "gen_cpp/FrontendService_types.h"
 #include "runtime/client_cache.h"
 #include "runtime/exec_env.h"
+<<<<<<< HEAD
 
 namespace starrocks::pipeline {
 
@@ -27,6 +28,12 @@ using apache::thrift::TException;
 using apache::thrift::TProcessor;
 using apache::thrift::transport::TTransportException;
 
+=======
+#include "util/thrift_rpc_helper.h"
+
+namespace starrocks::pipeline {
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 AuditStatisticsReporter::AuditStatisticsReporter() {
     auto status = ThreadPoolBuilder("audit_report")
                           .set_min_threads(1)
@@ -42,6 +49,7 @@ AuditStatisticsReporter::AuditStatisticsReporter() {
 // including the final status when execution finishes.
 Status AuditStatisticsReporter::report_audit_statistics(const TReportAuditStatisticsParams& params, ExecEnv* exec_env,
                                                         const TNetworkAddress& fe_addr) {
+<<<<<<< HEAD
     Status fe_status;
     FrontendServiceConnection coord(exec_env->frontend_client_cache(), fe_addr, config::thrift_rpc_timeout_ms,
                                     &fe_status);
@@ -83,6 +91,16 @@ Status AuditStatisticsReporter::report_audit_statistics(const TReportAuditStatis
         LOG(WARNING) << msg.str();
         rpc_status = Status::InternalError(msg.str());
         return rpc_status;
+=======
+    TReportAuditStatisticsResult res;
+    Status rpc_status;
+    rpc_status = ThriftRpcHelper::rpc<FrontendServiceClient>(
+            fe_addr.hostname, fe_addr.port,
+            [&res, &params](FrontendServiceConnection& client) { client->reportAuditStatistics(res, params); },
+            config::thrift_rpc_timeout_ms);
+    if (rpc_status.ok()) {
+        rpc_status = Status(res.status);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     return rpc_status;
 }

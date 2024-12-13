@@ -15,9 +15,15 @@
 
 package com.starrocks.connector.hive.glue.util;
 
+<<<<<<< HEAD
 import com.amazonaws.services.glue.model.InvalidInputException;
 import com.amazonaws.services.glue.model.Table;
 import org.apache.hadoop.hive.metastore.TableType;
+=======
+import org.apache.hadoop.hive.metastore.TableType;
+import software.amazon.awssdk.services.glue.model.InvalidInputException;
+import software.amazon.awssdk.services.glue.model.Table;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import static org.apache.commons.lang3.StringUtils.isNotEmpty;
 import static org.apache.hadoop.hive.metastore.api.hive_metastoreConstants.META_TABLE_STORAGE;
@@ -35,31 +41,54 @@ public enum HiveTableValidator {
                 return;
             }
 
+<<<<<<< HEAD
             if (table.getTableType() == null) {
+=======
+            if (table.tableType() == null) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 missingProperty = "TableType";
             } else {
                 // for iceberg table, must contain metadata location in parameters
                 // TODO(zombee0), check hudi deltalake
                 if (isIcebergTable(table)) {
+<<<<<<< HEAD
                     if (table.getParameters().get(METADATA_LOCATION_PROP) == null) {
                         missingProperty = "MetadataLocation";
                     }
                 } else if (table.getStorageDescriptor() == null) {
+=======
+                    if (table.parameters().get(METADATA_LOCATION_PROP) == null) {
+                        missingProperty = "MetadataLocation";
+                    }
+                } else if (table.storageDescriptor() == null) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     missingProperty = "StorageDescriptor";
                 }
             }
 
             if (missingProperty != null) {
+<<<<<<< HEAD
                 throw new InvalidInputException(
                         String.format("%s cannot be null for table: %s", missingProperty, table.getName()));
+=======
+                throw InvalidInputException.builder()
+                        .message(String.format("%s cannot be null for table: %s", missingProperty, table.name()))
+                        .build();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
     };
 
     public static boolean isIcebergTable(Table table) {
+<<<<<<< HEAD
         return table.getParameters() != null &&
                 table.getParameters().get(TABLE_TYPE_PROP) != null &&
                 table.getParameters().get(TABLE_TYPE_PROP).equalsIgnoreCase(ICEBERG_TABLE_TYPE_VALUE);
+=======
+        return table.parameters() != null &&
+                table.parameters().get(TABLE_TYPE_PROP) != null &&
+                table.parameters().get(TABLE_TYPE_PROP).equalsIgnoreCase(ICEBERG_TABLE_TYPE_VALUE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public abstract void validate(Table table);
@@ -73,17 +102,28 @@ public enum HiveTableValidator {
     }
 
     private static boolean isNotManagedOrExternalTable(Table table) {
+<<<<<<< HEAD
         if (table.getTableType() != null &&
                 TableType.valueOf(table.getTableType()) != TableType.MANAGED_TABLE &&
                 TableType.valueOf(table.getTableType()) != TableType.EXTERNAL_TABLE) {
+=======
+        if (table.tableType() != null &&
+                TableType.valueOf(table.tableType()) != TableType.MANAGED_TABLE &&
+                TableType.valueOf(table.tableType()) != TableType.EXTERNAL_TABLE) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return true;
         }
         return false;
     }
 
     private static boolean isStorageHandlerType(Table table) {
+<<<<<<< HEAD
         if (table.getParameters() != null && table.getParameters().containsKey(META_TABLE_STORAGE) &&
                 isNotEmpty(table.getParameters().get(META_TABLE_STORAGE))) {
+=======
+        if (table.parameters() != null && table.parameters().containsKey(META_TABLE_STORAGE) &&
+                isNotEmpty(table.parameters().get(META_TABLE_STORAGE))) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return true;
         }
         return false;

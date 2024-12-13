@@ -22,18 +22,36 @@ import com.starrocks.proto.PCancelPlanFragmentResult;
 import com.starrocks.proto.PCollectQueryStatisticsResult;
 import com.starrocks.proto.PExecBatchPlanFragmentsResult;
 import com.starrocks.proto.PExecPlanFragmentResult;
+<<<<<<< HEAD
 import com.starrocks.proto.PFetchDataResult;
 import com.starrocks.proto.PGetFileSchemaResult;
 import com.starrocks.proto.PMVMaintenanceTaskResult;
+=======
+import com.starrocks.proto.PExecShortCircuitResult;
+import com.starrocks.proto.PFetchArrowSchemaRequest;
+import com.starrocks.proto.PFetchArrowSchemaResult;
+import com.starrocks.proto.PFetchDataResult;
+import com.starrocks.proto.PGetFileSchemaResult;
+import com.starrocks.proto.PListFailPointResponse;
+import com.starrocks.proto.PMVMaintenanceTaskResult;
+import com.starrocks.proto.PProcessDictionaryCacheRequest;
+import com.starrocks.proto.PProcessDictionaryCacheResult;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.proto.PProxyRequest;
 import com.starrocks.proto.PProxyResult;
 import com.starrocks.proto.PPulsarProxyRequest;
 import com.starrocks.proto.PPulsarProxyResult;
 import com.starrocks.proto.PTriggerProfileReportResult;
+<<<<<<< HEAD
+=======
+import com.starrocks.proto.PUpdateFailPointStatusRequest;
+import com.starrocks.proto.PUpdateFailPointStatusResponse;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import java.util.concurrent.Future;
 
 public interface PBackendService {
+<<<<<<< HEAD
     @ProtobufRPC(serviceName = "PBackendService", methodName = "exec_plan_fragment",
             attachmentHandler = ThriftClientAttachmentHandler.class, onceTalkTimeout = 60000)
     Future<PExecPlanFragmentResult> execPlanFragmentAsync(PExecPlanFragmentRequest request);
@@ -43,10 +61,22 @@ public interface PBackendService {
     Future<PExecBatchPlanFragmentsResult> execBatchPlanFragmentsAsync(PExecBatchPlanFragmentsRequest request);
 
     @ProtobufRPC(serviceName = "PBackendService", methodName = "cancel_plan_fragment",
+=======
+    @ProtobufRPC(serviceName = "PInternalService", methodName = "exec_plan_fragment",
+            attachmentHandler = ThriftClientAttachmentHandler.class, onceTalkTimeout = 60000)
+    Future<PExecPlanFragmentResult> execPlanFragmentAsync(PExecPlanFragmentRequest request);
+
+    @ProtobufRPC(serviceName = "PInternalService", methodName = "exec_batch_plan_fragments",
+            attachmentHandler = ThriftClientAttachmentHandler.class, onceTalkTimeout = 60000)
+    Future<PExecBatchPlanFragmentsResult> execBatchPlanFragmentsAsync(PExecBatchPlanFragmentsRequest request);
+
+    @ProtobufRPC(serviceName = "PInternalService", methodName = "cancel_plan_fragment",
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             onceTalkTimeout = 5000)
     Future<PCancelPlanFragmentResult> cancelPlanFragmentAsync(PCancelPlanFragmentRequest request);
 
     // we set timeout to 1 day, because now there is no way to give different timeout for each RPC call
+<<<<<<< HEAD
     @ProtobufRPC(serviceName = "PBackendService", methodName = "fetch_data",
             attachmentHandler = ThriftClientAttachmentHandler.class, onceTalkTimeout = 86400000)
     Future<PFetchDataResult> fetchDataAsync(PFetchDataRequest request);
@@ -75,5 +105,53 @@ public interface PBackendService {
 
     @ProtobufRPC(serviceName = "PBackendService", methodName = "execute_command", onceTalkTimeout = 600000)
     Future<ExecuteCommandResultPB> executeCommandAsync(ExecuteCommandRequestPB request);
+=======
+    @ProtobufRPC(serviceName = "PInternalService", methodName = "fetch_data",
+            attachmentHandler = ThriftClientAttachmentHandler.class, onceTalkTimeout = 86400000)
+    Future<PFetchDataResult> fetchDataAsync(PFetchDataRequest request);
+
+    @ProtobufRPC(serviceName = "PInternalService", methodName = "trigger_profile_report",
+            attachmentHandler = ThriftClientAttachmentHandler.class, onceTalkTimeout = 10000)
+    Future<PTriggerProfileReportResult> triggerProfileReport(PTriggerProfileReportRequest request);
+
+    @ProtobufRPC(serviceName = "PInternalService", methodName = "collect_query_statistics",
+            attachmentHandler = ThriftClientAttachmentHandler.class, onceTalkTimeout = 10000)
+    Future<PCollectQueryStatisticsResult> collectQueryStatistics(PCollectQueryStatisticsRequest request);
+
+    @ProtobufRPC(serviceName = "PInternalService", methodName = "get_info", onceTalkTimeout = 600000)
+    Future<PProxyResult> getInfo(PProxyRequest request);
+
+    @ProtobufRPC(serviceName = "PInternalService", methodName = "get_pulsar_info", onceTalkTimeout = 600000)
+    Future<PPulsarProxyResult> getPulsarInfo(PPulsarProxyRequest request);
+
+    @ProtobufRPC(serviceName = "PInternalService", methodName = "get_file_schema",
+            attachmentHandler = ThriftClientAttachmentHandler.class, onceTalkTimeout = 600000)
+    Future<PGetFileSchemaResult> getFileSchema(PGetFileSchemaRequest request);
+
+    @ProtobufRPC(serviceName = "PInternalService", methodName = "submit_mv_maintenance_task", onceTalkTimeout = 60000,
+            attachmentHandler = ThriftClientAttachmentHandler.class)
+    Future<PMVMaintenanceTaskResult> submitMVMaintenanceTaskAsync(PMVMaintenanceTaskRequest request);
+
+    @ProtobufRPC(serviceName = "PInternalService", methodName = "execute_command", onceTalkTimeout = 600000)
+    Future<ExecuteCommandResultPB> executeCommandAsync(ExecuteCommandRequestPB request);
+
+    @ProtobufRPC(serviceName = "PInternalService", methodName = "update_fail_point_status", onceTalkTimeout = 60000)
+    Future<PUpdateFailPointStatusResponse> updateFailPointStatusAsync(PUpdateFailPointStatusRequest request);
+
+    @ProtobufRPC(serviceName = "PInternalService", methodName = "list_fail_point",
+            attachmentHandler = ThriftClientAttachmentHandler.class, onceTalkTimeout = 60000)
+    Future<PListFailPointResponse> listFailPointAsync(PListFailPointRequest request);
+
+    @ProtobufRPC(serviceName = "PInternalService", methodName = "exec_short_circuit",
+            attachmentHandler = ThriftClientAttachmentHandler.class, onceTalkTimeout = 60000)
+    Future<PExecShortCircuitResult> execShortCircuit(PExecShortCircuitRequest request);
+
+    @ProtobufRPC(serviceName = "PInternalService", methodName = "process_dictionary_cache", onceTalkTimeout = 600000)
+    Future<PProcessDictionaryCacheResult> processDictionaryCache(PProcessDictionaryCacheRequest request);
+
+    @ProtobufRPC(serviceName = "PInternalService", methodName = "fetch_arrow_schema", onceTalkTimeout = 600000)
+    Future<PFetchArrowSchemaResult> fetchArrowSchema(PFetchArrowSchemaRequest request);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 

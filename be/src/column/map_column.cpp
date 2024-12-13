@@ -177,7 +177,11 @@ void MapColumn::fill_default(const Filter& filter) {
     update_rows(*default_column, indexes.data());
 }
 
+<<<<<<< HEAD
 Status MapColumn::update_rows(const Column& src, const uint32_t* indexes) {
+=======
+void MapColumn::update_rows(const Column& src, const uint32_t* indexes) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     const auto& map_column = down_cast<const MapColumn&>(src);
 
     const UInt32Column& src_offsets = map_column.offsets();
@@ -200,8 +204,13 @@ Status MapColumn::update_rows(const Column& src, const uint32_t* indexes) {
                 element_idxes.emplace_back(element_offset + j);
             }
         }
+<<<<<<< HEAD
         RETURN_IF_ERROR(_keys->update_rows(map_column.keys(), element_idxes.data()));
         RETURN_IF_ERROR(_values->update_rows(map_column.values(), element_idxes.data()));
+=======
+        _keys->update_rows(map_column.keys(), element_idxes.data());
+        _values->update_rows(map_column.values(), element_idxes.data());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     } else {
         MutableColumnPtr new_map_column = clone_empty();
         size_t idx_begin = 0;
@@ -217,8 +226,11 @@ Status MapColumn::update_rows(const Column& src, const uint32_t* indexes) {
         }
         swap_column(*new_map_column.get());
     }
+<<<<<<< HEAD
 
     return Status::OK();
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 void MapColumn::remove_first_n_values(size_t count) {
@@ -563,7 +575,11 @@ int64_t MapColumn::xor_checksum(uint32_t from, uint32_t to) const {
     return (xor_checksum ^ _values->xor_checksum(element_from, element_to));
 }
 
+<<<<<<< HEAD
 void MapColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const {
+=======
+void MapColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol) const {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     DCHECK_LT(idx, size());
     const size_t offset = _offsets->get_data()[idx];
     const size_t map_size = _offsets->get_data()[idx + 1] - offset;

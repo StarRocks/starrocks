@@ -34,6 +34,7 @@
 
 package com.starrocks.catalog;
 
+<<<<<<< HEAD
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -41,12 +42,24 @@ import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageType;
+=======
+import com.starrocks.analysis.FunctionName;
+import com.starrocks.catalog.MaterializedIndex.IndexState;
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.concurrent.lock.LockManager;
+import com.starrocks.persist.CreateTableInfo;
+import com.starrocks.persist.EditLog;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.NodeMgr;
+import com.starrocks.transaction.GtidGenerator;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+<<<<<<< HEAD
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
@@ -56,6 +69,10 @@ import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+=======
+import java.util.LinkedList;
+import java.util.List;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 public class DatabaseTest {
 
@@ -67,6 +84,12 @@ public class DatabaseTest {
     @Mocked
     private EditLog editLog;
 
+<<<<<<< HEAD
+=======
+    @Mocked
+    NodeMgr nodeMgr;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Before
     public void setup() {
         db = new Database(dbId, "dbTest");
@@ -87,14 +110,33 @@ public class DatabaseTest {
                 minTimes = 0;
                 result = globalStateMgr;
 
+<<<<<<< HEAD
                 globalStateMgr.getClusterId();
                 minTimes = 0;
                 result = 1;
+=======
+                globalStateMgr.getNodeMgr();
+                minTimes = 0;
+                result = nodeMgr;
+
+                globalStateMgr.getLockManager();
+                minTimes = 0;
+                result = new LockManager();
+
+                globalStateMgr.getNextId();
+                minTimes = 0;
+                result = 1L;
+
+                globalStateMgr.getGtidGenerator();
+                minTimes = 0;
+                result = new GtidGenerator();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         };
     }
 
     @Test
+<<<<<<< HEAD
     public void lockTest() {
         db.readLock();
         try {
@@ -112,12 +154,19 @@ public class DatabaseTest {
     }
 
     @Test
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void createAndDropPartitionTest() {
         Assert.assertEquals("dbTest", db.getOriginName());
         Assert.assertEquals(dbId, db.getId());
 
         MaterializedIndex baseIndex = new MaterializedIndex(10001, IndexState.NORMAL);
+<<<<<<< HEAD
         Partition partition = new Partition(20000L, "baseTable", baseIndex, new RandomDistributionInfo(10));
+=======
+        Partition partition = new Partition(20000L, 20001L,
+                "baseTable", baseIndex, new RandomDistributionInfo(10));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<Column> baseSchema = new LinkedList<Column>();
         OlapTable table = new OlapTable(2000, "baseTable", baseSchema, KeysType.AGG_KEYS,
                 new SinglePartitionInfo(), new RandomDistributionInfo(10));
@@ -143,12 +192,15 @@ public class DatabaseTest {
         // drop not exist tableFamily
         db.dropTable("invalid");
         Assert.assertEquals(1, db.getTables().size());
+<<<<<<< HEAD
         db.dropTable("invalid");
         Assert.assertEquals(1, db.getTables().size());
 
         // drop normal
         db.dropTable(table.getName());
         Assert.assertEquals(0, db.getTables().size());
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         db.registerTableUnlocked(table);
         db.dropTable(table.getName());
@@ -156,6 +208,7 @@ public class DatabaseTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testSerialization() throws Exception {
         // 1. Write objects to file
         File file = new File("./database");
@@ -225,6 +278,8 @@ public class DatabaseTest {
     }
 
     @Test
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void testGetUUID() {
         // Internal database
         Database db1 = new Database();
@@ -238,4 +293,66 @@ public class DatabaseTest {
         db3.setCatalogName("hive");
         Assert.assertEquals("hive.db3", db3.getUUID());
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testAddFunction() throws StarRocksException {
+        // Add addIntInt function to database
+        FunctionName name = new FunctionName(null, "addIntInt");
+        name.setDb(db.getCatalogName());
+        final Type[] argTypes = {Type.INT, Type.INT};
+        Function f = new Function(name, argTypes, Type.INT, false);
+        db.addFunction(f);
+
+        // Add addDoubleDouble function to database
+        FunctionName name2 = new FunctionName(null, "addDoubleDouble");
+        name2.setDb(db.getCatalogName());
+        final Type[] argTypes2 = {Type.DOUBLE, Type.DOUBLE};
+        Function f2 = new Function(name2, argTypes2, Type.DOUBLE, false);
+        db.addFunction(f2);
+    }
+
+    @Test
+    public void testAddFunctionGivenFunctionAlreadyExists() throws StarRocksException {
+        FunctionName name = new FunctionName(null, "addIntInt");
+        name.setDb(db.getCatalogName());
+        final Type[] argTypes = {Type.INT, Type.INT};
+        Function f = new Function(name, argTypes, Type.INT, false);
+
+        // Add the UDF for the first time
+        db.addFunction(f);
+
+        // Attempt to add the same UDF again, expecting an exception
+        Assert.assertThrows(StarRocksException.class, () -> db.addFunction(f));
+    }
+
+    @Test
+    public void testAddFunctionGivenFunctionAlreadyExistsAndAllowExisting() throws StarRocksException {
+        FunctionName name = new FunctionName(null, "addIntInt");
+        name.setDb(db.getCatalogName());
+        final Type[] argTypes = {Type.INT, Type.INT};
+        Function f = new Function(name, argTypes, Type.INT, false);
+
+        // Add the UDF for the first time
+        db.addFunction(f, true, false);
+        // Attempt to add the same UDF again
+        db.addFunction(f, true, false);
+
+        List<Function> functions = db.getFunctions();
+        Assert.assertEquals(functions.size(), 1);
+        Assert.assertTrue(functions.get(0).compare(f, Function.CompareMode.IS_IDENTICAL));
+    }
+
+    @Test
+    public void testAddAndDropFunctionForRestore() {
+        Function f1 = new Function(new FunctionName(db.getFullName(), "test_function"),
+                                   new Type[] {Type.INT}, new String[] {"argName"}, Type.INT, false);
+        try {
+            db.addFunction(f1);
+        } catch (Exception e) {
+        }
+        db.dropFunctionForRestore(f1);
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

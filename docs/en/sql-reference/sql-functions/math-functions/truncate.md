@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # truncate
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Rounds the input down to the nearest equal or smaller value with the specified number of places after the decimal point.
 

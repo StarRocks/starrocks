@@ -34,7 +34,10 @@
 
 package com.starrocks.qe;
 
+<<<<<<< HEAD
 import com.amazonaws.util.StringUtils;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.google.common.base.Enums;
 import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
@@ -44,25 +47,58 @@ import com.google.common.reflect.TypeToken;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.ToNumberPolicy;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.common.VectorSearchOptions;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.TimeUtils;
+<<<<<<< HEAD
 import com.starrocks.monitor.unit.TimeValue;
 import com.starrocks.qe.VariableMgr.VarAttr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.system.BackendCoreStat;
+=======
+import com.starrocks.connector.PlanMode;
+import com.starrocks.datacache.DataCachePopulateMode;
+import com.starrocks.monitor.unit.TimeValue;
+import com.starrocks.qe.VariableMgr.VarAttr;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
+import com.starrocks.server.StorageVolumeMgr;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.common.QueryDebugOptions;
+import com.starrocks.storagevolume.StorageVolume;
+import com.starrocks.system.BackendResourceStat;
+import com.starrocks.thrift.TCloudConfiguration;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TOverflowMode;
 import com.starrocks.thrift.TPipelineProfileLevel;
 import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TSpillMode;
+<<<<<<< HEAD
 import com.starrocks.thrift.TTabletInternalParallelMode;
 import com.starrocks.thrift.TTimeUnit;
 import org.apache.commons.lang3.EnumUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+=======
+import com.starrocks.thrift.TSpillOptions;
+import com.starrocks.thrift.TSpillToRemoteStorageOptions;
+import com.starrocks.thrift.TTabletInternalParallelMode;
+import com.starrocks.thrift.TTimeUnit;
+import org.apache.commons.lang3.EnumUtils;
+import org.apache.commons.lang3.StringUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.jetbrains.annotations.TestOnly;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.json.JSONObject;
 
 import java.io.DataInput;
@@ -76,6 +112,10 @@ import java.util.Objects;
 import java.util.Optional;
 
 import static com.starrocks.qe.SessionVariableConstants.ChooseInstancesMode.LOCALITY;
+<<<<<<< HEAD
+=======
+import static com.starrocks.qe.SessionVariableConstants.ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 // System variable
 @SuppressWarnings("FieldMayBeFinal")
@@ -89,7 +129,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String USE_COMPUTE_NODES = "use_compute_nodes";
     public static final String PREFER_COMPUTE_NODE = "prefer_compute_node";
+<<<<<<< HEAD
     public static final String EXEC_MEM_LIMIT = "exec_mem_limit";
+=======
+    // The schedule policy of backend and compute nodes.
+    // The optional values are "compute_nodes_only" and "all_nodes".
+    public static final String COMPUTATION_FRAGMENT_SCHEDULING_POLICY = "computation_fragment_scheduling_policy";
+    public static final String EXEC_MEM_LIMIT = "exec_mem_limit";
+    public static final String VECTOR_DISTANCE_COLUMN_NAME = "vector_distance_column_name";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     /**
      * configure the mem limit of load process on BE.
@@ -104,17 +152,29 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     /**
      * The mem limit of query on BE. It takes effects only when enabling pipeline engine.
+<<<<<<< HEAD
      * - If `query_mem_limit` > 0, use it to limit the memory of a query.
      * The memory a query able to be used is just `query_mem_limit`.
      * - Otherwise, use `exec_mem_limit` to limit the memory of a query.
      * The memory a query able to be used is `exec_mem_limit * num_fragments * pipeline_dop`.
      * To maintain compatibility, the default value is 0.
+=======
+     * If `query_mem_limit` > 0, use it to limit the memory of a query.
+     * Otherwise, no limitation
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
      */
     public static final String QUERY_MEM_LIMIT = "query_mem_limit";
 
     public static final String QUERY_TIMEOUT = "query_timeout";
 
+<<<<<<< HEAD
     /* 
+=======
+    public static final String METADATA_COLLECT_QUERY_TIMEOUT = "metadata_collect_query_timeout";
+    public static final String ENABLE_METADATA_PROFILE = "enable_metadata_profile";
+
+    /*
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
      * When FE does not set the pagecache parameter, we expect a query to follow the pagecache policy of BE.
      * If pagecache is set by FE, a query whether to use pagecache follows the policy specified by FE.
      */
@@ -123,6 +183,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String QUERY_DELIVERY_TIMEOUT = "query_delivery_timeout";
     public static final String MAX_EXECUTION_TIME = "max_execution_time";
     public static final String IS_REPORT_SUCCESS = "is_report_success";
+<<<<<<< HEAD
+=======
+    public static final String COLOR_EXPLAIN_OUTPUT = "enable_color_explain_output";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static final String ENABLE_PROFILE = "enable_profile";
 
     public static final String ENABLE_LOAD_PROFILE = "enable_load_profile";
@@ -153,8 +217,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String MAX_ALLOWED_PACKET = "max_allowed_packet";
     public static final String AUTO_INCREMENT_INCREMENT = "auto_increment_increment";
     public static final String QUERY_CACHE_TYPE = "query_cache_type";
+<<<<<<< HEAD
     public static final String INTERACTIVE_TIMTOUT = "interactive_timeout";
     public static final String WAIT_TIMEOUT = "wait_timeout";
+=======
+    public static final String INTERACTIVE_TIMEOUT = "interactive_timeout";
+    public static final String WAIT_TIMEOUT = "wait_timeout";
+
+    public static final String CATALOG = "catalog";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static final String NET_WRITE_TIMEOUT = "net_write_timeout";
     public static final String NET_READ_TIMEOUT = "net_read_timeout";
     public static final String TIME_ZONE = "time_zone";
@@ -170,11 +241,25 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String PARALLEL_FRAGMENT_EXEC_INSTANCE_NUM = "parallel_fragment_exec_instance_num";
     public static final String MAX_PARALLEL_SCAN_INSTANCE_NUM = "max_parallel_scan_instance_num";
     public static final String ENABLE_INSERT_STRICT = "enable_insert_strict";
+<<<<<<< HEAD
     public static final String ENABLE_SPILL = "enable_spill";
+=======
+    public static final String INSERT_MAX_FILTER_RATIO = "insert_max_filter_ratio";
+    public static final String INSERT_TIMEOUT = "insert_timeout";
+    public static final String DYNAMIC_OVERWRITE = "dynamic_overwrite";
+    public static final String ENABLE_SPILL = "enable_spill";
+    public static final String ENABLE_SPILL_TO_REMOTE_STORAGE = "enable_spill_to_remote_storage";
+    public static final String DISABLE_SPILL_TO_LOCAL_DISK = "disable_spill_to_local_disk";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static final String SPILLABLE_OPERATOR_MASK = "spillable_operator_mask";
     // spill mode: auto, force
     public static final String SPILL_MODE = "spill_mode";
     public static final String ENABLE_AGG_SPILL_PREAGGREGATION = "enable_agg_spill_preaggregation";
+<<<<<<< HEAD
+=======
+    public static final String ENABLE_SPILL_BUFFER_READ = "enable_spill_buffer_read";
+    public static final String MAX_SPILL_READ_BUFFER_BYTES_PER_DRIVER = "max_spill_read_buffer_bytes_per_driver";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // enable table pruning(RBO) in cardinality-preserving joins
     public static final String ENABLE_RBO_TABLE_PRUNE = "enable_rbo_table_prune";
 
@@ -184,6 +269,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // Table pruning on update statement is risky, so turn off in default.
     public static final String ENABLE_TABLE_PRUNE_ON_UPDATE = "enable_table_prune_on_update";
 
+<<<<<<< HEAD
+=======
+    public static final String ENABLE_UKFK_OPT = "enable_ukfk_opt";
+    public static final String ENABLE_UKFK_JOIN_REORDER = "enable_ukfk_join_reorder";
+    public static final String MAX_UKFK_JOIN_REORDER_SCALE_RATIO = "max_ukfk_join_reorder_scale_ratio";
+    public static final String MAX_UKFK_JOIN_REORDER_FK_ROWS = "max_ukfk_join_reorder_fk_rows";
+    public static final String ENABLE_ELIMINATE_AGG = "enable_eliminate_agg";
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // if set to true, some of stmt will be forwarded to leader FE to get result
 
     // if set to true, some of stmt will be forwarded to leader FE to get result
@@ -199,6 +293,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String MAX_SCAN_KEY_NUM = "max_scan_key_num";
     public static final String MAX_PUSHDOWN_CONDITIONS_PER_COLUMN = "max_pushdown_conditions_per_column";
 
+<<<<<<< HEAD
+=======
+    public static final String ENABLE_LAMBDA_PUSHDOWN = "enable_lambda_pushdown";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // use new execution engine instead of the old one if enable_pipeline_engine is true,
     // the new execution engine split a fragment into pipelines, then create several drivers
     // from the pipeline for parallel executing, threads from global pool pick out the
@@ -217,7 +315,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             "runtime_adaptive_dop_max_output_amplification_factor";
 
     public static final String ENABLE_PIPELINE_ENGINE = "enable_pipeline_engine";
+<<<<<<< HEAD
     public static final String ENABLE_PIPELINE_QUERY_STATISTIC = "enable_pipeline_query_statistic";
+=======
+
+    public static final String MAX_BUCKETS_PER_BE_TO_USE_BALANCER_ASSIGNMENT = "max_buckets_per_be_to_use_balancer_assignment";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public static final String ENABLE_MV_PLANNER = "enable_mv_planner";
     public static final String ENABLE_INCREMENTAL_REFRESH_MV = "enable_incremental_mv";
@@ -231,6 +334,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
      */
     public static final String ENABLE_LOCAL_SHUFFLE_AGG = "enable_local_shuffle_agg";
 
+<<<<<<< HEAD
     public static final String ENABLE_DELIVER_BATCH_FRAGMENTS = "enable_deliver_batch_fragments";
 
     // Use resource group. It will influence the CPU schedule, I/O scheduler, and
@@ -238,11 +342,18 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_RESOURCE_GROUP = "enable_resource_group";
     public static final String ENABLE_RESOURCE_GROUP_V2 = "enable_resource_group_v2";
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static final String ENABLE_QUERY_TABLET_AFFINITY = "enable_query_tablet_affinity";
 
     public static final String ENABLE_TABLET_INTERNAL_PARALLEL = "enable_tablet_internal_parallel";
     public static final String ENABLE_TABLET_INTERNAL_PARALLEL_V2 = "enable_tablet_internal_parallel_v2";
 
+<<<<<<< HEAD
+=======
+    public static final String ENABLE_LAKE_TABLET_INTERNAL_PARALLEL = "enable_lake_tablet_internal_parallel";
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static final String TABLET_INTERNAL_PARALLEL_MODE = "tablet_internal_parallel_mode";
     public static final String ENABLE_SHARED_SCAN = "enable_shared_scan";
     public static final String PIPELINE_DOP = "pipeline_dop";
@@ -268,6 +379,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_FILTER_UNUSED_COLUMNS_IN_SCAN_STAGE =
             "enable_filter_unused_columns_in_scan_stage";
 
+<<<<<<< HEAD
+=======
+    public static final String JOIN_LATE_MATERIALIZATION = "join_late_materialization";
+    public static final String ENABLE_PARTITION_HASH_JOIN = "enable_partition_hash_join";
+
+    public static final String ENABLE_PRUNE_COLUMN_AFTER_INDEX_FILTER =
+            "enable_prune_column_after_index_filter";
+
+    public static final String ENABLE_GIN_FILTER = "enable_gin_filter";
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // the maximum time, in seconds, waiting for an insert statement's transaction state
     // transfer from COMMITTED to VISIBLE.
     // If the time exceeded but the transaction state is not VISIBLE, the transaction will
@@ -290,6 +412,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String NEW_PLANNER_OPTIMIZER_TIMEOUT = "new_planner_optimize_timeout";
     public static final String ENABLE_GROUPBY_USE_OUTPUT_ALIAS = "enable_groupby_use_output_alias";
     public static final String ENABLE_QUERY_DUMP = "enable_query_dump";
+<<<<<<< HEAD
+=======
+    public static final String QUERY_DEBUG_OPTIONS = "query_debug_options";
+    public static final String VECTOR_SEARCH_OPTIONS = "vector_search_options";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // --------------------------- Limitations for Materialized View ------------------------------------ //
     public static final String OPTIMIZER_MATERIALIZED_VIEW_TIMELIMIT = "optimizer_materialized_view_timelimit";
@@ -306,7 +433,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_ENABLE_GREEDY_JOIN_REORDER = "cbo_enable_greedy_join_reorder";
     public static final String CBO_ENABLE_REPLICATED_JOIN = "cbo_enable_replicated_join";
     public static final String CBO_USE_CORRELATED_JOIN_ESTIMATE = "cbo_use_correlated_join_estimate";
+<<<<<<< HEAD
     public static final String CBO_ENABLE_LOW_CARDINALITY_OPTIMIZE = "cbo_enable_low_cardinality_optimize";
+=======
+    public static final String ALWAYS_COLLECT_LOW_CARD_DICT = "always_collect_low_card_dict";
+    public static final String CBO_ENABLE_LOW_CARDINALITY_OPTIMIZE = "cbo_enable_low_cardinality_optimize";
+    public static final String LOW_CARDINALITY_OPTIMIZE_V2 = "low_cardinality_optimize_v2";
+    public static final String ARRAY_LOW_CARDINALITY_OPTIMIZE = "array_low_cardinality_optimize";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static final String CBO_USE_NTH_EXEC_PLAN = "cbo_use_nth_exec_plan";
     public static final String CBO_CTE_REUSE = "cbo_cte_reuse";
     public static final String CBO_CTE_REUSE_RATE = "cbo_cte_reuse_rate";
@@ -317,6 +451,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_MAX_REORDER_NODE = "cbo_max_reorder_node";
     public static final String CBO_PRUNE_SHUFFLE_COLUMN_RATE = "cbo_prune_shuffle_column_rate";
     public static final String CBO_PUSH_DOWN_AGGREGATE_MODE = "cbo_push_down_aggregate_mode";
+<<<<<<< HEAD
 
     public static final String CBO_PUSH_DOWN_DISTINCT_BELOW_WINDOW = "cbo_push_down_distinct_below_window";
     public static final String CBO_PUSH_DOWN_AGGREGATE = "cbo_push_down_aggregate";
@@ -330,6 +465,35 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_DERIVE_RANGE_JOIN_PREDICATE = "cbo_derive_range_join_predicate";
 
     public static final String SKEW_JOIN_RAND_RANGE = "skew_join_rand_range";
+=======
+    public static final String CBO_PUSH_DOWN_AGGREGATE_ON_BROADCAST_JOIN = "cbo_push_down_aggregate_on_broadcast_join";
+
+    public static final String CBO_PUSH_DOWN_DISTINCT_BELOW_WINDOW = "cbo_push_down_distinct_below_window";
+    public static final String CBO_PUSH_DOWN_AGGREGATE = "cbo_push_down_aggregate";
+    public static final String CBO_PUSH_DOWN_GROUPINGSET = "cbo_push_down_groupingset";
+    public static final String CBO_PUSH_DOWN_GROUPINGSET_RESHUFFLE = "cbo_push_down_groupingset_reshuffle";
+    public static final String CBO_DEBUG_ALIVE_BACKEND_NUMBER = "cbo_debug_alive_backend_number";
+    public static final String CBO_PRUNE_SUBFIELD = "cbo_prune_subfield";
+    public static final String CBO_PRUNE_JSON_SUBFIELD = "cbo_prune_json_subfield";
+    public static final String CBO_PRUNE_JSON_SUBFIELD_DEPTH = "cbo_prune_json_subfield_depth";
+    public static final String ENABLE_OPTIMIZER_REWRITE_GROUPINGSETS_TO_UNION_ALL =
+            "enable_rewrite_groupingsets_to_union_all";
+    public static final String ENABLE_PARTITION_LEVEL_CARDINALITY_ESTIMATION =
+            "enable_partition_level_cardinality_estimation";
+
+    public static final String CBO_USE_DB_LOCK = "cbo_use_lock_db";
+    public static final String CBO_PREDICATE_SUBFIELD_PATH = "cbo_enable_predicate_subfield_path";
+    public static final String CBO_PREPARE_METADATA_THREAD_POOL_SIZE = "cbo_prepare_metadata_thread_pool_size";
+
+    public static final String CBO_ENABLE_PARALLEL_PREPARE_METADATA = "enable_parallel_prepare_metadata";
+
+    public static final String SKEW_JOIN_RAND_RANGE = "skew_join_rand_range";
+    public static final String ENABLE_STATS_TO_OPTIMIZE_SKEW_JOIN = "enable_stats_to_optimize_skew_join";
+    public static final String SKEW_JOIN_OPTIMIZE_USE_MCV_COUNT = "skew_join_use_mcv_count";
+    public static final String SKEW_JOIN_DATA_SKEW_THRESHOLD = "skew_join_data_skew_threshold";
+
+    public static final String CHOOSE_EXECUTE_INSTANCES_MODE = "choose_execute_instances_mode";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // --------  New planner session variables end --------
 
@@ -354,6 +518,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_TOPN_RUNTIME_FILTER = "enable_topn_runtime_filter";
     public static final String GLOBAL_RUNTIME_FILTER_RPC_HTTP_MIN_SIZE = "global_runtime_filter_rpc_http_min_size";
 
+<<<<<<< HEAD
+=======
+    public static final String ENABLE_PIPELINE_LEVEL_MULTI_PARTITIONED_RF =
+            "enable_pipeline_level_multi_partitioned_rf";
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static final String ENABLE_COLUMN_EXPR_PREDICATE = "enable_column_expr_predicate";
     public static final String ENABLE_EXCHANGE_PASS_THROUGH = "enable_exchange_pass_through";
     public static final String ENABLE_EXCHANGE_PERF = "enable_exchange_perf";
@@ -362,8 +532,27 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ALLOW_DEFAULT_PARTITION = "allow_default_partition";
 
+<<<<<<< HEAD
     public static final String ENABLE_HIVE_COLUMN_STATS = "enable_hive_column_stats";
 
+=======
+    public static final String ENABLE_PRUNE_ICEBERG_MANIFEST = "enable_prune_iceberg_manifest";
+
+    public static final String ENABLE_READ_ICEBERG_PUFFIN_NDV = "enable_read_iceberg_puffin_ndv";
+
+    public static final String ENABLE_ICEBERG_COLUMN_STATISTICS = "enable_iceberg_column_statistics";
+    public static final String ENABLE_READ_ICEBERG_EQUALITY_DELETE_WITH_PARTITION_EVOLUTION =
+            "enable_read_iceberg_equality_delete_with_partition_evolution";
+    public static final String ENABLE_DELTA_LAKE_COLUMN_STATISTICS = "enable_delta_lake_column_statistics";
+    public static final String ENABLE_QUERY_TRIGGER_ANALYZE = "enable_query_trigger_analyze";
+
+    public static final String PLAN_MODE = "plan_mode";
+
+    public static final String ENABLE_HIVE_COLUMN_STATS = "enable_hive_column_stats";
+
+    public static final String ENABLE_WRITE_HIVE_EXTERNAL_TABLE = "enable_write_hive_external_table";
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static final String ENABLE_HIVE_METADATA_CACHE_WITH_INSERT = "enable_hive_metadata_cache_with_insert";
 
     public static final String DEFAULT_TABLE_COMPRESSION = "default_table_compression";
@@ -373,22 +562,43 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // if the gc of any service is caused, you can set the value to 100 for testing.
     public static final String HIVE_PARTITION_STATS_SAMPLE_SIZE = "hive_partition_stats_sample_size";
 
+<<<<<<< HEAD
     public static final String PIPELINE_SINK_DOP = "pipeline_sink_dop";
     public static final String ENABLE_ADAPTIVE_SINK_DOP = "enable_adaptive_sink_dop";
     public static final String ENABLE_PERSISTENT_INDEX_BY_DEFAULT = "enable_persistent_index_by_default";
+=======
+    public static final String ENABLE_CONNECTOR_SINK_GLOBAL_SHUFFLE = "enable_connector_sink_global_shuffle";
+
+    public static final String ENABLE_CONNECTOR_SINK_SPILL = "enable_connector_sink_spill";
+    public static final String CONNECTOR_SINK_SPILL_MEM_LIMIT_THRESHOLD = "connector_sink_spill_mem_limit_threshold";
+    public static final String PIPELINE_SINK_DOP = "pipeline_sink_dop";
+    public static final String ENABLE_ADAPTIVE_SINK_DOP = "enable_adaptive_sink_dop";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static final String RUNTIME_FILTER_SCAN_WAIT_TIME = "runtime_filter_scan_wait_time";
     public static final String RUNTIME_FILTER_ON_EXCHANGE_NODE = "runtime_filter_on_exchange_node";
     public static final String ENABLE_MULTI_COLUMNS_ON_GLOBAL_RUNTIME_FILTER =
             "enable_multicolumn_global_runtime_filter";
 
+<<<<<<< HEAD
     public static final String ENABLE_OPTIMIZER_TRACE_LOG = "enable_optimizer_trace_log";
     public static final String ENABLE_MV_OPTIMIZER_TRACE_LOG = "enable_mv_optimizer_trace_log";
 
+=======
+    // command, file
+    public static final String TRACE_LOG_MODE = "trace_log_mode";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static final String JOIN_IMPLEMENTATION_MODE = "join_implementation_mode";
     public static final String JOIN_IMPLEMENTATION_MODE_V2 = "join_implementation_mode_v2";
 
     public static final String STATISTIC_COLLECT_PARALLEL = "statistic_collect_parallel";
 
+<<<<<<< HEAD
+=======
+    public static final String STATISTIC_META_COLLECT_PARALLEL = "statistic_meta_collect_parallel";
+
+    public static final String ENABLE_ANALYZE_PHASE_PRUNE_COLUMNS = "enable_analyze_phase_prune_columns";
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static final String ENABLE_SHOW_ALL_VARIABLES = "enable_show_all_variables";
 
     public static final String ENABLE_QUERY_DEBUG_TRACE = "enable_query_debug_trace";
@@ -400,22 +610,60 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String PARSE_TOKENS_LIMIT = "parse_tokens_limit";
 
     public static final String ENABLE_SORT_AGGREGATE = "enable_sort_aggregate";
+<<<<<<< HEAD
     public static final String ENABLE_PARALLEL_MERGE = "enable_parallel_merge";
 
+=======
+    public static final String ENABLE_PER_BUCKET_OPTIMIZE = "enable_per_bucket_optimize";
+    public static final String ENABLE_PARTITION_BUCKET_OPTIMIZE = "enable_partition_bucket_optimize";
+    public static final String ENABLE_GROUP_EXECUTION = "enable_group_execution";
+    public static final String GROUP_EXECUTION_GROUP_SCALE = "group_execution_group_scale";
+    public static final String GROUP_EXECUTION_MAX_GROUPS = "group_execution_max_groups";
+    public static final String GROUP_EXECUTION_MIN_SCAN_ROWS = "group_execution_min_scan_rows";
+
+    public static final String ENABLE_PARALLEL_MERGE = "enable_parallel_merge";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static final String ENABLE_QUERY_QUEUE = "enable_query_queue";
 
     public static final String WINDOW_PARTITION_MODE = "window_partition_mode";
 
+<<<<<<< HEAD
     public static final String ENABLE_SCAN_BLOCK_CACHE = "enable_scan_block_cache";
     public static final String ENABLE_POPULATE_BLOCK_CACHE = "enable_populate_block_cache";
     public static final String HUDI_MOR_FORCE_JNI_READER = "hudi_mor_force_jni_reader";
+=======
+    public static final String ENABLE_SCAN_DATACACHE = "enable_scan_datacache";
+    public static final String ENABLE_POPULATE_DATACACHE = "enable_populate_datacache";
+    public static final String POPULATE_DATACACHE_MODE = "populate_datacache_mode";
+    public static final String ENABLE_DATACACHE_ASYNC_POPULATE_MODE = "enable_datacache_async_populate_mode";
+    public static final String ENABLE_DATACACHE_IO_ADAPTOR = "enable_datacache_io_adaptor";
+    public static final String DATACACHE_EVICT_PROBABILITY = "datacache_evict_probability";
+
+    // The following configurations will be deprecated, and we use the `datacache` suffix instead.
+    // But it is temporarily necessary to keep them for a period of time to be compatible with
+    // the old session variable names.
+    public static final String ENABLE_SCAN_BLOCK_CACHE = "enable_scan_block_cache";
+    public static final String ENABLE_POPULATE_BLOCK_CACHE = "enable_populate_block_cache";
+
+    public static final String ENABLE_FILE_METACACHE = "enable_file_metacache";
+    public static final String HUDI_MOR_FORCE_JNI_READER = "hudi_mor_force_jni_reader";
+    public static final String PAIMON_FORCE_JNI_READER = "paimon_force_jni_reader";
+    public static final String ENABLE_DYNAMIC_PRUNE_SCAN_RANGE = "enable_dynamic_prune_scan_range";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static final String IO_TASKS_PER_SCAN_OPERATOR = "io_tasks_per_scan_operator";
     public static final String CONNECTOR_IO_TASKS_PER_SCAN_OPERATOR = "connector_io_tasks_per_scan_operator";
     public static final String ENABLE_CONNECTOR_ADAPTIVE_IO_TASKS = "enable_connector_adaptive_io_tasks";
     public static final String CONNECTOR_IO_TASKS_SLOW_IO_LATENCY_MS = "connector_io_tasks_slow_io_latency_ms";
     public static final String SCAN_USE_QUERY_MEM_RATIO = "scan_use_query_mem_ratio";
     public static final String CONNECTOR_SCAN_USE_QUERY_MEM_RATIO = "connector_scan_use_query_mem_ratio";
+<<<<<<< HEAD
 
+=======
+    public static final String CONNECTOR_SINK_COMPRESSION_CODEC = "connector_sink_compression_codec";
+
+    public static final String CONNECTOR_SINK_TARGET_MAX_FILE_SIZE = "connector_sink_target_max_file_size";
+    public static final String ENABLE_CONNECTOR_SPLIT_IO_TASKS = "enable_connector_split_io_tasks";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static final String ENABLE_QUERY_CACHE = "enable_query_cache";
     public static final String QUERY_CACHE_FORCE_POPULATE = "query_cache_force_populate";
     public static final String QUERY_CACHE_ENTRY_MAX_BYTES = "query_cache_entry_max_bytes";
@@ -433,28 +681,69 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_MATERIALIZED_VIEW_REWRITE = "enable_materialized_view_rewrite";
     public static final String ENABLE_MATERIALIZED_VIEW_UNION_REWRITE = "enable_materialized_view_union_rewrite";
     public static final String MATERIALIZED_VIEW_UNION_REWRITE_MODE = "materialized_view_union_rewrite_mode";
+<<<<<<< HEAD
     public static final String ENABLE_MATERIALIZED_VIEW_REWRITE_PARTITION_COMPENSATE =
             "enable_materialized_view_rewrite_partition_compensate";
+=======
+    public static final String ENABLE_MATERIALIZED_VIEW_TRANSPARENT_UNION_REWRITE =
+            "enable_materialized_view_transparent_union_rewrite";
+    public static final String ENABLE_MATERIALIZED_VIEW_REWRITE_PARTITION_COMPENSATE =
+            "enable_materialized_view_rewrite_partition_compensate";
+    public static final String ENABLE_MATERIALIZED_VIEW_AGG_PUSHDOWN_REWRITE = "enable_materialized_view_agg_pushdown_rewrite";
+    public static final String ENABLE_MATERIALIZED_VIEW_TIMESERIES_AGG_PUSHDOWN_REWRITE =
+            "enable_materialized_view_timeseries_agg_pushdown_rewrite";
+
+    public static final String ENABLE_MATERIALIZED_VIEW_TEXT_MATCH_REWRITE =
+            "enable_materialized_view_text_match_rewrite";
+    public static final String MATERIALIZED_VIEW_SUBQUERY_TEXT_MATCH_MAX_COUNT =
+            "materialized_view_subuqery_text_match_max_count";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public static final String LARGE_DECIMAL_UNDERLYING_TYPE = "large_decimal_underlying_type";
 
     public static final String ENABLE_ICEBERG_IDENTITY_COLUMN_OPTIMIZE = "enable_iceberg_identity_column_optimize";
     public static final String ENABLE_PIPELINE_LEVEL_SHUFFLE = "enable_pipeline_level_shuffle";
 
+<<<<<<< HEAD
     public static final String ENABLE_STRICT_ORDER_BY = "enable_strict_order_by";
 
     private static final String ENABLE_RESULT_SINK_ACCUMULATE = "enable_result_sink_accumulate";
 
+=======
+    public static final String ENABLE_PLAN_SERIALIZE_CONCURRENTLY = "enable_plan_serialize_concurrently";
+
+    public static final String ENABLE_STRICT_ORDER_BY = "enable_strict_order_by";
+    private static final String ENABLE_FINE_GRAINED_RANGE_PREDICATE = "enable_fine_grained_range_predicate";
+
+    private static final String ENABLE_RESULT_SINK_ACCUMULATE = "enable_result_sink_accumulate";
+
+    public static final String ENABLE_WAIT_DEPENDENT_EVENT = "enable_wait_dependent_event";
+
+    public static final String ENABLE_PHASED_SCHEDULER = "enable_phased_scheduler";
+    public static final String PHASED_SCHEDULER_MAX_CONCURRENCY = "phased_scheduler_max_concurrency";
+
+    public static final String CUSTOM_QUERY_ID = "custom_query_id";
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // Access ORC columns by name. By default, columns in ORC files are accessed by
     // their ordinal position in the Hive table definition.
     public static final String ORC_USE_COLUMN_NAMES = "orc_use_column_names";
 
+<<<<<<< HEAD
+=======
+    public static final String ENABLE_EXECUTION_ONLY = "enable_execution_only";
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // Flag to control whether to proxy follower's query statement to leader/follower.
     public enum FollowerQueryForwardMode {
         DEFAULT,    // proxy queries by the follower's replay progress (default)
         FOLLOWER,   // proxy queries to follower no matter the follower's replay progress
         LEADER      // proxy queries to leader no matter the follower's replay progress
     }
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static final String FOLLOWER_QUERY_FORWARD_MODE = "follower_query_forward_mode";
 
     public static final String ENABLE_ARRAY_DISTINCT_AFTER_AGG_OPT = "enable_array_distinct_after_agg_opt";
@@ -477,6 +766,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             return EnumUtils.getEnumIgnoreCase(MaterializedViewRewriteMode.class, str);
         }
     }
+<<<<<<< HEAD
     public static final String MATERIALIZED_VIEW_REWRITE_MODE = "materialized_view_rewrite_mode";
 
     public static final String QUERY_DEBUG_OPTIONS = "query_debug_options";
@@ -485,6 +775,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_SYNC_MATERIALIZED_VIEW_REWRITE = "enable_sync_materialized_view_rewrite";
     public static final String ENABLE_RULE_BASED_MATERIALIZED_VIEW_REWRITE =
             "enable_rule_based_materialized_view_rewrite";
+=======
+
+    public static final String MATERIALIZED_VIEW_REWRITE_MODE = "materialized_view_rewrite_mode";
+
+    public static final String ENABLE_MATERIALIZED_VIEW_REWRITE_FOR_INSERT = "enable_materialized_view_for_insert";
+
+    public static final String ENABLE_SYNC_MATERIALIZED_VIEW_REWRITE = "enable_sync_materialized_view_rewrite";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static final String ENABLE_FORCE_RULE_BASED_MV_REWRITE =
             "enable_force_rule_based_mv_rewrite";
 
@@ -507,6 +805,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_MATERIALIZED_VIEW_PLAN_CACHE = "enable_materialized_view_plan_cache";
 
+<<<<<<< HEAD
+=======
+    public static final String ENABLE_VIEW_BASED_MV_REWRITE = "enable_view_based_mv_rewrite";
+
+    public static final String ENABLE_CBO_VIEW_BASED_MV_REWRITE = "enable_cbo_view_based_mv_rewrite";
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static final String ENABLE_BIG_QUERY_LOG = "enable_big_query_log";
     public static final String BIG_QUERY_LOG_CPU_SECOND_THRESHOLD = "big_query_log_cpu_second_threshold";
     public static final String BIG_QUERY_LOG_SCAN_BYTES_THRESHOLD = "big_query_log_scan_bytes_threshold";
@@ -515,17 +820,33 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String SQL_DIALECT = "sql_dialect";
 
+<<<<<<< HEAD
+=======
+    // Is Trino dialect downgraded to Starrocks
+    public static final String ENABLE_DIALECT_DOWNGRADE = "enable_dialect_downgrade";
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static final String ENABLE_OUTER_JOIN_REORDER = "enable_outer_join_reorder";
 
     public static final String CBO_REORDER_THRESHOLD_USE_EXHAUSTIVE = "cbo_reorder_threshold_use_exhaustive";
     public static final String ENABLE_REWRITE_SUM_BY_ASSOCIATIVE_RULE = "enable_rewrite_sum_by_associative_rule";
     public static final String ENABLE_REWRITE_SIMPLE_AGG_TO_META_SCAN = "enable_rewrite_simple_agg_to_meta_scan";
+<<<<<<< HEAD
 
     public static final String ENABLE_PRUNE_COMPLEX_TYPES = "enable_prune_complex_types";
 
     public static final String RANGE_PRUNER_PREDICATES_MAX_LEN = "range_pruner_max_predicate";
 
     public static final String ENABLE_PRUNE_COMPLEX_TYPES_IN_UNNEST = "enable_prune_complex_types_in_unnest";
+=======
+    public static final String ENABLE_REWRITE_SIMPLE_AGG_TO_HDFS_SCAN = "enable_rewrite_simple_agg_to_hdfs_scan";
+    public static final String ENABLE_REWRITE_PARTITION_COLUMN_MINMAX = "enable_rewrite_partition_column_minmax";
+    public static final String ENABLE_PRUNE_COMPLEX_TYPES = "enable_prune_complex_types";
+    public static final String ENABLE_SUBFIELD_NO_COPY = "enable_subfield_no_copy";
+    public static final String ENABLE_PRUNE_COMPLEX_TYPES_IN_UNNEST = "enable_prune_complex_types_in_unnest";
+    public static final String RANGE_PRUNER_PREDICATES_MAX_LEN = "range_pruner_max_predicate";
+    public static final String ENABLE_EVALUATE_SCHEMA_SCAN_RULE = "enable_evaluate_schema_scan_rule";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public static final String GROUP_CONCAT_MAX_LEN = "group_concat_max_len";
 
@@ -535,7 +856,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String SPILL_MEM_LIMIT_THRESHOLD = "spill_mem_limit_threshold";
     public static final String SPILL_OPERATOR_MIN_BYTES = "spill_operator_min_bytes";
     public static final String SPILL_OPERATOR_MAX_BYTES = "spill_operator_max_bytes";
+<<<<<<< HEAD
     public static final String SPILL_ENCODE_LEVEL = "spill_encode_level";
+=======
+    public static final String SPILL_REVOCABLE_MAX_BYTES = "spill_revocable_max_bytes";
+    public static final String SPILL_ENABLE_DIRECT_IO = "spill_enable_direct_io";
+    public static final String SPILL_ENABLE_COMPACTION = "spill_enable_compaction";
+    // only used in test. spill_mode="RANDOM"
+    public static final String SPILL_RAND_RATIO = "spill_rand_ratio";
+    public static final String SPILL_ENCODE_LEVEL = "spill_encode_level";
+    public static final String SPILL_STORAGE_VOLUME = "spill_storage_volume";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // full_sort_max_buffered_{rows,bytes} are thresholds that limits input size of partial_sort
     // in full sort.
@@ -545,6 +876,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     // Used by full sort inorder to permute only order-by columns in cascading merging phase, after
     // that, non-order-by output columns are permuted according to the ordinal column.
+<<<<<<< HEAD
+=======
+    public static final String FULL_SORT_LATE_MATERIALIZATION_V2 = "full_sort_late_materialization_v2";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static final String FULL_SORT_LATE_MATERIALIZATION = "full_sort_late_materialization";
 
     // For group-by-count-distinct query like select a, count(distinct b) from t group by a, if group-by column a
@@ -571,6 +906,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String SCAN_OR_TO_UNION_THRESHOLD = "scan_or_to_union_threshold";
 
+<<<<<<< HEAD
+=======
+    public static final String ENABLE_PUSHDOWN_OR_PREDICATE = "enable_pushdown_or_predicate";
+
+    public static final String ENABLE_SHOW_PREDICATE_TREE_IN_PROFILE = "enable_show_predicate_tree_in_profile";
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static final String SELECT_RATIO_THRESHOLD = "select_ratio_threshold";
 
     public static final String DISABLE_FUNCTION_FOLD_CONSTANTS = "disable_function_fold_constants";
@@ -582,12 +924,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_PARTITION_COLUMN_VALUE_ONLY_OPTIMIZATION =
             "enable_partition_column_value_only_optimization";
 
+<<<<<<< HEAD
     public static final String HDFS_BACKEND_SELECTOR_HASH_ALGORITHM = "hdfs_backend_selector_hash_algorithm";
 
+=======
+    public static final String WAREHOUSE_NAME = "warehouse";
+
+    public static final String HDFS_BACKEND_SELECTOR_HASH_ALGORITHM = "hdfs_backend_selector_hash_algorithm";
+
+    public static final String HDFS_BACKEND_SELECTOR_FORCE_REBALANCE = "hdfs_backend_selector_force_rebalance";
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static final String CONSISTENT_HASH_VIRTUAL_NUMBER = "consistent_hash_virtual_number";
 
     public static final String ENABLE_COLLECT_TABLE_LEVEL_SCAN_STATS = "enable_collect_table_level_scan_stats";
 
+<<<<<<< HEAD
     public static final String ENABLE_EXPR_PRUNE_PARTITION = "enable_expr_prune_partition";
 
     public static final String ENABLE_ICEBERG_NDV = "enable_iceberg_ndv";
@@ -600,21 +952,119 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String CROSS_JOIN_COST_PENALTY = "cross_join_cost_penalty";
 
+=======
+    public static final String HIVE_TEMP_STAGING_DIR = "hive_temp_staging_dir";
+
+    // binary, json, compact
+    public static final String THRIFT_PLAN_PROTOCOL = "thrift_plan_protocol";
+
+    public static final String COUNT_DISTINCT_IMPLEMENTATION = "count_distinct_implementation";
+
+    public static final String ENABLE_COUNT_DISTINCT_REWRITE_BY_HLL_BITMAP = "enable_count_distinct_rewrite_by_hll_bitmap";
+
+    // 0 means disable interleaving, positive value sets the group size, but adaptively enable interleaving,
+    // negative value means force interleaving under the group size of abs(interleaving_group_size)
+    public static final String INTERLEAVING_GROUP_SIZE = "interleaving_group_size";
+
+    public static final String CBO_PUSHDOWN_TOPN_LIMIT = "cbo_push_down_topn_limit";
+
+    public static final String ENABLE_AGGREGATION_PIPELINE_SHARE_LIMIT = "enable_aggregation_pipeline_share_limit";
+
+    public static final String ENABLE_EXPR_PRUNE_PARTITION = "enable_expr_prune_partition";
+
+    public static final String ALLOW_HIVE_WITHOUT_PARTITION_FILTER = "allow_hive_without_partition_filter";
+
+    public static final String SCAN_HIVE_PARTITION_NUM_LIMIT = "scan_hive_partition_num_limit";
+
+    public static final String ENABLE_CROSS_JOIN = "enable_cross_join";
+
+    public static final String ENABLE_NESTED_LOOP_JOIN = "enable_nested_loop_join";
+
+    public static final String AUDIT_EXECUTE_STMT = "audit_execute_stmt";
+
+    public static final String CROSS_JOIN_COST_PENALTY = "cross_join_cost_penalty";
+
+    public static final String CBO_DERIVE_RANGE_JOIN_PREDICATE = "cbo_derive_range_join_predicate";
+
+    public static final String CBO_DERIVE_JOIN_IS_NULL_PREDICATE = "cbo_derive_join_is_null_predicate";
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static final String CBO_DECIMAL_CAST_STRING_STRICT = "cbo_decimal_cast_string_strict";
 
     public static final String CBO_EQ_BASE_TYPE = "cbo_eq_base_type";
 
+<<<<<<< HEAD
     // whether rewrite bitmap_union(to_bitmap(x)) to bitmap_agg(x) directly.
     public static final String ENABLE_REWRITE_BITMAP_UNION_TO_BITMAP_AGG = "enable_rewrite_bitmap_union_to_bitamp_agg";
 
+=======
+    public static final String ENABLE_SHORT_CIRCUIT = "enable_short_circuit";
+
+    public static final String ENABLE_PREPARE_STMT = "enable_prepare_stmt";
+
+    public static final String ENABLE_HYPERSCAN_VEC = "enable_hyperscan_vec";
+
+    // whether rewrite bitmap_union(to_bitmap(x)) to bitmap_agg(x) directly.
+    public static final String ENABLE_REWRITE_BITMAP_UNION_TO_BITMAP_AGG = "enable_rewrite_bitmap_union_to_bitamp_agg";
+
+    public static final String ENABLE_PREDICATE_MOVE_AROUND = "enable_predicate_move_around";
+
+    public static final String JIT_LEVEL = "jit_level";
+
+    // ann params like: nprobe
+    public static final String ANN_PARAMS = "ann_params";
+
+    public static final String PQ_REFINE_FACTOR = "pq_refine_factor";
+
+    public static final String K_FACTOR = "k_factor";
+
+    /**
+     * Used to split files stored in dfs such as object storage or hdfs into smaller files.
+     */
+    public static final String CONNECTOR_MAX_SPLIT_SIZE = "connector_max_split_size";
+
+    /**
+     * BE can split file of some specific formats, so FE don't need to split at all.
+     * But if a file is very huge, we still want FE to split them to more BEs.
+     * And this parameter is to define how huge this file is.
+     */
+    public static final String CONNECTOR_HUGE_FILE_SIZE = "connector_huge_file_size";
+
+    public static final String ENABLE_CONNECTOR_SINK_WRITER_SCALING = "enable_connector_sink_writer_scaling";
+
+    public static final String ENABLE_CONSTANT_EXECUTE_IN_FE = "enable_constant_execute_in_fe";
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // A group of like predicates with the same column and concatenated by OR, can be consolidated into
     // regexp predicate, only the number of like predicates is not less that `like_predicate_consolidate_min`
     // would be consolidated, since when the number of like predicates is too small, its corresponding
     // regexp predicate is less efficient than like predicates.
     public static final String LIKE_PREDICATE_CONSOLIDATE_MIN = "like_predicate_consolidate_min";
 
+<<<<<<< HEAD
     public static final String ENABLE_REWRITE_UNNEST_BITMAP_TO_ARRAY = "enable_rewrite_unnest_bitmap_to_array";
 
+=======
+    public static final String CONNECTOR_REMOTE_FILE_ASYNC_QUEUE_SIZE = "connector_remote_file_async_queue_size";
+    public static final String CONNECTOR_REMOTE_FILE_ASYNC_TASK_SIZE = "connector_remote_file_async_task_size";
+    public static final String ENABLE_CONNECTOR_INCREMENTAL_SCAN_RANGES = "enable_connector_incremental_scan_ranges";
+    public static final String CONNECTOR_INCREMENTAL_SCAN_RANGE_SIZE = "connector_incremental_scan_ranges_size";
+    public static final String ENABLE_CONNECTOR_ASYNC_LIST_PARTITIONS = "enable_connector_async_list_partitions";
+    public static final String ENABLE_PLAN_ANALYZER = "enable_plan_analyzer";
+
+    public static final String ENABLE_PLAN_ADVISOR = "enable_plan_advisor";
+
+    public static final String DISABLE_GENERATED_COLUMN_REWRITE = "disable_generated_column_rewrite";
+
+    public static final String ENABLE_PUSH_DOWN_PRE_AGG_WITH_RANK = "enable_push_down_pre_agg_with_rank";
+
+    public static final String INSERT_LOCAL_SHUFFLE_FOR_WINDOW_PRE_AGG = "insert_local_shuffle_for_window_pre_agg";
+
+    public static final String ENABLE_REWRITE_UNNEST_BITMAP_TO_ARRAY = "enable_rewrite_unnest_bitmap_to_array";
+
+    public static final String ENABLE_SCAN_PREDICATE_EXPR_REUSE = "enable_scan_predicate_expr_reuse";
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -629,7 +1079,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             .add("enable_vectorized_insert")
             .add("vectorized_insert_enable")
             .add("prefer_join_method")
+<<<<<<< HEAD
             .add("rewrite_count_distinct_to_bitmap_hll").build();
+=======
+            .add("rewrite_count_distinct_to_bitmap_hll")
+            .build();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // Limitations
     // mem limit can't smaller than bufferpool's default page size
@@ -640,6 +1095,21 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_PIPELINE, alias = ENABLE_PIPELINE_ENGINE, show = ENABLE_PIPELINE_ENGINE)
     private boolean enablePipelineEngine = true;
 
+<<<<<<< HEAD
+=======
+    /**
+     * The threshold for determining whether to use a more evenly assignment bucket sequences to backend algorithm for query
+     * execution.
+     *
+     * <p> This algorithm is only used when {@code numBucketsPerBe} is smaller than this threshold, because the time complexity
+     * of it is {@code numBucketsPerBe} times than the previous algorithm.
+     *
+     * @see ColocatedBackendSelector
+     */
+    @VariableMgr.VarAttr(name = MAX_BUCKETS_PER_BE_TO_USE_BALANCER_ASSIGNMENT, flag = VariableMgr.INVISIBLE)
+    private int maxBucketsPerBeToUseBalancerAssignment = 6;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @VariableMgr.VarAttr(name = ENABLE_RUNTIME_ADAPTIVE_DOP)
     private boolean enableRuntimeAdaptiveDop = false;
 
@@ -655,9 +1125,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_INCREMENTAL_REFRESH_MV)
     private boolean enableIncrementalRefreshMV = false;
 
+<<<<<<< HEAD
     @VarAttr(name = ENABLE_PIPELINE_QUERY_STATISTIC)
     private boolean enablePipelineQueryStatistic = true;
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @VariableMgr.VarAttr(name = ENABLE_LOCAL_SHUFFLE_AGG)
     private boolean enableLocalShuffleAgg = true;
 
@@ -667,10 +1140,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = PREFER_COMPUTE_NODE)
     private boolean preferComputeNode = false;
 
+<<<<<<< HEAD
+=======
+    @VariableMgr.VarAttr(name = COMPUTATION_FRAGMENT_SCHEDULING_POLICY)
+    private String computationFragmentSchedulingPolicy = COMPUTE_NODES_ONLY.name();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @VariableMgr.VarAttr(name = LOG_REJECTED_RECORD_NUM)
     private long logRejectedRecordNum = 0;
 
     /**
+<<<<<<< HEAD
      * If enable this variable (only take effect for pipeline), it will deliver fragment instances
      * to BE in batch and concurrently.
      * - Uses `exec_batch_plan_fragments` instead of `exec_plan_fragment` RPC API, which all the instances
@@ -681,6 +1161,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enableDeliverBatchFragments = true;
 
     /**
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
      * Determines whether to enable query tablet affinity. When enabled, attempts to schedule
      * fragments that access the same tablet to run on the same node to improve cache hit.
      */
@@ -700,6 +1182,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             alias = ENABLE_TABLET_INTERNAL_PARALLEL, show = ENABLE_TABLET_INTERNAL_PARALLEL)
     private boolean enableTabletInternalParallel = true;
 
+<<<<<<< HEAD
+=======
+    @VariableMgr.VarAttr(name = ENABLE_LAKE_TABLET_INTERNAL_PARALLEL)
+    private boolean enableLakeTabletInternalParallel = false;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // The strategy mode of TabletInternalParallel, which is effective only when enableTabletInternalParallel is true.
     // The optional values are "auto" and "force_split".
     @VariableMgr.VarAttr(name = TABLET_INTERNAL_PARALLEL_MODE, flag = VariableMgr.INVISIBLE)
@@ -708,7 +1196,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_SHARED_SCAN)
     private boolean enableSharedScan = false;
 
+<<<<<<< HEAD
     // max memory used on every backend.
+=======
+    // max memory used on each fragment instance
+    // NOTE: only used for non-pipeline engine and stream_load
+    // The pipeline engine uses the query_mem_limit
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static final long DEFAULT_EXEC_MEM_LIMIT = 2147483648L;
     @VariableMgr.VarAttr(name = EXEC_MEM_LIMIT, flag = VariableMgr.INVISIBLE)
     public long maxExecMemByte = DEFAULT_EXEC_MEM_LIMIT;
@@ -723,6 +1217,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = QUERY_TIMEOUT)
     private int queryTimeoutS = 300;
 
+<<<<<<< HEAD
+=======
+    // metadata collect query timeout in second
+    @VariableMgr.VarAttr(name = METADATA_COLLECT_QUERY_TIMEOUT)
+    private int metadataCollectQueryTimeoutS = 60;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @VariableMgr.VarAttr(name = USE_PAGE_CACHE)
     private boolean usePageCache = true;
 
@@ -737,6 +1238,16 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_PROFILE, alias = IS_REPORT_SUCCESS)
     private boolean enableProfile = false;
 
+<<<<<<< HEAD
+=======
+    // Toggle ANSI color in explain output
+    @VariableMgr.VarAttr(name = COLOR_EXPLAIN_OUTPUT)
+    private boolean colorExplainOutput = true;
+
+    @VariableMgr.VarAttr(name = ENABLE_METADATA_PROFILE)
+    private boolean enableMetadataProfile = false;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // if true, will generate profile when load finished
     @VariableMgr.VarAttr(name = ENABLE_LOAD_PROFILE)
     private boolean enableLoadProfile = false;
@@ -761,7 +1272,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = TRANSACTION_ISOLATION)
     private String transactionIsolation = "REPEATABLE-READ";
     @VariableMgr.VarAttr(name = TRANSACTION_READ_ONLY, alias = TX_READ_ONLY)
+<<<<<<< HEAD
     private String transactionReadOnly = "OFF";
+=======
+    private boolean transactionReadOnly = false;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // this is used to make c3p0 library happy
     @VariableMgr.VarAttr(name = CHARACTER_SET_CLIENT)
     private String charsetClient = "utf8";
@@ -799,7 +1314,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private int queryCacheType = 0;
 
     // The number of seconds the server waits for activity on an interactive connection before closing it
+<<<<<<< HEAD
     @VariableMgr.VarAttr(name = INTERACTIVE_TIMTOUT)
+=======
+    @VariableMgr.VarAttr(name = INTERACTIVE_TIMEOUT)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private int interactiveTimeout = 3600;
 
     // The number of seconds the server waits for activity on a noninteractive connection before closing it.
@@ -818,9 +1337,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = TIME_ZONE)
     private String timeZone = TimeUtils.getSystemTimeZone().getID();
 
+<<<<<<< HEAD
     @VariableMgr.VarAttr(name = ENABLE_ICEBERG_NDV)
     private boolean enableIcebergNdv = true;
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @VariableMgr.VarAttr(name = INNODB_READ_ONLY)
     private boolean innodbReadOnly = true;
 
@@ -853,6 +1375,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = CBO_CTE_REUSE)
     private boolean cboCteReuse = true;
 
+<<<<<<< HEAD
+=======
+    // -1 (< 0): disable cte, force inline. 0: force cte; other (> 0): compute by costs * ratio
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @VarAttr(name = CBO_CTE_REUSE_RATE_V2, flag = VariableMgr.INVISIBLE, alias = CBO_CTE_REUSE_RATE,
             show = CBO_CTE_REUSE_RATE)
     private double cboCTERuseRatio = 1.15;
@@ -866,6 +1392,16 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = CBO_PRUNE_SUBFIELD, flag = VariableMgr.INVISIBLE)
     private boolean cboPruneSubfield = true;
 
+<<<<<<< HEAD
+=======
+    // it's need BE to enable flat json, else will take a poor performance
+    @VarAttr(name = CBO_PRUNE_JSON_SUBFIELD)
+    private boolean cboPruneJsonSubfield = true;
+
+    @VarAttr(name = CBO_PRUNE_JSON_SUBFIELD_DEPTH, flag = VariableMgr.INVISIBLE)
+    private int cboPruneJsonSubfieldDepth = 20;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @VarAttr(name = ENABLE_SQL_DIGEST, flag = VariableMgr.INVISIBLE)
     private boolean enableSQLDigest = false;
 
@@ -888,6 +1424,23 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = PIPELINE_SINK_DOP)
     private int pipelineSinkDop = 0;
 
+<<<<<<< HEAD
+=======
+    // Add a global shuffle between the connector sink fragment and its child fragment.
+    @VariableMgr.VarAttr(name = ENABLE_CONNECTOR_SINK_GLOBAL_SHUFFLE, flag = VariableMgr.INVISIBLE)
+    private boolean enableConnectorSinkGlobalShuffle = true;
+
+    @VariableMgr.VarAttr(name = ENABLE_CONNECTOR_SINK_SPILL, flag = VariableMgr.INVISIBLE)
+    private boolean enableConnectorSinkSpill = true;
+
+    @VariableMgr.VarAttr(name = CONNECTOR_SINK_SPILL_MEM_LIMIT_THRESHOLD, flag = VariableMgr.INVISIBLE)
+    private double connectorSinkSpillMemLimitThreshold = 0.5;
+
+    // execute sql don't return result, for performance test
+    @VarAttr(name = ENABLE_EXECUTION_ONLY, flag = VariableMgr.INVISIBLE)
+    private boolean enableExecutionOnly = false;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     /*
      * The maximum pipeline dop limit which only takes effect when pipeline_dop=0.
      * This limitation is to avoid the negative overhead caused by scheduling on super multi-core scenarios.
@@ -896,7 +1449,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private int maxPipelineDop = 64;
 
     @VariableMgr.VarAttr(name = PROFILE_TIMEOUT, flag = VariableMgr.INVISIBLE)
+<<<<<<< HEAD
     private int profileTimeout = 2;
+=======
+    private int profileTimeout = 10;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     @VariableMgr.VarAttr(name = RUNTIME_PROFILE_REPORT_INTERVAL)
     private int runtimeProfileReportInterval = 10;
@@ -917,9 +1474,30 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_INSERT_STRICT)
     private boolean enableInsertStrict = true;
 
+<<<<<<< HEAD
     @VariableMgr.VarAttr(name = ENABLE_SPILL)
     private boolean enableSpill = false;
 
+=======
+    @VariableMgr.VarAttr(name = DYNAMIC_OVERWRITE)
+    private boolean dynamicOverwrite = false;
+
+    @VariableMgr.VarAttr(name = INSERT_MAX_FILTER_RATIO)
+    private double insertMaxFilterRatio = 0;
+
+    @VariableMgr.VarAttr(name = INSERT_TIMEOUT)
+    private int insertTimeoutS = 14400;
+
+    @VariableMgr.VarAttr(name = ENABLE_SPILL)
+    private boolean enableSpill = false;
+
+    @VariableMgr.VarAttr(name = ENABLE_SPILL_TO_REMOTE_STORAGE)
+    private boolean enableSpillToRemoteStorage = false;
+
+    @VariableMgr.VarAttr(name = DISABLE_SPILL_TO_LOCAL_DISK)
+    private boolean disableSpillToLocalDisk = false;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // this is used to control which operators can spill, only meaningful when enable_spill=true
     // it uses a bit to identify whether the spill of each operator is in effect, 0 means no, 1 means yes
     // at present, only the lowest 4 bits are meaningful, corresponding to the four operators
@@ -946,17 +1524,50 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = SPILL_MEM_LIMIT_THRESHOLD, flag = VariableMgr.INVISIBLE)
     private double spillMemLimitThreshold = 0.8;
     @VarAttr(name = SPILL_OPERATOR_MIN_BYTES, flag = VariableMgr.INVISIBLE)
+<<<<<<< HEAD
     private long spillOperatorMinBytes = 1024L * 1024 * 10;
     @VarAttr(name = SPILL_OPERATOR_MAX_BYTES, flag = VariableMgr.INVISIBLE)
     private long spillOperatorMaxBytes = 1024L * 1024 * 1000;
+=======
+    private long spillOperatorMinBytes = 1024L * 1024 * 50;
+    @VarAttr(name = SPILL_OPERATOR_MAX_BYTES, flag = VariableMgr.INVISIBLE)
+    private long spillOperatorMaxBytes = 1024L * 1024 * 1000;
+    // If the operator memory revocable memory exceeds this value, the operator will perform a spill as soon as possible
+    @VarAttr(name = SPILL_REVOCABLE_MAX_BYTES)
+    private long spillRevocableMaxBytes = 0;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // the encoding level of spilled data, the meaning of values is similar to transmission_encode_level,
     // see more details in the comment above transmissionEncodeLevel
     @VarAttr(name = SPILL_ENCODE_LEVEL)
     private int spillEncodeLevel = 7;
 
+<<<<<<< HEAD
     @VarAttr(name = ENABLE_AGG_SPILL_PREAGGREGATION, flag = VariableMgr.INVISIBLE)
     public boolean enableAggSpillPreaggregation = true;
 
+=======
+    @VarAttr(name = SPILL_ENABLE_DIRECT_IO)
+    private boolean spillEnableDirectIO = false;
+
+    @VarAttr(name = SPILL_STORAGE_VOLUME)
+    private String spillStorageVolume = "";
+
+    @VarAttr(name = SPILL_RAND_RATIO, flag = VariableMgr.INVISIBLE)
+    private double spillRandRatio = 0.1;
+
+    @VarAttr(name = SPILL_ENABLE_COMPACTION, flag = VariableMgr.INVISIBLE)
+    private boolean spillEnableCompaction = true;
+
+    @VarAttr(name = ENABLE_AGG_SPILL_PREAGGREGATION, flag = VariableMgr.INVISIBLE)
+    public boolean enableAggSpillPreaggregation = true;
+
+    @VarAttr(name = ENABLE_SPILL_BUFFER_READ, flag = VariableMgr.INVISIBLE)
+    public boolean enableSpillBufferRead = true;
+
+    @VarAttr(name = MAX_SPILL_READ_BUFFER_BYTES_PER_DRIVER, flag = VariableMgr.INVISIBLE)
+    public long maxSpillReadBufferBytesPerDriver = 1024 * 1024 * 16;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @VarAttr(name = ENABLE_RBO_TABLE_PRUNE)
     private boolean enableRboTablePrune = false;
 
@@ -965,6 +1576,25 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_TABLE_PRUNE_ON_UPDATE)
     private boolean enableTablePruneOnUpdate = false;
+<<<<<<< HEAD
+=======
+
+    @VarAttr(name = ENABLE_UKFK_OPT)
+    private boolean enableUKFKOpt = false;
+
+    @VarAttr(name = ENABLE_UKFK_JOIN_REORDER)
+    private boolean enableUKFKJoinReorder = false;
+
+    @VarAttr(name = MAX_UKFK_JOIN_REORDER_SCALE_RATIO, flag = VariableMgr.INVISIBLE)
+    private int maxUKFKJoinReorderScaleRatio = 100;
+
+    @VarAttr(name = MAX_UKFK_JOIN_REORDER_FK_ROWS, flag = VariableMgr.INVISIBLE)
+    private int maxUKFKJoinReorderFKRows = 100000000;
+
+    @VarAttr(name = ENABLE_ELIMINATE_AGG)
+    private boolean enableEliminateAgg = true;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @VariableMgr.VarAttr(name = FORWARD_TO_LEADER, alias = FORWARD_TO_MASTER)
     private boolean forwardToLeader = false;
 
@@ -981,6 +1611,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private int maxScanKeyNum = -1;
     @VariableMgr.VarAttr(name = MAX_PUSHDOWN_CONDITIONS_PER_COLUMN)
     private int maxPushdownConditionsPerColumn = -1;
+<<<<<<< HEAD
+=======
+    @VariableMgr.VarAttr(name = ENABLE_LAMBDA_PUSHDOWN)
+    private boolean enableLambdaPushdown = true;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     @VariableMgr.VarAttr(name = HASH_JOIN_PUSH_DOWN_RIGHT_TABLE)
     private boolean hashJoinPushDownRightTable = true;
@@ -994,6 +1629,21 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_FILTER_UNUSED_COLUMNS_IN_SCAN_STAGE)
     private boolean enableFilterUnusedColumnsInScanStage = true;
 
+<<<<<<< HEAD
+=======
+    @VariableMgr.VarAttr(name = JOIN_LATE_MATERIALIZATION)
+    private boolean joinLateMaterialization = false;
+
+    @VariableMgr.VarAttr(name = ENABLE_PARTITION_HASH_JOIN)
+    private boolean enablePartitionHashJoin = true;
+
+    @VariableMgr.VarAttr(name = ENABLE_PRUNE_COLUMN_AFTER_INDEX_FILTER, flag = VariableMgr.INVISIBLE)
+    private boolean enablePruneColumnAfterIndexFilter = true;
+
+    @VariableMgr.VarAttr(name = ENABLE_GIN_FILTER)
+    private boolean enableGinFilter = true;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @VariableMgr.VarAttr(name = CBO_MAX_REORDER_NODE_USE_EXHAUSTIVE)
     private int cboMaxReorderNodeUseExhaustive = 4;
 
@@ -1027,21 +1677,48 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = NEW_PLANNER_OPTIMIZER_TIMEOUT)
     private long optimizerExecuteTimeout = 3000;
 
+<<<<<<< HEAD
+=======
+    @VariableMgr.VarAttr(name = QUERY_DEBUG_OPTIONS, flag = VariableMgr.INVISIBLE)
+    private String queryDebugOptions = "";
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @VariableMgr.VarAttr(name = OPTIMIZER_MATERIALIZED_VIEW_TIMELIMIT)
     private long optimizerMaterializedViewTimeLimitMillis = 1000;
 
     @VariableMgr.VarAttr(name = ENABLE_QUERY_DUMP)
     private boolean enableQueryDump = false;
 
+<<<<<<< HEAD
     @VariableMgr.VarAttr(name = CBO_ENABLE_LOW_CARDINALITY_OPTIMIZE)
     private boolean enableLowCardinalityOptimize = true;
 
     @VariableMgr.VarAttr(name = QUERY_DEBUG_OPTIONS, flag = VariableMgr.INVISIBLE)
     private String queryDebugOptions = "";
+=======
+    // only used for test case
+    @VariableMgr.VarAttr(name = ALWAYS_COLLECT_LOW_CARD_DICT, flag = VariableMgr.INVISIBLE)
+    private boolean alwaysCollectDict = false;
+
+    @VariableMgr.VarAttr(name = CBO_ENABLE_LOW_CARDINALITY_OPTIMIZE)
+    private boolean enableLowCardinalityOptimize = true;
+
+    @VariableMgr.VarAttr(name = LOW_CARDINALITY_OPTIMIZE_V2)
+    private boolean useLowCardinalityOptimizeV2 = true;
+
+    @VarAttr(name = ARRAY_LOW_CARDINALITY_OPTIMIZE)
+    private boolean enableArrayLowCardinalityOptimize = true;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     @VariableMgr.VarAttr(name = ENABLE_OPTIMIZER_REWRITE_GROUPINGSETS_TO_UNION_ALL)
     private boolean enableRewriteGroupingSetsToUnionAll = false;
 
+<<<<<<< HEAD
+=======
+    @VariableMgr.VarAttr(name = ENABLE_PARTITION_LEVEL_CARDINALITY_ESTIMATION, flag = VariableMgr.INVISIBLE)
+    private boolean enablePartitionLevelCardinalityEstimation = true;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // value should be 0~4
     // 0 represents automatic selection, and 1, 2, 3, and 4 represent forced selection of AGG of
     // corresponding stages respectively. However, stages 3 and 4 can only be generated in
@@ -1107,6 +1784,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = GLOBAL_RUNTIME_FILTER_RPC_HTTP_MIN_SIZE, flag = VariableMgr.INVISIBLE)
     private long globalRuntimeFilterRpcHttpMinSize = 64L * 1024 * 1024;
 
+<<<<<<< HEAD
+=======
+    @VarAttr(name = ENABLE_PIPELINE_LEVEL_MULTI_PARTITIONED_RF)
+    private boolean enablePipelineLevelMultiPartitionedRf = false;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     //In order to be compatible with the logic of the old planner,
     //When the column name is the same as the alias name,
     //the alias will be used as the groupby column if set to true.
@@ -1131,6 +1814,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_HIVE_COLUMN_STATS)
     private boolean enableHiveColumnStats = true;
 
+<<<<<<< HEAD
+=======
+    @VariableMgr.VarAttr(name = ENABLE_WRITE_HIVE_EXTERNAL_TABLE)
+    private boolean enableWriteHiveExternalTable = false;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @VariableMgr.VarAttr(name = ENABLE_HIVE_METADATA_CACHE_WITH_INSERT)
     private boolean enableHiveMetadataCacheWithInsert = false;
 
@@ -1143,6 +1832,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_ADAPTIVE_SINK_DOP)
     private boolean enableAdaptiveSinkDop = false;
 
+<<<<<<< HEAD
     @VariableMgr.VarAttr(name = ENABLE_PERSISTENT_INDEX_BY_DEFAULT, flag = VariableMgr.INVISIBLE)
     private boolean enablePersistentIndexByDefault = false;
 
@@ -1158,15 +1848,39 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_QUERY_DEBUG_TRACE, flag = VariableMgr.INVISIBLE)
     private boolean enableQueryDebugTrace = false;
 
+=======
+    @VariableMgr.VarAttr(name = JOIN_IMPLEMENTATION_MODE_V2, alias = JOIN_IMPLEMENTATION_MODE)
+    private String joinImplementationMode = "auto"; // auto, merge, hash, nestloop
+
+    @VariableMgr.VarAttr(name = ENABLE_QUERY_DEBUG_TRACE, flag = VariableMgr.INVISIBLE)
+    private boolean enableQueryDebugTrace = false;
+
+    // command, file
+    @VarAttr(name = TRACE_LOG_MODE, flag = VariableMgr.INVISIBLE)
+    private String traceLogMode = "command";
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @VariableMgr.VarAttr(name = INTERPOLATE_PASSTHROUGH, flag = VariableMgr.INVISIBLE)
     private boolean interpolatePassthrough = true;
 
     @VariableMgr.VarAttr(name = HASH_JOIN_INTERPOLATE_PASSTHROUGH, flag = VariableMgr.INVISIBLE)
     private boolean hashJoinInterpolatePassthrough = false;
 
+<<<<<<< HEAD
     @VarAttr(name = STATISTIC_COLLECT_PARALLEL)
     private int statisticCollectParallelism = 1;
 
+=======
+    @VarAttr(name = STATISTIC_COLLECT_PARALLEL, flag = VariableMgr.INVISIBLE)
+    private int statisticCollectParallelism = 1;
+
+    @VarAttr(name = STATISTIC_META_COLLECT_PARALLEL, flag = VariableMgr.INVISIBLE)
+    private int statisticMetaCollectParallelism = 10;
+
+    @VarAttr(name = ENABLE_ANALYZE_PHASE_PRUNE_COLUMNS, flag = VariableMgr.INVISIBLE)
+    private boolean enableAnalyzePhasePruneColumns = false;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @VarAttr(name = ENABLE_SHOW_ALL_VARIABLES, flag = VariableMgr.INVISIBLE)
     private boolean enableShowAllVariables = false;
 
@@ -1176,21 +1890,64 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // 0: auto, 1: force push down, -1: don't push down, 2: push down medium, 3: push down high
     @VarAttr(name = "cboPushDownAggregateMode_v1", alias = CBO_PUSH_DOWN_AGGREGATE_MODE,
             show = CBO_PUSH_DOWN_AGGREGATE_MODE, flag = VariableMgr.INVISIBLE)
+<<<<<<< HEAD
     private int cboPushDownAggregateMode = -1;
+=======
+    private int cboPushDownAggregateMode = 0;
+
+    @VarAttr(name = CBO_PUSH_DOWN_AGGREGATE_ON_BROADCAST_JOIN, flag = VariableMgr.INVISIBLE)
+    private boolean cboPushDownAggregateOnBroadcastJoin = true;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // auto, global, local
     @VarAttr(name = CBO_PUSH_DOWN_AGGREGATE, flag = VariableMgr.INVISIBLE)
     private String cboPushDownAggregate = "global";
 
+<<<<<<< HEAD
+=======
+    @VarAttr(name = CBO_PUSH_DOWN_GROUPINGSET, flag = VariableMgr.INVISIBLE)
+    private boolean cboPushDownGroupingSet = true;
+
+    @VarAttr(name = CBO_PUSH_DOWN_GROUPINGSET_RESHUFFLE, flag = VariableMgr.INVISIBLE)
+    private boolean cboPushDownGroupingSetReshuffle = true;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @VariableMgr.VarAttr(name = PARSE_TOKENS_LIMIT)
     private int parseTokensLimit = 3500000;
 
     @VarAttr(name = ENABLE_SORT_AGGREGATE)
     private boolean enableSortAggregate = false;
 
+<<<<<<< HEAD
     @VarAttr(name = ENABLE_PARALLEL_MERGE)
     private boolean enableParallelMerge = true;
 
+=======
+    @VarAttr(name = ENABLE_PER_BUCKET_OPTIMIZE)
+    private boolean enablePerBucketComputeOptimize = true;
+
+    @VarAttr(name = ENABLE_PARTITION_BUCKET_OPTIMIZE, flag = VariableMgr.INVISIBLE)
+    private boolean enablePartitionBucketOptimize = false;
+
+    @VarAttr(name = ENABLE_GROUP_EXECUTION)
+    private boolean enableGroupExecution = true;
+
+    @VarAttr(name = GROUP_EXECUTION_GROUP_SCALE)
+    private int groupExecutionGroupScale = 64;
+
+    @VarAttr(name = GROUP_EXECUTION_MAX_GROUPS)
+    private int groupExecutionMaxGroups = 128;
+
+    @VarAttr(name = GROUP_EXECUTION_MIN_SCAN_ROWS)
+    private long groupExecutionMinScanRows = 5000000;
+
+    @VarAttr(name = ENABLE_PARALLEL_MERGE)
+    private boolean enableParallelMerge = true;
+
+    @VarAttr(name = ENABLE_QUERY_QUEUE, flag = VariableMgr.INVISIBLE)
+    private boolean enableQueryQueue = true;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // 1: sort based, 2: hash based
     @VarAttr(name = WINDOW_PARTITION_MODE, flag = VariableMgr.INVISIBLE)
     private int windowPartitionMode = 1;
@@ -1201,6 +1958,21 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_REWRITE_SIMPLE_AGG_TO_META_SCAN)
     private boolean enableRewriteSimpleAggToMetaScan = false;
 
+<<<<<<< HEAD
+=======
+    @VarAttr(name = ENABLE_REWRITE_PARTITION_COLUMN_MINMAX)
+    private boolean enableRewritePartitionColumnMinMax = true;
+
+    @VarAttr(name = ENABLE_REWRITE_SIMPLE_AGG_TO_HDFS_SCAN)
+    private boolean enableRewriteSimpleAggToHdfsScan = false;
+
+    @VarAttr(name = ENABLE_EVALUATE_SCHEMA_SCAN_RULE)
+    private boolean enableEvaluateSchemaScanRule = true;
+
+    @VariableMgr.VarAttr(name = INTERLEAVING_GROUP_SIZE)
+    private int interleavingGroupSize = 10;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // support auto|row|column
     @VariableMgr.VarAttr(name = PARTIAL_UPDATE_MODE)
     private String partialUpdateMode = "auto";
@@ -1208,11 +1980,84 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = HDFS_BACKEND_SELECTOR_HASH_ALGORITHM, flag = VariableMgr.INVISIBLE)
     private String hdfsBackendSelectorHashAlgorithm = "consistent";
 
+<<<<<<< HEAD
     @VariableMgr.VarAttr(name = CONSISTENT_HASH_VIRTUAL_NUMBER, flag = VariableMgr.INVISIBLE)
     private int consistentHashVirtualNodeNum = 128;
 
     @VarAttr(name = ENABLE_REWRITE_BITMAP_UNION_TO_BITMAP_AGG)
     private boolean enableRewriteBitmapUnionToBitmapAgg = false;
+=======
+    @VariableMgr.VarAttr(name = HDFS_BACKEND_SELECTOR_FORCE_REBALANCE, flag = VariableMgr.INVISIBLE)
+    private boolean hdfsBackendSelectorForceRebalance = false;
+
+    @VariableMgr.VarAttr(name = CONSISTENT_HASH_VIRTUAL_NUMBER, flag = VariableMgr.INVISIBLE)
+    private int consistentHashVirtualNodeNum = 256;
+
+    // binary, json, compact,
+    @VarAttr(name = THRIFT_PLAN_PROTOCOL)
+    private String thriftPlanProtocol = "binary";
+
+    @VarAttr(name = CBO_PUSHDOWN_TOPN_LIMIT)
+    private long cboPushDownTopNLimit = 1000;
+
+    @VarAttr(name = ENABLE_AGGREGATION_PIPELINE_SHARE_LIMIT, flag = VariableMgr.INVISIBLE)
+    private boolean enableAggregationPipelineShareLimit = true;
+
+    @VarAttr(name = ENABLE_HYPERSCAN_VEC)
+    private boolean enableHyperscanVec = true;
+
+    @VarAttr(name = ENABLE_PLAN_ANALYZER, flag = VariableMgr.INVISIBLE)
+    private boolean enablePlanAnalyzer = false;
+
+    @VarAttr(name = ENABLE_PLAN_ADVISOR)
+    private boolean enablePlanAdvisor = true;
+
+    @VarAttr(name = COUNT_DISTINCT_IMPLEMENTATION)
+    private String countDistinctImplementation = "default";
+
+    // By default, we always use the created mv's bitmap/hll to rewrite count distinct, but result is not
+    // exactly matched with the original result.
+    // If we want to get the exactly matched result, we can disable this.
+    @VarAttr(name = ENABLE_COUNT_DISTINCT_REWRITE_BY_HLL_BITMAP)
+    private boolean enableCountDistinctRewriteByHllBitmap = true;
+
+    @VarAttr(name = DISABLE_GENERATED_COLUMN_REWRITE, flag = VariableMgr.INVISIBLE)
+    private boolean disableGeneratedColumnRewrite = false;
+
+    @VarAttr(name = ENABLE_SCAN_PREDICATE_EXPR_REUSE, flag = VariableMgr.INVISIBLE)
+    private boolean enableScanPredicateExprReuse = true;
+
+    public int getCboPruneJsonSubfieldDepth() {
+        return cboPruneJsonSubfieldDepth;
+    }
+
+    public void setCboPruneJsonSubfieldDepth(int cboPruneJsonSubfieldDepth) {
+        this.cboPruneJsonSubfieldDepth = cboPruneJsonSubfieldDepth;
+    }
+
+    public boolean isEnableExecutionOnly() {
+        return enableExecutionOnly;
+    }
+
+    public boolean isCboPruneJsonSubfield() {
+        return cboPruneJsonSubfield;
+    }
+
+    public void setCboPruneJsonSubfield(boolean cboPruneJsonSubfield) {
+        this.cboPruneJsonSubfield = cboPruneJsonSubfield;
+    }
+
+    public void setEnableArrayLowCardinalityOptimize(boolean enableArrayLowCardinalityOptimize) {
+        this.enableArrayLowCardinalityOptimize = enableArrayLowCardinalityOptimize;
+    }
+
+    public boolean isEnableArrayLowCardinalityOptimize() {
+        return enableArrayLowCardinalityOptimize;
+    }
+
+    @VarAttr(name = ENABLE_REWRITE_BITMAP_UNION_TO_BITMAP_AGG)
+    private boolean enableRewriteBitmapUnionToBitmapAgg = true;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public boolean isEnableRewriteBitmapUnionToBitmapAgg() {
         return enableRewriteBitmapUnionToBitmapAgg;
@@ -1222,6 +2067,33 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableRewriteBitmapUnionToBitmapAgg = enableRewriteBitmapUnionToBitmapAgg;
     }
 
+<<<<<<< HEAD
+=======
+    public long getCboPushDownTopNLimit() {
+        return cboPushDownTopNLimit;
+    }
+
+    public void setCboPushDownTopNLimit(long cboPushDownTopNLimit) {
+        this.cboPushDownTopNLimit = cboPushDownTopNLimit;
+    }
+
+    public boolean getEnableAggregationPipelineShareLimit() {
+        return enableAggregationPipelineShareLimit;
+    }
+
+    public String getThriftPlanProtocol() {
+        return thriftPlanProtocol;
+    }
+
+    public void setTraceLogMode(String traceLogMode) {
+        this.traceLogMode = traceLogMode;
+    }
+
+    public String getTraceLogMode() {
+        return traceLogMode;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void setPartialUpdateMode(String mode) {
         this.partialUpdateMode = mode;
     }
@@ -1234,6 +2106,43 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableSortAggregate;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isEnablePerBucketComputeOptimize() {
+        return enablePerBucketComputeOptimize;
+    }
+
+    public boolean isEnablePartitionBucketOptimize() {
+        return enablePartitionBucketOptimize;
+    }
+
+    public void setEnablePartitionBucketOptimize(boolean enablePartitionBucketOptimize) {
+        this.enablePartitionBucketOptimize = enablePartitionBucketOptimize;
+    }
+
+    public void setEnableGroupExecution(boolean enableGroupExecution) {
+        this.enableGroupExecution = enableGroupExecution;
+    }
+
+    // runtime dop requires join probe to wait for all builds to complete before executing.
+    // It conflicts with group execution.
+    public boolean isEnableGroupExecution() {
+        return enableGroupExecution && !isEnableRuntimeAdaptiveDop();
+    }
+
+    public int getGroupExecutionGroupScale() {
+        return groupExecutionGroupScale;
+    }
+
+    public int getGroupExecutionMaxGroups() {
+        return groupExecutionMaxGroups;
+    }
+
+    public long getGroupExecutionMinScanRows() {
+        return groupExecutionMinScanRows;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public int getWindowPartitionMode() {
         return windowPartitionMode;
     }
@@ -1250,6 +2159,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableParallelMerge = enableParallelMerge;
     }
 
+<<<<<<< HEAD
     @VarAttr(name = ENABLE_ICEBERG_COLUMN_STATISTICS)
     private boolean enableIcebergColumnStatistics = true;
 
@@ -1282,6 +2192,49 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_SCAN_BLOCK_CACHE)
     private boolean useScanBlockCache = false;
+=======
+    public boolean isEnableQueryQueue() {
+        return enableQueryQueue;
+    }
+
+    @VariableMgr.VarAttr(name = ENABLE_SCAN_DATACACHE, alias = ENABLE_SCAN_BLOCK_CACHE)
+    private boolean enableScanDataCache = true;
+
+    @VariableMgr.VarAttr(name = ENABLE_POPULATE_DATACACHE, alias = ENABLE_POPULATE_BLOCK_CACHE, flag = VariableMgr.INVISIBLE)
+    private boolean enablePopulateDataCache = true;
+
+    @VariableMgr.VarAttr(name = POPULATE_DATACACHE_MODE)
+    private String dataCachePopulateMode = DataCachePopulateMode.AUTO.modeName();
+
+    @VariableMgr.VarAttr(name = CATALOG, flag = VariableMgr.SESSION_ONLY)
+    private String catalog = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
+
+    public void setCatalog(String catalog) {
+        this.catalog = catalog;
+    }
+
+    public String getCatalog() {
+        return this.catalog;
+    }
+
+    @VariableMgr.VarAttr(name = ENABLE_DATACACHE_ASYNC_POPULATE_MODE)
+    private boolean enableDataCacheAsyncPopulateMode = true;
+
+    @VariableMgr.VarAttr(name = ENABLE_DATACACHE_IO_ADAPTOR)
+    private boolean enableDataCacheIOAdaptor = true;
+
+    @VariableMgr.VarAttr(name = DATACACHE_EVICT_PROBABILITY, flag = VariableMgr.INVISIBLE)
+    private int datacacheEvictProbability = 100;
+
+    private int datacachePriority = 0;
+
+    private long datacacheTTLSeconds = 0L;
+
+    private boolean enableCacheSelect = false;
+
+    @VariableMgr.VarAttr(name = ENABLE_DYNAMIC_PRUNE_SCAN_RANGE)
+    private boolean enableDynamicPruneScanRange = true;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     @VariableMgr.VarAttr(name = IO_TASKS_PER_SCAN_OPERATOR)
     private int ioTasksPerScanOperator = 4;
@@ -1292,6 +2245,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_CONNECTOR_ADAPTIVE_IO_TASKS)
     private boolean enableConnectorAdaptiveIoTasks = true;
 
+<<<<<<< HEAD
+=======
+    @VariableMgr.VarAttr(name = ENABLE_CONNECTOR_SPLIT_IO_TASKS)
+    private boolean enableConnectorSplitIoTasks = true;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @VariableMgr.VarAttr(name = CONNECTOR_IO_TASKS_SLOW_IO_LATENCY_MS, flag = VariableMgr.INVISIBLE)
     private int connectorIoTasksSlowIoLatency = 50;
 
@@ -1301,12 +2260,37 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = CONNECTOR_SCAN_USE_QUERY_MEM_RATIO)
     private double connectorScanUseQueryMemRatio = 0.3;
 
+<<<<<<< HEAD
     @VariableMgr.VarAttr(name = ENABLE_POPULATE_BLOCK_CACHE)
     private boolean enablePopulateBlockCache = true;
+=======
+    @VariableMgr.VarAttr(name = CONNECTOR_SINK_COMPRESSION_CODEC)
+    private String connectorSinkCompressionCodec = "uncompressed";
+
+    public String getConnectorSinkCompressionCodec() {
+        return connectorSinkCompressionCodec;
+    }
+
+    @VariableMgr.VarAttr(name = CONNECTOR_SINK_TARGET_MAX_FILE_SIZE)
+    private long connectorSinkTargetMaxFileSize = 1024L * 1024 * 1024;
+
+    public long getConnectorSinkTargetMaxFileSize() {
+        return connectorSinkTargetMaxFileSize;
+    }
+
+    @VariableMgr.VarAttr(name = ENABLE_FILE_METACACHE)
+    private boolean enableFileMetaCache = true;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     @VariableMgr.VarAttr(name = HUDI_MOR_FORCE_JNI_READER)
     private boolean hudiMORForceJNIReader = false;
 
+<<<<<<< HEAD
+=======
+    @VariableMgr.VarAttr(name = PAIMON_FORCE_JNI_READER)
+    private boolean paimonForceJNIReader = false;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @VarAttr(name = ENABLE_QUERY_CACHE)
     private boolean enableQueryCache = false;
 
@@ -1344,15 +2328,29 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enableMaterializedViewUnionRewrite = true;
 
     /**
+<<<<<<< HEAD
      * <= 0: default mode, only try to union all rewrite by logical plan tree after partition compensate
      * 1: eager mode v1, try to pull up query's filter after union when query's output matches mv's define query
      *  which will increase union rewrite's ability.
      * 2: eager mode v2, try to pull up query's filter after union as much as possible.
+=======
+     * see {@code MaterializedViewUnionRewriteMode} for more details.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
      */
     @VarAttr(name = MATERIALIZED_VIEW_UNION_REWRITE_MODE)
     private int materializedViewUnionRewriteMode = 0;
 
     /**
+<<<<<<< HEAD
+=======
+     * Whether to enable transparent union rewrite for materialized view which treats materialized view as always-consistent
+     * and then union rewrite.
+     */
+    @VarAttr(name = ENABLE_MATERIALIZED_VIEW_TRANSPARENT_UNION_REWRITE)
+    private boolean enableMaterializedViewTransparentUnionRewrite = true;
+
+    /**
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
      * Whether to compensate partition predicates in mv rewrite, see
      * <code>Materialization#isCompensatePartitionPredicate</code> for more details.
      * NOTE: if set it false, it will be rewritten by the mv defined sql with user's query and will not add
@@ -1361,11 +2359,31 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_MATERIALIZED_VIEW_REWRITE_PARTITION_COMPENSATE, flag = VariableMgr.INVISIBLE)
     private boolean enableMaterializedViewRewritePartitionCompensate = true;
 
+<<<<<<< HEAD
     @VarAttr(name = ENABLE_FORCE_RULE_BASED_MV_REWRITE)
     private boolean enableForceRuleBasedMvRewrite = false;
 
     @VarAttr(name = ENABLE_RULE_BASED_MATERIALIZED_VIEW_REWRITE)
     private boolean enableRuleBasedMaterializedViewRewrite = true;
+=======
+    /**
+     * Whether to support to rewrite query with materialized view by using aggregate pushdown.
+     */
+    @VarAttr(name = ENABLE_MATERIALIZED_VIEW_AGG_PUSHDOWN_REWRITE)
+    private boolean enableMaterializedViewPushDownRewrite = false;
+
+    @VarAttr(name = ENABLE_MATERIALIZED_VIEW_TIMESERIES_AGG_PUSHDOWN_REWRITE)
+    private boolean enableMaterializedViewTimeSeriesPushDownRewrite = true;
+
+    @VarAttr(name = ENABLE_FORCE_RULE_BASED_MV_REWRITE)
+    private boolean enableForceRuleBasedMvRewrite = true;
+
+    @VarAttr(name = ENABLE_MATERIALIZED_VIEW_TEXT_MATCH_REWRITE)
+    private boolean enableMaterializedViewTextMatchRewrite = true;
+
+    @VarAttr(name = MATERIALIZED_VIEW_SUBQUERY_TEXT_MATCH_MAX_COUNT)
+    private int materializedViewSubQueryTextMatchMaxCount = 4;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     @VarAttr(name = ENABLE_MATERIALIZED_VIEW_VIEW_DELTA_REWRITE)
     private boolean enableMaterializedViewViewDeltaRewrite = true;
@@ -1397,6 +2415,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_MATERIALIZED_VIEW_PLAN_CACHE, flag = VariableMgr.INVISIBLE)
     private boolean enableMaterializedViewPlanCache = true;
 
+<<<<<<< HEAD
+=======
+    @VarAttr(name = ENABLE_VIEW_BASED_MV_REWRITE)
+    private boolean enableViewBasedMvRewrite = true;
+
+    @VarAttr(name = ENABLE_CBO_VIEW_BASED_MV_REWRITE)
+    private boolean enableCBOViewBasedMvRewrite = false;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     /**
      * Materialized view rewrite rule output limit: how many MVs would be chosen in a Rule for an OptExpr ?
      */
@@ -1447,6 +2474,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = SQL_DIALECT)
     private String sqlDialect = "StarRocks";
 
+<<<<<<< HEAD
+=======
+    @VarAttr(name = ENABLE_DIALECT_DOWNGRADE)
+    private boolean enableDialectDowngrade = true;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @VarAttr(name = ENABLE_OUTER_JOIN_REORDER)
     private boolean enableOuterJoinReorder = true;
 
@@ -1458,12 +2491,23 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_PRUNE_COMPLEX_TYPES)
     private boolean enablePruneComplexTypes = true;
 
+<<<<<<< HEAD
     @VarAttr(name = RANGE_PRUNER_PREDICATES_MAX_LEN)
     public int rangePrunerPredicateMaxLen = 100;
+=======
+    @VarAttr(name = ENABLE_SUBFIELD_NO_COPY)
+    private boolean enableSubfieldNoCopy = true;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     @VarAttr(name = ENABLE_PRUNE_COMPLEX_TYPES_IN_UNNEST)
     private boolean enablePruneComplexTypesInUnnest = true;
 
+<<<<<<< HEAD
+=======
+    @VarAttr(name = RANGE_PRUNER_PREDICATES_MAX_LEN)
+    public int rangePrunerPredicateMaxLen = 100;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @VarAttr(name = SQL_QUOTE_SHOW_CREATE)
     private boolean quoteShowCreate = true; // Defined but unused now, for compatibility with MySQL
 
@@ -1476,8 +2520,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = FULL_SORT_MAX_BUFFERED_BYTES, flag = VariableMgr.INVISIBLE)
     private long fullSortMaxBufferedBytes = 16L * 1024 * 1024;
 
+<<<<<<< HEAD
     @VariableMgr.VarAttr(name = FULL_SORT_LATE_MATERIALIZATION)
     private boolean fullSortLateMaterialization = false;
+=======
+    @VariableMgr.VarAttr(name = FULL_SORT_LATE_MATERIALIZATION_V2, alias = FULL_SORT_LATE_MATERIALIZATION,
+            show = FULL_SORT_LATE_MATERIALIZATION)
+    private boolean fullSortLateMaterialization = true;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     @VariableMgr.VarAttr(name = DISTINCT_COLUMN_BUCKETS)
     private int distinctColumnBuckets = 1024;
@@ -1500,6 +2550,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = SCAN_OR_TO_UNION_THRESHOLD, flag = VariableMgr.INVISIBLE)
     private long scanOrToUnionThreshold = 50000000;
 
+<<<<<<< HEAD
+=======
+    @VarAttr(name = ENABLE_PUSHDOWN_OR_PREDICATE, flag = VariableMgr.INVISIBLE)
+    private boolean enablePushdownOrPredicate = true;
+
+    @VarAttr(name = ENABLE_SHOW_PREDICATE_TREE_IN_PROFILE, flag = VariableMgr.INVISIBLE)
+    private boolean enableShowPredicateTreeInProfile = false;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @VarAttr(name = SELECT_RATIO_THRESHOLD, flag = VariableMgr.INVISIBLE)
     private double selectRatioThreshold = 0.15;
 
@@ -1512,6 +2571,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_COUNT_STAR_OPTIMIZATION, flag = VariableMgr.INVISIBLE)
     private boolean enableCountStarOptimization = true;
 
+<<<<<<< HEAD
+=======
+    @VariableMgr.VarAttr(name = WAREHOUSE_NAME, flag = VariableMgr.SESSION_ONLY)
+    private String warehouseName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @VarAttr(name = ENABLE_PARTITION_COLUMN_VALUE_ONLY_OPTIMIZATION, flag = VariableMgr.INVISIBLE)
     private boolean enablePartitionColumnValueOnlyOptimization = true;
 
@@ -1520,6 +2585,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_COLLECT_TABLE_LEVEL_SCAN_STATS)
     private boolean enableCollectTableLevelScanStats = true;
 
+<<<<<<< HEAD
     @VarAttr(name = ENABLE_EXPR_PRUNE_PARTITION, flag = VariableMgr.INVISIBLE)
     private boolean enableExprPrunePartition = true;
 
@@ -1527,10 +2593,140 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = SKEW_JOIN_RAND_RANGE, flag = VariableMgr.INVISIBLE)
     private int skewJoinRandRange = 1000;
+=======
+    @VarAttr(name = HIVE_TEMP_STAGING_DIR)
+    private String hiveTempStagingDir = "/tmp/starrocks";
+
+    @VarAttr(name = ENABLE_EXPR_PRUNE_PARTITION, flag = VariableMgr.INVISIBLE)
+    private boolean enableExprPrunePartition = true;
+
+    @VarAttr(name = ALLOW_HIVE_WITHOUT_PARTITION_FILTER)
+    private boolean allowHiveWithoutPartitionFilter = true;
+
+    // For the maximum number of partitions allowed to be scanned in a single hive table, 0 means no limit.
+    @VarAttr(name = SCAN_HIVE_PARTITION_NUM_LIMIT)
+    private int scanHivePartitionNumLimit = 0;
+
+    @VarAttr(name = ENABLE_CROSS_JOIN)
+    private boolean enableCrossJoin = true;
+
+    @VarAttr(name = ENABLE_NESTED_LOOP_JOIN)
+    private boolean enableNestedLoopJoin = true;
+
+    @VariableMgr.VarAttr(name = AUDIT_EXECUTE_STMT)
+    private boolean auditExecuteStmt = false;
+
+    @VariableMgr.VarAttr(name = ENABLE_SHORT_CIRCUIT)
+    private boolean enableShortCircuit = false;
+
+    @VariableMgr.VarAttr(name = ENABLE_PREPARE_STMT)
+    private boolean enablePrepareStmt = true;
+
+    @VarAttr(name = JIT_LEVEL)
+    private int jitLevel = 1;
+
+    @VarAttr(name = CONNECTOR_MAX_SPLIT_SIZE)
+    private long connectorMaxSplitSize = 64L * 1024L * 1024L;
+
+    @VarAttr(name = CONNECTOR_HUGE_FILE_SIZE)
+    private long connectorHugeFileSize = 512L * 1024L * 1024L;
+
+    @VarAttr(name = ENABLE_CONNECTOR_SINK_WRITER_SCALING)
+    private boolean enableConnectorSinkWriterScaling = true;
+
+    private int exprChildrenLimit = -1;
+
+    @VarAttr(name = CBO_PREDICATE_SUBFIELD_PATH, flag = VariableMgr.INVISIBLE)
+    private boolean cboPredicateSubfieldPath = true;
+
+    @VarAttr(name = CROSS_JOIN_COST_PENALTY, flag = VariableMgr.INVISIBLE)
+    private long crossJoinCostPenalty = 1000000;
+
+    @VarAttr(name = CBO_PREPARE_METADATA_THREAD_POOL_SIZE)
+    private int prepareMetadataPoolSize = 16;
+
+    @VarAttr(name = CBO_ENABLE_PARALLEL_PREPARE_METADATA)
+    private boolean enableParallelPrepareMetadata = false;
+
+    // To set ANN tuning parameters for user.
+    // Since the session variables does not support map variables,
+    // it needs to be passed in the form of a JSON string.
+    @VarAttr(name = ANN_PARAMS)
+    private String annParams = "";
+
+    @VarAttr(name = PQ_REFINE_FACTOR)
+    private double pqRefineFactor = 1;
+
+    @VarAttr(name = K_FACTOR)
+    private double kFactor = 1;
+
+    public int getPrepareMetadataPoolSize() {
+        return prepareMetadataPoolSize;
+    }
+
+    public void setPrepareMetadataPoolSize(int prepareMetadataPoolSize) {
+        this.prepareMetadataPoolSize = prepareMetadataPoolSize;
+    }
+
+    public boolean enableParallelPrepareMetadata() {
+        return enableParallelPrepareMetadata;
+    }
+
+    public void setEnableParallelPrepareMetadata(boolean enableParallelPrepareMetadata) {
+        this.enableParallelPrepareMetadata = enableParallelPrepareMetadata;
+    }
+
+    public String getHiveTempStagingDir() {
+        return hiveTempStagingDir;
+    }
+
+    public boolean enableWriteHiveExternalTable() {
+        return enableWriteHiveExternalTable;
+    }
+
+    public SessionVariable setHiveTempStagingDir(String hiveTempStagingDir) {
+        this.hiveTempStagingDir = hiveTempStagingDir;
+        return this;
+    }
+
+    @VarAttr(name = ENABLE_PRUNE_ICEBERG_MANIFEST)
+    private boolean enablePruneIcebergManifest = true;
+
+    @VarAttr(name = ENABLE_READ_ICEBERG_PUFFIN_NDV)
+    private boolean enableReadIcebergPuffinNdv = true;
+
+    @VarAttr(name = ENABLE_ICEBERG_COLUMN_STATISTICS)
+    private boolean enableIcebergColumnStatistics = false;
+
+    @VarAttr(name = ENABLE_READ_ICEBERG_EQUALITY_DELETE_WITH_PARTITION_EVOLUTION)
+    private boolean enableReadIcebergEqDeleteWithPartitionEvolution = false;
+
+    @VarAttr(name = ENABLE_DELTA_LAKE_COLUMN_STATISTICS)
+    private boolean enableDeltaLakeColumnStatistics = false;
+
+    @VarAttr(name = ENABLE_QUERY_TRIGGER_ANALYZE)
+    private boolean enableQueryTriggerAnalyze = true;
+
+    @VarAttr(name = PLAN_MODE)
+    private String planMode = PlanMode.AUTO.modeName();
+
+    @VarAttr(name = SKEW_JOIN_RAND_RANGE, flag = VariableMgr.INVISIBLE)
+    private int skewJoinRandRange = 1000;
+    @VarAttr(name = ENABLE_STATS_TO_OPTIMIZE_SKEW_JOIN)
+    private boolean enableStatsToOptimizeSkewJoin = false;
+
+    // mcv means most common value in histogram statistics
+    @VarAttr(name = SKEW_JOIN_OPTIMIZE_USE_MCV_COUNT, flag = VariableMgr.INVISIBLE)
+    private int skewJoinOptimizeUseMCVCount = 5;
+
+    @VarAttr(name = SKEW_JOIN_DATA_SKEW_THRESHOLD, flag = VariableMgr.INVISIBLE)
+    private double skewJoinDataSkewThreshold = 0.2;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     @VarAttr(name = LARGE_DECIMAL_UNDERLYING_TYPE)
     private String largeDecimalUnderlyingType = SessionVariableConstants.PANIC;
 
+<<<<<<< HEAD
 
     @VarAttr(name = CBO_DERIVE_RANGE_JOIN_PREDICATE)
     private boolean cboDeriveRangeJoinPredicate = false;
@@ -1540,6 +2736,52 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = CROSS_JOIN_COST_PENALTY, flag = VariableMgr.INVISIBLE)
     private long crossJoinCostPenalty = 1000000;
+=======
+    @VarAttr(name = CBO_DERIVE_RANGE_JOIN_PREDICATE)
+    private boolean cboDeriveRangeJoinPredicate = false;
+
+    @VarAttr(name = ENABLE_FINE_GRAINED_RANGE_PREDICATE)
+    private boolean enableFineGrainedRangePredicate = false;
+
+    @VarAttr(name = CBO_DERIVE_JOIN_IS_NULL_PREDICATE)
+    private boolean cboDeriveJoinIsNullPredicate = true;
+
+    @VarAttr(name = CBO_DECIMAL_CAST_STRING_STRICT, flag = VariableMgr.INVISIBLE)
+    private boolean cboDecimalCastStringStrict = true;
+
+    @VarAttr(name = CBO_EQ_BASE_TYPE)
+    private String cboEqBaseType = SessionVariableConstants.DECIMAL;
+
+    @VariableMgr.VarAttr(name = ENABLE_RESULT_SINK_ACCUMULATE)
+    private boolean enableResultSinkAccumulate = true;
+
+    @VarAttr(name = CHOOSE_EXECUTE_INSTANCES_MODE)
+    private String chooseExecuteInstancesMode = LOCALITY.name();
+
+    @VarAttr(name = ENABLE_PREDICATE_MOVE_AROUND)
+    private boolean enablePredicateMoveAround = true;
+
+    @VarAttr(name = CONNECTOR_REMOTE_FILE_ASYNC_QUEUE_SIZE, flag = VariableMgr.INVISIBLE)
+    private int connectorRemoteFileAsyncQueueSize = 1000;
+
+    @VarAttr(name = CONNECTOR_REMOTE_FILE_ASYNC_TASK_SIZE, flag = VariableMgr.INVISIBLE)
+    private int connectorRemoteFileAsyncTaskSize = 4;
+
+    @VarAttr(name = ENABLE_CONNECTOR_INCREMENTAL_SCAN_RANGES)
+    private boolean enableConnectorIncrementalScanRanges = true;
+
+    @VarAttr(name = CONNECTOR_INCREMENTAL_SCAN_RANGE_SIZE)
+    private int connectorIncrementalScanRangeSize = 500;
+
+    @VarAttr(name = ENABLE_CONNECTOR_ASYNC_LIST_PARTITIONS)
+    private boolean enableConnectorAsyncListPartitions = false;
+
+    @VarAttr(name = ENABLE_PUSH_DOWN_PRE_AGG_WITH_RANK)
+    private boolean enablePushDownPreAggWithRank = true;
+
+    @VarAttr(name = INSERT_LOCAL_SHUFFLE_FOR_WINDOW_PRE_AGG)
+    private boolean insertLocalShuffleForWindowPreAgg = true;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public SessionVariableConstants.ChooseInstancesMode getChooseExecuteInstancesMode() {
         return Enums.getIfPresent(SessionVariableConstants.ChooseInstancesMode.class,
@@ -1547,6 +2789,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
                 .or(SessionVariableConstants.ChooseInstancesMode.LOCALITY);
     }
 
+<<<<<<< HEAD
     @VarAttr(name = CBO_DECIMAL_CAST_STRING_STRICT, flag = VariableMgr.INVISIBLE)
     private boolean cboDecimalCastStringStrict = true;
 
@@ -1578,6 +2821,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.cboEqBaseType = cboEqBaseType;
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void setChooseExecuteInstancesMode(String mode) {
         SessionVariableConstants.ChooseInstancesMode result =
                 Enums.getIfPresent(SessionVariableConstants.ChooseInstancesMode.class, StringUtils.upperCase(mode))
@@ -1589,6 +2834,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.chooseExecuteInstancesMode = StringUtils.upperCase(mode);
     }
 
+<<<<<<< HEAD
 
     public boolean enableCboDeriveRangeJoinPredicate() {
         return cboDeriveRangeJoinPredicate;
@@ -1596,13 +2842,86 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setCboDeriveRangeJoinPredicate(boolean cboDeriveRangeJoinPredicate) {
         this.cboDeriveRangeJoinPredicate = cboDeriveRangeJoinPredicate;
+=======
+    public boolean isCboDecimalCastStringStrict() {
+        return cboDecimalCastStringStrict;
+    }
+
+    @VarAttr(name = ENABLE_ARRAY_DISTINCT_AFTER_AGG_OPT)
+    private boolean enableArrayDistinctAfterAggOpt = true;
+
+    public String getCboEqBaseType() {
+        return cboEqBaseType;
+    }
+
+    public boolean isEnablePruneIcebergManifest() {
+        return enablePruneIcebergManifest;
+    }
+
+    public void setEnablePruneIcebergManifest(boolean enablePruneIcebergManifest) {
+        this.enablePruneIcebergManifest = enablePruneIcebergManifest;
+    }
+
+    public boolean enableReadIcebergPuffinNdv() {
+        return enableReadIcebergPuffinNdv;
+    }
+
+    public void setEnableReadIcebergPuffinNdv(boolean enableReadIcebergPuffinNdv) {
+        this.enableReadIcebergPuffinNdv = enableReadIcebergPuffinNdv;
+    }
+
+    public boolean enableDeltaLakeColumnStatistics() {
+        return enableDeltaLakeColumnStatistics;
+    }
+
+    public boolean enableIcebergColumnStatistics() {
+        return enableIcebergColumnStatistics;
+    }
+
+    public boolean enableReadIcebergEqDeleteWithPartitionEvolution() {
+        return enableReadIcebergEqDeleteWithPartitionEvolution;
+    }
+
+    public void setEnableReadIcebergEqDeleteWithPartitionEvolution(boolean enableReadIcebergEqDeleteWithPartitionEvolution) {
+        this.enableReadIcebergEqDeleteWithPartitionEvolution = enableReadIcebergEqDeleteWithPartitionEvolution;
+    }
+
+    public void setEnableDeltaLakeColumnStatistics(boolean enableDeltaLakeColumnStatistics) {
+        this.enableDeltaLakeColumnStatistics = enableDeltaLakeColumnStatistics;
+    }
+
+    public void setEnableIcebergColumnStatistics(boolean enableIcebergColumnStatistics) {
+        this.enableIcebergColumnStatistics = enableIcebergColumnStatistics;
+    }
+
+    public boolean isEnableQueryTriggerAnalyze() {
+        return enableQueryTriggerAnalyze;
+    }
+
+    public String getPlanMode() {
+        return planMode;
+    }
+
+    public void setPlanMode(String planMode) {
+        PlanMode.fromName(planMode);
+        this.planMode = planMode;
+    }
+
+    public boolean isCboPredicateSubfieldPath() {
+        return cboPredicateSubfieldPath;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @VarAttr(name = ENABLE_ICEBERG_IDENTITY_COLUMN_OPTIMIZE)
     private boolean enableIcebergIdentityColumnOptimize = true;
 
+<<<<<<< HEAD
     @VarAttr(name = ENABLE_PIPELINE_LEVEL_SHUFFLE, flag = VariableMgr.INVISIBLE)
     private boolean enablePipelineLevelShuffle = true;
+=======
+    @VarAttr(name = ENABLE_PLAN_SERIALIZE_CONCURRENTLY)
+    private boolean enablePlanSerializeConcurrently = true;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     @VarAttr(name = ORC_USE_COLUMN_NAMES)
     private boolean orcUseColumnNames = false;
@@ -1613,6 +2932,40 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_STRICT_ORDER_BY)
     private boolean enableStrictOrderBy = true;
 
+<<<<<<< HEAD
+=======
+    // enable wait dependent event in plan fragment
+    // the operators will wait for the dependent event to be completed before executing
+    // all of the probe side operators will wait for the build side operators to complete.
+    // Scenarios where AGG is present in the probe side will reduce peak memory usage,
+    // but in some cases will result in increased latency for individual queries.
+    //
+    @VarAttr(name = ENABLE_WAIT_DEPENDENT_EVENT)
+    private boolean enableWaitDependentEvent = false;
+
+    @VarAttr(name = ENABLE_PHASED_SCHEDULER)
+    private boolean enablePhasedScheduler = false;
+
+    @VarAttr(name = PHASED_SCHEDULER_MAX_CONCURRENCY)
+    private int phasedSchedulerMaxConcurrency = 2;
+
+    public int getPhasedSchedulerMaxConcurrency() {
+        return phasedSchedulerMaxConcurrency;
+    }
+
+    public void setPhasedSchedulerMaxConcurrency(int phasedSchedulerMaxConcurrency) {
+        this.phasedSchedulerMaxConcurrency = phasedSchedulerMaxConcurrency;
+    }
+
+    public boolean enablePhasedScheduler() {
+        return enablePhasedScheduler;
+    }
+
+    public void setEnablePhasedScheduler(boolean enablePhasedScheduler) {
+        this.enablePhasedScheduler = enablePhasedScheduler;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void setFollowerQueryForwardMode(String mode) {
         this.followerForwardMode = mode;
     }
@@ -1625,9 +2978,23 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return Optional.of(followerForwardMode.equalsIgnoreCase(FollowerQueryForwardMode.LEADER.toString()));
     }
 
+<<<<<<< HEAD
     @VarAttr(name = LIKE_PREDICATE_CONSOLIDATE_MIN)
     private int likePredicateConsolidateMin = 2;
 
+=======
+    @VarAttr(name = ENABLE_PIPELINE_LEVEL_SHUFFLE, flag = VariableMgr.INVISIBLE)
+    private boolean enablePipelineLevelShuffle = true;
+
+    @VarAttr(name = ENABLE_CONSTANT_EXECUTE_IN_FE)
+    private boolean enableConstantExecuteInFE = true;
+
+    @VarAttr(name = LIKE_PREDICATE_CONSOLIDATE_MIN)
+    private int likePredicateConsolidateMin = 2;
+
+    @VarAttr(name = CUSTOM_QUERY_ID, flag = VariableMgr.SESSION_ONLY)
+    private String customQueryId = "";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     @VarAttr(name = ENABLE_REWRITE_UNNEST_BITMAP_TO_ARRAY)
     private boolean enableRewriteUnnestBitmapToArray = true;
@@ -1684,6 +3051,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return hudiMORForceJNIReader;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean getPaimonForceJNIReader() {
+        return paimonForceJNIReader;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void setCboCTEMaxLimit(int cboCTEMaxLimit) {
         this.cboCTEMaxLimit = cboCTEMaxLimit;
     }
@@ -1711,10 +3085,69 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_STRICT_TYPE, flag = VariableMgr.INVISIBLE)
     private boolean enableStrictType = false;
 
+<<<<<<< HEAD
+=======
+    public boolean isEnableScanDataCache() {
+        return enableScanDataCache;
+    }
+
+    public void setEnableScanDataCache(boolean enableScanDataCache) {
+        this.enableScanDataCache = enableScanDataCache;
+    }
+
+    public boolean isEnablePopulateDataCache() {
+        return this.enablePopulateDataCache;
+    }
+
+    public void setEnablePopulateDataCache(boolean enablePopulateDataCache) {
+        this.enablePopulateDataCache = enablePopulateDataCache;
+    }
+
+    public DataCachePopulateMode getDataCachePopulateMode() {
+        return DataCachePopulateMode.fromName(this.dataCachePopulateMode);
+    }
+
+    public void setDataCachePopulateMode(String mode) {
+        this.dataCachePopulateMode = mode;
+    }
+
+    public void setEnableDataCacheAsyncPopulateMode(boolean enableDataCacheAsyncPopulateMode) {
+        this.enableDataCacheAsyncPopulateMode = enableDataCacheAsyncPopulateMode;
+    }
+
+    public void setEnableDataCacheIOAdaptor(boolean enableDataCacheIOAdaptor) {
+        this.enableDataCacheIOAdaptor = enableDataCacheIOAdaptor;
+    }
+
+    public void setDataCacheEvictProbability(int datacacheEvictProbability) {
+        this.datacacheEvictProbability = datacacheEvictProbability;
+    }
+
+    public void setDataCachePriority(int dataCachePriority) {
+        this.datacachePriority = dataCachePriority;
+    }
+
+    public void setDatacacheTTLSeconds(long datacacheTTLSeconds) {
+        this.datacacheTTLSeconds = datacacheTTLSeconds;
+    }
+
+    public void setEnableCacheSelect(boolean enableCacheSelect) {
+        this.enableCacheSelect = enableCacheSelect;
+    }
+
+    public void setConnectorIoTasksPerScanOperator(int connectorIoTasksPerScanOperator) {
+        this.connectorIoTasksPerScanOperator = connectorIoTasksPerScanOperator;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public boolean isCboUseDBLock() {
         return cboUseDBLock;
     }
 
+<<<<<<< HEAD
+=======
+    @TestOnly
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void setCboUseDBLock(boolean cboUseDBLock) {
         this.cboUseDBLock = cboUseDBLock;
     }
@@ -1731,6 +3164,25 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.statisticCollectParallelism = parallelism;
     }
 
+<<<<<<< HEAD
+=======
+    public int getStatisticMetaCollectParallelism() {
+        return statisticMetaCollectParallelism;
+    }
+
+    public void setStatisticMetaCollectParallelism(int statisticMetaCollectParallelism) {
+        this.statisticMetaCollectParallelism = statisticMetaCollectParallelism;
+    }
+
+    public boolean isEnableAnalyzePhasePruneColumns() {
+        return enableAnalyzePhasePruneColumns;
+    }
+
+    public void setEnableAnalyzePhasePruneColumns(boolean enableAnalyzePhasePruneColumns) {
+        this.enableAnalyzePhasePruneColumns = enableAnalyzePhasePruneColumns;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public int getUseComputeNodes() {
         return useComputeNodes;
     }
@@ -1747,6 +3199,26 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.preferComputeNode = preferComputeNode;
     }
 
+<<<<<<< HEAD
+=======
+    public void setComputationFragmentSchedulingPolicy(String computationFragmentSchedulingPolicy) {
+        SessionVariableConstants.ComputationFragmentSchedulingPolicy result =
+                Enums.getIfPresent(SessionVariableConstants.ComputationFragmentSchedulingPolicy.class,
+                        StringUtils.upperCase(computationFragmentSchedulingPolicy)).orNull();
+        if (result == null) {
+            String legalValues = Joiner.on(" | ").join(SessionVariableConstants.ComputationFragmentSchedulingPolicy.values());
+            throw new IllegalArgumentException("Legal values of computation_fragment_scheduling_policy are " + legalValues);
+        }
+        this.computationFragmentSchedulingPolicy = StringUtils.upperCase(computationFragmentSchedulingPolicy);
+    }
+
+    public SessionVariableConstants.ComputationFragmentSchedulingPolicy getComputationFragmentSchedulingPolicy() {
+        return Enums.getIfPresent(SessionVariableConstants.ComputationFragmentSchedulingPolicy.class,
+                        StringUtils.upperCase(computationFragmentSchedulingPolicy))
+                .or(SessionVariableConstants.ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public boolean enableHiveColumnStats() {
         return enableHiveColumnStats;
     }
@@ -1767,6 +3239,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return hivePartitionStatsSampleSize;
     }
 
+<<<<<<< HEAD
+=======
+    public void setForceScheduleLocal(boolean forceScheduleLocal) {
+        this.forceScheduleLocal = forceScheduleLocal;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public boolean getEnableAdaptiveSinkDop() {
         return enableAdaptiveSinkDop;
     }
@@ -1775,10 +3254,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableAdaptiveSinkDop = e;
     }
 
+<<<<<<< HEAD
     public boolean getEnablePersistentIndexByDefault() {
         return enablePersistentIndexByDefault;
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public long getMaxExecMemByte() {
         return maxExecMemByte;
     }
@@ -1791,6 +3273,33 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return queryTimeoutS;
     }
 
+<<<<<<< HEAD
+=======
+    public void setQueryDeliveryTimeoutS(int queryDeliveryTimeoutS) {
+        this.queryDeliveryTimeoutS = queryDeliveryTimeoutS;
+    }
+
+    public int getMetadataCollectQueryTimeoutS() {
+        return metadataCollectQueryTimeoutS;
+    }
+
+    public void setMetadataCollectQueryTimeoutS(int metadataCollectQueryTimeoutS) {
+        this.metadataCollectQueryTimeoutS = metadataCollectQueryTimeoutS;
+    }
+
+    public boolean isEnableMetadataProfile() {
+        return enableMetadataProfile;
+    }
+
+    public void setEnableMetadataProfile(boolean enableMetadataProfile) {
+        this.enableMetadataProfile = enableMetadataProfile;
+    }
+
+    public int getQueryDeliveryTimeoutS() {
+        return queryDeliveryTimeoutS;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public boolean isEnableProfile() {
         return enableProfile;
     }
@@ -1799,6 +3308,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableProfile = enableProfile;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean getColorExplainOutput() {
+        return colorExplainOutput;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public boolean isEnableLoadProfile() {
         return enableLoadProfile;
     }
@@ -1887,6 +3403,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return maxParallelScanInstanceNum;
     }
 
+<<<<<<< HEAD
+=======
+    public String getWarehouseName() {
+        return warehouseName;
+    }
+
+    public void setWarehouseName(String warehouseName) {
+        this.warehouseName = warehouseName;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public String getHdfsBackendSelectorHashAlgorithm() {
         return hdfsBackendSelectorHashAlgorithm;
     }
@@ -1895,6 +3422,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.hdfsBackendSelectorHashAlgorithm = hdfsBackendSelectorHashAlgorithm;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean getHdfsBackendSelectorForceRebalance() {
+        return hdfsBackendSelectorForceRebalance;
+    }
+
+    public void setHdfsBackendSelectorForceRebalance(boolean hdfsBackendSelectorForceRebalance) {
+        this.hdfsBackendSelectorForceRebalance = hdfsBackendSelectorForceRebalance;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public int getConsistentHashVirtualNodeNum() {
         return consistentHashVirtualNodeNum;
     }
@@ -1913,9 +3451,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
                 return pipelineDop;
             }
             if (maxPipelineDop <= 0) {
+<<<<<<< HEAD
                 return BackendCoreStat.getDefaultDOP();
             }
             return Math.min(maxPipelineDop, BackendCoreStat.getDefaultDOP());
+=======
+                return BackendResourceStat.getInstance().getDefaultDOP();
+            }
+            return Math.min(maxPipelineDop, BackendResourceStat.getInstance().getDefaultDOP());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } else {
             return parallelExecInstanceNum;
         }
@@ -1927,9 +3471,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
                 return pipelineDop;
             }
             if (maxPipelineDop <= 0) {
+<<<<<<< HEAD
                 return BackendCoreStat.getSinkDefaultDOP();
             }
             return Math.min(maxPipelineDop, BackendCoreStat.getSinkDefaultDOP());
+=======
+                return BackendResourceStat.getInstance().getSinkDefaultDOP();
+            }
+            return Math.min(maxPipelineDop, BackendResourceStat.getInstance().getSinkDefaultDOP());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } else {
             return parallelExecInstanceNum;
         }
@@ -1959,7 +3509,35 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableInsertStrict = enableInsertStrict;
     }
 
+<<<<<<< HEAD
     public boolean getEnableSpill() {
+=======
+    public boolean isDynamicOverwrite() {
+        return dynamicOverwrite;
+    }
+
+    public void setDynamicOverwrite(boolean dynamicOverwrite) {
+        this.dynamicOverwrite = dynamicOverwrite;
+    }
+
+    public double getInsertMaxFilterRatio() {
+        return insertMaxFilterRatio;
+    }
+
+    public void setInsertMaxFilterRatio(double insertMaxFilterRatio) {
+        this.insertMaxFilterRatio = insertMaxFilterRatio;
+    }
+
+    public int getInsertTimeoutS() {
+        return insertTimeoutS;
+    }
+
+    public void setInsertTimeoutS(int insertTimeoutS) {
+        this.insertTimeoutS = insertTimeoutS;
+    }
+
+    public boolean isEnableSpill() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return enableSpill;
     }
 
@@ -1971,6 +3549,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.spillMode = spillMode;
     }
 
+<<<<<<< HEAD
+=======
+    public String getSpillMode() {
+        return spillMode;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void setEnableRboTablePrune(boolean enableRboTablePrune) {
         this.enableRboTablePrune = enableRboTablePrune;
     }
@@ -1995,6 +3580,49 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableTablePruneOnUpdate;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isEnableEliminateAgg() {
+        return enableEliminateAgg;
+    }
+
+    public void setEnableEliminateAgg(boolean enableEliminateAgg) {
+        this.enableEliminateAgg = enableEliminateAgg;
+    }
+
+    public boolean isEnableUKFKOpt() {
+        return enableUKFKOpt;
+    }
+
+    public void setEnableUKFKOpt(boolean enableUKFKOpt) {
+        this.enableUKFKOpt = enableUKFKOpt;
+    }
+
+    public boolean isEnableUKFKJoinReorder() {
+        return enableUKFKJoinReorder;
+    }
+
+    public void setEnableUKFKJoinReorder(boolean enableUKFKJoinReorder) {
+        this.enableUKFKJoinReorder = enableUKFKJoinReorder;
+    }
+
+    public int getMaxUKFKJoinReorderScaleRatio() {
+        return maxUKFKJoinReorderScaleRatio;
+    }
+
+    public void setMaxUKFKJoinReorderScaleRatio(int maxUKFKJoinReorderScaleRatio) {
+        this.maxUKFKJoinReorderScaleRatio = maxUKFKJoinReorderScaleRatio;
+    }
+
+    public int getMaxUKFKJoinReorderFKRows() {
+        return maxUKFKJoinReorderFKRows;
+    }
+
+    public void setMaxUKFKJoinReorderFKRows(int maxUKFKJoinReorderFKRows) {
+        this.maxUKFKJoinReorderFKRows = maxUKFKJoinReorderFKRows;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public int getSpillMemTableSize() {
         return this.spillMemTableSize;
     }
@@ -2007,12 +3635,25 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return this.spillMemLimitThreshold;
     }
 
+<<<<<<< HEAD
     public long getSpillOperatorMinBytes() {
         return this.spillOperatorMinBytes;
     }
 
     public long getSpillOperatorMaxBytes() {
         return this.spillOperatorMaxBytes;
+=======
+    public void setSpillMemLimitThreshold(double spillMemLimitThreshold) {
+        this.spillMemLimitThreshold = spillMemLimitThreshold;
+    }
+
+    public double getConnectorSinkSpillMemLimitThreshold() {
+        return this.connectorSinkSpillMemLimitThreshold;
+    }
+
+    public long getSpillOperatorMinBytes() {
+        return this.spillOperatorMinBytes;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public int getSpillEncodeLevel() {
@@ -2067,6 +3708,25 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableFilterUnusedColumnsInScanStage;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isEnablePruneColumnAfterIndexFilter() {
+        return enablePruneColumnAfterIndexFilter;
+    }
+
+    public boolean isEnableGinFilter() {
+        return enableGinFilter;
+    }
+
+    public boolean isJoinLateMaterialization() {
+        return joinLateMaterialization;
+    }
+
+    public boolean enablePartitionHashJoin() {
+        return enablePartitionHashJoin;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void disableTrimOnlyFilteredColumnsInScanStage() {
         this.enableFilterUnusedColumnsInScanStage = false;
     }
@@ -2242,8 +3902,20 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return globalRuntimeFilterProbeMinSelectivity;
     }
 
+<<<<<<< HEAD
     public boolean isEnableDeliverBatchFragments() {
         return enableDeliverBatchFragments;
+=======
+    public void setEnablePipelineLevelMultiPartitionedRf(boolean on) {
+        enablePipelineLevelMultiPartitionedRf = on;
+        if (on) {
+            enableRuntimeAdaptiveDop = false;
+        }
+    }
+
+    public boolean isEnablePipelineLevelMultiPartitionedRf() {
+        return enablePipelineLevelMultiPartitionedRf && enablePipelineEngine;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public boolean isMVPlanner() {
@@ -2278,6 +3950,16 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enablePipelineEngine && pipelineDop <= 0;
     }
 
+<<<<<<< HEAD
+=======
+    public void setEnableRuntimeAdaptiveDop(boolean on) {
+        enableRuntimeAdaptiveDop = on;
+        if (on) {
+            enablePipelineLevelMultiPartitionedRf = false;
+        }
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public boolean isEnableRuntimeAdaptiveDop() {
         return enablePipelineEngine && enableRuntimeAdaptiveDop;
     }
@@ -2303,13 +3985,28 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     public boolean isEnableTabletInternalParallel() {
+<<<<<<< HEAD
         return enableTabletInternalParallel;
+=======
+        return enableTabletInternalParallel || (RunMode.isSharedDataMode() && enableLakeTabletInternalParallel);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public boolean isEnableResourceGroup() {
         return true;
     }
 
+<<<<<<< HEAD
+=======
+    public int getMaxBucketsPerBeToUseBalancerAssignment() {
+        return maxBucketsPerBeToUseBalancerAssignment;
+    }
+
+    public void setMaxBucketsPerBeToUseBalancerAssignment(int maxBucketsPerBeToUseBalancerAssignment) {
+        this.maxBucketsPerBeToUseBalancerAssignment = maxBucketsPerBeToUseBalancerAssignment;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void setPipelineDop(int pipelineDop) {
         this.pipelineDop = pipelineDop;
     }
@@ -2322,6 +4019,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return pipelineSinkDop;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isEnableConnectorSinkGlobalShuffle() {
+        return enableConnectorSinkGlobalShuffle;
+    }
+
+    public boolean isEnableConnectorSinkSpill() {
+        return enableConnectorSinkSpill;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void setPipelineSinkDop(int pipelineSinkDop) {
         this.pipelineSinkDop = pipelineSinkDop;
     }
@@ -2383,8 +4091,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     public boolean isEnableMaterializedViewForceRewrite() {
+<<<<<<< HEAD
         return materializedViewRewriteMode.equalsIgnoreCase(MaterializedViewRewriteMode.MODE_FORCE)  ||
                         materializedViewRewriteMode.equalsIgnoreCase(MaterializedViewRewriteMode.MODE_FORCE_OR_ERROR);
+=======
+        return materializedViewRewriteMode.equalsIgnoreCase(MaterializedViewRewriteMode.MODE_FORCE) ||
+                materializedViewRewriteMode.equalsIgnoreCase(MaterializedViewRewriteMode.MODE_FORCE_OR_ERROR);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public boolean isEnableMaterializedViewRewriteOrError() {
@@ -2415,10 +4128,28 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.useCorrelatedJoinEstimate = useCorrelatedJoinEstimate;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isAlwaysCollectDict() {
+        return alwaysCollectDict;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public boolean isEnableLowCardinalityOptimize() {
         return enableLowCardinalityOptimize;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isUseLowCardinalityOptimizeV2() {
+        return useLowCardinalityOptimizeV2;
+    }
+
+    public void setUseLowCardinalityOptimizeV2(boolean useLowCardinalityOptimizeV2) {
+        this.useLowCardinalityOptimizeV2 = useLowCardinalityOptimizeV2;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public boolean isEnableRewriteGroupingsetsToUnionAll() {
         return enableRewriteGroupingSetsToUnionAll;
     }
@@ -2427,6 +4158,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableRewriteGroupingSetsToUnionAll = enableRewriteGroupingSetsToUnionAll;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isEnablePartitionLevelCardinalityEstimation() {
+        return enablePartitionLevelCardinalityEstimation;
+    }
+
+    public void setEnablePartitionLevelCardinalityEstimation(boolean enablePartitionLevelCardinalityEstimation) {
+        this.enablePartitionLevelCardinalityEstimation = enablePartitionLevelCardinalityEstimation;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void setEnableLowCardinalityOptimize(boolean enableLowCardinalityOptimize) {
         this.enableLowCardinalityOptimize = enableLowCardinalityOptimize;
     }
@@ -2474,6 +4216,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return singleNodeExecPlan;
     }
 
+<<<<<<< HEAD
+=======
+    // -1 (< 0): disable cte, force inline. 0: force cte; other (> 0): compute by costs * ratio
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public double getCboCTERuseRatio() {
         return cboCTERuseRatio;
     }
@@ -2486,10 +4232,32 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return cboPushDownAggregateMode;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean getEnableLambdaPushDown() {
+        return enableLambdaPushdown;
+    }
+
+    public void setEnableLambdaPushdown(boolean enableLambdaPushdown) {
+        this.enableLambdaPushdown = enableLambdaPushdown;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void setCboPushDownAggregateMode(int cboPushDownAggregateMode) {
         this.cboPushDownAggregateMode = cboPushDownAggregateMode;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isCboPushDownAggregateOnBroadcastJoin() {
+        return cboPushDownAggregateOnBroadcastJoin;
+    }
+
+    public void setCboPushDownAggregateOnBroadcastJoin(boolean cboPushDownAggregateOnBroadcastJoin) {
+        this.cboPushDownAggregateOnBroadcastJoin = cboPushDownAggregateOnBroadcastJoin;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public String getCboPushDownAggregate() {
         return cboPushDownAggregate;
     }
@@ -2498,6 +4266,25 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.cboPushDownAggregate = cboPushDownAggregate;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isCboPushDownGroupingSet() {
+        return cboPushDownGroupingSet;
+    }
+
+    public void setCboPushDownGroupingSet(boolean cboPushDownGroupingSet) {
+        this.cboPushDownGroupingSet = cboPushDownGroupingSet;
+    }
+
+    public boolean isCboPushDownGroupingSetReshuffle() {
+        return cboPushDownGroupingSetReshuffle;
+    }
+
+    public void setCboPushDownGroupingSetReshuffle(boolean cboPushDownGroupingSetReshuffle) {
+        this.cboPushDownGroupingSetReshuffle = cboPushDownGroupingSetReshuffle;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void setCboPushDownDistinctBelowWindow(boolean flag) {
         this.cboPushDownDistinctBelowWindow = flag;
     }
@@ -2522,6 +4309,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.joinImplementationMode = joinImplementationMode;
     }
 
+<<<<<<< HEAD
     public boolean isEnableOptimizerTraceLog() {
         return enableOptimizerTraceLog;
     }
@@ -2538,6 +4326,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableMVOptimizerTraceLog = val;
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public boolean isRuntimeFilterOnExchangeNode() {
         return runtimeFilterOnExchangeNode;
     }
@@ -2573,6 +4363,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public void setInterpolatePassthrough(boolean value) {
         this.interpolatePassthrough = value;
     }
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public boolean isHashJoinInterpolatePassthrough() {
         return hashJoinInterpolatePassthrough;
     }
@@ -2673,12 +4467,29 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.nestedMvRewriteMaxLevel = nestedMvRewriteMaxLevel;
     }
 
+<<<<<<< HEAD
     public boolean isEnableRuleBasedMaterializedViewRewrite() {
         return enableRuleBasedMaterializedViewRewrite;
     }
 
     public void setEnableRuleBasedMaterializedViewRewrite(boolean enableRuleBasedMaterializedViewRewrite) {
         this.enableRuleBasedMaterializedViewRewrite = enableRuleBasedMaterializedViewRewrite;
+=======
+    public boolean isEnableMaterializedViewTextMatchRewrite() {
+        return enableMaterializedViewTextMatchRewrite;
+    }
+
+    public void setEnableMaterializedViewTextMatchRewrite(boolean enable) {
+        this.enableMaterializedViewTextMatchRewrite = enable;
+    }
+
+    public int getMaterializedViewSubQueryTextMatchMaxCount() {
+        return materializedViewSubQueryTextMatchMaxCount;
+    }
+
+    public void setMaterializedViewSubQueryTextMatchMaxCount(int materializedViewSubQueryTextMatchMaxCount) {
+        this.materializedViewSubQueryTextMatchMaxCount = materializedViewSubQueryTextMatchMaxCount;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public boolean isEnableForceRuleBasedMvRewrite() {
@@ -2697,6 +4508,34 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableMaterializedViewRewritePartitionCompensate = enableMaterializedViewRewritePartitionCompensate;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isEnableMaterializedViewTransparentUnionRewrite() {
+        return enableMaterializedViewTransparentUnionRewrite;
+    }
+
+    public void setEnableMaterializedViewTransparentUnionRewrite(boolean enableMaterializedViewTransparentUnionRewrite) {
+        this.enableMaterializedViewTransparentUnionRewrite = enableMaterializedViewTransparentUnionRewrite;
+    }
+
+    public boolean isEnableMaterializedViewPushDownRewrite() {
+        return enableMaterializedViewPushDownRewrite;
+    }
+
+    public void setEnableMaterializedViewPushDownRewrite(boolean enableMaterializedViewPushDownRewrite) {
+        this.enableMaterializedViewPushDownRewrite = enableMaterializedViewPushDownRewrite;
+    }
+
+    public boolean isEnableMaterializedViewTimeSeriesPushDownRewrite() {
+        return enableMaterializedViewTimeSeriesPushDownRewrite;
+    }
+
+    public void setEnableMaterializedViewTimeSeriesPushDownRewrite(
+            boolean enableMaterializedViewTimeSeriesPushDownRewrite) {
+        this.enableMaterializedViewTimeSeriesPushDownRewrite = enableMaterializedViewTimeSeriesPushDownRewrite;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public boolean isEnableMaterializedViewViewDeltaRewrite() {
         return enableMaterializedViewViewDeltaRewrite;
     }
@@ -2717,6 +4556,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return materializedViewJoinSameTablePermutationLimit;
     }
 
+<<<<<<< HEAD
+=======
+    @Deprecated
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public boolean isEnableMaterializedViewSingleTableViewDeltaRewrite() {
         return enableMaterializedViewSingleTableViewDeltaRewrite;
     }
@@ -2742,6 +4585,25 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return this.enableMaterializedViewPlanCache;
     }
 
+<<<<<<< HEAD
+=======
+    public void setEnableViewBasedMvRewrite(boolean enableViewBasedMvRewrite) {
+        this.enableViewBasedMvRewrite = enableViewBasedMvRewrite;
+    }
+
+    public boolean isEnableViewBasedMvRewrite() {
+        return this.enableViewBasedMvRewrite;
+    }
+
+    public void setEnableCBOViewBasedMvRewrite(boolean enableCBOViewBasedMvRewrite) {
+        this.enableCBOViewBasedMvRewrite = enableCBOViewBasedMvRewrite;
+    }
+
+    public boolean isEnableCBOViewBasedMvRewrite() {
+        return this.enableCBOViewBasedMvRewrite;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public int getCboMaterializedViewRewriteRuleOutputLimit() {
         return cboMaterializedViewRewriteRuleOutputLimit;
     }
@@ -2826,6 +4688,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.sqlDialect = dialect;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isEnableDialectDowngrade() {
+        return enableDialectDowngrade;
+    }
+
+    public void setEnableDialectDowngrade(boolean enableDialectDowngrade) {
+        this.enableDialectDowngrade = enableDialectDowngrade;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public boolean isEnableOuterJoinReorder() {
         return enableOuterJoinReorder;
     }
@@ -2858,6 +4731,25 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return this.enableRewriteSimpleAggToMetaScan;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isEnableRewritePartitionColumnMinMax() {
+        return enableRewritePartitionColumnMinMax;
+    }
+
+    public void setEnableRewriteSimpleAggToHdfsScan(boolean v) {
+        this.enableRewriteSimpleAggToHdfsScan = v;
+    }
+
+    public boolean isEnableRewriteSimpleAggToHdfsScan() {
+        return this.enableRewriteSimpleAggToHdfsScan;
+    }
+
+    public boolean isEnableEvaluateSchemaScanRule() {
+        return enableEvaluateSchemaScanRule;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public boolean getEnablePruneComplexTypes() {
         return this.enablePruneComplexTypes;
     }
@@ -2866,12 +4758,21 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enablePruneComplexTypes = enablePruneComplexTypes;
     }
 
+<<<<<<< HEAD
     public int getRangePrunerPredicateMaxLen() {
         return rangePrunerPredicateMaxLen;
     }
 
     public void setRangePrunerPredicateMaxLen(int rangePrunerPredicateMaxLen) {
         this.rangePrunerPredicateMaxLen = rangePrunerPredicateMaxLen;
+=======
+    public boolean getEnableSubfieldNoCopy() {
+        return this.enableSubfieldNoCopy;
+    }
+
+    public void setEnableSubfieldNoCopy(boolean enableSubfieldNoCopy) {
+        this.enableSubfieldNoCopy = enableSubfieldNoCopy;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public boolean getEnablePruneComplexTypesInUnnest() {
@@ -2882,6 +4783,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enablePruneComplexTypesInUnnest = enablePruneComplexTypesInUnnest;
     }
 
+<<<<<<< HEAD
+=======
+    public int getRangePrunerPredicateMaxLen() {
+        return rangePrunerPredicateMaxLen;
+    }
+
+    public void setRangePrunerPredicateMaxLen(int rangePrunerPredicateMaxLen) {
+        this.rangePrunerPredicateMaxLen = rangePrunerPredicateMaxLen;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public String getDefaultTableCompression() {
         return defaultTableCompressionAlgorithm;
     }
@@ -2934,6 +4846,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.scanOrToUnionThreshold = scanOrToUnionThreshold;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isEnablePushdownOrPredicate() {
+        return enablePushdownOrPredicate;
+    }
+
+    public boolean isEnableShowPredicateTreeInProfile() {
+        return enableShowPredicateTreeInProfile;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public double getSelectRatioThreshold() {
         return selectRatioThreshold;
     }
@@ -2982,6 +4905,85 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableExprPrunePartition = enableExprPrunePartition;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isAllowHiveWithoutPartitionFilter() {
+        return allowHiveWithoutPartitionFilter;
+    }
+
+    public void setAllowHiveWithoutPartitionFilter(boolean allowHiveWithoutPartitionFilter) {
+        this.allowHiveWithoutPartitionFilter = allowHiveWithoutPartitionFilter;
+    }
+
+    public int getScanHivePartitionNumLimit() {
+        return scanHivePartitionNumLimit;
+    }
+
+    public void setScanHivePartitionNumLimit(int scanHivePartitionNumLimit) {
+        this.scanHivePartitionNumLimit = scanHivePartitionNumLimit;
+    }
+
+    public boolean isEnableCrossJoin() {
+        return enableCrossJoin;
+    }
+
+    public void setEnableCrossJoin(boolean enableCrossJoin) {
+        this.enableCrossJoin = enableCrossJoin;
+    }
+
+    public boolean isEnableNestedLoopJoin() {
+        return enableNestedLoopJoin;
+    }
+
+    public void setEnableNestedLoopJoin(boolean enableNestedLoopJoin) {
+        this.enableNestedLoopJoin = enableNestedLoopJoin;
+    }
+
+    public boolean enableCboDeriveRangeJoinPredicate() {
+        return cboDeriveRangeJoinPredicate;
+    }
+
+    public void setCboDeriveRangeJoinPredicate(boolean cboDeriveRangeJoinPredicate) {
+        this.cboDeriveRangeJoinPredicate = cboDeriveRangeJoinPredicate;
+    }
+
+    public boolean isEnableFineGrainedRangePredicate() {
+        return enableFineGrainedRangePredicate;
+    }
+
+    public void setEnableFineGrainedRangePredicate(boolean enableFineGrainedRangePredicate) {
+        this.enableFineGrainedRangePredicate = enableFineGrainedRangePredicate;
+    }
+
+    public boolean isCboDeriveJoinIsNullPredicate() {
+        return cboDeriveJoinIsNullPredicate;
+    }
+
+    public void setCboEqBaseType(String cboEqBaseType) {
+        this.cboEqBaseType = cboEqBaseType;
+    }
+
+    public boolean isAuditExecuteStmt() {
+        return auditExecuteStmt;
+    }
+
+    public void setEnableShortCircuit(boolean enableShortCircuit) {
+        this.enableShortCircuit = enableShortCircuit;
+    }
+
+    public boolean isEnableShortCircuit() {
+        return enableShortCircuit;
+    }
+
+    public boolean isEnablePrepareStmt() {
+        return enablePrepareStmt;
+    }
+
+    public void setEnablePrepareStmt(boolean enablePrepareStmt) {
+        this.enablePrepareStmt = enablePrepareStmt;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void setLargeDecimalUnderlyingType(String type) {
         if (type.equalsIgnoreCase(SessionVariableConstants.PANIC) ||
                 type.equalsIgnoreCase(SessionVariableConstants.DECIMAL) ||
@@ -3001,6 +5003,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableIcebergIdentityColumnOptimize;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean getEnablePlanSerializeConcurrently() {
+        return enablePlanSerializeConcurrently;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public long getCrossJoinCostPenalty() {
         return crossJoinCostPenalty;
     }
@@ -3009,6 +5018,41 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.crossJoinCostPenalty = crossJoinCostPenalty;
     }
 
+<<<<<<< HEAD
+=======
+    public int getSkewJoinRandRange() {
+        return skewJoinRandRange;
+    }
+
+    public void setSkewJoinRandRange(int skewJoinRandRange) {
+        this.skewJoinRandRange = skewJoinRandRange;
+    }
+
+    public boolean isEnableStatsToOptimizeSkewJoin() {
+        return enableStatsToOptimizeSkewJoin;
+    }
+
+    public void setEnableStatsToOptimizeSkewJoin(boolean enableStatsToOptimizeSkewJoin) {
+        this.enableStatsToOptimizeSkewJoin = enableStatsToOptimizeSkewJoin;
+    }
+
+    public int getSkewJoinOptimizeUseMCVCount() {
+        return skewJoinOptimizeUseMCVCount;
+    }
+
+    public void setSkewJoinOptimizeUseMCVCount(int skewJoinOptimizeUseMCVCount) {
+        this.skewJoinOptimizeUseMCVCount = skewJoinOptimizeUseMCVCount;
+    }
+
+    public double getSkewJoinDataSkewThreshold() {
+        return skewJoinDataSkewThreshold;
+    }
+
+    public void setSkewJoinDataSkewThreshold(double skewJoinDataSkewThreshold) {
+        this.skewJoinDataSkewThreshold = skewJoinDataSkewThreshold;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public boolean isEnableStrictOrderBy() {
         return enableStrictOrderBy;
     }
@@ -3021,12 +5065,53 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableArrayDistinctAfterAggOpt;
     }
 
+<<<<<<< HEAD
     public int getSkewJoinRandRange() {
         return skewJoinRandRange;
     }
 
     public void setSkewJoinRandRange(int skewJoinRandRange) {
         this.skewJoinRandRange = skewJoinRandRange;
+=======
+    public long getConnectorMaxSplitSize() {
+        return connectorMaxSplitSize;
+    }
+
+    public void setConnectorMaxSplitSize(long size) {
+        connectorMaxSplitSize = size;
+    }
+
+    public long getConnectorHugeFileSize() {
+        return connectorHugeFileSize;
+    }
+
+    public void setConnectorHugeFileSize(long size) {
+        connectorHugeFileSize = size;
+    }
+
+    public boolean isEnableConnectorSplitIoTasks() {
+        return enableConnectorSplitIoTasks;
+    }
+
+    public void setEnableConnectorSplitIoTasks(boolean v) {
+        enableConnectorSplitIoTasks = v;
+    }
+
+    public boolean isEnablePredicateMoveAround() {
+        return enablePredicateMoveAround;
+    }
+
+    public void setEnablePredicateMoveAround(boolean enablePredicateMoveAround) {
+        this.enablePredicateMoveAround = enablePredicateMoveAround;
+    }
+
+    public boolean isEnableConstantExecuteInFE() {
+        return enableConstantExecuteInFE;
+    }
+
+    public void setEnableConstantExecuteInFE(boolean enableConstantExecuteInFE) {
+        this.enableConstantExecuteInFE = enableConstantExecuteInFE;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public int getLikePredicateConsolidateMin() {
@@ -3037,6 +5122,97 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.likePredicateConsolidateMin = value;
     }
 
+<<<<<<< HEAD
+=======
+    public String getCustomQueryId() {
+        return customQueryId;
+    }
+
+    public void setCustomQueryId(String customQueryId) {
+        this.customQueryId = customQueryId;
+    }
+
+    public int getConnectorRemoteFileAsyncQueueSize() {
+        return connectorRemoteFileAsyncQueueSize;
+    }
+
+    public int getConnectorRemoteFileAsyncTaskSize() {
+        return connectorRemoteFileAsyncTaskSize;
+    }
+
+    public boolean isEnablePlanAnalyzer() {
+        return enablePlanAnalyzer;
+    }
+
+    public void setEnablePlanAnalyzer(boolean enablePlanAnalyzer) {
+        this.enablePlanAnalyzer = enablePlanAnalyzer;
+    }
+
+    public boolean isEnablePlanAdvisor() {
+        return enablePlanAdvisor;
+    }
+
+    public void setEnablePlanAdvisor(boolean enablePlanAdvisor) {
+        this.enablePlanAdvisor = enablePlanAdvisor;
+    }
+
+    public void setCountDistinctImplementation(String countDistinctImplementation) {
+        this.countDistinctImplementation = countDistinctImplementation;
+    }
+
+    public SessionVariableConstants.CountDistinctImplMode getCountDistinctImplementation() {
+        return SessionVariableConstants.CountDistinctImplMode.parse(countDistinctImplementation);
+    }
+
+    public boolean isEnableCountDistinctRewriteByHllBitmap() {
+        return enableCountDistinctRewriteByHllBitmap;
+    }
+
+    public void setEnableCountDistinctRewriteByHllBitmap(boolean enableCountDistinctRewriteByHllBitmap) {
+        this.enableCountDistinctRewriteByHllBitmap = enableCountDistinctRewriteByHllBitmap;
+    }
+
+    public boolean isDisableGeneratedColumnRewrite() {
+        return disableGeneratedColumnRewrite;
+    }
+
+    public boolean isEnableScanPredicateExprReuse() {
+        return enableScanPredicateExprReuse;
+    }
+
+    public int getConnectorIncrementalScanRangeNumber() {
+        return connectorIncrementalScanRangeSize;
+    }
+
+    public void setConnectorIncrementalScanRangeNumber(int v) {
+        connectorIncrementalScanRangeSize = v;
+    }
+
+    public boolean isEnableConnectorIncrementalScanRanges() {
+        return enableConnectorIncrementalScanRanges;
+    }
+
+    public boolean isEnableConnectorAsyncListPartitions() {
+        return enableConnectorAsyncListPartitions;
+    }
+
+    public void setEnableConnectorAsyncListPartitions(boolean v) {
+        enableConnectorAsyncListPartitions = v;
+    }
+
+    public void setEnableConnectorIncrementalScanRanges(boolean v) {
+        enableConnectorIncrementalScanRanges = v;
+    }
+
+    public boolean getEnablePushDownPreAggWithRank() {
+        return enablePushDownPreAggWithRank;
+    }
+
+    public boolean isInsertLocalShuffleForWindowPreAgg() {
+        return insertLocalShuffleForWindowPreAgg;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public boolean isEnableRewriteUnnestBitmapToArray() {
         return enableRewriteUnnestBitmapToArray;
     }
@@ -3045,6 +5221,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // used for rest api
     public TQueryOptions toThrift() {
         TQueryOptions tResult = new TQueryOptions();
+<<<<<<< HEAD
         tResult.setMem_limit(maxExecMemByte);
         if (queryMemLimit > 0) {
             tResult.setQuery_mem_limit(queryMemLimit);
@@ -3053,6 +5230,20 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         // Avoid integer overflow
         tResult.setQuery_timeout(Math.min(Integer.MAX_VALUE / 1000, queryTimeoutS));
         tResult.setQuery_delivery_timeout(Math.min(Integer.MAX_VALUE / 1000, queryDeliveryTimeoutS));
+=======
+        tResult.setCatalog(catalog);
+        tResult.setMem_limit(maxExecMemByte);
+        tResult.setQuery_mem_limit(queryMemLimit);
+        tResult.setSql_dialect(sqlDialect.toLowerCase());
+
+        // Avoid integer overflow
+        tResult.setQuery_timeout(Math.min(Integer.MAX_VALUE / 1000, queryTimeoutS));
+        if (enablePhasedScheduler) {
+            tResult.setQuery_delivery_timeout(tResult.getQuery_timeout());
+        } else {
+            tResult.setQuery_delivery_timeout(Math.min(Integer.MAX_VALUE / 1000, queryDeliveryTimeoutS));
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         tResult.setEnable_profile(enableProfile);
         tResult.setBig_query_profile_threshold(TimeValue.parseTimeValue(bigQueryProfileThreshold).getMillis());
         tResult.setBig_query_profile_threshold_unit(TTimeUnit.MILLISECOND);
@@ -3073,6 +5264,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
         tResult.setEnable_spill(enableSpill);
         if (enableSpill) {
+<<<<<<< HEAD
             tResult.setSpill_mem_table_size(spillMemTableSize);
             tResult.setSpill_mem_table_num(spillMemTableNum);
             tResult.setSpill_mem_limit_threshold(spillMemLimitThreshold);
@@ -3081,6 +5273,41 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             tResult.setSpill_encode_level(spillEncodeLevel);
             tResult.setSpillable_operator_mask(spillableOperatorMask);
             tResult.setEnable_agg_spill_preaggregation(enableAggSpillPreaggregation);
+=======
+            TSpillOptions spillOptions = new TSpillOptions();
+            spillOptions.setSpill_mem_table_size(spillMemTableSize);
+            spillOptions.setSpill_mem_table_num(spillMemTableNum);
+            spillOptions.setSpill_mem_limit_threshold(spillMemLimitThreshold);
+            spillOptions.setSpill_operator_min_bytes(spillOperatorMinBytes);
+            spillOptions.setSpill_operator_max_bytes(spillOperatorMaxBytes);
+            spillOptions.setSpill_revocable_max_bytes(spillRevocableMaxBytes);
+            spillOptions.setSpill_encode_level(spillEncodeLevel);
+            spillOptions.setSpillable_operator_mask(spillableOperatorMask);
+            spillOptions.setEnable_agg_spill_preaggregation(enableAggSpillPreaggregation);
+            spillOptions.setSpill_enable_direct_io(spillEnableDirectIO);
+            spillOptions.setSpill_rand_ratio(spillRandRatio);
+            spillOptions.setSpill_enable_compaction(spillEnableCompaction);
+            spillOptions.setSpill_mode(TSpillMode.valueOf(spillMode.toUpperCase()));
+            spillOptions.setEnable_spill_buffer_read(enableSpillBufferRead);
+            spillOptions.setMax_spill_read_buffer_bytes_per_driver(maxSpillReadBufferBytesPerDriver);
+            if (enableSpillToRemoteStorage && !spillStorageVolume.isEmpty()) {
+                // find storage volume config
+                GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+                StorageVolumeMgr storageVolumeMgr = globalStateMgr.getStorageVolumeMgr();
+                StorageVolume sv = storageVolumeMgr.getStorageVolumeByName(spillStorageVolume);
+                if (sv != null) {
+                    spillOptions.setEnable_spill_to_remote_storage(true);
+                    TSpillToRemoteStorageOptions options = new TSpillToRemoteStorageOptions();
+                    options.setRemote_storage_paths(sv.getLocations());
+                    TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();
+                    sv.getCloudConfiguration().toThrift(tCloudConfiguration);
+                    options.setRemote_storage_conf(tCloudConfiguration);
+                    options.setDisable_spill_to_local_disk(disableSpillToLocalDisk);
+                    spillOptions.setSpill_to_remote_storage_options(options);
+                }
+            }
+            tResult.setSpill_options(spillOptions);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         // Compression Type
@@ -3092,6 +5319,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setTransmission_encode_level(transmissionEncodeLevel);
         tResult.setGroup_concat_max_len(groupConcatMaxLen);
         tResult.setRpc_http_min_size(rpcHttpMinSize);
+<<<<<<< HEAD
+=======
+        tResult.setInterleaving_group_size(interleavingGroupSize);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         TCompressionType loadCompressionType =
                 CompressionUtils.findTCompressionByName(loadTransmissionCompressionType);
@@ -3112,16 +5343,30 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             tResult.setPipeline_profile_level(TPipelineProfileLevel.MERGE);
         }
 
+<<<<<<< HEAD
         tResult.setEnable_tablet_internal_parallel(enableTabletInternalParallel);
         tResult.setTablet_internal_parallel_mode(
                 TTabletInternalParallelMode.valueOf(tabletInternalParallelMode.toUpperCase()));
         tResult.setSpill_mode(TSpillMode.valueOf(spillMode.toUpperCase()));
         tResult.setEnable_query_debug_trace(enableQueryDebugTrace);
         tResult.setEnable_pipeline_query_statistic(enablePipelineQueryStatistic);
+=======
+        if (RunMode.isSharedDataMode()) {
+            tResult.setEnable_tablet_internal_parallel(enableLakeTabletInternalParallel);
+        } else {
+            tResult.setEnable_tablet_internal_parallel(enableTabletInternalParallel);
+        }
+
+        tResult.setTablet_internal_parallel_mode(
+                TTabletInternalParallelMode.valueOf(tabletInternalParallelMode.toUpperCase()));
+        tResult.setEnable_query_debug_trace(enableQueryDebugTrace);
+        tResult.setEnable_pipeline_query_statistic(true);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         tResult.setRuntime_filter_early_return_selectivity(runtimeFilterEarlyReturnSelectivity);
 
         tResult.setAllow_throw_exception((sqlMode & SqlModeHelper.MODE_ALLOW_THROW_EXCEPTION) != 0);
 
+<<<<<<< HEAD
         tResult.setUse_scan_block_cache(useScanBlockCache);
         tResult.setEnable_populate_block_cache(enablePopulateBlockCache);
         tResult.setHudi_mor_force_jni_reader(hudiMORForceJNIReader);
@@ -3136,6 +5381,39 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setEnable_collect_table_level_scan_stats(enableCollectTableLevelScanStats);
         tResult.setEnable_pipeline_level_shuffle(enablePipelineLevelShuffle);
         tResult.setEnable_result_sink_accumulate(enableResultSinkAccumulate);
+=======
+        tResult.setEnable_scan_datacache(enableScanDataCache);
+        tResult.setEnable_populate_datacache(enablePopulateDataCache);
+        tResult.setEnable_datacache_async_populate_mode(enableDataCacheAsyncPopulateMode);
+        tResult.setEnable_datacache_io_adaptor(enableDataCacheIOAdaptor);
+        tResult.setDatacache_evict_probability(datacacheEvictProbability);
+        tResult.setDatacache_priority(datacachePriority);
+        tResult.setDatacache_ttl_seconds(datacacheTTLSeconds);
+        tResult.setEnable_cache_select(enableCacheSelect);
+        tResult.setEnable_file_metacache(enableFileMetaCache);
+        tResult.setHudi_mor_force_jni_reader(hudiMORForceJNIReader);
+        tResult.setIo_tasks_per_scan_operator(ioTasksPerScanOperator);
+        tResult.setConnector_io_tasks_per_scan_operator(connectorIoTasksPerScanOperator);
+        tResult.setEnable_dynamic_prune_scan_range(enableDynamicPruneScanRange);
+        tResult.setUse_page_cache(usePageCache);
+
+        tResult.setEnable_connector_adaptive_io_tasks(enableConnectorAdaptiveIoTasks);
+        tResult.setEnable_connector_split_io_tasks(enableConnectorSplitIoTasks);
+        tResult.setConnector_io_tasks_slow_io_latency_ms(connectorIoTasksSlowIoLatency);
+        tResult.setConnector_scan_use_query_mem_ratio(connectorScanUseQueryMemRatio);
+        tResult.setScan_use_query_mem_ratio(scanUseQueryMemRatio);
+        tResult.setAnn_params(VectorSearchOptions.readAnnParams(annParams));
+        tResult.setPq_refine_factor(pqRefineFactor);
+        tResult.setK_factor(kFactor);
+        tResult.setEnable_collect_table_level_scan_stats(enableCollectTableLevelScanStats);
+        tResult.setEnable_pipeline_level_shuffle(enablePipelineLevelShuffle);
+        tResult.setEnable_hyperscan_vec(enableHyperscanVec);
+        tResult.setJit_level(jitLevel);
+        tResult.setEnable_result_sink_accumulate(enableResultSinkAccumulate);
+        tResult.setEnable_connector_sink_writer_scaling(enableConnectorSinkWriterScaling);
+        tResult.setEnable_wait_dependent_event(enableWaitDependentEvent);
+        tResult.setConnector_max_split_size(connectorMaxSplitSize);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         tResult.setOrc_use_column_names(orcUseColumnNames);
         return tResult;
     }

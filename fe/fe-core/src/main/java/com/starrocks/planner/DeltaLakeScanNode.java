@@ -16,6 +16,7 @@ package com.starrocks.planner;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
+<<<<<<< HEAD
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
@@ -69,6 +70,45 @@ public class DeltaLakeScanNode extends ScanNode {
     private List<TScanRangeLocations> scanRangeLocationsList = new ArrayList<>();
     private Optional<Expression> deltaLakePredicates = Optional.empty();
     private CloudConfiguration cloudConfiguration = null;
+=======
+import com.starrocks.analysis.SlotDescriptor;
+import com.starrocks.analysis.TupleDescriptor;
+import com.starrocks.catalog.DeltaLakeTable;
+import com.starrocks.catalog.Type;
+import com.starrocks.common.StarRocksException;
+import com.starrocks.connector.CatalogConnector;
+import com.starrocks.connector.ConnectorMetadatRequestContext;
+import com.starrocks.connector.GetRemoteFilesParams;
+import com.starrocks.connector.RemoteFileInfoDefaultSource;
+import com.starrocks.connector.RemoteFileInfoSource;
+import com.starrocks.connector.TableVersionRange;
+import com.starrocks.connector.delta.DeltaConnectorScanRangeSource;
+import com.starrocks.connector.delta.DeltaUtils;
+import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.plan.HDFSScanNodePredicates;
+import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.THdfsScanNode;
+import com.starrocks.thrift.TPlanNode;
+import com.starrocks.thrift.TPlanNodeType;
+import com.starrocks.thrift.TScanRangeLocations;
+import io.delta.kernel.engine.Engine;
+import io.delta.kernel.internal.SnapshotImpl;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+import java.util.List;
+import java.util.Optional;
+
+public class DeltaLakeScanNode extends ScanNode {
+    private static final Logger LOG = LogManager.getLogger(DeltaLakeScanNode.class);
+    private final DeltaLakeTable deltaLakeTable;
+    private final HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
+    private CloudConfiguration cloudConfiguration = null;
+    private DeltaConnectorScanRangeSource scanRangeSource = null;
+    private int selectedPartitionCount = -1;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public DeltaLakeScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc, planNodeName);
@@ -89,7 +129,11 @@ public class DeltaLakeScanNode extends ScanNode {
         if (catalog == null) {
             return;
         }
+<<<<<<< HEAD
         Connector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalog);
+=======
+        CatalogConnector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalog);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Preconditions.checkState(connector != null,
                 String.format("connector of catalog %s should not be null", catalog));
         cloudConfiguration = connector.getMetadata().getCloudConfiguration();
@@ -105,6 +149,7 @@ public class DeltaLakeScanNode extends ScanNode {
         return helper.toString();
     }
 
+<<<<<<< HEAD
     private void preProcessConjuncts(StructType tableSchema) {
         List<Expression> expressions = new ArrayList<>(conjuncts.size());
         ExpressionConverter convertor = new ExpressionConverter(tableSchema);
@@ -203,6 +248,39 @@ public class DeltaLakeScanNode extends ScanNode {
 
     private long nextPartitionId() {
         return partitionIdGen.getAndIncrement();
+=======
+    @Override
+    public List<TScanRangeLocations> getScanRangeLocations(long maxScanRangeLength) {
+        if (maxScanRangeLength == 0) {
+            return scanRangeSource.getAllOutputs();
+        }
+        return scanRangeSource.getOutputs((int) maxScanRangeLength);
+    }
+
+    @Override
+    public boolean hasMoreScanRanges() {
+        return scanRangeSource.hasMoreOutput();
+    }
+
+    public void setupScanRangeSource(ScalarOperator predicate, List<String> fieldNames, boolean enableIncrementalScanRanges)
+            throws StarRocksException {
+        SnapshotImpl snapshot = (SnapshotImpl) deltaLakeTable.getDeltaSnapshot();
+        DeltaUtils.checkProtocolAndMetadata(snapshot.getProtocol(), snapshot.getMetadata());
+        Engine engine = deltaLakeTable.getDeltaEngine();
+        long snapshotId = snapshot.getVersion(engine);
+
+        GetRemoteFilesParams params =
+                GetRemoteFilesParams.newBuilder().setTableVersionRange(TableVersionRange.withEnd(Optional.of(snapshotId)))
+                        .setPredicate(predicate).setFieldNames(fieldNames).build();
+        RemoteFileInfoSource remoteFileInfoSource = null;
+        if (enableIncrementalScanRanges) {
+            remoteFileInfoSource = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFilesAsync(deltaLakeTable, params);
+        } else {
+            remoteFileInfoSource = new RemoteFileInfoDefaultSource(
+                    GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFiles(deltaLakeTable, params));
+        }
+        scanRangeSource = new DeltaConnectorScanRangeSource(deltaLakeTable, remoteFileInfoSource);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -237,10 +315,16 @@ public class DeltaLakeScanNode extends ScanNode {
         output.append(prefix).append(String.format("avgRowSize=%s", avgRowSize));
         output.append("\n");
 
+<<<<<<< HEAD
         output.append(prefix).append(String.format("numNodes=%s", numNodes));
         output.append("\n");
 
         if (detailLevel == TExplainLevel.VERBOSE) {
+=======
+        if (detailLevel == TExplainLevel.VERBOSE) {
+            HdfsScanNode.appendDataCacheOptionsInExplain(output, prefix, dataCacheOptions);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             for (SlotDescriptor slotDescriptor : desc.getSlots()) {
                 Type type = slotDescriptor.getOriginType();
                 if (type.isComplexType()) {
@@ -250,10 +334,30 @@ public class DeltaLakeScanNode extends ScanNode {
             }
 
             List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
+<<<<<<< HEAD
                     deltaLakeTable.getCatalogName(), deltaLakeTable.getDbName(), deltaLakeTable.getTableName());
 
             output.append(prefix).append(
                     String.format("partitions=%s/%s", scanNodePredicates.getSelectedPartitionIds().size(),
+=======
+                    deltaLakeTable.getCatalogName(), deltaLakeTable.getCatalogDBName(), deltaLakeTable.getCatalogTableName(),
+                    ConnectorMetadatRequestContext.DEFAULT);
+
+            if (selectedPartitionCount == -1) {
+                if (scanRangeSource != null) {
+                    // we have to consume all scan ranges to know how many partition been selected.
+                    while (scanRangeSource.hasMoreOutput()) {
+                        scanRangeSource.getOutputs(1000);
+                    }
+                    selectedPartitionCount = scanRangeSource.selectedPartitionCount();
+                } else {
+                    selectedPartitionCount = 0;
+                }
+            }
+
+            output.append(prefix).append(
+                    String.format("partitions=%s/%s", selectedPartitionCount,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                             partitionNames.size() == 0 ? 1 : partitionNames.size()));
             output.append("\n");
         }
@@ -262,11 +366,14 @@ public class DeltaLakeScanNode extends ScanNode {
     }
 
     @Override
+<<<<<<< HEAD
     public int getNumInstances() {
         return scanRangeLocationsList.size();
     }
 
     @Override
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     protected void toThrift(TPlanNode msg) {
         msg.node_type = TPlanNodeType.HDFS_SCAN_NODE;
         THdfsScanNode tHdfsScanNode = new THdfsScanNode();
@@ -281,11 +388,15 @@ public class DeltaLakeScanNode extends ScanNode {
         HdfsScanNode.setCloudConfigurationToThrift(tHdfsScanNode, cloudConfiguration);
         HdfsScanNode.setMinMaxConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
         HdfsScanNode.setPartitionConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
+<<<<<<< HEAD
     }
 
     @Override
     public boolean canUsePipeLine() {
         return true;
+=======
+        HdfsScanNode.setDataCacheOptionsToThrift(tHdfsScanNode, dataCacheOptions);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override

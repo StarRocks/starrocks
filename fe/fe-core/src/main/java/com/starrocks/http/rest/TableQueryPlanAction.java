@@ -36,22 +36,47 @@ package com.starrocks.http.rest;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.base.Strings;
+<<<<<<< HEAD
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksHttpException;
+=======
+import com.google.common.collect.Maps;
+import com.starrocks.analysis.TableName;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.PrivilegeType;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.Table;
+import com.starrocks.common.DdlException;
+import com.starrocks.common.FeConstants;
+import com.starrocks.common.StarRocksHttpException;
+import com.starrocks.common.util.NetUtils;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.planner.PlanFragment;
+<<<<<<< HEAD
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+=======
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
+import com.starrocks.rpc.ConfigurableSerDesFactory;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.StatementPlanner;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.Authorizer;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.StatementBase;
@@ -107,7 +132,11 @@ public class TableQueryPlanAction extends RestBaseAction {
 
     @Override
     protected void executeWithoutPassword(BaseRequest request, BaseResponse response)
+<<<<<<< HEAD
             throws DdlException {
+=======
+            throws DdlException, AccessDeniedException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // just allocate 2 slot for top holder map
         Map<String, Object> resultMap = new HashMap<>(4);
         String dbName = request.getSingleParameter(DB_KEY);
@@ -140,16 +169,29 @@ public class TableQueryPlanAction extends RestBaseAction {
                     sql, ConnectContext.get().getCurrentUserIdentity(), dbName, tableName);
 
             // check privilege for select, otherwise return HTTP 401
+<<<<<<< HEAD
             checkTableAction(ConnectContext.get(), dbName, tableName, PrivilegeType.SELECT);
             Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+=======
+            Authorizer.checkTableAction(ConnectContext.get().getCurrentUserIdentity(), ConnectContext.get().getCurrentRoleIds(),
+                    dbName, tableName, PrivilegeType.SELECT);
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (db == null) {
                 throw new StarRocksHttpException(HttpResponseStatus.NOT_FOUND,
                         "Database [" + dbName + "] " + "does not exists");
             }
             // may be should acquire writeLock
+<<<<<<< HEAD
             db.readLock();
             try {
                 Table table = db.getTable(tableName);
+=======
+            Locker locker = new Locker();
+            locker.lockDatabase(db.getId(), LockType.READ);
+            try {
+                Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (table == null) {
                     throw new StarRocksHttpException(HttpResponseStatus.NOT_FOUND,
                             "Table [" + tableName + "] " + "does not exists");
@@ -163,7 +205,11 @@ public class TableQueryPlanAction extends RestBaseAction {
                 // parse/analysis/plan the sql and acquire tablet distributions
                 handleQuery(ConnectContext.get(), db.getFullName(), tableName, sql, resultMap);
             } finally {
+<<<<<<< HEAD
                 db.readUnlock();
+=======
+                locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         } catch (StarRocksHttpException e) {
             // status code  should conforms to HTTP semantic
@@ -259,6 +305,16 @@ public class TableQueryPlanAction extends RestBaseAction {
                     "The Sql is invalid");
         }
 
+<<<<<<< HEAD
+=======
+        if (execPlan.getScanNodes().isEmpty() && FeConstants.enablePruneEmptyOutputScan) {
+            result.put("partitions", Maps.newHashMap());
+            result.put("opaqued_query_plan", "");
+            result.put("status", 200);
+            return;
+        }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // acquire ScanNode to obtain pruned tablet
         // in this way, just retrieve only one scannode
         if (execPlan.getScanNodes().size() != 1) {
@@ -301,9 +357,15 @@ public class TableQueryPlanAction extends RestBaseAction {
         tQueryPlanInfo.tablet_info = tabletInfo;
 
         // serialize TQueryPlanInfo and encode plan with Base64 to string in order to translate by json format
+<<<<<<< HEAD
         TSerializer serializer = new TSerializer();
         String opaquedQueryPlan;
         try {
+=======
+        String opaquedQueryPlan;
+        try {
+            TSerializer serializer = ConfigurableSerDesFactory.getTSerializer();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             byte[] queryPlanStream = serializer.serialize(tQueryPlanInfo);
             opaquedQueryPlan = Base64.getEncoder().encodeToString(queryPlanStream);
         } catch (TException e) {
@@ -328,7 +390,11 @@ public class TableQueryPlanAction extends RestBaseAction {
             TInternalScanRange scanRange = scanRangeLocations.scan_range.internal_scan_range;
             Node tabletRouting = new Node(Long.parseLong(scanRange.version), Integer.parseInt(scanRange.schema_hash));
             for (TNetworkAddress address : scanRange.hosts) {
+<<<<<<< HEAD
                 tabletRouting.addRouting(address.hostname + ":" + address.port);
+=======
+                tabletRouting.addRouting(NetUtils.getHostPortInAccessibleFormat(address.hostname, address.port));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
             result.put(String.valueOf(scanRange.tablet_id), tabletRouting);
         }

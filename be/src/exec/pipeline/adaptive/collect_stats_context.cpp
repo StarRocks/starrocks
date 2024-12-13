@@ -19,6 +19,10 @@
 #include "column/chunk.h"
 #include "common/statusor.h"
 #include "exec/pipeline/adaptive/adaptive_dop_param.h"
+<<<<<<< HEAD
+=======
+#include "exec/pipeline/adaptive/event.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "exec/pipeline/adaptive/utils.h"
 
 namespace starrocks::pipeline {
@@ -198,7 +202,11 @@ StatusOr<ChunkPtr> RoundRobinState::pull_chunk(int32_t driver_seq) {
     while (buffer_idx < _ctx->_upstream_dop) {
         auto& buffer_chunk_queue = _ctx->_buffer_chunk_queue(buffer_idx);
         while (!buffer_chunk_queue.empty()) {
+<<<<<<< HEAD
             accumulator.push(std::move(buffer_chunk_queue.front()));
+=======
+            RETURN_IF_ERROR(accumulator.push(std::move(buffer_chunk_queue.front())));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             buffer_chunk_queue.pop();
             if (!accumulator.empty()) {
                 return accumulator.pull();
@@ -233,7 +241,12 @@ CollectStatsContext::CollectStatsContext(RuntimeState* const runtime_state, size
           _buffer_chunk_queue_per_driver_seq(max_dop),
           _is_finishing_per_driver_seq(max_dop),
           _is_finished_per_driver_seq(max_dop),
+<<<<<<< HEAD
           _runtime_state(runtime_state) {
+=======
+          _runtime_state(runtime_state),
+          _blocking_event(Event::create_event()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     _state_payloads[CollectStatsStateEnum::BLOCK] = std::make_unique<BlockState>(this);
     _state_payloads[CollectStatsStateEnum::PASSTHROUGH] = std::make_unique<PassthroughState>(this);
     _state_payloads[CollectStatsStateEnum::ROUND_ROBIN] = std::make_unique<RoundRobinState>(this);
@@ -297,6 +310,11 @@ void CollectStatsContext::_transform_state(CollectStatsStateEnum state_enum, siz
     auto* next_state = _get_state(state_enum);
     _downstream_dop = downstream_dop;
     _state = next_state;
+<<<<<<< HEAD
+=======
+
+    _blocking_event->finish(_runtime_state);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 CollectStatsContext::BufferChunkQueue& CollectStatsContext::_buffer_chunk_queue(int32_t driver_seq) {

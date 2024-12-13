@@ -23,6 +23,10 @@
 #include "common/config.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
+<<<<<<< HEAD
+=======
+#include "fs/key_cache.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "runtime/exec_env.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/fixed_location_provider.h"
@@ -53,16 +57,29 @@ public:
     ~LakeReplicationTxnManagerTest() override = default;
 
     void SetUp() override {
+<<<<<<< HEAD
         std::vector<starrocks::StorePath> paths;
         CHECK_OK(starrocks::parse_conf_store_paths(starrocks::config::storage_root_path, &paths));
         _test_dir = paths[0].path + "/lake";
         _location_provider = std::make_unique<lake::FixedLocationProvider>(_test_dir);
+=======
+        config::enable_transparent_data_encryption = false;
+        std::vector<starrocks::StorePath> paths;
+        CHECK_OK(starrocks::parse_conf_store_paths(starrocks::config::storage_root_path, &paths));
+        _test_dir = paths[0].path + "/lake";
+        _location_provider = std::make_shared<lake::FixedLocationProvider>(_test_dir);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         CHECK_OK(FileSystem::Default()->create_dir_recursive(_location_provider->metadata_root_location(1)));
         CHECK_OK(FileSystem::Default()->create_dir_recursive(_location_provider->txn_log_root_location(1)));
         CHECK_OK(FileSystem::Default()->create_dir_recursive(_location_provider->segment_root_location(1)));
         _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
+<<<<<<< HEAD
         _update_manager = std::make_unique<lake::UpdateManager>(_location_provider.get(), _mem_tracker.get());
         _tablet_manager = std::make_unique<lake::TabletManager>(_location_provider.get(), _update_manager.get(), 16384);
+=======
+        _update_manager = std::make_unique<lake::UpdateManager>(_location_provider, _mem_tracker.get());
+        _tablet_manager = std::make_unique<lake::TabletManager>(_location_provider, _update_manager.get(), 16384);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         _replication_txn_manager = std::make_unique<lake::ReplicationTxnManager>(_tablet_manager.get());
 
         ASSERT_TRUE(_tablet_manager->create_tablet(get_create_tablet_req(_tablet_id, _version, _schema_hash)).ok());
@@ -73,8 +90,16 @@ public:
             auto src_tablet = create_tablet(_src_tablet_id, 1, _schema_hash);
 
             std::vector<int64_t> keys{0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
+<<<<<<< HEAD
             for (int i = 2; i <= _src_version; i++) {
                 ASSERT_TRUE(src_tablet->rowset_commit(i, create_rowset(src_tablet, keys)).ok());
+=======
+            Int64Column deletes;
+            int64_t deletes_array[2] = {10, 11};
+            deletes.append_numbers(deletes_array, sizeof(int64_t) * 2);
+            for (int i = 2; i <= _src_version; i++) {
+                ASSERT_TRUE(src_tablet->rowset_commit(i, create_rowset(src_tablet, keys, &deletes)).ok());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
     }
@@ -86,6 +111,10 @@ public:
         EXPECT_TRUE(status.ok()) << status;
         status = fs::remove_all(config::storage_root_path);
         EXPECT_TRUE(status.ok() || status.is_not_found()) << status;
+<<<<<<< HEAD
+=======
+        config::enable_transparent_data_encryption = false;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     TCreateTabletReq get_create_tablet_req(int64_t tablet_id, int64_t version, int32_t schema_hash,
@@ -157,7 +186,11 @@ public:
         writer_context.partition_id = 0;
         writer_context.rowset_path_prefix = tablet->schema_hash_path();
         writer_context.rowset_state = COMMITTED;
+<<<<<<< HEAD
         writer_context.tablet_schema = &tablet->tablet_schema();
+=======
+        writer_context.tablet_schema = tablet->thread_safe_get_tablet_schema();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         writer_context.version.first = 0;
         writer_context.version.second = 0;
         writer_context.segments_overlap = NONOVERLAPPING;
@@ -169,7 +202,11 @@ public:
         if (empty) {
             return *writer->build();
         }
+<<<<<<< HEAD
         auto schema = ChunkHelper::convert_schema(tablet->tablet_schema());
+=======
+        auto schema = ChunkHelper::convert_schema(tablet->thread_safe_get_tablet_schema());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         auto chunk = ChunkHelper::new_chunk(schema, keys.size());
         auto& cols = chunk->columns();
         for (int64_t key : keys) {
@@ -203,7 +240,11 @@ public:
 protected:
     std::unique_ptr<starrocks::lake::TabletManager> _tablet_manager;
     std::string _test_dir;
+<<<<<<< HEAD
     std::unique_ptr<lake::LocationProvider> _location_provider;
+=======
+    std::shared_ptr<lake::LocationProvider> _location_provider;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::unique_ptr<MemTracker> _mem_tracker;
     std::unique_ptr<lake::UpdateManager> _update_manager;
     std::unique_ptr<lake::ReplicationTxnManager> _replication_txn_manager;
@@ -328,12 +369,25 @@ TEST_P(LakeReplicationTxnManagerTest, test_publish_failed) {
     Status status = _replication_txn_manager->remote_snapshot(remote_snapshot_request, &remote_snapshot_info);
     EXPECT_TRUE(status.ok()) << status;
 
+<<<<<<< HEAD
     const int64_t txn_ids[] = {_transaction_id};
     auto status_or = lake::publish_version(_tablet_manager.get(), _tablet_id, _version, _src_version, txn_ids, 1, 0);
     EXPECT_TRUE(!status_or.ok()) << status_or.status();
 
     const int32_t txn_types[] = {TxnTypePB::TXN_REPLICATION};
     lake::abort_txn(_tablet_manager.get(), _tablet_id, txn_ids, txn_types, 1);
+=======
+    auto txn_info = TxnInfoPB();
+    txn_info.set_txn_id(_transaction_id);
+    txn_info.set_combined_txn_log(false);
+    txn_info.set_txn_type(TXN_REPLICATION);
+    txn_info.set_commit_time(0);
+    auto txn_info_span = std::span<const TxnInfoPB>(&txn_info, 1);
+    auto status_or = lake::publish_version(_tablet_manager.get(), _tablet_id, _version, _src_version, txn_info_span);
+    EXPECT_TRUE(!status_or.ok()) << status_or.status();
+
+    lake::abort_txn(_tablet_manager.get(), _tablet_id, txn_info_span);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 TEST_P(LakeReplicationTxnManagerTest, test_run_normal) {
@@ -377,8 +431,83 @@ TEST_P(LakeReplicationTxnManagerTest, test_run_normal) {
     status = _replication_txn_manager->replicate_snapshot(replicate_snapshot_request);
     EXPECT_TRUE(status.ok()) << status;
 
+<<<<<<< HEAD
     const int64_t txn_ids[] = {_transaction_id};
     auto status_or = lake::publish_version(_tablet_manager.get(), _tablet_id, _version, _src_version, txn_ids, 1, 0);
+=======
+    auto txn_info = TxnInfoPB();
+    txn_info.set_txn_id(_transaction_id);
+    txn_info.set_combined_txn_log(false);
+    txn_info.set_commit_time(0);
+    auto txn_info_span = std::span<const TxnInfoPB>(&txn_info, 1);
+    auto status_or = lake::publish_version(_tablet_manager.get(), _tablet_id, _version, _src_version, txn_info_span);
+    EXPECT_TRUE(status_or.ok()) << status_or.status();
+
+    EXPECT_EQ(_src_version, status_or.value()->version());
+}
+
+TEST_P(LakeReplicationTxnManagerTest, test_run_normal_encrypted) {
+    EncryptionKeyPB pb;
+    pb.set_id(EncryptionKey::DEFAULT_MASTER_KYE_ID);
+    pb.set_type(EncryptionKeyTypePB::NORMAL_KEY);
+    pb.set_algorithm(EncryptionAlgorithmPB::AES_128);
+    pb.set_plain_key("0000000000000000");
+    std::unique_ptr<EncryptionKey> root_encryption_key = EncryptionKey::create_from_pb(pb).value();
+    auto val_st = root_encryption_key->generate_key();
+    EXPECT_TRUE(val_st.ok());
+    std::unique_ptr<EncryptionKey> encryption_key = std::move(val_st.value());
+    encryption_key->set_id(2);
+    KeyCache::instance().add_key(root_encryption_key);
+    KeyCache::instance().add_key(encryption_key);
+    config::enable_transparent_data_encryption = true;
+
+    TRemoteSnapshotRequest remote_snapshot_request;
+    remote_snapshot_request.__set_transaction_id(_transaction_id);
+    remote_snapshot_request.__set_table_id(_table_id);
+    remote_snapshot_request.__set_partition_id(_partition_id);
+    remote_snapshot_request.__set_tablet_id(_tablet_id);
+    remote_snapshot_request.__set_tablet_type(TTabletType::TABLET_TYPE_LAKE);
+    remote_snapshot_request.__set_schema_hash(_schema_hash);
+    remote_snapshot_request.__set_visible_version(_version);
+    remote_snapshot_request.__set_src_token(ExecEnv::GetInstance()->token());
+    remote_snapshot_request.__set_src_tablet_id(_src_tablet_id);
+    remote_snapshot_request.__set_src_tablet_type(TTabletType::TABLET_TYPE_DISK);
+    remote_snapshot_request.__set_src_schema_hash(_schema_hash);
+    remote_snapshot_request.__set_src_visible_version(_src_version);
+    remote_snapshot_request.__set_src_backends({TBackend()});
+
+    TSnapshotInfo remote_snapshot_info;
+    Status status = _replication_txn_manager->remote_snapshot(remote_snapshot_request, &remote_snapshot_info);
+    EXPECT_TRUE(status.ok()) << status;
+
+    TReplicateSnapshotRequest replicate_snapshot_request;
+    replicate_snapshot_request.__set_transaction_id(_transaction_id);
+    replicate_snapshot_request.__set_table_id(_table_id);
+    replicate_snapshot_request.__set_partition_id(_partition_id);
+    replicate_snapshot_request.__set_tablet_id(_tablet_id);
+    replicate_snapshot_request.__set_tablet_type(TTabletType::TABLET_TYPE_LAKE);
+    replicate_snapshot_request.__set_schema_hash(_schema_hash);
+    replicate_snapshot_request.__set_visible_version(_version);
+    replicate_snapshot_request.__set_src_token(ExecEnv::GetInstance()->token());
+    replicate_snapshot_request.__set_src_tablet_id(_src_tablet_id);
+    replicate_snapshot_request.__set_src_tablet_type(TTabletType::TABLET_TYPE_DISK);
+    replicate_snapshot_request.__set_src_schema_hash(_schema_hash);
+    replicate_snapshot_request.__set_src_visible_version(_src_version);
+    replicate_snapshot_request.__set_src_snapshot_infos({remote_snapshot_info});
+
+    status = _replication_txn_manager->replicate_snapshot(replicate_snapshot_request);
+    EXPECT_TRUE(status.ok()) << status;
+
+    status = _replication_txn_manager->replicate_snapshot(replicate_snapshot_request);
+    EXPECT_TRUE(status.ok()) << status;
+
+    auto txn_info = TxnInfoPB();
+    txn_info.set_txn_id(_transaction_id);
+    txn_info.set_combined_txn_log(false);
+    txn_info.set_commit_time(0);
+    auto txn_info_span = std::span<const TxnInfoPB>(&txn_info, 1);
+    auto status_or = lake::publish_version(_tablet_manager.get(), _tablet_id, _version, _src_version, txn_info_span);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     EXPECT_TRUE(status_or.ok()) << status_or.status();
 
     EXPECT_EQ(_src_version, status_or.value()->version());

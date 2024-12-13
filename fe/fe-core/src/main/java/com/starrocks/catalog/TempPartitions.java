@@ -56,7 +56,11 @@ import java.util.Set;
 // temp partition is used to implement the overwrite load.
 // user can load data into some of the temp partitions,
 // and then replace the formal partitions with these temp partitions
+<<<<<<< HEAD
 // to make a overwrite load.
+=======
+// to make an overwrite load.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public class TempPartitions implements Writable, GsonPostProcessable {
     @SerializedName(value = "idToPartition")
     private Map<Long, Partition> idToPartition = Maps.newHashMap();
@@ -84,8 +88,14 @@ public class TempPartitions implements Writable, GsonPostProcessable {
             idToPartition.remove(partition.getId());
             nameToPartition.remove(partitionName);
             if (!GlobalStateMgr.isCheckpointThread() && needDropTablet) {
+<<<<<<< HEAD
                 TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
                 for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.ALL)) {
+=======
+                TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+                for (MaterializedIndex index :
+                        partition.getDefaultPhysicalPartition().getMaterializedIndices(IndexExtState.ALL)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     for (Tablet tablet : index.getTablets()) {
                         invertedIndex.deleteTablet(tablet.getId());
                     }
@@ -132,10 +142,13 @@ public class TempPartitions implements Writable, GsonPostProcessable {
         }
     }
 
+<<<<<<< HEAD
     public int getPartitionsCount() {
         return idToPartition.size();
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public void write(DataOutput out) throws IOException {
         String json = GsonUtils.GSON.toJson(this);

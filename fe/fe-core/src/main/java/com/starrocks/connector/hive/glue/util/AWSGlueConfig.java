@@ -12,16 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
 package com.starrocks.connector.hive.glue.util;
 
 import com.amazonaws.ClientConfiguration;
 
+=======
+package com.starrocks.connector.hive.glue.util;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public final class AWSGlueConfig {
 
     private AWSGlueConfig() {
     }
 
+<<<<<<< HEAD
     public static final String AWS_GLUE_ENDPOINT = "aws.hive.metastore.glue.endpoint";
     public static final String AWS_REGION = "aws.hive.metastore.glue.region";
     public static final String AWS_CATALOG_CREDENTIALS_PROVIDER_FACTORY_CLASS
@@ -39,6 +45,8 @@ public final class AWSGlueConfig {
     public static final String AWS_GLUE_SOCKET_TIMEOUT = "aws.hive.metastore.glue.socket-timeout";
     public static final int DEFAULT_SOCKET_TIMEOUT = ClientConfiguration.DEFAULT_SOCKET_TIMEOUT;
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static final String AWS_GLUE_DB_CACHE_ENABLE = "aws.hive.metastore.glue.cache.db.enable";
     public static final String AWS_GLUE_DB_CACHE_SIZE = "aws.hive.metastore.glue.cache.db.size";
     public static final String AWS_GLUE_DB_CACHE_TTL_MINS = "aws.hive.metastore.glue.cache.db.ttl-mins";

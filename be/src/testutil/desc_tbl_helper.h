@@ -61,8 +61,13 @@ public:
             generate_desc_tuple(slot_info, &desc_tbl_builder);
         }
         DescriptorTbl* desc_tbl = nullptr;
+<<<<<<< HEAD
         DescriptorTbl::create(runtime_state, &obj_pool, desc_tbl_builder.desc_tbl(), &desc_tbl,
                               config::vector_chunk_size);
+=======
+        (void)DescriptorTbl::create(runtime_state, &obj_pool, desc_tbl_builder.desc_tbl(), &desc_tbl,
+                                    config::vector_chunk_size);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return desc_tbl;
     }
 

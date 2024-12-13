@@ -92,6 +92,7 @@ class TabletUpdates;
 // The concurrency control is handled in Tablet Class, not in this class.
 class TabletMeta {
 public:
+<<<<<<< HEAD
     [[nodiscard]] static Status create(const TCreateTabletReq& request, const TabletUid& tablet_uid, uint64_t shard_id,
                                        uint32_t next_unique_id,
                                        const std::unordered_map<uint32_t, uint32_t>& col_ordinal_to_unique_id,
@@ -99,16 +100,36 @@ public:
 
     static TabletMetaSharedPtr create();
 
+=======
+    static Status create(const TCreateTabletReq& request, const TabletUid& tablet_uid, uint64_t shard_id,
+                         uint32_t next_unique_id,
+                         const std::unordered_map<uint32_t, uint32_t>& col_ordinal_to_unique_id,
+                         TabletMetaSharedPtr* tablet_meta);
+
+    static TabletMetaSharedPtr create();
+
+    static const RowsetMetaSharedPtr& rowset_meta_with_max_rowset_version(
+            const std::vector<RowsetMetaSharedPtr>& rowsets);
+
+    static const RowsetMetaPB& rowset_meta_pb_with_max_rowset_version(const std::vector<RowsetMetaPB>& rowsets);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     explicit TabletMeta();
     TabletMeta(int64_t table_id, int64_t partition_id, int64_t tablet_id, int32_t schema_hash, uint64_t shard_id,
                const TTabletSchema& tablet_schema, uint32_t next_unique_id, bool enable_persistent_index,
                const std::unordered_map<uint32_t, uint32_t>& col_ordinal_to_unique_id, const TabletUid& tablet_uid,
+<<<<<<< HEAD
                TTabletType::type tabletType, TCompressionType::type compression_type);
+=======
+               TTabletType::type tabletType, TCompressionType::type compression_type,
+               int32_t primary_index_cache_expire_sec, TStorageType::type storage_type, int compression_level);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     virtual ~TabletMeta();
 
     // Function create_from_file is used to be compatible with previous tablet_meta.
     // Previous tablet_meta is a physical file in tablet dir, which is not stored in rocksdb.
+<<<<<<< HEAD
     [[nodiscard]] Status create_from_file(const std::string& file_path);
     // Note that create_from_memory will not use tablet schema map to share the tablet schemas with same schema id,
     // it's the difference from create_from_file
@@ -124,6 +145,23 @@ public:
     void init_from_pb(TabletMetaPB* ptablet_meta_pb, bool use_tablet_schema_map = true);
 
     void to_meta_pb(TabletMetaPB* tablet_meta_pb);
+=======
+    Status create_from_file(const std::string& file_path);
+    // Note that create_from_memory will not use tablet schema map to share the tablet schemas with same schema id,
+    // it's the difference from create_from_file
+    Status create_from_memory(std::string_view data);
+    Status save(const std::string& file_path);
+    static Status save(const std::string& file_path, const TabletMetaPB& tablet_meta_pb);
+    static Status reset_tablet_uid(const std::string& file_path);
+    static std::string construct_header_file_path(const std::string& schema_hash_path, int64_t tablet_id);
+    Status save_meta(DataDir* data_dir, bool skip_tablet_schema = false);
+
+    Status serialize(std::string* meta_binary);
+    Status deserialize(std::string_view data);
+    void init_from_pb(TabletMetaPB* ptablet_meta_pb, bool use_tablet_schema_map = true);
+
+    void to_meta_pb(TabletMetaPB* tablet_meta_pb, bool skip_tablet_schema = false);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     void to_json(std::string* json_string, json2pb::Pb2JsonOptions& options);
 
     TabletTypePB tablet_type() const { return _tablet_type; }
@@ -157,10 +195,19 @@ public:
 
     const TabletSchema& tablet_schema() const;
 
+<<<<<<< HEAD
     void set_tablet_schema(const std::shared_ptr<const TabletSchema>& tablet_schema) { _schema = tablet_schema; }
 
     std::shared_ptr<const TabletSchema>& tablet_schema_ptr() { return _schema; }
     const std::shared_ptr<const TabletSchema>& tablet_schema_ptr() const { return _schema; }
+=======
+    void set_tablet_schema(const TabletSchemaCSPtr& tablet_schema) { _schema = tablet_schema; }
+    void save_tablet_schema(const TabletSchemaCSPtr& tablet_schema, std::vector<RowsetSharedPtr>& committed_rs,
+                            DataDir* data_dir);
+
+    TabletSchemaCSPtr& tablet_schema_ptr() { return _schema; }
+    const TabletSchemaCSPtr& tablet_schema_ptr() const { return _schema; }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     const std::vector<RowsetMetaSharedPtr>& all_rs_metas() const;
     void add_rs_meta(const RowsetMetaSharedPtr& rs_meta);
@@ -195,12 +242,25 @@ public:
         return _updatesPB.release();
     }
 
+<<<<<<< HEAD
+=======
+    std::string get_storage_type() const { return _storage_type; }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     bool get_enable_persistent_index() const { return _enable_persistent_index; }
 
     void set_enable_persistent_index(bool enable_persistent_index) {
         _enable_persistent_index = enable_persistent_index;
     }
 
+<<<<<<< HEAD
+=======
+    int32_t get_primary_index_cache_expire_sec() const { return _primary_index_cache_expire_sec; }
+    void set_primary_index_cache_expire_sec(int32_t primary_index_cache_expire_sec) {
+        _primary_index_cache_expire_sec = primary_index_cache_expire_sec;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::shared_ptr<BinlogConfig> get_binlog_config() { return _binlog_config; }
 
     void set_binlog_config(const BinlogConfig& new_config) {
@@ -222,10 +282,20 @@ public:
 
     const TabletSchemaCSPtr& source_schema() const { return _source_schema; }
 
+<<<<<<< HEAD
 private:
     int64_t _mem_usage() const { return sizeof(TabletMeta); }
 
     Status _save_meta(DataDir* data_dir);
+=======
+    // for test
+    void TEST_set_table_id(int64_t table_id);
+
+private:
+    int64_t _mem_usage() const { return sizeof(TabletMeta); }
+
+    Status _save_meta(DataDir* data_dir, bool skip_tablet_schema = false);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // _del_pred_array is ignored to compare.
     friend bool operator==(const TabletMeta& a, const TabletMeta& b);
@@ -239,13 +309,21 @@ private:
     int64_t _creation_time = 0;
     int64_t _cumulative_layer_point = 0;
     bool _enable_persistent_index = false;
+<<<<<<< HEAD
+=======
+    int32_t _primary_index_cache_expire_sec = 0;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     TabletUid _tablet_uid;
     TabletTypePB _tablet_type = TabletTypePB::TABLET_TYPE_DISK;
 
     TabletState _tablet_state = TABLET_NOTREADY;
     // Note: Segment store the pointer of TabletSchema,
     // so this point should never change
+<<<<<<< HEAD
     std::shared_ptr<const TabletSchema> _schema = nullptr;
+=======
+    TabletSchemaCSPtr _schema = nullptr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     std::vector<RowsetMetaSharedPtr> _rs_metas;
     std::vector<RowsetMetaSharedPtr> _inc_rs_metas;
@@ -280,6 +358,11 @@ private:
 
     bool _enable_shortcut_compaction = true;
 
+<<<<<<< HEAD
+=======
+    std::string _storage_type;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // If the tablet is replicated from another cluster, the source_schema saved the schema in the cluster
     TabletSchemaCSPtr _source_schema = nullptr;
 
@@ -294,6 +377,13 @@ inline int64_t TabletMeta::table_id() const {
     return _table_id;
 }
 
+<<<<<<< HEAD
+=======
+inline void TabletMeta::TEST_set_table_id(int64_t table_id) {
+    _table_id = table_id;
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 inline int64_t TabletMeta::partition_id() const {
     return _partition_id;
 }
@@ -341,7 +431,11 @@ inline size_t TabletMeta::num_rows() const {
 inline size_t TabletMeta::tablet_footprint() const {
     size_t total_size = 0;
     for (auto& rs : _rs_metas) {
+<<<<<<< HEAD
         total_size += rs->data_disk_size();
+=======
+        total_size += rs->data_disk_size() + rs->index_disk_size();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     return total_size;
 }

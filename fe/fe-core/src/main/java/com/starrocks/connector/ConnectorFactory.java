@@ -15,10 +15,21 @@
 package com.starrocks.connector;
 
 import com.starrocks.connector.config.ConnectorConfig;
+<<<<<<< HEAD
+=======
+import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.informationschema.InformationSchemaConnector;
+import com.starrocks.connector.metadata.TableMetaConnector;
+import org.apache.commons.lang.exception.ExceptionUtils;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.lang.reflect.Constructor;
+<<<<<<< HEAD
+=======
+import java.lang.reflect.InvocationTargetException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 public class ConnectorFactory {
     private static final Logger LOG = LogManager.getLogger(ConnectorFactory.class);
@@ -29,11 +40,37 @@ public class ConnectorFactory {
      * @param context - encapsulate all information needed to create a connector
      * @return a connector instance
      */
+<<<<<<< HEAD
     public static Connector createConnector(ConnectorContext context) {
+=======
+    public static CatalogConnector createConnector(ConnectorContext context, boolean isReplay)
+            throws StarRocksConnectorException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (null == context || !ConnectorType.isSupport(context.getType())) {
             return null;
         }
 
+<<<<<<< HEAD
+=======
+        try {
+            LazyConnector lazyConnector = new LazyConnector(context);
+            if (!isReplay) {
+                lazyConnector.initIfNeeded();
+            }
+
+            InformationSchemaConnector informationSchemaConnector =
+                    new InformationSchemaConnector(context.getCatalogName());
+            TableMetaConnector tableMetaConnector = new TableMetaConnector(context.getCatalogName(), context.getType());
+            return new CatalogConnector(lazyConnector, informationSchemaConnector, tableMetaConnector);
+        } catch (Exception e) {
+            LOG.error(String.format("create [%s] connector failed", context.getType()), e);
+            throw new StarRocksConnectorException(e.getMessage(), e);
+        }
+    }
+
+    public static Connector createRealConnector(ConnectorContext context)
+            throws StarRocksConnectorException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ConnectorType connectorType = ConnectorType.from(context.getType());
         Class<Connector> connectorClass = connectorType.getConnectorClass();
         Class<ConnectorConfig> ctConfigClass = connectorType.getConfigClass();
@@ -49,9 +86,19 @@ public class ConnectorFactory {
             }
 
             return connector;
+<<<<<<< HEAD
         } catch (Exception e) {
             LOG.error("can't create connector for type: " + context.getType(), e);
             return null;
+=======
+        } catch (InvocationTargetException e) {
+            LOG.error(String.format("create [%s] connector failed", context.getType()), e);
+            Throwable rootCause = ExceptionUtils.getCause(e);
+            throw new StarRocksConnectorException(rootCause.getMessage(), rootCause);
+        } catch (Exception e1) {
+            LOG.error(String.format("create [%s] connector failed", context.getType()), e1);
+            throw new StarRocksConnectorException(e1.getMessage(), e1);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 }

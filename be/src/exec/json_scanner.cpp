@@ -25,6 +25,10 @@
 #include "column/adaptive_nullable_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
+<<<<<<< HEAD
+=======
+#include "column/vectorized_fwd.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "exec/json_parser.h"
 #include "exprs/cast_expr.h"
 #include "exprs/column_ref.h"
@@ -68,7 +72,11 @@ Status JsonScanner::open() {
         RETURN_IF_ERROR(parse_json_paths(range.jsonpaths, &_json_paths));
     }
     if (range.__isset.json_root) {
+<<<<<<< HEAD
         JsonFunctions::parse_json_paths(range.json_root, &_root_paths);
+=======
+        RETURN_IF_ERROR(JsonFunctions::parse_json_paths(range.json_root, &_root_paths));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     if (range.__isset.strip_outer_array) {
         _strip_outer_array = range.strip_outer_array;
@@ -109,6 +117,12 @@ StatusOr<ChunkPtr> JsonScanner::get_next() {
             // return Status::EndOfFile("EOF of reading json file, nothing read");
             return src_chunk;
         } else if (status.is_time_out()) {
+<<<<<<< HEAD
+=======
+            if (src_chunk->is_empty()) {
+                _reusable_empty_chunk.swap(src_chunk);
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             // if timeout happens at the beginning of reading src_chunk, we return the error state
             // else we will _materialize the lines read before timeout and return ok()
             return status;
@@ -123,6 +137,51 @@ void JsonScanner::close() {
     FileScanner::close();
 }
 
+<<<<<<< HEAD
+=======
+static TypeDescriptor construct_json_type(const TypeDescriptor& src_type) {
+    switch (src_type.type) {
+    case TYPE_ARRAY: {
+        TypeDescriptor json_type(TYPE_ARRAY);
+        const auto& child_type = src_type.children[0];
+        json_type.children.emplace_back(construct_json_type(child_type));
+        return json_type;
+    }
+    case TYPE_STRUCT: {
+        TypeDescriptor json_type(TYPE_STRUCT);
+        json_type.field_names = src_type.field_names;
+        for (auto& child_type : src_type.children) {
+            json_type.children.emplace_back(construct_json_type(child_type));
+        }
+        return json_type;
+    }
+    case TYPE_MAP: {
+        TypeDescriptor json_type(TYPE_MAP);
+        const auto& key_type = src_type.children[0];
+        const auto& value_type = src_type.children[1];
+        json_type.children.emplace_back(construct_json_type(key_type));
+        json_type.children.emplace_back(construct_json_type(value_type));
+        return json_type;
+    }
+    case TYPE_FLOAT:
+    case TYPE_DOUBLE:
+    case TYPE_BIGINT:
+    case TYPE_INT:
+    case TYPE_SMALLINT:
+    case TYPE_TINYINT:
+    case TYPE_BOOLEAN:
+    case TYPE_CHAR:
+    case TYPE_VARCHAR:
+    case TYPE_JSON: {
+        return src_type;
+    }
+    default:
+        // Treat other types as VARCHAR.
+        return TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+    }
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 Status JsonScanner::_construct_json_types() {
     size_t slot_size = _src_slot_descriptors.size();
     _json_types.resize(slot_size);
@@ -132,6 +191,7 @@ Status JsonScanner::_construct_json_types() {
             continue;
         }
 
+<<<<<<< HEAD
         switch (slot_desc->type().type) {
         case TYPE_ARRAY: {
             TypeDescriptor json_type(TYPE_ARRAY);
@@ -203,6 +263,9 @@ Status JsonScanner::_construct_json_types() {
             break;
         }
         }
+=======
+        _json_types[column_pos] = construct_json_type(slot_desc->type());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     return Status::OK();
 }
@@ -256,7 +319,11 @@ Status JsonScanner::parse_json_paths(const std::string& jsonpath, std::vector<st
             std::vector<SimpleJsonPath> parsed_paths;
             const char* cstr = path.get_c_str();
 
+<<<<<<< HEAD
             JsonFunctions::parse_json_paths(std::string(cstr), &parsed_paths);
+=======
+            RETURN_IF_ERROR(JsonFunctions::parse_json_paths(std::string(cstr), &parsed_paths));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             path_vecs->emplace_back(std::move(parsed_paths));
         }
         return Status::OK();
@@ -268,6 +335,15 @@ Status JsonScanner::parse_json_paths(const std::string& jsonpath, std::vector<st
 }
 
 Status JsonScanner::_create_src_chunk(ChunkPtr* chunk) {
+<<<<<<< HEAD
+=======
+    if (_reusable_empty_chunk) {
+        DCHECK(_reusable_empty_chunk->is_empty());
+        _reusable_empty_chunk.swap(*chunk);
+        return Status::OK();
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     SCOPED_RAW_TIMER(&_counter->init_chunk_ns);
     *chunk = std::make_shared<Chunk>();
     size_t slot_size = _src_slot_descriptors.size();
@@ -308,8 +384,20 @@ Status JsonScanner::_open_next_reader() {
         LOG(WARNING) << "Failed to create sequential files: " << st.to_string();
         return st;
     }
+<<<<<<< HEAD
     _cur_file_reader = std::make_unique<JsonReader>(_state, _counter, this, file, _strict_mode, _src_slot_descriptors);
     RETURN_IF_ERROR(_cur_file_reader->open());
+=======
+    _cur_file_reader = std::make_unique<JsonReader>(_state, _counter, this, file, _strict_mode, _src_slot_descriptors,
+                                                    _json_types, range_desc);
+    st = _cur_file_reader->open();
+    // Timeout can happen when reading data from a TimeBoundedStreamLoadPipe.
+    // In this case, open file should be successful, and just need to try to
+    // read data next time
+    if (!st.ok() && !st.is_time_out()) {
+        return st;
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     _next_range++;
     return Status::OK();
 }
@@ -334,13 +422,19 @@ StatusOr<ChunkPtr> JsonScanner::_cast_chunk(const starrocks::ChunkPtr& src_chunk
 }
 
 JsonReader::JsonReader(starrocks::RuntimeState* state, starrocks::ScannerCounter* counter, JsonScanner* scanner,
+<<<<<<< HEAD
                        std::shared_ptr<SequentialFile> file, bool strict_mode, std::vector<SlotDescriptor*> slot_descs)
+=======
+                       std::shared_ptr<SequentialFile> file, bool strict_mode, std::vector<SlotDescriptor*> slot_descs,
+                       std::vector<TypeDescriptor> type_descs, const TBrokerRangeDesc& range_desc)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         : _state(state),
           _counter(counter),
           _scanner(scanner),
           _strict_mode(strict_mode),
           _file(std::move(file)),
           _slot_descs(std::move(slot_descs)),
+<<<<<<< HEAD
           _op_col_index(-1) {
 #if BE_TEST
     raw::RawVector<char> buf(_buf_size);
@@ -348,6 +442,14 @@ JsonReader::JsonReader(starrocks::RuntimeState* state, starrocks::ScannerCounter
 #endif
     int index = 0;
     for (const auto& desc : _slot_descs) {
+=======
+          _type_descs(std::move(std::move(type_descs))),
+          _op_col_index(-1),
+          _range_desc(range_desc) {
+    int index = 0;
+    for (size_t i = 0; i < _slot_descs.size(); ++i) {
+        const auto& desc = _slot_descs[i];
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (desc == nullptr) {
             continue;
         }
@@ -356,6 +458,10 @@ JsonReader::JsonReader(starrocks::RuntimeState* state, starrocks::ScannerCounter
         }
         index++;
         _slot_desc_dict.emplace(desc->col_name(), desc);
+<<<<<<< HEAD
+=======
+        _type_desc_dict.emplace(desc->col_name(), _type_descs[i]);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }
 
@@ -367,7 +473,11 @@ Status JsonReader::open() {
 }
 
 JsonReader::~JsonReader() {
+<<<<<<< HEAD
     close();
+=======
+    (void)close();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 Status JsonReader::close() {
@@ -568,15 +678,27 @@ Status JsonReader::_construct_row_without_jsonpath(simdjson::ondemand::object* r
                 }
 
                 auto slot_desc = itr->second;
+<<<<<<< HEAD
+=======
+                auto type_desc = _type_desc_dict[key];
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
                 // update the prev parsed position
                 column_index = chunk->get_index_by_slot_id(slot_desc->id());
                 if (_prev_parsed_position.size() <= key_index) {
+<<<<<<< HEAD
                     _prev_parsed_position.emplace_back(key, column_index, slot_desc->type());
                 } else {
                     _prev_parsed_position[key_index].key = key;
                     _prev_parsed_position[key_index].column_index = column_index;
                     _prev_parsed_position[key_index].type = slot_desc->type();
+=======
+                    _prev_parsed_position.emplace_back(key, column_index, type_desc);
+                } else {
+                    _prev_parsed_position[key_index].key = key;
+                    _prev_parsed_position[key_index].column_index = column_index;
+                    _prev_parsed_position[key_index].type = type_desc;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
             }
 
@@ -612,7 +734,11 @@ Status JsonReader::_construct_row_without_jsonpath(simdjson::ondemand::object* r
             if (UNLIKELY(i == _op_col_index)) {
                 // special treatment for __op column, fill default value '0' rather than null
                 if (column->is_binary()) {
+<<<<<<< HEAD
                     std::ignore = column->append_strings(std::vector{Slice{"0"}});
+=======
+                    std::ignore = column->append_strings(std::vector<Slice>{Slice{"0"}});
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 } else {
                     column->append_datum(Datum((uint8_t)0));
                 }
@@ -639,7 +765,12 @@ Status JsonReader::_construct_row_with_jsonpath(simdjson::ondemand::object* row,
             if (strcmp(column_name, "__op") == 0) {
                 // special treatment for __op column, fill default value '0' rather than null
                 if (column->is_binary()) {
+<<<<<<< HEAD
                     column->append_strings(std::vector{Slice{"0"}});
+=======
+                    Slice s{"0"};
+                    column->append_strings(&s, 1);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 } else {
                     column->append_datum(Datum((uint8_t)0));
                 }
@@ -671,7 +802,12 @@ Status JsonReader::_construct_row_with_jsonpath(simdjson::ondemand::object* row,
                 if (strcmp(column_name, "__op") == 0) {
                     // special treatment for __op column, fill default value '0' rather than null
                     if (column->is_binary()) {
+<<<<<<< HEAD
                         column->append_strings(std::vector{Slice{"0"}});
+=======
+                        Slice s{"0"};
+                        column->append_strings(&s, 1);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     } else {
                         column->append_datum(Datum((uint8_t)0));
                     }
@@ -692,6 +828,7 @@ Status JsonReader::_construct_row(simdjson::ondemand::object* row, Chunk* chunk)
     return _construct_row_with_jsonpath(row, chunk);
 }
 
+<<<<<<< HEAD
 // read one json string from file read and parse it to json doc.
 Status JsonReader::_read_and_parse_json() {
     uint8_t* data{};
@@ -750,6 +887,125 @@ Status JsonReader::_read_and_parse_json() {
             return Status::DataQualityError(fmt::format("illegal json started with {}", data[i]));
         }
     }
+=======
+Status JsonReader::_read_file_stream() {
+    // TODO: Remove the down_cast, should not rely on the specific implementation.
+    auto pipe = make_shared<StreamLoadPipeReader>(down_cast<StreamLoadPipeInputStream*>(_file->stream().get())->pipe());
+    if (_range_desc.compression_type != TCompressionType::NO_COMPRESSION &&
+        _range_desc.compression_type != TCompressionType::UNKNOWN_COMPRESSION) {
+        pipe = std::make_shared<CompressedStreamLoadPipeReader>(
+                down_cast<StreamLoadPipeInputStream*>(_file->stream().get())->pipe(), _range_desc.compression_type);
+    }
+    ++_counter->file_read_count;
+    SCOPED_RAW_TIMER(&_counter->file_read_ns);
+    ASSIGN_OR_RETURN(_file_stream_buffer, pipe->read());
+    if (_file_stream_buffer->capacity < _file_stream_buffer->remaining() + simdjson::SIMDJSON_PADDING) {
+        // For efficiency reasons, simdjson requires a string with a few bytes (simdjson::SIMDJSON_PADDING) at the end.
+        // Hence, a re-allocation is needed if the space is not enough.
+        ASSIGN_OR_RETURN(auto buf, ByteBuffer::allocate_with_tracker(_file_stream_buffer->remaining() +
+                                                                     simdjson::SIMDJSON_PADDING));
+        buf->put_bytes(_file_stream_buffer->ptr, _file_stream_buffer->remaining());
+        buf->flip();
+        std::swap(buf, _file_stream_buffer);
+    }
+
+    _state->update_num_bytes_scan_from_source(_file_stream_buffer->remaining());
+
+    _payload = _file_stream_buffer->ptr;
+    _payload_size = _file_stream_buffer->remaining();
+    _payload_capacity = _file_stream_buffer->capacity;
+
+    return Status::OK();
+}
+
+// read one json string from file read and parse it to json doc.
+Status JsonReader::_read_file_broker() {
+    ++_counter->file_read_count;
+    SCOPED_RAW_TIMER(&_counter->file_read_ns);
+
+    // TODO: Remove the down_cast, should not rely on the specific implementation.
+    auto* stream = down_cast<io::SeekableInputStream*>(_file->stream().get());
+    auto res = stream->get_size();
+    if (!res.ok()) {
+        return res.status();
+    }
+    auto sz = res.value();
+    if (sz == 0) {
+        return Status::EndOfFile("EOF of reading file");
+    }
+
+    if (sz >= _scanner->_params.json_file_size_limit) {
+        return Status::MemoryLimitExceeded(
+                fmt::format("The file size {} exceeds the limit {}, adjust the FE configuration json_file_size_limit "
+                            "if you are sure you want to perform the operation",
+                            sz, _scanner->_params.json_file_size_limit));
+    }
+
+    if (sz + simdjson::SIMDJSON_PADDING > _file_broker_buffer_capacity) {
+        // reallocate if needed.
+        // For efficiency reasons, simdjson requires a string with a few bytes (simdjson::SIMDJSON_PADDING) at the end.
+        // Hence, a re-allocation is needed if the space is not enough.
+        auto allocated = sz + simdjson::SIMDJSON_PADDING;
+        _file_broker_buffer.reset(new char[allocated]);
+        _file_broker_buffer_capacity = allocated;
+        _file_broker_buffer_size = 0;
+    }
+
+    {
+        auto res = _file->read(reinterpret_cast<void*>(_file_broker_buffer.get()), sz);
+        if (!res.ok()) {
+            return res.status();
+        }
+        _file_broker_buffer_size = res.value();
+
+        if (res.value() <= 0) {
+            return Status::EndOfFile("EOF of reading file");
+        }
+        _state->update_num_bytes_scan_from_source(_file_broker_buffer_size);
+    }
+    _payload = _file_broker_buffer.get();
+    _payload_size = _file_broker_buffer_size;
+    _payload_capacity = _file_broker_buffer_capacity;
+
+    return Status::OK();
+}
+
+Status JsonReader::_check_ndjson() {
+    // Check the content format according to the first non-space character.
+    // Treat json string started with '{' as ndjson.
+    // Treat json string started with '[' as json array.
+    for (size_t i = 0; i < _payload_size; ++i) {
+        // Skip spaces at the string head.
+        const auto& c = _payload[i];
+        if (c == ' ' || c == '\t' || c == '\r' || c == '\n') continue;
+
+        if (c == '[') {
+            break;
+        } else if (c == '{') {
+            _is_ndjson = true;
+            break;
+        } else {
+            LOG(WARNING) << "illegal json started with [" << c << "]";
+            return Status::DataQualityError(fmt::format("illegal json started with {}", c));
+        }
+    }
+    return Status::OK();
+}
+
+// read one json string from file read and parse it to json doc.
+Status JsonReader::_read_and_parse_json() {
+    const auto& file_type = _scanner->_scan_range.ranges[0].file_type;
+    if (file_type == TFileType::FILE_STREAM) {
+        RETURN_IF_ERROR(_read_file_stream());
+    } else if (file_type == TFileType::FILE_BROKER || file_type == TFileType::FILE_LOCAL) {
+        // TFileType::FILE_LOCAL is only used in test.
+        RETURN_IF_ERROR(_read_file_broker());
+    } else {
+        return Status::NotSupported(fmt::format("not support file type: {}", file_type));
+    }
+
+    RETURN_IF_ERROR(_check_ndjson());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     if (!_scanner->_root_paths.empty()) {
         // With json root set, expand the outer array automatically.
@@ -779,7 +1035,11 @@ Status JsonReader::_read_and_parse_json() {
     }
 
     _empty_parser = false;
+<<<<<<< HEAD
     return _parser->parse(data, length, length + simdjson::SIMDJSON_PADDING);
+=======
+    return _parser->parse(_payload, _payload_size, _payload_capacity);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 // _construct_column constructs column based on no value.

@@ -34,6 +34,10 @@
 
 package com.starrocks.http.rest;
 
+<<<<<<< HEAD
+=======
+import com.starrocks.authorization.AccessDeniedException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.DdlException;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
@@ -62,7 +66,11 @@ public class MetaReplayerCheckAction extends RestBaseAction {
     }
 
     @Override
+<<<<<<< HEAD
     protected void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException {
+=======
+    protected void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException, AccessDeniedException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         UserIdentity currentUser = ConnectContext.get().getCurrentUserIdentity();
         checkUserOwnsAdminRole(currentUser);
 

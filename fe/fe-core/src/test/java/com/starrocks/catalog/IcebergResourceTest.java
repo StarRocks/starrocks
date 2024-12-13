@@ -16,6 +16,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Maps;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
 import com.starrocks.connector.iceberg.IcebergCatalogType;
 import com.starrocks.mysql.privilege.Auth;
@@ -25,6 +26,17 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Injectable;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.connector.iceberg.IcebergCatalogType;
+import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.ast.CreateResourceStmt;
+import com.starrocks.utframe.UtFrameUtils;
+import mockit.Expectations;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
@@ -42,7 +54,11 @@ public class IcebergResourceTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testFromStmt(@Mocked GlobalStateMgr globalStateMgr, @Injectable Auth auth) throws UserException {
+=======
+    public void testFromStmt(@Mocked GlobalStateMgr globalStateMgr) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         String name = "iceberg0";
         String type = "iceberg";
         String catalogType = "HIVE";
@@ -52,6 +68,16 @@ public class IcebergResourceTest {
         properties.put("iceberg.catalog.type", catalogType);
         properties.put("iceberg.catalog.hive.metastore.uris", metastoreURIs);
         CreateResourceStmt stmt = new CreateResourceStmt(true, name, properties);
+<<<<<<< HEAD
+=======
+        Analyzer analyzer = new Analyzer(Analyzer.AnalyzerVisitor.getInstance());
+        new Expectations() {
+            {
+                globalStateMgr.getAnalyzer();
+                result = analyzer;
+            }
+        };
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
         IcebergResource resource = (IcebergResource) Resource.fromStmt(stmt);
         Assert.assertEquals("iceberg0", resource.getName());
@@ -65,7 +91,11 @@ public class IcebergResourceTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testCustomStmt(@Mocked GlobalStateMgr globalStateMgr, @Injectable Auth auth) throws UserException {
+=======
+    public void testCustomStmt(@Mocked GlobalStateMgr globalStateMgr) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         String name = "iceberg1";
         String type = "iceberg";
         String catalogType = "CUSTOM";
@@ -75,6 +105,17 @@ public class IcebergResourceTest {
         properties.put("iceberg.catalog.type", catalogType);
         properties.put("iceberg.catalog-impl", catalogImpl);
         CreateResourceStmt stmt = new CreateResourceStmt(true, name, properties);
+<<<<<<< HEAD
+=======
+
+        Analyzer analyzer = new Analyzer(Analyzer.AnalyzerVisitor.getInstance());
+        new Expectations() {
+            {
+                globalStateMgr.getAnalyzer();
+                result = analyzer;
+            }
+        };
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
         IcebergResource resource = (IcebergResource) Resource.fromStmt(stmt);
         Assert.assertEquals("iceberg1", resource.getName());

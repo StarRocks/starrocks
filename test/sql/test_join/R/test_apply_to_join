@@ -7,8 +7,12 @@ CREATE TABLE `t0` (
 DUPLICATE KEY(`v1`, `v2`, v3)
 DISTRIBUTED BY HASH(`v1`) BUCKETS 3
 PROPERTIES (
+<<<<<<< HEAD
 "replication_num" = "1",
 "in_memory" = "false"
+=======
+"replication_num" = "1"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 );
 -- result:
 -- !result
@@ -20,8 +24,12 @@ CREATE TABLE `t1` (
 DUPLICATE KEY(`v4`, `v5`, v6)
 DISTRIBUTED BY HASH(`v4`) BUCKETS 3
 PROPERTIES (
+<<<<<<< HEAD
 "replication_num" = "1",
 "in_memory" = "false"
+=======
+"replication_num" = "1"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 );
 -- result:
 -- !result
@@ -33,8 +41,12 @@ CREATE TABLE `t2` (
 DUPLICATE KEY(`v7`, `v8`, v9)
 DISTRIBUTED BY HASH(`v7`) BUCKETS 3
 PROPERTIES (
+<<<<<<< HEAD
 "replication_num" = "1",
 "in_memory" = "false"
+=======
+"replication_num" = "1"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 );
 -- result:
 -- !result
@@ -94,4 +106,8 @@ select count(*) from t0 left join t1 on (select count(*) from t2) > 0 or v1 + v4
 select count(*) from t0 left join t1 on (select count(*) from t2) > v1 + v4 or v1 < v4;
 -- result:
 33
+<<<<<<< HEAD
 -- !result
+=======
+-- !result
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

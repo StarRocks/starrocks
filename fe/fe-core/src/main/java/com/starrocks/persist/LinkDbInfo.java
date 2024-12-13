@@ -24,6 +24,10 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
+<<<<<<< HEAD
+=======
+@Deprecated
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public class LinkDbInfo implements Writable {
     private String cluster;
     private String name;
@@ -34,12 +38,15 @@ public class LinkDbInfo implements Writable {
         this.name = "";
     }
 
+<<<<<<< HEAD
     public LinkDbInfo(String name, long id) {
         this.name = name;
         this.id = id;
         this.cluster = "";
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public String getName() {
         return name;
     }

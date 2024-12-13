@@ -31,9 +31,15 @@ class PublishVersionManager {
 public:
     Status init();
     ~PublishVersionManager();
+<<<<<<< HEAD
     Status wait_publish_task_apply_finish(std::vector<TFinishTaskRequest> finish_task_requests);
     bool has_pending_task() { return !_finish_task_requests.empty() || !_waitting_finish_task_requests.empty(); }
     Status finish_publish_version_task();
+=======
+    void wait_publish_task_apply_finish(std::vector<TFinishTaskRequest> finish_task_requests);
+    bool has_pending_task() { return !_finish_task_requests.empty() || !_waitting_finish_task_requests.empty(); }
+    void finish_publish_version_task();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     void update_tablet_version(TFinishTaskRequest& finish_task_request);
 
     size_t finish_task_requests_size() { return _finish_task_requests.size(); }

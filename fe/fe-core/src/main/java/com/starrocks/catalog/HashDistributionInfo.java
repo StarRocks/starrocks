@@ -38,6 +38,7 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Objects;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
+<<<<<<< HEAD
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.HashDistributionDesc;
@@ -49,13 +50,42 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+=======
+import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.planner.OlapScanNode;
+import com.starrocks.sql.ast.DistributionDesc;
+import com.starrocks.sql.ast.HashDistributionDesc;
+import com.starrocks.sql.common.MetaUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+import static java.util.Objects.requireNonNull;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 /**
  * Hash Distribution Info.
  */
+<<<<<<< HEAD
 public class HashDistributionInfo extends DistributionInfo {
     @SerializedName(value = "distributionColumns")
     private List<Column> distributionColumns;
+=======
+public class HashDistributionInfo extends DistributionInfo implements GsonPostProcessable {
+
+    @SerializedName("colIds")
+    private List<ColumnId> distributionColumnIds;
+
+    @SerializedName(value = "distributionColumns")
+    @Deprecated // Use distributionColumnIds to get columns, this is reserved for rollback compatibility only.
+    private List<Column> deprecatedColumns;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @SerializedName(value = "bucketNum")
     private int bucketNum;
 
@@ -63,12 +93,24 @@ public class HashDistributionInfo extends DistributionInfo {
 
     public HashDistributionInfo() {
         super();
+<<<<<<< HEAD
         this.distributionColumns = new ArrayList<Column>();
+=======
+        this.deprecatedColumns = new ArrayList<>();
+        this.distributionColumnIds = new ArrayList<>();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public HashDistributionInfo(int bucketNum, List<Column> distributionColumns) {
         super(DistributionInfoType.HASH);
+<<<<<<< HEAD
         this.distributionColumns = distributionColumns;
+=======
+        this.deprecatedColumns = requireNonNull(distributionColumns, "distributionColumns is null");
+        this.distributionColumnIds = distributionColumns.stream()
+                .map(Column::getColumnId)
+                .collect(Collectors.toList());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.bucketNum = bucketNum;
     }
 
@@ -77,8 +119,14 @@ public class HashDistributionInfo extends DistributionInfo {
         return true;
     }
 
+<<<<<<< HEAD
     public List<Column> getDistributionColumns() {
         return distributionColumns;
+=======
+    @Override
+    public List<ColumnId> getDistributionColumns() {
+        return distributionColumnIds;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -87,9 +135,15 @@ public class HashDistributionInfo extends DistributionInfo {
     }
 
     @Override
+<<<<<<< HEAD
     public String getDistributionKey() {
         List<String> colNames = Lists.newArrayList();
         for (Column column : distributionColumns) {
+=======
+    public String getDistributionKey(Map<ColumnId, Column> schema) {
+        List<String> colNames = Lists.newArrayList();
+        for (Column column : MetaUtils.getColumnsByColumnIds(schema, distributionColumnIds)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             colNames.add("`" + column.getName() + "`");
         }
         String colList = Joiner.on(", ").join(colNames);
@@ -97,7 +151,14 @@ public class HashDistributionInfo extends DistributionInfo {
     }
 
     public void setDistributionColumns(List<Column> columns) {
+<<<<<<< HEAD
         this.distributionColumns = columns;
+=======
+        this.deprecatedColumns = columns;
+        this.distributionColumnIds = columns.stream()
+                .map(column -> ColumnId.create(column.getName()))
+                .collect(Collectors.toList());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -105,6 +166,7 @@ public class HashDistributionInfo extends DistributionInfo {
         this.bucketNum = bucketNum;
     }
 
+<<<<<<< HEAD
     public void write(DataOutput out) throws IOException {
         super.write(out);
         int columnCount = distributionColumns.size();
@@ -134,6 +196,11 @@ public class HashDistributionInfo extends DistributionInfo {
     @Override
     public int hashCode() {
         return Objects.hashCode(type, bucketNum, distributionColumns);
+=======
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(type, bucketNum, distributionColumnIds);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -150,6 +217,7 @@ public class HashDistributionInfo extends DistributionInfo {
 
         return type == hashDistributionInfo.type
                 && bucketNum == hashDistributionInfo.bucketNum
+<<<<<<< HEAD
                 && distributionColumns.equals(hashDistributionInfo.distributionColumns);
     }
 
@@ -157,6 +225,15 @@ public class HashDistributionInfo extends DistributionInfo {
     public DistributionDesc toDistributionDesc() {
         List<String> distriColNames = Lists.newArrayList();
         for (Column col : distributionColumns) {
+=======
+                && distributionColumnIds.equals(hashDistributionInfo.distributionColumnIds);
+    }
+
+    @Override
+    public DistributionDesc toDistributionDesc(Map<ColumnId, Column> schema) {
+        List<String> distriColNames = Lists.newArrayList();
+        for (Column col : MetaUtils.getColumnsByColumnIds(schema, distributionColumnIds)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             distriColNames.add(col.getName());
         }
         DistributionDesc distributionDesc = new HashDistributionDesc(bucketNum, distriColNames);
@@ -164,17 +241,37 @@ public class HashDistributionInfo extends DistributionInfo {
     }
 
     @Override
+<<<<<<< HEAD
     public HashDistributionInfo copy() {
         return new HashDistributionInfo(bucketNum, distributionColumns);
     }
 
     @Override
     public String toSql() {
+=======
+    public void gsonPostProcess() throws IOException {
+        if (distributionColumnIds == null || distributionColumnIds.size() <= 0) {
+            distributionColumnIds = deprecatedColumns.stream().map(Column::getColumnId).collect(Collectors.toList());
+        }
+    }
+
+    @Override
+    public HashDistributionInfo copy() {
+        return new HashDistributionInfo(bucketNum, deprecatedColumns);
+    }
+
+    @Override
+    public String toSql(Map<ColumnId, Column> schema) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         StringBuilder builder = new StringBuilder();
         builder.append("DISTRIBUTED BY HASH(");
 
         List<String> colNames = Lists.newArrayList();
+<<<<<<< HEAD
         for (Column column : distributionColumns) {
+=======
+        for (Column column : MetaUtils.getColumnsByColumnIds(schema, distributionColumnIds)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             colNames.add("`" + column.getName() + "`");
         }
         String colList = Joiner.on(", ").join(colNames);
@@ -192,8 +289,13 @@ public class HashDistributionInfo extends DistributionInfo {
         builder.append("type: ").append(type).append("; ");
 
         builder.append("distribution columns: [");
+<<<<<<< HEAD
         for (Column column : distributionColumns) {
             builder.append(column.getName()).append(",");
+=======
+        for (ColumnId name : distributionColumnIds) {
+            builder.append(name.getId()).append(",");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         builder.append("]; ");
 

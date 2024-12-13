@@ -26,7 +26,11 @@ static int max_size = 20480 * 2;
 
 TEST(AvxTest, seqFilterTest) {
     std::vector<int32_t> data;
+<<<<<<< HEAD
     std::vector<uint8_t> filter;
+=======
+    Filter filter;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     for (int i = 0; i < max_size / 2; ++i) {
         data.push_back(i);
@@ -59,7 +63,11 @@ TEST(AvxTest, seqFilterTest) {
 
 TEST(AvxTest, seqProgmaFilterTest) {
     std::vector<int32_t> data;
+<<<<<<< HEAD
     std::vector<uint8_t> filter;
+=======
+    Filter filter;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     for (int i = 0; i < max_size / 2; ++i) {
         data.push_back(i);
@@ -92,7 +100,11 @@ TEST(AvxTest, seqProgmaFilterTest) {
 
 TEST(AvxTest, seqAvxFilterTest) {
     std::vector<int32_t> data;
+<<<<<<< HEAD
     std::vector<uint8_t> filter;
+=======
+    Filter filter;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     for (int i = 0; i < max_size / 2; ++i) {
         data.push_back(i);
@@ -124,7 +136,11 @@ TEST(AvxTest, seqAvxFilterTest) {
 
 TEST(AvxTest, randomFilterTest) {
     std::vector<int32_t> data;
+<<<<<<< HEAD
     std::vector<uint8_t> filter;
+=======
+    Filter filter;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     for (int i = 0; i < max_size; ++i) {
         data.push_back(i);
@@ -152,7 +168,11 @@ TEST(AvxTest, randomFilterTest) {
 
 TEST(AvxTest, randomProgmaFilterTest) {
     std::vector<int32_t> data;
+<<<<<<< HEAD
     std::vector<uint8_t> filter;
+=======
+    Filter filter;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     for (int i = 0; i < max_size; ++i) {
         data.push_back(i);
@@ -180,7 +200,11 @@ TEST(AvxTest, randomProgmaFilterTest) {
 
 TEST(AvxTest, randomAvxFilterTest) {
     std::vector<int32_t> data;
+<<<<<<< HEAD
     std::vector<uint8_t> filter;
+=======
+    Filter filter;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     for (int i = 0; i < max_size; ++i) {
         data.push_back(i);

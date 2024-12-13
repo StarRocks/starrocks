@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     l_orderkey,
@@ -21,6 +22,8 @@ group by
 order by
     revenue desc,
     o_orderdate limit 10;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 [result]
 TOP-N (order by [[38: sum DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FIRST]])
     TOP-N (order by [[38: sum DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FIRST]])

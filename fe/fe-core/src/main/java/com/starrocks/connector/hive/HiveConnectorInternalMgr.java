@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.hive;
 
+<<<<<<< HEAD
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.starrocks.common.Config;
 import com.starrocks.connector.CachingRemoteFileConf;
@@ -23,12 +24,38 @@ import com.starrocks.connector.ReentrantExecutor;
 import com.starrocks.connector.RemoteFileIO;
 
 import java.util.Map;
+=======
+import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import com.starrocks.common.Config;
+import com.starrocks.common.util.Util;
+import com.starrocks.connector.CachingRemoteFileConf;
+import com.starrocks.connector.CachingRemoteFileIO;
+import com.starrocks.connector.HdfsEnvironment;
+import com.starrocks.connector.MetastoreType;
+import com.starrocks.connector.ReentrantExecutor;
+import com.starrocks.connector.RemoteFileIO;
+import com.starrocks.sql.analyzer.SemanticException;
+
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.Executor;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import static com.starrocks.connector.CachingRemoteFileIO.NEVER_REFRESH;
+<<<<<<< HEAD
 
 public class HiveConnectorInternalMgr {
+=======
+import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_TYPE;
+import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_URIS;
+
+public class HiveConnectorInternalMgr {
+    public static final List<String> SUPPORTED_METASTORE_TYPE = Lists.newArrayList("hive", "glue", "dlf");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private final String catalogName;
     private final HdfsEnvironment hdfsEnvironment;
     private final Map<String, String> properties;
@@ -41,12 +68,25 @@ public class HiveConnectorInternalMgr {
     private ExecutorService refreshHiveMetastoreExecutor;
     private ExecutorService refreshRemoteFileExecutor;
     private ExecutorService pullRemoteFileExecutor;
+<<<<<<< HEAD
 
     private final boolean isRecursive;
     private final int loadRemoteFileMetadataThreadNum;
     private final boolean enableHmsEventsIncrementalSync;
 
     private final boolean enableBackgroundRefreshHiveMetadata;
+=======
+    private ExecutorService updateRemoteFilesExecutor;
+    private ExecutorService updateStatisticsExecutor;
+
+    private final boolean isRecursive;
+    private final int loadRemoteFileMetadataThreadNum;
+    private final int updateRemoteFileMetadataThreadNum;
+    private final boolean enableHmsEventsIncrementalSync;
+
+    private final boolean enableBackgroundRefreshHiveMetadata;
+    private final MetastoreType metastoreType;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public HiveConnectorInternalMgr(String catalogName, Map<String, String> properties, HdfsEnvironment hdfsEnvironment) {
         this.catalogName = catalogName;
@@ -61,11 +101,31 @@ public class HiveConnectorInternalMgr {
         this.isRecursive = Boolean.parseBoolean(properties.getOrDefault("enable_recursive_listing", "true"));
         this.loadRemoteFileMetadataThreadNum = Integer.parseInt(properties.getOrDefault("remote_file_load_thread_num",
                 String.valueOf(Config.remote_file_metadata_load_concurrency)));
+<<<<<<< HEAD
+=======
+        this.updateRemoteFileMetadataThreadNum = Integer.parseInt(properties.getOrDefault("remote_file_update_thread_num",
+                String.valueOf(Config.remote_file_metadata_load_concurrency / 4)));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.enableHmsEventsIncrementalSync = Boolean.parseBoolean(properties.getOrDefault("enable_hms_events_incremental_sync",
                 String.valueOf(Config.enable_hms_events_incremental_sync)));
 
         this.enableBackgroundRefreshHiveMetadata = Boolean.parseBoolean(properties.getOrDefault(
                 "enable_background_refresh_connector_metadata", "true"));
+<<<<<<< HEAD
+=======
+
+        String hiveMetastoreType = properties.getOrDefault(HIVE_METASTORE_TYPE, "hive").toLowerCase();
+        if (!SUPPORTED_METASTORE_TYPE.contains(hiveMetastoreType)) {
+            throw new SemanticException("hive metastore type [%s] is not supported", hiveMetastoreType);
+        }
+
+        if (hiveMetastoreType.equals("hive")) {
+            String hiveMetastoreUris = Preconditions.checkNotNull(properties.get(HIVE_METASTORE_URIS),
+                    "%s must be set in properties when creating hive catalog", HIVE_METASTORE_URIS);
+            Util.validateMetastoreUris(hiveMetastoreUris);
+        }
+        this.metastoreType = MetastoreType.get(hiveMetastoreType);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public void shutdown() {
@@ -83,7 +143,11 @@ public class HiveConnectorInternalMgr {
     public IHiveMetastore createHiveMetastore() {
         // TODO(stephen): Abstract the creator class to construct hive meta client
         HiveMetaClient metaClient = HiveMetaClient.createHiveMetaClient(hdfsEnvironment, properties);
+<<<<<<< HEAD
         IHiveMetastore hiveMetastore = new HiveMetastore(metaClient, catalogName);
+=======
+        IHiveMetastore hiveMetastore = new HiveMetastore(metaClient, catalogName, metastoreType);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         IHiveMetastore baseHiveMetastore;
         if (!enableMetastoreCache) {
             baseHiveMetastore = hiveMetastore;
@@ -133,6 +197,30 @@ public class HiveConnectorInternalMgr {
         return pullRemoteFileExecutor;
     }
 
+<<<<<<< HEAD
+=======
+    public ExecutorService getupdateRemoteFilesExecutor() {
+        if (updateRemoteFilesExecutor == null) {
+            updateRemoteFilesExecutor = Executors.newFixedThreadPool(updateRemoteFileMetadataThreadNum,
+                    new ThreadFactoryBuilder().setNameFormat("update-hive-remote-files-%d").build());
+        }
+
+        return updateRemoteFilesExecutor;
+    }
+
+    public Executor getUpdateStatisticsExecutor() {
+        Executor baseExecutor = Executors.newCachedThreadPool(
+                new ThreadFactoryBuilder().setNameFormat("hive-metastore-update-%d").build());
+        return new ReentrantExecutor(baseExecutor, remoteFileConf.getRefreshMaxThreadNum());
+    }
+
+    public Executor getRefreshOthersFeExecutor() {
+        Executor baseExecutor = Executors.newCachedThreadPool(
+                new ThreadFactoryBuilder().setNameFormat("refresh-others-fe-hive-metadata-cache-%d").build());
+        return new ReentrantExecutor(baseExecutor, remoteFileConf.getRefreshMaxThreadNum());
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public boolean isSearchRecursive() {
         return isRecursive;
     }
@@ -156,4 +244,12 @@ public class HiveConnectorInternalMgr {
     public boolean isEnableBackgroundRefreshHiveMetadata() {
         return enableBackgroundRefreshHiveMetadata;
     }
+<<<<<<< HEAD
 }
+=======
+
+    public MetastoreType getMetastoreType() {
+        return metastoreType;
+    }
+}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

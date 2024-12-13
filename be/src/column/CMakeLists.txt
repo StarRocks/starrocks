@@ -16,6 +16,10 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/column")
 
 add_library(Column STATIC
         array_column.cpp
+<<<<<<< HEAD
+=======
+        array_view_column.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         adaptive_nullable_column.cpp
         chunk.cpp
         chunk_extra_data.cpp

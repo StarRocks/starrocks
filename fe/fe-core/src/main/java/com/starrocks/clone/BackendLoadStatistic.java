@@ -37,14 +37,28 @@ package com.starrocks.clone;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+<<<<<<< HEAD
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.DiskInfo.DiskState;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.clone.BalanceStatus.ErrCode;
+=======
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
+import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.DiskInfo;
+import com.starrocks.catalog.DiskInfo.DiskState;
+import com.starrocks.catalog.TabletInvertedIndex;
+import com.starrocks.clone.BackendsFitStatus.ErrCode;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.monitor.unit.ByteSizeValue;
+<<<<<<< HEAD
+=======
+import com.starrocks.persist.gson.GsonUtils;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageMedium;
@@ -145,10 +159,25 @@ public class BackendLoadStatistic {
     private SystemInfoService infoService;
     private TabletInvertedIndex invertedIndex;
 
+<<<<<<< HEAD
     private long beId;
     private String clusterName;
 
     private boolean isAvailable;
+=======
+    @SerializedName(value = "beId")
+    private long beId;
+    @SerializedName(value = "clusterName")
+    private String clusterName;
+    @SerializedName(value = "isAvailable")
+    private boolean isAvailable;
+    @SerializedName(value = "cpuCores")
+    private int cpuCores;
+    @SerializedName(value = "memLimit")
+    private long memLimit;
+    @SerializedName(value = "memUsed")
+    private long memUsed;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public static class LoadScore {
         public double replicaNumCoefficient = 0.5;
@@ -261,6 +290,12 @@ public class BackendLoadStatistic {
         }
 
         isAvailable = be.isAvailable();
+<<<<<<< HEAD
+=======
+        cpuCores = be.getCpuCores();
+        memLimit = be.getMemLimitBytes();
+        memUsed = be.getMemUsedBytes();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         ImmutableMap<String, DiskInfo> disks = be.getDisks();
         for (DiskInfo diskInfo : disks.values()) {
@@ -388,9 +423,15 @@ public class BackendLoadStatistic {
         return loadScore;
     }
 
+<<<<<<< HEAD
     public BalanceStatus isFit(long tabletSize, TStorageMedium medium,
                                List<RootPathLoadStatistic> result, boolean isSupplement) {
         BalanceStatus status = new BalanceStatus(ErrCode.COMMON_ERROR);
+=======
+    public BackendsFitStatus isFit(long tabletSize, TStorageMedium medium,
+                                   List<RootPathLoadStatistic> result, boolean isSupplement) {
+        BackendsFitStatus status = new BackendsFitStatus(ErrCode.COMMON_ERROR);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // try choosing path from first to end (low usage to high usage)
         List<RootPathLoadStatistic> mediumNotMatchedPath = Lists.newArrayList();
         for (RootPathLoadStatistic pathStatistic : pathStatistics) {
@@ -399,27 +440,43 @@ public class BackendLoadStatistic {
                 continue;
             }
 
+<<<<<<< HEAD
             BalanceStatus bStatus = pathStatistic.isFit(tabletSize);
+=======
+            BackendsFitStatus bStatus = pathStatistic.isFit(tabletSize);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (!bStatus.ok()) {
                 status.addErrMsgs(bStatus.getErrMsgs());
                 continue;
             }
 
             result.add(pathStatistic);
+<<<<<<< HEAD
             return BalanceStatus.OK;
+=======
+            return BackendsFitStatus.OK;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         // if this is a supplement task, ignore the storage medium
         if (isSupplement || !Config.enable_strict_storage_medium_check) {
             for (RootPathLoadStatistic filteredPathStatistic : mediumNotMatchedPath) {
+<<<<<<< HEAD
                 BalanceStatus bStatus = filteredPathStatistic.isFit(tabletSize);
+=======
+                BackendsFitStatus bStatus = filteredPathStatistic.isFit(tabletSize);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (!bStatus.ok()) {
                     status.addErrMsgs(bStatus.getErrMsgs());
                     continue;
                 }
 
                 result.add(filteredPathStatistic);
+<<<<<<< HEAD
                 return BalanceStatus.OK;
+=======
+                return BackendsFitStatus.OK;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
         return status;
@@ -450,6 +507,7 @@ public class BackendLoadStatistic {
 
     @Override
     public String toString() {
+<<<<<<< HEAD
         StringBuilder sb = new StringBuilder();
         sb.append("be id: ").append(beId).append(", is available: ").append(isAvailable).append(", mediums: [");
         for (TStorageMedium medium : TStorageMedium.values()) {
@@ -464,6 +522,32 @@ public class BackendLoadStatistic {
             sb.append("{").append(pathStat).append("},");
         }
         return sb.append("]").toString();
+=======
+        // Basic information
+        JsonObject json = (JsonObject) GsonUtils.GSON.toJsonTree(this);
+
+        // Mediums
+        JsonArray mediums = new JsonArray();
+        for (TStorageMedium medium : TStorageMedium.values()) {
+            JsonObject mediumJson = new JsonObject();
+            mediumJson.addProperty("medium", medium.toString());
+            mediumJson.addProperty("replica", totalReplicaNumMap.get(medium));
+            mediumJson.addProperty("used", totalUsedCapacityMap.getOrDefault(medium, 0L));
+            mediumJson.addProperty("total", new ByteSizeValue(totalCapacityMap.getOrDefault(medium, 0L)).toString());
+            mediumJson.addProperty("score", loadScoreMap.getOrDefault(medium, LoadScore.DUMMY).score);
+            mediums.add(mediumJson);
+        }
+        json.add("mediums", mediums);
+
+        // Paths
+        JsonArray paths = new JsonArray();
+        for (RootPathLoadStatistic pathStat : pathStatistics) {
+            paths.add(pathStat.toJson());
+        }
+        json.add("paths", paths);
+
+        return json.toString();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public List<String> getInfo(TStorageMedium medium) {

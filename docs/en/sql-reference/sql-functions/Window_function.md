@@ -17,6 +17,10 @@ sidebar_position: 0.9
   - [Function examples](#function-examples)
     - [AVG()](#avg)
     - [COUNT()](#count)
+<<<<<<< HEAD
+=======
+    - [CUME\_DIST()](#cume_dist)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     - [DENSE\_RANK()](#dense_rank)
     - [FIRST\_VALUE()](#first_value)
     - [LAST\_VALUE()](#last_value)
@@ -25,6 +29,10 @@ sidebar_position: 0.9
     - [MAX()](#max)
     - [MIN()](#min)
     - [NTILE()](#ntile)
+<<<<<<< HEAD
+=======
+    - [PERCENT\_RANK()](#percent_rank)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     - [RANK()](#rank)
     - [ROW\_NUMBER()](#row_number)
     - [QUALIFY()](#qualify)
@@ -46,7 +54,11 @@ The window function is a special class of built-in functions. Similar to the agg
 ### Syntax
 
 ```SQL
+<<<<<<< HEAD
 function(args) OVER(partition_by_clause order_by_clause [window_clause])
+=======
+function(args) OVER([partition_by_clause] [order_by_clause] [order_by_clause window_clause])
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 partition_by_clause ::= PARTITION BY expr [, expr ...]
 order_by_clause ::= ORDER BY expr [ASC | DESC] [, expr [ASC | DESC] ...]
 ```
@@ -216,6 +228,71 @@ from scores where subject in ('math') and score > 90;
 +------+-------+---------+-------+-------------+
 ```
 
+<<<<<<< HEAD
+=======
+### CUME_DIST()
+
+The CUME_DIST() function calculates the cumulative distribution of a value within a partition or window, indicating its relative position as a percentage in the partition. It is often used to calculate the distribution of highest or lowest values in a group.
+
+- If data is sorted in ascending order, this function calculates the percentage of values less than or equal to the value in the current row.
+- If data is sorted in descending order, this function calculates the percentage of values greater than or equal to the value in the current row.
+
+The cumulative distribution is in the range of 0 to 1. It is useful for percentile calculation and data distribution analysis.
+
+This function is supported from v3.2.
+
+**Syntax:**
+
+```SQL
+CUME_DIST() OVER (partition_by_clause order_by_clause)
+```
+
+- `partition_by_clause`: optional. If this clause is not specified, the entire result set is processed as a single partition.
+- `order_by_clause`: **This function must be used with ORDER BY to sort partition rows into the desired order.**
+
+CUME_DIST() contains NULL values and treats them as the lowest values.
+
+**Examples:**
+
+The following example shows the cumulative distribution of each score within each `subject` group. This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
+
+```plaintext
+SELECT *, 
+    cume_dist() 
+      OVER (
+        PARTITION BY subject
+        ORDER BY score
+      ) AS cume_dist 
+FROM scores;
++------+-------+---------+-------+---------------------+
+| id   | name  | subject | score | cume_dist           |
++------+-------+---------+-------+---------------------+
+|    6 | amber | NULL    |    90 |                   1 |
+|    3 | jack  | english |  NULL |                 0.2 |
+|    5 | mike  | english |    85 |                 0.4 |
+|    4 | amy   | english |    92 |                 0.6 |
+|    2 | tom   | english |    98 |                 0.8 |
+|    1 | lily  | english |   100 |                   1 |
+|    1 | lily  | math    |  NULL | 0.16666666666666666 |
+|    5 | mike  | math    |    70 |  0.3333333333333333 |
+|    2 | tom   | math    |    80 |  0.6666666666666666 |
+|    4 | amy   | math    |    80 |  0.6666666666666666 |
+|    6 | amber | math    |    92 |  0.8333333333333334 |
+|    3 | jack  | math    |    95 |                   1 |
+|    2 | tom   | physics |  NULL | 0.16666666666666666 |
+|    1 | lily  | physics |    60 |  0.3333333333333333 |
+|    5 | mike  | physics |    85 |                 0.5 |
+|    4 | amy   | physics |    99 |  0.8333333333333334 |
+|    3 | jack  | physics |    99 |  0.8333333333333334 |
+|    6 | amber | physics |   100 |                   1 |
++------+-------+---------+-------+---------------------+
+```
+
+- For `cume_dist` in the first row, the `NULL` group has only one row, and only this row itself meets the condition of "less than or equal to the current row". The cumulative distribution is 1。
+- For `cume_dist` in the second row, the `english` group has five rows, and only this row itself (NULL) meets the condition of "less than or equal to the current row". The cumulative distribution is 0.2.
+- For `cume_dist` in the third row, the `english` group has five rows, and two rows (85 and NULL) meet the condition of "less than or equal to the current row". The cumulative distribution is 0.4.
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ### DENSE_RANK()
 
 The DENSE_RANK() function is used to represent rankings. Unlike RANK(), DENSE_RANK() **does not have vacant** numbers. For example, if there are two 1s, the third number of DENSE_RANK() is still 2, whereas the third number of RANK() is 3.
@@ -744,6 +821,56 @@ As the above example shown, when `num_buckets` is `2`:
 - For the first row, this partition has only this record and it is assigned to only one bucket.
 - For rows 2 to 7, the partition has 6 records and the first 3 records are assigned to bucket 1 and other 3 records are assigned to bucket 2.
 
+<<<<<<< HEAD
+=======
+### PERCENT_RANK()
+
+Calculates the relative rank of a row within a result set as a percentage.
+
+PERCENT_RANK() is calculated using the following formula, where `Rank` represents the rank of the current row in the partition.
+
+```plaintext
+(Rank - 1)/(Rows in partition - 1)
+```
+
+The return values range from 0 to 1. This function is useful for percentile calculation and analyzing data distribution. It is supported from v3.2.
+
+**Syntax:**
+
+```SQL
+PERCENT_RANK() OVER (partition_by_clause order_by_clause)
+```
+
+**This function must be used with ORDER BY to sort partition rows into the desired order.**
+
+**Examples:**
+
+The following example shows the relative rank of each `score` within the group of `math`. This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
+
+```SQL
+SELECT *,
+    PERCENT_RANK()
+        OVER (
+            PARTITION BY subject
+            ORDER BY score
+        ) AS `percent_rank`
+FROM scores where subject in ('math');
+```
+
+```plaintext
++------+-------+---------+-------+--------------+
+| id   | name  | subject | score | percent_rank |
++------+-------+---------+-------+--------------+
+|    1 | lily  | math    |  NULL |            0 |
+|    5 | mike  | math    |    70 |          0.2 |
+|    2 | tom   | math    |    80 |          0.4 |
+|    4 | amy   | math    |    80 |          0.4 |
+|    6 | amber | math    |    92 |          0.8 |
+|    3 | jack  | math    |    95 |            1 |
++------+-------+---------+-------+--------------+
+```
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ### RANK()
 
 The RANK() function is used to represent rankings. Unlike DENSE_RANK(), RANK() will **appear as a vacant** number. For example, if two tied 1s appear, the third number of RANK() will be 3 instead of 2.
@@ -1011,7 +1138,11 @@ Returns the population variance of an expression. VAR_POP and VARIANCE_POP are a
 **Syntax:**
 
 ```SQL
+<<<<<<< HEAD
 VARIANCE(expr) [OVER (partition_by_clause)]
+=======
+VARIANCE(expr) OVER([partition_by_clause] [order_by_clause] [order_by_clause window_clause])
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ```
 
 :::tip
@@ -1026,6 +1157,10 @@ If `expr` is a table column, it must evaluate to TINYINT, SMALLINT, INT, BIGINT,
 
 This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
+<<<<<<< HEAD
+=======
+```plaintext
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 select *,
     variance(score)
         over (
@@ -1052,7 +1187,11 @@ Returns the sample variance of an expression. These functions can be used as win
 **Syntax:**
 
 ```sql
+<<<<<<< HEAD
 VAR_SAMP(expr) [OVER (partition_by_clause)]
+=======
+VAR_SAMP(expr) OVER([partition_by_clause] [order_by_clause] [order_by_clause window_clause])
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ```
 
 :::tip
@@ -1092,7 +1231,11 @@ Returns the standard deviation of an expression. These functions can be used as 
 **Syntax:**
 
 ```sql
+<<<<<<< HEAD
 STD(expr) [OVER (partition_by_clause)]
+=======
+STD(expr) OVER([partition_by_clause] [order_by_clause] [order_by_clause window_clause])
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ```
 
 :::tip
@@ -1132,7 +1275,11 @@ Returns the sample standard deviation of an expression. This function can be use
 **Syntax:**
 
 ```sql
+<<<<<<< HEAD
 STDDEV_SAMP(expr) [OVER (partition_by_clause)]
+=======
+STDDEV_SAMP(expr) OVER([partition_by_clause] [order_by_clause] [order_by_clause window_clause])
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ```
 
 :::tip
@@ -1190,7 +1337,11 @@ Returns the sample covariance of two expressions. This function is supported fro
 **Syntax:**
 
 ```sql
+<<<<<<< HEAD
 COVAR_SAMP(expr1,expr2) [OVER (partition_by_clause)]
+=======
+COVAR_SAMP(expr1,expr2) OVER([partition_by_clause] [order_by_clause] [order_by_clause window_clause])
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ```
 
 :::tip
@@ -1246,7 +1397,11 @@ Returns the population covariance of two expressions. This function is supported
 **Syntax:**
 
 ```sql
+<<<<<<< HEAD
 COVAR_POP(expr1, expr2) [OVER (partition_by_clause)]
+=======
+COVAR_POP(expr1, expr2) OVER([partition_by_clause] [order_by_clause] [order_by_clause window_clause])
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ```
 
 :::tip
@@ -1286,7 +1441,11 @@ Returns the Pearson correlation coefficient between two expressions. This functi
 **Syntax:**
 
 ```sql
+<<<<<<< HEAD
 CORR(expr1, expr2) [OVER (partition_by_clause)]
+=======
+CORR(expr1, expr2) OVER([partition_by_clause] [order_by_clause] [order_by_clause window_clause])
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ```
 
 :::tip

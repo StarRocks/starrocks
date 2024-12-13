@@ -127,7 +127,13 @@ void TableFunctionOperatorTest::SetUp() {
         t_desc_table.slotDescriptors.push_back(slot_desc);
     }
 
+<<<<<<< HEAD
     DescriptorTbl::create(&_runtime_state, &_object_pool, t_desc_table, &_desc_tbl, config::vector_chunk_size);
+=======
+    ASSERT_TRUE(
+            DescriptorTbl::create(&_runtime_state, &_object_pool, t_desc_table, &_desc_tbl, config::vector_chunk_size)
+                    .ok());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     _runtime_state.set_desc_tbl(_desc_tbl);
 
     _tnode.node_id = 1;
@@ -135,7 +141,10 @@ void TableFunctionOperatorTest::SetUp() {
     _tnode.num_children = 1;
 
     _tnode.row_tuples.push_back(1);
+<<<<<<< HEAD
     _tnode.nullable_tuples.push_back(false);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     TExprNode expr_node;
     expr_node.__isset.fn = true;

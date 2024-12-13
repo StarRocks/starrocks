@@ -14,6 +14,11 @@
 
 #pragma once
 
+<<<<<<< HEAD
+=======
+#include <hs/hs.h>
+#include <re2/re2.h>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include <runtime/decimalv3.h>
 
 #include <iomanip>
@@ -22,9 +27,18 @@
 #include "column/column_viewer.h"
 #include "exprs/function_context.h"
 #include "exprs/function_helper.h"
+<<<<<<< HEAD
 #include "util/url_parser.h"
 
 namespace starrocks {
+=======
+#include "runtime/current_thread.h"
+#include "util/phmap/phmap.h"
+#include "util/url_parser.h"
+
+namespace starrocks {
+class RegexpSplit;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 struct PadState {
     bool is_const;
@@ -46,7 +60,64 @@ struct ConcatState {
     std::string tail;
 };
 
+<<<<<<< HEAD
 struct StringFunctionsState;
+=======
+struct StringFunctionsState {
+    using DriverMap = phmap::parallel_flat_hash_map<int32_t, std::unique_ptr<re2::RE2>, phmap::Hash<int32_t>,
+                                                    phmap::EqualTo<int32_t>, phmap::Allocator<int32_t>,
+                                                    NUM_LOCK_SHARD_LOG, std::mutex>;
+
+    std::string pattern;
+    std::unique_ptr<re2::RE2> regex;
+    std::unique_ptr<re2::RE2::Options> options;
+    bool const_pattern{false};
+    DriverMap driver_regex_map; // regex for each pipeline_driver, to make it driver-local
+
+    bool use_hyperscan = false;
+    int size_of_pattern = -1;
+
+    // a pointer to the generated database that responsible for parsed expression.
+    hs_database_t* database = nullptr;
+    // a type containing error details that is returned by the compile calls on failure.
+    hs_compile_error_t* compile_err = nullptr;
+    // A Hyperscan scratch space, Used to call hs_scan,
+    // one scratch space per thread, or concurrent caller, is required
+    hs_scratch_t* scratch = nullptr;
+
+    StringFunctionsState() : regex(), options() {}
+
+    // Implement a driver-local regex, to avoid lock contention on the RE2::cache_mutex
+    re2::RE2* get_or_prepare_regex() {
+        DCHECK(const_pattern);
+        int32_t driver_id = CurrentThread::current().get_driver_id();
+        if (driver_id == 0) {
+            return regex.get();
+        }
+        re2::RE2* res = nullptr;
+        driver_regex_map.lazy_emplace_l(
+                driver_id, [&](auto& value) { res = value.get(); },
+                [&](auto build) {
+                    auto regex = std::make_unique<re2::RE2>(pattern, *options);
+                    DCHECK(regex->ok());
+                    res = regex.get();
+                    build(driver_id, std::move(regex));
+                });
+        DCHECK(!!res);
+        return res;
+    }
+
+    ~StringFunctionsState() {
+        if (scratch != nullptr) {
+            hs_free_scratch(scratch);
+        }
+
+        if (database != nullptr) {
+            hs_free_database(database);
+        }
+    }
+};
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 struct MatchInfo {
     size_t from;
@@ -218,6 +289,16 @@ public:
     DEFINE_VECTORIZED_FN(get_char);
 
     /**
+<<<<<<< HEAD
+=======
+     * @param: [string_value]
+     * @paramType: [BinaryColumn]
+     * @return: BigIntColumn
+     */
+    DEFINE_VECTORIZED_FN(inet_aton);
+
+    /**
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
      * Return the index of the first occurrence of substring
      *
      * @param: [string_value, sub_string_value]
@@ -309,6 +390,16 @@ public:
      */
     DEFINE_VECTORIZED_FN(split_part);
 
+<<<<<<< HEAD
+=======
+    /**
+     * @param: [string_value, delimiter, field]
+     * @paramType: [BinaryColumn, BinaryColumn, IntColumn]
+     * @return: BinaryColumn
+     */
+    DEFINE_VECTORIZED_FN(substring_index);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // regex method
     static Status regexp_extract_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
     static Status regexp_replace_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
@@ -336,6 +427,19 @@ public:
      */
     DEFINE_VECTORIZED_FN(regexp_replace);
 
+<<<<<<< HEAD
+=======
+    static StatusOr<ColumnPtr> regexp_replace_use_hyperscan(StringFunctionsState* state, const Columns& columns);
+    static StatusOr<ColumnPtr> regexp_replace_use_hyperscan_vec(StringFunctionsState* state, const Columns& columns);
+
+    /**
+     * @param: [string_value, pattern, max_split]
+     * @paramType: [BinaryColumn, BinaryColumn, IntColumn]
+     * @return: Array<BinaryColumn>
+     */
+    DEFINE_VECTORIZED_FN(regexp_split);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     /**
      * @param: [string_value, pattern_value, replace_value]
      * @paramType: [BinaryColumn, BinaryColumn, BinaryColumn]
@@ -424,6 +528,11 @@ public:
 
     DEFINE_VECTORIZED_FN(url_extract_parameter);
 
+<<<<<<< HEAD
+=======
+    DEFINE_VECTORIZED_FN(url_extract_host);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     /**
      * @param: [BigIntColumn]
      * @return: StringColumn
@@ -483,6 +592,19 @@ public:
 
     static inline char _DUMMY_STRING_FOR_EMPTY_PATTERN = 'A';
 
+<<<<<<< HEAD
+=======
+    DEFINE_VECTORIZED_FN(crc32);
+
+    DEFINE_VECTORIZED_FN(ngram_search);
+
+    DEFINE_VECTORIZED_FN(ngram_search_case_insensitive);
+    static Status ngram_search_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status ngram_search_case_insensitive_prepare(FunctionContext* context,
+                                                        FunctionContext::FunctionStateScope scope);
+    static Status ngram_search_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 private:
     static int index_of(const char* source, int source_count, const char* target, int target_count, int from_index);
 
@@ -522,8 +644,13 @@ private:
     };
 
     static StatusOr<ColumnPtr> parse_url_general(FunctionContext* context, const starrocks::Columns& columns);
+<<<<<<< HEAD
     static StatusOr<ColumnPtr> parse_url_const(UrlParser::UrlPart* url_part, FunctionContext* context,
                                                const starrocks::Columns& columns);
+=======
+    static StatusOr<ColumnPtr> parse_const_urlpart(UrlParser::UrlPart* url_part, FunctionContext* context,
+                                                   const starrocks::Columns& columns);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     template <LogicalType Type, bool scale_up, bool check_overflow>
     static inline void money_format_decimal_impl(FunctionContext* context, ColumnViewer<Type> const& money_viewer,

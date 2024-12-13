@@ -117,7 +117,10 @@ private:
         // Use explicit producer token to avoid the overhead of too many sub-queues
         static thread_local ::moodycamel::ProducerToken producer_token(_ctx_resources);
         DCHECK(ptr);
+<<<<<<< HEAD
         _resetter(ptr.get());
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Status status = _resetter(ptr.get());
         // if reset fail, then delete this context
         if (!status.ok()) {

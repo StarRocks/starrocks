@@ -9,7 +9,11 @@ displayed_sidebar: docs
 该语句用于更新缓存在 StarRocks 中的数据湖上的元数据，主要有以下两个使用场景：
 
 - **外部表**：使用 Hive 外部表和 Hudi 外部表查询 Hive 和 Hudi 数据时， 可使用该语句更新缓存的 Hive 和 Hudi 元数据。
+<<<<<<< HEAD
 - **External catalog**：使用 [Hive catalog](../../../data_source/catalog/hive_catalog.md)、[Hudi catalog](../../../data_source/catalog/hudi_catalog.md)、[Delta Lake catalog](../../../data_source/catalog/deltalake_catalog.md) 查询对应数据源数据时，可使用该语句更新缓存的元数据。
+=======
+- **External catalog**：使用 [Hive catalog](../../../data_source/catalog/hive_catalog.md)、[Hudi catalog](../../../data_source/catalog/hudi_catalog.md)、[Delta Lake catalog](../../../data_source/catalog/deltalake_catalog.md)、[MaxCompute Catalog](../../../data_source/catalog/maxcompute_catalog.md)（自 3.3 起）查询对应数据源数据时，可使用该语句更新缓存的元数据。
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 > **注意**
 >
@@ -47,7 +51,11 @@ displayed_sidebar: docs
 
     | **参数**         | **必选** | **说明**                                                     |
     | ---------------- | -------- | ------------------------------------------------------------ |
+<<<<<<< HEAD
     | external_catalog | 否       | 外部数据目录名称，支持 Hive catalog、Hudi catalog、Delta Lake catalog。|
+=======
+    | external_catalog | 否       | 外部数据目录名称，支持 Hive、Hudi、Delta Lake、MaxCompute catalog （自 3.3 起）。                          |
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     | db_name          | 否       | 表所在的数据库名。                            |
     | table_name       | 是       | 表名名。                                        |
     | partition_name   | 否       | 表中的分区名。如指定，则更新缓存的表中指定分区的元数据。 |

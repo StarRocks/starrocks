@@ -20,6 +20,10 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.common.DebugOperatorTracer;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.OutputPropertyGroup;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
@@ -29,14 +33,20 @@ import com.starrocks.sql.optimizer.rule.RuleSet;
 import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
+<<<<<<< HEAD
 import java.util.Arrays;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.BitSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+<<<<<<< HEAD
 import java.util.StringJoiner;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.stream.Collectors;
 
 /**
@@ -335,6 +345,7 @@ public class GroupExpression {
         return sb.toString();
     }
 
+<<<<<<< HEAD
     public String toPrettyString(String headlineIndent, String detailIndent) {
         StringBuilder sb = new StringBuilder();
         sb.append(detailIndent)
@@ -343,10 +354,21 @@ public class GroupExpression {
         String childDetailIndent = detailIndent + "    ";
         for (Group input : inputs) {
             sb.append(input.toPrettyString(childHeadlineIndent, childDetailIndent));
+=======
+    public String debugString(String headlineIndent, String detailIndent) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(detailIndent)
+                .append(op.accept(new DebugOperatorTracer(), null)).append("\n");
+        String childHeadlineIndent = detailIndent + "->  ";
+        String childDetailIndent = detailIndent + "    ";
+        for (Group input : inputs) {
+            sb.append(input.debugString(childHeadlineIndent, childDetailIndent));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return sb.toString();
     }
 
+<<<<<<< HEAD
     public String printExploredRules() {
         StringJoiner joiner = new StringJoiner(", ", "{", "}");
         ruleMasks.stream().forEach(e -> joiner.add(RuleType.values()[e].name()));
@@ -357,6 +379,11 @@ public class GroupExpression {
         if (!isAppliedMVRules.isPresent()) {
             List<Rule> mvRules = RuleSet.getRewriteRulesByType(Arrays.asList(RuleSetType.MULTI_TABLE_MV_REWRITE,
                     RuleSetType.SINGLE_TABLE_MV_REWRITE));
+=======
+    public boolean hasAppliedMVRules() {
+        if (!isAppliedMVRules.isPresent()) {
+            final List<Rule> mvRules = RuleSet.getRewriteRulesByType(RuleSetType.ALL_MV_REWRITE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             isAppliedMVRules = Optional.of(mvRules.stream().anyMatch(rule -> hasRuleApplied(rule)));
         }
         return isAppliedMVRules.get();

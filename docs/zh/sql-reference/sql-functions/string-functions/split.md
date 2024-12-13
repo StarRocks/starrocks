@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # split
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 根据分隔符拆分字符串，将拆分后的所有字符串以 ARRAY 的格式返回。
 

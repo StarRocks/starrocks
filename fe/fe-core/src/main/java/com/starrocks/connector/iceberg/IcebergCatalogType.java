@@ -20,6 +20,10 @@ public enum IcebergCatalogType {
     CUSTOM_CATALOG,
     GLUE_CATALOG,
     REST_CATALOG,
+<<<<<<< HEAD
+=======
+    HADOOP_CATALOG,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     UNKNOWN;
     // TODO: add more iceberg catalog type
 

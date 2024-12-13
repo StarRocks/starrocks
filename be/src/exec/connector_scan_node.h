@@ -26,6 +26,13 @@ namespace starrocks {
 
 class ConnectorScanner;
 
+<<<<<<< HEAD
+=======
+namespace pipeline {
+class ConnectorScanOperatorMemShareArbitrator;
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 class ConnectorScanNode final : public starrocks::ScanNode {
 public:
     ConnectorScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
@@ -53,11 +60,26 @@ public:
     bool use_stream_load_thread_pool() { return _use_stream_load_thread_pool; };
 #endif
 
+<<<<<<< HEAD
 private:
     RuntimeState* _runtime_state = nullptr;
     connector::DataSourceProviderPtr _data_source_provider = nullptr;
     connector::ConnectorType _connector_type;
 
+=======
+    StatusOr<pipeline::MorselQueuePtr> convert_scan_range_to_morsel_queue(
+            const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
+            bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
+            size_t num_total_scan_ranges) override;
+
+    size_t estimated_scan_row_bytes() const { return _estimated_scan_row_bytes; }
+
+    bool output_chunk_by_bucket() const override { return _data_source_provider->output_chunk_by_bucket(); }
+    bool is_asc_hint() const override { return _data_source_provider->is_asc_hint(); }
+    std::optional<bool> partition_order_hint() const override { return _data_source_provider->partition_order_hint(); }
+
+private:
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // non-pipeline methods.
     void _init_counter();
     Status _start_scan_thread(RuntimeState* state);
@@ -88,8 +110,11 @@ private:
     std::atomic<int32_t> _scanner_submit_count = 0;
     std::atomic<int32_t> _running_threads = 0;
     std::atomic<int32_t> _closed_scanners = 0;
+<<<<<<< HEAD
 
 private:
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     template <typename T>
     class Stack {
     public:
@@ -126,15 +151,32 @@ private:
     UnboundedBlockingQueue<ChunkPtr> _result_chunks;
     Profile _profile;
 
+<<<<<<< HEAD
     void _estimate_scan_row_bytes();
     void _estimate_mem_usage_per_chunk_source();
     int _estimated_max_concurrent_chunks() const;
     int64_t _mem_limit = 0;
     size_t _estimated_scan_row_bytes = 0;
     size_t _estimated_mem_usage_per_chunk_source = 0;
+=======
+private:
+    // pipeline fields and methods.
+    connector::DataSourceProviderPtr _data_source_provider = nullptr;
+    connector::ConnectorType _connector_type;
+    void _estimate_scan_row_bytes();
+    void _estimate_data_source_mem_bytes();
+    int _estimate_max_concurrent_chunks() const;
+    int64_t _scan_mem_limit = 0;
+    size_t _estimated_scan_row_bytes = 0;
+    size_t _estimated_data_source_mem_bytes = 0;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 #ifdef BE_TEST
     std::atomic_bool _use_stream_load_thread_pool = false;
 #endif
+<<<<<<< HEAD
+=======
+    pipeline::ConnectorScanOperatorMemShareArbitrator* _mem_share_arb = nullptr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 } // namespace starrocks

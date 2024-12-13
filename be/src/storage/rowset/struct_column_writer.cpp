@@ -71,6 +71,11 @@ StatusOr<std::unique_ptr<ColumnWriter>> create_struct_column_writer(const Column
         value_options.need_zone_map = false;
         value_options.need_bloom_filter = field_column.is_bf_column();
         value_options.need_bitmap_index = field_column.has_bitmap_index();
+<<<<<<< HEAD
+=======
+        value_options.need_flat = opts.need_flat;
+        value_options.is_compaction = opts.is_compaction;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ASSIGN_OR_RETURN(auto field_writer, ColumnWriter::create(value_options, &field_column, wfile));
         field_writers.emplace_back(std::move(field_writer));
     }

@@ -166,7 +166,11 @@ public:
     Status reset() override;
     bool match(StreamLoadContext* ctx) override;
     // commit kafka offset
+<<<<<<< HEAD
     Status commit(std::vector<RdKafka::TopicPartition*>& offset);
+=======
+    Status commit(const std::string& topic, const std::map<int32_t, int64_t>& offsets);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     Status assign_topic_partitions(const std::map<int32_t, int64_t>& begin_partition_offset, const std::string& topic,
                                    StreamLoadContext* ctx);

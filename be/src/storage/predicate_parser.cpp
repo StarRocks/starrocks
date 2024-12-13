@@ -21,11 +21,16 @@
 #include "storage/chunk_helper.h"
 #include "storage/column_expr_predicate.h"
 #include "storage/column_predicate.h"
+<<<<<<< HEAD
+=======
+#include "storage/predicate_tree/predicate_tree.hpp"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "storage/tablet_schema.h"
 #include "storage/type_utils.h"
 
 namespace starrocks {
 
+<<<<<<< HEAD
 bool PredicateParser::can_pushdown(const ColumnPredicate* predicate) const {
     RETURN_IF(predicate->column_id() >= _schema.num_columns(), false);
     const TabletColumn& column = _schema.column(predicate->column_id());
@@ -50,6 +55,10 @@ ColumnPredicate* PredicateParser::parse_thrift_cond(const TCondition& condition)
     auto type = col.type();
     auto&& type_info = get_type_info(type, precision, scale);
 
+=======
+ColumnPredicate* PredicateParser::create_column_predicate(const TCondition& condition, TypeInfoPtr& type_info,
+                                                          ColumnId index) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ColumnPredicate* pred = nullptr;
     if ((condition.condition_op == "*=" || condition.condition_op == "=") && condition.condition_values.size() == 1) {
         pred = new_column_eq_predicate(type_info, index, condition.condition_values[0]);
@@ -78,6 +87,54 @@ ColumnPredicate* PredicateParser::parse_thrift_cond(const TCondition& condition)
         LOG(WARNING) << "unknown condition: " << condition.condition_op;
         return pred;
     }
+<<<<<<< HEAD
+=======
+    return pred;
+}
+
+bool OlapPredicateParser::can_pushdown(const ColumnPredicate* predicate) const {
+    RETURN_IF(predicate->column_id() >= _schema->num_columns(), false);
+    const TabletColumn& column = _schema->column(predicate->column_id());
+    return _schema->keys_type() == KeysType::PRIMARY_KEYS ||
+           column.aggregation() == StorageAggregateType::STORAGE_AGGREGATE_NONE;
+}
+
+bool OlapPredicateParser::can_pushdown(const SlotDescriptor* slot_desc) const {
+    const size_t index = _schema->field_index(slot_desc->col_name());
+    CHECK(index <= _schema->num_columns());
+    const TabletColumn& column = _schema->column(index);
+    return _schema->keys_type() == KeysType::PRIMARY_KEYS ||
+           column.aggregation() == StorageAggregateType::STORAGE_AGGREGATE_NONE;
+}
+
+struct CanPushDownVisitor {
+    bool operator()(const PredicateColumnNode& node) const { return parent->can_pushdown(node.col_pred()); }
+
+    template <CompoundNodeType Type>
+    bool operator()(const PredicateCompoundNode<Type>& node) const {
+        return std::all_of(node.children().begin(), node.children().end(),
+                           [this](const auto& child) { return child.visit(*this); });
+    }
+
+    const PredicateParser* parent;
+};
+
+bool OlapPredicateParser::can_pushdown(const ConstPredicateNodePtr& pred_tree) const {
+    return pred_tree.visit(CanPushDownVisitor{this});
+}
+
+ColumnPredicate* OlapPredicateParser::parse_thrift_cond(const TCondition& condition) const {
+    const size_t index = _schema->field_index(condition.column_name);
+    RETURN_IF(index >= _schema->num_columns(), nullptr);
+    const TabletColumn& col = _schema->column(index);
+    auto precision = col.precision();
+    auto scale = col.scale();
+    auto type = col.type();
+    auto&& type_info = get_type_info(type, precision, scale);
+
+    ColumnPredicate* pred = create_column_predicate(condition, type_info, index);
+    RETURN_IF(pred == nullptr, nullptr);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     if (type == TYPE_CHAR) {
         pred->padding_zeros(col.length());
@@ -85,11 +142,19 @@ ColumnPredicate* PredicateParser::parse_thrift_cond(const TCondition& condition)
     return pred;
 }
 
+<<<<<<< HEAD
 StatusOr<ColumnPredicate*> PredicateParser::parse_expr_ctx(const SlotDescriptor& slot_desc, RuntimeState* state,
                                                            ExprContext* expr_ctx) const {
     const size_t column_id = _schema.field_index(slot_desc.col_name());
     RETURN_IF(column_id >= _schema.num_columns(), nullptr);
     const TabletColumn& col = _schema.column(column_id);
+=======
+StatusOr<ColumnPredicate*> OlapPredicateParser::parse_expr_ctx(const SlotDescriptor& slot_desc, RuntimeState* state,
+                                                               ExprContext* expr_ctx) const {
+    const size_t column_id = _schema->field_index(slot_desc.col_name());
+    RETURN_IF(column_id >= _schema->num_columns(), nullptr);
+    const TabletColumn& col = _schema->column(column_id);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     auto precision = col.precision();
     auto scale = col.scale();
     auto type = col.type();
@@ -97,8 +162,74 @@ StatusOr<ColumnPredicate*> PredicateParser::parse_expr_ctx(const SlotDescriptor&
     return ColumnExprPredicate::make_column_expr_predicate(type_info, column_id, state, expr_ctx, &slot_desc);
 }
 
+<<<<<<< HEAD
 uint32_t PredicateParser::column_id(const SlotDescriptor& slot_desc) {
     return _schema.field_index(slot_desc.col_name());
+=======
+uint32_t OlapPredicateParser::column_id(const SlotDescriptor& slot_desc) const {
+    return _schema->field_index(slot_desc.col_name());
+}
+
+bool ConnectorPredicateParser::can_pushdown(const ColumnPredicate* predicate) const {
+    return false;
+}
+
+bool ConnectorPredicateParser::can_pushdown(const SlotDescriptor* slot_desc) const {
+    return false;
+}
+
+bool ConnectorPredicateParser::can_pushdown(const ConstPredicateNodePtr& pred_tree) const {
+    return false;
+}
+
+ColumnPredicate* ConnectorPredicateParser::parse_thrift_cond(const TCondition& condition) const {
+    uint8_t precision = 0;
+    uint8_t scale = 0;
+    LogicalType type = LogicalType::TYPE_UNKNOWN;
+    size_t index = 0;
+
+    for (const SlotDescriptor* slot : *_slot_desc) {
+        if (slot->col_name() == condition.column_name) {
+            type = slot->type().type;
+            precision = slot->type().precision;
+            scale = slot->type().scale;
+            index = slot->id();
+            break;
+        }
+    }
+    // column not found
+    RETURN_IF(type == LogicalType::TYPE_UNKNOWN, nullptr);
+
+    auto&& type_info = get_type_info(type, precision, scale);
+
+    return create_column_predicate(condition, type_info, index);
+}
+
+StatusOr<ColumnPredicate*> ConnectorPredicateParser::parse_expr_ctx(const SlotDescriptor& slot_desc,
+                                                                    RuntimeState* state, ExprContext* expr_ctx) const {
+    uint8_t precision = 0;
+    uint8_t scale = 0;
+    LogicalType type = LogicalType::TYPE_UNKNOWN;
+    size_t column_id = 0;
+
+    for (const SlotDescriptor* slot : *_slot_desc) {
+        if (slot->col_name() == slot_desc.col_name()) {
+            type = slot->type().type;
+            precision = slot->type().precision;
+            scale = slot->type().scale;
+            column_id = slot->id();
+            break;
+        }
+    }
+    RETURN_IF(type == LogicalType::TYPE_UNKNOWN, nullptr);
+
+    auto&& type_info = get_type_info(type, precision, scale);
+    return ColumnExprPredicate::make_column_expr_predicate(type_info, column_id, state, expr_ctx, &slot_desc);
+}
+
+uint32_t ConnectorPredicateParser::column_id(const SlotDescriptor& slot_desc) const {
+    return slot_desc.id();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 } // namespace starrocks

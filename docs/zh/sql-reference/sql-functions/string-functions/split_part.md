@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # split_part
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 根据分割符拆分字符串，返回指定的分割部分（从 1 开始计数）。
 

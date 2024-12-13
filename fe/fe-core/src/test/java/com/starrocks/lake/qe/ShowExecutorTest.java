@@ -15,7 +15,10 @@
 package com.starrocks.lake.qe;
 
 import com.starrocks.catalog.Database;
+<<<<<<< HEAD
 import com.starrocks.common.AnalysisException;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.mysql.MysqlCommand;
@@ -82,11 +85,19 @@ public class ShowExecutorTest {
         globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
         new Expectations(globalStateMgr) {
             {
+<<<<<<< HEAD
                 globalStateMgr.getDb("testDb");
                 minTimes = 0;
                 result = db;
 
                 globalStateMgr.getDb("testDb1");
+=======
+                globalStateMgr.getLocalMetastore().getDb("testDb");
+                minTimes = 0;
+                result = db;
+
+                globalStateMgr.getLocalMetastore().getDb("testDb1");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 minTimes = 0;
                 result = db1;
             }
@@ -94,11 +105,16 @@ public class ShowExecutorTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testShowCreateDb() throws DdlException, AnalysisException {
+=======
+    public void testShowCreateDb() throws DdlException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ctx.setGlobalStateMgr(globalStateMgr);
         ctx.setQualifiedUser("testUser");
 
         ShowCreateDbStmt stmt = new ShowCreateDbStmt("testDb");
+<<<<<<< HEAD
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
         Assert.assertTrue(resultSet.next());
@@ -110,6 +126,17 @@ public class ShowExecutorTest {
         stmt = new ShowCreateDbStmt("testDb1");
         executor = new ShowExecutor(ctx, stmt);
         resultSet = executor.execute();
+=======
+        ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
+        Assert.assertTrue(resultSet.next());
+        Assert.assertEquals("testDb", resultSet.getString(0));
+        Assert.assertEquals(resultSet.getString(1), "CREATE DATABASE `testDb`\n" +
+                        "PROPERTIES (\"storage_volume\" = \"builtin_storage_volume\")");
+        Assert.assertFalse(resultSet.next());
+
+        stmt = new ShowCreateDbStmt("testDb1");
+        resultSet = ShowExecutor.execute(stmt, ctx);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertTrue(resultSet.next());
         Assert.assertEquals("testDb1", resultSet.getString(0));
         Assert.assertEquals("CREATE DATABASE `testDb1`", resultSet.getString(1));

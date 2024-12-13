@@ -20,6 +20,23 @@
 
 namespace starrocks {
 
+<<<<<<< HEAD
+=======
+class OrcMemoryPool : public orc::MemoryPool {
+public:
+    ~OrcMemoryPool() override = default;
+
+    char* malloc(uint64_t size) override;
+
+    void free(char* p) override;
+
+    int64_t bytes_allocated() const;
+
+private:
+    std::atomic_int64_t _bytes_allocated{0};
+};
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 orc::MemoryPool* getOrcMemoryPool();
 
 } // namespace starrocks

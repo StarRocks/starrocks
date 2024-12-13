@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # log2
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 返回以 2 为底数的 `x` 的对数。
 

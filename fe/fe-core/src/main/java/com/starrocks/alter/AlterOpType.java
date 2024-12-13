@@ -61,7 +61,18 @@ public enum AlterOpType {
 
     //Alter View
     ALTER_VIEW,
+<<<<<<< HEAD
 
+=======
+    REFRESH_SCHEMA,
+    ALTER_MV_STATUS,
+
+    // Optimize table
+    OPTIMIZE,
+    ALTER_BRANCH,
+    ALTER_TAG,
+    ALTER_TABLE_OPERATION,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     INVALID_OP; // INVALID_OP must be the last one
 
     // true means 2 operations have no conflict.
@@ -83,7 +94,11 @@ public enum AlterOpType {
     }
 
     public boolean needCheckCapacity() {
+<<<<<<< HEAD
         return this == ADD_ROLLUP || this == SCHEMA_CHANGE || this == ADD_PARTITION;
+=======
+        return this == ADD_ROLLUP || this == SCHEMA_CHANGE || this == ADD_PARTITION || this == OPTIMIZE;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
 }

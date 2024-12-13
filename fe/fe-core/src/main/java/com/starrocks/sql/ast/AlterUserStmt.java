@@ -14,20 +14,32 @@
 
 package com.starrocks.sql.ast;
 
+<<<<<<< HEAD
 import com.starrocks.analysis.UserDesc;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Collections;
+=======
+import com.starrocks.sql.parser.NodePosition;
+
+import java.util.Map;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 public class AlterUserStmt extends BaseCreateAlterUserStmt {
     private final boolean ifExists;
 
+<<<<<<< HEAD
     public AlterUserStmt(UserDesc userDesc, boolean ifExists) {
         this(userDesc, ifExists, NodePosition.ZERO);
     }
 
     public AlterUserStmt(UserDesc userDesc, boolean ifExists, NodePosition pos) {
         super(userDesc, null, Collections.emptyList(), pos);
+=======
+    public AlterUserStmt(UserIdentity userIdentity, boolean ifExists, UserAuthOption userAuthOption,
+                         Map<String, String> properties, NodePosition pos) {
+        super(userIdentity, userAuthOption, properties, pos);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.ifExists = ifExists;
     }
 

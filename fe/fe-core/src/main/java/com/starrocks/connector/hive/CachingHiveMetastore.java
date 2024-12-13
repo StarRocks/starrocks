@@ -15,7 +15,10 @@
 package com.starrocks.connector.hive;
 
 import com.google.common.base.Preconditions;
+<<<<<<< HEAD
 import com.google.common.cache.CacheBuilder;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 import com.google.common.collect.ImmutableMap;
@@ -25,6 +28,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Streams;
 import com.google.common.util.concurrent.UncheckedExecutionException;
 import com.starrocks.catalog.Database;
+<<<<<<< HEAD
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.Table;
@@ -32,6 +36,17 @@ import com.starrocks.common.Config;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.events.MetastoreNotificationFetchException;
+=======
+import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
+import com.starrocks.connector.DatabaseTableName;
+import com.starrocks.connector.PartitionUtil;
+import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.hive.events.MetastoreNotificationFetchException;
+import com.starrocks.connector.metastore.CachingMetastore;
+import com.starrocks.connector.metastore.MetastoreTable;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.hadoop.hive.metastore.api.NoSuchObjectException;
 import org.apache.hadoop.hive.metastore.api.NotificationEventResponse;
 import org.apache.logging.log4j.LogManager;
@@ -57,6 +72,7 @@ import static com.google.common.base.Throwables.throwIfUnchecked;
 import static com.google.common.cache.CacheLoader.asyncReloading;
 import static com.google.common.collect.ImmutableMap.toImmutableMap;
 import static com.google.common.util.concurrent.MoreExecutors.newDirectExecutorService;
+<<<<<<< HEAD
 import static java.util.concurrent.TimeUnit.SECONDS;
 
 public class CachingHiveMetastore implements IHiveMetastore {
@@ -75,16 +91,33 @@ public class CachingHiveMetastore implements IHiveMetastore {
 
     protected LoadingCache<String, List<String>> databaseNamesCache;
     protected LoadingCache<String, List<String>> tableNamesCache;
+=======
+import static com.starrocks.connector.hive.HiveMetadata.useMetadataCache;
+
+public class CachingHiveMetastore extends CachingMetastore implements IHiveMetastore {
+    private static final Logger LOG = LogManager.getLogger(CachingHiveMetastore.class);
+
+    private final boolean enableListNameCache;
+    protected final IHiveMetastore metastore;
+
+    private final Map<DatabaseTableName, Long> lastAccessTimeMap;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // eg: HivePartitionValue -> List("year=2022/month=10", "year=2022/month=11")
     protected LoadingCache<HivePartitionValue, List<String>> partitionKeysCache;
 
+<<<<<<< HEAD
     protected LoadingCache<String, Database> databaseCache;
     protected LoadingCache<HiveTableName, Table> tableCache;
 
     // eg: "year=2022/month=10" -> Partition
     protected LoadingCache<HivePartitionName, Partition> partitionCache;
     protected LoadingCache<HiveTableName, HivePartitionStats> tableStatsCache;
+=======
+    // eg: "year=2022/month=10" -> Partition
+    protected LoadingCache<HivePartitionName, Partition> partitionCache;
+    protected LoadingCache<DatabaseTableName, HivePartitionStats> tableStatsCache;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     protected LoadingCache<HivePartitionName, HivePartitionStats> partitionStatsCache;
 
     public static CachingHiveMetastore createQueryLevelInstance(IHiveMetastore metastore, long perQueryCacheMaxSize) {
@@ -105,6 +138,7 @@ public class CachingHiveMetastore implements IHiveMetastore {
 
     protected CachingHiveMetastore(IHiveMetastore metastore, Executor executor, long expireAfterWriteSec,
                                    long refreshIntervalSec, long maxSize, boolean enableListNamesCache) {
+<<<<<<< HEAD
         this.metastore = metastore;
         this.enableListNameCache = enableListNamesCache;
         this.lastAccessTimeMap = Maps.newConcurrentMap();
@@ -114,6 +148,12 @@ public class CachingHiveMetastore implements IHiveMetastore {
                 .build(asyncReloading(CacheLoader.from(this::loadAllDatabaseNames), executor));
         tableNamesCache = newCacheBuilder(NEVER_CACHE, NEVER_CACHE, NEVER_CACHE)
                 .build(asyncReloading(CacheLoader.from(this::loadAllTableNames), executor));
+=======
+        super(executor, expireAfterWriteSec, refreshIntervalSec, maxSize);
+        this.metastore = metastore;
+        this.enableListNameCache = enableListNamesCache;
+        this.lastAccessTimeMap = Maps.newConcurrentMap();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // The list names interface of hive metastore latency is very low, so we default to pull the latest every time.
         if (enableListNamesCache) {
@@ -124,12 +164,15 @@ public class CachingHiveMetastore implements IHiveMetastore {
                     .build(asyncReloading(CacheLoader.from(this::loadPartitionKeys), executor));
         }
 
+<<<<<<< HEAD
         databaseCache = newCacheBuilder(expireAfterWriteSec, refreshIntervalSec, maxSize)
                 .build(asyncReloading(CacheLoader.from(this::loadDb), executor));
 
         tableCache = newCacheBuilder(expireAfterWriteSec, refreshIntervalSec, maxSize)
                 .build(asyncReloading(CacheLoader.from(this::loadTable), executor));
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         partitionCache = newCacheBuilder(expireAfterWriteSec, NEVER_REFRESH, maxSize)
                 .build(asyncReloading(new CacheLoader<HivePartitionName, Partition>() {
                     @Override
@@ -162,6 +205,7 @@ public class CachingHiveMetastore implements IHiveMetastore {
                 }, executor));
     }
 
+<<<<<<< HEAD
     private static CacheBuilder<Object, Object> newCacheBuilder(long expiresAfterWriteSec, long refreshSec, long maximumSize) {
         CacheBuilder<Object, Object> cacheBuilder = CacheBuilder.newBuilder();
         if (expiresAfterWriteSec >= 0) {
@@ -176,18 +220,46 @@ public class CachingHiveMetastore implements IHiveMetastore {
         return cacheBuilder;
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public List<String> getAllDatabaseNames() {
         return get(databaseNamesCache, "");
     }
 
+<<<<<<< HEAD
     private List<String> loadAllDatabaseNames() {
         return metastore.getAllDatabaseNames();
     }
 
+=======
+    public List<String> loadAllDatabaseNames() {
+        return metastore.getAllDatabaseNames();
+    }
+
+    @Override
+    public void createDb(String dbName, Map<String, String> properties) {
+        try {
+            metastore.createDb(dbName, properties);
+        } finally {
+            invalidateDatabase(dbName);
+        }
+    }
+
+    @Override
+    public void dropDb(String dbName, boolean deleteData) {
+        try {
+            metastore.dropDb(dbName, deleteData);
+        } finally {
+            invalidateDatabase(dbName);
+        }
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public List<String> getAllTableNames(String dbName) {
         return get(tableNamesCache, dbName);
     }
 
+<<<<<<< HEAD
     public Set<HiveTableName> getCachedTableNames() {
         // use partition cache to get all cached table names because partition cache is more accurate,
         // table cache will be cached when user use `use catalog.db` command.
@@ -196,6 +268,33 @@ public class CachingHiveMetastore implements IHiveMetastore {
                 Collectors.toSet());
     }
 
+=======
+    public Set<DatabaseTableName> getCachedTableNames() {
+        // use partition cache to get all cached table names because partition cache is more accurate,
+        // table cache will be cached when user use `use catalog.db` command.
+        return partitionCache.asMap().keySet().stream().map(hivePartitionName ->
+                DatabaseTableName.of(hivePartitionName.getDatabaseName(), hivePartitionName.getTableName())).collect(
+                Collectors.toSet());
+    }
+
+    public void createTable(String dbName, Table table) {
+        try {
+            metastore.createTable(dbName, table);
+        } finally {
+            invalidateTable(dbName, table.getName());
+        }
+    }
+
+    @Override
+    public void dropTable(String dbName, String tableName) {
+        try {
+            metastore.dropTable(dbName, tableName);
+        } finally {
+            invalidateTable(dbName, tableName);
+        }
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public Map<HivePartitionName, Partition> getCachedPartitions(List<HivePartitionName> hivePartitionName) {
         return partitionCache.getAllPresent(hivePartitionName);
@@ -206,24 +305,42 @@ public class CachingHiveMetastore implements IHiveMetastore {
         return Maps.newHashMap(partitionCache.asMap());
     }
 
+<<<<<<< HEAD
     private List<String> loadAllTableNames(String dbName) {
+=======
+    public List<String> loadAllTableNames(String dbName) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return metastore.getAllTableNames(dbName);
     }
 
     @Override
     public List<String> getPartitionKeysByValue(String dbName, String tableName, List<Optional<String>> partitionValues) {
+<<<<<<< HEAD
         HiveTableName hiveTableName = HiveTableName.of(dbName, tableName);
         HivePartitionValue hivePartitionValue = HivePartitionValue.of(hiveTableName, partitionValues);
         if (metastore instanceof CachingHiveMetastore) {
             Table table = getTable(dbName, tableName);
             if (table.isHiveTable() && !((HiveTable) table).isUseMetadataCache()) {
+=======
+        DatabaseTableName databaseTableName = DatabaseTableName.of(dbName, tableName);
+        HivePartitionValue hivePartitionValue = HivePartitionValue.of(databaseTableName, partitionValues);
+        if (metastore instanceof CachingHiveMetastore) {
+            Table table = getTable(dbName, tableName);
+            if (table.isHiveTable() && !useMetadataCache()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 invalidatePartitionKeys(hivePartitionValue);
             }
         }
         // update last access time
+<<<<<<< HEAD
         lastAccessTimeMap.put(hiveTableName, System.currentTimeMillis());
         // first check if the all partition keys are cached
         HivePartitionValue allPartitionValue = HivePartitionValue.of(hiveTableName, HivePartitionValue.ALL_PARTITION_VALUES);
+=======
+        lastAccessTimeMap.put(databaseTableName, System.currentTimeMillis());
+        // first check if the all partition keys are cached
+        HivePartitionValue allPartitionValue = HivePartitionValue.of(databaseTableName, HivePartitionValue.ALL_PARTITION_VALUES);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (partitionKeysCache.asMap().containsKey(allPartitionValue)) {
             List<String> allPartitionNames = get(partitionKeysCache, allPartitionValue);
             if (partitionValues.stream().noneMatch(Optional::isPresent)) {
@@ -235,6 +352,14 @@ public class CachingHiveMetastore implements IHiveMetastore {
         return get(partitionKeysCache, hivePartitionValue);
     }
 
+<<<<<<< HEAD
+=======
+    @Override
+    public boolean partitionExists(Table table, List<String> partitionValues) {
+        return metastore.partitionExists(table, partitionValues);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private List<String> loadPartitionKeys(HivePartitionValue hivePartitionValue) {
         return metastore.getPartitionKeysByValue(hivePartitionValue.getHiveTableName().getDatabaseName(),
                 hivePartitionValue.getHiveTableName().getTableName(), hivePartitionValue.getPartitionValues());
@@ -244,6 +369,7 @@ public class CachingHiveMetastore implements IHiveMetastore {
         return get(databaseCache, dbName);
     }
 
+<<<<<<< HEAD
     private Database loadDb(String dbName) {
         return metastore.getDb(dbName);
     }
@@ -254,6 +380,27 @@ public class CachingHiveMetastore implements IHiveMetastore {
 
     private Table loadTable(HiveTableName hiveTableName) {
         return metastore.getTable(hiveTableName.getDatabaseName(), hiveTableName.getTableName());
+=======
+    public Database loadDb(String dbName) {
+        return metastore.getDb(dbName);
+    }
+
+    @Override
+    public MetastoreTable getMetastoreTable(String dbName, String tableName) {
+        return metastore.getMetastoreTable(dbName, tableName);
+    }
+
+    public Table getTable(String dbName, String tableName) {
+        return get(tableCache, DatabaseTableName.of(dbName, tableName));
+    }
+
+    public boolean tableExists(String dbName, String tableName) {
+        return metastore.tableExists(dbName, tableName);
+    }
+
+    public Table loadTable(DatabaseTableName databaseTableName) {
+        return metastore.getTable(databaseTableName.getDatabaseName(), databaseTableName.getTableName());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public Partition getPartition(String dbName, String tblName, List<String> partitionValues) {
@@ -264,6 +411,37 @@ public class CachingHiveMetastore implements IHiveMetastore {
         return metastore.getPartition(key.getDatabaseName(), key.getTableName(), key.getPartitionValues());
     }
 
+<<<<<<< HEAD
+=======
+    public void addPartitions(String dbName, String tableName, List<HivePartitionWithStats> partitions) {
+        try {
+            metastore.addPartitions(dbName, tableName, partitions);
+        } catch (Exception e) {
+            LOG.warn("Failed to execute metastore.addPartitions", e);
+            throw e;
+        } finally {
+            if (!(metastore instanceof CachingHiveMetastore)) {
+                List<HivePartitionName> partitionNames = partitions.stream()
+                        .map(name -> HivePartitionName.of(dbName, tableName, name.getPartitionName()))
+                        .collect(Collectors.toList());
+                refreshPartition(partitionNames);
+            }
+        }
+    }
+
+    @Override
+    public void dropPartition(String dbName, String tableName, List<String> partValues, boolean deleteData) {
+        List<String> partitionColNames = getTable(dbName, tableName).getPartitionColumnNames();
+        try {
+            metastore.dropPartition(dbName, tableName, partValues, deleteData);
+        } finally {
+            String partitionName = PartitionUtil.toHivePartitionName(partitionColNames, partValues);
+            HivePartitionName hivePartitionName = HivePartitionName.of(dbName, tableName, partitionName);
+            invalidatePartition(hivePartitionName);
+        }
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public Map<String, Partition> getPartitionsByNames(String dbName, String tblName, List<String> partitionNames) {
         List<HivePartitionName> hivePartitionNames = partitionNames.stream()
                 .map(partitionName -> HivePartitionName.of(dbName, tblName, partitionName))
@@ -299,17 +477,51 @@ public class CachingHiveMetastore implements IHiveMetastore {
     }
 
     public HivePartitionStats getTableStatistics(String dbName, String tblName) {
+<<<<<<< HEAD
         return get(tableStatsCache, HiveTableName.of(dbName, tblName));
     }
 
     private HivePartitionStats loadTableStatistics(HiveTableName hiveTableName) {
         return metastore.getTableStatistics(hiveTableName.getDatabaseName(), hiveTableName.getTableName());
+=======
+        return get(tableStatsCache, DatabaseTableName.of(dbName, tblName));
+    }
+
+    private HivePartitionStats loadTableStatistics(DatabaseTableName databaseTableName) {
+        return metastore.getTableStatistics(databaseTableName.getDatabaseName(), databaseTableName.getTableName());
+    }
+
+    public void updateTableStatistics(String dbName, String tableName, Function<HivePartitionStats, HivePartitionStats> update) {
+        try {
+            metastore.updateTableStatistics(dbName, tableName, update);
+        } finally {
+            if (!(metastore instanceof CachingHiveMetastore)) {
+                refreshTable(dbName, tableName, true);
+            }
+        }
+    }
+
+    public void updatePartitionStatistics(String dbName, String tableName, String partitionName,
+                                          Function<HivePartitionStats, HivePartitionStats> update) {
+        try {
+            metastore.updatePartitionStatistics(dbName, tableName, partitionName, update);
+        } finally {
+            if (!(metastore instanceof CachingHiveMetastore)) {
+                refreshPartition(Lists.newArrayList(HivePartitionName.of(dbName, tableName, partitionName)));
+            }
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
     public Map<String, HivePartitionStats> getPartitionStatistics(Table table, List<String> partitionNames) {
+<<<<<<< HEAD
         String dbName = ((HiveMetaStoreTable) table).getDbName();
         String tblName = ((HiveMetaStoreTable) table).getTableName();
+=======
+        String dbName = (table).getCatalogDBName();
+        String tblName = (table).getCatalogTableName();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         List<HivePartitionName> hivePartitionNames = partitionNames.stream()
                 .map(partitionName -> HivePartitionName.of(dbName, tblName, partitionName))
@@ -360,15 +572,24 @@ public class CachingHiveMetastore implements IHiveMetastore {
     @Override
     public List<HivePartitionName> refreshTable(String hiveDbName, String hiveTblName,
                                                 boolean onlyCachedPartitions) {
+<<<<<<< HEAD
         HiveTableName hiveTableName = HiveTableName.of(hiveDbName, hiveTblName);
         tableNameLockMap.putIfAbsent(hiveTableName, hiveDbName + "_" + hiveTblName + "_lock");
         String lockStr = tableNameLockMap.get(hiveTableName);
         synchronized (lockStr) {
             return refreshTableWithoutSync(hiveDbName, hiveTblName, hiveTableName, onlyCachedPartitions);
+=======
+        DatabaseTableName databaseTableName = DatabaseTableName.of(hiveDbName, hiveTblName);
+        tableNameLockMap.putIfAbsent(databaseTableName, hiveDbName + "_" + hiveTblName + "_lock");
+        String lockStr = tableNameLockMap.get(databaseTableName);
+        synchronized (lockStr) {
+            return refreshTableWithoutSync(hiveDbName, hiveTblName, databaseTableName, onlyCachedPartitions);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
     public boolean refreshView(String hiveDbName, String hiveViewName) {
+<<<<<<< HEAD
         HiveTableName hiveTableName = HiveTableName.of(hiveDbName, hiveViewName);
         tableNameLockMap.putIfAbsent(hiveTableName, hiveDbName + "_" + hiveViewName + "_lock");
         String lockStr = tableNameLockMap.get(hiveTableName);
@@ -376,6 +597,15 @@ public class CachingHiveMetastore implements IHiveMetastore {
             Table updatedTable;
             try {
                 updatedTable = loadTable(hiveTableName);
+=======
+        DatabaseTableName databaseTableName = DatabaseTableName.of(hiveDbName, hiveViewName);
+        tableNameLockMap.putIfAbsent(databaseTableName, hiveDbName + "_" + hiveViewName + "_lock");
+        String lockStr = tableNameLockMap.get(databaseTableName);
+        synchronized (lockStr) {
+            Table updatedTable;
+            try {
+                updatedTable = loadTable(databaseTableName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             } catch (StarRocksConnectorException e) {
                 Throwable cause = e.getCause();
                 if (cause instanceof InvocationTargetException &&
@@ -387,17 +617,29 @@ public class CachingHiveMetastore implements IHiveMetastore {
                 }
             }
 
+<<<<<<< HEAD
             tableCache.put(hiveTableName, updatedTable);
+=======
+            tableCache.put(databaseTableName, updatedTable);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return true;
     }
 
     public List<HivePartitionName> refreshTableWithoutSync(String hiveDbName, String hiveTblName,
+<<<<<<< HEAD
                                                            HiveTableName hiveTableName,
                                                            boolean onlyCachedPartitions) {
         Table updatedTable;
         try {
             updatedTable = loadTable(hiveTableName);
+=======
+                                                           DatabaseTableName databaseTableName,
+                                                           boolean onlyCachedPartitions) {
+        Table updatedTable;
+        try {
+            updatedTable = loadTable(databaseTableName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } catch (StarRocksConnectorException e) {
             Throwable cause = e.getCause();
             if (cause instanceof InvocationTargetException &&
@@ -409,14 +651,22 @@ public class CachingHiveMetastore implements IHiveMetastore {
             }
         }
 
+<<<<<<< HEAD
         tableCache.put(hiveTableName, updatedTable);
 
         // refresh table need to refresh partitionKeysCache with all partition values
         HivePartitionValue hivePartitionValue = HivePartitionValue.of(hiveTableName, HivePartitionValue.ALL_PARTITION_VALUES);
+=======
+        tableCache.put(databaseTableName, updatedTable);
+
+        // refresh table need to refresh partitionKeysCache with all partition values
+        HivePartitionValue hivePartitionValue = HivePartitionValue.of(databaseTableName, HivePartitionValue.ALL_PARTITION_VALUES);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<String> updatedPartitionKeys = loadPartitionKeys(hivePartitionValue);
         if (enableListNameCache) {
             partitionKeysCache.put(hivePartitionValue, updatedPartitionKeys);
         }
+<<<<<<< HEAD
 
         HiveMetaStoreTable hmsTable = (HiveMetaStoreTable) updatedTable;
         List<HivePartitionName> refreshPartitionNames = Lists.newArrayList();
@@ -425,6 +675,14 @@ public class CachingHiveMetastore implements IHiveMetastore {
             Partition updatedPartition = loadPartition(hivePartitionName);
             partitionCache.put(hivePartitionName, updatedPartition);
             tableStatsCache.put(hiveTableName, loadTableStatistics(hiveTableName));
+=======
+        List<HivePartitionName> refreshPartitionNames = Lists.newArrayList();
+        if (updatedTable.isUnPartitioned()) {
+            HivePartitionName hivePartitionName = HivePartitionName.of(hiveDbName, hiveTblName, Lists.newArrayList());
+            Partition updatedPartition = loadPartition(hivePartitionName);
+            partitionCache.put(hivePartitionName, updatedPartition);
+            tableStatsCache.put(databaseTableName, loadTableStatistics(databaseTableName));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } else {
             List<HivePartitionName> allPartitionsInHms = updatedPartitionKeys.stream()
                     .map(key -> HivePartitionName.of(hiveDbName, hiveTblName, key))
@@ -459,15 +717,25 @@ public class CachingHiveMetastore implements IHiveMetastore {
 
     @Override
     public List<HivePartitionName> refreshTableBackground(String hiveDbName, String hiveTblName, boolean onlyCachedPartitions) {
+<<<<<<< HEAD
         HiveTableName hiveTableName = HiveTableName.of(hiveDbName, hiveTblName);
         if (lastAccessTimeMap.containsKey(hiveTableName)) {
             long lastAccessTime = lastAccessTimeMap.get(hiveTableName);
+=======
+        DatabaseTableName databaseTableName = DatabaseTableName.of(hiveDbName, hiveTblName);
+        if (lastAccessTimeMap.containsKey(databaseTableName)) {
+            long lastAccessTime = lastAccessTimeMap.get(databaseTableName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             long intervalSec = (System.currentTimeMillis() - lastAccessTime) / 1000;
             long refreshIntervalSinceLastAccess = Config.background_refresh_metadata_time_secs_since_last_access_secs;
             if (refreshIntervalSinceLastAccess >= 0 && intervalSec > refreshIntervalSinceLastAccess) {
                 // invalidate table cache
                 invalidateTable(hiveDbName, hiveTblName);
+<<<<<<< HEAD
                 lastAccessTimeMap.remove(hiveTableName);
+=======
+                lastAccessTimeMap.remove(databaseTableName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 LOG.info("{}.{} skip refresh because of the last access time is {}", hiveDbName, hiveTblName,
                         LocalDateTime.ofInstant(Instant.ofEpochMilli(lastAccessTime), ZoneId.systemDefault()));
                 return null;
@@ -475,8 +743,14 @@ public class CachingHiveMetastore implements IHiveMetastore {
         }
 
         List<HivePartitionName> refreshPartitionNames = refreshTable(hiveDbName, hiveTblName, onlyCachedPartitions);
+<<<<<<< HEAD
         Set<HiveTableName> cachedTableNames = getCachedTableNames();
         lastAccessTimeMap.keySet().removeIf(tableName -> !(cachedTableNames.contains(tableName)));
+=======
+        Set<DatabaseTableName> cachedTableNames = getCachedTableNames();
+        lastAccessTimeMap.keySet().removeIf(tableName -> !(cachedTableNames.contains(tableName)));
+        LOG.info("Refresh table {}.{} in background", hiveDbName, hiveTblName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return refreshPartitionNames;
     }
 
@@ -508,6 +782,7 @@ public class CachingHiveMetastore implements IHiveMetastore {
     }
 
     public synchronized void refreshPartition(List<HivePartitionName> partitionNames) {
+<<<<<<< HEAD
         Map<HivePartitionName, Partition> updatedPartitions = loadPartitionsByNames(partitionNames);
         partitionCache.putAll(updatedPartitions);
 
@@ -530,6 +805,25 @@ public class CachingHiveMetastore implements IHiveMetastore {
             LOG.error("Error occurred when loading cache", e);
             throwIfInstanceOf(e.getCause(), StarRocksConnectorException.class);
             throw e;
+=======
+        if (metastore instanceof CachingHiveMetastore) {
+            metastore.refreshPartition(partitionNames);
+        } else {
+            Map<HivePartitionName, Partition> updatedPartitions = loadPartitionsByNames(partitionNames);
+            partitionCache.putAll(updatedPartitions);
+
+            Map<HivePartitionName, HivePartitionStats> updatePartitionStats = loadPartitionsStatistics(partitionNames);
+            partitionStatsCache.putAll(updatePartitionStats);
+
+            if (enableListNameCache && !partitionNames.isEmpty()) {
+                HivePartitionName firstName = partitionNames.get(0);
+                DatabaseTableName databaseTableName = DatabaseTableName.of(firstName.getDatabaseName(), firstName.getTableName());
+                // refresh partitionKeysCache with all partition values
+                HivePartitionValue hivePartitionValue = HivePartitionValue.of(
+                        databaseTableName, HivePartitionValue.ALL_PARTITION_VALUES);
+                partitionKeysCache.put(hivePartitionValue, loadPartitionKeys(hivePartitionValue));
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -551,6 +845,10 @@ public class CachingHiveMetastore implements IHiveMetastore {
                 .collect(Collectors.toList());
     }
 
+<<<<<<< HEAD
+=======
+    @Override
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public synchronized void invalidateAll() {
         databaseNamesCache.invalidateAll();
         tableNamesCache.invalidateAll();
@@ -562,12 +860,27 @@ public class CachingHiveMetastore implements IHiveMetastore {
         partitionStatsCache.invalidateAll();
     }
 
+<<<<<<< HEAD
     public synchronized void invalidateTable(String dbName, String tableName) {
         HiveTableName hiveTableName = HiveTableName.of(dbName, tableName);
         tableCache.invalidate(hiveTableName);
         tableStatsCache.invalidate(hiveTableName);
         partitionKeysCache.asMap().keySet().stream().filter(hivePartitionValue -> hivePartitionValue.getHiveTableName().
                 equals(hiveTableName)).forEach(partitionKeysCache::invalidate);
+=======
+    public synchronized void invalidateDatabase(String dbName) {
+        databaseCache.invalidate(dbName);
+        databaseNamesCache.invalidateAll();
+    }
+
+    @Override
+    public synchronized void invalidateTable(String dbName, String tableName) {
+        DatabaseTableName databaseTableName = DatabaseTableName.of(dbName, tableName);
+        tableCache.invalidate(databaseTableName);
+        tableStatsCache.invalidate(databaseTableName);
+        partitionKeysCache.asMap().keySet().stream().filter(hivePartitionValue -> hivePartitionValue.getHiveTableName().
+                equals(databaseTableName)).forEach(partitionKeysCache::invalidate);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<HivePartitionName> presentPartitions = getPresentPartitionNames(partitionCache, dbName, tableName);
         presentPartitions.forEach(p -> partitionCache.invalidate(p));
         List<HivePartitionName> presentPartitionStats = getPresentPartitionNames(partitionStatsCache, dbName, tableName);
@@ -575,9 +888,15 @@ public class CachingHiveMetastore implements IHiveMetastore {
     }
 
     public synchronized void invalidatePartition(HivePartitionName partitionName) {
+<<<<<<< HEAD
         HiveTableName hiveTableName = HiveTableName.of(partitionName.getDatabaseName(), partitionName.getTableName());
         partitionKeysCache.asMap().keySet().stream().filter(hivePartitionValue -> hivePartitionValue.getHiveTableName().
                 equals(hiveTableName)).forEach(partitionKeysCache::invalidate);
+=======
+        DatabaseTableName databaseTableName = DatabaseTableName.of(partitionName.getDatabaseName(), partitionName.getTableName());
+        partitionKeysCache.asMap().keySet().stream().filter(hivePartitionValue -> hivePartitionValue.getHiveTableName().
+                equals(databaseTableName)).forEach(partitionKeysCache::invalidate);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         partitionCache.invalidate(partitionName);
         partitionStatsCache.invalidate(partitionName);
     }
@@ -591,15 +910,19 @@ public class CachingHiveMetastore implements IHiveMetastore {
         }
     }
 
+<<<<<<< HEAD
     public boolean isTablePresent(HiveTableName tableName) {
         return tableCache.getIfPresent(tableName) != null;
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public boolean isPartitionPresent(HivePartitionName hivePartitionName) {
         return partitionCache.getIfPresent(hivePartitionName) != null;
     }
 
     public synchronized void refreshTableByEvent(HiveTable updatedHiveTable, HiveCommonStats commonStats, Partition partition) {
+<<<<<<< HEAD
         String dbName = updatedHiveTable.getDbName();
         String tableName = updatedHiveTable.getTableName();
         HiveTableName hiveTableName = HiveTableName.of(dbName, tableName);
@@ -612,6 +935,20 @@ public class CachingHiveMetastore implements IHiveMetastore {
         } else {
             partitionKeysCache.asMap().keySet().stream().filter(hivePartitionValue -> hivePartitionValue.getHiveTableName().
                     equals(hiveTableName)).forEach(partitionKeysCache::invalidate);
+=======
+        String dbName = updatedHiveTable.getCatalogDBName();
+        String tableName = updatedHiveTable.getCatalogTableName();
+        DatabaseTableName databaseTableName = DatabaseTableName.of(dbName, tableName);
+        tableCache.put(databaseTableName, updatedHiveTable);
+        if (updatedHiveTable.isUnPartitioned()) {
+            Map<String, HiveColumnStats> columnStats = get(tableStatsCache, databaseTableName).getColumnStats();
+            HivePartitionStats updatedPartitionStats = createPartitionStats(commonStats, columnStats);
+            tableStatsCache.put(databaseTableName, updatedPartitionStats);
+            partitionCache.put(HivePartitionName.of(dbName, tableName, Lists.newArrayList()), partition);
+        } else {
+            partitionKeysCache.asMap().keySet().stream().filter(hivePartitionValue -> hivePartitionValue.getHiveTableName().
+                    equals(databaseTableName)).forEach(partitionKeysCache::invalidate);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             List<HivePartitionName> presentPartitions = getPresentPartitionNames(partitionCache, dbName, tableName);
             presentPartitions.forEach(p -> partitionCache.invalidate(p));
             List<HivePartitionName> presentPartitionStats = getPresentPartitionNames(partitionStatsCache, dbName, tableName);
@@ -624,9 +961,16 @@ public class CachingHiveMetastore implements IHiveMetastore {
                                                      Partition partition) {
         Map<String, HiveColumnStats> columnStats = get(partitionStatsCache, hivePartitionName).getColumnStats();
         HivePartitionStats updatedPartitionStats = createPartitionStats(commonStats, columnStats);
+<<<<<<< HEAD
         HiveTableName hiveTableName = HiveTableName.of(hivePartitionName.getDatabaseName(), hivePartitionName.getTableName());
         partitionKeysCache.asMap().keySet().stream().filter(hivePartitionValue -> hivePartitionValue.getHiveTableName().
                 equals(hiveTableName)).forEach(partitionKeysCache::invalidate);
+=======
+        DatabaseTableName
+                databaseTableName = DatabaseTableName.of(hivePartitionName.getDatabaseName(), hivePartitionName.getTableName());
+        partitionKeysCache.asMap().keySet().stream().filter(hivePartitionValue -> hivePartitionValue.getHiveTableName().
+                equals(databaseTableName)).forEach(partitionKeysCache::invalidate);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         partitionCache.put(hivePartitionName, partition);
         partitionStatsCache.put(hivePartitionName, updatedPartitionStats);
     }
@@ -649,4 +993,8 @@ public class CachingHiveMetastore implements IHiveMetastore {
             final boolean getAllEvents) throws MetastoreNotificationFetchException {
         return ((HiveMetastore) metastore).getNextEventResponse(lastSyncedEventId, catalogName, getAllEvents);
     }
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

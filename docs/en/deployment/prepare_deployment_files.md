@@ -38,6 +38,7 @@ Follow these steps to prepare deployment files for the x86-based platform:
 
    The package includes the following directories and files:
 
+<<<<<<< HEAD
    | **Directory/File**     | **Description**                                              |
    | ---------------------- | ------------------------------------------------------------ |
    | **apache_hdfs_broker** | The deployment directory of the Broker node. From StarRocks v2.5 onwards, you do not need to deploy Broker nodes in general scenarios. If you need to deploy Broker nodes in your StarRocks cluster, see [Deploy Broker node](../deployment/deploy_broker.md) for detailed instructions. |
@@ -45,6 +46,15 @@ Follow these steps to prepare deployment files for the x86-based platform:
    | **be**                 | The BE deployment directory.                                 |
    | **LICENSE.txt**        | The StarRocks license file.                                  |
    | **NOTICE.txt**         | The StarRocks notice file.                                   |
+=======
+   | **Directory/File**     | **Description**                              |
+   | ---------------------- | -------------------------------------------- |
+   | **apache_hdfs_broker** | The deployment directory of the Broker node. |
+   | **fe**                 | The FE deployment directory.                 |
+   | **be**                 | The BE deployment directory.                 |
+   | **LICENSE.txt**        | The StarRocks license file.                  |
+   | **NOTICE.txt**         | The StarRocks notice file.                   |
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 3. Dispatch the directory **fe** to all the FE instances and the directory **be** to all the BE or CN instances for [manual deployment](../deployment/deploy_manually.md).
 

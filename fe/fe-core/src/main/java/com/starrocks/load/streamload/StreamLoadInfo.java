@@ -19,12 +19,21 @@ import com.google.re2j.Pattern;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.Config;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SqlModeHelper;
+<<<<<<< HEAD
+=======
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.ColumnSeparator;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.ImportColumnsStmt;
@@ -32,16 +41,30 @@ import com.starrocks.sql.ast.ImportWhereStmt;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.RowDelimiter;
 import com.starrocks.sql.parser.ParsingException;
+<<<<<<< HEAD
+=======
+import com.starrocks.system.SystemInfoService;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TFileType;
 import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.thrift.TStreamLoadPutRequest;
 import com.starrocks.thrift.TUniqueId;
+<<<<<<< HEAD
+=======
+import com.starrocks.warehouse.Warehouse;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
+<<<<<<< HEAD
+=======
+import java.util.Optional;
+
+import static com.starrocks.server.WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 public class StreamLoadInfo {
 
@@ -81,6 +104,12 @@ public class StreamLoadInfo {
     private String confluentSchemaRegistryUrl;
     private long logRejectedRecordNum = 0;
     private TPartialUpdateMode partialUpdateMode = TPartialUpdateMode.ROW_MODE;
+<<<<<<< HEAD
+=======
+    private long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+
+    private TCompressionType payloadCompressionType = TCompressionType.NO_COMPRESSION;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public StreamLoadInfo(TUniqueId id, long txnId, TFileType fileType, TFileFormatType formatType) {
         this.id = id;
@@ -92,6 +121,7 @@ public class StreamLoadInfo {
         this.stripOuterArray = false;
     }
 
+<<<<<<< HEAD
     public StreamLoadInfo(TUniqueId id, long txnId, int timeout) {
         this.id = id;
         this.txnId = txnId;
@@ -99,6 +129,17 @@ public class StreamLoadInfo {
         this.jsonRoot = "";
         this.stripOuterArray = false;
         this.timeout = timeout;
+=======
+    public StreamLoadInfo(TUniqueId id, long txnId, TFileType fileType, TFileFormatType formatType, Optional<Integer> timeout) {
+        this.id = id;
+        this.txnId = txnId;
+        this.fileType = fileType;
+        this.formatType = formatType;
+        this.jsonPaths = "";
+        this.jsonRoot = "";
+        this.stripOuterArray = false;
+        timeout.ifPresent(integer -> this.timeout = integer);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public String getConfluentSchemaRegistryUrl() {
@@ -233,6 +274,13 @@ public class StreamLoadInfo {
         return compressionType;
     }
 
+<<<<<<< HEAD
+=======
+    public TCompressionType getPayloadCompressionType() {
+        return payloadCompressionType;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public boolean getEnableReplicatedStorage() {
         return enableReplicatedStorage;
     }
@@ -249,6 +297,7 @@ public class StreamLoadInfo {
         this.logRejectedRecordNum = logRejectedRecordNum;
     }
 
+<<<<<<< HEAD
     public static StreamLoadInfo fromStreamLoadContext(TUniqueId id, long txnId, int timeout, StreamLoadParam context)
             throws UserException {
         StreamLoadInfo streamLoadInfo = new StreamLoadInfo(id, txnId, timeout);
@@ -368,10 +417,80 @@ public class StreamLoadInfo {
             String[] partNames = PART_NAME_SPLIT.split(request.getPartitions().trim());
             if (request.isSetIsTempPartition()) {
                 partitions = new PartitionNames(request.isIsTempPartition(), Lists.newArrayList(partNames));
+=======
+    public void setWarehouseId(long warehouseId) {
+        this.warehouseId = warehouseId;
+    }
+
+    public long getWarehouseId() {
+        return warehouseId;
+    }
+
+    public static StreamLoadInfo fromHttpStreamLoadRequest(
+            TUniqueId id, long txnId, Optional<Integer> timeout, StreamLoadKvParams params)
+            throws StarRocksException {
+        StreamLoadInfo streamLoadInfo = new StreamLoadInfo(id, txnId,
+                params.getFileType().orElse(TFileType.FILE_STREAM),
+                params.getFileFormatType().orElse(TFileFormatType.FORMAT_CSV_PLAIN), timeout);
+        streamLoadInfo.setOptionalFromStreamLoad(params);
+        String warehouseName = params.getWarehouse().orElse(DEFAULT_WAREHOUSE_NAME);
+        Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName);
+        if (warehouse == null) {
+            throw new StarRocksException(String.format("Warehouse [%s] does not exist", warehouseName));
+        }
+        streamLoadInfo.setWarehouseId(warehouse.getId());
+        return streamLoadInfo;
+    }
+
+    public static StreamLoadInfo fromTStreamLoadPutRequest(TStreamLoadPutRequest request, Database db)
+            throws StarRocksException {
+        StreamLoadThriftParams streamLoadParams = new StreamLoadThriftParams(request);
+        StreamLoadInfo streamLoadInfo = new StreamLoadInfo(request.getLoadId(), request.getTxnId(),
+                streamLoadParams.getFileType().orElse(null), streamLoadParams.getFileFormatType().orElse(null));
+        streamLoadInfo.setOptionalFromStreamLoad(streamLoadParams);
+        long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+        if (request.isSetBackend_id()) {
+            SystemInfoService systemInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+            warehouseId = com.starrocks.lake.Utils.getWarehouseIdByNodeId(systemInfo, request.getBackend_id())
+                    .orElse(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        } else if (request.getWarehouse() != null && !request.getWarehouse().isEmpty()) {
+            // For backward, we keep this else branch. We should prioritize using the method to get the warehouse by backend.
+            String warehouseName = request.getWarehouse();
+            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName);
+            warehouseId = warehouse.getId();
+        }
+        streamLoadInfo.setWarehouseId(warehouseId);
+        return streamLoadInfo;
+    }
+
+    private void setOptionalFromStreamLoad(StreamLoadParams params) throws StarRocksException {
+        Optional<String> columns = params.getColumns();
+        if (columns.isPresent()) {
+            setColumnToColumnExpr(columns.get());
+        }
+        Optional<String> where = params.getWhere();
+        if (where.isPresent()) {
+            setWhereExpr(where.get());
+        }
+        params.getColumnSeparator().ifPresent(value -> columnSeparator = new ColumnSeparator(value));
+        params.getRowDelimiter().ifPresent(value -> rowDelimiter = new RowDelimiter(value));
+        params.getSkipHeader().ifPresent(value -> skipHeader = value);
+        params.getEnclose().ifPresent(value -> enclose = value);
+        params.getEscape().ifPresent(value -> escape = value);
+        params.getTrimSpace().ifPresent(value -> trimSpace = value);
+
+        Optional<String> parts = params.getPartitions();
+        if (parts.isPresent()) {
+            String[] partNames = PART_NAME_SPLIT.split(parts.get().trim());
+            Optional<Boolean> isTempPartition = params.getIsTempPartition();
+            if (isTempPartition.isPresent()) {
+                partitions = new PartitionNames(isTempPartition.get(), Lists.newArrayList(partNames));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             } else {
                 partitions = new PartitionNames(false, Lists.newArrayList(partNames));
             }
         }
+<<<<<<< HEAD
         switch (request.getFileType()) {
             case FILE_STREAM:
                 path = request.getPath();
@@ -432,6 +551,53 @@ public class StreamLoadInfo {
     }
 
     public static StreamLoadInfo fromRoutineLoadJob(RoutineLoadJob routineLoadJob) throws UserException {
+=======
+
+        if (fileType != null) {
+            if (fileType == TFileType.FILE_STREAM) {
+                path = params.getFilePath().orElse(null);
+            } else {
+                throw new StarRocksException("Unsupported file type, type=" + fileType);
+            }
+        }
+
+        params.getNegative().ifPresent(value -> negative = value);
+        params.getTimeout().ifPresent(value -> timeout = value);
+        params.getStrictMode().ifPresent(value -> strictMode = value);
+        Optional<String> timezoneOptional = params.getTimezone();
+
+        if (timezoneOptional.isPresent()) {
+            timezone = TimeUtils.checkTimeZoneValidAndStandardize(timezoneOptional.get());
+        }
+
+        params.getLoadMemLimit().ifPresent(value -> loadMemLimit = value);
+
+        if (formatType == TFileFormatType.FORMAT_JSON) {
+            params.getJsonPaths().ifPresent(value -> jsonPaths = value);
+            params.getJsonRoot().ifPresent(value -> jsonRoot = value);
+            params.getStripOuterArray().ifPresent(value -> stripOuterArray = value);
+        }
+
+        params.getTransmissionCompressionType().ifPresent(
+                value -> compressionType = CompressionUtils.findTCompressionByName(value));
+        params.getLoadDop().ifPresent(value -> loadParallelRequestNum = value);
+        params.getEnableReplicatedStorage().ifPresent(value -> enableReplicatedStorage = value);
+        params.getMergeCondition().ifPresent(value -> mergeConditionStr = value);
+        params.getLogRejectedRecordNum().ifPresent(value -> logRejectedRecordNum = value);
+        params.getPartialUpdate().ifPresent(value -> partialUpdate = value);
+        params.getPartialUpdateMode().ifPresent(value -> partialUpdateMode = value);
+
+        Optional<String> compressionType = params.getPayloadCompressionType();
+        if (compressionType.isPresent()) {
+            payloadCompressionType = CompressionUtils.findTCompressionByName(compressionType.get());
+            if (payloadCompressionType == null) {
+                throw new StarRocksException("Unsupported compression type: " + compressionType.get());
+            }
+        }
+    }
+
+    public static StreamLoadInfo fromRoutineLoadJob(RoutineLoadJob routineLoadJob) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         TUniqueId dummyId = new TUniqueId();
         TFileFormatType fileFormatType = TFileFormatType.FORMAT_CSV_PLAIN;
         if (routineLoadJob.getFormat().equals("json")) {
@@ -447,7 +613,11 @@ public class StreamLoadInfo {
         return streamLoadInfo;
     }
 
+<<<<<<< HEAD
     private void setOptionalFromRoutineLoadJob(RoutineLoadJob routineLoadJob) throws UserException {
+=======
+    private void setOptionalFromRoutineLoadJob(RoutineLoadJob routineLoadJob) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // copy the columnExprDescs, cause it may be changed when planning.
         // so we keep the columnExprDescs in routine load job as origin.
         if (routineLoadJob.getColumnDescs() != null) {
@@ -483,10 +653,18 @@ public class StreamLoadInfo {
         trimSpace = routineLoadJob.isTrimspace();
         enclose = routineLoadJob.getEnclose();
         escape = routineLoadJob.getEscape();
+<<<<<<< HEAD
     }
 
     // used for stream load
     private void setColumnToColumnExpr(String columns) throws UserException {
+=======
+        warehouseId = routineLoadJob.getWarehouseId();
+    }
+
+    // used for stream load
+    private void setColumnToColumnExpr(String columns) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         String columnsSQL = "COLUMNS (" + columns + ")";
         ImportColumnsStmt columnsStmt;
         try {
@@ -496,7 +674,11 @@ public class StreamLoadInfo {
             throw e;
         } catch (Exception e) {
             LOG.warn("failed to parse columns header, sql={}", columnsSQL, e);
+<<<<<<< HEAD
             throw new UserException("parse columns header failed", e);
+=======
+            throw new StarRocksException("parse columns header failed", e);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         if (columnsStmt.getColumns() != null && !columnsStmt.getColumns().isEmpty()) {
@@ -504,7 +686,11 @@ public class StreamLoadInfo {
         }
     }
 
+<<<<<<< HEAD
     private void setWhereExpr(String whereString) throws UserException {
+=======
+    private void setWhereExpr(String whereString) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ImportWhereStmt whereStmt;
         try {
             whereStmt = new ImportWhereStmt(com.starrocks.sql.parser.SqlParser.parseSqlToExpr(whereString,
@@ -514,12 +700,20 @@ public class StreamLoadInfo {
             throw e;
         } catch (Exception e) {
             LOG.warn("failed to parse where header, sql={}", whereString, e);
+<<<<<<< HEAD
             throw new UserException("parse columns header failed", e);
+=======
+            throw new StarRocksException("parse columns header failed", e);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         whereExpr = whereStmt.getExpr();
     }
 
+<<<<<<< HEAD
     private void setMergeConditionExpr(String mergeConditionStr) throws UserException {
+=======
+    private void setMergeConditionExpr(String mergeConditionStr) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.mergeConditionStr = mergeConditionStr;
         // TODO:(caneGuy) use expr for update condition
     }

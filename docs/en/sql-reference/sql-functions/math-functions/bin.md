@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # bin
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Transforms the input `arg` into a binary.
 

@@ -70,7 +70,11 @@ public class ExceptionChecker {
                 if (!Strings.isNullOrEmpty(exceptionMsg)) {
                     if (!e.getMessage().contains(exceptionMsg)) {
                         AssertionFailedError assertion = new AssertionFailedError(
+<<<<<<< HEAD
                                 "expceted msg: " + exceptionMsg + ", actual: " + e.getMessage());
+=======
+                                "expected msg: " + exceptionMsg + ", actual: " + e.getMessage());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         assertion.initCause(e);
                         throw assertion;
                     }

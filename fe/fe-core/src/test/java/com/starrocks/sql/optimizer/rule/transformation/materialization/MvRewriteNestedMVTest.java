@@ -14,6 +14,10 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.plan.ConnectorPlanTestBase;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -23,9 +27,17 @@ import org.junit.runners.MethodSorters;
 
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 public class MvRewriteNestedMVTest extends MvRewriteTestBase {
+<<<<<<< HEAD
     @BeforeClass
     public static void beforeClass() throws Exception {
         MvRewriteTestBase.beforeClass();
+=======
+
+    @BeforeClass
+    public static void beforeClass() throws Exception {
+        MvRewriteTestBase.beforeClass();
+        ConnectorPlanTestBase.mockHiveCatalog(connectContext);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         starRocksAssert.withTable(cluster, "depts");
         starRocksAssert.withTable(cluster, "emps");
@@ -97,6 +109,7 @@ public class MvRewriteNestedMVTest extends MvRewriteTestBase {
     public void testExternalNestedMVs1() throws Exception {
         connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
         createAndRefreshMv("create materialized view hive_nested_mv_1 distributed by hash(s_suppkey) " +
+<<<<<<< HEAD
                         "PROPERTIES (\n" +
                         "\"force_external_table_query_rewrite\" = \"true\"\n" +
                         ") " +
@@ -110,6 +123,12 @@ public class MvRewriteNestedMVTest extends MvRewriteTestBase {
                         "PROPERTIES (\n" +
                         "\"force_external_table_query_rewrite\" = \"true\"\n" +
                         ") " +
+=======
+                        " as select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier");
+        createAndRefreshMv("create materialized view hive_nested_mv_2 distributed by hash(s_suppkey) " +
+                        " as select s_suppkey, sum(s_acctbal) from hive0.tpch.supplier group by s_suppkey");
+        createAndRefreshMv("create materialized view hive_nested_mv_3 distributed by hash(s_suppkey) " +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         " as select * from hive_nested_mv_2 where s_suppkey > 1");
         String query1 = "select s_suppkey, sum(s_acctbal) from hive0.tpch.supplier where s_suppkey > 1 group by s_suppkey ";
         String plan1 = getFragmentPlan(query1);

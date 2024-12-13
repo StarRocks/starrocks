@@ -27,7 +27,11 @@ import java.util.List;
 
 public class CompactionsProcNode implements ProcNodeInterface {
     private static final List<String> TITLES = Collections.unmodifiableList(Arrays.asList(
+<<<<<<< HEAD
             "Partition", "TxnID", "StartTime", "CommitTime", "FinishTime", "Error"));
+=======
+            "Partition", "TxnID", "StartTime", "CommitTime", "FinishTime", "Error", "Profile"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public CompactionsProcNode() {
     }
@@ -46,6 +50,10 @@ public class CompactionsProcNode implements ProcNodeInterface {
             row.add(record.getCommitTs().map(TimeUtils::longToTimeString).orElse(null));
             row.add(record.getFinishTs().map(TimeUtils::longToTimeString).orElse(null));
             row.add(record.getErrorMessage().orElse(null));
+<<<<<<< HEAD
+=======
+            row.add(record.getExecutionProfile().orElse(null));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             result.addRow(row);
         }
         return result;

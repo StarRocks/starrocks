@@ -23,16 +23,31 @@ import java.util.Objects;
 
 public class HashDistributionSpec extends DistributionSpec {
     private final HashDistributionDesc hashDistributionDesc;
+<<<<<<< HEAD
+=======
+    private final EquivalentDescriptor equivDesc;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public HashDistributionSpec(HashDistributionDesc distributionDesc) {
         super(DistributionType.SHUFFLE);
         this.hashDistributionDesc = distributionDesc;
+<<<<<<< HEAD
         propertyInfo.initDistributionDisjointSet(distributionDesc.getDistributionCols());
     }
 
     public HashDistributionSpec(HashDistributionDesc distributionDesc, PropertyInfo propertyInfo) {
         super(DistributionType.SHUFFLE, propertyInfo);
         this.hashDistributionDesc = distributionDesc;
+=======
+        this.equivDesc = new EquivalentDescriptor();
+        equivDesc.initDistributionUnionFind(distributionDesc.getDistributionCols());
+    }
+
+    public HashDistributionSpec(HashDistributionDesc distributionDesc, EquivalentDescriptor descriptor) {
+        super(DistributionType.SHUFFLE);
+        this.hashDistributionDesc = distributionDesc;
+        this.equivDesc = descriptor;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public HashDistributionDesc getHashDistributionDesc() {
@@ -80,7 +95,11 @@ public class HashDistributionSpec extends DistributionSpec {
             int idx = 0;
             for (; idx < requiredShuffleColumns.size(); idx++) {
                 DistributionCol requiredCol = requiredShuffleColumns.get(idx);
+<<<<<<< HEAD
                 if (propertyInfo.isConnected(requiredCol, shuffleCol)) {
+=======
+                if (equivDesc.isConnected(requiredCol, shuffleCol)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     break;
                 }
             }
@@ -100,7 +119,11 @@ public class HashDistributionSpec extends DistributionSpec {
         for (int i = 0; i < shuffleColumns.size(); i++) {
             DistributionCol requiredCol = requiredShuffleColumns.get(i);
             DistributionCol shuffleCol = shuffleColumns.get(i);
+<<<<<<< HEAD
             if (!propertyInfo.isConnected(requiredCol, shuffleCol)) {
+=======
+            if (!equivDesc.isConnected(requiredCol, shuffleCol)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 return false;
             }
 
@@ -113,6 +136,13 @@ public class HashDistributionSpec extends DistributionSpec {
             return true;
         }
 
+<<<<<<< HEAD
+=======
+        if (spec.type.equals(DistributionType.ROUND_ROBIN)) {
+            return true;
+        }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (!spec.type.equals(DistributionType.SHUFFLE)) {
             return false;
         }
@@ -120,6 +150,7 @@ public class HashDistributionSpec extends DistributionSpec {
         HashDistributionSpec other = (HashDistributionSpec) spec;
         HashDistributionDesc.SourceType thisSourceType = hashDistributionDesc.getSourceType();
 
+<<<<<<< HEAD
         // check shuffle_local PropertyInfo
         if (thisSourceType == HashDistributionDesc.SourceType.LOCAL) {
             ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentColocateIndex();
@@ -128,6 +159,16 @@ public class HashDistributionSpec extends DistributionSpec {
             boolean satisfyColocate = propertyInfo.isSinglePartition() || (colocateIndex.isColocateTable(tableId) &&
                     !colocateIndex.isGroupUnstable(colocateIndex.getGroup(tableId)) &&
                     !propertyInfo.isEmptyPartition());
+=======
+        // check shuffle_local equivalentDescriptor
+        if (thisSourceType == HashDistributionDesc.SourceType.LOCAL) {
+            ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+            long tableId = equivDesc.getTableId();
+            // Disable use colocate/bucket join when table with empty partition
+            boolean satisfyColocate = equivDesc.isSinglePartition() || (colocateIndex.isColocateTable(tableId) &&
+                    !colocateIndex.isGroupUnstable(colocateIndex.getGroup(tableId)) &&
+                    !equivDesc.isEmptyPartition());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (!satisfyColocate) {
                 return false;
             }
@@ -140,6 +181,7 @@ public class HashDistributionSpec extends DistributionSpec {
         return hashDistributionDesc.getDistributionCols();
     }
 
+<<<<<<< HEAD
     public HashDistributionSpec getNullRelaxSpec(PropertyInfo propertyInfo) {
         return new HashDistributionSpec(hashDistributionDesc.getNullRelaxDesc(), propertyInfo);
     }
@@ -147,6 +189,15 @@ public class HashDistributionSpec extends DistributionSpec {
     public HashDistributionSpec getNullStrictSpec(PropertyInfo propertyInfo) {
         if (!hashDistributionDesc.isAllNullStrict()) {
             return new HashDistributionSpec(hashDistributionDesc.getNullStrictDesc(), propertyInfo);
+=======
+    public HashDistributionSpec getNullRelaxSpec(EquivalentDescriptor descriptor) {
+        return new HashDistributionSpec(hashDistributionDesc.getNullRelaxDesc(), descriptor);
+    }
+
+    public HashDistributionSpec getNullStrictSpec(EquivalentDescriptor descriptor) {
+        if (!hashDistributionDesc.isAllNullStrict()) {
+            return new HashDistributionSpec(hashDistributionDesc.getNullStrictDesc(), descriptor);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } else {
             return this;
         }
@@ -156,6 +207,13 @@ public class HashDistributionSpec extends DistributionSpec {
         return hashDistributionDesc.isAllNullStrict();
     }
 
+<<<<<<< HEAD
+=======
+    public EquivalentDescriptor getEquivDesc() {
+        return equivDesc;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public int hashCode() {
         return Objects.hash(hashDistributionDesc);

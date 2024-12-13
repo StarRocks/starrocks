@@ -25,6 +25,7 @@
 namespace starrocks::bthreads {
 
 namespace {
+<<<<<<< HEAD
 struct FunctorArg {
     explicit FunctorArg(std::function<void()> f) : func(std::move(f)) {}
 
@@ -34,6 +35,13 @@ struct FunctorArg {
 static void* bthread_func(void* arg) {
     auto func_arg = static_cast<FunctorArg*>(arg);
     func_arg->func();
+=======
+typedef std::function<void()> FunctorArg;
+
+static void* bthread_func(void* arg) {
+    auto func_arg = static_cast<FunctorArg*>(arg);
+    func_arg->operator()();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     delete func_arg;
     return nullptr;
 }

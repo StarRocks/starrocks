@@ -23,6 +23,7 @@ import org.junit.Test;
 public class StorageInfoTest {
     @Test
     public void test() {
+<<<<<<< HEAD
         StorageInfo info = new StorageInfo();
         Assert.assertEquals(-1, info.getClusterID());
         Assert.assertEquals(0, info.getImageJournalId());
@@ -36,5 +37,9 @@ public class StorageInfoTest {
 
         Assert.assertEquals(100, info.getClusterID());
         Assert.assertEquals(200, info.getImageJournalId());
+=======
+        StorageInfo info = new StorageInfo(20, ImageFormatVersion.v2);
+        Assert.assertEquals(20, info.getImageJournalId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }

@@ -42,12 +42,21 @@
 namespace starrocks {
 
 static void set_up() {
+<<<<<<< HEAD
     system("rm -rf ./test_run && mkdir -p ./test_run");
     system("mkdir -p ./test_run/data && mkdir -p ./test_run/data.ssd");
 }
 
 static void tear_down() {
     system("rm -rf ./test_run");
+=======
+    [[maybe_unused]] auto res = system("rm -rf ./test_run && mkdir -p ./test_run");
+    res = system("mkdir -p ./test_run/data && mkdir -p ./test_run/data.ssd");
+}
+
+static void tear_down() {
+    [[maybe_unused]] auto res = system("rm -rf ./test_run");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 class OptionsTest : public testing::Test {

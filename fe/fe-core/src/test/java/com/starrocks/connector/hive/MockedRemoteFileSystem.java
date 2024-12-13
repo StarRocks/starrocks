@@ -193,7 +193,11 @@ public class MockedRemoteFileSystem extends FileSystem {
 
     @Override
     public boolean rename(Path path, Path path1) throws IOException {
+<<<<<<< HEAD
         throw new UnsupportedOperationException();
+=======
+        return false;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -218,7 +222,11 @@ public class MockedRemoteFileSystem extends FileSystem {
 
     @Override
     public boolean mkdirs(Path path, FsPermission fsPermission) {
+<<<<<<< HEAD
         throw new UnsupportedOperationException();
+=======
+        return false;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override

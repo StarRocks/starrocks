@@ -29,14 +29,24 @@ import org.apache.paimon.types.DecimalType;
 import org.apache.paimon.types.DoubleType;
 import org.apache.paimon.types.FloatType;
 import org.apache.paimon.types.IntType;
+<<<<<<< HEAD
+=======
+import org.apache.paimon.types.LocalZonedTimestampType;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.paimon.types.MapType;
 import org.apache.paimon.types.RowType;
 import org.apache.paimon.types.SmallIntType;
 import org.apache.paimon.types.TimestampType;
 import org.apache.paimon.types.TinyIntType;
+<<<<<<< HEAD
 import org.apache.paimon.types.VarCharType;
 import org.junit.Assert;
 import org.junit.Ignore;
+=======
+import org.apache.paimon.types.VarBinaryType;
+import org.apache.paimon.types.VarCharType;
+import org.junit.Assert;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.junit.Test;
 
 import java.util.Arrays;
@@ -52,6 +62,16 @@ public class PaimonColumnConverterTest {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testConvertVarBinary() {
+        VarBinaryType paimonType = new VarBinaryType();
+        Type result = ColumnTypeConverter.fromPaimonType(paimonType);
+        Assert.assertEquals(result, Type.VARBINARY);
+    }
+
+    @Test
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void testConvertChar() {
         CharType paimonType = new CharType(10);
         Type result = ColumnTypeConverter.fromPaimonType(paimonType);
@@ -63,7 +83,11 @@ public class PaimonColumnConverterTest {
     public void testConvertVarchar() {
         VarCharType paimonType = new VarCharType();
         Type result = ColumnTypeConverter.fromPaimonType(paimonType);
+<<<<<<< HEAD
         Type srType = ScalarType.createDefaultExternalTableString();
+=======
+        Type srType = ScalarType.createDefaultCatalogString();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals(result, srType);
     }
 
@@ -141,6 +165,16 @@ public class PaimonColumnConverterTest {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testConvertLocalZonedDatetime() {
+        LocalZonedTimestampType paimonType = new LocalZonedTimestampType();
+        Type result = ColumnTypeConverter.fromPaimonType(paimonType);
+        Assert.assertEquals(result, Type.DATETIME);
+    }
+
+    @Test
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void testConvertArray() {
         ArrayType paimonType = new ArrayType(new SmallIntType());
         Type result = ColumnTypeConverter.fromPaimonType(paimonType);
@@ -155,11 +189,19 @@ public class PaimonColumnConverterTest {
         Type result = ColumnTypeConverter.fromPaimonType(paimonType);
         Assert.assertTrue(result instanceof com.starrocks.catalog.MapType);
         com.starrocks.catalog.MapType srType = (com.starrocks.catalog.MapType) result;
+<<<<<<< HEAD
         Assert.assertEquals(ScalarType.createDefaultExternalTableString(), srType.getKeyType());
         Assert.assertEquals(Type.DATETIME, srType.getValueType());
     }
 
     @Ignore
+=======
+        Assert.assertEquals(ScalarType.createDefaultCatalogString(), srType.getKeyType());
+        Assert.assertEquals(Type.DATETIME, srType.getValueType());
+    }
+
+    @Test
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void testConvertStruct() {
         List<DataField> fields =
                 Arrays.asList(

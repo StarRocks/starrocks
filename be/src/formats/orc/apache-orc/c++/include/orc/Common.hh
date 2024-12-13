@@ -18,14 +18,28 @@
 
 #pragma once
 
+<<<<<<< HEAD
+=======
+#include <glog/logging.h>
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include <string>
 
 #include "orc/Exceptions.hh"
 #include "orc/Type.hh"
 #include "orc/Vector.hh"
+<<<<<<< HEAD
 
 namespace orc {
 
+=======
+#include "runtime/integer_overflow_arithmetics.h"
+
+namespace orc {
+
+using int128_t = __int128;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 class FileVersion {
 private:
     uint32_t majorVersion;
@@ -216,6 +230,7 @@ inline bool compare(T val1, T val2) {
 // Specialization for Decimal
 template <>
 inline bool compare(Decimal val1, Decimal val2) {
+<<<<<<< HEAD
     // compare integral parts
     Int128 integral1 = scaleDownInt128ByPowerOfTen(val1.value, val1.scale);
     Int128 integral2 = scaleDownInt128ByPowerOfTen(val2.value, val2.scale);
@@ -250,6 +265,41 @@ inline bool compare(Decimal val1, Decimal val2) {
         return true;
     }
     return false;
+=======
+    if (val1.scale == val2.scale) {
+        return val1.value < val2.value;
+    }
+
+    // three-way comparison
+    // requires val1.scale < val2.scale
+    // returns negative iff x < y
+    // returns zero iff x = y
+    // returns positive iff x > y
+    auto cmp = [](Decimal& val1, Decimal& val2) -> int128_t {
+        DCHECK(val1.scale < val2.scale);
+        int128_t value1 = (static_cast<int128_t>(val1.value.getHighBits()) << 64) + val1.value.getLowBits();
+        int128_t value2 = (static_cast<int128_t>(val2.value.getHighBits()) << 64) + val2.value.getLowBits();
+        int32_t delta = val2.scale - val1.scale;
+        int128_t scaled_value1;
+        bool overflow;
+        overflow = starrocks::mul_overflow(value1, starrocks::exp10_int128(delta), &scaled_value1);
+        if (overflow) {
+            return value1;
+        }
+        int128_t diff;
+        overflow = starrocks::sub_overflow(scaled_value1, value2, &diff);
+        if (overflow) {
+            return value1;
+        }
+        return diff;
+    };
+
+    if (val1.scale < val2.scale) {
+        return cmp(val1, val2) < 0;
+    } else {
+        return cmp(val2, val1) > 0;
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 enum BloomFilterVersion {

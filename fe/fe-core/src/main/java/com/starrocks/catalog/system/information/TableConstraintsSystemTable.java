@@ -22,9 +22,19 @@ import com.starrocks.thrift.TSchemaTableType;
 import static com.starrocks.catalog.system.SystemTable.builder;
 
 public class TableConstraintsSystemTable {
+<<<<<<< HEAD
     public static SystemTable create() {
         return new SystemTable(SystemId.TABLE_CONSTRAINTS_ID,
                 "table_constraints",
+=======
+    private static final String NAME = "table_constraints";
+
+    public static SystemTable create(String catalogName) {
+        return new SystemTable(
+                catalogName,
+                SystemId.TABLE_CONSTRAINTS_ID,
+                NAME,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 Table.TableType.SCHEMA,
                 builder()
                         .column("CONSTRAINT_CATALOG", ScalarType.createVarchar(512))

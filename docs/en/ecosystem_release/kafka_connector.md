@@ -2,11 +2,19 @@
 displayed_sidebar: docs
 ---
 
+<<<<<<< HEAD
 # Kafka connector
 
 ## Notifications
 
 **User guide:** [Load data using Kafka connector](../loading/Kafka-connector-starrocks.md)
+=======
+# Releases of StarRocks Connector for Kafka
+
+## Notifications
+
+**User guide:** [Load data using Kafka connector](https://docs.starrocks.io/docs/loading/Kafka-connector-starrocks/)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 **Source codes:** [starrocks-connector-for-kafka](https://github.com/StarRocks/starrocks-connector-for-kafka)
 
@@ -18,6 +26,7 @@ displayed_sidebar: docs
 
 | Kafka Connector | StarRocks | Java |
 | --------------- | --------- | ---- |
+<<<<<<< HEAD
 | 1.0.0           | 2.1 and later | 8    |
 
 ## Release note
@@ -25,6 +34,43 @@ displayed_sidebar: docs
 ### 1.0
 
 **1.0.0**
+=======
+| 1.0.3           | 2.1 and later | 8    |
+| 1.0.2           | 2.1 and later | 8    |
+| 1.0.1           | 2.1 and later | 8    |
+| 1.0.0           | 2.1 and later | 8    |
+
+## Release notes
+
+### 1.0
+
+#### 1.0.3
+
+Release date: December 19, 2023
+
+**Features**
+
+Added Apache License as the open-source software license. [#9](https://github.com/StarRocks/starrocks-connector-for-kafka/pull/9)
+
+#### 1.0.2
+
+Release date: December 14, 2023
+
+**Features**
+
+Supports the source data to be of DECIMAL type. [#7](https://github.com/StarRocks/starrocks-connector-for-kafka/pull/7)
+
+#### 1.0.1
+
+Release date: November 28, 2023
+
+**Features**
+
+- Supports loading Debezium data into Primary Key tables. [#4](https://github.com/StarRocks/starrocks-connector-for-kafka/pull/4)
+- Supports parsing JSON data without schema registry. [#6](https://github.com/StarRocks/starrocks-connector-for-kafka/pull/6)
+
+#### 1.0.0
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Release date: June 25, 2023
 

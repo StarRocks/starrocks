@@ -76,11 +76,18 @@ void create_tuple_descriptor(RuntimeState* state, ObjectPool* pool, const SlotDe
     tuple_desc_builder.build(&table_desc_builder);
 
     std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
+<<<<<<< HEAD
     std::vector<bool> nullable_tuples = std::vector<bool>{true};
     DescriptorTbl* tbl = nullptr;
     DescriptorTbl::create(state, pool, table_desc_builder.desc_tbl(), &tbl, config::vector_chunk_size);
 
     RowDescriptor* row_desc = pool->add(new RowDescriptor(*tbl, row_tuples, nullable_tuples));
+=======
+    DescriptorTbl* tbl = nullptr;
+    auto st = DescriptorTbl::create(state, pool, table_desc_builder.desc_tbl(), &tbl, config::vector_chunk_size);
+    CHECK(st.ok()) << st;
+    RowDescriptor* row_desc = pool->add(new RowDescriptor(*tbl, row_tuples));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     *tuple_desc = row_desc->tuple_descriptors()[0];
     return;
 }
@@ -196,11 +203,19 @@ static uint64_t get_hit_rows(OrcChunkReader* reader) {
         if (st.is_end_of_file()) {
             break;
         }
+<<<<<<< HEAD
         DCHECK(st.ok()) << st.get_error_msg();
         ChunkPtr ckptr = reader->create_chunk();
         DCHECK(ckptr != nullptr);
         st = reader->fill_chunk(&ckptr);
         DCHECK(st.ok()) << st.get_error_msg();
+=======
+        DCHECK(st.ok()) << st.message();
+        ChunkPtr ckptr = reader->create_chunk();
+        DCHECK(ckptr != nullptr);
+        st = reader->fill_chunk(&ckptr);
+        DCHECK(st.ok()) << st.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ChunkPtr result = reader->cast_chunk(&ckptr);
         DCHECK(result != nullptr);
         records += result->num_rows();
@@ -209,12 +224,17 @@ static uint64_t get_hit_rows(OrcChunkReader* reader) {
     return records;
 }
 
+<<<<<<< HEAD
 void check_schema(const std::string& path, const std::vector<std::pair<std::string, LogicalType>>& expected_schema) {
+=======
+void check_schema(const std::string& path, const std::vector<std::pair<std::string, TypeDescriptor>>& expected_schema) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     OrcChunkReader reader{4096, {}};
     reader.set_broker_load_mode(true);
     auto input_stream = orc::readLocalFile(path);
     reader.init(std::move(input_stream));
     std::vector<SlotDescriptor> schema;
+<<<<<<< HEAD
 
     auto st = reader.get_schema(&schema);
     DCHECK(st.ok()) << st.get_error_msg();
@@ -223,6 +243,15 @@ void check_schema(const std::string& path, const std::vector<std::pair<std::stri
     for (size_t i = 0; i < expected_schema.size(); ++i) {
         EXPECT_EQ(schema[i].col_name(), expected_schema[i].first);
         EXPECT_EQ(schema[i].type().type, expected_schema[i].second) << schema[i].col_name();
+=======
+    EXPECT_OK(reader.get_schema(&schema));
+    EXPECT_EQ(schema.size(), expected_schema.size());
+    for (size_t i = 0; i < expected_schema.size(); ++i) {
+        EXPECT_EQ(schema[i].col_name(), expected_schema[i].first);
+        EXPECT_TRUE(schema[i].type() == expected_schema[i].second)
+                << "column name: " << schema[i].col_name() << " expected: " << expected_schema[i].second.debug_string()
+                << " actual: " << schema[i].type().debug_string();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }
 
@@ -377,7 +406,11 @@ static ExprContext* create_expr_context(ObjectPool* pool, const std::vector<TExp
     texpr.__set_nodes(nodes);
     ExprContext* ctx;
     Status st = Expr::create_expr_tree(pool, texpr, &ctx, nullptr);
+<<<<<<< HEAD
     DCHECK(st.ok()) << st.get_error_msg();
+=======
+    DCHECK(st.ok()) << st.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     return ctx;
 }
 
@@ -500,8 +533,13 @@ TEST_F(OrcChunkReaderTest, SkipRowGroups) {
 }
 
 template <int ORC_PRECISION, int ORC_SCALE, typename ValueType>
+<<<<<<< HEAD
 std::vector<DecimalV2Value> convert_orc_to_starrocks_decimalv2(RuntimeState* state, ObjectPool* pool,
                                                                const std::vector<ValueType>& values) {
+=======
+Buffer<DecimalV2Value> convert_orc_to_starrocks_decimalv2(RuntimeState* state, ObjectPool* pool,
+                                                          const Buffer<ValueType>& values) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::cout << "orc precision=" << ORC_PRECISION << " scale=" << ORC_SCALE << std::endl;
     if constexpr (std::is_same_v<ValueType, int64_t>) {
         static_assert(ORC_PRECISION <= 18);
@@ -556,7 +594,11 @@ std::vector<DecimalV2Value> convert_orc_to_starrocks_decimalv2(RuntimeState* sta
     b3.build(&builder);
 
     Status status = DescriptorTbl::create(state, pool, builder.desc_tbl(), &tbl, config::vector_chunk_size);
+<<<<<<< HEAD
     DCHECK(status.ok()) << status.get_error_msg();
+=======
+    DCHECK(status.ok()) << status.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     slots.push_back(tbl->get_slot_descriptor(0));
 
     OrcChunkReader reader(state->chunk_size(), slots);
@@ -581,7 +623,11 @@ std::vector<DecimalV2Value> convert_orc_to_starrocks_decimalv2(RuntimeState* sta
 }
 
 TEST_F(OrcChunkReaderTest, TestDecimal64) {
+<<<<<<< HEAD
     const std::vector<int64_t> orc_values = {
+=======
+    const Buffer<int64_t> orc_values = {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             0,
             1,
             -1,
@@ -595,7 +641,11 @@ TEST_F(OrcChunkReaderTest, TestDecimal64) {
             999'999'999'000'000'000,
     };
 
+<<<<<<< HEAD
     auto check_results = [](const std::vector<const char*>& exp, const std::vector<DecimalV2Value>& real) {
+=======
+    auto check_results = [](const Buffer<const char*>& exp, const Buffer<DecimalV2Value>& real) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ASSERT_EQ(exp.size(), real.size());
         for (int i = 0; i < exp.size(); i++) {
             EXPECT_EQ(exp[i], real[i].to_string());
@@ -604,7 +654,11 @@ TEST_F(OrcChunkReaderTest, TestDecimal64) {
 
     ObjectPool pool;
     {
+<<<<<<< HEAD
         std::vector<const char*> exp = {
+=======
+        Buffer<const char*> exp = {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "0",
                 "0.000000001",
                 "-0.000000001",
@@ -621,7 +675,11 @@ TEST_F(OrcChunkReaderTest, TestDecimal64) {
         check_results(exp, real);
     }
     {
+<<<<<<< HEAD
         std::vector<const char*> exp = {
+=======
+        Buffer<const char*> exp = {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "0",           "0.00000001",           "-0.00000001", "0.00000123",          "1230",
                 "-9.99999999", "-9999999999.99999999", "9.99999999",  "9999999999.99999999", "10",
                 "9999999990",
@@ -630,7 +688,11 @@ TEST_F(OrcChunkReaderTest, TestDecimal64) {
         check_results(exp, real);
     }
     {
+<<<<<<< HEAD
         std::vector<const char*> exp = {
+=======
+        Buffer<const char*> exp = {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "0",
                 "0.0000001",
                 "-0.0000001",
@@ -647,7 +709,11 @@ TEST_F(OrcChunkReaderTest, TestDecimal64) {
         check_results(exp, real);
     }
     {
+<<<<<<< HEAD
         std::vector<const char*> exp = {
+=======
+        Buffer<const char*> exp = {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "0",
                 "1",
                 "-1",
@@ -664,7 +730,11 @@ TEST_F(OrcChunkReaderTest, TestDecimal64) {
         check_results(exp, real);
     }
     {
+<<<<<<< HEAD
         std::vector<const char*> exp = {
+=======
+        Buffer<const char*> exp = {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "0",
                 "0",
                 "0",
@@ -681,7 +751,11 @@ TEST_F(OrcChunkReaderTest, TestDecimal64) {
         check_results(exp, real);
     }
     {
+<<<<<<< HEAD
         std::vector<const char*> exp = {
+=======
+        Buffer<const char*> exp = {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "0",
                 "0",
                 "0",
@@ -698,7 +772,11 @@ TEST_F(OrcChunkReaderTest, TestDecimal64) {
         check_results(exp, real);
     }
     {
+<<<<<<< HEAD
         std::vector<const char*> exp = {
+=======
+        Buffer<const char*> exp = {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "0",           "0",           "0",          "0",          "0.00000123", "-0.000000009", "-9.999999999",
                 "0.000000009", "9.999999999", "0.00000001", "9.99999999",
         };
@@ -708,7 +786,11 @@ TEST_F(OrcChunkReaderTest, TestDecimal64) {
 }
 
 TEST_F(OrcChunkReaderTest, TestDecimal128) {
+<<<<<<< HEAD
     const std::vector<int128_t> orc_values = {
+=======
+    const Buffer<int128_t> orc_values = {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             (int128_t)0,
             (int128_t)1,
             (int128_t)-1,
@@ -724,7 +806,11 @@ TEST_F(OrcChunkReaderTest, TestDecimal128) {
             (int128_t)999'999'999'000'000'000,
     };
 
+<<<<<<< HEAD
     auto check_results = [](const std::vector<const char*>& exp, const std::vector<DecimalV2Value>& real) {
+=======
+    auto check_results = [](const Buffer<const char*>& exp, const Buffer<DecimalV2Value>& real) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ASSERT_EQ(exp.size(), real.size());
         for (int i = 0; i < exp.size(); i++) {
             EXPECT_EQ(exp[i], real[i].to_string());
@@ -733,7 +819,11 @@ TEST_F(OrcChunkReaderTest, TestDecimal128) {
 
     ObjectPool pool;
     {
+<<<<<<< HEAD
         std::vector<const char*> exp = {
+=======
+        Buffer<const char*> exp = {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "0",
                 "0.000000001",
                 "-0.000000001",
@@ -750,7 +840,11 @@ TEST_F(OrcChunkReaderTest, TestDecimal128) {
         check_results(exp, real);
     }
     {
+<<<<<<< HEAD
         std::vector<const char*> exp = {
+=======
+        Buffer<const char*> exp = {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "0",
                 "0.00000001",
                 "-0.00000001",
@@ -767,7 +861,11 @@ TEST_F(OrcChunkReaderTest, TestDecimal128) {
         check_results(exp, real);
     }
     {
+<<<<<<< HEAD
         std::vector<const char*> exp = {
+=======
+        Buffer<const char*> exp = {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "0",
                 "0.0000001",
                 "-0.0000001",
@@ -784,7 +882,11 @@ TEST_F(OrcChunkReaderTest, TestDecimal128) {
         check_results(exp, real);
     }
     {
+<<<<<<< HEAD
         std::vector<const char*> exp = {
+=======
+        Buffer<const char*> exp = {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "0",
                 "1",
                 "-1",
@@ -801,7 +903,11 @@ TEST_F(OrcChunkReaderTest, TestDecimal128) {
         check_results(exp, real);
     }
     {
+<<<<<<< HEAD
         std::vector<const char*> exp = {
+=======
+        Buffer<const char*> exp = {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "0",
                 "0",
                 "0",
@@ -818,7 +924,11 @@ TEST_F(OrcChunkReaderTest, TestDecimal128) {
         check_results(exp, real);
     }
     {
+<<<<<<< HEAD
         std::vector<const char*> exp = {
+=======
+        Buffer<const char*> exp = {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "0",
                 "0",
                 "0",
@@ -835,7 +945,11 @@ TEST_F(OrcChunkReaderTest, TestDecimal128) {
         check_results(exp, real);
     }
     {
+<<<<<<< HEAD
         std::vector<const char*> exp = {
+=======
+        Buffer<const char*> exp = {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "0", "0", "0", "0", "0", "0", "-9.999999999", "0", "9.999999999", "0", "0.000000009",
         };
         auto real = convert_orc_to_starrocks_decimalv2<27, 26>(_runtime_state.get(), &pool, orc_values);
@@ -843,11 +957,17 @@ TEST_F(OrcChunkReaderTest, TestDecimal128) {
     }
 }
 
+<<<<<<< HEAD
 std::vector<TimestampValue> convert_orc_to_starrocks_timestamp(RuntimeState* state, ObjectPool* pool,
                                                                const std::string& reader_tz,
                                                                const std::string& write_tz,
                                                                const std::vector<int64_t>& values,
                                                                const bool isInstant) {
+=======
+Buffer<TimestampValue> convert_orc_to_starrocks_timestamp(RuntimeState* state, ObjectPool* pool,
+                                                          const std::string& reader_tz, const std::string& write_tz,
+                                                          const Buffer<int64_t>& values, const bool isInstant) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     const char* filename = "orc_scanner_test_timestamp.orc";
     std::filesystem::remove(filename);
     ORC_UNIQUE_PTR<orc::OutputStream> outStream = orc::writeLocalFile(filename);
@@ -892,7 +1012,11 @@ std::vector<TimestampValue> convert_orc_to_starrocks_timestamp(RuntimeState* sta
     b3.build(&builder);
 
     Status status = DescriptorTbl::create(state, pool, builder.desc_tbl(), &tbl, config::vector_chunk_size);
+<<<<<<< HEAD
     DCHECK(status.ok()) << status.get_error_msg();
+=======
+    DCHECK(status.ok()) << status.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     slots.push_back(tbl->get_slot_descriptor(0));
 
     OrcChunkReader reader(state->chunk_size(), slots);
@@ -919,7 +1043,11 @@ std::vector<TimestampValue> convert_orc_to_starrocks_timestamp(RuntimeState* sta
 
 TEST_F(OrcChunkReaderTest, TestTimestamp) {
     // clang-format off
+<<<<<<< HEAD
     const std::vector<int64_t> orc_values = {
+=======
+    const Buffer<int64_t> orc_values = {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             // 2021.5.25 1:18:40 GMT
             // 2021.5.25 9:18:40 Asia/Shanghai
             1621905520,
@@ -937,7 +1065,11 @@ TEST_F(OrcChunkReaderTest, TestTimestamp) {
     // clang-format on
     {
         // Instant Timestamp
+<<<<<<< HEAD
         const std::vector<std::string> exp_values = {
+=======
+        const Buffer<std::string> exp_values = {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "2021-05-25 09:18:40",
                 "1970-01-01 08:00:00",
                 "1702-06-01 04:01:35",
@@ -954,7 +1086,11 @@ TEST_F(OrcChunkReaderTest, TestTimestamp) {
     {
         // Timestamp
         // Instant Timestamp
+<<<<<<< HEAD
         const std::vector<std::string> exp_values = {
+=======
+        const Buffer<std::string> exp_values = {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "2021-05-25 01:18:40",
                 "1970-01-01 00:00:00",
                 "1702-05-31 19:55:52",
@@ -1011,6 +1147,7 @@ TEST_F(OrcChunkReaderTest, TestReadPositionalColumn) {
         OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
         auto input_stream = orc::readLocalFile(input_orc_file);
         Status st = reader.init(std::move(input_stream));
+<<<<<<< HEAD
         DCHECK(st.ok()) << st.get_error_msg();
 
         st = reader.read_next();
@@ -1019,6 +1156,16 @@ TEST_F(OrcChunkReaderTest, TestReadPositionalColumn) {
         DCHECK(ckptr != nullptr);
         st = reader.fill_chunk(&ckptr);
         DCHECK(st.ok()) << st.get_error_msg();
+=======
+        DCHECK(st.ok()) << st.message();
+
+        st = reader.read_next();
+        DCHECK(st.ok()) << st.message();
+        ChunkPtr ckptr = reader.create_chunk();
+        DCHECK(ckptr != nullptr);
+        st = reader.fill_chunk(&ckptr);
+        DCHECK(st.ok()) << st.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ChunkPtr result = reader.cast_chunk(&ckptr);
         DCHECK(result != nullptr);
 
@@ -1040,6 +1187,7 @@ TEST_F(OrcChunkReaderTest, TestReadPositionalColumn) {
         reader.set_hive_column_names(&hive_column_names);
         auto input_stream = orc::readLocalFile(input_orc_file);
         Status st = reader.init(std::move(input_stream));
+<<<<<<< HEAD
         DCHECK(st.ok()) << st.get_error_msg();
 
         st = reader.read_next();
@@ -1048,6 +1196,16 @@ TEST_F(OrcChunkReaderTest, TestReadPositionalColumn) {
         DCHECK(ckptr != nullptr);
         st = reader.fill_chunk(&ckptr);
         DCHECK(st.ok()) << st.get_error_msg();
+=======
+        DCHECK(st.ok()) << st.message();
+
+        st = reader.read_next();
+        DCHECK(st.ok()) << st.message();
+        ChunkPtr ckptr = reader.create_chunk();
+        DCHECK(ckptr != nullptr);
+        st = reader.fill_chunk(&ckptr);
+        DCHECK(st.ok()) << st.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ChunkPtr result = reader.cast_chunk(&ckptr);
         DCHECK(result != nullptr);
 
@@ -1118,6 +1276,7 @@ TEST_F(OrcChunkReaderTest, TestReadBinaryColumn) {
         OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
         auto input_stream = orc::readLocalFile(input_orc_file);
         Status st = reader.init(std::move(input_stream));
+<<<<<<< HEAD
         DCHECK(st.ok()) << st.get_error_msg();
 
         st = reader.read_next();
@@ -1126,6 +1285,16 @@ TEST_F(OrcChunkReaderTest, TestReadBinaryColumn) {
         DCHECK(ckptr != nullptr);
         st = reader.fill_chunk(&ckptr);
         DCHECK(st.ok()) << st.get_error_msg();
+=======
+        DCHECK(st.ok()) << st.message();
+
+        st = reader.read_next();
+        DCHECK(st.ok()) << st.message();
+        ChunkPtr ckptr = reader.create_chunk();
+        DCHECK(ckptr != nullptr);
+        st = reader.fill_chunk(&ckptr);
+        DCHECK(st.ok()) << st.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ChunkPtr result = reader.cast_chunk(&ckptr);
         DCHECK(result != nullptr);
 
@@ -1142,8 +1311,13 @@ TEST_F(OrcChunkReaderTest, TestReadBinaryColumn) {
         EXPECT_FALSE(nulls[0]);
         EXPECT_EQ(vo[0], 0);
         EXPECT_EQ(vo[1], 2);
+<<<<<<< HEAD
         EXPECT_EQ(vb[0], u'\n');
         EXPECT_EQ(vb[1], u'\274');
+=======
+        EXPECT_EQ((int)vb[0], 10);
+        EXPECT_EQ((int)vb[1], 188);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }
 
@@ -1171,6 +1345,7 @@ TEST_F(OrcChunkReaderTest, TestReadVarcharColumn) {
         reader.set_broker_load_mode(false);
         auto input_stream = orc::readLocalFile(input_orc_file);
         Status st = reader.init(std::move(input_stream));
+<<<<<<< HEAD
         DCHECK(st.ok()) << st.get_error_msg();
 
         st = reader.read_next();
@@ -1179,6 +1354,16 @@ TEST_F(OrcChunkReaderTest, TestReadVarcharColumn) {
         DCHECK(ckptr != nullptr);
         st = reader.fill_chunk(&ckptr);
         DCHECK(st.ok()) << st.get_error_msg();
+=======
+        DCHECK(st.ok()) << st.message();
+
+        st = reader.read_next();
+        DCHECK(st.ok()) << st.message();
+        ChunkPtr ckptr = reader.create_chunk();
+        DCHECK(ckptr != nullptr);
+        st = reader.fill_chunk(&ckptr);
+        DCHECK(st.ok()) << st.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ChunkPtr result = reader.cast_chunk(&ckptr);
         DCHECK(result != nullptr);
 
@@ -1207,6 +1392,7 @@ TEST_F(OrcChunkReaderTest, TestReadVarcharColumn) {
         reader.set_broker_load_mode(true);
         auto input_stream = orc::readLocalFile(input_orc_file);
         Status st = reader.init(std::move(input_stream));
+<<<<<<< HEAD
         DCHECK(st.ok()) << st.get_error_msg();
 
         st = reader.read_next();
@@ -1215,6 +1401,16 @@ TEST_F(OrcChunkReaderTest, TestReadVarcharColumn) {
         DCHECK(ckptr != nullptr);
         st = reader.fill_chunk(&ckptr);
         DCHECK(st.ok()) << st.get_error_msg();
+=======
+        DCHECK(st.ok()) << st.message();
+
+        st = reader.read_next();
+        DCHECK(st.ok()) << st.message();
+        ChunkPtr ckptr = reader.create_chunk();
+        DCHECK(ckptr != nullptr);
+        st = reader.fill_chunk(&ckptr);
+        DCHECK(st.ok()) << st.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ChunkPtr result = reader.cast_chunk(&ckptr);
         DCHECK(result != nullptr);
 
@@ -1242,6 +1438,7 @@ TEST_F(OrcChunkReaderTest, TestReadVarcharColumn) {
         reader.set_broker_load_mode(true);
         auto input_stream = orc::readLocalFile(input_orc_file);
         Status st = reader.init(std::move(input_stream));
+<<<<<<< HEAD
         DCHECK(st.ok()) << st.get_error_msg();
 
         st = reader.read_next();
@@ -1250,6 +1447,16 @@ TEST_F(OrcChunkReaderTest, TestReadVarcharColumn) {
         DCHECK(ckptr != nullptr);
         st = reader.fill_chunk(&ckptr);
         DCHECK(st.ok()) << st.get_error_msg();
+=======
+        DCHECK(st.ok()) << st.message();
+
+        st = reader.read_next();
+        DCHECK(st.ok()) << st.message();
+        ChunkPtr ckptr = reader.create_chunk();
+        DCHECK(ckptr != nullptr);
+        st = reader.fill_chunk(&ckptr);
+        DCHECK(st.ok()) << st.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ChunkPtr result = reader.cast_chunk(&ckptr);
         DCHECK(result != nullptr);
 
@@ -1305,6 +1512,7 @@ TEST_F(OrcChunkReaderTest, TestReadArrayBasic) {
         OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
         auto input_stream = orc::readLocalFile(input_orc_file);
         Status st = reader.init(std::move(input_stream));
+<<<<<<< HEAD
         DCHECK(st.ok()) << st.get_error_msg();
 
         st = reader.read_next();
@@ -1313,6 +1521,16 @@ TEST_F(OrcChunkReaderTest, TestReadArrayBasic) {
         DCHECK(ckptr != nullptr);
         st = reader.fill_chunk(&ckptr);
         DCHECK(st.ok()) << st.get_error_msg();
+=======
+        DCHECK(st.ok()) << st.message();
+
+        st = reader.read_next();
+        DCHECK(st.ok()) << st.message();
+        ChunkPtr ckptr = reader.create_chunk();
+        DCHECK(ckptr != nullptr);
+        st = reader.fill_chunk(&ckptr);
+        DCHECK(st.ok()) << st.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ChunkPtr result = reader.cast_chunk(&ckptr);
         DCHECK(result != nullptr);
 
@@ -1353,6 +1571,7 @@ TEST_F(OrcChunkReaderTest, TestReadArrayDecimal) {
         OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
         auto input_stream = orc::readLocalFile(input_orc_file);
         Status st = reader.init(std::move(input_stream));
+<<<<<<< HEAD
         DCHECK(st.ok()) << st.get_error_msg();
 
         st = reader.read_next();
@@ -1361,6 +1580,16 @@ TEST_F(OrcChunkReaderTest, TestReadArrayDecimal) {
         DCHECK(ckptr != nullptr);
         st = reader.fill_chunk(&ckptr);
         DCHECK(st.ok()) << st.get_error_msg();
+=======
+        DCHECK(st.ok()) << st.message();
+
+        st = reader.read_next();
+        DCHECK(st.ok()) << st.message();
+        ChunkPtr ckptr = reader.create_chunk();
+        DCHECK(ckptr != nullptr);
+        st = reader.fill_chunk(&ckptr);
+        DCHECK(st.ok()) << st.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ChunkPtr result = reader.cast_chunk(&ckptr);
         DCHECK(result != nullptr);
 
@@ -1421,6 +1650,7 @@ TEST_F(OrcChunkReaderTest, TestReadPaddingChar) {
         OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
         auto input_stream = orc::readLocalFile(input_orc_file);
         Status st = reader.init(std::move(input_stream));
+<<<<<<< HEAD
         DCHECK(st.ok()) << st.get_error_msg();
 
         st = reader.read_next();
@@ -1429,6 +1659,16 @@ TEST_F(OrcChunkReaderTest, TestReadPaddingChar) {
         DCHECK(ckptr != nullptr);
         st = reader.fill_chunk(&ckptr);
         DCHECK(st.ok()) << st.get_error_msg();
+=======
+        DCHECK(st.ok()) << st.message();
+
+        st = reader.read_next();
+        DCHECK(st.ok()) << st.message();
+        ChunkPtr ckptr = reader.create_chunk();
+        DCHECK(ckptr != nullptr);
+        st = reader.fill_chunk(&ckptr);
+        DCHECK(st.ok()) << st.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ChunkPtr result = reader.cast_chunk(&ckptr);
         DCHECK(result != nullptr);
 
@@ -1498,6 +1738,7 @@ TEST_F(OrcChunkReaderTest, TestColumnWithUpperCase) {
         OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
         auto input_stream = orc::readLocalFile(input_orc_file);
         Status st = reader.init(std::move(input_stream));
+<<<<<<< HEAD
         DCHECK(st.ok()) << st.get_error_msg();
 
         st = reader.read_next();
@@ -1506,6 +1747,16 @@ TEST_F(OrcChunkReaderTest, TestColumnWithUpperCase) {
         DCHECK(ckptr != nullptr);
         st = reader.fill_chunk(&ckptr);
         DCHECK(st.ok()) << st.get_error_msg();
+=======
+        DCHECK(st.ok()) << st.message();
+
+        st = reader.read_next();
+        DCHECK(st.ok()) << st.message();
+        ChunkPtr ckptr = reader.create_chunk();
+        DCHECK(ckptr != nullptr);
+        st = reader.fill_chunk(&ckptr);
+        DCHECK(st.ok()) << st.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ChunkPtr result = reader.cast_chunk(&ckptr);
         DCHECK(result != nullptr);
 
@@ -1555,17 +1806,29 @@ TEST_F(OrcChunkReaderTest, TestReadStructBasic) {
         reader.set_use_orc_column_names(true);
         auto input_stream = orc::readLocalFile(input_orc_file);
         Status st = reader.init(std::move(input_stream));
+<<<<<<< HEAD
         DCHECK(st.ok()) << st.get_error_msg();
+=======
+        DCHECK(st.ok()) << st.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         std::vector<bool> selectd_column_id = {true, true, true, true, true};
         EXPECT_EQ(selectd_column_id, reader.TEST_get_selected_column_id_list());
 
         st = reader.read_next();
+<<<<<<< HEAD
         DCHECK(st.ok()) << st.get_error_msg();
         ChunkPtr ckptr = reader.create_chunk();
         DCHECK(ckptr != nullptr);
         st = reader.fill_chunk(&ckptr);
         DCHECK(st.ok()) << st.get_error_msg();
+=======
+        DCHECK(st.ok()) << st.message();
+        ChunkPtr ckptr = reader.create_chunk();
+        DCHECK(ckptr != nullptr);
+        st = reader.fill_chunk(&ckptr);
+        DCHECK(st.ok()) << st.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ChunkPtr result = reader.cast_chunk(&ckptr);
         DCHECK(result != nullptr);
 
@@ -1597,17 +1860,29 @@ TEST_F(OrcChunkReaderTest, TestReadStructBasic) {
         reader.set_use_orc_column_names(true);
         auto input_stream = orc::readLocalFile(input_orc_file);
         Status st = reader.init(std::move(input_stream));
+<<<<<<< HEAD
         DCHECK(st.ok()) << st.get_error_msg();
+=======
+        DCHECK(st.ok()) << st.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         std::vector<bool> selectd_column_id = {true, true, true, false, true};
         EXPECT_EQ(selectd_column_id, reader.TEST_get_selected_column_id_list());
 
         st = reader.read_next();
+<<<<<<< HEAD
         DCHECK(st.ok()) << st.get_error_msg();
         ChunkPtr ckptr = reader.create_chunk();
         DCHECK(ckptr != nullptr);
         st = reader.fill_chunk(&ckptr);
         DCHECK(st.ok()) << st.get_error_msg();
+=======
+        DCHECK(st.ok()) << st.message();
+        ChunkPtr ckptr = reader.create_chunk();
+        DCHECK(ckptr != nullptr);
+        st = reader.fill_chunk(&ckptr);
+        DCHECK(st.ok()) << st.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ChunkPtr result = reader.cast_chunk(&ckptr);
         DCHECK(result != nullptr);
 
@@ -1654,17 +1929,29 @@ TEST_F(OrcChunkReaderTest, TestReadStructUnorderedField) {
         reader.set_use_orc_column_names(true);
         auto input_stream = orc::readLocalFile(input_orc_file);
         Status st = reader.init(std::move(input_stream));
+<<<<<<< HEAD
         DCHECK(st.ok()) << st.get_error_msg();
+=======
+        DCHECK(st.ok()) << st.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         std::vector<bool> selectd_column_id = {true, true, true, true, true};
         EXPECT_EQ(selectd_column_id, reader.TEST_get_selected_column_id_list());
 
         st = reader.read_next();
+<<<<<<< HEAD
         DCHECK(st.ok()) << st.get_error_msg();
         ChunkPtr ckptr = reader.create_chunk();
         DCHECK(ckptr != nullptr);
         st = reader.fill_chunk(&ckptr);
         DCHECK(st.ok()) << st.get_error_msg();
+=======
+        DCHECK(st.ok()) << st.message();
+        ChunkPtr ckptr = reader.create_chunk();
+        DCHECK(ckptr != nullptr);
+        st = reader.fill_chunk(&ckptr);
+        DCHECK(st.ok()) << st.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ChunkPtr result = reader.cast_chunk(&ckptr);
         DCHECK(result != nullptr);
 
@@ -1701,17 +1988,29 @@ TEST_F(OrcChunkReaderTest, TestReadStructUnorderedField) {
         reader.set_hive_column_names(&hive_column_names);
         auto input_stream = orc::readLocalFile(input_orc_file);
         Status st = reader.init(std::move(input_stream));
+<<<<<<< HEAD
         DCHECK(st.ok()) << st.get_error_msg();
+=======
+        DCHECK(st.ok()) << st.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         std::vector<bool> selectd_column_id = {true, true, true, true, true};
         EXPECT_EQ(selectd_column_id, reader.TEST_get_selected_column_id_list());
 
         st = reader.read_next();
+<<<<<<< HEAD
         DCHECK(st.ok()) << st.get_error_msg();
         ChunkPtr ckptr = reader.create_chunk();
         DCHECK(ckptr != nullptr);
         st = reader.fill_chunk(&ckptr);
         DCHECK(st.ok()) << st.get_error_msg();
+=======
+        DCHECK(st.ok()) << st.message();
+        ChunkPtr ckptr = reader.create_chunk();
+        DCHECK(ckptr != nullptr);
+        st = reader.fill_chunk(&ckptr);
+        DCHECK(st.ok()) << st.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ChunkPtr result = reader.cast_chunk(&ckptr);
         DCHECK(result != nullptr);
 
@@ -1743,17 +2042,29 @@ TEST_F(OrcChunkReaderTest, TestReadStructUnorderedField) {
         reader.set_use_orc_column_names(true);
         auto input_stream = orc::readLocalFile(input_orc_file);
         Status st = reader.init(std::move(input_stream));
+<<<<<<< HEAD
         DCHECK(st.ok()) << st.get_error_msg();
+=======
+        DCHECK(st.ok()) << st.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         std::vector<bool> selectd_column_id = {true, true, true, true, false};
         EXPECT_EQ(selectd_column_id, reader.TEST_get_selected_column_id_list());
 
         st = reader.read_next();
+<<<<<<< HEAD
         DCHECK(st.ok()) << st.get_error_msg();
         ChunkPtr ckptr = reader.create_chunk();
         DCHECK(ckptr != nullptr);
         st = reader.fill_chunk(&ckptr);
         DCHECK(st.ok()) << st.get_error_msg();
+=======
+        DCHECK(st.ok()) << st.message();
+        ChunkPtr ckptr = reader.create_chunk();
+        DCHECK(ckptr != nullptr);
+        st = reader.fill_chunk(&ckptr);
+        DCHECK(st.ok()) << st.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ChunkPtr result = reader.cast_chunk(&ckptr);
         DCHECK(result != nullptr);
 
@@ -1798,17 +2109,29 @@ TEST_F(OrcChunkReaderTest, TestReadStructCaseSensitiveField) {
         reader.set_case_sensitive(true);
         auto input_stream = orc::readLocalFile(input_orc_file);
         Status st = reader.init(std::move(input_stream));
+<<<<<<< HEAD
         DCHECK(st.ok()) << st.get_error_msg();
+=======
+        DCHECK(st.ok()) << st.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         std::vector<bool> selectd_column_id = {true, true, true, false, true};
         EXPECT_EQ(selectd_column_id, reader.TEST_get_selected_column_id_list());
 
         st = reader.read_next();
+<<<<<<< HEAD
         DCHECK(st.ok()) << st.get_error_msg();
         ChunkPtr ckptr = reader.create_chunk();
         DCHECK(ckptr != nullptr);
         st = reader.fill_chunk(&ckptr);
         DCHECK(st.ok()) << st.get_error_msg();
+=======
+        DCHECK(st.ok()) << st.message();
+        ChunkPtr ckptr = reader.create_chunk();
+        DCHECK(ckptr != nullptr);
+        st = reader.fill_chunk(&ckptr);
+        DCHECK(st.ok()) << st.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ChunkPtr result = reader.cast_chunk(&ckptr);
         DCHECK(result != nullptr);
 
@@ -1930,18 +2253,30 @@ TEST_F(OrcChunkReaderTest, TestReadStructArrayMap) {
         reader.set_use_orc_column_names(true);
         auto input_stream = orc::readLocalFile(input_orc_file);
         Status st = reader.init(std::move(input_stream));
+<<<<<<< HEAD
         DCHECK(st.ok()) << st.get_error_msg();
+=======
+        DCHECK(st.ok()) << st.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         std::vector<bool> selectd_column_id = {true, true, true, true, true, true, true,
                                                true, true, true, true, true, true};
         EXPECT_EQ(selectd_column_id, reader.TEST_get_selected_column_id_list());
 
         st = reader.read_next();
+<<<<<<< HEAD
         DCHECK(st.ok()) << st.get_error_msg();
         ChunkPtr ckptr = reader.create_chunk();
         DCHECK(ckptr != nullptr);
         st = reader.fill_chunk(&ckptr);
         DCHECK(st.ok()) << st.get_error_msg();
+=======
+        DCHECK(st.ok()) << st.message();
+        ChunkPtr ckptr = reader.create_chunk();
+        DCHECK(ckptr != nullptr);
+        st = reader.fill_chunk(&ckptr);
+        DCHECK(st.ok()) << st.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ChunkPtr result = reader.cast_chunk(&ckptr);
         DCHECK(result != nullptr);
 
@@ -2009,18 +2344,30 @@ TEST_F(OrcChunkReaderTest, TestReadStructArrayMap) {
         reader.set_use_orc_column_names(true);
         auto input_stream = orc::readLocalFile(input_orc_file);
         Status st = reader.init(std::move(input_stream));
+<<<<<<< HEAD
         DCHECK(st.ok()) << st.get_error_msg();
+=======
+        DCHECK(st.ok()) << st.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         std::vector<bool> selectd_column_id = {true, true, true, true, true,  true, true,
                                                true, true, true, true, false, true};
         EXPECT_EQ(selectd_column_id, reader.TEST_get_selected_column_id_list());
 
         st = reader.read_next();
+<<<<<<< HEAD
         DCHECK(st.ok()) << st.get_error_msg();
         ChunkPtr ckptr = reader.create_chunk();
         DCHECK(ckptr != nullptr);
         st = reader.fill_chunk(&ckptr);
         DCHECK(st.ok()) << st.get_error_msg();
+=======
+        DCHECK(st.ok()) << st.message();
+        ChunkPtr ckptr = reader.create_chunk();
+        DCHECK(ckptr != nullptr);
+        st = reader.fill_chunk(&ckptr);
+        DCHECK(st.ok()) << st.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ChunkPtr result = reader.cast_chunk(&ckptr);
         DCHECK(result != nullptr);
 
@@ -2075,7 +2422,11 @@ TEST_F(OrcChunkReaderTest, TestReadStructArrayMap) {
         Status st = reader.init(std::move(input_stream));
         EXPECT_TRUE(st.ok());
         if (!st.ok()) {
+<<<<<<< HEAD
             std::cout << st.get_error_msg() << std::endl;
+=======
+            std::cout << st.message() << std::endl;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         std::vector<bool> selectd_column_id = {true, false, false, false, false, false, false,
@@ -2083,11 +2434,19 @@ TEST_F(OrcChunkReaderTest, TestReadStructArrayMap) {
         EXPECT_EQ(selectd_column_id, reader.TEST_get_selected_column_id_list());
 
         st = reader.read_next();
+<<<<<<< HEAD
         DCHECK(st.ok()) << st.get_error_msg();
         ChunkPtr ckptr = reader.create_chunk();
         DCHECK(ckptr != nullptr);
         st = reader.fill_chunk(&ckptr);
         DCHECK(st.ok()) << st.get_error_msg();
+=======
+        DCHECK(st.ok()) << st.message();
+        ChunkPtr ckptr = reader.create_chunk();
+        DCHECK(ckptr != nullptr);
+        st = reader.fill_chunk(&ckptr);
+        DCHECK(st.ok()) << st.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ChunkPtr result = reader.cast_chunk(&ckptr);
         DCHECK(result != nullptr);
 
@@ -2117,6 +2476,7 @@ TEST_F(OrcChunkReaderTest, TestOrcIcebergPositionDelete) {
     reader.set_use_orc_column_names(true);
     auto input_stream = orc::readLocalFile(input_orc_file);
     Status st = reader.init(std::move(input_stream));
+<<<<<<< HEAD
     DCHECK(st.ok()) << st.get_error_msg();
 
     st = reader.read_next();
@@ -2125,6 +2485,16 @@ TEST_F(OrcChunkReaderTest, TestOrcIcebergPositionDelete) {
     DCHECK(ckptr != nullptr);
     st = reader.fill_chunk(&ckptr);
     DCHECK(st.ok()) << st.get_error_msg();
+=======
+    DCHECK(st.ok()) << st.message();
+
+    st = reader.read_next();
+    DCHECK(st.ok()) << st.message();
+    ChunkPtr ckptr = reader.create_chunk();
+    DCHECK(ckptr != nullptr);
+    st = reader.fill_chunk(&ckptr);
+    DCHECK(st.ok()) << st.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ChunkPtr result = reader.cast_chunk(&ckptr);
     DCHECK(result != nullptr);
 
@@ -2161,6 +2531,7 @@ TEST_F(OrcChunkReaderTest, TestTypeMismatched) {
     reader.set_case_sensitive(true);
     auto input_stream = orc::readLocalFile(input_orc_file);
     Status st = reader.init(std::move(input_stream));
+<<<<<<< HEAD
     DCHECK(st.ok()) << st.get_error_msg();
 
     st = reader.read_next();
@@ -2169,6 +2540,16 @@ TEST_F(OrcChunkReaderTest, TestTypeMismatched) {
     DCHECK(ckptr != nullptr);
     st = reader.fill_chunk(&ckptr);
     DCHECK(st.ok()) << st.get_error_msg();
+=======
+    DCHECK(st.ok()) << st.message();
+
+    st = reader.read_next();
+    DCHECK(st.ok()) << st.message();
+    ChunkPtr ckptr = reader.create_chunk();
+    DCHECK(ckptr != nullptr);
+    st = reader.fill_chunk(&ckptr);
+    DCHECK(st.ok()) << st.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ChunkPtr result = reader.cast_chunk(&ckptr);
     DCHECK(result != nullptr);
 
@@ -2214,6 +2595,7 @@ TEST_F(OrcChunkReaderTest, TestTypeMismatchedString2Double) {
     reader.set_case_sensitive(true);
     auto input_stream = orc::readLocalFile(input_orc_file);
     Status st = reader.init(std::move(input_stream));
+<<<<<<< HEAD
     DCHECK(st.ok()) << st.get_error_msg();
 
     st = reader.read_next();
@@ -2222,6 +2604,16 @@ TEST_F(OrcChunkReaderTest, TestTypeMismatchedString2Double) {
     DCHECK(ckptr != nullptr);
     st = reader.fill_chunk(&ckptr);
     DCHECK(st.ok()) << st.get_error_msg();
+=======
+    DCHECK(st.ok()) << st.message();
+
+    st = reader.read_next();
+    DCHECK(st.ok()) << st.message();
+    ChunkPtr ckptr = reader.create_chunk();
+    DCHECK(ckptr != nullptr);
+    st = reader.fill_chunk(&ckptr);
+    DCHECK(st.ok()) << st.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ChunkPtr result = reader.cast_chunk(&ckptr);
     DCHECK(result != nullptr);
 
@@ -2237,6 +2629,7 @@ TEST_F(OrcChunkReaderTest, TestTypeMismatchedString2Double) {
 }
 
 TEST_F(OrcChunkReaderTest, GetFileSchema) {
+<<<<<<< HEAD
     const std::vector<std::pair<std::string, std::vector<std::pair<std::string, LogicalType>>>> test_cases = {
             {"./be/test/exec/test_data/orc_scanner/scalar_types.orc",
              {{"col_bool", TYPE_BOOLEAN},
@@ -2253,12 +2646,140 @@ TEST_F(OrcChunkReaderTest, GetFileSchema) {
               {"col_decimal", TYPE_DECIMAL128},
               {"col_timestamp", TYPE_DATETIME},
               {"col_date", TYPE_DATE}}}};
+=======
+    const std::vector<std::pair<std::string, std::vector<std::pair<std::string, TypeDescriptor>>>> test_cases = {
+            {"./be/test/exec/test_data/orc_scanner/scalar_types.orc",
+             {{"col_bool", TypeDescriptor::from_logical_type(TYPE_BOOLEAN)},
+              {"col_tinyint", TypeDescriptor::from_logical_type(TYPE_TINYINT)},
+              {"col_smallint", TypeDescriptor::from_logical_type(TYPE_SMALLINT)},
+              {"col_int", TypeDescriptor::from_logical_type(TYPE_INT)},
+              {"col_bigint", TypeDescriptor::from_logical_type(TYPE_BIGINT)},
+              {"col_float", TypeDescriptor::from_logical_type(TYPE_FLOAT)},
+              {"col_double", TypeDescriptor::from_logical_type(TYPE_DOUBLE)},
+              {"col_string", TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH)},
+              {"col_char", TypeDescriptor::create_char_type(10)},
+              {"col_varchar", TypeDescriptor::create_varchar_type(10)},
+              {"col_binary", TypeDescriptor::create_varbinary_type(TypeDescriptor::MAX_VARCHAR_LENGTH)},
+              {"col_decimal", TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 38, 19)},
+              {"col_timestamp", TypeDescriptor::from_logical_type(TYPE_DATETIME)},
+              {"col_date", TypeDescriptor::from_logical_type(TYPE_DATE)}}},
+            {"./be/test/exec/test_data/orc_scanner/compound.orc",
+             {{"col_int", TypeDescriptor::from_logical_type(TYPE_INT)},
+              {"col_list_int", TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_INT))},
+              {"col_list_list_int", TypeDescriptor::create_array_type(TypeDescriptor::create_array_type(
+                                            TypeDescriptor::from_logical_type(TYPE_INT)))},
+              {"col_map_string_int",
+               TypeDescriptor::create_map_type(TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH),
+                                               TypeDescriptor::from_logical_type(TYPE_INT))},
+              {"col_map_string_map_string_int",
+               TypeDescriptor::create_map_type(
+                       TypeDescriptor::create_varchar_type(1048576),
+                       TypeDescriptor::create_map_type(
+                               TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH),
+                               TypeDescriptor::from_logical_type(TYPE_INT)))},
+              {"col_struct_string_int",
+               TypeDescriptor::create_struct_type(
+                       {"field_string", "field_int"},
+                       {TypeDescriptor::create_varchar_type(1048576), TypeDescriptor::from_logical_type(TYPE_INT)})},
+              {"col_struct_struct_string_int_string",
+               TypeDescriptor::create_struct_type(
+                       {"filed_struct", "field_string2"},
+                       {TypeDescriptor::create_struct_type(
+                                {"field_string1", "field_int"},
+                                {TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH),
+                                 TypeDescriptor::from_logical_type(TYPE_INT)}),
+                        TypeDescriptor::create_varchar_type(1048576)})}}}};
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     for (const auto& test_case : test_cases) {
         check_schema(test_case.first, test_case.second);
     }
 }
 
+<<<<<<< HEAD
+=======
+/**
+ *
+File Version: 0.12 with TRINO_ORIGINAL by Trino
+Rows: 1
+Compression: ZSTD
+Compression size: 262144
+Type: struct<c1:int,c2:bigint>
+Attributes on root.c1
+  iceberg.id: 1
+  iceberg.required: false
+Attributes on root.c2
+  iceberg.id: 2
+  iceberg.long-type: TIME
+  iceberg.required: false
+
+Stripe Statistics:
+  Stripe 1:
+    Column 0: count: 1 hasNull: true
+    Column 1: count: 1 hasNull: true min: 1 max: 1 sum: 1
+    Column 2: count: 1 hasNull: true min: 3723456000 max: 3723456000 sum: 3723456000
+
+File Statistics:
+  Column 0: count: 1 hasNull: true
+  Column 1: count: 1 hasNull: true min: 1 max: 1 sum: 1
+  Column 2: count: 1 hasNull: true min: 3723456000 max: 3723456000 sum: 3723456000
+
+Stripes:
+  Stripe: offset: 3 data: 16 rows: 1 tail: 58 index: 56
+    Stream: column 1 section ROW_INDEX start: 3 length 22
+    Stream: column 2 section ROW_INDEX start: 25 length 34
+    Stream: column 1 section DATA start: 59 length 6
+    Stream: column 2 section DATA start: 65 length 10
+    Encoding column 0: DIRECT
+    Encoding column 1: DIRECT_V2
+    Encoding column 2: DIRECT_V2
+
+File length: 455 bytes
+Padding length: 0 bytes
+Padding ratio: 0%
+
+{"c1":1,"c2":3723456000}
+{"c1":4,"c2":null}
+{"c1":2,"c2":7384000000}
+{"c1":3,"c2":11045000000}
+ */
+TEST_F(OrcChunkReaderTest, TestReadTimeColumn) {
+    SlotDesc slot_descs[] = {
+            {"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
+            {"c2", TypeDescriptor::from_logical_type(LogicalType::TYPE_TIME)},
+            {""},
+    };
+    static const std::string input_orc_file = "./be/test/exec/test_data/orc_scanner/orc_test_time_column.orc";
+    std::vector<SlotDescriptor*> src_slot_descriptors;
+    ObjectPool pool;
+    create_slot_descriptors(_runtime_state.get(), &pool, &src_slot_descriptors, slot_descs);
+
+    {
+        OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
+        auto input_stream = orc::readLocalFile(input_orc_file);
+        Status st = reader.init(std::move(input_stream));
+        EXPECT_TRUE(st.ok());
+
+        st = reader.read_next();
+        EXPECT_TRUE(st.ok());
+        ChunkPtr ckptr = reader.create_chunk();
+        EXPECT_TRUE(ckptr != nullptr);
+        st = reader.fill_chunk(&ckptr);
+        EXPECT_TRUE(st.ok());
+        ChunkPtr result = reader.cast_chunk(&ckptr);
+        EXPECT_TRUE(result != nullptr);
+
+        EXPECT_EQ(result->num_rows(), 4);
+        EXPECT_EQ(result->num_columns(), 2);
+        ColumnPtr col = result->get_column_by_slot_id(1);
+        EXPECT_EQ("[1, 3723]", result->debug_row(0));
+        EXPECT_EQ("[4, NULL]", result->debug_row(1));
+        EXPECT_EQ("[2, 7384]", result->debug_row(2));
+        EXPECT_EQ("[3, 11045]", result->debug_row(3));
+    }
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 TEST_F(OrcChunkReaderTest, DatetimeMicrosecond) {
     SlotDesc slot_descs[] = {
             {"col_int", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},

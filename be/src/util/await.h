@@ -14,6 +14,10 @@
 
 #pragma once
 
+<<<<<<< HEAD
+=======
+#include <cstdint>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include <functional>
 
 namespace starrocks {
@@ -54,7 +58,11 @@ public:
     // return value:
     // * true: condition is true
     // * false: condition is still false, timed out
+<<<<<<< HEAD
     bool until(condition_fun cond);
+=======
+    bool until(const condition_fun& cond);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 private:
     int64_t _timeout = 0;

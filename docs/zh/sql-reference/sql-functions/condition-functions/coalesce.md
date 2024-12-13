@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # coalesce
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 从左向右返回参数中的第一个非 NULL 表达式。
 

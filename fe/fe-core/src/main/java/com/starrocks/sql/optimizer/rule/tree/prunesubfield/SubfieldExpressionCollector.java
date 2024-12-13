@@ -15,6 +15,11 @@
 package com.starrocks.sql.optimizer.rule.tree.prunesubfield;
 
 import com.google.common.collect.Lists;
+<<<<<<< HEAD
+=======
+import com.google.common.collect.Sets;
+import com.starrocks.catalog.Type;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -23,17 +28,50 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 
 import java.util.List;
+<<<<<<< HEAD
+=======
+import java.util.Set;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 /*
  * collect all complex expressions, such as: MAP_KEYS, MAP_VALUES, map['key'], struct.a.b.c ...
  */
 public class SubfieldExpressionCollector extends ScalarOperatorVisitor<Void, Void> {
     private final List<ScalarOperator> complexExpressions = Lists.newArrayList();
+<<<<<<< HEAD
+=======
+    private Set<String> checkFunctions;
+    private final boolean enableJsonCollect;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public List<ScalarOperator> getComplexExpressions() {
         return complexExpressions;
     }
 
+<<<<<<< HEAD
+=======
+    public SubfieldExpressionCollector() {
+        this(true);
+    }
+
+    public SubfieldExpressionCollector(boolean enableJsonCollect) {
+        this.enableJsonCollect = enableJsonCollect;
+        this.checkFunctions = Sets.newHashSet(PruneSubfieldRule.PRUNE_FUNCTIONS);
+    }
+
+    public static SubfieldExpressionCollector buildPruneCollector() {
+        SubfieldExpressionCollector collector = new SubfieldExpressionCollector();
+        collector.checkFunctions = Sets.newHashSet(PruneSubfieldRule.PRUNE_FUNCTIONS);
+        return collector;
+    }
+
+    public static SubfieldExpressionCollector buildPushdownCollector() {
+        SubfieldExpressionCollector collector = new SubfieldExpressionCollector();
+        collector.checkFunctions = Sets.newHashSet(PruneSubfieldRule.PUSHDOWN_FUNCTIONS);
+        return collector;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public Void visit(ScalarOperator scalarOperator, Void context) {
         for (ScalarOperator child : scalarOperator.getChildren()) {
@@ -44,7 +82,11 @@ public class SubfieldExpressionCollector extends ScalarOperatorVisitor<Void, Voi
 
     @Override
     public Void visitVariableReference(ColumnRefOperator variable, Void context) {
+<<<<<<< HEAD
         if (variable.getType().isComplexType()) {
+=======
+        if (variable.getType().isComplexType() || variable.getType().isJsonType()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             complexExpressions.add(variable);
         }
         return null;
@@ -74,10 +116,30 @@ public class SubfieldExpressionCollector extends ScalarOperatorVisitor<Void, Voi
             return null;
         }
 
+<<<<<<< HEAD
         if (PruneSubfieldRule.SUPPORT_FUNCTIONS.contains(call.getFnName())) {
             complexExpressions.add(call);
             return null;
         }
         return visit(call, context);
+=======
+        if (!checkFunctions.contains(call.getFnName())) {
+            return visit(call, context);
+        }
+
+        // Json function has multi-version, support use path version
+        if (PruneSubfieldRule.SUPPORT_JSON_FUNCTIONS.contains(call.getFnName())) {
+            if (!enableJsonCollect) {
+                return visit(call, context);
+            }
+            Type[] args = call.getFunction().getArgs();
+            if (args.length <= 1 || !args[0].isJsonType() || !args[1].isStringType()) {
+                return visit(call, context);
+            }
+        }
+
+        complexExpressions.add(call);
+        return null;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }

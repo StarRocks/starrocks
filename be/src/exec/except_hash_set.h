@@ -38,7 +38,11 @@ public:
 
 struct ExceptSliceFlagEqual {
     bool operator()(const ExceptSliceFlag& x, const ExceptSliceFlag& y) const {
+<<<<<<< HEAD
         return memequal(x.slice.data, x.slice.size, y.slice.data, y.slice.size);
+=======
+        return memequal_padded(x.slice.data, x.slice.size, y.slice.data, y.slice.size);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 };
 
@@ -54,7 +58,11 @@ template <typename HashSet>
 class ExceptHashSet {
 public:
     using Iterator = typename HashSet::iterator;
+<<<<<<< HEAD
     using KeyVector = std::vector<Slice>;
+=======
+    using KeyVector = Buffer<Slice>;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     /// Used to allocate memory for serializing columns to the key.
     struct BufferState {

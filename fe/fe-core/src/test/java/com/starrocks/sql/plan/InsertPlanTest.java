@@ -15,12 +15,17 @@
 package com.starrocks.sql.plan;
 
 import com.google.common.collect.Lists;
+<<<<<<< HEAD
+=======
+import com.starrocks.analysis.TableName;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+<<<<<<< HEAD
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.InsertPlanner;
 import com.starrocks.sql.StatementPlanner;
@@ -28,12 +33,30 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
+=======
+import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
+import com.starrocks.server.MetadataMgr;
+import com.starrocks.sql.InsertPlanner;
+import com.starrocks.sql.StatementPlanner;
+import com.starrocks.sql.analyzer.AstToSQLBuilder;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
+import com.starrocks.sql.parser.SqlParser;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.TExplainLevel;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.iceberg.BaseTable;
+<<<<<<< HEAD
 import org.apache.iceberg.Snapshot;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.iceberg.SortOrder;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.hadoop.HadoopFileIO;
@@ -43,7 +66,10 @@ import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+<<<<<<< HEAD
 import java.util.Optional;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.stream.Stream;
 
 public class InsertPlanTest extends PlanTestBase {
@@ -111,8 +137,12 @@ public class InsertPlanTest extends PlanTestBase {
                 "     tabletRatio=0/0\n" +
                 "     tabletList=\n" +
                 "     cardinality=1\n" +
+<<<<<<< HEAD
                 "     avgRowSize=3.0\n" +
                 "     numNodes=0"));
+=======
+                "     avgRowSize=3.0\n"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -181,11 +211,19 @@ public class InsertPlanTest extends PlanTestBase {
 
         explainString = getInsertExecPlan("insert into test_insert_mv_count(v1) values(1)");
         Assert.assertTrue(explainString.contains("OUTPUT EXPRS:1: column_0 | 2: expr | 3: expr | 4: if"));
+<<<<<<< HEAD
         Assert.assertTrue(explainString.contains(
                 "  |  <slot 1> : 1: column_0\n" +
                         "  |  <slot 2> : NULL\n" +
                         "  |  <slot 3> : NULL\n" +
                         "  |  <slot 4> : if(NULL IS NULL, 0, 1)"));
+=======
+        Assert.assertTrue(explainString, explainString.contains(
+                "  |  <slot 1> : 1: column_0\n" +
+                        "  |  <slot 2> : NULL\n" +
+                        "  |  <slot 3> : NULL\n" +
+                        "  |  <slot 4> : 0"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         explainString = getInsertExecPlan("insert into test_insert_mv_count(v3,v1) values(3,1)");
 
@@ -194,16 +232,27 @@ public class InsertPlanTest extends PlanTestBase {
                 "  |  <slot 1> : 1: column_0\n" +
                         "  |  <slot 2> : 2: column_1\n" +
                         "  |  <slot 3> : NULL\n" +
+<<<<<<< HEAD
                         "  |  <slot 4> : if(NULL IS NULL, 0, 1)"));
+=======
+                        "  |  <slot 4> : 0"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         explainString = getInsertExecPlan("insert into test_insert_mv_count select 1,2,3");
         Assert.assertTrue(explainString.contains("OUTPUT EXPRS:6: v1 | 7: v2 | 8: v3 | 5: if"));
         Assert.assertTrue(explainString.contains(
                 "1:Project\n" +
+<<<<<<< HEAD
                         "  |  <slot 5> : if(2 IS NULL, 0, 1)\n" +
                         "  |  <slot 6> : CAST(1 AS BIGINT)\n" +
                         "  |  <slot 7> : CAST(2 AS BIGINT)\n" +
                         "  |  <slot 8> : CAST(3 AS BIGINT)"));
+=======
+                        "  |  <slot 5> : 1\n" +
+                        "  |  <slot 6> : 1\n" +
+                        "  |  <slot 7> : 2\n" +
+                        "  |  <slot 8> : 3"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         starRocksAssert.dropTable("test_insert_mv_count");
     }
@@ -254,7 +303,11 @@ public class InsertPlanTest extends PlanTestBase {
                 "  1:Project\n" +
                         "  |  <slot 1> : 1: v1\n" +
                         "  |  <slot 6> : to_bitmap(1: v1)\n" +
+<<<<<<< HEAD
                         "  |  <slot 7> : CAST(2 AS BIGINT)\n" +
+=======
+                        "  |  <slot 7> : 2\n" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         "  |  <slot 8> : NULL\n"));
 
         explainString = getInsertExecPlan("insert into ti2 select * from ti2");
@@ -288,8 +341,12 @@ public class InsertPlanTest extends PlanTestBase {
                 "     tabletRatio=0/0\n" +
                 "     tabletList=\n" +
                 "     cardinality=1\n" +
+<<<<<<< HEAD
                 "     avgRowSize=4.0\n" +
                 "     numNodes=0"));
+=======
+                "     avgRowSize=4.0\n"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         sql = "insert into test.mysql_table(k1) select v1 from t0";
         explainString = getInsertExecPlan(sql);
@@ -312,8 +369,12 @@ public class InsertPlanTest extends PlanTestBase {
                 "     tabletRatio=0/0\n" +
                 "     tabletList=\n" +
                 "     cardinality=1\n" +
+<<<<<<< HEAD
                 "     avgRowSize=3.0\n" +
                 "     numNodes=0"));
+=======
+                "     avgRowSize=3.0\n"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -374,6 +435,11 @@ public class InsertPlanTest extends PlanTestBase {
     }
 
     public static String getInsertExecPlan(String originStmt) throws Exception {
+<<<<<<< HEAD
+=======
+        connectContext.setQueryId(UUIDUtil.genUUID());
+        connectContext.setExecutionId(UUIDUtil.toTUniqueId(connectContext.getQueryId()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         connectContext.setDumpInfo(new QueryDumpInfo(connectContext));
         StatementBase statementBase =
                 com.starrocks.sql.parser.SqlParser.parse(originStmt, connectContext.getSessionVariable().getSqlMode())
@@ -580,7 +646,10 @@ public class InsertPlanTest extends PlanTestBase {
                 "LEFT JOIN  (SELECT  distinct_id,tag_value  FROM user_tag_bq004 WHERE base_time ='2021-06-23' )  a3   " +
                 "ON a.distinct_id =  a3.distinct_id;";
         String plan = getInsertExecPlan(sql);
+<<<<<<< HEAD
         System.out.println(plan);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertTrue(plan.contains("  11:HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (COLOCATE)\n" +
                 "  |  colocate: true\n" +
@@ -669,9 +738,18 @@ public class InsertPlanTest extends PlanTestBase {
                     "    TUPLE ID: 2\n" +
                     "    RANDOM\n" +
                     "\n" +
+<<<<<<< HEAD
                     "  1:AGGREGATE (update finalize)\n" +
                     "  |  output: min(2: v1), max(3: v2)\n" +
                     "  |  group by: 1: pk");
+=======
+                    "  1:Project\n" +
+                    "  |  <slot 1> : 1: pk\n" +
+                    "  |  <slot 4> : CAST(2: v1 AS VARCHAR)\n" +
+                    "  |  <slot 5> : 3: v2\n" +
+                    "  |  \n" +
+                    "  0:OlapScanNode");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         {
             // KesType is AGG_KEYS
@@ -736,7 +814,10 @@ public class InsertPlanTest extends PlanTestBase {
     @Test
     public void testInsertSelectWithConstant() throws Exception {
         String explainString = getInsertExecPlan("insert into tarray select 1,null,null from tarray");
+<<<<<<< HEAD
         System.out.printf("%s\n", explainString);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertTrue(explainString.contains("PLAN FRAGMENT 0\n" +
                 " OUTPUT EXPRS:7: v1 | 8: v2 | 9: v3\n" +
                 "  PARTITION: RANDOM\n" +
@@ -747,7 +828,11 @@ public class InsertPlanTest extends PlanTestBase {
                 "    RANDOM\n" +
                 "\n" +
                 "  1:Project\n" +
+<<<<<<< HEAD
                 "  |  <slot 7> : CAST(1 AS BIGINT)\n" +
+=======
+                "  |  <slot 7> : 1\n" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "  |  <slot 8> : NULL\n" +
                 "  |  <slot 9> : NULL"));
     }
@@ -796,12 +881,15 @@ public class InsertPlanTest extends PlanTestBase {
                 "\"hive.metastore.uris\"=\"thrift://hms:9083\", \"iceberg.catalog.type\"=\"hive\")";
         starRocksAssert.withCatalog(createIcebergCatalogStmt);
         MetadataMgr metadata = starRocksAssert.getCtx().getGlobalStateMgr().getMetadataMgr();
+<<<<<<< HEAD
         new MockUp<IcebergTable>() {
             @Mock
             public Optional<Snapshot> getSnapshot() {
                 return Optional.empty();
             }
         };
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         Table nativeTable = new BaseTable(null, null);
 
@@ -809,8 +897,13 @@ public class InsertPlanTest extends PlanTestBase {
         Column k2 = new Column("k2", Type.INT);
         IcebergTable.Builder builder = IcebergTable.builder();
         builder.setCatalogName("iceberg_catalog");
+<<<<<<< HEAD
         builder.setRemoteDbName("iceberg_db");
         builder.setRemoteTableName("iceberg_table");
+=======
+        builder.setCatalogDBName("iceberg_db");
+        builder.setCatalogTableName("iceberg_table");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         builder.setSrTableName("iceberg_table");
         builder.setFullSchema(Lists.newArrayList(k1, k2));
         builder.setNativeTable(nativeTable);
@@ -828,9 +921,12 @@ public class InsertPlanTest extends PlanTestBase {
 
                 icebergTable.getPartitionColumnNames();
                 result = new ArrayList<>();
+<<<<<<< HEAD
 
                 icebergTable.getPartitionColumns();
                 result = Lists.newArrayList(new Column("k1", Type.INT), new Column("k2", Type.INT));
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         };
 
@@ -854,18 +950,42 @@ public class InsertPlanTest extends PlanTestBase {
             }
         };
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         new Expectations(metadata) {
             {
                 metadata.getDb("iceberg_catalog", "iceberg_db");
                 result = new Database(12345566, "iceberg_db");
                 minTimes = 0;
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 metadata.getTable("iceberg_catalog", "iceberg_db", "iceberg_table");
                 result = icebergTable;
                 minTimes = 0;
             }
         };
 
+<<<<<<< HEAD
+=======
+
+        new MockUp<MetaUtils>() {
+            @Mock
+            public Database getDatabase(String catalogName, String tableName) {
+                return new Database(12345566, "iceberg_db");
+            }
+            @Mock
+            public com.starrocks.catalog.Table getSessionAwareTable(
+                    ConnectContext context, Database database, TableName tableName) {
+                return icebergTable;
+            }
+        };
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         String actualRes = getInsertExecPlan("explain insert into iceberg_catalog.iceberg_db.iceberg_table select 1, 2");
         String expected = "PLAN FRAGMENT 0\n" +
                 " OUTPUT EXPRS:4: k1 | 5: k2\n" +
@@ -877,12 +997,149 @@ public class InsertPlanTest extends PlanTestBase {
                 "    RANDOM\n" +
                 "\n" +
                 "  1:Project\n" +
+<<<<<<< HEAD
                 "  |  <slot 4> : CAST(1 AS INT)\n" +
                 "  |  <slot 5> : CAST(2 AS INT)\n" +
+=======
+                "  |  <slot 4> : 1\n" +
+                "  |  <slot 5> : 2\n" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "  |  \n" +
                 "  0:UNION\n" +
                 "     constant exprs: \n" +
                 "         NULL\n";
         Assert.assertEquals(expected, actualRes);
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void insertToSql() {
+        String sql = "insert into test_all_type_partition_by_date " +
+                "partition(p1992) (t1a, id_date) SELECT `t1a`, `id_date` FROM `test_all_type_partition_by_date` ";
+        var stmts = SqlParser.parse(sql, new SessionVariable());
+        Assert.assertEquals(1, stmts.size());
+
+        // verify generated SQL
+        String genSql = AstToSQLBuilder.toSQL(stmts.get(0));
+        Assert.assertEquals("INSERT INTO `test_all_type_partition_by_date` " +
+                "PARTITION (p1992) (`t1a`,`id_date`) " +
+                "SELECT `t1a`, `id_date`\n" +
+                "FROM `test_all_type_partition_by_date`", genSql);
+
+        // parse it again
+        var stmts2 = SqlParser.parse(genSql, new SessionVariable());
+        Assert.assertEquals(genSql, AstToSQLBuilder.toSQL(stmts2.get(0)));
+    }
+
+    @Test
+    public void testInsertNotExistTable() {
+        try {
+            getInsertExecPlan("insert into not_exist_table values (1)");
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("Table not_exist_table is not found"));
+        }
+    }
+
+    @Test
+    public void testInsertFiles() throws Exception {
+        String actual = getInsertExecPlan("insert into files " +
+                "(\"path\" = \"hdfs://127.0.0.1:9000/files/\", \"format\"=\"parquet\", \"compression\" = \"uncompressed\") " +
+                "select 1 as k1");
+        String expected = "PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:2: expr\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  TABLE FUNCTION TABLE SINK\n" +
+                "    PATH: hdfs://127.0.0.1:9000/files/\n" +
+                "    FORMAT: parquet\n" +
+                "    PARTITION BY: []\n" +
+                "    SINGLE: false\n" +
+                "    RANDOM\n" +
+                "\n" +
+                "  2:EXCHANGE\n" +
+                "\n" +
+                "PLAN FRAGMENT 1\n" +
+                " OUTPUT EXPRS:\n" +
+                "  PARTITION: UNPARTITIONED\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 02\n" +
+                "    RANDOM\n" +
+                "\n" +
+                "  1:Project\n" +
+                "  |  <slot 2> : 1\n" +
+                "  |  \n" +
+                "  0:UNION\n" +
+                "     constant exprs: \n" +
+                "         NULL\n";
+        Assert.assertEquals(expected, actual);
+    }
+
+    @Test
+    public void testInsertFilesWithSingle() throws Exception {
+        String actual = getInsertExecPlan("insert into files " +
+                "(\"path\" = \"hdfs://127.0.0.1:9000/files/\", \"format\"=\"parquet\", \"compression\" = \"uncompressed\"," +
+                " \"single\" = \"true\") " +
+                "select 1 as k1, 2 as k2");
+        String expected = "PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:2: expr | 3: expr\n" +
+                "  PARTITION: UNPARTITIONED\n" +
+                "\n" +
+                "  TABLE FUNCTION TABLE SINK\n" +
+                "    PATH: hdfs://127.0.0.1:9000/files/\n" +
+                "    FORMAT: parquet\n" +
+                "    PARTITION BY: []\n" +
+                "    SINGLE: true\n" +
+                "    RANDOM\n" +
+                "\n" +
+                "  1:Project\n" +
+                "  |  <slot 2> : 1\n" +
+                "  |  <slot 3> : 2\n" +
+                "  |  \n" +
+                "  0:UNION\n" +
+                "     constant exprs: \n" +
+                "         NULL\n";
+        Assert.assertEquals(expected, actual);
+    }
+
+    @Test
+    public void testInsertFilesWithPartition() throws Exception {
+        String actual = getInsertExecPlan("insert into files " +
+                "(\"path\" = \"hdfs://127.0.0.1:9000/files/\", \"format\"=\"parquet\", \"compression\" = \"uncompressed\"," +
+                " \"partition_by\" = \"v1\") " +
+                "select v1, v2 from t0");
+        String expected = "PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:1: v1 | 2: v2\n" +
+                "  PARTITION: HASH_PARTITIONED: 1: v1\n" +
+                "\n" +
+                "  TABLE FUNCTION TABLE SINK\n" +
+                "    PATH: hdfs://127.0.0.1:9000/files/\n" +
+                "    FORMAT: parquet\n" +
+                "    PARTITION BY: [v1]\n" +
+                "    SINGLE: false\n" +
+                "    RANDOM\n" +
+                "\n" +
+                "  1:EXCHANGE\n" +
+                "\n" +
+                "PLAN FRAGMENT 1\n" +
+                " OUTPUT EXPRS:\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 01\n" +
+                "    HASH_PARTITIONED: 1: v1\n" +
+                "\n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=0/1\n" +
+                "     rollup: t0\n" +
+                "     tabletRatio=0/0\n" +
+                "     tabletList=\n" +
+                "     cardinality=1\n" +
+                "     avgRowSize=2.0\n";
+        Assert.assertEquals(expected, actual);
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

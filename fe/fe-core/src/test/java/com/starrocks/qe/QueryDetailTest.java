@@ -24,7 +24,11 @@ public class QueryDetailTest {
         QueryDetail queryDetail = new QueryDetail("219a2d5443c542d4-8fc938db37c892e3", true, 1, "127.0.0.1",
                 System.currentTimeMillis(), -1, -1, QueryDetail.QueryMemState.RUNNING,
                 "testDb", "select * from table1 limit 1",
+<<<<<<< HEAD
                 "root", "");
+=======
+                "root", "", "default_catalog");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         queryDetail.setProfile("bbbbb");
         queryDetail.setErrorMessage("cancelled");
 

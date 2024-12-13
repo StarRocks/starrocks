@@ -16,6 +16,10 @@ package com.starrocks.sql.ast;
 
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
+<<<<<<< HEAD
+=======
+import com.starrocks.analysis.Parameter;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Table;
 import com.starrocks.sql.parser.NodePosition;
@@ -49,7 +53,11 @@ public class UpdateStmt extends DmlStmt {
         this.fromRelations = fromRelations;
         this.wherePredicate = wherePredicate;
         this.commonTableExpressions = commonTableExpressions;
+<<<<<<< HEAD
         this.assignmentColumns = Sets.newHashSet();
+=======
+        this.assignmentColumns = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         for (ColumnAssignment each : assignments) {
             this.assignmentColumns.add(each.getColumn());
         }
@@ -69,6 +77,18 @@ public class UpdateStmt extends DmlStmt {
         return assignments;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean assignmentsContainsParameter() {
+        for (ColumnAssignment assignment : assignments) {
+            if (assignment.getExpr().contains(Parameter.class)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public List<Relation> getFromRelations() {
         return fromRelations;
     }

@@ -286,7 +286,11 @@ Status ReplicationUtils::download_remote_snapshot(
             estimate_timeout_sec = config::replication_min_speed_time_seconds;
         }
 
+<<<<<<< HEAD
         VLOG(1) << "Downloading " << remote_file_url << ", bytes: " << file_size
+=======
+        VLOG(2) << "Downloading " << remote_file_url << ", bytes: " << file_size
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 << ", timeout: " << estimate_timeout_sec << "s";
 
         RETURN_IF_ERROR(download_remote_file(remote_file_url, estimate_timeout_sec,
@@ -340,7 +344,23 @@ StatusOr<std::string> ReplicationUtils::download_remote_snapshot_file(
 
 Status ReplicationUtils::convert_rowset_txn_meta(RowsetTxnMetaPB* rowset_txn_meta,
                                                  const std::unordered_map<uint32_t, uint32_t>& column_unique_id_map) {
+<<<<<<< HEAD
     return convert_column_unique_ids(rowset_txn_meta->mutable_partial_update_column_unique_ids(), column_unique_id_map);
+=======
+    RETURN_IF_ERROR(convert_column_unique_ids(rowset_txn_meta->mutable_partial_update_column_unique_ids(),
+                                              column_unique_id_map));
+
+    if (rowset_txn_meta->has_auto_increment_partial_update_column_uid()) {
+        auto iter = column_unique_id_map.find(rowset_txn_meta->auto_increment_partial_update_column_uid());
+        if (iter == column_unique_id_map.end()) {
+            LOG(ERROR) << "Column not found, column unique id: "
+                       << rowset_txn_meta->auto_increment_partial_update_column_uid();
+            return Status::InternalError("Column not found");
+        }
+        rowset_txn_meta->set_auto_increment_partial_update_column_uid(iter->second);
+    }
+    return Status::OK();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 } // namespace starrocks

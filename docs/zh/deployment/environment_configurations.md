@@ -58,7 +58,11 @@ netstat -tunlp | grep 9070
 
 在用于 CN 部署的实例上，您需要检查以下端口：
 
+<<<<<<< HEAD
 - `9060`：CN Thrift Server 端口（`be_port`）（注意：自 v3.1 起，该配置项由 `thrift_port` 更名为 `be_port`。）
+=======
+- `9060`：CN Thrift Server 端口（`be_port`）
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 - `8040`：CN HTTP Server 端口（`be_http_port`）
 - `9050`：CN 心跳服务端口（`heartbeat_service_port`）
 - `8060`：CN bRPC 端口（`brpc_port`）
@@ -364,7 +368,11 @@ sysctl -p
 
    ```Bash
    rpm -qa | grep ntp
+<<<<<<< HEAD
    systemctl status chrony
+=======
+   systemctl status chronyd
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
    ```
 
 2. 如不存在，运行以下命令安装 NTP 时间服务器。

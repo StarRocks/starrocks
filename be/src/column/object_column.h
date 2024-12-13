@@ -20,12 +20,20 @@
 #include "column/datum.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
+<<<<<<< HEAD
 #include "types/bitmap_value.h"
 #include "types/hll.h"
+=======
+#include "gutil/strings/substitute.h"
+#include "types/bitmap_value.h"
+#include "types/hll.h"
+#include "util/json.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "util/percentile_value.h"
 
 namespace starrocks {
 
+<<<<<<< HEAD
 //class Object {
 //    Object();
 //
@@ -37,6 +45,8 @@ namespace starrocks {
 //    size_t serialize(uint8_t* dst) const;
 //};
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 template <typename T>
 class ObjectColumn : public ColumnFactory<Column, ObjectColumn<T>> {
     friend class ColumnFactory<Column, ObjectColumn>;
@@ -110,7 +120,11 @@ public:
 
     bool append_nulls(size_t count) override { return false; }
 
+<<<<<<< HEAD
     bool append_strings(const Buffer<Slice>& strs) override;
+=======
+    bool append_strings(const Slice* data, size_t size) override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     size_t append_numbers(const void* buff, size_t length) override { return -1; }
 
@@ -123,7 +137,11 @@ public:
 
     void fill_default(const Filter& filter) override;
 
+<<<<<<< HEAD
     Status update_rows(const Column& src, const uint32_t* indexes) override;
+=======
+    void update_rows(const Column& src, const uint32_t* indexes) override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     uint32_t serialize(size_t idx, uint8_t* pos) override;
     uint32_t serialize_default(uint8_t* pos) override;
@@ -133,6 +151,11 @@ public:
 
     const uint8_t* deserialize_and_append(const uint8_t* pos) override;
 
+<<<<<<< HEAD
+=======
+    bool deserialize_and_append(const Slice& src);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     void deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) override;
 
     uint32_t serialize_size(size_t idx) const override;
@@ -153,7 +176,11 @@ public:
 
     int64_t xor_checksum(uint32_t from, uint32_t to) const override;
 
+<<<<<<< HEAD
     void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const override;
+=======
+    void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol = false) const override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     std::string get_name() const override { return std::string{"object"}; }
 
@@ -221,6 +248,7 @@ public:
         return ss.str();
     }
 
+<<<<<<< HEAD
     bool capacity_limit_reached(std::string* msg = nullptr) const override {
         if (_pool.size() > Column::MAX_CAPACITY_LIMIT) {
             if (msg != nullptr) {
@@ -230,6 +258,14 @@ public:
             return true;
         }
         return false;
+=======
+    Status capacity_limit_reached() const override {
+        if (_pool.size() > Column::MAX_CAPACITY_LIMIT) {
+            return Status::CapacityLimitExceed(strings::Substitute("row count of object column exceed the limit: $0",
+                                                                   std::to_string(Column::MAX_CAPACITY_LIMIT)));
+        }
+        return Status::OK();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     StatusOr<ColumnPtr> upgrade_if_overflow() override;
@@ -238,6 +274,11 @@ public:
 
     bool has_large_column() const override { return false; }
 
+<<<<<<< HEAD
+=======
+    void check_or_die() const override {}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 private:
     // add this to avoid warning clang-diagnostic-overloaded-virtual
     using Column::append;
@@ -259,8 +300,11 @@ private:
     // Currently, only for data loading
     void _build_slices() const;
 
+<<<<<<< HEAD
     void check_or_die() const override {}
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 private:
     Buffer<T> _pool;
     mutable bool _cache_ok = false;

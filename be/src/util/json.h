@@ -70,6 +70,10 @@ public:
     ////////////////// builder  //////////////////////
 
     // construct a JsonValue from single sql type
+<<<<<<< HEAD
+=======
+    static JsonValue from_none();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     static JsonValue from_null();
     static JsonValue from_int(int64_t value);
     static JsonValue from_uint(uint64_t value);
@@ -122,9 +126,17 @@ public:
     StatusOr<uint64_t> get_uint() const;
     StatusOr<double> get_double() const;
     StatusOr<Slice> get_string() const;
+<<<<<<< HEAD
     bool is_null() const;
     bool is_none() const;
     bool is_null_or_none() const;
+=======
+    StatusOr<JsonValue> get_obj(const std::string& key) const;
+    bool is_null() const;
+    bool is_none() const;
+    bool is_null_or_none() const;
+    bool is_invalid() const;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     ////////////////// util  //////////////////////
     StatusOr<std::string> to_string() const;

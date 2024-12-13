@@ -2,7 +2,11 @@
 displayed_sidebar: docs
 ---
 
+<<<<<<< HEAD
 # Deploy StarRocks using GCS
+=======
+# Use GCS for shared-data
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import SharedDataIntro from '../../_assets/commonMarkdown/sharedDataIntro.md'
 import SharedDataCNconf from '../../_assets/commonMarkdown/sharedDataCNconf.md'
@@ -19,7 +23,11 @@ import SharedDataUse from '../../_assets/commonMarkdown/sharedDataUse.md'
 
 The deployment of a shared-data StarRocks cluster is similar to that of a shared-nothing StarRocks cluster. The only difference is that you need to deploy CNs instead of BEs in a shared-data cluster. This section only lists the extra FE and CN configuration items you need to add in the configuration files of FE and CN **fe.conf** and **cn.conf** when you deploy a shared-data StarRocks cluster. For detailed instructions on deploying a StarRocks cluster, see [Deploy StarRocks](../../deployment/deploy_manually.md).
 
+<<<<<<< HEAD
 > **Note**
+=======
+> **NOTE**
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 >
 > Do not start the cluster until after it is configured for shared-storage in the next section of this document.
 
@@ -29,6 +37,7 @@ Before starting the cluster configure the FEs and CNs. An example configuration 
 
 ### Example FE configuration for GCS
 
+<<<<<<< HEAD
 The example shared-data additions for your `fe.conf` can be added to the `fe.conf` file on each
 of your FE nodes. Because GCS storage is accessed using the
 [Cloud Storage XML API](https://cloud.google.com/storage/docs/xml-api/overview), the parameters
@@ -51,6 +60,27 @@ use the prefix `aws_s3`.
   aws_s3_access_key = <HMAC access_key>
   aws_s3_secret_key = <HMAC secret_key>
   ```
+=======
+The example shared-data additions for your `fe.conf` can be added to the `fe.conf` file on each of your FE nodes. Because GCS storage is accessed using the [Cloud Storage XML API](https://cloud.google.com/storage/docs/xml-api/overview), the parameters use the prefix `aws_s3`.
+
+```Properties
+run_mode = shared_data
+cloud_native_meta_port = <meta_port>
+cloud_native_storage_type = S3
+
+# For example, testbucket/subpath
+aws_s3_path = <s3_path>
+
+# For example: us-east1
+aws_s3_region = <region>
+
+# For example: https://storage.googleapis.com
+aws_s3_endpoint = <endpoint_url>
+
+aws_s3_access_key = <HMAC access_key>
+aws_s3_secret_key = <HMAC secret_key>
+```
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ### All FE parameters related to shared-storage with GCS
 
@@ -59,6 +89,7 @@ use the prefix `aws_s3`.
 The running mode of the StarRocks cluster. Valid values:
 
 - `shared_data`
+<<<<<<< HEAD
 - `shared_nothing` (Default).
 
 > **Note**
@@ -66,6 +97,14 @@ The running mode of the StarRocks cluster. Valid values:
 > You cannot adopt the `shared_data` and `shared_nothing` modes simultaneously for a StarRocks cluster. Mixed deployment is not supported.
 >
 > Do not change `run_mode` after the cluster is deployed. Otherwise, the cluster fails to restart. The transformation from a shared-nothing cluster to a shared-data cluster or vice versa is not supported.
+=======
+- `shared_nothing` (Default)
+
+> **NOTE**
+>
+> - You cannot adopt the `shared_data` and `shared_nothing` modes simultaneously for a StarRocks cluster. Mixed deployment is not supported.
+> - Do not change `run_mode` after the cluster is deployed. Otherwise, the cluster fails to restart. The transformation from a shared-nothing cluster to a shared-data cluster or vice versa is not supported.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 #### cloud_native_meta_port
 
@@ -91,7 +130,18 @@ Supported from v3.1.0.
 The type of object storage you use. In shared-data mode, StarRocks supports storing data in Azure Blob (supported from v3.1.1 onwards), and object storages that are compatible with the S3 protocol (such as AWS S3, Google GCS, and MinIO). Valid value:
 
 - `S3` (Default)
+<<<<<<< HEAD
 - `AZBLOB`.
+=======
+- `AZBLOB`
+- `HDFS`
+
+> **NOTE**
+>
+> - If you specify this parameter as `S3`, you must add the parameters prefixed by `aws_s3`.
+> - If you specify this parameter as `AZBLOB`, you must add the parameters prefixed by `azure_blob`.
+> - If you specify this parameter as `HDFS`, you must add the parameter `cloud_native_hdfs_url`.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 #### aws_s3_path
 
@@ -110,7 +160,11 @@ The region in which your S3 bucket resides, for example, `us-west-2`.
 Whether to use Instance Profile and Assumed Role as credential methods for accessing GCS. Valid values:
 
 - `true`
+<<<<<<< HEAD
 - `false` (Default).
+=======
+- `false` (Default)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 If you use IAM user-based credential (Access Key and Secret Key) to access GCS, you must specify this item as `false`, and specify `aws_s3_access_key` and `aws_s3_secret_key`.
 
@@ -136,7 +190,11 @@ The ARN of the IAM role that has privileges on your GCS bucket in which your dat
 
 The external ID of the AWS account that is used for cross-account access to your GCS bucket.
 
+<<<<<<< HEAD
 > **Note**
+=======
+> **NOTE**
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 >
 > Only credential-related configuration items can be modified after your shared-data StarRocks cluster is created. If you changed the original storage path-related configuration items, the databases and tables you created before the change become read-only, and you cannot load data into them.
 
@@ -156,19 +214,32 @@ enable_load_volume_from_conf = false
 
 <SharedDataUseIntro />
 
+<<<<<<< HEAD
 The following example creates a storage volume `def_volume` for a GCS bucket `defaultbucket` with an HMAC Access Key and Secret Key, enables the storage volume, and sets it as the default storage volume:
+=======
+The following example creates a storage volume `def_volume` for a GCS bucket `defaultbucket` with an HMAC Access Key and Secret Key, enables the [Partitioned Prefix](../../sql-reference/sql-statements/cluster-management/storage_volume/CREATE_STORAGE_VOLUME.md#partitioned-prefix) feature, and sets it as the default storage volume:
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ```SQL
 CREATE STORAGE VOLUME def_volume
 TYPE = S3
+<<<<<<< HEAD
 LOCATIONS = ("s3://defaultbucket/test/")
+=======
+LOCATIONS = ("s3://defaultbucket")
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 PROPERTIES
 (
     "enabled" = "true",
     "aws.s3.region" = "us-east1",
     "aws.s3.endpoint" = "https://storage.googleapis.com",
     "aws.s3.access_key" = "<HMAC access key>",
+<<<<<<< HEAD
     "aws.s3.secret_key" = "<HMAC secret key>"
+=======
+    "aws.s3.secret_key" = "<HMAC secret key>",
+    "aws.s3.enable_partitioned_prefix" = "true"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 );
 
 SET def_volume AS DEFAULT STORAGE VOLUME;

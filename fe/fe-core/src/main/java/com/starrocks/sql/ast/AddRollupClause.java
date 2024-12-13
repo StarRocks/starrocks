@@ -17,6 +17,7 @@
 
 package com.starrocks.sql.ast;
 
+<<<<<<< HEAD
 import com.google.common.base.Strings;
 import com.google.common.collect.Sets;
 import com.starrocks.alter.AlterOpType;
@@ -25,23 +26,38 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.sql.analyzer.FeNameFormat;
+=======
+import com.starrocks.alter.AlterOpType;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 import java.util.Map;
+<<<<<<< HEAD
 import java.util.Set;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 // used to create one rollup
 // syntax:
 //      ALTER TABLE table_name
 //          ADD ROLLUP rollup_name (column, ..) FROM base_rollup
 public class AddRollupClause extends AlterTableClause {
+<<<<<<< HEAD
     private String rollupName;
     private List<String> columnNames;
     private String baseRollupName;
     private List<String> dupKeys;
 
     private Map<String, String> properties;
+=======
+    private final String rollupName;
+    private final List<String> columnNames;
+    private String baseRollupName;
+    private final List<String> dupKeys;
+
+    private final Map<String, String> properties;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public String getRollupName() {
         return rollupName;
@@ -76,6 +92,7 @@ public class AddRollupClause extends AlterTableClause {
         this.properties = properties;
     }
 
+<<<<<<< HEAD
     @Override
     public void analyze(Analyzer analyzer) throws AnalysisException {
         FeNameFormat.checkTableName(rollupName);
@@ -96,6 +113,12 @@ public class AddRollupClause extends AlterTableClause {
     }
 
     @Override
+=======
+    public void setBaseRollupName(String baseRollupName) {
+        this.baseRollupName = baseRollupName;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public Map<String, String> getProperties() {
         return this.properties;
     }

@@ -18,7 +18,11 @@ This statement is supported from v2.4.
 SHOW ANALYZE STATUS [WHERE]
 ```
 
+<<<<<<< HEAD
 You can use `LIKE or WHERE` to filter the information to return.
+=======
+You can use `LIKE` or `WHERE` to filter the information to return.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 This statement returns the following columns.
 

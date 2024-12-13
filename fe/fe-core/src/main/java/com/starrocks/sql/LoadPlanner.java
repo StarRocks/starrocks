@@ -15,6 +15,10 @@
 package com.starrocks.sql;
 
 import com.google.common.base.Preconditions;
+<<<<<<< HEAD
+=======
+import com.google.common.collect.ImmutableMap;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Analyzer;
@@ -37,11 +41,19 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.Load;
+<<<<<<< HEAD
+=======
+import com.starrocks.load.loadv2.LoadJob;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.DataSink;
@@ -55,6 +67,10 @@ import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.StreamLoadScanNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
+=======
+import com.starrocks.server.WarehouseManager;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.PartitionNames;
@@ -72,6 +88,10 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Collections;
+<<<<<<< HEAD
+=======
+import java.util.HashSet;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -132,10 +152,26 @@ public class LoadPlanner {
     TRoutineLoadTask routineLoadTask;
     private TPartialUpdateMode partialUpdateMode = TPartialUpdateMode.ROW_MODE;
 
+<<<<<<< HEAD
+=======
+    private long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+
+    private LoadJob.JSONOptions jsonOptions = new LoadJob.JSONOptions();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private Boolean missAutoIncrementColumn = Boolean.FALSE;
 
     private String mergeConditionStr;
 
+<<<<<<< HEAD
+=======
+    // Only valid for stream load
+    private boolean enableBatchWrite = false;
+    private int batchWriteIntervalMs;
+    private ImmutableMap<String, String> batchWriteParameters;
+    private Set<Long> batchWriteBackendIds;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public LoadPlanner(long loadJobId, TUniqueId loadId, long txnId, long dbId, OlapTable destTable,
                        boolean strictMode, String timezone, long timeoutS,
                        long startTime, boolean partialUpdate, ConnectContext context,
@@ -222,9 +258,29 @@ public class LoadPlanner {
         this.label = label;
         this.timeoutS = timeoutS;
         this.etlJobType = EtlJobType.STREAM_LOAD;
+<<<<<<< HEAD
         if (Config.enable_pipeline_load) {
             this.context.getSessionVariable().setEnablePipelineEngine(true);
         }
+=======
+        this.context.getSessionVariable().setEnablePipelineEngine(true);
+    }
+
+    public void setWarehouseId(long warehouseId) {
+        this.warehouseId = warehouseId;
+    }
+
+    public long getWarehouseId() {
+        return warehouseId;
+    }
+
+    public void setBatchWrite(
+            int batchWriteIntervalMs, ImmutableMap<String, String> loadParameters, Set<Long> batchWriteBackendIds) {
+        this.enableBatchWrite = true;
+        this.batchWriteIntervalMs = batchWriteIntervalMs;
+        this.batchWriteParameters = loadParameters;
+        this.batchWriteBackendIds = new HashSet<>(batchWriteBackendIds);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public void setPartialUpdateMode(TPartialUpdateMode mode) {
@@ -235,11 +291,26 @@ public class LoadPlanner {
         this.mergeConditionStr = mergeConditionStr;
     }
 
+<<<<<<< HEAD
     public void plan() throws UserException {
+=======
+    public void setJsonOptions(LoadJob.JSONOptions options) {
+        this.jsonOptions = options;
+    }
+
+    public void plan() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // 1. Generate tuple descriptor
         OlapTable olapDestTable = (OlapTable) destTable;
         List<Column> destColumns = Lists.newArrayList();
         if (isPrimaryKey && partialUpdate) {
+<<<<<<< HEAD
+=======
+            if (((OlapTable) destTable).hasRowStorageType() && partialUpdate &&
+                    partialUpdateMode != TPartialUpdateMode.ROW_MODE) {
+                throw new DdlException("column with row table only support row mode partial update");
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (this.etlJobType == EtlJobType.BROKER) {
                 if (fileGroups.size() != 1) {
                     throw new DdlException("partial update only support single filegroup.");
@@ -317,6 +388,7 @@ public class LoadPlanner {
         if (!needShufflePlan) {
             sinkFragment = new PlanFragment(new PlanFragmentId(0), scanNode, DataPartition.RANDOM);
         }
+<<<<<<< HEAD
         prepareSinkFragment(sinkFragment, partitionIds, true, true, forceReplicatedStorage);
         if (this.context != null) {
             if (this.context.getSessionVariable().isEnablePipelineEngine() && Config.enable_pipeline_load) {
@@ -334,6 +406,20 @@ public class LoadPlanner {
                 sinkFragment.setPipelineDop(1);
                 sinkFragment.setParallelExecNum(parallelInstanceNum);
             }
+=======
+        prepareSinkFragment(sinkFragment, partitionIds, true, forceReplicatedStorage);
+        if (this.context != null) {
+            if (needShufflePlan) {
+                sinkFragment.setPipelineDop(1);
+                sinkFragment.setParallelExecNum(parallelInstanceNum);
+                sinkFragment.setForceSetTableSinkDop();
+            } else {
+                sinkFragment.setPipelineDop(parallelInstanceNum);
+                sinkFragment.setParallelExecNum(1);
+            }
+            sinkFragment.setHasOlapTableSink();
+            sinkFragment.setForceAssignScanRangesPerDriverSeq();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } else {
             sinkFragment.setPipelineDop(1);
             sinkFragment.setParallelExecNum(parallelInstanceNum);
@@ -355,7 +441,11 @@ public class LoadPlanner {
         Collections.reverse(fragments);
     }
 
+<<<<<<< HEAD
     private void generateTupleDescriptor(List<Column> destColumns, boolean isPrimaryKey) throws UserException {
+=======
+    private void generateTupleDescriptor(List<Column> destColumns, boolean isPrimaryKey) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.tupleDesc = descTable.createTupleDescriptor("DestTableTupleDescriptor");
         // Add column slotDesc for dest table
         for (Column col : destColumns) {
@@ -370,8 +460,13 @@ public class LoadPlanner {
 
             if (col.getType().isVarchar() && enableDictOptimize
                     && IDictManager.getInstance().hasGlobalDict(destTable.getId(),
+<<<<<<< HEAD
                     col.getName())) {
                 Optional<ColumnDict> dict = IDictManager.getInstance().getGlobalDict(destTable.getId(), col.getName());
+=======
+                    col.getColumnId())) {
+                Optional<ColumnDict> dict = IDictManager.getInstance().getGlobalDict(destTable.getId(), col.getColumnId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 dict.ifPresent(columnDict -> globalDicts.add(new Pair<>(slotDesc.getId().asInt(), columnDict)));
             }
         }
@@ -385,22 +480,42 @@ public class LoadPlanner {
         descTable.computeMemLayout();
     }
 
+<<<<<<< HEAD
     private ScanNode prepareScanNodes() throws UserException {
+=======
+    private ScanNode prepareScanNodes() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ScanNode scanNode = null;
         if (this.etlJobType == EtlJobType.BROKER) {
             FileScanNode fileScanNode = new FileScanNode(new PlanNodeId(planNodeGenerator.getNextId().asInt()),
                     tupleDesc,
+<<<<<<< HEAD
                     "FileScanNode", fileStatusesList, filesAdded);
             fileScanNode.setLoadInfo(loadJobId, txnId, destTable, brokerDesc, fileGroups, strictMode,
                     parallelInstanceNum);
             fileScanNode.setUseVectorizedLoad(true);
+=======
+                    "FileScanNode", fileStatusesList, filesAdded, warehouseId);
+            fileScanNode.setLoadInfo(loadJobId, txnId, destTable, brokerDesc, fileGroups, strictMode,
+                    parallelInstanceNum);
+            fileScanNode.setUseVectorizedLoad(true);
+            fileScanNode.setJSONOptions(jsonOptions);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             fileScanNode.init(analyzer);
             fileScanNode.finalizeStats(analyzer);
             scanNode = fileScanNode;
         } else if (this.etlJobType == EtlJobType.STREAM_LOAD || this.etlJobType == EtlJobType.ROUTINE_LOAD) {
             StreamLoadScanNode streamScanNode = new StreamLoadScanNode(loadId, new PlanNodeId(0), tupleDesc,
+<<<<<<< HEAD
                     destTable, streamLoadInfo, dbName, label, parallelInstanceNum, txnId);
             streamScanNode.setNeedAssignBE(true);
+=======
+                    destTable, streamLoadInfo, dbName, label, parallelInstanceNum, txnId, warehouseId);
+            streamScanNode.setNeedAssignBE(true);
+            if (enableBatchWrite) {
+                streamScanNode.setBatchWrite(batchWriteIntervalMs, batchWriteParameters, batchWriteBackendIds);
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             streamScanNode.setUseVectorizedLoad(true);
             streamScanNode.init(analyzer);
             streamScanNode.finalizeStats(analyzer);
@@ -431,8 +546,14 @@ public class LoadPlanner {
         return nullExprInAutoIncrement;
     }
 
+<<<<<<< HEAD
     private void prepareSinkFragment(PlanFragment sinkFragment, List<Long> partitionIds, boolean canUsePipeLine,
                                      boolean completeTabletSink, boolean forceReplicatedStorage) throws UserException {
+=======
+    private void prepareSinkFragment(PlanFragment sinkFragment, List<Long> partitionIds,
+                                     boolean completeTabletSink, boolean forceReplicatedStorage) throws
+            StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         DataSink dataSink = null;
         if (destTable instanceof OlapTable) {
             // 4. Olap table sink
@@ -444,12 +565,24 @@ public class LoadPlanner {
                 enableAutomaticPartition = olapTable.supportedAutomaticPartition();
             }
             Preconditions.checkState(!CollectionUtils.isEmpty(partitionIds));
+<<<<<<< HEAD
             dataSink = new OlapTableSink(olapTable, tupleDesc, partitionIds, canUsePipeLine,
                     olapTable.writeQuorum(), forceReplicatedStorage ? true : ((OlapTable) destTable).enableReplicatedStorage(),
                     checkNullExprInAutoIncrement(), enableAutomaticPartition);
             if (this.missAutoIncrementColumn == Boolean.TRUE) {
                 ((OlapTableSink) dataSink).setMissAutoIncrementColumn();
             }
+=======
+            dataSink = new OlapTableSink(olapTable, tupleDesc, partitionIds,
+                    olapTable.writeQuorum(), forceReplicatedStorage ? true : ((OlapTable) destTable).enableReplicatedStorage(),
+                    checkNullExprInAutoIncrement(), enableAutomaticPartition, warehouseId);
+            if (this.missAutoIncrementColumn == Boolean.TRUE) {
+                ((OlapTableSink) dataSink).setMissAutoIncrementColumn();
+            }
+            if (olapTable.getAutomaticBucketSize() > 0) {
+                ((OlapTableSink) dataSink).setAutomaticBucketSize(olapTable.getAutomaticBucketSize());
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (completeTabletSink) {
                 ((OlapTableSink) dataSink).init(loadId, txnId, dbId, timeoutS);
                 ((OlapTableSink) dataSink).setPartialUpdateMode(partialUpdateMode);
@@ -468,7 +601,11 @@ public class LoadPlanner {
         sinkFragment.setLoadGlobalDicts(globalDicts);
     }
 
+<<<<<<< HEAD
     public void completeTableSink(long txnId) throws AnalysisException, UserException {
+=======
+    public void completeTableSink(long txnId) throws AnalysisException, StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (destTable instanceof OlapTable) {
             OlapTableSink dataSink = (OlapTableSink) fragments.get(0).getSink();
             dataSink.init(loadId, txnId, dbId, timeoutS);

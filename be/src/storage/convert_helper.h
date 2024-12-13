@@ -94,6 +94,7 @@ private:
     std::vector<const FieldConverter*> _converters;
 };
 
+<<<<<<< HEAD
 class ChunkConverter {
 public:
     ChunkConverter() = default;
@@ -109,4 +110,6 @@ private:
     std::vector<const FieldConverter*> _converters;
 };
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // namespace starrocks

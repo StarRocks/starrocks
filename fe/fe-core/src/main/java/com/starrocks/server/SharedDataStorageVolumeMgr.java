@@ -22,9 +22,18 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+<<<<<<< HEAD
 import com.starrocks.common.InvalidConfException;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.credential.CloudConfigurationConstants;
+=======
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReportException;
+import com.starrocks.common.InvalidConfException;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.connector.share.credential.CloudConfigurationConstants;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.storagevolume.StorageVolume;
 import org.apache.logging.log4j.LogManager;
@@ -41,6 +50,11 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+<<<<<<< HEAD
+=======
+import static com.starrocks.server.GlobalStateMgr.NEXT_ID_INIT_VALUE;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
     private static final Logger LOG = LogManager.getLogger(SharedDataStorageVolumeMgr.class);
 
@@ -116,7 +130,11 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
         if (svName.equals(StorageVolumeMgr.DEFAULT)) {
             sv = getDefaultStorageVolume();
             if (sv == null) {
+<<<<<<< HEAD
                 throw new DdlException("Default storage volume not exists, it should be created first");
+=======
+                throw ErrorReportException.report(ErrorCode.ERR_NO_DEFAULT_STORAGE_VOLUME);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         } else {
             sv = getStorageVolumeByName(svName);
@@ -183,6 +201,7 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
             if (dbStorageVolumeId != null) {
                 return getStorageVolume(dbStorageVolumeId);
             } else {
+<<<<<<< HEAD
                 sv = getStorageVolumeByName(BUILTIN_STORAGE_VOLUME);
                 if (sv == null) {
                     if (Config.enable_load_volume_from_conf) {
@@ -195,12 +214,21 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
                                 "Try setting 'enable_load_volume_from_conf' to true " +
                                 "and ensure the related storage volume settings are correct");
                     }
+=======
+                sv = getDefaultStorageVolume();
+                if (sv == null) {
+                    throw ErrorReportException.report(ErrorCode.ERR_NO_DEFAULT_STORAGE_VOLUME);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
             }
         } else if (svName.equals(StorageVolumeMgr.DEFAULT)) {
             sv = getDefaultStorageVolume();
             if (sv == null) {
+<<<<<<< HEAD
                 throw new DdlException("Default storage volume not exists, it should be created first");
+=======
+                throw ErrorReportException.report(ErrorCode.ERR_NO_DEFAULT_STORAGE_VOLUME);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         } else {
             sv = getStorageVolumeByName(svName);
@@ -329,16 +357,29 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
         List<List<Long>> bindings = new ArrayList<>();
         List<Long> tableBindings = new ArrayList<>();
         List<Long> dbBindings = new ArrayList<>();
+<<<<<<< HEAD
         List<Long> dbIds = GlobalStateMgr.getCurrentState().getDbIdsIncludeRecycleBin();
         for (Long dbId : dbIds) {
             Database db = GlobalStateMgr.getCurrentState().getDbIncludeRecycleBin(dbId);
             db.readLock();
+=======
+        List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIdsIncludeRecycleBin().stream()
+                .filter(dbid -> dbid > NEXT_ID_INIT_VALUE).collect(Collectors.toList());
+        for (Long dbId : dbIds) {
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIncludeRecycleBin(dbId);
+            Locker locker = new Locker();
+            locker.lockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (dbToStorageVolume.containsKey(dbId)) {
                 continue;
             }
             dbBindings.add(dbId);
             try {
+<<<<<<< HEAD
                 List<Table> tables = GlobalStateMgr.getCurrentState().getTablesIncludeRecycleBin(db);
+=======
+                List<Table> tables = GlobalStateMgr.getCurrentState().getLocalMetastore().getTablesIncludeRecycleBin(db);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 for (Table table : tables) {
                     Long tableId = table.getId();
                     if (!tableToStorageVolume.containsKey(tableId) && table.isCloudNativeTableOrMaterializedView()) {
@@ -346,7 +387,11 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
                     }
                 }
             } finally {
+<<<<<<< HEAD
                 db.readUnlock();
+=======
+                locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
         bindings.add(dbBindings);

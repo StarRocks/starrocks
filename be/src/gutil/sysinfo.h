@@ -30,6 +30,11 @@
 
 #pragma once
 
+<<<<<<< HEAD
+=======
+#include <sys/resource.h>
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include <cstdint>
 
 namespace base {
@@ -49,6 +54,12 @@ extern double CyclesPerSecond();
 // * "2,4-127,128-143\n" -> 143
 // Ref: https://www.kernel.org/doc/Documentation/cputopology.txt
 // Exposed for testing.
+<<<<<<< HEAD
 extern int ParseMaxCpuIndex(const char* str);
+=======
+int ParseMaxCpuIndex(const char* str);
+
+int get_cur_core_file_limit();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 } // namespace base

@@ -34,6 +34,10 @@
 
 package com.starrocks.qe;
 
+<<<<<<< HEAD
+=======
+import com.starrocks.common.Config;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.DigitalVersion;
 import com.starrocks.plugin.AuditEvent;
 import com.starrocks.plugin.AuditEvent.EventType;
@@ -77,6 +81,63 @@ public class AuditEventProcessorTest {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testAuditLogBuilderCONNECTION() throws IOException {
+        try (AuditLogBuilder auditLogBuilder = new AuditLogBuilder()) {
+            AuditEvent event = new AuditEvent.AuditEventBuilder().setEventType(EventType.CONNECTION)
+                    .setTimestamp(System.currentTimeMillis())
+                    .setClientIp("127.0.0.1")
+                    .setUser("user1")
+                    .setAuthorizedUser("user2")
+                    .setDb("db1")
+                    .setState("EOF")
+                    .setQueryTime(2000)
+                    .setScanBytes(100000)
+                    .setScanRows(200000)
+                    .setReturnRows(1)
+                    .setStmtId(1234)
+                    .setStmt("select * from tbl1").build();
+
+            if (auditLogBuilder.eventFilter(event.type)) {
+                auditLogBuilder.exec(event);
+                Config.audit_log_json_format = true;
+                auditLogBuilder.exec(event);
+            }
+            Assert.assertEquals(EventType.CONNECTION,  event.type);
+        }
+    }
+
+    @Test
+    public void testAuditLogBuilderBigQuery() throws IOException {
+        try (AuditLogBuilder auditLogBuilder = new AuditLogBuilder()) {
+            AuditEvent event = new AuditEvent.AuditEventBuilder().setEventType(EventType.AFTER_QUERY)
+                    .setTimestamp(System.currentTimeMillis())
+                    .setClientIp("127.0.0.1")
+                    .setUser("user1")
+                    .setAuthorizedUser("user2")
+                    .setDb("db1")
+                    .setState("EOF")
+                    .setQueryTime(2000)
+                    .setScanBytes(100000)
+                    .setScanRows(200000)
+                    .setReturnRows(1)
+                    .setStmtId(1234)
+                    .setStmt("select * from tbl1")
+                    .setBigQueryLogCPUSecondThreshold(5)
+                    .setCpuCostNs(6 * 1000000000L).build();
+            if (auditLogBuilder.eventFilter(event.type)) {
+                auditLogBuilder.exec(event);
+                Config.audit_log_json_format = true;
+                auditLogBuilder.exec(event);
+            }
+            Assert.assertEquals(6 * 1000000000L, event.cpuCostNs);
+            Assert.assertEquals(5, event.bigQueryLogCPUSecondThreshold);
+        }
+    }
+
+    @Test
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void testAuditLogBuilder() throws IOException {
         try (AuditLogBuilder auditLogBuilder = new AuditLogBuilder()) {
             PluginInfo pluginInfo = auditLogBuilder.getPluginInfo();
@@ -108,7 +169,11 @@ public class AuditEventProcessorTest {
 
     @Test
     public void testAuditEventProcessor() throws IOException {
+<<<<<<< HEAD
         AuditEventProcessor processor = GlobalStateMgr.getCurrentAuditEventProcessor();
+=======
+        AuditEventProcessor processor = GlobalStateMgr.getCurrentState().getAuditEventProcessor();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         long start = System.currentTimeMillis();
         for (int i = 0; i < 10000; i++) {
             AuditEvent event = new AuditEvent.AuditEventBuilder().setEventType(EventType.AFTER_QUERY)
@@ -129,4 +194,8 @@ public class AuditEventProcessorTest {
         long total = System.currentTimeMillis() - start;
         System.out.println("total(ms): " + total + ", avg: " + total / 10000.0);
     }
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

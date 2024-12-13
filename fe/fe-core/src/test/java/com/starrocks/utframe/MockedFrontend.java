@@ -38,7 +38,10 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
+<<<<<<< HEAD
 import com.starrocks.common.util.JdkUtils;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.ha.FrontendNodeType;
@@ -115,6 +118,10 @@ public class MockedFrontend {
         MIN_FE_CONF.put("query_port", "9030");
         MIN_FE_CONF.put("edit_log_port", "9010");
         MIN_FE_CONF.put("priority_networks", "127.0.0.1/24");
+<<<<<<< HEAD
+=======
+        MIN_FE_CONF.put("frontend_address", "127.0.0.1");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         MIN_FE_CONF.put("sys_log_verbose_modules", "org");
         MIN_FE_CONF.put("cloud_native_meta_port", "6090");
 
@@ -230,12 +237,18 @@ public class MockedFrontend {
 
             try {
                 // init config
+<<<<<<< HEAD
                 new Config().init(frontend.getRunningDir() + "/conf/fe.conf");
 
                 // check it after Config is initialized, otherwise the config 'check_java_version' won't work.
                 if (!JdkUtils.checkJavaVersion()) {
                 // throw new IllegalArgumentException("Java version doesn't match");
                 }
+=======
+                Config config = new Config();
+                config.init(frontend.getRunningDir() + "/conf/fe.conf");
+                config.initMutable(frontend.getRunningDir() + "/conf/fe_mutable.conf");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
                 // set dns cache ttl
                 java.security.Security.setProperty("networkaddress.cache.ttl", "60");
@@ -263,8 +276,11 @@ public class MockedFrontend {
                 };
 
                 GlobalStateMgr.getCurrentState().initialize(args);
+<<<<<<< HEAD
                 StateChangeExecutor.getInstance().setMetaContext(
                         GlobalStateMgr.getCurrentState().getMetaContext());
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
                 if (RunMode.isSharedDataMode()) {
                     // setup and start StarManager service

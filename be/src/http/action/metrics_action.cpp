@@ -336,7 +336,11 @@ void MetricsAction::handle(HttpRequest* req) {
         PrometheusMetricsVisitor visitor;
         _metrics->collect(&visitor);
         if (config::dump_metrics_with_bvar) {
+<<<<<<< HEAD
             bvar::Variable::dump_exposed(&visitor, nullptr);
+=======
+            bvar::Variable::dump_exposed(&visitor, &_options);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 #ifdef USE_STAROS
 #ifdef BE_TEST

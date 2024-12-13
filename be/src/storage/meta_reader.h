@@ -20,9 +20,13 @@
 #include "column/vectorized_fwd.h"
 #include "runtime/descriptors.h"
 #include "storage/olap_common.h"
+<<<<<<< HEAD
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/segment.h"
 #include "storage/tablet.h"
+=======
+#include "storage/rowset/segment.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 namespace starrocks {
 
@@ -32,15 +36,24 @@ class RuntimeState;
 
 namespace starrocks {
 
+<<<<<<< HEAD
 class Tablet;
+=======
+class ColumnIterator;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 class SegmentMetaCollecter;
 
 // Params for MetaReader
 // mainly include tablet
 struct MetaReaderParams {
     MetaReaderParams() = default;
+<<<<<<< HEAD
     ;
     TabletSharedPtr tablet;
+=======
+
+    int64_t tablet_id;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     Version version = Version(-1, 0);
     const std::vector<SlotDescriptor*>* slots = nullptr;
     RuntimeState* runtime_state = nullptr;
@@ -49,6 +62,11 @@ struct MetaReaderParams {
     const DescriptorTbl* desc_tbl = nullptr;
 
     int chunk_size = config::vector_chunk_size;
+<<<<<<< HEAD
+=======
+
+    void check_validation() const { LOG_IF(FATAL, version.first == -1) << "version is not set. tablet=" << tablet_id; }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 struct SegmentMetaCollecterParams {
@@ -56,7 +74,12 @@ struct SegmentMetaCollecterParams {
     std::vector<ColumnId> cids;
     std::vector<bool> read_page;
     std::vector<LogicalType> field_type;
+<<<<<<< HEAD
     int32_t max_cid;
+=======
+    bool use_page_cache;
+    TabletSchemaCSPtr tablet_schema;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 // MetaReader will implements
@@ -82,8 +105,11 @@ public:
     };
 
 protected:
+<<<<<<< HEAD
     Version _version;
     int _chunk_size;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     CollectContext _collect_context;
     bool _is_init;
     bool _has_more;
@@ -98,6 +124,16 @@ protected:
     Status _read(Chunk* chunk, size_t n);
 };
 
+<<<<<<< HEAD
+=======
+static const std::string META_COUNT_ROWS = "rows";
+static const std::string META_MIN = "min";
+static const std::string META_MAX = "max";
+static const std::string META_DICT_MERGE = "dict_merge";
+static const std::string META_FLAT_JSON_META = "flat_json_meta";
+static const std::string META_COUNT_COL = "count";
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 class SegmentMetaCollecter {
 public:
     SegmentMetaCollecter(SegmentSharedPtr segment);
@@ -119,7 +155,13 @@ private:
     Status _collect_dict(ColumnId cid, Column* column, LogicalType type);
     Status _collect_max(ColumnId cid, Column* column, LogicalType type);
     Status _collect_min(ColumnId cid, Column* column, LogicalType type);
+<<<<<<< HEAD
     Status _collect_count(Column* column, LogicalType type);
+=======
+    Status _collect_count(ColumnId cid, Column* column, LogicalType type);
+    Status _collect_rows(Column* column, LogicalType type);
+    Status _collect_flat_json(ColumnId cid, Column* column);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     template <bool is_max>
     Status __collect_max_or_min(ColumnId cid, Column* column, LogicalType type);
     SegmentSharedPtr _segment;

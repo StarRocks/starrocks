@@ -26,11 +26,19 @@ import org.apache.paimon.types.DecimalType;
 import org.apache.paimon.types.DoubleType;
 import org.apache.paimon.types.FloatType;
 import org.apache.paimon.types.IntType;
+<<<<<<< HEAD
+=======
+import org.apache.paimon.types.LocalZonedTimestampType;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.paimon.types.MapType;
 import org.apache.paimon.types.RowType;
 import org.apache.paimon.types.SmallIntType;
 import org.apache.paimon.types.TimestampType;
 import org.apache.paimon.types.TinyIntType;
+<<<<<<< HEAD
+=======
+import org.apache.paimon.types.VarBinaryType;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.paimon.types.VarCharType;
 
 import java.util.stream.Collectors;
@@ -63,6 +71,13 @@ public class PaimonTypeUtils {
             return "binary";
         }
 
+<<<<<<< HEAD
+=======
+        public String visit(VarBinaryType varBinaryType) {
+            return "binary";
+        }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         public String visit(DecimalType decimalType) {
             return String.format("decimal(%d,%d)", decimalType.getPrecision(), decimalType.getScale());
         }
@@ -99,6 +114,13 @@ public class PaimonTypeUtils {
             return "timestamp-millis";
         }
 
+<<<<<<< HEAD
+=======
+        public String visit(LocalZonedTimestampType timestampType) {
+            return "timestamp-millis";
+        }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         public String visit(ArrayType arrayType) {
             return String.format("array<%s>", arrayType.getElementType().accept(this));
         }
@@ -110,9 +132,15 @@ public class PaimonTypeUtils {
         }
 
         public String visit(RowType rowType) {
+<<<<<<< HEAD
             String type = rowType.getFields().stream().map(f -> f.type().accept(this) + ",")
                     .collect(Collectors.joining(","));
             return String.format("struct<%s>", type.substring(0, type.length() - 1));
+=======
+            String type = rowType.getFields().stream().map(f -> f.name() + ":" + f.type().accept(this))
+                    .collect(Collectors.joining(","));
+            return String.format("struct<%s>", type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         @Override

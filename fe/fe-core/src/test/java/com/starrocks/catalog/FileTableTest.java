@@ -14,14 +14,25 @@
 
 package com.starrocks.catalog;
 
+<<<<<<< HEAD
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.RemoteFileDesc;
+=======
+import com.starrocks.analysis.DescriptorTable;
+import com.starrocks.common.DdlException;
+import com.starrocks.connector.RemoteFileDesc;
+import com.starrocks.connector.hive.HiveStorageFormat;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.connector.hive.RemoteFileInputFormat;
 import com.starrocks.connector.hive.TextFileFormatDesc;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.TableFactoryProvider;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.common.EngineType;
+<<<<<<< HEAD
+=======
+import com.starrocks.thrift.TTableDescriptor;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
@@ -54,8 +65,14 @@ public class FileTableTest {
     public void testCreateExternalTable() throws Exception {
         String hdfsPath = "hdfs://127.0.0.1:10000/hive/";
 
+<<<<<<< HEAD
         String createTableSql = "create external table if not exists db.file_tbl (col1 int, col2 int) engine=file properties " +
                 "(\"path\"=\"hdfs://127.0.0.1:10000/hive/\", \"format\"=\"orc\")";
+=======
+        String createTableSql =
+                "create external table if not exists db.file_tbl (col1 int, col2 int) engine=file properties " +
+                        "(\"path\"=\"hdfs://127.0.0.1:10000/hive/\", \"format\"=\"orc\")";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         CreateTableStmt
                 createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, connectContext);
         com.starrocks.catalog.Table table = createTable(createTableStmt);
@@ -72,7 +89,12 @@ public class FileTableTest {
                 "engine=file properties " +
                 "(\"path\"=\"hdfs://127.0.0.1:10000/hive/\", \"format\"=\"parquet\")";
         CreateTableStmt
+<<<<<<< HEAD
                 createTableStmt2 = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql2, connectContext);
+=======
+                createTableStmt2 =
+                (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql2, connectContext);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         com.starrocks.catalog.Table table2 = createTable(createTableStmt2);
 
         Assert.assertTrue(table2 instanceof FileTable);
@@ -85,7 +107,12 @@ public class FileTableTest {
                 "engine=file properties " +
                 "(\"path\"=\"hdfs://127.0.0.1:10000/hive/\")";
         CreateTableStmt
+<<<<<<< HEAD
                 createTableStmt3 = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql3, connectContext);
+=======
+                createTableStmt3 =
+                (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql3, connectContext);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertThrows(DdlException.class,
                 () -> createTable(createTableStmt3));
 
@@ -93,7 +120,12 @@ public class FileTableTest {
                 "engine=file properties " +
                 "(\"format\"=\"parquet\")";
         CreateTableStmt
+<<<<<<< HEAD
                 createTableStmt4 = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql4, connectContext);
+=======
+                createTableStmt4 =
+                (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql4, connectContext);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertThrows(DdlException.class,
                 () -> createTable(createTableStmt4));
 
@@ -101,7 +133,12 @@ public class FileTableTest {
                 "engine=file properties " +
                 "(\"path\"=\"hdfs://127.0.0.1:10000/hive/\", \"format\"=\"haha\")";
         CreateTableStmt
+<<<<<<< HEAD
                 createTableStmt5 = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql5, connectContext);
+=======
+                createTableStmt5 =
+                (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql5, connectContext);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertThrows(DdlException.class,
                 () -> createTable(createTableStmt5));
     }
@@ -116,14 +153,23 @@ public class FileTableTest {
                             "(\"path\"=\"hdfs://127.0.0.1:10000/hive/\", \"format\"=\"text\", \"csv_separator\"=\",\", " +
                             "\"row_delimiter\"=\"xx\", \"collection_delimiter\"=\"yy\", \"map_delimiter\"=\"zz\")";
             CreateTableStmt
+<<<<<<< HEAD
                     createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, connectContext);
+=======
+                    createTableStmt =
+                    (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, connectContext);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             com.starrocks.catalog.Table table = createTable(createTableStmt);
 
             Assert.assertTrue(table instanceof FileTable);
             FileTable fileTable = (FileTable) table;
             Assert.assertEquals("file_tbl", fileTable.getName());
             Assert.assertEquals(hdfsPath, fileTable.getTableLocation());
+<<<<<<< HEAD
             Assert.assertEquals(RemoteFileInputFormat.TEXT, fileTable.getFileFormat());
+=======
+            Assert.assertEquals(RemoteFileInputFormat.TEXTFILE, fileTable.getFileFormat());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             Assert.assertEquals(hdfsPath, fileTable.getFileProperties().get("path"));
             Assert.assertEquals("text", fileTable.getFileProperties().get("format"));
         }
@@ -140,7 +186,11 @@ public class FileTableTest {
             @Override
             public List<RemoteFileDesc> getFileDescsFromHdfs() throws DdlException {
                 List<RemoteFileDesc> fileDescList = new ArrayList<>();
+<<<<<<< HEAD
                 RemoteFileDesc fileDesc = new RemoteFileDesc("aa", "snappy", 0, 0, null, null);
+=======
+                RemoteFileDesc fileDesc = new RemoteFileDesc("aa", "snappy", 0, 0, null);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 fileDescList.add(fileDesc);
                 return fileDescList;
             }
@@ -166,4 +216,28 @@ public class FileTableTest {
         Assert.assertEquals(desc.getCollectionDelim(), "ZZZ");
         Assert.assertEquals(desc.getMapkeyDelim(), "MMM");
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testCreateTextExternalTableFormat() throws Exception {
+        String createTableSql =
+                "create external table if not exists db.file_tbl (col1 int, col2 int, col3 string) engine=file properties " +
+                        "(\"path\"=\"hdfs://127.0.0.1:10000/hive/\", \"format\"=\"avro\")";
+        CreateTableStmt
+                createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, connectContext);
+        com.starrocks.catalog.Table table = createTable(createTableStmt);
+
+        Assert.assertTrue(table instanceof FileTable);
+        FileTable fileTable = (FileTable) table;
+        List<DescriptorTable.ReferencedPartitionInfo> partitions = new ArrayList<>();
+        TTableDescriptor tTableDescriptor = fileTable.toThrift(partitions);
+
+        Assert.assertEquals(tTableDescriptor.getFileTable().getInput_format(),
+                HiveStorageFormat.get("avro").getInputFormat());
+        Assert.assertEquals(tTableDescriptor.getFileTable().getSerde_lib(), HiveStorageFormat.get("avro").getSerde());
+        Assert.assertEquals(tTableDescriptor.getFileTable().getHive_column_names(), "col1,col2,col3");
+        Assert.assertEquals(tTableDescriptor.getFileTable().getHive_column_types(), "int#int#string");
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

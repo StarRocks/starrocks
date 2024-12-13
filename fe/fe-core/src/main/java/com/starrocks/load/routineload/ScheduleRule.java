@@ -44,7 +44,11 @@ import com.starrocks.system.SystemInfoService;
 public class ScheduleRule {
 
     private static int deadBeCount() {
+<<<<<<< HEAD
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
+=======
+        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         int total = systemInfoService.getTotalBackendNumber();
         int alive = systemInfoService.getAliveBackendNumber();
         return total - alive;

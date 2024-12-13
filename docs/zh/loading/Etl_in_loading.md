@@ -74,7 +74,11 @@ StarRocks 支持在导入数据的过程中实现数据转换。
 
    > **说明**
    >
+<<<<<<< HEAD
    > 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [确定分桶数量](../table_design/data_distribution/Data_distribution.md#确定分桶数量)。
+=======
+   > 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [设置分桶数量](../table_design/data_distribution/Data_distribution.md#设置分桶数量)。
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
    a. 创建一张名为 `table1` 的表，包含 `user_id`、`event_date` 和 `event_type` 三列，如下所示：
 

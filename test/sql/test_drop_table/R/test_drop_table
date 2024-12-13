@@ -1,6 +1,7 @@
 -- name: test_drop_table
 CREATE TABLE t0(c0 INT) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 PROPERTIES('replication_num'='1');
 -- result:
+<<<<<<< HEAD
 []
 -- !result
 INSERT INTO t0 VALUES(1),(2),(3);
@@ -14,6 +15,17 @@ DROP TABLE t0;
 RECOVER TABLE t0;
 -- result:
 []
+=======
+-- !result
+INSERT INTO t0 VALUES(1),(2),(3);
+-- result:
+-- !result
+DROP TABLE t0;
+-- result:
+-- !result
+RECOVER TABLE t0;
+-- result:
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result
 SELECT * FROM t0 ORDER BY c0;
 -- result:
@@ -23,7 +35,10 @@ SELECT * FROM t0 ORDER BY c0;
 -- !result
 INSERT INTO t0 VALUES(4);
 -- result:
+<<<<<<< HEAD
 []
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result
 SELECT * FROM t0 ORDER BY c0;
 -- result:
@@ -34,6 +49,7 @@ SELECT * FROM t0 ORDER BY c0;
 -- !result
 DROP TABLE t0 FORCE;
 -- result:
+<<<<<<< HEAD
 []
 -- !result
 RECOVER TABLE t0;
@@ -63,6 +79,31 @@ E: (1050, "Unexpected exception: Table 't0' already exists")
 INSERT INTO t0 VALUES(1, 100),(2, 200),(3, 300);
 -- result:
 []
+=======
+-- !result
+RECOVER TABLE t0;
+-- result:
+E: (5502, "Unknown table 't0'")
+-- !result
+CREATE TABLE t0(c0 INT, c1 INT) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 PROPERTIES('replication_num'='1');
+-- result:
+-- !result
+INSERT INTO t0 VALUES(1, 10),(2, 20),(3, 30);
+-- result:
+-- !result
+DROP TABLE t0;
+-- result:
+-- !result
+CREATE TABLE t0(c0 INT, c1 INT) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 PROPERTIES('replication_num'='1');
+-- result:
+-- !result
+RECOVER TABLE t0;
+-- result:
+E: (1050, "Table 't0' already exists")
+-- !result
+INSERT INTO t0 VALUES(1, 100),(2, 200),(3, 300);
+-- result:
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result
 SELECT * FROM t0 ORDER BY c0;
 -- result:
@@ -72,11 +113,17 @@ SELECT * FROM t0 ORDER BY c0;
 -- !result
 DROP TABLE t0;
 -- result:
+<<<<<<< HEAD
 []
 -- !result
 RECOVER TABLE t0;
 -- result:
 []
+=======
+-- !result
+RECOVER TABLE t0;
+-- result:
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result
 SELECT * FROM t0 ORDER BY c0;
 -- result:
@@ -86,7 +133,10 @@ SELECT * FROM t0 ORDER BY c0;
 -- !result
 INSERT INTO t0 VALUES(4, 400);
 -- result:
+<<<<<<< HEAD
 []
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result
 SELECT * FROM t0 ORDER BY c0;
 -- result:
@@ -97,5 +147,9 @@ SELECT * FROM t0 ORDER BY c0;
 -- !result
 DROP TABLE t0 FORCE;
 -- result:
+<<<<<<< HEAD
 []
 -- !result
+=======
+-- !result
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

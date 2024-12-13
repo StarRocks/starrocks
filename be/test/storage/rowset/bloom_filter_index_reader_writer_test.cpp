@@ -52,17 +52,26 @@ const std::string kTestDir = "/bloom_filter_index_reader_writer_test";
 class BloomFilterIndexReaderWriterTest : public testing::Test {
 protected:
     void SetUp() override {
+<<<<<<< HEAD
         _mem_tracker = std::make_unique<MemTracker>();
         StoragePageCache::create_global_cache(_mem_tracker.get(), 1000000000);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         _fs = std::make_shared<MemoryFileSystem>();
         ASSERT_TRUE(_fs->create_dir(kTestDir).ok());
 
         _opts.use_page_cache = true;
         _opts.kept_in_memory = false;
+<<<<<<< HEAD
         _opts.skip_fill_data_cache = false;
         _opts.stats = &_stats;
     }
     void TearDown() override { StoragePageCache::release_global_cache(); }
+=======
+        _opts.stats = &_stats;
+    }
+    void TearDown() override { StoragePageCache::instance()->prune(); }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     template <LogicalType type>
     void write_bloom_filter_index_file(const std::string& file_name, const void* values, size_t value_count,
@@ -165,7 +174,10 @@ protected:
         }
     }
 
+<<<<<<< HEAD
     std::unique_ptr<MemTracker> _mem_tracker = nullptr;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::shared_ptr<MemoryFileSystem> _fs = nullptr;
     IndexReadOptions _opts;
     OlapReaderStatistics _stats;

@@ -15,6 +15,10 @@
 #pragma once
 
 #include "common/statusor.h"
+<<<<<<< HEAD
+=======
+#include "storage/persistent_index.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 namespace starrocks::lake {
 
@@ -42,4 +46,11 @@ inline StatusOr<T> enhance_error_prompt(StatusOr<T> res) {
     }
 }
 
+<<<<<<< HEAD
+=======
+inline IndexValue build_index_value(const IndexValueWithVerPB& value) {
+    return IndexValue(((uint64_t)value.rssid() << 32 | value.rowid()));
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // namespace starrocks::lake

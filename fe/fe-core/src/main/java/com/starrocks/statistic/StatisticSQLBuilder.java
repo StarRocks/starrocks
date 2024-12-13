@@ -18,8 +18,14 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+<<<<<<< HEAD
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Type;
+=======
+import com.starrocks.catalog.Type;
+import org.apache.commons.collections.CollectionUtils;
+import org.apache.logging.log4j.util.Strings;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.velocity.VelocityContext;
 import org.apache.velocity.app.VelocityEngine;
 
@@ -33,7 +39,14 @@ import static com.starrocks.statistic.StatsConstants.EXTERNAL_FULL_STATISTICS_TA
 import static com.starrocks.statistic.StatsConstants.FULL_STATISTICS_TABLE_NAME;
 import static com.starrocks.statistic.StatsConstants.SAMPLE_STATISTICS_TABLE_NAME;
 import static com.starrocks.statistic.StatsConstants.STATISTIC_DATA_VERSION;
+<<<<<<< HEAD
 import static com.starrocks.statistic.StatsConstants.STATISTIC_HISTOGRAM_VERSION;
+=======
+import static com.starrocks.statistic.StatsConstants.STATISTIC_EXTERNAL_HISTOGRAM_VERSION;
+import static com.starrocks.statistic.StatsConstants.STATISTIC_EXTERNAL_QUERY_V2_VERSION;
+import static com.starrocks.statistic.StatsConstants.STATISTIC_HISTOGRAM_VERSION;
+import static com.starrocks.statistic.StatsConstants.STATISTIC_PARTITION_VERSION;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import static com.starrocks.statistic.StatsConstants.STATISTIC_TABLE_VERSION;
 
 public class StatisticSQLBuilder {
@@ -43,6 +56,16 @@ public class StatisticSQLBuilder {
                     + " WHERE $predicate"
                     + " GROUP BY partition_id";
 
+<<<<<<< HEAD
+=======
+    private static final String QUERY_PARTITION_STATISTIC_TEMPLATE =
+            "SELECT cast(" + STATISTIC_PARTITION_VERSION + " as INT), " +
+                    " `partition_id`, `column_name`, hll_cardinality(hll_union(`ndv`)) as distinct_count"
+                    + " FROM " + FULL_STATISTICS_TABLE_NAME
+                    + " WHERE $predicate"
+                    + " GROUP BY `partition_id`, `column_name`";
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private static final String QUERY_SAMPLE_STATISTIC_TEMPLATE =
             "SELECT cast(" + STATISTIC_DATA_VERSION + " as INT), update_time, db_id, table_id, column_name,"
                     + " row_count, data_size, distinct_count, null_count, max, min"
@@ -57,21 +80,45 @@ public class StatisticSQLBuilder {
                     + " WHERE $predicate"
                     + " GROUP BY db_id, table_id, column_name";
 
+<<<<<<< HEAD
+=======
+    private static final String QUERY_EXTERNAL_FULL_STATISTIC_V2_TEMPLATE =
+            "SELECT cast(" + STATISTIC_EXTERNAL_QUERY_V2_VERSION + " as INT), column_name,"
+                    + " sum(row_count), cast(sum(data_size) as bigint), hll_union_agg(ndv), sum(null_count), "
+                    + " cast(max(cast(max as $type)) as string), cast(min(cast(min as $type)) as string),"
+                    + " max(update_time)"
+                    + " FROM " + StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME
+                    + " WHERE $predicate"
+                    + " GROUP BY table_uuid, column_name";
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private static final String QUERY_HISTOGRAM_STATISTIC_TEMPLATE =
             "SELECT cast(" + STATISTIC_HISTOGRAM_VERSION + " as INT), db_id, table_id, column_name,"
                     + " cast(json_object(\"buckets\", buckets, \"mcv\", mcv) as varchar)"
                     + " FROM " + StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME
                     + " WHERE $predicate";
 
+<<<<<<< HEAD
+=======
+    private static final String QUERY_EXTERNAL_HISTOGRAM_STATISTIC_TEMPLATE =
+            "SELECT cast(" + STATISTIC_EXTERNAL_HISTOGRAM_VERSION + " as INT), column_name,"
+                    + " cast(json_object(\"buckets\", buckets, \"mcv\", mcv) as varchar)"
+                    + " FROM " + StatsConstants.EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME
+                    + " WHERE $predicate";
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private static final VelocityEngine DEFAULT_VELOCITY_ENGINE;
 
     static {
         DEFAULT_VELOCITY_ENGINE = new VelocityEngine();
         // close velocity log
         DEFAULT_VELOCITY_ENGINE.setProperty(VelocityEngine.RUNTIME_LOG_REFERENCE_LOG_INVALID, false);
+<<<<<<< HEAD
         DEFAULT_VELOCITY_ENGINE.setProperty(VelocityEngine.RUNTIME_LOG_LOGSYSTEM_CLASS,
                 "org.apache.velocity.runtime.log.Log4JLogChute");
         DEFAULT_VELOCITY_ENGINE.setProperty("runtime.log.logsystem.log4j.logger", "velocity");
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public static String buildQueryTableStatisticsSQL(Long tableId, List<Long> partitionIds) {
@@ -84,6 +131,23 @@ public class StatisticSQLBuilder {
         return build(context, QUERY_TABLE_STATISTIC_TEMPLATE);
     }
 
+<<<<<<< HEAD
+=======
+    public static String buildQueryPartitionStatisticsSQL(Long tableId, List<Long> partitionIds, List<String> columns) {
+        VelocityContext context = new VelocityContext();
+        String tablePredicate = "table_id=" + tableId;
+        String partitionPredicate = CollectionUtils.isEmpty(partitionIds) ? "" :
+                " AND `partition_id` in (" +
+                        partitionIds.stream().map(String::valueOf).collect(Collectors.joining(", ")) + ")";
+        String columnPredicate = CollectionUtils.isEmpty(columns) ? "" :
+                " AND `column_name` in (" +
+                        columns.stream().map(Strings::quote).collect(Collectors.joining(",")) + ")";
+        context.put("predicate", tablePredicate + partitionPredicate + columnPredicate);
+
+        return build(context, QUERY_PARTITION_STATISTIC_TEMPLATE);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static String buildQueryTableStatisticsSQL(Long tableId, Long partitionId) {
         VelocityContext context = new VelocityContext();
         context.put("predicate", "table_id = " + tableId + " and partition_id = " + partitionId);
@@ -112,8 +176,14 @@ public class StatisticSQLBuilder {
         return build(context, QUERY_SAMPLE_STATISTIC_TEMPLATE);
     }
 
+<<<<<<< HEAD
     public static String buildQueryFullStatisticsSQL(Long dbId, Long tableId, List<Column> columns) {
         Map<String, List<String>> nameGroups = groupByTypes(columns);
+=======
+    public static String buildQueryFullStatisticsSQL(Long dbId, Long tableId, List<String> columnNames,
+                                                     List<Type> columnTypes) {
+        Map<String, List<String>> nameGroups = groupByTypes(columnNames, columnTypes);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         List<String> querySQL = new ArrayList<>();
         nameGroups.forEach((type, names) -> {
@@ -127,11 +197,36 @@ public class StatisticSQLBuilder {
         return Joiner.on(" UNION ALL ").join(querySQL);
     }
 
+<<<<<<< HEAD
     private static Map<String, List<String>> groupByTypes(List<Column> columns) {
         Map<String, List<String>> groupByTypeNames = Maps.newHashMap();
         for (Column column : columns) {
             Type columnType = column.getType();
             String columnName = column.getName();
+=======
+    public static String buildQueryExternalFullStatisticsSQL(String tableUUID, List<String> columnNames,
+                                                             List<Type> columnTypes) {
+        Map<String, List<String>> nameGroups = groupByTypes(columnNames, columnTypes);
+
+        List<String> querySQL = new ArrayList<>();
+        nameGroups.forEach((type, names) -> {
+            VelocityContext context = new VelocityContext();
+            context.put("type", type);
+            context.put("predicate",
+                    "table_uuid = \"" + tableUUID + "\"" + " and column_name in (" +
+                            names.stream().map(c -> "\"" + c + "\"").collect(Collectors.joining(", ")) + ")");
+            querySQL.add(build(context, QUERY_EXTERNAL_FULL_STATISTIC_V2_TEMPLATE));
+        });
+
+        return Joiner.on(" UNION ALL ").join(querySQL);
+    }
+
+    private static Map<String, List<String>> groupByTypes(List<String> columnNames, List<Type> columnTypes) {
+        Map<String, List<String>> groupByTypeNames = Maps.newHashMap();
+        for (int i = 0; i < columnNames.size(); i++) {
+            String columnName = columnNames.get(i);
+            Type columnType = columnTypes.get(i);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
             if (columnType.isStringType() || !columnType.canStatistic()) {
                 groupByTypeNames.computeIfAbsent("string", k -> Lists.newArrayList()).add(columnName);
@@ -159,6 +254,14 @@ public class StatisticSQLBuilder {
         return "DELETE FROM " + EXTERNAL_FULL_STATISTICS_TABLE_NAME + " WHERE TABLE_UUID = '" + tableUUID + "'";
     }
 
+<<<<<<< HEAD
+=======
+    public static String buildDropExternalStatSQL(String catalogName, String dbName, String tableName) {
+        return "DELETE FROM " + EXTERNAL_FULL_STATISTICS_TABLE_NAME + " WHERE CATALOG_NAME = '" + catalogName + "'" +
+                " AND DB_NAME = '" + dbName + "' AND TABLE_NAME = '" + tableName + "'";
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static String buildDropPartitionSQL(List<Long> pids) {
         return "DELETE FROM " + FULL_STATISTICS_TABLE_NAME + " WHERE " +
                 " PARTITION_ID IN (" +
@@ -195,12 +298,48 @@ public class StatisticSQLBuilder {
         return build(context, QUERY_HISTOGRAM_STATISTIC_TEMPLATE);
     }
 
+<<<<<<< HEAD
+=======
+    public static String buildQueryConnectorHistogramStatisticsSQL(String tableUUID, List<String> columnNames) {
+        VelocityContext context = new VelocityContext();
+
+        List<String> predicateList = Lists.newArrayList();
+        if (tableUUID != null) {
+            predicateList.add("table_uuid = '" + tableUUID + "'");
+        }
+
+        if (!columnNames.isEmpty()) {
+            predicateList.add("column_name in (" + Joiner.on(", ")
+                    .join(columnNames.stream().map(c -> "'" + c + "'").collect(Collectors.toList())) + ")");
+        }
+
+        context.put("predicate", Joiner.on(" and ").join(predicateList));
+        return build(context, QUERY_EXTERNAL_HISTOGRAM_STATISTIC_TEMPLATE);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static String buildDropHistogramSQL(Long tableId, List<String> columnNames) {
         return "delete from " + StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME + " where table_id = "
                 + tableId + " and column_name in (" + Joiner.on(", ")
                 .join(columnNames.stream().map(c -> "'" + c + "'").collect(Collectors.toList())) + ")";
     }
 
+<<<<<<< HEAD
+=======
+    public static String buildDropExternalHistogramSQL(String tableUUID, List<String> columnNames) {
+        return "delete from " + StatsConstants.EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME + " where table_uuid = '"
+                + tableUUID + "' and column_name in (" + Joiner.on(", ")
+                .join(columnNames.stream().map(c -> "'" + c + "'").collect(Collectors.toList())) + ")";
+    }
+
+    public static String buildDropExternalHistogramSQL(String catalogName, String dbName, String tableName,
+                                                       List<String> columnNames) {
+        return "delete from " + StatsConstants.EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME + " where catalog_name = '"
+                + catalogName + "' and db_name = '" + dbName + "' and table_name = '" + tableName + "' and column_name in ("
+                + Joiner.on(", ").join(columnNames.stream().map(c -> "'" + c + "'").collect(Collectors.toList())) + ")";
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private static String build(VelocityContext context, String template) {
         StringWriter sw = new StringWriter();
         DEFAULT_VELOCITY_ENGINE.evaluate(context, sw, "", template);

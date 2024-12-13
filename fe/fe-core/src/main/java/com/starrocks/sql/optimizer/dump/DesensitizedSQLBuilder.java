@@ -23,6 +23,10 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.ColumnId;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.FileTable;
@@ -67,6 +71,10 @@ import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.ViewRelation;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.common.MetaUtils;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.statistic.StatsConstants;
 import org.apache.commons.collections4.CollectionUtils;
@@ -153,7 +161,11 @@ public class DesensitizedSQLBuilder {
         private final Map<String, String> desensitizedDict;
 
         public DesensitizedSQLVisitor(boolean simple, boolean withoutTbl, Map<String, String> desensitizedDict) {
+<<<<<<< HEAD
             super(simple, withoutTbl);
+=======
+            super(simple, withoutTbl, true);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             this.desensitizedDict = desensitizedDict;
         }
 
@@ -469,10 +481,17 @@ public class DesensitizedSQLBuilder {
                 sb.append("\"database\" = \"").append(desensitizedDbName).append("\",\n");
                 sb.append("\"table\" = \"").append(desensitizedTblName).append("\",\n");
                 sb.append("\"resource\" = \"").append(hiveTable.getResourceName()).append("\"");
+<<<<<<< HEAD
                 if (!hiveTable.getHiveProperties().isEmpty()) {
                     sb.append(",\n");
                 }
                 sb.append(new PrintableMap<>(hiveTable.getHiveProperties(), " = ", true, true, false).toString());
+=======
+                if (!table.getProperties().isEmpty()) {
+                    sb.append(",\n");
+                }
+                sb.append(new PrintableMap<>(hiveTable.getProperties(), " = ", true, true, false).toString());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 sb.append("\n)");
             } else if (table.getType() == Table.TableType.FILE) {
                 FileTable fileTable = (FileTable) table;
@@ -535,7 +554,11 @@ public class DesensitizedSQLBuilder {
 
             // distribution
             DistributionInfo distributionInfo = materializedView.getDefaultDistributionInfo();
+<<<<<<< HEAD
             sb.append("\n").append(desensitizeDistributionInfo(distributionInfo));
+=======
+            sb.append("\n").append(desensitizeDistributionInfo(table.getIdToColumn(), distributionInfo));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
             // refresh scheme
             sb.append("\nREFRESH ").append("MANUAL");
@@ -578,10 +601,16 @@ public class DesensitizedSQLBuilder {
                         .append("\" = \"");
                 final List<String> cols = Lists.newArrayList();
                 materializedView.getTableProperty().getUniqueConstraints()
+<<<<<<< HEAD
                         .stream()
                         .forEach(e -> cols.addAll(e.getUniqueColumns()));
                 List<String> desensitizedCols = Lists.newArrayList();
                 cols.stream().forEach(e -> desensitizedCols.add(desensitizeValue(e, COLUMN)));
+=======
+                        .forEach(e -> cols.addAll(e.getUniqueColumnNames(materializedView)));
+                List<String> desensitizedCols = Lists.newArrayList();
+                cols.forEach(e -> desensitizedCols.add(desensitizeValue(e, COLUMN)));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 sb.append(Joiner.on(", ").join(desensitizedCols)).append("\"");
             }
 
@@ -637,7 +666,11 @@ public class DesensitizedSQLBuilder {
             if (CollectionUtils.isNotEmpty(olapTable.getIndexes())) {
                 for (Index index : olapTable.getIndexes()) {
                     sb.append(",\n");
+<<<<<<< HEAD
                     sb.append("  ").append(desensitizeIndexDef(index));
+=======
+                    sb.append("  ").append(desensitizeIndexDef(olapTable, index));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
             }
 
@@ -659,7 +692,11 @@ public class DesensitizedSQLBuilder {
 
             // distribution
             DistributionInfo distributionInfo = olapTable.getDefaultDistributionInfo();
+<<<<<<< HEAD
             sb.append(desensitizeDistributionInfo(distributionInfo));
+=======
+            sb.append(desensitizeDistributionInfo(olapTable.getIdToColumn(), distributionInfo));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
             // order by
             MaterializedIndexMeta index = olapTable.getIndexMetaByIndexId(olapTable.getBaseIndexId());
@@ -682,11 +719,19 @@ public class DesensitizedSQLBuilder {
             sb.append(1).append("\"");
 
             // bloom filter
+<<<<<<< HEAD
             Set<String> bfColumnNames = olapTable.getCopiedBfColumns();
             if (bfColumnNames != null) {
                 sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_BF_COLUMNS)
                         .append("\" = \"");
                 List<String> desensitizedCols = olapTable.getCopiedBfColumns().stream()
+=======
+            Set<String> bfColumnNames = olapTable.getBfColumnNames();
+            if (bfColumnNames != null) {
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_BF_COLUMNS)
+                        .append("\" = \"");
+                List<String> desensitizedCols = olapTable.getBfColumnNames().stream()
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         .map(e -> desensitizeValue(e, COLUMN)).
                         collect(toList());
                 sb.append(Joiner.on(", ").join(desensitizedCols)).append("\"");
@@ -725,10 +770,16 @@ public class DesensitizedSQLBuilder {
                         .append("\" = \"");
                 final List<String> cols = Lists.newArrayList();
                 olapTable.getTableProperty().getUniqueConstraints()
+<<<<<<< HEAD
                         .stream()
                         .forEach(e -> cols.addAll(e.getUniqueColumns()));
                 List<String> desensitizedCols = Lists.newArrayList();
                 cols.stream().forEach(e -> desensitizedCols.add(desensitizeValue(e, COLUMN)));
+=======
+                        .forEach(e -> cols.addAll(e.getUniqueColumnNames(olapTable)));
+                List<String> desensitizedCols = Lists.newArrayList();
+                cols.forEach(e -> desensitizedCols.add(desensitizeValue(e, COLUMN)));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 sb.append(Joiner.on(", ").join(desensitizedCols)).append("\"");
             }
 
@@ -765,17 +816,29 @@ public class DesensitizedSQLBuilder {
                     column.getPrimitiveType() != PrimitiveType.BITMAP) {
                 sb.append("DEFAULT \"").append(column.getDefaultValue()).append("\" ");
             } else if (column.isGeneratedColumn()) {
+<<<<<<< HEAD
                 sb.append("AS ").append(visit(column.getGeneratedColumnExpr()));
+=======
+                sb.append("AS ").append(visit(column.getGeneratedColumnExpr(table.getIdToColumn())));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
             return sb.toString();
         }
 
+<<<<<<< HEAD
         private String desensitizeIndexDef(Index index) {
+=======
+        private String desensitizeIndexDef(Table table, Index index) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             StringBuilder sb = new StringBuilder("INDEX ");
             sb.append(index.getIndexName());
             sb.append(" (");
             List<String> indexCols = Lists.newArrayList();
+<<<<<<< HEAD
             for (String col : index.getColumns()) {
+=======
+            for (String col : MetaUtils.getColumnNamesByColumnIds(table, index.getColumns())) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 indexCols.add(desensitizeValue(StringUtils.lowerCase(col), COLUMN));
             }
             sb.append(Joiner.on(", ").join(indexCols));
@@ -803,9 +866,15 @@ public class DesensitizedSQLBuilder {
             }
         }
 
+<<<<<<< HEAD
         private String desensitizeDistributionInfo(DistributionInfo distributionInfo) {
             if (distributionInfo instanceof HashDistributionInfo) {
                 String distribution = distributionInfo.toSql();
+=======
+        private String desensitizeDistributionInfo(Map<ColumnId, Column> schema, DistributionInfo distributionInfo) {
+            if (distributionInfo instanceof HashDistributionInfo) {
+                String distribution = distributionInfo.toSql(schema);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 int startIdx = distribution.indexOf("(");
                 int endIdx = distribution.indexOf(")");
                 String colsString = distribution.substring(startIdx + 1, endIdx);
@@ -815,7 +884,11 @@ public class DesensitizedSQLBuilder {
                         .collect(Collectors.joining(", "));
                 return "\n" + distribution.substring(0, startIdx + 1) + desensitizeCols + distribution.substring(endIdx);
             } else {
+<<<<<<< HEAD
                 return "\n" + distributionInfo.toSql();
+=======
+                return "\n" + distributionInfo.toSql(schema);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
 

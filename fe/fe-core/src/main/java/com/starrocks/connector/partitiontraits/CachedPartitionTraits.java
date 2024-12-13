@@ -24,10 +24,18 @@ import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionKey;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.Type;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ThrowingSupplier;
 import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.connector.PartitionInfo;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.common.PCell;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
 
 import java.util.List;
@@ -49,10 +57,19 @@ public class CachedPartitionTraits extends DefaultTraits {
     private final Cache<Object, Object> cache;
     private final ConnectorPartitionTraits delegate;
     private final QueryMaterializationContext.QueryCacheStats stats;
+<<<<<<< HEAD
 
     public CachedPartitionTraits(Cache<Object, Object> cache,
                                  ConnectorPartitionTraits delegate,
                                  QueryMaterializationContext.QueryCacheStats stats) {
+=======
+    private final MaterializedView mv;
+
+    public CachedPartitionTraits(Cache<Object, Object> cache,
+                                 ConnectorPartitionTraits delegate,
+                                 QueryMaterializationContext.QueryCacheStats stats,
+                                 MaterializedView mv) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Objects.requireNonNull(cache);
         Objects.requireNonNull(delegate);
         Objects.requireNonNull(stats);
@@ -60,6 +77,10 @@ public class CachedPartitionTraits extends DefaultTraits {
         this.delegate = delegate;
         this.table = delegate.getTable();
         this.stats = stats;
+<<<<<<< HEAD
+=======
+        this.mv = mv;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     /**
@@ -68,7 +89,11 @@ public class CachedPartitionTraits extends DefaultTraits {
      * @return the cache key
      */
     private String buildCacheKey(String prefix) {
+<<<<<<< HEAD
         return String.format("cache_%s_%s", prefix, table.getId());
+=======
+        return String.format("cache_%s_%s_%s", prefix, (mv == null) ? "0" : mv.getId(), table.getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     /**
@@ -108,8 +133,13 @@ public class CachedPartitionTraits extends DefaultTraits {
     }
 
     @Override
+<<<<<<< HEAD
     public String getDbName() {
         return delegate.getDbName();
+=======
+    public String getCatalogDBName() {
+        return delegate.getCatalogDBName();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -118,8 +148,13 @@ public class CachedPartitionTraits extends DefaultTraits {
     }
 
     @Override
+<<<<<<< HEAD
     public boolean supportPartitionRefresh() {
         return delegate.supportPartitionRefresh();
+=======
+    public PartitionKey createPartitionKeyWithType(List<String> values, List<Type> types) throws AnalysisException {
+        return delegate.createPartitionKeyWithType(values, types);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -151,9 +186,15 @@ public class CachedPartitionTraits extends DefaultTraits {
     }
 
     @Override
+<<<<<<< HEAD
     public Map<String, List<List<String>>> getPartitionList(Column partitionColumn) {
         return getCacheWithException("getPartitionList",
                 () -> delegate.getPartitionList(partitionColumn), () -> Maps.newHashMap());
+=======
+    public Map<String, PCell> getPartitionCells(List<Column> partitionColumns) throws AnalysisException {
+        return getCacheWithException("getPartitionList",
+                () -> delegate.getPartitionCells(partitionColumns), () -> Maps.newHashMap());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -163,6 +204,15 @@ public class CachedPartitionTraits extends DefaultTraits {
     }
 
     @Override
+<<<<<<< HEAD
+=======
+    public Map<String, PartitionInfo> getPartitionNameWithPartitionInfo(List<String> partitionNames) {
+        // no cache since partition names are not stable.
+        return delegate.getPartitionNameWithPartitionInfo(partitionNames);
+    }
+
+    @Override
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public List<PartitionInfo> getPartitions(List<String> names) {
         // no cache since partition names are not stable.
         return delegate.getPartitions(names);

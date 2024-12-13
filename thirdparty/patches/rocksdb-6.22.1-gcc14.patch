@@ -1,0 +1,151 @@
+diff --git a/db/compaction/compaction_iteration_stats.h b/db/compaction/compaction_iteration_stats.h
+index cb7b82c..a82cf95 100644
+--- a/db/compaction/compaction_iteration_stats.h
++++ b/db/compaction/compaction_iteration_stats.h
+@@ -6,6 +6,7 @@
+ #pragma once
+ 
+ #include "rocksdb/rocksdb_namespace.h"
++#include <cstdint>
+ 
+ struct CompactionIterationStats {
+   // Compaction statistics
+diff --git a/db/kv_checksum.h b/db/kv_checksum.h
+index ba15dca..5372f61 100644
+--- a/db/kv_checksum.h
++++ b/db/kv_checksum.h
+@@ -57,7 +57,7 @@ typedef ProtectionInfoKVOTS<uint64_t> ProtectionInfoKVOTS64;
+ template <typename T>
+ class ProtectionInfo {
+  public:
+-  ProtectionInfo<T>() = default;
++  ProtectionInfo() = default;
+ 
+   Status GetStatus() const;
+   ProtectionInfoKVOT<T> ProtectKVOT(const Slice& key, const Slice& value,
+@@ -86,7 +86,7 @@ class ProtectionInfo {
+   static const uint64_t kSeedS = 0x4A2AB5CBD26F542C;
+   static const uint64_t kSeedC = 0x1CB5633EC70B2937;
+ 
+-  ProtectionInfo<T>(T val) : val_(val) {
++  ProtectionInfo(T val) : val_(val) {
+     static_assert(sizeof(ProtectionInfo<T>) == sizeof(T), "");
+   }
+ 
+@@ -99,7 +99,7 @@ class ProtectionInfo {
+ template <typename T>
+ class ProtectionInfoKVOT {
+  public:
+-  ProtectionInfoKVOT<T>() = default;
++  ProtectionInfoKVOT() = default;
+ 
+   ProtectionInfo<T> StripKVOT(const Slice& key, const Slice& value,
+                               ValueType op_type, const Slice& timestamp) const;
+@@ -121,7 +121,7 @@ class ProtectionInfoKVOT {
+   friend class ProtectionInfoKVOTS<T>;
+   friend class ProtectionInfoKVOTC<T>;
+ 
+-  ProtectionInfoKVOT<T>(T val) : info_(val) {
++  ProtectionInfoKVOT(T val) : info_(val) {
+     static_assert(sizeof(ProtectionInfoKVOT<T>) == sizeof(T), "");
+   }
+ 
+@@ -134,7 +134,7 @@ class ProtectionInfoKVOT {
+ template <typename T>
+ class ProtectionInfoKVOTC {
+  public:
+-  ProtectionInfoKVOTC<T>() = default;
++  ProtectionInfoKVOTC() = default;
+ 
+   ProtectionInfoKVOT<T> StripC(ColumnFamilyId column_family_id) const;
+ 
+@@ -162,8 +162,8 @@ class ProtectionInfoKVOTC {
+  private:
+   friend class ProtectionInfoKVOT<T>;
+ 
+-  ProtectionInfoKVOTC<T>(T val) : kvot_(val) {
+-    static_assert(sizeof(ProtectionInfoKVOTC<T>) == sizeof(T), "");
++  ProtectionInfoKVOTC(T val) : kvot_(val) {
++    static_assert(sizeof(ProtectionInfoKVOTC) == sizeof(T), "");
+   }
+ 
+   T GetVal() const { return kvot_.GetVal(); }
+@@ -175,7 +175,7 @@ class ProtectionInfoKVOTC {
+ template <typename T>
+ class ProtectionInfoKVOTS {
+  public:
+-  ProtectionInfoKVOTS<T>() = default;
++  ProtectionInfoKVOTS() = default;
+ 
+   ProtectionInfoKVOT<T> StripS(SequenceNumber sequence_number) const;
+ 
+@@ -203,7 +203,7 @@ class ProtectionInfoKVOTS {
+  private:
+   friend class ProtectionInfoKVOT<T>;
+ 
+-  ProtectionInfoKVOTS<T>(T val) : kvot_(val) {
++  ProtectionInfoKVOTS(T val) : kvot_(val) {
+     static_assert(sizeof(ProtectionInfoKVOTS<T>) == sizeof(T), "");
+   }
+ 
+diff --git a/include/rocksdb/utilities/checkpoint.h b/include/rocksdb/utilities/checkpoint.h
+index df2a744..30e3d88 100644
+--- a/include/rocksdb/utilities/checkpoint.h
++++ b/include/rocksdb/utilities/checkpoint.h
+@@ -10,6 +10,7 @@
+ 
+ #include <string>
+ #include <vector>
++#include <cstdint>
+ #include "rocksdb/status.h"
+ 
+ namespace ROCKSDB_NAMESPACE {
+diff --git a/table/block_based/data_block_hash_index.h b/table/block_based/data_block_hash_index.h
+index f356395..6eaf717 100644
+--- a/table/block_based/data_block_hash_index.h
++++ b/table/block_based/data_block_hash_index.h
+@@ -7,6 +7,7 @@
+ 
+ #include <string>
+ #include <vector>
++#include <cstdint>
+ 
+ #include "rocksdb/slice.h"
+ 
+diff --git a/third-party/folly/folly/synchronization/detail/ProxyLockable-inl.h b/third-party/folly/folly/synchronization/detail/ProxyLockable-inl.h
+index 573330c..ada1e63 100644
+--- a/third-party/folly/folly/synchronization/detail/ProxyLockable-inl.h
++++ b/third-party/folly/folly/synchronization/detail/ProxyLockable-inl.h
+@@ -14,6 +14,7 @@
+ #include <mutex>
+ #include <stdexcept>
+ #include <utility>
++#include <system_error>
+ 
+ namespace folly {
+ namespace detail {
+diff --git a/trace_replay/trace_replay.cc b/trace_replay/trace_replay.cc
+index 5fd5295..8fd5bf3 100644
+--- a/trace_replay/trace_replay.cc
++++ b/trace_replay/trace_replay.cc
+@@ -217,7 +217,7 @@ void TracerHelper::DecodeMultiGetPayload(Trace* trace,
+   multiget_payload->cf_ids.reserve(multiget_payload->multiget_size);
+   multiget_payload->multiget_keys.reserve(multiget_payload->multiget_size);
+   for (uint32_t i = 0; i < multiget_payload->multiget_size; i++) {
+-    uint32_t tmp_cfid;
++    uint32_t tmp_cfid{};
+     Slice tmp_key;
+     GetFixed32(&cfids_payload, &tmp_cfid);
+     GetLengthPrefixedSlice(&keys_payload, &tmp_key);
+diff --git a/util/string_util.h b/util/string_util.h
+index 195ae8b..8af0180 100644
+--- a/util/string_util.h
++++ b/util/string_util.h
+@@ -10,6 +10,7 @@
+ #include <string>
+ #include <unordered_map>
+ #include <vector>
++#include <cstdint>
+ 
+ #include "rocksdb/rocksdb_namespace.h"
+ 

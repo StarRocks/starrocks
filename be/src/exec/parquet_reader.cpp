@@ -18,6 +18,10 @@
 #include <arrow/status.h>
 #include <gutil/strings/substitute.h>
 
+<<<<<<< HEAD
+=======
+#include <memory>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include <utility>
 
 #include "common/config.h"
@@ -25,7 +29,13 @@
 #include "exec/file_scanner.h"
 #include "fmt/format.h"
 #include "parquet/schema.h"
+<<<<<<< HEAD
 #include "runtime/descriptors.h"
+=======
+#include "parquet_schema_builder.h"
+#include "runtime/descriptors.h"
+#include "util/byte_buffer.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "util/runtime_profile.h"
 
 namespace starrocks {
@@ -112,9 +122,16 @@ Status ParquetReaderWrap::_init_parquet_reader() {
                                                    parquet::ParquetFileReader::Open(_parquet, _properties),
                                                    arrow_reader_properties, &_reader);
         if (!st.ok()) {
+<<<<<<< HEAD
             LOG(WARNING) << "Failed to create parquet file reader. error: " << st.ToString()
                          << ", filename: " << _filename;
             return Status::InternalError(fmt::format("Failed to create file reader. filename: {}", _filename));
+=======
+            std::ostringstream oss;
+            oss << "Failed to create parquet file reader. error: " << st.ToString() << ", filename: " << _filename;
+            LOG(INFO) << oss.str();
+            return Status::InternalError(oss.str());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         if (!_reader || !_reader->parquet_reader()) {
@@ -208,6 +225,7 @@ Status ParquetReaderWrap::get_schema(std::vector<SlotDescriptor>* schema) {
         const auto& field = file_schema->group_node()->field(i);
         const auto& name = field->name();
 
+<<<<<<< HEAD
         if (!field->is_primitive()) {
             // Now, we treat all nested types as VARCHAR.
             schema->emplace_back(i, name, TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH));
@@ -289,6 +307,11 @@ Status ParquetReaderWrap::get_schema(std::vector<SlotDescriptor>* schema) {
             return Status::NotSupported(
                     fmt::format("Unknown supported parquet physical type: {}, column name: {}", physical_type, name));
         }
+=======
+        TypeDescriptor tp;
+        RETURN_IF_ERROR(get_parquet_type(field, &tp));
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         schema->emplace_back(i, name, tp);
     }
 
@@ -322,7 +345,11 @@ Status ParquetReaderWrap::column_indices(const std::vector<SlotDescriptor*>& tup
             for (auto index : iter->second) {
                 _parquet_column_ids.emplace_back(index);
             }
+<<<<<<< HEAD
         } else {
+=======
+        } else if (!_invalid_as_null) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             std::stringstream str_error;
             str_error << "Column: " << slot_desc->col_name() << " is not found in file: " << _filename;
             LOG(WARNING) << str_error.str();
@@ -473,15 +500,26 @@ arrow::Result<int64_t> ParquetChunkFile::ReadAt(int64_t position, int64_t nbytes
     ++_counter->file_read_count;
     SCOPED_RAW_TIMER(&_counter->file_read_ns);
     auto status = _file->read_at_fully(position, out, nbytes);
+<<<<<<< HEAD
     return status.ok() ? nbytes
                        : arrow::Result<int64_t>(arrow::Status(arrow::StatusCode::IOError, status.get_error_msg()));
+=======
+    return status.ok()
+                   ? nbytes
+                   : arrow::Result<int64_t>(arrow::Status(arrow::StatusCode::IOError, std::string(status.message())));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 arrow::Result<int64_t> ParquetChunkFile::GetSize() {
     const StatusOr<uint64_t> status_or = _file->get_size();
     return status_or.ok() ? status_or.value()
+<<<<<<< HEAD
                           : arrow::Result<int64_t>(
                                     arrow::Status(arrow::StatusCode::IOError, status_or.status().get_error_msg()));
+=======
+                          : arrow::Result<int64_t>(arrow::Status(arrow::StatusCode::IOError,
+                                                                 std::string(status_or.status().message())));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 arrow::Status ParquetChunkFile::Seek(int64_t position) {
@@ -494,6 +532,7 @@ arrow::Result<int64_t> ParquetChunkFile::Tell() const {
 }
 
 arrow::Result<std::shared_ptr<arrow::Buffer>> ParquetChunkFile::Read(int64_t nbytes) {
+<<<<<<< HEAD
     auto buffer_res = arrow::AllocateBuffer(nbytes, arrow::default_memory_pool());
     ARROW_RETURN_NOT_OK(buffer_res);
     std::shared_ptr<arrow::Buffer> read_buf = std::move(buffer_res.ValueOrDie());
@@ -504,6 +543,24 @@ arrow::Result<std::shared_ptr<arrow::Buffer>> ParquetChunkFile::Read(int64_t nby
         return std::move(read_buf);
     } else {
         return arrow::SliceBuffer(read_buf, 0, bytes_read_res.ValueOrDie());
+=======
+    auto tracker = CurrentThread::mem_tracker();
+    if (tracker == nullptr) {
+        return arrow::Status::ExecutionError("current thread memory tracker Not Found when allocate arrow Buffer");
+    }
+    std::unique_ptr<arrow::Buffer> buffer_res;
+    ARROW_RETURN_NOT_OK(arrow::AllocateBuffer(nbytes, arrow::default_memory_pool()).Value(&buffer_res));
+    std::shared_ptr<arrow::Buffer> read_buf(buffer_res.release(), MemTrackerDeleter(tracker));
+    int64_t bytes_read_res = 0;
+    ARROW_RETURN_NOT_OK(ReadAt(_pos, nbytes, read_buf->mutable_data()).Value(&bytes_read_res));
+    // If bytes_read is equal with read_buf's capacity, we just assign
+    if (bytes_read_res == nbytes) {
+        return std::move(read_buf);
+    } else {
+        std::shared_ptr<arrow::Buffer> slice_buf(new arrow::Buffer(read_buf, 0, bytes_read_res),
+                                                 MemTrackerDeleter(tracker));
+        return slice_buf;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }
 

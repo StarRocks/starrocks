@@ -44,7 +44,11 @@ import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.load.FailMsg;
+<<<<<<< HEAD
 import com.starrocks.transaction.BeginTransactionException;
+=======
+import com.starrocks.transaction.RunningTxnExceedException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -108,7 +112,11 @@ public class LoadJobScheduler extends FrontendDaemon {
                         .build(), e);
                 needScheduleJobs.put(loadJob);
                 return;
+<<<<<<< HEAD
             } catch (BeginTransactionException e) {
+=======
+            } catch (RunningTxnExceedException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 LOG.warn(new LogBuilder(LogKey.LOAD_JOB, loadJob.getId())
                         .add("error_msg", "Failed to begin txn when job is scheduling. "
                                 + "Job will be rescheduled later")

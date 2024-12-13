@@ -22,6 +22,11 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.property.DomainProperty;
+import com.starrocks.sql.optimizer.property.DomainPropertyDeriver;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import java.util.ArrayList;
 import java.util.List;
@@ -59,6 +64,17 @@ public class LogicalFilterOperator extends LogicalOperator {
     }
 
     @Override
+<<<<<<< HEAD
+=======
+    public DomainProperty deriveDomainProperty(List<OptExpression> inputs) {
+        DomainProperty childDomainProperty = inputs.get(0).getDomainProperty();
+        DomainPropertyDeriver deriver = new DomainPropertyDeriver();
+        DomainProperty filterDomainProperty = deriver.derive(predicate);
+        return childDomainProperty.filterDomainProperty(filterDomainProperty);
+    }
+
+    @Override
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
         return visitor.visitLogicalFilter(this, context);
     }

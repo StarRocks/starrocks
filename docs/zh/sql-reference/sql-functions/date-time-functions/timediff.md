@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # timediff
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 返回两个 DATETIME 类型值之间的差值。
 

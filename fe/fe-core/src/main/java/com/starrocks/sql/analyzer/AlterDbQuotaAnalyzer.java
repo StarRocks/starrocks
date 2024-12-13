@@ -34,7 +34,11 @@ public class AlterDbQuotaAnalyzer {
         AlterDatabaseQuotaStmt.QuotaType quotaType = statement.getQuotaType();
         if (quotaType == AlterDatabaseQuotaStmt.QuotaType.DATA) {
             try {
+<<<<<<< HEAD
                 statement.setQuota(ParseUtil.analyzeDataVolumn(statement.getQuotaValue()));
+=======
+                statement.setQuota(ParseUtil.analyzeDataVolume(statement.getQuotaValue()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             } catch (AnalysisException e) {
                 throw new SemanticException(e.getMessage());
             }

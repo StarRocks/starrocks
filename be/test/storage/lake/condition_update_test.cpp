@@ -101,8 +101,13 @@ public:
     }
 
     int64_t check(int64_t version, std::function<bool(int c0, int c1, int c2)> check_fn) {
+<<<<<<< HEAD
         ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
         ASSIGN_OR_ABORT(auto reader, tablet.new_reader(version, *_schema));
+=======
+        ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version));
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         CHECK_OK(reader->prepare());
         CHECK_OK(reader->open(TabletReaderParams()));
         auto chunk = ChunkHelper::new_chunk(*_schema, 128);
@@ -149,11 +154,25 @@ TEST_P(ConditionUpdateTest, test_condition_update) {
     // normal write
     for (int i = 0; i < 3; i++) {
         auto txn_id = next_id();
+<<<<<<< HEAD
         auto delta_writer =
                 DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
+=======
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -176,11 +195,26 @@ TEST_P(ConditionUpdateTest, test_condition_update) {
     result[3] = std::make_pair(5, 6);
     for (int i = 0; i < 4; i++) {
         auto txn_id = next_id();
+<<<<<<< HEAD
         auto delta_writer = DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, "c1",
                                                 _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunks[i], indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
+=======
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_merge_condition("c1")
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunks[i], indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -208,11 +242,25 @@ TEST_P(ConditionUpdateTest, test_condition_update_multi_segment) {
     // normal write
     for (int i = 0; i < 3; i++) {
         auto txn_id = next_id();
+<<<<<<< HEAD
         auto delta_writer =
                 DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
+=======
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -229,11 +277,26 @@ TEST_P(ConditionUpdateTest, test_condition_update_multi_segment) {
     config::write_buffer_size = 1;
     for (int i = 0; i < 2; i++) {
         auto txn_id = next_id();
+<<<<<<< HEAD
         auto delta_writer = DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, "c1",
                                                 _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(i == 0 ? chunk1 : chunk2, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
+=======
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_merge_condition("c1")
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(i == 0 ? chunk1 : chunk2, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -262,13 +325,29 @@ TEST_P(ConditionUpdateTest, test_condition_update_in_memtable) {
     auto version = 1;
     auto txn_id = next_id();
     auto tablet_id = _tablet_metadata->id();
+<<<<<<< HEAD
     auto delta_writer =
             DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, "c1", _mem_tracker.get());
+=======
+    ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_merge_condition("c1")
+                                               .set_schema_id(_tablet_schema->id())
+                                               .build());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ASSERT_OK(delta_writer->open());
     // finish condition merge in one memtable
     ASSERT_OK(delta_writer->write(chunks[0], indexes.data(), indexes.size()));
     ASSERT_OK(delta_writer->write(chunks[1], indexes.data(), indexes.size()));
+<<<<<<< HEAD
     ASSERT_OK(delta_writer->finish());
+=======
+    ASSERT_OK(delta_writer->finish_with_txnlog());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     delta_writer->close();
     // Publish version
     ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());

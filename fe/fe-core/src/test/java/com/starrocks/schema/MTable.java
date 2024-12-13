@@ -15,9 +15,14 @@
 package com.starrocks.schema;
 
 import com.google.common.base.Joiner;
+<<<<<<< HEAD
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import org.apache.parquet.Strings;
+=======
+import com.google.common.base.Strings;
+import com.google.common.collect.Lists;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -26,6 +31,10 @@ import java.util.stream.Collectors;
  * MTable means Mocked-Table and is used to mock SR's table so can be used for FE's unit tests.
  */
 public class MTable {
+<<<<<<< HEAD
+=======
+    private String dbName;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private String tableName;
     private List<String> columns;
     private String distCol;
@@ -109,9 +118,19 @@ public class MTable {
         this.replicateNum = replicateNum;
     }
 
+<<<<<<< HEAD
     public MTable withValues(String value) {
         String[] arr = value.split(",");
         return withValues(Lists.newArrayList(arr));
+=======
+    public String getDbName() {
+        return this.dbName;
+    }
+
+    public MTable withValues(String value) {
+        String[] arr = value.split(",");
+        return withValues(List.of(arr));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public MTable withValues(List<String> values) {
@@ -120,7 +139,11 @@ public class MTable {
     }
 
     public MTable withProperties(String value) {
+<<<<<<< HEAD
         return withProperties(ImmutableList.of(value));
+=======
+        return withProperties(List.of(value));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public MTable withProperties(List<String> values) {
@@ -128,8 +151,18 @@ public class MTable {
         return this;
     }
 
+<<<<<<< HEAD
     public String getCreateTableSql() {
         String  sql = String.format("CREATE TABLE `%s` (\n" +
+=======
+    public MTable withDbName(String dbName) {
+        this.dbName = dbName;
+        return this;
+    }
+
+    public String getCreateTableSql() {
+        String sql = String.format("CREATE TABLE IF NOT EXISTS `%s` (\n" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         " %s" +
                         "\n" +
                         ") ENGINE=OLAP\n",

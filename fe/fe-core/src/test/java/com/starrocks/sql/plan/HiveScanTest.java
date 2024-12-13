@@ -15,18 +15,36 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.planner.ScanNode;
+<<<<<<< HEAD
 import com.starrocks.server.GlobalStateMgr;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+=======
+import org.junit.Assert;
+import org.junit.BeforeClass;
+import org.junit.ClassRule;
+import org.junit.Test;
+import org.junit.rules.TemporaryFolder;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import java.util.List;
 
 public class HiveScanTest extends ConnectorPlanTestBase {
+<<<<<<< HEAD
     @BeforeClass
     public static void beforeClass() throws Exception {
         ConnectorPlanTestBase.beforeClass();
         GlobalStateMgr.getCurrentState().changeCatalogDb(connectContext, "hive0.partitioned_db");
+=======
+    @ClassRule
+    public static TemporaryFolder temp = new TemporaryFolder();
+
+    @BeforeClass
+    public static void beforeClass() throws Exception {
+        ConnectorPlanTestBase.doInit(temp.newFolder().toURI().toString());
+        connectContext.changeCatalogDb("hive0.partitioned_db");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -76,4 +94,76 @@ public class HiveScanTest extends ConnectorPlanTestBase {
             Assert.assertEquals(expexted, scanNodeList.get(0).getScanOptimzeOption().getCanUseMinMaxCountOpt());
         }
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testHiveRewriteSimpleAggToHdfsScan() throws Exception {
+        connectContext.getSessionVariable().setEnableRewriteSimpleAggToHdfsScan(true);
+        // positive cases.
+        {
+            String[] sqlString = {
+                    "select count(*) from lineitem_par",
+                    "select count(*) from lineitem_par where l_shipdate = '1998-01-01'",
+                    "select count(*), l_shipdate from lineitem_par where l_shipdate = '1998-01-01' group by l_shipdate"
+            };
+            for (int i = 0; i < sqlString.length; i++) {
+                String sql = sqlString[i];
+                String plan = getFragmentPlan(sql);
+                assertContains(plan, "___count___");
+            }
+        }
+        // negative cases.
+        {
+            String[] sqlString = {
+                    "select count(l_orderkey) from lineitem_par",
+                    "select count(*) from lineitem_par where l_shipdate = '1998-01-01' and l_orderkey = 202",
+                    "select count(*), count(l_orderkey), l_shipdate from lineitem_par where l_shipdate = '1998-01-01' group by " +
+                            "l_shipdate"
+            };
+            for (int i = 0; i < sqlString.length; i++) {
+                String sql = sqlString[i];
+                String plan = getFragmentPlan(sql);
+                assertNotContains(plan, "___count___");
+            }
+        }
+        connectContext.getSessionVariable().setEnableRewriteSimpleAggToHdfsScan(false);
+    }
+
+    @Test
+    public void testIcebergRewriteSimpleAggToHdfsScan() throws Exception {
+        connectContext.getSessionVariable().setEnableRewriteSimpleAggToHdfsScan(true);
+        // positive cases.
+        {
+            String[] sqlString = {
+                    "select count(*) from iceberg0.partitioned_db.t1",
+                    "select count(*) from iceberg0.partitioned_db.t1 where date = '2020-01-01'",
+                    "select count(*), date from iceberg0.partitioned_db.t1 where date = '2020-01-01' " +
+                            "group by date"
+            };
+            for (int i = 0; i < sqlString.length; i++) {
+                String sql = sqlString[i];
+                String plan = getFragmentPlan(sql);
+                assertContains(plan, "___count___");
+            }
+        }
+        // negative cases.
+        {
+            String[] sqlString = {
+                    "select count(id) from iceberg0.partitioned_db.t1",
+                    "select count(*) from iceberg0.partitioned_db.t1 where date = '1998-01-01' and id =" +
+                            " 202",
+                    "select count(*), count(id), date from iceberg0.partitioned_db.t1 where date " +
+                            "= '2020-01-01' group by " +
+                            "date"
+            };
+            for (int i = 0; i < sqlString.length; i++) {
+                String sql = sqlString[i];
+                String plan = getFragmentPlan(sql);
+                assertNotContains(plan, "___count___");
+            }
+        }
+        connectContext.getSessionVariable().setEnableRewriteSimpleAggToHdfsScan(false);
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

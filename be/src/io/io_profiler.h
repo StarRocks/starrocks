@@ -68,11 +68,19 @@ public:
     static IOStat get_context_io();
     static void clear_context();
 
+<<<<<<< HEAD
     static bool is_empty();
 
     static void take_tls_io_snapshot(IOStat* snapshot);
     static IOStat calculate_scoped_tls_io(const IOStat& snapshot);
 
+=======
+    static void take_tls_io_snapshot(IOStat* snapshot);
+    static IOStat calculate_scoped_tls_io(const IOStat& snapshot);
+
+    static bool is_empty();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     class Scope {
     public:
         Scope() = delete;

@@ -23,11 +23,18 @@ import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.util.Util;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+<<<<<<< HEAD
 import com.starrocks.connector.iceberg.IcebergAwsClientFactory;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.connector.iceberg.IcebergCatalog;
 import com.starrocks.connector.iceberg.IcebergCatalogType;
 import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
 import com.starrocks.connector.iceberg.io.IcebergCachingFileIO;
+<<<<<<< HEAD
+=======
+import com.starrocks.connector.share.iceberg.IcebergAwsClientFactory;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -52,13 +59,23 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
+<<<<<<< HEAD
 import static com.starrocks.connector.iceberg.IcebergConnector.HIVE_METASTORE_URIS;
 import static com.starrocks.connector.iceberg.IcebergConnector.ICEBERG_METASTORE_URIS;
+=======
+import static com.starrocks.connector.iceberg.IcebergCatalogProperties.HIVE_METASTORE_TIMEOUT;
+import static com.starrocks.connector.iceberg.IcebergCatalogProperties.HIVE_METASTORE_URIS;
+import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ICEBERG_METASTORE_URIS;
+import static com.starrocks.connector.iceberg.IcebergMetadata.LOCATION_PROPERTY;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import static org.apache.hadoop.hive.conf.HiveConf.ConfVars.METASTOREWAREHOUSE;
 
 public class IcebergHiveCatalog implements IcebergCatalog {
     private static final Logger LOG = LogManager.getLogger(IcebergHiveCatalog.class);
+<<<<<<< HEAD
     public static final String LOCATION_PROPERTY = "location";
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     private final Configuration conf;
     private final HiveCatalog delegate;
@@ -66,8 +83,13 @@ public class IcebergHiveCatalog implements IcebergCatalog {
     @VisibleForTesting
     public IcebergHiveCatalog(String name, Configuration conf, Map<String, String> properties) {
         this.conf = conf;
+<<<<<<< HEAD
         this.conf.set(MetastoreConf.ConfVars.CLIENT_SOCKET_TIMEOUT.getHiveName(),
                 String.valueOf(Config.hive_meta_store_timeout_s));
+=======
+        String hmsTimeout = properties.getOrDefault(HIVE_METASTORE_TIMEOUT, String.valueOf(Config.hive_meta_store_timeout_s));
+        this.conf.set(MetastoreConf.ConfVars.CLIENT_SOCKET_TIMEOUT.getHiveName(), hmsTimeout);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (conf.get(METASTOREWAREHOUSE.varname) == null) {
             this.conf.set(METASTOREWAREHOUSE.varname, METASTOREWAREHOUSE.getDefaultValue());
         }
@@ -87,7 +109,11 @@ public class IcebergHiveCatalog implements IcebergCatalog {
         // The property is false by default, in such case, when we execute SHOW TABLES FROM CATALOG.DB,
         // it will request all Table Objects from Hive Metastore, when there are lots of tables under the
         // database, timeout may happen.
+<<<<<<< HEAD
         copiedProperties.put(HiveCatalog.LIST_ALL_TABLES, "true");
+=======
+        copiedProperties.putIfAbsent(HiveCatalog.LIST_ALL_TABLES, "true");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         delegate = (HiveCatalog) CatalogUtil.loadCatalog(HiveCatalog.class.getName(), name, copiedProperties, conf);
     }
@@ -103,6 +129,14 @@ public class IcebergHiveCatalog implements IcebergCatalog {
     }
 
     @Override
+<<<<<<< HEAD
+=======
+    public boolean tableExists(String dbName, String tableName) throws StarRocksConnectorException {
+        return delegate.tableExists(TableIdentifier.of(dbName, tableName));
+    }
+
+    @Override
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public List<String> listAllDatabases() {
         return delegate.listNamespaces().stream()
                 .map(ns -> ns.level(0))
@@ -110,7 +144,11 @@ public class IcebergHiveCatalog implements IcebergCatalog {
     }
 
     @Override
+<<<<<<< HEAD
     public void createDb(String dbName, Map<String, String> properties) {
+=======
+    public void createDB(String dbName, Map<String, String> properties) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         properties = properties == null ? new HashMap<>() : properties;
         for (Map.Entry<String, String> entry : properties.entrySet()) {
             String key = entry.getKey();
@@ -134,7 +172,11 @@ public class IcebergHiveCatalog implements IcebergCatalog {
     }
 
     @Override
+<<<<<<< HEAD
     public void dropDb(String dbName) throws MetaNotFoundException {
+=======
+    public void dropDB(String dbName) throws MetaNotFoundException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Database database;
         try {
             database = getDB(dbName);
@@ -191,6 +233,14 @@ public class IcebergHiveCatalog implements IcebergCatalog {
     }
 
     @Override
+<<<<<<< HEAD
+=======
+    public void renameTable(String dbName, String tblName, String newTblName) throws StarRocksConnectorException {
+        delegate.renameTable(TableIdentifier.of(dbName, tblName), TableIdentifier.of(dbName, newTblName));
+    }
+
+    @Override
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void deleteUncommittedDataFiles(List<String> fileLocations) {
         if (fileLocations.isEmpty()) {
             return;

@@ -15,8 +15,14 @@
 package com.starrocks.sql.optimizer.validate;
 
 import com.google.common.collect.ImmutableList;
+<<<<<<< HEAD
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.PlannerProfile;
+=======
+import com.starrocks.common.profile.Timer;
+import com.starrocks.common.profile.Tracers;
+import com.starrocks.qe.ConnectContext;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -50,14 +56,22 @@ public final class PlanValidator {
         boolean enablePlanValidation = ConnectContext.get().getSessionVariable().getEnablePlanValidation();
         try {
             for (Checker checker : checkerList) {
+<<<<<<< HEAD
                 try (PlannerProfile.ScopedTimer tracer = PlannerProfile.getScopedTimer(checker.getClass().getSimpleName())) {
+=======
+                try (Timer tracer = Tracers.watchScope(checker.getClass().getSimpleName())) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     checker.validate(optExpression, taskContext);
                 }
             }
         } catch (IllegalArgumentException e) {
             String message = e.getMessage();
             if (!message.contains("Invalid plan")) {
+<<<<<<< HEAD
                 message = "Invalid plan:\n" + optExpression.explain() + message;
+=======
+                message = "Invalid plan:\n" + optExpression.debugString() + message;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
             LOGGER.debug("Failed to validate plan.", e);
             if (enablePlanValidation) {

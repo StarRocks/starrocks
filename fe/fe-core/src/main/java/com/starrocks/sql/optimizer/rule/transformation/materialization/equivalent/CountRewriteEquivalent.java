@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.rule.transformation.materialization.equivalent;
 
 import com.starrocks.catalog.FunctionSet;
+<<<<<<< HEAD
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -26,6 +27,21 @@ public class CountRewriteEquivalent extends IAggregateRewriteEquivalent {
     public CountRewriteEquivalent() {}
 
     private boolean check(ScalarOperator op) {
+=======
+import com.starrocks.common.Pair;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+
+import static com.starrocks.sql.optimizer.rule.transformation.materialization.common.AggregateFunctionRollupUtils.getRollupAggregateFunc;
+
+public class CountRewriteEquivalent extends IAggregateRewriteEquivalent {
+    public static IAggregateRewriteEquivalent INSTANCE = new CountRewriteEquivalent();
+
+    public CountRewriteEquivalent() {}
+
+    public static boolean check(ScalarOperator op) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (op == null || !(op instanceof CallOperator)) {
             return false;
         }
@@ -50,6 +66,22 @@ public class CountRewriteEquivalent extends IAggregateRewriteEquivalent {
     }
 
     @Override
+<<<<<<< HEAD
+=======
+    public boolean isSupportPushDownRewrite(CallOperator aggFunc) {
+        if (aggFunc == null) {
+            return false;
+        }
+
+        String aggFuncName = aggFunc.getFnName();
+        if (!aggFuncName.equals(FunctionSet.COUNT) || aggFunc.isDistinct()) {
+            return false;
+        }
+        return true;
+    }
+
+    @Override
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public ScalarOperator rewrite(RewriteEquivalentContext eqContext,
                                   EquivalentShuttleContext shuttleContext,
                                   ColumnRefOperator replace,
@@ -58,9 +90,37 @@ public class CountRewriteEquivalent extends IAggregateRewriteEquivalent {
             return null;
         }
         if (shuttleContext.isRollup()) {
+<<<<<<< HEAD
             return AggregatedMaterializedViewRewriter.getRollupAggregate((CallOperator) eqContext.getInput(), replace);
+=======
+            return getRollupAggregateFunc((CallOperator) eqContext.getInput(), replace, false);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } else {
             return replace;
         }
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    public ScalarOperator rewriteRollupAggregateFunc(EquivalentShuttleContext shuttleContext,
+                                                     CallOperator aggFunc,
+                                                     ColumnRefOperator replace) {
+        return getRollupAggregateFunc(aggFunc, replace, false);
+    }
+
+    @Override
+    public ScalarOperator rewriteAggregateFunc(EquivalentShuttleContext shuttleContext,
+                                               CallOperator aggFunc,
+                                               ColumnRefOperator replace) {
+        return replace;
+    }
+
+    @Override
+    public Pair<CallOperator, CallOperator> rewritePushDownRollupAggregateFunc(EquivalentShuttleContext shuttleContext,
+                                                                               CallOperator aggFunc,
+                                                                               ColumnRefOperator replace) {
+        return null;
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

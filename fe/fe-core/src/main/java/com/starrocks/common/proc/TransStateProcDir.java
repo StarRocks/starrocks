@@ -55,7 +55,11 @@ public class TransStateProcDir implements ProcDirInterface {
     public ProcResult fetchResult() throws AnalysisException {
         BaseProcResult result = new BaseProcResult();
         result.setNames(TITLE_NAMES);
+<<<<<<< HEAD
         GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
+=======
+        GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         long dbId = ProcUtils.getDbId(dbIdOrName);
         result.setRows(transactionMgr.getDbTransStateInfo(dbId));
         return result;

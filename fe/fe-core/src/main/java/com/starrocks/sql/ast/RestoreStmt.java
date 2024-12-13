@@ -22,6 +22,10 @@ import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 import java.util.Map;
+<<<<<<< HEAD
+=======
+import java.util.Set;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 public class RestoreStmt extends AbstractBackupStmt {
     private boolean allowLoad = false;
@@ -31,6 +35,7 @@ public class RestoreStmt extends AbstractBackupStmt {
     private int starrocksMetaVersion = -1;
 
     public RestoreStmt(LabelName labelName, String repoName, List<TableRef> tblRefs,
+<<<<<<< HEAD
                        Map<String, String> properties) {
         this(labelName, repoName, tblRefs, properties, NodePosition.ZERO);
     }
@@ -38,6 +43,20 @@ public class RestoreStmt extends AbstractBackupStmt {
     public RestoreStmt(LabelName labelName, String repoName, List<TableRef> tblRefs,
                        Map<String, String> properties, NodePosition pos) {
         super(labelName, repoName, tblRefs, properties, pos);
+=======
+                       List<FunctionRef> fnRefs, List<CatalogRef> externalCatalogRefs, Set<BackupObjectType> allMarker,
+                       boolean withOnClause, String originDbName, Map<String, String> properties) {
+        this(labelName, repoName, tblRefs, fnRefs, externalCatalogRefs,
+                allMarker, withOnClause, originDbName, properties, NodePosition.ZERO);
+    }
+
+    public RestoreStmt(LabelName labelName, String repoName, List<TableRef> tblRefs,
+                       List<FunctionRef> fnRefs, List<CatalogRef> externalCatalogRefs, Set<BackupObjectType> allMarker,
+                       boolean withOnClause, String originDbName,
+                       Map<String, String> properties, NodePosition pos) {
+        super(labelName, repoName, tblRefs, fnRefs, externalCatalogRefs,
+                allMarker, withOnClause, originDbName, properties, pos);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public boolean allowLoad() {

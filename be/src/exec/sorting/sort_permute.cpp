@@ -43,7 +43,11 @@ bool TieIterator::next() {
     if (_inner_range_first == 0 && tie[_inner_range_first] == 1) {
         // Just start from the 0
     } else {
+<<<<<<< HEAD
         _inner_range_first = SIMD::find_nonzero(tie, _inner_range_first + 1);
+=======
+        _inner_range_first = SIMD::find_nonzero(tie, _inner_range_first + 1, end - (_inner_range_first + 1));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (_inner_range_first >= end) {
             return false;
         }
@@ -51,7 +55,11 @@ bool TieIterator::next() {
     }
 
     // Find the zero, or the end of range
+<<<<<<< HEAD
     _inner_range_last = SIMD::find_zero(tie, _inner_range_first + 1);
+=======
+    _inner_range_last = SIMD::find_zero(tie, _inner_range_first + 1, end - _inner_range_first + 1);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     _inner_range_last = std::min(_inner_range_last, end);
 
     if (_inner_range_first >= _inner_range_last) {

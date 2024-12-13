@@ -52,8 +52,11 @@ private:
 
     RuntimeProfile::Counter* _expr_compute_timer = nullptr;
     RuntimeProfile::Counter* _common_sub_expr_compute_timer = nullptr;
+<<<<<<< HEAD
 
     DictOptimizeParser _dict_optimize_parser;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 } // namespace starrocks

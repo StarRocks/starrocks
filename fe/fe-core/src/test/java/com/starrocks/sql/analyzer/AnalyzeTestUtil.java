@@ -14,9 +14,19 @@
 
 package com.starrocks.sql.analyzer;
 
+<<<<<<< HEAD
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
+=======
+import com.starrocks.common.Config;
+import com.starrocks.common.ErrorReportException;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.SetStmt;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.UserVariable;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.utframe.StarRocksAssert;
@@ -29,6 +39,10 @@ public class AnalyzeTestUtil {
     private static String DB_NAME = "test";
 
     public static void init() throws Exception {
+<<<<<<< HEAD
+=======
+        Config.enable_experimental_rowstore = true;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // create connect context
         UtFrameUtils.createMinStarRocksCluster();
         connectContext = UtFrameUtils.createDefaultCtx();
@@ -177,6 +191,10 @@ public class AnalyzeTestUtil {
                 "  `pk` bigint NOT NULL COMMENT \"\",\n" +
                 "  `v1` string NOT NULL COMMENT \"\",\n" +
                 "  `v2` int NOT NULL,\n" +
+<<<<<<< HEAD
+=======
+                "  `v4` int NOT NULL,\n" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "  `v3` array<int> not null" +
                 ") ENGINE=OLAP\n" +
                 "PRIMARY KEY(`pk`)\n" +
@@ -296,6 +314,22 @@ public class AnalyzeTestUtil {
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\"\n" +
                 ");");
+<<<<<<< HEAD
+=======
+
+        starRocksAssert.withTable("CREATE TABLE `tmcwr` (\n" +
+                "  `id`  bigint COMMENT \"\",\n" +
+                "  `name`  bigint NULL COMMENT \"\",\n" +
+                "  `mc` bigint NULL COMMENT \"\" ,\n" +
+                "  `ff` bigint NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "PRIMARY KEY(`id`)\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"storage_type\" = \"column_with_row\"" +
+                ");");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public static String getDbName() {
@@ -306,6 +340,13 @@ public class AnalyzeTestUtil {
         return connectContext;
     }
 
+<<<<<<< HEAD
+=======
+    public static void setConnectContext(ConnectContext ctx) {
+        connectContext = ctx;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static StarRocksAssert getStarRocksAssert() {
         return starRocksAssert;
     }
@@ -357,12 +398,34 @@ public class AnalyzeTestUtil {
                     connectContext.getSessionVariable().getSqlMode()).get(0);
             Analyzer.analyze(statementBase, connectContext);
             Assert.fail("Miss semantic error exception");
+<<<<<<< HEAD
+=======
+        } catch (ParsingException | SemanticException | UnsupportedException | ErrorReportException e) {
+            if (!exceptMessage.equals("")) {
+                Assert.assertTrue(e.getMessage(), e.getMessage().contains(exceptMessage));
+            }
+        }
+    }
+
+    public static void analyzeSetUserVariableFail(String originStmt, String exceptMessage) {
+        try {
+            StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(originStmt,
+                    connectContext.getSessionVariable().getSqlMode()).get(0);
+            Analyzer.analyze(statementBase, connectContext);
+            SetStmt setStmt = (SetStmt) statementBase;
+            SetStmtAnalyzer.calcuteUserVariable((UserVariable) setStmt.getSetListItems().get(0));
+            Assert.fail("Miss semantic error exception");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } catch (ParsingException | SemanticException | UnsupportedException e) {
             if (!exceptMessage.equals("")) {
                 Assert.assertTrue(e.getMessage(), e.getMessage().contains(exceptMessage));
             }
         } catch (Exception e) {
+<<<<<<< HEAD
             Assert.fail("analyze exception");
+=======
+            Assert.fail("analyze exception: " + e);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 }

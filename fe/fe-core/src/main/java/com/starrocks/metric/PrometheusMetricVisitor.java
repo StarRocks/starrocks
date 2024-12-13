@@ -37,12 +37,21 @@ package com.starrocks.metric;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.Snapshot;
 import com.google.common.base.Joiner;
+<<<<<<< HEAD
+=======
+import com.google.common.base.Strings;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.monitor.jvm.JvmStats;
 import com.starrocks.monitor.jvm.JvmStats.BufferPool;
 import com.starrocks.monitor.jvm.JvmStats.GarbageCollector;
 import com.starrocks.monitor.jvm.JvmStats.MemoryPool;
 import com.starrocks.monitor.jvm.JvmStats.Threads;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
+=======
+import com.starrocks.server.NodeMgr;
+import com.starrocks.system.SystemInfoService;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import java.util.HashSet;
 import java.util.List;
@@ -187,10 +196,61 @@ public class PrometheusMetricVisitor extends MetricVisitor {
     }
 
     @Override
+<<<<<<< HEAD
     public void visitHistogram(String name, Histogram histogram) {
         final String fullName = prefix + "_" + name.replaceAll("\\.", "_");
         sb.append(HELP).append(fullName).append(" ").append("\n");
         sb.append(TYPE).append(fullName).append(" ").append("summary\n");
+=======
+    public void visitHistogram(HistogramMetric histogram) {
+        final String fullName = prefix + "_" + histogram.getName();
+
+        if (!metricNames.contains(fullName)) {
+            sb.append(HELP).append(fullName).append(" ").append("\n");
+            sb.append(TYPE).append(fullName).append(" ").append("summary\n");
+            metricNames.add(fullName);
+        }
+
+        Snapshot snapshot = histogram.getSnapshot();
+        String tagName = histogram.getTagName();
+        boolean isTagNameEmpty = Strings.isNullOrEmpty(tagName);
+        String delimiter = isTagNameEmpty ? "" : ", ";
+        sb.append(fullName).append("{quantile=\"0.75\"").append(delimiter).append(tagName).append("} ")
+                .append(snapshot.get75thPercentile()).append("\n");
+        sb.append(fullName).append("{quantile=\"0.95\"").append(delimiter).append(tagName).append("} ")
+                .append(snapshot.get95thPercentile()).append("\n");
+        sb.append(fullName).append("{quantile=\"0.98\"").append(delimiter).append(tagName).append("} ")
+                .append(snapshot.get98thPercentile()).append("\n");
+        sb.append(fullName).append("{quantile=\"0.99\"").append(delimiter).append(tagName).append("} ")
+                .append(snapshot.get99thPercentile()).append("\n");
+        sb.append(fullName).append("{quantile=\"0.999\"").append(delimiter).append(tagName).append("} ")
+                .append(snapshot.get999thPercentile()).append("\n");
+        if (isTagNameEmpty) {
+            sb.append(fullName).append("_sum ").append(histogram.getCount() * snapshot.getMean()).append("\n");
+            sb.append(fullName).append("_count ").append(histogram.getCount()).append("\n");
+        } else {
+            sb.append(fullName).append("_sum").append("{").append(tagName).append("} ")
+                    .append(histogram.getCount() * snapshot.getMean()).append("\n");
+            sb.append(fullName).append("_count").append("{").append(tagName).append("} ")
+                    .append(histogram.getCount()).append("\n");
+        }
+    }
+
+    @Override
+    public void visitHistogram(String name, Histogram histogram) {
+        // use histogram metric directly if metrics is instance of HistogramMetric
+        if (histogram instanceof HistogramMetric) {
+            visitHistogram((HistogramMetric) histogram);
+            return;
+        }
+        final String fullName = prefix + "_" + name.replaceAll("\\.", "_");
+
+        if (!metricNames.contains(fullName)) {
+            sb.append(HELP).append(fullName).append(" ").append("\n");
+            sb.append(TYPE).append(fullName).append(" ").append("summary\n");
+            metricNames.add(fullName);
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         Snapshot snapshot = histogram.getSnapshot();
         sb.append(fullName).append("{quantile=\"0.75\"} ").append(snapshot.get75thPercentile()).append("\n");
@@ -205,6 +265,7 @@ public class PrometheusMetricVisitor extends MetricVisitor {
     @Override
     public void getNodeInfo() {
         final String NODE_INFO = "node_info";
+<<<<<<< HEAD
         sb.append(Joiner.on(" ").join(TYPE, NODE_INFO, "gauge\n"));
         sb.append(NODE_INFO).append("{type=\"fe_node_num\", state=\"total\"} ")
                 .append(GlobalStateMgr.getCurrentState().getFrontends(null).size()).append("\n");
@@ -214,17 +275,37 @@ public class PrometheusMetricVisitor extends MetricVisitor {
                 .append(GlobalStateMgr.getCurrentSystemInfo().getAliveBackendNumber()).append("\n");
         sb.append(NODE_INFO).append("{type=\"be_node_num\", state=\"decommissioned\"} ")
                 .append(GlobalStateMgr.getCurrentSystemInfo().getDecommissionedBackendIds().size()).append("\n");
+=======
+        final NodeMgr nodeMgr = GlobalStateMgr.getCurrentState().getNodeMgr();
+        final SystemInfoService systemInfoService = nodeMgr.getClusterInfo();
+        sb.append(Joiner.on(" ").join(TYPE, NODE_INFO, "gauge\n"));
+        sb.append(NODE_INFO).append("{type=\"fe_node_num\", state=\"total\"} ")
+                .append(nodeMgr.getFrontends(null).size()).append("\n");
+        sb.append(NODE_INFO).append("{type=\"be_node_num\", state=\"total\"} ")
+                .append(systemInfoService.getTotalBackendNumber()).append("\n");
+        sb.append(NODE_INFO).append("{type=\"be_node_num\", state=\"alive\"} ")
+                .append(systemInfoService.getAliveBackendNumber()).append("\n");
+        sb.append(NODE_INFO).append("{type=\"be_node_num\", state=\"decommissioned\"} ")
+                .append(systemInfoService.getDecommissionedBackendIds().size())
+                .append("\n");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         sb.append(NODE_INFO).append("{type=\"broker_node_num\", state=\"dead\"} ").append(
                         GlobalStateMgr.getCurrentState().getBrokerMgr().getAllBrokers().stream().filter(b -> !b.isAlive)
                                 .count())
                 .append("\n");
 
         sb.append(NODE_INFO).append("{type=\"cn_node_num\", state=\"total\"} ")
+<<<<<<< HEAD
             .append(GlobalStateMgr.getCurrentSystemInfo().getTotalComputeNodeNumber()).append("\n");
         sb.append(NODE_INFO).append("{type=\"cn_node_num\", state=\"alive\"} ")
             .append(GlobalStateMgr.getCurrentSystemInfo().getAliveComputeNodeNumber()).append("\n");
 
 
+=======
+            .append(systemInfoService.getTotalComputeNodeNumber()).append("\n");
+        sb.append(NODE_INFO).append("{type=\"cn_node_num\", state=\"alive\"} ")
+            .append(systemInfoService.getAliveComputeNodeNumber()).append("\n");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // only master FE has this metrics, to help the Grafana knows who is the leader
         if (GlobalStateMgr.getCurrentState().isLeader()) {

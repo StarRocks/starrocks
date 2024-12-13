@@ -21,11 +21,16 @@
 #include <arrow/io/file.h>
 #include <arrow/io/interfaces.h>
 #include <gen_cpp/DataSinks_types.h>
+<<<<<<< HEAD
+=======
+#include <glog/logging.h>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include <parquet/api/reader.h>
 #include <parquet/api/writer.h>
 #include <parquet/arrow/reader.h>
 #include <parquet/arrow/writer.h>
 #include <parquet/exception.h>
+<<<<<<< HEAD
 
 #include <utility>
 
@@ -34,6 +39,27 @@
 #include "formats/parquet/chunk_writer.h"
 #include "fs/fs.h"
 #include "runtime/runtime_state.h"
+=======
+#include <parquet/schema.h>
+#include <parquet/types.h>
+#include <stddef.h>
+#include <stdint.h>
+
+#include <functional>
+#include <memory>
+#include <utility>
+#include <vector>
+
+#include "column/chunk.h"
+#include "column/nullable_column.h"
+#include "column/vectorized_fwd.h"
+#include "common/status.h"
+#include "formats/parquet/chunk_writer.h"
+#include "fs/fs.h"
+#include "runtime/runtime_state.h"
+#include "runtime/types.h"
+#include "types/logical_type.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "util/priority_thread_pool.hpp"
 
 namespace starrocks::parquet {
@@ -91,12 +117,20 @@ public:
     // A callback function that will receive results from caller
     using CallbackFunction = std::function<void(const LevelBuilderResult&)>;
 
+<<<<<<< HEAD
     LevelBuilder(TypeDescriptor type_desc, ::parquet::schema::NodePtr node);
+=======
+    LevelBuilder(TypeDescriptor type_desc, ::parquet::schema::NodePtr node, std::string timezone,
+                 bool use_legacy_decimal_encoding, bool use_int96_timestamp_encoding);
+
+    Status init();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // Determine rep/def level information for the array.
     //
     // The callback will be invoked for each leaf Array that is a descendant of array.  Each leaf array is
     // processed in a depth first traversal-order.
+<<<<<<< HEAD
     void write(const LevelBuilderContext& ctx, const ColumnPtr& col, const CallbackFunction& write_leaf_callback);
 
 private:
@@ -139,6 +173,56 @@ private:
                                  const CallbackFunction& write_leaf_callback);
 
     void _write_struct_column_chunk(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
+=======
+    Status write(const LevelBuilderContext& ctx, const ColumnPtr& col, const CallbackFunction& write_leaf_callback);
+
+private:
+    Status _write_column_chunk(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
+                               const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
+                               const CallbackFunction& write_leaf_callback);
+
+    Status _write_boolean_column_chunk(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
+                                       const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
+                                       const CallbackFunction& write_leaf_callback);
+
+    template <LogicalType lt, ::parquet::Type::type pt>
+    Status _write_int_column_chunk(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
+                                   const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
+                                   const CallbackFunction& write_leaf_callback);
+
+    template <LogicalType lt>
+    Status _write_decimal_to_flba_column_chunk(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
+                                               const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
+                                               const CallbackFunction& write_leaf_callback);
+
+    template <LogicalType lt>
+    Status _write_byte_array_column_chunk(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
+                                          const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
+                                          const CallbackFunction& write_leaf_callback);
+
+    Status _write_date_column_chunk(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
+                                    const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
+                                    const CallbackFunction& write_leaf_callback);
+
+    template <bool use_int96_timestamp_encoding>
+    Status _write_datetime_column_chunk(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
+                                        const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
+                                        const CallbackFunction& write_leaf_callback);
+
+    Status _write_array_column_chunk(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
+                                     const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
+                                     const CallbackFunction& write_leaf_callback);
+
+    Status _write_map_column_chunk(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
+                                   const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
+                                   const CallbackFunction& write_leaf_callback);
+
+    Status _write_struct_column_chunk(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
+                                      const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
+                                      const CallbackFunction& write_leaf_callback);
+
+    Status _write_time_column_chunk(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                     const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
                                     const CallbackFunction& write_leaf_callback);
 
@@ -152,6 +236,13 @@ private:
 private:
     TypeDescriptor _type_desc;
     ::parquet::schema::NodePtr _root;
+<<<<<<< HEAD
+=======
+    std::string _timezone;
+    int _offset{0};
+    bool _use_legacy_decimal_encoding = false;
+    bool _use_int96_timestamp_encoding = false;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 } // namespace starrocks::parquet

@@ -33,7 +33,11 @@ public class CreateInsertOverwriteJobLogTest {
     @Test
     public void testBasic() throws IOException {
         List<Long> targetPartitionIds = Lists.newArrayList(10L, 20L);
+<<<<<<< HEAD
         CreateInsertOverwriteJobLog jobInfo = new CreateInsertOverwriteJobLog(100L, 101L, 102L, targetPartitionIds);
+=======
+        CreateInsertOverwriteJobLog jobInfo = new CreateInsertOverwriteJobLog(100L, 101L, 102L, targetPartitionIds, false);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
         DataOutputStream dataOutputStream = new DataOutputStream(outputStream);
         jobInfo.write(dataOutputStream);

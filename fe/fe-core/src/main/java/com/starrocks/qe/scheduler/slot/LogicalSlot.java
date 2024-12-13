@@ -138,8 +138,13 @@ public class LogicalSlot {
         return expiredAllocatedTimeMs;
     }
 
+<<<<<<< HEAD
     public boolean isPendingExpired(long nowMs) {
         return nowMs >= expiredPendingTimeMs;
+=======
+    public boolean isPendingTimeout() {
+        return System.currentTimeMillis() >= expiredPendingTimeMs;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public boolean isAllocatedExpired(long nowMs) {

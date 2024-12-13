@@ -57,7 +57,11 @@
 
 4. 指定外部数据目录（External Catalog）下的写权限
 
+<<<<<<< HEAD
    当前仅支持写入数据到 Iceberg 表 (自 3.1 版本起)。
+=======
+   当前仅支持写入数据到 Iceberg 表 (自 3.1 版本起) 和 Hive 表（自 3.2 版本起）。
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
    ```SQL
    -- 创建自定义角色。

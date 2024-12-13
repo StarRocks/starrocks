@@ -29,6 +29,11 @@ public:
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
     void push_down_join_runtime_filter(RuntimeState* state, RuntimeFilterProbeCollector* collector) override;
+<<<<<<< HEAD
+=======
+    void push_down_tuple_slot_mappings(RuntimeState* state,
+                                       const std::vector<TupleSlotMapping>& parent_mappings) override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 protected:
     const TPlanNode& _tnode;

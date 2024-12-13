@@ -6,7 +6,11 @@ displayed_sidebar: docs
 
 ## Description
 
+<<<<<<< HEAD
 Deletes a repository. Repositories are used to store data snapshots for [data backup and restoration](../../../administration/management/Backup_and_restore.md).
+=======
+Deletes a repository. Repositories are used to store data snapshots for data backup and restoration.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 > **CAUTION**
 >

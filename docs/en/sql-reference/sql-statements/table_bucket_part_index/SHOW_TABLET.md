@@ -58,9 +58,15 @@ SHOW TABLET <tablet_id>
 ### Query information of tablets in a table or a partition
 
 ```plain
+<<<<<<< HEAD
 +----------+-----------+-----------+------------+---------+-------------+-------------------+-----------------------+------------------+----------------------+---------------+----------+----------+--------+-------------------------+--------------+------------------+--------------+----------+----------+-------------------+
 | TabletId | ReplicaId | BackendId | SchemaHash | Version | VersionHash | LstSuccessVersion | LstSuccessVersionHash | LstFailedVersion | LstFailedVersionHash | LstFailedTime | DataSize | RowCount | State  | LstConsistencyCheckTime | CheckVersion | CheckVersionHash | VersionCount | PathHash | MetaUrl  | CompactionStatus  |
 +----------+-----------+-----------+------------+---------+-------------+-------------------+-----------------------+------------------+----------------------+---------------+----------+----------+--------+-------------------------+--------------+------------------+--------------+----------+----------+-------------------+
+=======
++----------+-----------+-----------+------------+---------+-------------+-------------------+-----------------------+------------------+----------------------+---------------+----------+----------+--------+-------------------------+--------------+------------------+--------------+----------+----------+-------------------+---------------+
+| TabletId | ReplicaId | BackendId | SchemaHash | Version | VersionHash | LstSuccessVersion | LstSuccessVersionHash | LstFailedVersion | LstFailedVersionHash | LstFailedTime | DataSize | RowCount | State  | LstConsistencyCheckTime | CheckVersion | CheckVersionHash | VersionCount | PathHash | MetaUrl  | CompactionStatus  | DiskRootPath  |
++----------+-----------+-----------+------------+---------+-------------+-------------------+-----------------------+------------------+----------------------+---------------+----------+----------+--------+-------------------------+--------------+------------------+--------------+----------+----------+-------------------+---------------+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ```
 
 | **Field**                | **Description**                        |
@@ -86,6 +92,10 @@ SHOW TABLET <tablet_id>
 | PathHash                | The hash of the directory in which the tablet is stored.        |
 | MetaUrl                 | The URL used to query more meta information.     |
 | CompactionStatus        | The URL used to query data version compaction status.    |
+<<<<<<< HEAD
+=======
+| DiskRootPath            | The disk where the replica is located.    |
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ### Query information of a specific tablet
 
@@ -169,6 +179,10 @@ DISTRIBUTED BY HASH(`k1`, `k2`, `k3`);
                 PathHash: 0
                  MetaUrl: http://172.26.92.141:8038/api/meta/header/9588955
         CompactionStatus: http://172.26.92.141:8038/api/compaction/show?tablet_id=9588955
+<<<<<<< HEAD
+=======
+            DiskRootPath: /storage/disk
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ```
 
 - Example 2: Query information of tablet 9588955.

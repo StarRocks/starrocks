@@ -49,6 +49,10 @@ public:
 
     OutputAmplificationType intra_pipeline_amplification_type() const override;
     size_t output_amplification_factor() const override;
+<<<<<<< HEAD
+=======
+    void update_exec_stats(RuntimeState* state) override {}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 private:
     std::atomic<bool> _is_finished = false;

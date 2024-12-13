@@ -72,6 +72,16 @@ Status TopNNode::init(const TPlanNode& tnode, RuntimeState* state) {
             }
         }
     }
+<<<<<<< HEAD
+=======
+
+    // create analytic_partition_exprs for pipeline execution engine to speedup AnalyticNode evaluation.
+    if (tnode.sort_node.__isset.partition_exprs) {
+        RETURN_IF_ERROR(
+                Expr::create_expr_trees(_pool, tnode.sort_node.partition_exprs, &_local_partition_exprs, state));
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     _is_asc_order = tnode.sort_node.sort_info.is_asc_order;
     _is_null_first = tnode.sort_node.sort_info.nulls_first;
     bool has_outer_join_child = tnode.sort_node.__isset.has_outer_join_child && tnode.sort_node.has_outer_join_child;
@@ -188,7 +198,11 @@ Status TopNNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
 
     {
         SCOPED_TIMER(_sort_timer);
+<<<<<<< HEAD
         _chunks_sorter->get_next(chunk, eos);
+=======
+        RETURN_IF_ERROR(_chunks_sorter->get_next(chunk, eos));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     if (*eos) {
         _chunks_sorter = nullptr;
@@ -265,13 +279,26 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> TopNNode::_decompose_to_
     using namespace pipeline;
 
     OpFactories ops_sink_with_sort = _children[0]->decompose_to_pipeline(context);
+<<<<<<< HEAD
+=======
+    ops_sink_with_sort = context->maybe_interpolate_grouped_exchange(_id, ops_sink_with_sort);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     int64_t partition_limit = _limit;
 
     if (is_partition_topn) {
         partition_limit = _tnode.sort_node.partition_limit;
+<<<<<<< HEAD
     }
 
     if (need_merge) {
+=======
+        if (_tnode.sort_node.__isset.pre_agg_insert_local_shuffle && _tnode.sort_node.pre_agg_insert_local_shuffle) {
+            ops_sink_with_sort = context->maybe_interpolate_local_shuffle_exchange(
+                    runtime_state(), id(), ops_sink_with_sort, _local_partition_exprs);
+        }
+    } else if (need_merge) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (enable_parallel_merge) {
             ops_sink_with_sort = context->maybe_interpolate_local_passthrough_exchange(
                     runtime_state(), id(), ops_sink_with_sort, context->degree_of_parallelism(), is_partition_skewed);
@@ -291,9 +318,13 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> TopNNode::_decompose_to_
     // TODO: avoid create spill channel when when disable spill
 
     auto workgroup = context->fragment_context()->workgroup();
+<<<<<<< HEAD
     auto executor = std::make_shared<spill::IOTaskExecutor>(ExecEnv::GetInstance()->scan_executor(), workgroup);
     auto spill_channel_factory =
             std::make_shared<SpillProcessChannelFactory>(degree_of_parallelism, std::move(executor));
+=======
+    auto spill_channel_factory = std::make_shared<SpillProcessChannelFactory>(degree_of_parallelism);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // spill process operator
     if (runtime_state()->enable_spill() && runtime_state()->enable_sort_spill() && _limit < 0 && !is_partition_topn) {
@@ -301,10 +332,19 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> TopNNode::_decompose_to_
     }
 
     // create context factory
+<<<<<<< HEAD
     auto context_factory = std::make_shared<ContextFactory>(
             runtime_state(), _tnode.sort_node.topn_type, need_merge, _sort_exec_exprs.lhs_ordering_expr_ctxs(),
             _is_asc_order, _is_null_first, _tnode.sort_node.partition_exprs, _offset, partition_limit, _sort_keys,
             _order_by_types, _build_runtime_filters);
+=======
+    bool enable_pre_agg = _tnode.sort_node.__isset.pre_agg_exprs && (!_tnode.sort_node.pre_agg_exprs.empty());
+    auto context_factory = std::make_shared<ContextFactory>(
+            runtime_state(), _tnode.sort_node.topn_type, need_merge, _sort_exec_exprs.lhs_ordering_expr_ctxs(),
+            _is_asc_order, _is_null_first, _tnode.sort_node.partition_exprs, enable_pre_agg,
+            _tnode.sort_node.pre_agg_exprs, _tnode.sort_node.pre_agg_output_slot_id, _offset, partition_limit,
+            _sort_keys, _order_by_types, _build_runtime_filters);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // Create a shared RefCountedRuntimeFilterCollector
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));

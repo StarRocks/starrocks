@@ -42,7 +42,11 @@ public class MetricsActionTest {
         }
         DefaultHttpRequest rawRequest =
                 new DefaultHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, uri, headers);
+<<<<<<< HEAD
         return new BaseRequest(null, rawRequest);
+=======
+        return new BaseRequest(null, rawRequest, null);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test

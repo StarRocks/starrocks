@@ -21,8 +21,13 @@ import org.junit.Test;
 public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase {
 
     @BeforeClass
+<<<<<<< HEAD
     public static void setUp() throws Exception {
         MaterializedViewTestBase.setUp();
+=======
+    public static void beforeClass() throws Exception {
+        MaterializedViewTestBase.beforeClass();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
 
@@ -45,6 +50,19 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                 " PARTITION p5 values less than (\"3000\"))" +
                 " distributed by hash(c1)" +
                 " properties (\"replication_num\"=\"1\");");
+<<<<<<< HEAD
+=======
+
+        starRocksAssert.withTable("create table test_base_part3(c1 int, c2 bigint, c3 date, c4 bigint)" +
+                " partition by range(c3) (" +
+                " partition p1 values less than (\"20240603\")," +
+                " partition p2 values less than (\"20240604\")," +
+                " partition p3 values less than (\"20240605\")," +
+                " PARTITION p4 values less than (\"20240606\")," +
+                " PARTITION p5 values less than (\"20240607\"))" +
+                " distributed by hash(c1)" +
+                " properties (\"replication_num\"=\"1\");");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     // MV's partition columns is the same with the base table, and mv has partition filter predicates.
@@ -177,10 +195,17 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
 
         sql("select c1, c3, c2 from test_base_part where c2 < 3000 and c3 < 3000")
                 .contains("partial_mv_6")
+<<<<<<< HEAD
                 .contains("PREDICATES: 9: c2 < 3000, 9: c2 >= 2000\n" +
                         "     partitions=5/5\n" +
                         "     rollup: test_base_part");
 
+=======
+                .contains("     TABLE: test_base_part\n" +
+                        "     PREAGGREGATION: ON\n" +
+                        "     PREDICATES: 9: c2 < 3000, 9: c2 >= 2000\n" +
+                        "     partitions=5/5");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // test query delta
         sql("select c1, c3, c2 from test_base_part where c2 < 1000 and c3 < 1000")
                 .contains("partial_mv_6")
@@ -396,11 +421,19 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
         // Union: MV table should be partition/distribution pruned.
         sql("select c1, c3, c2 from test_base_part")
                 .contains("UNION")
+<<<<<<< HEAD
                 .contains("TABLE: partial_mv_7\n" +
                         "     PREAGGREGATION: ON\n" +
                         "     partitions=4/5\n" +
                         "     rollup: partial_mv_7\n" +
                         "     tabletRatio=4/8")
+=======
+                .contains("     TABLE: partial_mv_7\n" +
+                        "     PREAGGREGATION: ON\n" +
+                        "     partitions=4/5\n" +
+                        "     rollup: partial_mv_7\n" +
+                        "     tabletRatio=8/8")
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 .contains("TABLE: test_base_part");
 
         // match all
@@ -494,6 +527,28 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testPartitionPrune_WithFunc() throws Exception {
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `partial_mv_14`\n" +
+                "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                "PARTITION BY (`c3`)\n" +
+                "REFRESH MANUAL\n" +
+                "AS SELECT `c3`, sum(`c4`) AS `total`\n" +
+                "FROM `test_mv`.`test_base_part3`\n" +
+                "GROUP BY `c3`;");
+        refreshMaterializedView(MATERIALIZED_DB_NAME, "partial_mv_14");
+
+        sql("select c3, sum(c4) from test_base_part3 where date_format(c3,'%Y%m%d')='20240602' group by c3")
+                .contains("TABLE: partial_mv_14\n" +
+                        "     PREAGGREGATION: ON\n" +
+                        "     PREDICATES: col$: c3 = '2024-06-02'\n" +
+                        "     partitions=1/5");
+        starRocksAssert.dropMaterializedView("partial_mv_14");
+    }
+
+    @Test
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void testPartitionWithNull() throws Exception {
         {
             starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `partial_mv_9`\n" +
@@ -501,10 +556,13 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                     "PARTITION BY (`c3`)\n" +
                     "DISTRIBUTED BY HASH(`c1`) BUCKETS 6\n" +
                     "REFRESH MANUAL\n" +
+<<<<<<< HEAD
                     "PROPERTIES (\n" +
                     "\"replication_num\" = \"1\",\n" +
                     "\"storage_medium\" = \"HDD\"\n" +
                     ")\n" +
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     "AS SELECT `test_base_part`.`c1`, `test_base_part`.`c3`, sum(`test_base_part`.`c4`) AS `total`\n" +
                     "FROM `test_mv`.`test_base_part`\n" +
                     "WHERE `test_base_part`.`c3` < 1000\n" +
@@ -522,10 +580,13 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                     "PARTITION BY (`c3`)\n" +
                     "DISTRIBUTED BY HASH(`c1`) BUCKETS 6\n" +
                     "REFRESH MANUAL\n" +
+<<<<<<< HEAD
                     "PROPERTIES (\n" +
                     "\"replication_num\" = \"1\",\n" +
                     "\"storage_medium\" = \"HDD\"\n" +
                     ")\n" +
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     "AS SELECT `test_base_part`.`c1`, `test_base_part`.`c3`, sum(`test_base_part`.`c4`) AS `total`\n" +
                     "FROM `test_mv`.`test_base_part`\n" +
                     "WHERE `test_base_part`.`c3` < 1000\n" +
@@ -556,10 +617,13 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                     "PARTITION BY (`c3`)\n" +
                     "DISTRIBUTED BY HASH(`c1`) BUCKETS 6\n" +
                     "REFRESH MANUAL\n" +
+<<<<<<< HEAD
                     "PROPERTIES (\n" +
                     "\"replication_num\" = \"1\",\n" +
                     "\"storage_medium\" = \"HDD\"\n" +
                     ")\n" +
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     "AS SELECT `c1`, `c3`, sum(`c4`) AS `total`\n" +
                     "FROM `test_mv`.`test_base_part_not_null`\n" +
                     "WHERE `c3` < 1000\n" +
@@ -577,10 +641,13 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                     "PARTITION BY (`c3`)\n" +
                     "DISTRIBUTED BY HASH(`c1`) BUCKETS 6\n" +
                     "REFRESH MANUAL\n" +
+<<<<<<< HEAD
                     "PROPERTIES (\n" +
                     "\"replication_num\" = \"1\",\n" +
                     "\"storage_medium\" = \"HDD\"\n" +
                     ")\n" +
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     "AS SELECT `test_base_part`.`c1`, `test_base_part`.`c3`, sum(`test_base_part`.`c4`) AS `total`\n" +
                     "FROM `test_mv`.`test_base_part`\n" +
                     "WHERE `test_base_part`.`c3` is null\n" +
@@ -598,10 +665,13 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                     "PARTITION BY (`c3`)\n" +
                     "DISTRIBUTED BY HASH(`c1`) BUCKETS 6\n" +
                     "REFRESH MANUAL\n" +
+<<<<<<< HEAD
                     "PROPERTIES (\n" +
                     "\"replication_num\" = \"1\",\n" +
                     "\"storage_medium\" = \"HDD\"\n" +
                     ")\n" +
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     "AS SELECT `test_base_part`.`c1`, `test_base_part`.`c3`, sum(`test_base_part`.`c4`) AS `total`\n" +
                     "FROM `test_mv`.`test_base_part`\n" +
                     "WHERE `test_base_part`.`c3` is not null\n" +

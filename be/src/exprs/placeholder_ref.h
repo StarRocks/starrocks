@@ -32,6 +32,10 @@ public:
         slot_ids->emplace_back(_column_id);
         return 1;
     }
+<<<<<<< HEAD
+=======
+    void for_each_slot_id(const std::function<void(SlotId)>& cb) const override { cb(_column_id); }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 private:
     SlotId _column_id;

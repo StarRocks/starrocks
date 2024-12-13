@@ -43,6 +43,10 @@ import "status.proto";
 import "types.proto";
 import "olap_common.proto";
 import "olap_file.proto";
+<<<<<<< HEAD
+=======
+import "lake_types.proto";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 option cc_generic_services = true;
 
@@ -151,8 +155,23 @@ message PTabletInfo {
     repeated int64 valid_dict_collected_version = 6;
 }
 
+<<<<<<< HEAD
 // Open a tablet writer.
 message PTabletWriterOpenRequest {
+=======
+message PLoadChannelProfileConfig {
+    optional bool enable_profile = 1;
+    optional int64 big_query_profile_threshold_ns = 2;
+    optional int64 runtime_profile_report_interval_ns = 3;
+}
+
+// Open a tablet writer.
+message PTabletWriterOpenRequest {
+    message LakeTabletParams {
+        optional bool write_txn_log = 1;
+    };
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     required PUniqueId id = 1;
     required int64 index_id = 2;
     required int64 txn_id = 3;
@@ -178,11 +197,28 @@ message PTabletWriterOpenRequest {
     optional int32 sender_id = 30;
     optional PartialUpdateMode partial_update_mode = 31;
     optional int64 table_id = 32;
+<<<<<<< HEAD
+=======
+
+    // tablet's data size larger than this will mark as inmutable
+    optional int64 immutable_tablet_size = 33 [default = 0];
+    optional PLoadChannelProfileConfig load_channel_profile_config = 34;
+    optional LakeTabletParams lake_tablet_params = 35;
+
+    // for multi olap table sink
+    optional int64 sink_id = 36 [default = 0];
+    optional bytes encryption_meta = 37;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 message PTabletWriterOpenResult {
     required StatusPB status = 1;
     optional bool is_repeated_chunk = 2 [default = false];
+<<<<<<< HEAD
+=======
+    repeated int64 immutable_tablet_ids = 3;
+    repeated int64 immutable_partition_ids = 4;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 // Add batch to tablet writer.
@@ -223,6 +259,11 @@ message PTabletWriterAddChunkRequest {
     // wait all sender close before rpc returning
     // this is used for automatic partition creation
     optional bool wait_all_sender_close = 11 [default = false];
+<<<<<<< HEAD
+=======
+    // for multi olap table sink
+    optional int64 sink_id = 12 [default = 0];
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 message PTabletWriterAddChunksRequest {
@@ -234,12 +275,27 @@ message PTabletWriterAddChunksRequest {
 }
 
 message PTabletWriterAddBatchResult {
+<<<<<<< HEAD
+=======
+    message LakeTabletData {
+        repeated TxnLogPB txn_logs = 1;
+    };
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     required StatusPB status = 1;
     repeated PTabletInfo tablet_vec = 2;
     optional int64 execution_time_us = 3;
     optional int64 wait_lock_time_us = 4;
     repeated PTabletInfo failed_tablet_vec = 5;
     optional int64 wait_memtable_flush_time_us = 6;
+<<<<<<< HEAD
+=======
+
+    repeated int64 immutable_tablet_ids = 7;
+    repeated int64 immutable_partition_ids = 8;
+    optional bytes load_channel_profile = 9;
+    optional LakeTabletData lake_tablet_data = 10;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 message PTabletWriterAddSegmentRequest {
@@ -250,6 +306,10 @@ message PTabletWriterAddSegmentRequest {
     optional bool eos = 5;
     optional int64 num_segments = 6;
     optional SegmentPB segment = 7;
+<<<<<<< HEAD
+=======
+    optional int64 sink_id = 8 [default = 0];
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 message PTabletWriterAddSegmentResult {
@@ -268,12 +328,21 @@ message PTabletWriterCancelRequest {
     optional int64 tablet_id = 5;
     repeated int64 tablet_ids = 6;
     optional string reason = 7;
+<<<<<<< HEAD
+=======
+    optional int64 sink_id = 8 [default = 0];
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 message PTabletWriterCancelResult {
 };
 
 message PExecPlanFragmentRequest {
+<<<<<<< HEAD
+=======
+    // describe attachment protocol: binary, compact, json
+    optional string attachment_protocol = 1;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 message PTabletReaderOpenRequest {
@@ -350,6 +419,10 @@ enum PPlanFragmentCancelReason {
     USER_CANCEL = 2;
     INTERNAL_ERROR = 3;
     TIMEOUT = 4;
+<<<<<<< HEAD
+=======
+    QUERY_FINISHED = 5;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 message PCancelPlanFragmentRequest {
@@ -410,6 +483,10 @@ message PKafkaLoadInfo {
     required string brokers = 1;
     required string topic = 2;
     repeated PStringPair properties = 3;
+<<<<<<< HEAD
+=======
+    optional int64 warehouseId = 11;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 message PKafkaMetaProxyRequest {
@@ -459,6 +536,11 @@ message PPulsarLoadInfo {
     required string topic = 2;
     required string subscription = 3;
     repeated PStringPair properties = 4;
+<<<<<<< HEAD
+=======
+
+    optional int64 warehouseId = 11;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 message PPulsarMetaProxyRequest {
@@ -528,8 +610,103 @@ message ExecuteCommandResultPB {
     optional string result = 2;
 };
 
+<<<<<<< HEAD
 // NOTE(zc): If you want to add new method here,
 // you must add same method to 'doris_internal_service.proto'.
+=======
+enum FailPointTriggerModeType {
+    ENABLE = 1;
+    DISABLE = 2;
+    PROBABILITY_ENABLE = 3;
+    ENABLE_N_TIMES = 4;
+}
+
+message PFailPointTriggerMode {
+    optional FailPointTriggerModeType mode = 1;
+    optional double probability = 2;
+    optional int32 n_times = 3;
+}
+
+message PUpdateFailPointStatusRequest {
+    optional string fail_point_name = 1;
+    optional PFailPointTriggerMode trigger_mode = 2;
+}
+
+message PUpdateFailPointStatusResponse {
+    optional StatusPB status = 1;
+}
+
+message PFailPointInfo {
+    optional string name = 1;
+    optional PFailPointTriggerMode trigger_mode = 2;
+}
+
+message PListFailPointRequest {
+}
+
+message PListFailPointResponse {
+    optional StatusPB status = 1;
+    repeated PFailPointInfo fail_points = 2;
+}
+
+message PExecShortCircuitResult {
+    optional StatusPB status = 1;
+    optional int64 affected_rows = 2;
+    optional bytes profile = 3;
+}
+
+message PExecShortCircuitRequest {
+    // describe attachment protocol: binary, compact, json
+    optional string attachment_protocol = 1;
+}
+
+enum PProcessDictionaryCacheRequestType {
+    BEGIN = 1;
+    REFRESH = 2;
+    COMMIT = 3;
+    CLEAR = 4;
+    STATISTIC = 5;
+};
+
+message PProcessDictionaryCacheRequest {
+    optional ChunkPB chunk = 1;
+    optional int64 dict_id = 2;
+    optional int64 txn_id = 3;
+    optional POlapTableSchemaParam schema = 4;
+    optional int64 memory_limit = 5;
+    optional int32 key_size = 6;
+    optional bool is_cancel = 7;
+    optional PProcessDictionaryCacheRequestType type = 8;
+};
+
+message PProcessDictionaryCacheResult {
+    optional StatusPB status = 1;
+    optional int64 dictionary_memory_usage = 2;
+};
+
+message PFetchArrowSchemaRequest {
+    optional PUniqueId finst_id = 1;
+};
+
+message PFetchArrowSchemaResult {
+    optional StatusPB status = 1;
+    optional bytes schema = 2;
+};
+
+// Data will be sent as the attachment of the request
+message PStreamLoadRequest {
+    optional string db = 1;
+    optional string table = 2;
+    optional string user = 3;
+    optional string passwd = 4;
+    repeated PStringPair parameters = 5;
+}
+
+message PStreamLoadResponse {
+    optional string json_result = 1;
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 service PInternalService {
     rpc transmit_data(PTransmitDataParams) returns (PTransmitDataResult);
     rpc exec_plan_fragment(PExecPlanFragmentRequest) returns (PExecPlanFragmentResult);
@@ -550,6 +727,11 @@ service PInternalService {
     rpc transmit_chunk_via_http(PHttpRequest) returns (PTransmitChunkResult);
     rpc tablet_writer_add_chunk(starrocks.PTabletWriterAddChunkRequest) returns (starrocks.PTabletWriterAddBatchResult);
     rpc tablet_writer_add_chunks(starrocks.PTabletWriterAddChunksRequest) returns (starrocks.PTabletWriterAddBatchResult);
+<<<<<<< HEAD
+=======
+    rpc tablet_writer_add_chunk_via_http(PHttpRequest) returns (starrocks.PTabletWriterAddBatchResult);
+    rpc tablet_writer_add_chunks_via_http(PHttpRequest) returns (starrocks.PTabletWriterAddBatchResult);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     rpc tablet_writer_add_segment(starrocks.PTabletWriterAddSegmentRequest) returns (starrocks.PTabletWriterAddSegmentResult);
     rpc transmit_runtime_filter(PTransmitRuntimeFilterParams) returns (PTransmitRuntimeFilterResult);
 
@@ -563,4 +745,17 @@ service PInternalService {
     rpc local_tablet_reader_scan_get_next(PTabletReaderScanGetNextRequest) returns (PTabletReaderScanGetNextResult);
 
     rpc execute_command(ExecuteCommandRequestPB) returns (ExecuteCommandResultPB);
+<<<<<<< HEAD
+=======
+    rpc update_fail_point_status(PUpdateFailPointStatusRequest) returns (PUpdateFailPointStatusResponse);
+    rpc list_fail_point(PListFailPointRequest) returns (PListFailPointResponse);
+
+    rpc exec_short_circuit(PExecShortCircuitRequest) returns (PExecShortCircuitResult);
+
+    rpc process_dictionary_cache(starrocks.PProcessDictionaryCacheRequest) returns (starrocks.PProcessDictionaryCacheResult);
+
+    rpc fetch_arrow_schema(PFetchArrowSchemaRequest) returns (PFetchArrowSchemaResult);
+    
+    rpc stream_load(PStreamLoadRequest) returns (PStreamLoadResponse);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };

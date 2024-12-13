@@ -35,11 +35,20 @@
 package com.starrocks.system;
 
 import com.starrocks.catalog.FsBroker;
+<<<<<<< HEAD
 import com.starrocks.common.GenericPool;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.Util;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.server.GlobalStateMgr;
+=======
+import com.starrocks.common.Pair;
+import com.starrocks.common.util.Util;
+import com.starrocks.ha.FrontendNodeType;
+import com.starrocks.rpc.ThriftConnectionPool;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.NodeMgr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.server.RunMode;
 import com.starrocks.system.HeartbeatMgr.BrokerHeartbeatHandler;
 import com.starrocks.system.HeartbeatMgr.FrontendHeartbeatHandler;
@@ -71,13 +80,25 @@ public class HeartbeatMgrTest {
     @Mocked
     private GlobalStateMgr globalStateMgr;
 
+<<<<<<< HEAD
+=======
+    @Mocked
+    private NodeMgr nodeMgr;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Before
     public void setUp() {
         new Expectations() {
             {
+<<<<<<< HEAD
                 globalStateMgr.getSelfNode();
                 minTimes = 0;
                 result = Pair.create("192.168.1.3", 9010); // not self
+=======
+                globalStateMgr.getNodeMgr();
+                minTimes = 0;
+                result = nodeMgr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
                 globalStateMgr.isReady();
                 minTimes = 0;
@@ -88,6 +109,17 @@ public class HeartbeatMgrTest {
                 result = globalStateMgr;
             }
         };
+<<<<<<< HEAD
+=======
+
+        new Expectations(nodeMgr) {
+            {
+                nodeMgr.getSelfNode();
+                minTimes = 0;
+                result = Pair.create("192.168.1.3", 9010); // not self
+            }
+        };
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -106,7 +138,11 @@ public class HeartbeatMgrTest {
         };
 
         Frontend fe = new Frontend(FrontendNodeType.FOLLOWER, "test", "192.168.1.1", 9010);
+<<<<<<< HEAD
         FrontendHeartbeatHandler handler = new FrontendHeartbeatHandler(fe, 12345, "abcd");
+=======
+        FrontendHeartbeatHandler handler = new FrontendHeartbeatHandler(fe, 0, "abcd");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         HeartbeatResponse response = handler.call();
 
         Assert.assertTrue(response instanceof FrontendHbResponse);
@@ -119,7 +155,11 @@ public class HeartbeatMgrTest {
         Assert.assertEquals("2.0-ac45651a", hbResponse.getFeVersion());
 
         Frontend fe2 = new Frontend(FrontendNodeType.FOLLOWER, "test2", "192.168.1.2", 9010);
+<<<<<<< HEAD
         handler = new FrontendHeartbeatHandler(fe2, 12345, "abcd");
+=======
+        handler = new FrontendHeartbeatHandler(fe2, 0, "abcd");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         response = handler.call();
 
         Assert.assertTrue(response instanceof FrontendHbResponse);
@@ -136,9 +176,15 @@ public class HeartbeatMgrTest {
         TBrokerOperationStatus status = new TBrokerOperationStatus();
         status.setStatusCode(TBrokerOperationStatusCode.OK);
 
+<<<<<<< HEAD
         new MockUp<GenericPool<TFileBrokerService.Client>>() {
             @Mock
             public TFileBrokerService.Client borrowObject(TNetworkAddress address) throws Exception {
+=======
+        new MockUp<ThriftConnectionPool<TFileBrokerService.Client>>() {
+            @Mock
+            public TFileBrokerService.Client borrowObject(TNetworkAddress address, int timeoutMs) throws Exception {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 return client;
             }
 
@@ -178,9 +224,15 @@ public class HeartbeatMgrTest {
         THeartbeatResult res = new THeartbeatResult();
         res.setStatus(status);
 
+<<<<<<< HEAD
         new MockUp<GenericPool<HeartbeatService.Client>>() {
             @Mock
             public HeartbeatService.Client borrowObject(TNetworkAddress address) throws Exception {
+=======
+        new MockUp<ThriftConnectionPool<?>>() {
+            @Mock
+            public HeartbeatService.Client borrowObject(TNetworkAddress address, int timeoutMs) throws Exception {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 return client;
             }
 

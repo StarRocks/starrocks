@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # seconds_add
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 向 `expr1` 添加指定的时间间隔，单位为秒。
 

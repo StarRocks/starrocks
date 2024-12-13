@@ -22,7 +22,13 @@
 #include <gmock/gmock.h> // EXPECT_THAT, ElementsAre
 #include <gtest/gtest.h>
 
+<<<<<<< HEAD
 #include <sstream>
+=======
+#include <iostream>
+#include <sstream>
+#include <streambuf>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include <thread>
 
 #include "common/status.h"
@@ -33,6 +39,23 @@ using namespace config;
 
 using namespace ::testing;
 
+<<<<<<< HEAD
+=======
+namespace {
+
+class ostream_redirect {
+public:
+    ostream_redirect(std::ostream& os, std::streambuf* buf) : _os(os), _buf(os.rdbuf(buf)) {}
+    ~ostream_redirect() { _os.rdbuf(_buf); }
+
+private:
+    std::ostream& _os;
+    std::streambuf* _buf;
+};
+
+} // namespace
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 class ConfigTest : public testing::Test {
     void SetUp() override { config::TEST_clear_configs(); }
 };
@@ -56,7 +79,10 @@ TEST_F(ConfigTest, test_init) {
     CONF_Int32s(cfg_int32s, "10,20,30");
     CONF_Int64s(cfg_int64s, "100,200,300");
     CONF_Strings(cfg_strings, "s1,s2,s3");
+<<<<<<< HEAD
     CONF_String(cfg_string_env, "prefix/${ConfigTestEnv1}/suffix");
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     CONF_Bool(cfg_bool_env, "false");
     CONF_String_enum(cfg_string_enum, "true", "true,false");
     // Invalid config file name
@@ -98,6 +124,39 @@ TEST_F(ConfigTest, test_init) {
         EXPECT_FALSE(config::init(ss));
     }
 
+<<<<<<< HEAD
+=======
+    // ignore env var config
+    {
+        std::stringstream ss;
+        ss << R"DEL(
+           JAVA_OPTS = -Xmx4g
+           )DEL";
+        std::stringstream stringbuf;
+        ostream_redirect cerrbuf(std::cerr, stringbuf.rdbuf());
+        EXPECT_TRUE(config::init(ss));
+        std::string err_text = stringbuf.str();
+        // no error message prompted
+        EXPECT_TRUE(err_text.empty()) << "ErrorText: " << err_text;
+    }
+
+    // contains the eror message about the unknown configvar `java_opts`
+    {
+        std::stringstream ss;
+        ss << R"DEL(
+           java_opts = -Xmx4g
+           )DEL";
+        std::stringstream stringbuf;
+        ostream_redirect cerrbuf(std::cerr, stringbuf.rdbuf());
+        EXPECT_TRUE(config::init(ss));
+        std::string err_text = stringbuf.str();
+        // error prompted for Unknown config `java_opts`
+        EXPECT_NE(std::string::npos, err_text.find("java_opts"));
+    }
+
+    // Move the definition here so that it won't fail other tests due to non-existence of ${ConfigTestEnv1}
+    CONF_String(cfg_string_env, "prefix/${ConfigTestEnv1}/suffix");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // Valid input
     {
         std::stringstream ss;
@@ -301,31 +360,67 @@ TEST_F(ConfigTest, test_set_config) {
     ASSERT_FALSE(cfg_bool);
     ASSERT_TRUE(config::set_config("cfg_bool", "true").ok());
     ASSERT_TRUE(cfg_bool);
+<<<<<<< HEAD
+=======
+    ASSERT_TRUE(config::rollback_config("cfg_bool").ok());
+    ASSERT_FALSE(cfg_bool);
+    ASSERT_TRUE(config::set_config("cfg_bool", "true").ok());
+    ASSERT_TRUE(cfg_bool);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // double
     ASSERT_EQ(cfg_double, 123.456);
     ASSERT_TRUE(config::set_config("cfg_double", "654.321").ok());
     ASSERT_EQ(cfg_double, 654.321);
+<<<<<<< HEAD
+=======
+    ASSERT_TRUE(config::rollback_config("cfg_double").ok());
+    ASSERT_EQ(cfg_double, 123.456);
+    ASSERT_TRUE(config::set_config("cfg_double", "654.321").ok());
+    ASSERT_EQ(cfg_double, 654.321);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // int16
     ASSERT_EQ(cfg_int16_t, 2561);
     ASSERT_TRUE(config::set_config("cfg_int16_t", "2562").ok());
     ASSERT_EQ(cfg_int16_t, 2562);
+<<<<<<< HEAD
+=======
+    ASSERT_TRUE(config::rollback_config("cfg_int16_t").ok());
+    ASSERT_EQ(cfg_int16_t, 2561);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // int32
     ASSERT_EQ(cfg_int32_t, 65536123);
     ASSERT_TRUE(config::set_config("cfg_int32_t", "65536124").ok());
     ASSERT_EQ(cfg_int32_t, 65536124);
+<<<<<<< HEAD
+=======
+    ASSERT_TRUE(config::rollback_config("cfg_int32_t").ok());
+    ASSERT_EQ(cfg_int32_t, 65536123);
+    ASSERT_TRUE(config::set_config("cfg_int32_t", "65536124").ok());
+    ASSERT_EQ(cfg_int32_t, 65536124);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // int64
     ASSERT_EQ(cfg_int64_t, 4294967296123);
     ASSERT_TRUE(config::set_config("cfg_int64_t", "4294967296124").ok());
     ASSERT_EQ(cfg_int64_t, 4294967296124);
+<<<<<<< HEAD
+=======
+    ASSERT_TRUE(config::rollback_config("cfg_int64_t").ok());
+    ASSERT_EQ(cfg_int64_t, 4294967296123);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // string
     ASSERT_EQ(cfg_std_string_mutable.value(), "starrocks_config_test_string_mutable");
     ASSERT_TRUE(config::set_config("cfg_std_string_mutable", "hello SR").ok());
     ASSERT_EQ(cfg_std_string_mutable.value(), "hello SR");
+<<<<<<< HEAD
+=======
+    ASSERT_TRUE(config::rollback_config("cfg_std_string_mutable").ok());
+    ASSERT_EQ(cfg_std_string_mutable.value(), "starrocks_config_test_string_mutable");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // not exist
     Status s = config::set_config("cfg_not_exist", "123");

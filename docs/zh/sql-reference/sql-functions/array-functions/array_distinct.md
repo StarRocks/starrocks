@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # array_distinct
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 数组元素去重。
 

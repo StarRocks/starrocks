@@ -70,11 +70,16 @@ public class TableSnapshotInfo {
 
     @Override
     public String toString() {
+<<<<<<< HEAD
         return "TableSnapshotInfo{" +
                 "baseTableInfo=" + baseTableInfo +
                 ", baseTable=" + baseTable.getName() +
                 ", refreshedPartitionInfos=" + refreshedPartitionInfos +
                 '}';
+=======
+        return "baseTable=" + baseTable.getName() +
+                ", refreshedPartitionInfos=" + refreshedPartitionInfos;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override

@@ -23,12 +23,23 @@ sql_annotation
 """
 from functools import wraps
 
+<<<<<<< HEAD
 from cup import log
 from nose import tools
 
 
 def init(record_mode=False):
     """init"""
+=======
+from nose.plugins.multiprocess import TimedOutException
+from cup import log
+
+
+def timeout():
+    """
+    timeout exception
+    """
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     def receive(func):
         """init decorator"""
@@ -36,6 +47,7 @@ def init(record_mode=False):
         @wraps(func)
         def wrapper(*args, **kwargs):
             """wrapper"""
+<<<<<<< HEAD
             name = args[1].name
             args[0].db = args[1].db
             args[0].case_info = args[1]
@@ -69,3 +81,42 @@ Start to run: %s
         return wrapper
 
     return receive
+=======
+
+            try:
+                res = func(*args, **kwargs)
+                return res
+            except TimedOutException as e:
+                raise AssertionError("TimedOutException: exceed the process-timeout limit!")
+            except Exception as e:
+                raise e
+
+        return wrapper
+
+    return receive
+
+
+def ignore_timeout():
+    """
+    ignore timeout exception
+    """
+
+    def receive(func):
+        """init decorator"""
+
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            """wrapper"""
+
+            try:
+                res = func(*args, **kwargs)
+                return res
+            except TimedOutException as e:
+                log.warning("[Ignore] TimedOutException: exceed the process-timeout limit!")
+            except Exception as e:
+                raise e
+
+        return wrapper
+
+    return receive
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

@@ -16,7 +16,11 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
 import com.starrocks.analysis.LabelName;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterRoutineLoadStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
@@ -57,8 +61,13 @@ public class AlterRoutineLoadAnalyzer {
             statement.setRoutineLoadDesc(CreateRoutineLoadStmt.buildLoadDesc(statement.getLoadPropertyList()));
             statement.checkJobProperties();
             statement.checkDataSourceProperties();
+<<<<<<< HEAD
         } catch (UserException e) {
             LOG.error(e);
+=======
+        } catch (StarRocksException e) {
+            LOG.error(e.getMessage(), e);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             throw new SemanticException(e.getMessage());
         }
     }

@@ -25,12 +25,20 @@ import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 
 import java.util.List;
+<<<<<<< HEAD
+=======
+import java.util.Objects;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 public class SubfieldExpr extends Expr {
 
     // We use fieldNames to extract subfield column from children[0],
     // children[0] must be an StructType.
     private List<String> fieldNames;
+<<<<<<< HEAD
+=======
+    private boolean copyFlag = true;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // Only used in parser, in parser, we can't determine column's type
     public SubfieldExpr(Expr child, List<String> fieldNames) {
@@ -60,12 +68,23 @@ public class SubfieldExpr extends Expr {
     public SubfieldExpr(SubfieldExpr other) {
         super(other);
         fieldNames = other.fieldNames;
+<<<<<<< HEAD
+=======
+        copyFlag = other.copyFlag;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public void setFieldNames(List<String> fieldNames) {
         this.fieldNames = ImmutableList.copyOf(fieldNames);
     }
 
+<<<<<<< HEAD
+=======
+    public void setCopyFlag(boolean copyFlag) {
+        this.copyFlag = copyFlag;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public List<String> getFieldNames() {
         return fieldNames;
     }
@@ -81,13 +100,21 @@ public class SubfieldExpr extends Expr {
 
     @Override
     protected String toSqlImpl() {
+<<<<<<< HEAD
         return getChild(0).toSqlImpl() + "." + Joiner.on('.').join(fieldNames);
+=======
+        return getChild(0).toSqlImpl() + "." + Joiner.on('.').join(fieldNames) + '[' + copyFlag + ']';
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
     protected void toThrift(TExprNode msg) {
         msg.setNode_type(TExprNodeType.SUBFIELD_EXPR);
         msg.setUsed_subfield_names(fieldNames);
+<<<<<<< HEAD
+=======
+        msg.setCopy_flag(copyFlag);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -99,4 +126,36 @@ public class SubfieldExpr extends Expr {
     public boolean isSelfMonotonic() {
         return children.get(0).isSelfMonotonic();
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (!super.equals(o)) {
+            return false;
+        }
+        SubfieldExpr that = (SubfieldExpr) o;
+        return Objects.equals(fieldNames, that.fieldNames) && this.copyFlag == that.copyFlag;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(super.hashCode(), fieldNames, copyFlag);
+    }
+
+    public String getPath() {
+        String childPath = getChildPath();
+        return childPath + "." + Joiner.on('.').join(fieldNames);
+    }
+
+    private String getChildPath() {
+        if (children.get(0) instanceof SlotRef) {
+            return ((SlotRef) children.get(0)).getColumnName();
+        }
+        return children.get(0).toSqlImpl();
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

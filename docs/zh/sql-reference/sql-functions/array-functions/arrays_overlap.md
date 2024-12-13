@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # arrays_overlap
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 判断两个相同类型的数组中是否包含相同的元素。返回`1`代表存在相同元素，返回`0`代表不存在相同元素。
 

@@ -16,16 +16,32 @@ package com.starrocks.connector.hudi;
 
 import com.starrocks.connector.CachingRemoteFileConf;
 import com.starrocks.connector.CachingRemoteFileIO;
+<<<<<<< HEAD
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.RemoteFileIO;
 import com.starrocks.connector.RemoteFileOperations;
 import com.starrocks.connector.hive.CacheUpdateProcessor;
 import com.starrocks.connector.hive.CachingHiveMetastore;
 import com.starrocks.connector.hive.CachingHiveMetastoreConf;
+=======
+import com.starrocks.connector.ConnectorProperties;
+import com.starrocks.connector.ConnectorType;
+import com.starrocks.connector.HdfsEnvironment;
+import com.starrocks.connector.MetastoreType;
+import com.starrocks.connector.RemoteFileIO;
+import com.starrocks.connector.RemoteFileOperations;
+import com.starrocks.connector.hive.CachingHiveMetastore;
+import com.starrocks.connector.hive.CachingHiveMetastoreConf;
+import com.starrocks.connector.hive.HiveCacheUpdateProcessor;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.connector.hive.HiveMetastoreOperations;
 import com.starrocks.connector.hive.HiveStatisticsProvider;
 import com.starrocks.connector.hive.IHiveMetastore;
 
+<<<<<<< HEAD
+=======
+import java.util.Map;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.Optional;
 import java.util.concurrent.ExecutorService;
 
@@ -40,6 +56,11 @@ public class HudiMetadataFactory {
     private final ExecutorService pullRemoteFileExecutor;
     private final boolean isRecursive;
     private final HdfsEnvironment hdfsEnvironment;
+<<<<<<< HEAD
+=======
+    private final MetastoreType metastoreType;
+    private final ConnectorProperties connectorProperties;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public HudiMetadataFactory(String catalogName,
                                IHiveMetastore metastore,
@@ -48,8 +69,14 @@ public class HudiMetadataFactory {
                                CachingRemoteFileConf fileConf,
                                ExecutorService pullRemoteFileExecutor,
                                boolean isRecursive,
+<<<<<<< HEAD
                                HdfsEnvironment hdfsEnvironment) {
 
+=======
+                               HdfsEnvironment hdfsEnvironment,
+                               MetastoreType metastoreType,
+                               Map<String, String> properties) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.catalogName = catalogName;
         this.metastore = metastore;
         this.remoteFileIO = remoteFileIO;
@@ -58,10 +85,16 @@ public class HudiMetadataFactory {
         this.pullRemoteFileExecutor = pullRemoteFileExecutor;
         this.isRecursive = isRecursive;
         this.hdfsEnvironment = hdfsEnvironment;
+<<<<<<< HEAD
+=======
+        this.metastoreType = metastoreType;
+        this.connectorProperties = new ConnectorProperties(ConnectorType.HUDI, properties);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public HudiMetadata create() {
         HiveMetastoreOperations hiveMetastoreOperations = new HiveMetastoreOperations(
+<<<<<<< HEAD
                 createQueryLevelInstance(metastore, perQueryMetastoreMaxNum), metastore instanceof CachingHiveMetastore);
         RemoteFileOperations remoteFileOperations = new RemoteFileOperations(
                 CachingRemoteFileIO.createQueryLevelInstance(remoteFileIO, perQueryCacheRemotePathMaxNum),
@@ -79,6 +112,29 @@ public class HudiMetadataFactory {
         Optional<CacheUpdateProcessor> cacheUpdateProcessor;
         if (remoteFileIO instanceof CachingRemoteFileIO || metastore instanceof CachingHiveMetastore) {
             cacheUpdateProcessor = Optional.of(new CacheUpdateProcessor(
+=======
+                createQueryLevelInstance(metastore, perQueryMetastoreMaxNum),
+                metastore instanceof CachingHiveMetastore,
+                hdfsEnvironment.getConfiguration(), metastoreType, catalogName);
+        RemoteFileOperations remoteFileOperations = new RemoteFileOperations(
+                CachingRemoteFileIO.createQueryLevelInstance(remoteFileIO, perQueryCacheRemotePathMaxNum),
+                pullRemoteFileExecutor,
+                pullRemoteFileExecutor,
+                isRecursive,
+                remoteFileIO instanceof CachingRemoteFileIO,
+                hdfsEnvironment.getConfiguration());
+        HiveStatisticsProvider statisticsProvider = new HiveStatisticsProvider(hiveMetastoreOperations, remoteFileOperations);
+        Optional<HiveCacheUpdateProcessor> cacheUpdateProcessor = getCacheUpdateProcessor();
+
+        return new HudiMetadata(catalogName, hdfsEnvironment, hiveMetastoreOperations,
+                remoteFileOperations, statisticsProvider, cacheUpdateProcessor, connectorProperties);
+    }
+
+    public synchronized Optional<HiveCacheUpdateProcessor> getCacheUpdateProcessor() {
+        Optional<HiveCacheUpdateProcessor> cacheUpdateProcessor;
+        if (remoteFileIO instanceof CachingRemoteFileIO || metastore instanceof CachingHiveMetastore) {
+            cacheUpdateProcessor = Optional.of(new HiveCacheUpdateProcessor(
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     catalogName, metastore, remoteFileIO, pullRemoteFileExecutor,
                     isRecursive, false));
         } else {

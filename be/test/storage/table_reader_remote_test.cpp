@@ -62,7 +62,11 @@ public:
         writer_context.partition_id = 0;
         writer_context.rowset_path_prefix = tablet->schema_hash_path();
         writer_context.rowset_state = COMMITTED;
+<<<<<<< HEAD
         writer_context.tablet_schema = &tablet->tablet_schema();
+=======
+        writer_context.tablet_schema = tablet->tablet_schema();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         writer_context.version.first = 0;
         writer_context.version.second = 0;
         writer_context.segments_overlap = NONOVERLAPPING;
@@ -219,7 +223,11 @@ TEST_F(TableReaderRemoteTest, test_multi_get_1_tablet) {
             std::vector<RowsetSharedPtr> dummy_rowsets;
             EditVersion full_version;
             ASSERT_TRUE(_tablets[0]->updates()->get_applied_rowsets(2, &dummy_rowsets, &full_version).ok());
+<<<<<<< HEAD
             if (full_version.major() < 2) {
+=======
+            if (full_version.major_number() < 2) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 ok = false;
                 break;
             }
@@ -313,8 +321,13 @@ TEST_F(TableReaderRemoteTest, test_multi_get_4_tablet) {
         for (int i = 0; i < num_buckets; i++) {
             std::vector<RowsetSharedPtr> dummy_rowsets;
             EditVersion full_version;
+<<<<<<< HEAD
             ASSERT_TRUE(_tablets[0]->updates()->get_applied_rowsets(2, &dummy_rowsets, &full_version).ok());
             if (full_version.major() < 2) {
+=======
+            ASSERT_TRUE(_tablets[i]->updates()->get_applied_rowsets(2, &dummy_rowsets, &full_version).ok());
+            if (full_version.major_number() < 2) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 ok = false;
                 break;
             }

@@ -39,6 +39,15 @@ public interface IMaterializedViewMetricsEntity {
     void increaseQueryMatchedCount(long count);
 
     /**
+<<<<<<< HEAD
+=======
+     * Increase the count of query text matched which is rewritten by success
+     * @param count: increase count
+     */
+    void increaseQueryTextBasedMatchedCount(long count);
+
+    /**
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
      * Increase the count of query hit which is rewritten by success and chosen at the end
      * @param count: increase count
      */

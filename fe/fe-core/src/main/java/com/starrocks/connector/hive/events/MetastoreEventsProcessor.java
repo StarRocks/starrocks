@@ -19,7 +19,11 @@ import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.util.FrontendDaemon;
+<<<<<<< HEAD
 import com.starrocks.connector.hive.CacheUpdateProcessor;
+=======
+import com.starrocks.connector.hive.HiveCacheUpdateProcessor;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.server.CatalogMgr;
 import org.apache.hadoop.hive.metastore.IMetaStoreClient;
 import org.apache.hadoop.hive.metastore.api.NotificationEvent;
@@ -71,7 +75,11 @@ public class MetastoreEventsProcessor extends FrontendDaemon {
     // event factory which is used to get or create MetastoreEvents
     private final MetastoreEventFactory metastoreEventFactory;
 
+<<<<<<< HEAD
     private final Map<String, CacheUpdateProcessor> cacheUpdateProcessors = new ConcurrentHashMap<>();
+=======
+    private final Map<String, HiveCacheUpdateProcessor> cacheUpdateProcessors = new ConcurrentHashMap<>();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // [catalogName.dbName.tableName] for hive table with resource
     private final List<String> externalTables = Lists.newArrayList();
@@ -81,7 +89,11 @@ public class MetastoreEventsProcessor extends FrontendDaemon {
         this.metastoreEventFactory = new MetastoreEventFactory(externalTables);
     }
 
+<<<<<<< HEAD
     public void registerCacheUpdateProcessor(String catalogName, CacheUpdateProcessor cache) {
+=======
+    public void registerCacheUpdateProcessor(String catalogName, HiveCacheUpdateProcessor cache) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         LOG.info("Start to synchronize hive metadata cache on catalog {}", catalogName);
         cacheUpdateProcessors.put(catalogName, cache);
     }
@@ -122,7 +134,11 @@ public class MetastoreEventsProcessor extends FrontendDaemon {
                                                      final boolean getAllEvents,
                                                      @Nullable final IMetaStoreClient.NotificationFilter filter) {
         LOG.info("Start to pull events on catalog [{}]", catalogName);
+<<<<<<< HEAD
         CacheUpdateProcessor updateProcessor = cacheUpdateProcessors.get(catalogName);
+=======
+        HiveCacheUpdateProcessor updateProcessor = cacheUpdateProcessors.get(catalogName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (updateProcessor == null) {
             LOG.error("Failed to get cacheUpdateProcessor by catalog {}.", catalogName);
             return Collections.emptyList();
@@ -171,7 +187,11 @@ public class MetastoreEventsProcessor extends FrontendDaemon {
         }
     }
 
+<<<<<<< HEAD
     private void doExecute(List<MetastoreEvent> events, CacheUpdateProcessor cacheProcessor) {
+=======
+    private void doExecute(List<MetastoreEvent> events, HiveCacheUpdateProcessor cacheProcessor) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         for (MetastoreEvent event : events) {
             try {
                 event.process();
@@ -190,7 +210,11 @@ public class MetastoreEventsProcessor extends FrontendDaemon {
      * Process the given list of notification events. Useful for tests which provide a list of events
      */
     private void processEvents(List<NotificationEvent> events, String catalogName) {
+<<<<<<< HEAD
         CacheUpdateProcessor cacheProcessor = cacheUpdateProcessors.get(catalogName);
+=======
+        HiveCacheUpdateProcessor cacheProcessor = cacheUpdateProcessors.get(catalogName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<MetastoreEvent> filteredEvents = metastoreEventFactory.getFilteredEvents(events, cacheProcessor, catalogName);
 
         if (filteredEvents.isEmpty()) {

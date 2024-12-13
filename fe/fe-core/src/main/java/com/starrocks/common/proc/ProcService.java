@@ -46,13 +46,21 @@ import org.apache.logging.log4j.Logger;
 public final class ProcService {
     private static final Logger LOG = LogManager.getLogger(ProcService.class);
     private static ProcService INSTANCE;
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private BaseProcDir root;
 
     private ProcService() {
         root = new BaseProcDir();
+<<<<<<< HEAD
         root.register("backends", new BackendsProcDir(GlobalStateMgr.getCurrentSystemInfo()));
         root.register("compute_nodes", new ComputeNodeProcDir(GlobalStateMgr.getCurrentSystemInfo()));
+=======
+        root.register("backends", new BackendsProcDir(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()));
+        root.register("compute_nodes", new ComputeNodeProcDir(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         root.register("dbs", new DbsProcDir(GlobalStateMgr.getCurrentState()));
         root.register("jobs", new JobsDbProcDir(GlobalStateMgr.getCurrentState()));
         root.register("statistic", new StatisticProcDir(GlobalStateMgr.getCurrentState()));
@@ -64,6 +72,10 @@ public final class ProcService {
         root.register("transactions", new TransDbProcDir());
         root.register("monitor", new MonitorProcDir());
         root.register("current_queries", new CurrentQueryStatisticsProcDir());
+<<<<<<< HEAD
+=======
+        root.register("global_current_queries", new CurrentGlobalQueryStatisticsProcDir());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         root.register("current_backend_instances", new CurrentQueryBackendInstanceProcDir());
         root.register("cluster_balance", new ClusterBalanceProcDir());
         root.register("routine_loads", new RoutineLoadsProcDir());
@@ -71,7 +83,11 @@ public final class ProcService {
         root.register("colocation_group", new ColocationGroupProcDir());
         root.register("catalog", GlobalStateMgr.getCurrentState().getCatalogMgr().getProcNode());
         root.register("compactions", new CompactionsProcNode());
+<<<<<<< HEAD
         root.register("warehouses", new WarehouseProcDir(GlobalStateMgr.getCurrentWarehouseMgr()));
+=======
+        root.register("warehouses", new WarehouseProcDir());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         root.register("meta_recovery", new MetaRecoveryProdDir());
         root.register("replications", new ReplicationsProcNode());
     }

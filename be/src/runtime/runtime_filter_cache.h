@@ -24,7 +24,10 @@
 
 namespace starrocks {
 
+<<<<<<< HEAD
 using JoinRuntimeFilterPtr = std::shared_ptr<const JoinRuntimeFilter>;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 class RfCacheValue;
 using RfCacheValueRawPtr = RfCacheValue*;
 using RfCacheValuePtr = std::shared_ptr<RfCacheValue>;

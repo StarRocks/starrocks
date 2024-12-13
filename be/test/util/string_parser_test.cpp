@@ -47,7 +47,10 @@
 namespace starrocks {
 
 std::string space[] = {"", "   ", "\t\t\t", "\n\n\n", "\v\v\v", "\f\f\f", "\r\r\r"};
+<<<<<<< HEAD
 const int space_len = 7;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 // Tests conversion of s to integer with and without leading/trailing whitespace
 template <typename T>

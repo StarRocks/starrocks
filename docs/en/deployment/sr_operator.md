@@ -7,9 +7,13 @@ displayed_sidebar: docs
 This topic introduces how to use the StarRocks Operator to automate the deployment and management of a StarRocks cluster on a Kubernetes cluster.
 
 :::note
+<<<<<<< HEAD
 
 The StarRocks Operator is designed to be a level 2 operator. To understand more about the capabilities of a level 2 operator, see [Operator Capability Levels](https://sdk.operatorframework.io/docs/overview/operator-capabilities/).
 
+=======
+The StarRocks k8s operator was designed to be a level 2 operator.   See https://sdk.operatorframework.io/docs/overview/operator-capabilities/ to understand more about the capabilities of a level 2 operator. 
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 :::
 
 ## How it works

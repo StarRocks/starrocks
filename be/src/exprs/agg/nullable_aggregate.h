@@ -74,6 +74,15 @@ struct NullableAggregateFunctionState
     T _nested_state;
 };
 
+<<<<<<< HEAD
+=======
+template <typename F, typename State>
+concept IsAggNullPred = requires(F f, State arg) {
+    { f(arg) }
+    ->std::convertible_to<bool>;
+};
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 template <typename State>
 struct AggNonNullPred {
     constexpr bool operator()(const State&) const { return false; }
@@ -89,7 +98,11 @@ struct AggNonNullPred {
 // If all the rows are NULL or `AggNullPred` returns true, we will return NULL.
 // The State must be NullableAggregateFunctionState
 template <typename NestedAggregateFunctionPtr, typename State, bool IsWindowFunc, bool IgnoreNull = true,
+<<<<<<< HEAD
           typename AggNullPred = AggNonNullPred<typename State::NestedState>>
+=======
+          IsAggNullPred<typename State::NestedState> AggNullPred = AggNonNullPred<typename State::NestedState>>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 class NullableAggregateFunctionBase : public AggregateFunctionStateHelper<State> {
     using NestedState = typename State::NestedState;
     static constexpr bool is_result_always_nullable = !std::is_same_v<AggNullPred, AggNonNullPred<NestedState>>;
@@ -268,7 +281,11 @@ public:
     }
 
     void merge_batch_selectively(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column* column,
+<<<<<<< HEAD
                                  AggDataPtr* states, const std::vector<uint8_t>& filter) const override {
+=======
+                                 AggDataPtr* states, const Filter& filter) const override {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         for (size_t i = 0; i < chunk_size; i++) {
             // TODO: optimize with simd ?
             if (filter[i] == 0) {
@@ -294,7 +311,11 @@ protected:
 };
 
 template <typename NestedAggregateFunctionPtr, typename State, bool IsWindowFunc, bool IgnoreNull = true,
+<<<<<<< HEAD
           typename AggNullPred = AggNonNullPred<typename State::NestedState>>
+=======
+          IsAggNullPred<typename State::NestedState> AggNullPred = AggNonNullPred<typename State::NestedState>>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 class NullableAggregateFunctionUnary final
         : public NullableAggregateFunctionBase<NestedAggregateFunctionPtr, State, IsWindowFunc, IgnoreNull,
                                                AggNullPred> {
@@ -406,7 +427,11 @@ public:
     }
 
     void update_batch_selectively(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column** columns,
+<<<<<<< HEAD
                                   AggDataPtr* states, const std::vector<uint8_t>& selection) const override {
+=======
+                                  AggDataPtr* states, const Filter& selection) const override {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // Scalar function compute will return non-nullable column
         // for nullable column when the real whole chunk data all not-null.
         if (columns[0]->is_nullable()) {
@@ -732,7 +757,11 @@ public:
     }
 
     void merge_batch_selectively(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column* column,
+<<<<<<< HEAD
                                  AggDataPtr* states, const std::vector<uint8_t>& filter) const override {
+=======
+                                 AggDataPtr* states, const Filter& filter) const override {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         auto fast_call_path = [&](const Column* data_column) {
             for (size_t i = 0; i < chunk_size; ++i) {
                 if (filter[i] == 0) {
@@ -786,7 +815,12 @@ public:
     }
 };
 
+<<<<<<< HEAD
 template <typename State, typename AggNullPred = AggNonNullPred<typename State::NestedState>>
+=======
+template <typename State,
+          IsAggNullPred<typename State::NestedState> AggNullPred = AggNonNullPred<typename State::NestedState>>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 class NullableAggregateFunctionVariadic final
         : public NullableAggregateFunctionBase<AggregateFunctionPtr, State, false, true, AggNullPred> {
 public:
@@ -829,7 +863,11 @@ public:
     }
 
     void update_batch_selectively(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column** columns,
+<<<<<<< HEAD
                                   AggDataPtr* states, const std::vector<uint8_t>& selection) const override {
+=======
+                                  AggDataPtr* states, const Filter& selection) const override {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         auto column_size = ctx->get_num_args();
         for (size_t i = 0; i < column_size; i++) {
             if (columns[i]->only_null()) {

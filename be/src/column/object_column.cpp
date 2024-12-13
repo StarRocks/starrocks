@@ -37,8 +37,13 @@ size_t ObjectColumn<T>::byte_size(size_t from, size_t size) const {
 
 template <typename T>
 size_t ObjectColumn<T>::byte_size(size_t idx) const {
+<<<<<<< HEAD
     DCHECK(false) << "Don't support object column byte size";
     return 0;
+=======
+    DCHECK_LE(idx, this->size()) << "Range error";
+    return _pool[idx].serialize_size();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 template <typename T>
@@ -111,9 +116,16 @@ void ObjectColumn<T>::append_value_multiple_times(const starrocks::Column& src, 
 }
 
 template <typename T>
+<<<<<<< HEAD
 bool ObjectColumn<T>::append_strings(const Buffer<starrocks::Slice>& strs) {
     _pool.reserve(_pool.size() + strs.size());
     for (const Slice& s : strs) {
+=======
+bool ObjectColumn<T>::append_strings(const Slice* data, size_t size) {
+    _pool.reserve(_pool.size() + size);
+    for (size_t i = 0; i < size; i++) {
+        const auto& s = data[i];
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         _pool.emplace_back(s);
     }
 
@@ -157,7 +169,11 @@ void ObjectColumn<T>::fill_default(const Filter& filter) {
 }
 
 template <typename T>
+<<<<<<< HEAD
 Status ObjectColumn<T>::update_rows(const Column& src, const uint32_t* indexes) {
+=======
+void ObjectColumn<T>::update_rows(const Column& src, const uint32_t* indexes) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     const auto& obj_col = down_cast<const ObjectColumn<T>&>(src);
     size_t replace_num = src.size();
     for (size_t i = 0; i < replace_num; i++) {
@@ -165,13 +181,20 @@ Status ObjectColumn<T>::update_rows(const Column& src, const uint32_t* indexes) 
         _pool[indexes[i]] = *obj_col.get_object(i);
     }
     _cache_ok = false;
+<<<<<<< HEAD
     return Status::OK();
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 template <typename T>
 uint32_t ObjectColumn<T>::serialize(size_t idx, uint8_t* pos) {
+<<<<<<< HEAD
     DCHECK(false) << "Don't support object column serialize";
     return 0;
+=======
+    return static_cast<uint32_t>(get_object(idx)->serialize(pos));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 template <typename T>
@@ -183,7 +206,13 @@ uint32_t ObjectColumn<T>::serialize_default(uint8_t* pos) {
 template <typename T>
 void ObjectColumn<T>::serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
                                       uint32_t max_one_row_size) {
+<<<<<<< HEAD
     DCHECK(false) << "Don't support object column serialize batch";
+=======
+    for (size_t i = 0; i < chunk_size; ++i) {
+        slice_sizes[i] += serialize(i, dst + i * max_one_row_size + slice_sizes[i]);
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 template <typename T>
@@ -193,14 +222,34 @@ const uint8_t* ObjectColumn<T>::deserialize_and_append(const uint8_t* pos) {
 }
 
 template <typename T>
+<<<<<<< HEAD
+=======
+bool ObjectColumn<T>::deserialize_and_append(const Slice& src) {
+    if constexpr (std::is_same_v<T, BitmapValue>) {
+        return _pool.emplace_back().valid_and_deserialize(src.data, src.size);
+    } else if constexpr (std::is_same_v<T, HyperLogLog>) {
+        return _pool.emplace_back().deserialize(src);
+    } else if constexpr (std::is_same_v<T, PercentileValue>) {
+        _pool.emplace_back(src);
+        return true;
+    }
+    return false;
+}
+
+template <typename T>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 void ObjectColumn<T>::deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) {
     DCHECK(false) << "Don't support object column deserialize and append";
 }
 
 template <typename T>
 uint32_t ObjectColumn<T>::serialize_size(size_t idx) const {
+<<<<<<< HEAD
     DCHECK(false) << "Don't support object column byte size";
     return 0;
+=======
+    return static_cast<uint32_t>(get_object(idx)->serialize_size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 template <typename T>
@@ -253,7 +302,11 @@ int64_t ObjectColumn<T>::xor_checksum(uint32_t from, uint32_t to) const {
 }
 
 template <typename T>
+<<<<<<< HEAD
 void ObjectColumn<T>::put_mysql_row_buffer(starrocks::MysqlRowBuffer* buf, size_t idx) const {
+=======
+void ObjectColumn<T>::put_mysql_row_buffer(starrocks::MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol) const {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     buf->push_null();
 }
 
@@ -280,7 +333,11 @@ void ObjectColumn<T>::_build_slices() const {
     size_t old_size = 0;
     for (size_t i = 0; i < _pool.size(); ++i) {
         size_t slice_size = _pool[i].serialize(_buffer.data() + old_size);
+<<<<<<< HEAD
         _slices.emplace_back(Slice(_buffer.data() + old_size, slice_size));
+=======
+        _slices.emplace_back(_buffer.data() + old_size, slice_size);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         old_size += slice_size;
     }
 }
@@ -316,9 +373,13 @@ std::string ObjectColumn<BitmapValue>::debug_item(size_t idx) const {
 
 template <typename T>
 StatusOr<ColumnPtr> ObjectColumn<T>::upgrade_if_overflow() {
+<<<<<<< HEAD
     if (capacity_limit_reached()) {
         return Status::InternalError("Size of ObjectColumn exceed the limit");
     }
+=======
+    RETURN_IF_ERROR(capacity_limit_reached());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     return nullptr;
 }
 

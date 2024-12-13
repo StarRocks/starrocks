@@ -38,23 +38,42 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
+<<<<<<< HEAD
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.common.collect.Streams;
 import com.starrocks.analysis.DateLiteral;
+=======
+import com.google.common.collect.HashMultimap;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Multimap;
+import com.google.common.collect.Sets;
+import com.google.common.collect.Streams;
+import com.starrocks.analysis.BloomFilterIndexUtil;
+import com.starrocks.analysis.DateLiteral;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.StringLiteral;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
+<<<<<<< HEAD
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ForeignKeyConstraint;
+=======
+import com.starrocks.catalog.ColumnId;
+import com.starrocks.catalog.DataProperty;
+import com.starrocks.catalog.Database;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
+<<<<<<< HEAD
 import com.starrocks.catalog.Type;
 import com.starrocks.catalog.UniqueConstraint;
 import com.starrocks.common.AnalysisException;
@@ -67,21 +86,71 @@ import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.Property;
+=======
+import com.starrocks.catalog.TableProperty;
+import com.starrocks.catalog.Type;
+import com.starrocks.catalog.constraint.ForeignKeyConstraint;
+import com.starrocks.catalog.constraint.UniqueConstraint;
+import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
+import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
+import com.starrocks.lake.DataCacheInfo;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SqlModeHelper;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
+import com.starrocks.server.StorageVolumeMgr;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.analyzer.SetStmtAnalyzer;
+import com.starrocks.sql.ast.Property;
+import com.starrocks.sql.ast.SetListItem;
+import com.starrocks.sql.ast.SetStmt;
+import com.starrocks.sql.ast.SystemVariable;
+import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.sql.optimizer.rule.transformation.partition.PartitionSelector;
+import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.system.Backend;
+import com.starrocks.system.SystemInfoService;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletType;
+<<<<<<< HEAD
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+=======
+import com.starrocks.warehouse.Warehouse;
+import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.collections.MapUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.jetbrains.annotations.NotNull;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.threeten.extra.PeriodDuration;
 
 import java.time.format.DateTimeParseException;
 import java.util.Arrays;
+<<<<<<< HEAD
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
+=======
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.TableProperty.INVALID;
@@ -103,8 +172,11 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_BF_COLUMNS = "bloom_filter_columns";
     public static final String PROPERTIES_BF_FPP = "bloom_filter_fpp";
+<<<<<<< HEAD
     private static final double MAX_FPP = 0.05;
     private static final double MIN_FPP = 0.0001;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public static final String PROPERTIES_COLUMN_SEPARATOR = "column_separator";
     public static final String PROPERTIES_LINE_DELIMITER = "line_delimiter";
@@ -124,6 +196,11 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_ENABLE_PERSISTENT_INDEX = "enable_persistent_index";
 
+<<<<<<< HEAD
+=======
+    public static final String PROPERTIES_LABELS_LOCATION = "labels.location";
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static final String PROPERTIES_PERSISTENT_INDEX_TYPE = "persistent_index_type";
 
     public static final String PROPERTIES_BINLOG_VERSION = "binlog_version";
@@ -134,10 +211,29 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_BINLOG_MAX_SIZE = "binlog_max_size";
 
+<<<<<<< HEAD
+=======
+    public static final String PROPERTIES_STORAGE_TYPE_COLUMN = "column";
+    public static final String PROPERTIES_STORAGE_TYPE_COLUMN_WITH_ROW = "column_with_row";
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static final String PROPERTIES_WRITE_QUORUM = "write_quorum";
 
     public static final String PROPERTIES_REPLICATED_STORAGE = "replicated_storage";
 
+<<<<<<< HEAD
+=======
+    public static final String PROPERTIES_BUCKET_SIZE = "bucket_size";
+
+    public static final String PROPERTIES_MUTABLE_BUCKET_NUM = "mutable_bucket_num";
+
+    public static final String PROPERTIES_ENABLE_LOAD_PROFILE = "enable_load_profile";
+
+    public static final String PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES = "base_compaction_forbidden_time_ranges";
+
+    public static final String PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC = "primary_index_cache_expire_sec";
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static final String PROPERTIES_TABLET_TYPE = "tablet_type";
 
     public static final String PROPERTIES_STRICT_RANGE = "strict_range";
@@ -153,13 +249,32 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_PARTITION_TTL_NUMBER = "partition_ttl_number";
     public static final String PROPERTIES_PARTITION_TTL = "partition_ttl";
     public static final String PROPERTIES_PARTITION_LIVE_NUMBER = "partition_live_number";
+<<<<<<< HEAD
     public static final String PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT = "auto_refresh_partitions_limit";
     public static final String PROPERTIES_PARTITION_REFRESH_NUMBER = "partition_refresh_number";
     public static final String PROPERTIES_EXCLUDED_TRIGGER_TABLES = "excluded_trigger_tables";
+=======
+    public static final String PROPERTIES_PARTITION_RETENTION_CONDITION = "partition_retention_condition";
+
+    public static final String PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT = "auto_refresh_partitions_limit";
+    public static final String PROPERTIES_PARTITION_REFRESH_NUMBER = "partition_refresh_number";
+    public static final String PROPERTIES_EXCLUDED_TRIGGER_TABLES = "excluded_trigger_tables";
+    public static final String PROPERTIES_EXCLUDED_REFRESH_TABLES = "excluded_refresh_tables";
+
+    // 1. `force_external_table_query_rewrite` is used to control whether external table can be rewritten or not
+    // 2. external table can be rewritten by default if not specific.
+    // 3. you can use `query_rewrite_consistency` to control mv's rewrite consistency.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static final String PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE = "force_external_table_query_rewrite";
     public static final String PROPERTIES_QUERY_REWRITE_CONSISTENCY = "query_rewrite_consistency";
     public static final String PROPERTIES_RESOURCE_GROUP = "resource_group";
 
+<<<<<<< HEAD
+=======
+    public static final String PROPERTIES_WAREHOUSE = "warehouse";
+    public static final String PROPERTIES_WAREHOUSE_ID = "warehouse_id";
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static final String PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX = "session.";
 
     public static final String PROPERTIES_STORAGE_VOLUME = "storage_volume";
@@ -177,17 +292,44 @@ public class PropertyAnalyzer {
     // -1: disable randomize, use current time as start
     // positive value: use [0, mv_randomize_start) as random interval
     public static final String PROPERTY_MV_RANDOMIZE_START = "mv_randomize_start";
+<<<<<<< HEAD
+=======
+    public static final String PROPERTY_MV_ENABLE_QUERY_REWRITE = "enable_query_rewrite";
+
+    // transparent_mv_rewrite_mode
+    public static final String PROPERTY_TRANSPARENT_MV_REWRITE_MODE = "transparent_mv_rewrite_mode";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     /**
      * Materialized View sort keys
      */
     public static final String PROPERTY_MV_SORT_KEYS = "mv_sort_keys";
 
+<<<<<<< HEAD
     // light schema change
+=======
+    // fast schema evolution
+    public static final String PROPERTIES_USE_FAST_SCHEMA_EVOLUTION = "fast_schema_evolution";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static final String PROPERTIES_USE_LIGHT_SCHEMA_CHANGE = "light_schema_change";
 
     public static final String PROPERTIES_DEFAULT_PREFIX = "default.";
 
+<<<<<<< HEAD
+=======
+    /**
+     * Matches location labels like : ["*", "a:*", "bcd_123:*", "123bcd_:val_123", "  a :  b  "],
+     * leading and trailing space of key and value will be ignored.
+     */
+    public static final String SINGLE_LOCATION_LABEL_REGEX = "(\\*|\\s*[a-z_0-9]+\\s*:\\s*(\\*|[a-z_0-9]+)\\s*)";
+    /**
+     * Matches location labels like: ["*, a: b,  c:d", "*, a:b, *", etc.].
+     * Limit the occurrences of single location label to 10 to avoid regex overflowing the stack.
+     */
+    public static final String MULTI_LOCATION_LABELS_REGEX = "\\s*" + SINGLE_LOCATION_LABEL_REGEX +
+            "\\s*(,\\s*" + SINGLE_LOCATION_LABEL_REGEX + "){0,9}\\s*";
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static DataProperty analyzeDataProperty(Map<String, String> properties,
                                                    DataProperty inferredDataProperty,
                                                    boolean isDefault)
@@ -303,23 +445,38 @@ public class PropertyAnalyzer {
         return shortKeyColumnCount;
     }
 
+<<<<<<< HEAD
     public static int analyzePartitionTimeToLive(Map<String, String> properties) throws AnalysisException {
+=======
+    public static int analyzePartitionTTLNumber(Map<String, String> properties) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         int partitionTimeToLive = INVALID;
         if (properties != null && properties.containsKey(PROPERTIES_PARTITION_TTL_NUMBER)) {
             try {
                 partitionTimeToLive = Integer.parseInt(properties.get(PROPERTIES_PARTITION_TTL_NUMBER));
             } catch (NumberFormatException e) {
+<<<<<<< HEAD
                 throw new AnalysisException("Partition TTL Number: " + e.getMessage());
             }
             if (partitionTimeToLive <= 0 && partitionTimeToLive != INVALID) {
                 throw new AnalysisException("Illegal Partition TTL Number: " + partitionTimeToLive);
+=======
+                throw new SemanticException("Partition TTL Number: " + e.getMessage());
+            }
+            if (partitionTimeToLive <= 0 && partitionTimeToLive != INVALID) {
+                throw new SemanticException("Illegal Partition TTL Number: " + partitionTimeToLive);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
             properties.remove(PROPERTIES_PARTITION_TTL_NUMBER);
         }
         return partitionTimeToLive;
     }
 
+<<<<<<< HEAD
     public static Pair<String, PeriodDuration> analyzePartitionTTL(Map<String, String> properties) {
+=======
+    public static Pair<String, PeriodDuration> analyzePartitionTTL(Map<String, String> properties, boolean removeProperties) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (properties != null && properties.containsKey(PROPERTIES_PARTITION_TTL)) {
             String ttlStr = properties.get(PROPERTIES_PARTITION_TTL);
             PeriodDuration duration;
@@ -328,23 +485,40 @@ public class PropertyAnalyzer {
             } catch (NumberFormatException e) {
                 throw new SemanticException(String.format("illegal %s: %s", PROPERTIES_PARTITION_TTL, e.getMessage()));
             }
+<<<<<<< HEAD
             properties.remove(PROPERTIES_PARTITION_TTL);
+=======
+            if (removeProperties) {
+                properties.remove(PROPERTIES_PARTITION_TTL);
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return Pair.create(ttlStr, duration);
         }
         return Pair.create(null, PeriodDuration.ZERO);
     }
 
+<<<<<<< HEAD
     public static int analyzePartitionLiveNumber(Map<String, String> properties,
                                                  boolean removeProperties) throws AnalysisException {
+=======
+    public static int analyzePartitionLiveNumber(Map<String, String> properties, boolean removeProperties) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         int partitionLiveNumber = INVALID;
         if (properties != null && properties.containsKey(PROPERTIES_PARTITION_LIVE_NUMBER)) {
             try {
                 partitionLiveNumber = Integer.parseInt(properties.get(PROPERTIES_PARTITION_LIVE_NUMBER));
             } catch (NumberFormatException e) {
+<<<<<<< HEAD
                 throw new AnalysisException("Partition Live Number: " + e.getMessage());
             }
             if (partitionLiveNumber <= 0 && partitionLiveNumber != INVALID) {
                 throw new AnalysisException("Illegal Partition Live Number: " + partitionLiveNumber);
+=======
+                throw new SemanticException("Partition Live Number: " + e.getMessage());
+            }
+            if (partitionLiveNumber <= 0 && partitionLiveNumber != INVALID) {
+                throw new SemanticException("Illegal Partition Live Number: " + partitionLiveNumber);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
             if (removeProperties) {
                 properties.remove(PROPERTIES_PARTITION_LIVE_NUMBER);
@@ -353,10 +527,101 @@ public class PropertyAnalyzer {
         return partitionLiveNumber;
     }
 
+<<<<<<< HEAD
     public static int analyzeAutoRefreshPartitionsLimit(Map<String, String> properties, MaterializedView mv)
             throws AnalysisException {
         if (mv.getRefreshScheme().getType() == MaterializedView.RefreshType.MANUAL) {
             throw new AnalysisException(
+=======
+    public static String analyzePartitionRetentionCondition(Database db,
+                                                            OlapTable olapTable,
+                                                            Map<String, String> properties,
+                                                            boolean removeProperties) {
+        String partitionRetentionCondition = "";
+        if (properties != null && properties.containsKey(PROPERTIES_PARTITION_RETENTION_CONDITION)) {
+            partitionRetentionCondition = properties.get(PROPERTIES_PARTITION_RETENTION_CONDITION);
+            if (Strings.isNullOrEmpty(partitionRetentionCondition)) {
+                throw new SemanticException("Illegal partition retention condition: " + partitionRetentionCondition);
+            }
+            // parse retention condition
+            Expr whereExpr = null;
+            try {
+                whereExpr = SqlParser.parseSqlToExpr(partitionRetentionCondition, SqlModeHelper.MODE_DEFAULT);
+                if (whereExpr == null) {
+                    throw new SemanticException("Failed to parse retention condition: " + partitionRetentionCondition);
+                }
+            } catch (Exception e) {
+                throw new SemanticException("Failed to parse retention condition: " + partitionRetentionCondition);
+            }
+            // validate retention condition
+            TableName tableName = new TableName(db.getFullName(), olapTable.getName());
+            ConnectContext connectContext = ConnectContext.get() == null ? new ConnectContext(null) : ConnectContext.get();
+            try {
+                PartitionSelector.getPartitionIdsByExpr(connectContext, tableName, olapTable, whereExpr, false);
+            } catch (Exception e) {
+                throw new SemanticException("Failed to validate retention condition: " + e.getMessage());
+            }
+            if (removeProperties) {
+                properties.remove(PROPERTIES_PARTITION_RETENTION_CONDITION);
+            }
+        }
+        return partitionRetentionCondition;
+    }
+
+    public static long analyzeBucketSize(Map<String, String> properties) {
+        long bucketSize = 0;
+        if (properties != null && properties.containsKey(PROPERTIES_BUCKET_SIZE)) {
+            try {
+                bucketSize = Long.parseLong(properties.get(PROPERTIES_BUCKET_SIZE));
+            } catch (NumberFormatException e) {
+                throw new SemanticException("Bucket size: " + e.getMessage());
+            }
+            if (bucketSize < 0) {
+                throw new SemanticException("Illegal bucket size: " + bucketSize);
+            }
+            return bucketSize;
+        } else {
+            throw new SemanticException("Bucket size is not set");
+        }
+    }
+
+    public static long analyzeMutableBucketNum(Map<String, String> properties) {
+        long mutableBucketNum = 0;
+        if (properties != null && properties.containsKey(PROPERTIES_MUTABLE_BUCKET_NUM)) {
+            try {
+                mutableBucketNum = Long.parseLong(properties.get(PROPERTIES_MUTABLE_BUCKET_NUM));
+            } catch (NumberFormatException e) {
+                throw new SemanticException("Mutable bucket num: " + e.getMessage());
+            }
+            if (mutableBucketNum < 0) {
+                throw new SemanticException("Illegal mutable bucket num: " + mutableBucketNum);
+            }
+            return mutableBucketNum;
+        } else {
+            throw new SemanticException("Mutable bucket num is not set");
+        }
+    }
+
+    public static boolean analyzeEnableLoadProfile(Map<String, String> properties) {
+        boolean enableLoadProfile = false;
+        if (properties != null && properties.containsKey(PROPERTIES_ENABLE_LOAD_PROFILE)) {
+            enableLoadProfile = Boolean.parseBoolean(properties.get(PROPERTIES_ENABLE_LOAD_PROFILE));
+        }
+        return enableLoadProfile;
+    }
+
+    public static String analyzeBaseCompactionForbiddenTimeRanges(Map<String, String> properties) {
+        if (properties != null && properties.containsKey(PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES)) {
+            String forbiddenTimeRanges = properties.get(PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES);
+            return forbiddenTimeRanges;
+        }
+        return "";
+    }
+
+    public static int analyzeAutoRefreshPartitionsLimit(Map<String, String> properties, MaterializedView mv) {
+        if (mv.getRefreshScheme().getType() == MaterializedView.RefreshType.MANUAL) {
+            throw new SemanticException(
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     "The auto_refresh_partitions_limit property does not support manual refresh mode.");
         }
         int autoRefreshPartitionsLimit = -1;
@@ -364,32 +629,51 @@ public class PropertyAnalyzer {
             try {
                 autoRefreshPartitionsLimit = Integer.parseInt(properties.get(PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT));
             } catch (NumberFormatException e) {
+<<<<<<< HEAD
                 throw new AnalysisException("Auto Refresh Partitions Limit: " + e.getMessage());
             }
             if (autoRefreshPartitionsLimit <= 0 && autoRefreshPartitionsLimit != INVALID) {
                 throw new AnalysisException("Illegal Auto Refresh Partitions Limit: " + autoRefreshPartitionsLimit);
+=======
+                throw new SemanticException("Auto Refresh Partitions Limit: " + e.getMessage());
+            }
+            if (autoRefreshPartitionsLimit <= 0 && autoRefreshPartitionsLimit != INVALID) {
+                throw new SemanticException("Illegal Auto Refresh Partitions Limit: " + autoRefreshPartitionsLimit);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
             properties.remove(PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT);
         }
         return autoRefreshPartitionsLimit;
     }
 
+<<<<<<< HEAD
     public static int analyzePartitionRefreshNumber(Map<String, String> properties) throws AnalysisException {
+=======
+    public static int analyzePartitionRefreshNumber(Map<String, String> properties) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         int partitionRefreshNumber = -1;
         if (properties != null && properties.containsKey(PROPERTIES_PARTITION_REFRESH_NUMBER)) {
             try {
                 partitionRefreshNumber = Integer.parseInt(properties.get(PROPERTIES_PARTITION_REFRESH_NUMBER));
             } catch (NumberFormatException e) {
+<<<<<<< HEAD
                 throw new AnalysisException("Partition Refresh Number: " + e.getMessage());
             }
             if (partitionRefreshNumber <= 0 && partitionRefreshNumber != INVALID) {
                 throw new AnalysisException("Illegal Partition Refresh Number: " + partitionRefreshNumber);
+=======
+                throw new SemanticException("Partition Refresh Number: " + e.getMessage());
+            }
+            if (partitionRefreshNumber <= 0 && partitionRefreshNumber != INVALID) {
+                throw new SemanticException("Illegal Partition Refresh Number: " + partitionRefreshNumber);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
             properties.remove(PROPERTIES_PARTITION_REFRESH_NUMBER);
         }
         return partitionRefreshNumber;
     }
 
+<<<<<<< HEAD
     public static List<TableName> analyzeExcludedTriggerTables(Map<String, String> properties, MaterializedView mv)
             throws AnalysisException {
         if (mv.getRefreshScheme().getType() != MaterializedView.RefreshType.ASYNC) {
@@ -398,32 +682,62 @@ public class PropertyAnalyzer {
         List<TableName> tables = Lists.newArrayList();
         if (properties != null && properties.containsKey(PROPERTIES_EXCLUDED_TRIGGER_TABLES)) {
             String tableStr = properties.get(PROPERTIES_EXCLUDED_TRIGGER_TABLES);
+=======
+    public static List<TableName> analyzeExcludedTables(Map<String, String> properties,
+                                                        String propertiesKey,
+                                                        MaterializedView mv) {
+        if (mv.getRefreshScheme().getType() != MaterializedView.RefreshType.ASYNC) {
+            throw new SemanticException("The " + propertiesKey + " property only applies to asynchronous refreshes.");
+        }
+        List<TableName> tables = Lists.newArrayList();
+        if (properties != null && properties.containsKey(propertiesKey)) {
+            String tableStr = properties.get(propertiesKey);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             List<String> tableList = Splitter.on(",").omitEmptyStrings().trimResults().splitToList(tableStr);
             for (String table : tableList) {
                 TableName tableName = AnalyzerUtils.stringToTableName(table);
                 if (mv.containsBaseTable(tableName)) {
                     tables.add(tableName);
                 } else {
+<<<<<<< HEAD
                     throw new AnalysisException(tableName.toSql() +
                             " is not base table of materialized view " + mv.getName());
                 }
             }
             properties.remove(PROPERTIES_EXCLUDED_TRIGGER_TABLES);
+=======
+                    throw new SemanticException(tableName.toSql() +
+                            " is not base table of materialized view " + mv.getName());
+                }
+            }
+            properties.remove(propertiesKey);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return tables;
     }
 
+<<<<<<< HEAD
     public static int analyzeMVRewriteStaleness(Map<String, String> properties)
             throws AnalysisException {
+=======
+    public static int analyzeMVRewriteStaleness(Map<String, String> properties) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         int maxMVRewriteStaleness = INVALID;
         if (properties != null && properties.containsKey(PROPERTIES_MV_REWRITE_STALENESS_SECOND)) {
             try {
                 maxMVRewriteStaleness = Integer.parseInt(properties.get(PROPERTIES_MV_REWRITE_STALENESS_SECOND));
             } catch (NumberFormatException e) {
+<<<<<<< HEAD
                 throw new AnalysisException("Invalid maxMVRewriteStaleness Number: " + e.getMessage());
             }
             if (maxMVRewriteStaleness != INVALID && maxMVRewriteStaleness < 0) {
                 throw new AnalysisException("Illegal maxMVRewriteStaleness: " + maxMVRewriteStaleness);
+=======
+                throw new SemanticException("Invalid maxMVRewriteStaleness Number: " + e.getMessage());
+            }
+            if (maxMVRewriteStaleness != INVALID && maxMVRewriteStaleness < 0) {
+                throw new SemanticException("Illegal maxMVRewriteStaleness: " + maxMVRewriteStaleness);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
             properties.remove(PROPERTIES_MV_REWRITE_STALENESS_SECOND);
         }
@@ -445,8 +759,12 @@ public class PropertyAnalyzer {
         return replicationNum;
     }
 
+<<<<<<< HEAD
     public static Short analyzeReplicationNum(Map<String, String> properties, boolean isDefault)
             throws AnalysisException {
+=======
+    public static Short analyzeReplicationNum(Map<String, String> properties, boolean isDefault) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         String key = PROPERTIES_DEFAULT_PREFIX;
         if (isDefault) {
             key += PropertyAnalyzer.PROPERTIES_REPLICATION_NUM;
@@ -467,6 +785,7 @@ public class PropertyAnalyzer {
         return resourceGroup;
     }
 
+<<<<<<< HEAD
     private static void checkReplicationNum(short replicationNum) throws AnalysisException {
         if (replicationNum <= 0) {
             throw new AnalysisException("Replication num should larger than 0");
@@ -477,11 +796,27 @@ public class PropertyAnalyzer {
             backendIds.addAll(GlobalStateMgr.getCurrentSystemInfo().getAvailableComputeNodeIds());
             if (RunMode.defaultReplicationNum() > backendIds.size()) {
                 throw new AnalysisException("Number of available CN nodes is " + backendIds.size()
+=======
+    private static void checkReplicationNum(short replicationNum) {
+        if (replicationNum <= 0) {
+            throw new SemanticException("Replication num should larger than 0");
+        }
+
+        List<Long> backendIds = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getAvailableBackendIds();
+        if (RunMode.isSharedDataMode()) {
+            backendIds.addAll(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getAvailableComputeNodeIds());
+            if (RunMode.defaultReplicationNum() > backendIds.size()) {
+                throw new SemanticException("Number of available CN nodes is " + backendIds.size()
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         + ", less than " + RunMode.defaultReplicationNum());
             }
         } else {
             if (replicationNum > backendIds.size()) {
+<<<<<<< HEAD
                 throw new AnalysisException("Table replication num should be less than " +
+=======
+                throw new SemanticException("Table replication num should be less than " +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         "of equal to the number of available BE nodes. "
                         + "You can change this default by setting the replication_num table properties. "
                         + "Current alive backend is [" + Joiner.on(",").join(backendIds) + "].");
@@ -507,13 +842,19 @@ public class PropertyAnalyzer {
         return rowDelimiter;
     }
 
+<<<<<<< HEAD
     public static TStorageType analyzeStorageType(Map<String, String> properties) throws AnalysisException {
+=======
+    public static TStorageType analyzeStorageType(Map<String, String> properties, OlapTable olapTable)
+            throws AnalysisException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // default is COLUMN
         TStorageType tStorageType = TStorageType.COLUMN;
         if (properties != null && properties.containsKey(PROPERTIES_STORAGE_TYPE)) {
             String storageType = properties.get(PROPERTIES_STORAGE_TYPE);
             if (storageType.equalsIgnoreCase(TStorageType.COLUMN.name())) {
                 tStorageType = TStorageType.COLUMN;
+<<<<<<< HEAD
             } else {
                 throw new AnalysisException("Invalid storage type: " + storageType);
             }
@@ -521,6 +862,25 @@ public class PropertyAnalyzer {
             properties.remove(PROPERTIES_STORAGE_TYPE);
         }
 
+=======
+            } else if (olapTable.supportsUpdate() && storageType.equalsIgnoreCase(TStorageType.ROW.name())) {
+                tStorageType = TStorageType.ROW;
+            } else if (olapTable.supportsUpdate() && storageType.equalsIgnoreCase(TStorageType.COLUMN_WITH_ROW.name())) {
+                tStorageType = TStorageType.COLUMN_WITH_ROW;
+                if (olapTable.getColumns().stream().filter(column -> !column.isKey()).count() == 0) {
+                    throw new AnalysisException("column_with_row storage type must have some non-key columns");
+                }
+            } else {
+                throw new AnalysisException(storageType + " for " + olapTable.getKeysType() + " table not supported");
+            }
+            if (!Config.enable_experimental_rowstore &&
+                    (tStorageType == TStorageType.ROW || tStorageType == TStorageType.COLUMN_WITH_ROW)) {
+                throw new AnalysisException(storageType + " for " + olapTable.getKeysType() +
+                        " table not supported, enable it by setting `enable_experimental_rowstore` to true");
+            }
+            properties.remove(PROPERTIES_STORAGE_TYPE);
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return tStorageType;
     }
 
@@ -546,7 +906,11 @@ public class PropertyAnalyzer {
         if (properties != null && properties.containsKey(PROPERTIES_VERSION_INFO)) {
             if (RunMode.isSharedDataMode()) {
                 throw new AnalysisException(String.format("Does not support the table property \"%s\" in share data " +
+<<<<<<< HEAD
                                 "mode, please remove it from the statement", PROPERTIES_VERSION_INFO));
+=======
+                        "mode, please remove it from the statement", PROPERTIES_VERSION_INFO));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
             String versionInfoStr = properties.get(PROPERTIES_VERSION_INFO);
             try {
@@ -577,6 +941,31 @@ public class PropertyAnalyzer {
         return schemaVersion;
     }
 
+<<<<<<< HEAD
+=======
+    public static Boolean analyzeUseFastSchemaEvolution(Map<String, String> properties) throws AnalysisException {
+        if (properties == null || properties.isEmpty()) {
+            return Config.enable_fast_schema_evolution;
+        }
+        String value = properties.get(PROPERTIES_USE_FAST_SCHEMA_EVOLUTION);
+        if (null == value) {
+            value = properties.get(PROPERTIES_USE_LIGHT_SCHEMA_CHANGE);
+            if (null == value) {
+                return Config.enable_fast_schema_evolution;
+            }
+        }
+        properties.remove(PROPERTIES_USE_FAST_SCHEMA_EVOLUTION);
+        properties.remove(PROPERTIES_USE_LIGHT_SCHEMA_CHANGE);
+        if (Boolean.TRUE.toString().equalsIgnoreCase(value)) {
+            return true;
+        } else if (Boolean.FALSE.toString().equalsIgnoreCase(value)) {
+            return false;
+        }
+        throw new AnalysisException(PROPERTIES_USE_FAST_SCHEMA_EVOLUTION
+                + " must be `true` or `false`");
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static Set<String> analyzeBloomFilterColumns(Map<String, String> properties, List<Column> columns,
                                                         boolean isPrimaryKey) throws AnalysisException {
         Set<String> bfColumns = null;
@@ -633,6 +1022,7 @@ public class PropertyAnalyzer {
     public static double analyzeBloomFilterFpp(Map<String, String> properties) throws AnalysisException {
         double bfFpp = 0;
         if (properties != null && properties.containsKey(PROPERTIES_BF_FPP)) {
+<<<<<<< HEAD
             String bfFppStr = properties.get(PROPERTIES_BF_FPP);
             try {
                 bfFpp = Double.parseDouble(bfFppStr);
@@ -645,6 +1035,10 @@ public class PropertyAnalyzer {
                 throw new AnalysisException("Bloom filter fpp should in [" + MIN_FPP + ", " + MAX_FPP + "]");
             }
 
+=======
+            bfFpp = BloomFilterIndexUtil.analyzeBloomFilterFpp(properties);
+            // have to remove this from properties, which means it's valid and checked already
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             properties.remove(PROPERTIES_BF_FPP);
         }
 
@@ -674,21 +1068,61 @@ public class PropertyAnalyzer {
         return timeout;
     }
 
+<<<<<<< HEAD
     // analyzeCompressionType will parse the compression type from properties
     public static TCompressionType analyzeCompressionType(Map<String, String> properties) throws AnalysisException {
+=======
+    // parse compression level if possible
+    public static int analyzeCompressionLevel(Map<String, String> properties) throws AnalysisException {
+        String compressionName = properties.get(PROPERTIES_COMPRESSION);
+        String noSpacesCompression = compressionName.replace(" ", "");
+        String pattern = "^zstd\\((\\d+)\\)$";
+        Pattern r = Pattern.compile(pattern, Pattern.CASE_INSENSITIVE);
+        Matcher m = r.matcher(noSpacesCompression);
+        if (m.matches()) {
+            String levelString = m.group(1);
+            int number = Integer.parseInt(levelString);
+            if (number >= 1 && number <= 22) {
+                properties.remove(PROPERTIES_COMPRESSION);
+                return number;
+            } else {
+                throw new AnalysisException("Invalid level for zstd compression type");
+            }
+        }
+        return -1;
+    }
+
+    // analyzeCompressionType will parse the compression type from properties
+    public static Pair<TCompressionType, Integer> analyzeCompressionType(
+                                                    Map<String, String> properties) throws AnalysisException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         TCompressionType compressionType = TCompressionType.LZ4_FRAME;
         if (ConnectContext.get() != null) {
             String defaultCompression = ConnectContext.get().getSessionVariable().getDefaultTableCompression();
             compressionType = CompressionUtils.getCompressTypeByName(defaultCompression);
         }
         if (properties == null || !properties.containsKey(PROPERTIES_COMPRESSION)) {
+<<<<<<< HEAD
             return compressionType;
         }
+=======
+            return new Pair<TCompressionType, Integer>(compressionType, -1);
+        }
+        int level = analyzeCompressionLevel(properties);
+        if (level != -1) {
+            return new Pair<TCompressionType, Integer>(TCompressionType.ZSTD, level);
+        }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         String compressionName = properties.get(PROPERTIES_COMPRESSION);
         properties.remove(PROPERTIES_COMPRESSION);
 
         if (CompressionUtils.getCompressTypeByName(compressionName) != null) {
+<<<<<<< HEAD
             return CompressionUtils.getCompressTypeByName(compressionName);
+=======
+            return new Pair<TCompressionType, Integer>(CompressionUtils.getCompressTypeByName(compressionName), -1);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } else {
             throw new AnalysisException("unknown compression type: " + compressionName);
         }
@@ -733,6 +1167,150 @@ public class PropertyAnalyzer {
         }
     }
 
+<<<<<<< HEAD
+=======
+    // Convert location string like: "k1:v1,k2:v2" to map
+    // Return `{*:*}` means that we have specified '*" in location string,
+    // in this case, we will scatter replicas on all the backends which have location label,
+    // not some specified locations. So we can ignore others location labels.
+    // And the location string will be simplified to a single '*'.
+    public static Multimap<String, String> analyzeLocationStringToMap(String locations) {
+        Multimap<String, String> locationMap = HashMultimap.create();
+        String[] singleLocationStrings = locations.split(",");
+        for (String singleLocationString : singleLocationStrings) {
+            if (singleLocationString.trim().equals("*")) {
+                locationMap.put("*", "*");
+                return locationMap;
+            } else {
+                String[] kv = singleLocationString.split(":");
+                String key = kv[0].trim();
+                String value = kv[1].trim();
+                if (value.equals("*") && locationMap.containsKey(key)) {
+                    // if value is '*', and we have specified this key before,
+                    // we will ignore this key, and use '*' to replace all the values of this key.
+                    locationMap.removeAll(key);
+                }
+                locationMap.put(key, value);
+            }
+        }
+
+        return locationMap;
+    }
+
+    public static String validateTableLocationProperty(String location) throws SemanticException {
+        if (location.isEmpty()) {
+            return location;
+        }
+
+        if (location.length() > 255) {
+            throw new SemanticException("location is too long, max length is 255");
+        }
+
+        Matcher matcher = Pattern.compile(MULTI_LOCATION_LABELS_REGEX).matcher(location);
+        if (!matcher.matches()) {
+            throw new SemanticException("Invalid location format: " + location +
+                    ", should be like: '*', 'key:*', or 'k1:v1,k2:v2,k1:v11'");
+        }
+
+        // check location is valid or not
+        Multimap<String, String> locationMap = analyzeLocationStringToMap(location);
+
+        if (!locationMap.keySet().contains("*")) {
+            // check location label associated with any backend or not
+            SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+            List<Backend> backends = systemInfoService.getBackends();
+            for (String key : locationMap.keySet()) {
+                Collection<String> values = locationMap.get(key);
+                for (String value : values) {
+                    boolean isValueValid = false;
+                    for (Backend backend : backends) {
+                        Pair<String, String> backendLocKV = backend.getSingleLevelLocationKV();
+                        if (backendLocKV != null && backend.getLocation().containsKey(key) &&
+                                (Objects.equals(backendLocKV.second, value) || value.equals("*"))) {
+                            isValueValid = true;
+                            break;
+                        }
+                    }
+                    if (!isValueValid) {
+                        throw new SemanticException(
+                                "Cannot find any backend with location: " + key + ":" + value);
+                    }
+                }
+            }
+        }
+
+        return convertLocationMapToString(locationMap);
+    }
+
+    public static String convertLocationMapToString(Map<String, String> locationMap) {
+        // Convert map to multi hash map.
+        Multimap<String, String> multiLocationMap = HashMultimap.create();
+        for (Map.Entry<String, String> entry : locationMap.entrySet()) {
+            multiLocationMap.put(entry.getKey(), entry.getValue());
+        }
+
+        return convertLocationMapToString(multiLocationMap);
+    }
+
+    // Convert location map to string without head and tail space.
+    public static String convertLocationMapToString(Multimap<String, String> locationMap) {
+        if (locationMap.containsKey("*")) {
+            return "*";
+        }
+
+        return locationMap.entries().stream()
+                .map(entry -> entry.getKey() + ":" + entry.getValue())
+                .collect(Collectors.joining(","));
+    }
+
+    public static String analyzeLocation(Map<String, String> properties, boolean removeAnalyzedProp) {
+        if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION)) {
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH)) {
+                throw new SemanticException("colocate table doesn't support location property");
+            }
+            String loc = properties.get(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION);
+            // validate location format
+            String validatedLoc = validateTableLocationProperty(loc);
+            if (removeAnalyzedProp) {
+                properties.remove(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION);
+            }
+            return validatedLoc;
+        } else {
+            if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH)) {
+                // won't set default location prop for colocate table
+                return null;
+            }
+            SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+            long numOfBackendsWithLocationLabel =
+                    systemInfoService.getBackends().stream()
+                            .filter(backend -> !backend.getLocation().isEmpty()).count();
+            if (numOfBackendsWithLocationLabel > 0) {
+                // If location is not specified explicitly, and we have some backends with location label,
+                // return '*', meaning by default we will scatter the replicas
+                // on all the backends which have location label.
+                // So that we can identify tables before and after upgrade to newer version.
+                // For history tables which don't have location label,
+                // their replica distribution won't be changed after upgrade.
+                return "*";
+            } else {
+                // If no backend has location label, return null,
+                // meaning we won't scatter replicas based on backend location,
+                // so we won't put the location label in table properties(`show create table` won't see it).
+                // User may not want to use this feature at all,
+                // we won't add a default location property to bother users.
+                return null;
+            }
+        }
+    }
+
+    public static void analyzeLocation(OlapTable table, Map<String, String> properties) {
+        String location = PropertyAnalyzer.analyzeLocation(properties, true);
+        if (location != null) {
+            table.setLocation(location);
+        }
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // analyze property like : "type" = "xxx";
     public static String analyzeType(Map<String, String> properties) {
         String type = null;
@@ -766,12 +1344,37 @@ public class PropertyAnalyzer {
         return val;
     }
 
+<<<<<<< HEAD
     public static List<UniqueConstraint> analyzeUniqueConstraint(
             Map<String, String> properties, Database db, OlapTable table) throws AnalysisException {
+=======
+    public static int analyzePrimaryIndexCacheExpireSecProp(Map<String, String> properties, String propKey, int defaultVal)
+            throws AnalysisException {
+        int val = 0;
+        if (properties != null && properties.containsKey(PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC)) {
+            String valStr = properties.get(PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC);
+            try {
+                val = Integer.parseInt(valStr);
+                if (val < 0) {
+                    throw new AnalysisException("Property " + PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC
+                            + " must not be less than 0");
+                }
+            } catch (NumberFormatException e) {
+                throw new AnalysisException("Property " + PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC
+                        + " must be integer: " + valStr);
+            }
+            properties.remove(PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC);
+        }
+        return val;
+    }
+
+    public static List<UniqueConstraint> analyzeUniqueConstraint(Map<String, String> properties, Database db, OlapTable table) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<UniqueConstraint> uniqueConstraints = Lists.newArrayList();
         List<UniqueConstraint> analyzedUniqueConstraints = Lists.newArrayList();
 
         if (properties != null && properties.containsKey(PROPERTIES_UNIQUE_CONSTRAINT)) {
+<<<<<<< HEAD
             String uniqueConstraintStr = properties.get(PROPERTIES_UNIQUE_CONSTRAINT);
             if (Strings.isNullOrEmpty(uniqueConstraintStr)) {
                 return uniqueConstraints;
@@ -814,6 +1417,35 @@ public class PropertyAnalyzer {
                                         uniqueConstraint.getUniqueColumns(), table.getName()));
                     }
                     analyzedUniqueConstraints.add(uniqueConstraint);
+=======
+            String constraintDescs = properties.get(PROPERTIES_UNIQUE_CONSTRAINT);
+            if (Strings.isNullOrEmpty(constraintDescs)) {
+                return uniqueConstraints;
+            }
+
+            String[] constraintArray = constraintDescs.split(";");
+            for (String constraintDesc : constraintArray) {
+                if (Strings.isNullOrEmpty(constraintDesc)) {
+                    continue;
+                }
+                Pair<TableName, List<String>> parseResult = UniqueConstraint.parseUniqueConstraintDesc(
+                        table.getCatalogName(), db.getFullName(), table.getName(), constraintDesc);
+                TableName tableName = parseResult.first;
+                List<String> columnNames = parseResult.second;
+                if (table.isMaterializedView()) {
+                    Table uniqueConstraintTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(
+                            tableName.getCatalog(), tableName.getDb(), tableName.getTbl());
+                    if (uniqueConstraintTable == null) {
+                        throw new SemanticException(String.format("table: %s does not exist", tableName));
+                    }
+                    List<ColumnId> columnIds = MetaUtils.getColumnIdsByColumnNames(uniqueConstraintTable, columnNames);
+                    analyzedUniqueConstraints.add(new UniqueConstraint(tableName.getCatalog(), tableName.getDb(),
+                            tableName.getTbl(), columnIds));
+                } else {
+                    List<ColumnId> columnIds = MetaUtils.getColumnIdsByColumnNames(table, columnNames);
+                    analyzedUniqueConstraints.add(new UniqueConstraint(tableName.getCatalog(), tableName.getDb(),
+                            tableName.getTbl(), columnIds));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
             }
             properties.remove(PROPERTIES_UNIQUE_CONSTRAINT);
@@ -823,8 +1455,12 @@ public class PropertyAnalyzer {
 
     private static Pair<BaseTableInfo, Table> analyzeForeignKeyConstraintTablePath(String tablePath,
                                                                                    String foreignKeyConstraintDesc,
+<<<<<<< HEAD
                                                                                    Database db)
             throws AnalysisException {
+=======
+                                                                                   Database db) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         String[] parts = tablePath.split("\\.");
         String catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
         String dbName = db.getFullName();
@@ -839,28 +1475,48 @@ public class PropertyAnalyzer {
         } else if (parts.length == 1) {
             tableName = parts[0];
         } else {
+<<<<<<< HEAD
             throw new AnalysisException(String.format("invalid foreign key constraint:%s," +
+=======
+            throw new SemanticException(String.format("invalid foreign key constraint:%s," +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     "table path is invalid", foreignKeyConstraintDesc));
         }
 
         if (!GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists(catalogName)) {
+<<<<<<< HEAD
             throw new AnalysisException(String.format("catalog: %s do not exist", catalogName));
         }
         Database parentDb = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
         if (parentDb == null) {
             throw new AnalysisException(
+=======
+            throw new SemanticException(String.format("catalog: %s do not exist", catalogName));
+        }
+        Database parentDb = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
+        if (parentDb == null) {
+            throw new SemanticException(
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     String.format("catalog: %s, database: %s do not exist", catalogName, dbName));
         }
         Table table = GlobalStateMgr.getCurrentState().getMetadataMgr()
                 .getTable(catalogName, dbName, tableName);
         if (table == null) {
+<<<<<<< HEAD
             throw new AnalysisException(String.format("catalog:%s, database: %s, table:%s do not exist",
+=======
+            throw new SemanticException(String.format("catalog:%s, database: %s, table:%s do not exist",
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     catalogName, dbName, tableName));
         }
 
         BaseTableInfo tableInfo;
         if (catalogName.equals(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)) {
+<<<<<<< HEAD
             tableInfo = new BaseTableInfo(parentDb.getId(), dbName, table.getId(), table.getName());
+=======
+            tableInfo = new BaseTableInfo(parentDb.getId(), dbName, table.getName(), table.getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } else {
             tableInfo = new BaseTableInfo(catalogName, dbName, table.getName(), table.getTableIdentifier());
         }
@@ -869,8 +1525,12 @@ public class PropertyAnalyzer {
     }
 
     private static void analyzeForeignKeyUniqueConstraint(Table parentTable, List<String> parentColumns,
+<<<<<<< HEAD
                                                           Table analyzedTable)
             throws AnalysisException {
+=======
+                                                          Table analyzedTable) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         KeysType parentTableKeyType = KeysType.DUP_KEYS;
         if (parentTable.isNativeTableOrMaterializedView()) {
             OlapTable parentOlapTable = (OlapTable) parentTable;
@@ -881,17 +1541,29 @@ public class PropertyAnalyzer {
         List<UniqueConstraint> mvUniqueConstraints = Lists.newArrayList();
         if (analyzedTable.isMaterializedView() && analyzedTable.hasUniqueConstraints()) {
             mvUniqueConstraints = analyzedTable.getUniqueConstraints().stream().filter(
+<<<<<<< HEAD
                     uniqueConstraint -> StringUtils.areTableNamesEqual(parentTable, uniqueConstraint.getTableName()))
+=======
+                            uniqueConstraint -> SRStringUtils.areTableNamesEqual(parentTable, uniqueConstraint.getTableName()))
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     .collect(Collectors.toList());
         }
 
         if (parentTableKeyType == KeysType.AGG_KEYS) {
+<<<<<<< HEAD
             throw new AnalysisException(
+=======
+            throw new SemanticException(
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     String.format("do not support reference agg table:%s", parentTable.getName()));
         } else if (parentTableKeyType == KeysType.DUP_KEYS) {
             // for DUP_KEYS type olap table or external table
             if (!parentTable.hasUniqueConstraints() && mvUniqueConstraints.isEmpty()) {
+<<<<<<< HEAD
                 throw new AnalysisException(
+=======
+                throw new SemanticException(
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         String.format("dup table:%s has no unique constraint", parentTable.getName()));
             } else {
                 List<UniqueConstraint> uniqueConstraints = parentTable.getUniqueConstraints();
@@ -908,7 +1580,11 @@ public class PropertyAnalyzer {
                     }
                 }
                 if (!matched) {
+<<<<<<< HEAD
                     throw new AnalysisException(
+=======
+                    throw new SemanticException(
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                             String.format("columns:%s are not dup table:%s's unique constraint", parentColumns,
                                     parentTable.getName()));
                 }
@@ -917,14 +1593,22 @@ public class PropertyAnalyzer {
             // for PRIMARY_KEYS and UNIQUE_KEYS type table
             // parent columns should be keys
             if (!((OlapTable) parentTable).isKeySet(Sets.newHashSet(parentColumns))) {
+<<<<<<< HEAD
                 throw new AnalysisException(String.format("columns:%s are not key columns of table:%s",
+=======
+                throw new SemanticException(String.format("columns:%s are not key columns of table:%s",
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         parentColumns, parentTable.getName()));
             }
         }
     }
 
     public static List<ForeignKeyConstraint> analyzeForeignKeyConstraint(
+<<<<<<< HEAD
             Map<String, String> properties, Database db, Table analyzedTable) throws AnalysisException {
+=======
+            Map<String, String> properties, Database db, Table analyzedTable) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<ForeignKeyConstraint> foreignKeyConstraints = Lists.newArrayList();
         if (properties != null && properties.containsKey(PROPERTIES_FOREIGN_KEY_CONSTRAINT)) {
             String foreignKeyConstraintsDesc = properties.get(PROPERTIES_FOREIGN_KEY_CONSTRAINT);
@@ -940,7 +1624,11 @@ public class PropertyAnalyzer {
                 }
                 Matcher foreignKeyMatcher = ForeignKeyConstraint.FOREIGN_KEY_PATTERN.matcher(trimed);
                 if (!foreignKeyMatcher.find() || foreignKeyMatcher.groupCount() != 9) {
+<<<<<<< HEAD
                     throw new AnalysisException(
+=======
+                    throw new SemanticException(
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                             String.format("invalid foreign key constraint:%s", foreignKeyConstraintDesc));
                 }
                 String sourceTablePath = foreignKeyMatcher.group(1);
@@ -949,12 +1637,21 @@ public class PropertyAnalyzer {
                 String targetTablePath = foreignKeyMatcher.group(6);
                 String targetColumns = foreignKeyMatcher.group(8);
                 // case insensitive
+<<<<<<< HEAD
                 List<String> childColumns = Arrays.stream(sourceColumns.split(",")).
                         map(String::trim).map(String::toLowerCase).collect(Collectors.toList());
                 List<String> parentColumns = Arrays.stream(targetColumns.split(",")).
                         map(String::trim).map(String::toLowerCase).collect(Collectors.toList());
                 if (childColumns.size() != parentColumns.size()) {
                     throw new AnalysisException(String.format("invalid foreign key constraint:%s," +
+=======
+                List<String> childColumnNames = Arrays.stream(sourceColumns.split(",")).
+                        map(String::trim).map(String::toLowerCase).collect(Collectors.toList());
+                List<String> parentColumnNames = Arrays.stream(targetColumns.split(",")).
+                        map(String::trim).map(String::toLowerCase).collect(Collectors.toList());
+                if (childColumnNames.size() != parentColumnNames.size()) {
+                    throw new SemanticException(String.format("invalid foreign key constraint:%s," +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                             " columns' size does not match", foreignKeyConstraintDesc));
                 }
                 // analyze table exist for foreign key constraint
@@ -962,17 +1659,22 @@ public class PropertyAnalyzer {
                         foreignKeyConstraintDesc, db);
                 BaseTableInfo parentTableInfo = parentTablePair.first;
                 Table parentTable = parentTablePair.second;
+<<<<<<< HEAD
                 if (!parentColumns.stream().allMatch(parentTable::containColumn)) {
                     throw new AnalysisException(String.format("some columns of:%s do not exist in parent table:%s",
                             parentColumns, parentTable.getName()));
                 }
 
+=======
+                List<ColumnId> parentColumnIds = MetaUtils.getColumnIdsByColumnNames(parentTable, parentColumnNames);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 Pair<BaseTableInfo, Table> childTablePair = Pair.create(null, analyzedTable);
                 Table childTable = analyzedTable;
                 if (analyzedTable.isMaterializedView()) {
                     childTablePair = analyzeForeignKeyConstraintTablePath(sourceTablePath, foreignKeyConstraintDesc,
                             db);
                     childTable = childTablePair.second;
+<<<<<<< HEAD
                     if (!childColumns.stream().allMatch(childTable::containColumn)) {
                         throw new AnalysisException(String.format("some columns of:%s do not exist in table:%s",
                                 childColumns, childTable.getName()));
@@ -996,6 +1698,24 @@ public class PropertyAnalyzer {
                     Column parentColumn = parentTable.getColumn(pair.second);
                     if (!childColumn.getType().equals(parentColumn.getType())) {
                         throw new AnalysisException(String.format(
+=======
+                } else {
+                    if (!analyzedTable.isNativeTable()) {
+                        throw new SemanticException("do not support add foreign key on external table");
+                    }
+                }
+                List<ColumnId> childColumnIds = MetaUtils.getColumnIdsByColumnNames(childTable, childColumnNames);
+
+                analyzeForeignKeyUniqueConstraint(parentTable, parentColumnNames, analyzedTable);
+
+                List<Pair<ColumnId, ColumnId>> columnRefPairs = Streams.zip(childColumnIds.stream(),
+                        parentColumnIds.stream(), Pair::create).collect(Collectors.toList());
+                for (Pair<ColumnId, ColumnId> pair : columnRefPairs) {
+                    Column childColumn = childTable.getColumn(pair.first);
+                    Column parentColumn = parentTable.getColumn(pair.second);
+                    if (!childColumn.getType().equals(parentColumn.getType())) {
+                        throw new SemanticException(String.format(
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                 "column:%s type does mot match referenced column:%s type", pair.first, pair.second));
                     }
                 }
@@ -1006,7 +1726,11 @@ public class PropertyAnalyzer {
                 foreignKeyConstraints.add(foreignKeyConstraint);
             }
             if (foreignKeyConstraints.isEmpty()) {
+<<<<<<< HEAD
                 throw new AnalysisException(
+=======
+                throw new SemanticException(
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         String.format("invalid foreign key constrain:%s", foreignKeyConstraintsDesc));
             }
             properties.remove(PROPERTIES_FOREIGN_KEY_CONSTRAINT);
@@ -1043,13 +1767,25 @@ public class PropertyAnalyzer {
         if (properties != null && properties.containsKey(PROPERTIES_PERSISTENT_INDEX_TYPE)) {
             String type = properties.get(PROPERTIES_PERSISTENT_INDEX_TYPE);
             properties.remove(PROPERTIES_PERSISTENT_INDEX_TYPE);
+<<<<<<< HEAD
             if (type.equalsIgnoreCase("LOCAL")) {
                 return TPersistentIndexType.LOCAL;
+=======
+            if (type.equalsIgnoreCase(TableProperty.LOCAL_INDEX_TYPE)) {
+                return TPersistentIndexType.LOCAL;
+            } else if (type.equalsIgnoreCase(TableProperty.CLOUD_NATIVE_INDEX_TYPE)) {
+                return TPersistentIndexType.CLOUD_NATIVE;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             } else {
                 throw new AnalysisException("Invalid persistent index type: " + type);
             }
         }
+<<<<<<< HEAD
         return TPersistentIndexType.LOCAL;
+=======
+        return Config.enable_cloud_native_persistent_index_by_default ? TPersistentIndexType.CLOUD_NATIVE
+                : TPersistentIndexType.LOCAL;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public static PeriodDuration analyzeStorageCoolDownTTL(Map<String, String> properties,
@@ -1070,4 +1806,359 @@ public class PropertyAnalyzer {
         return periodDuration;
     }
 
+<<<<<<< HEAD
+=======
+    public static void analyzeMVProperties(Database db,
+                                           MaterializedView materializedView,
+                                           Map<String, String> properties,
+                                           boolean isNonPartitioned) throws DdlException {
+        try {
+            // replicated storage
+            materializedView.setEnableReplicatedStorage(
+                    PropertyAnalyzer.analyzeBooleanProp(
+                            properties, PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE,
+                            Config.enable_replicated_storage_as_default_engine));
+
+            // replication_num
+            short replicationNum = RunMode.defaultReplicationNum();
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM)) {
+                replicationNum = PropertyAnalyzer.analyzeReplicationNum(properties, replicationNum);
+                materializedView.setReplicationNum(replicationNum);
+            }
+            // bloom_filter_columns
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BF_COLUMNS)) {
+                List<Column> baseSchema = materializedView.getColumns();
+                Set<String> bfColumns = PropertyAnalyzer.analyzeBloomFilterColumns(properties, baseSchema,
+                        materializedView.getKeysType() == KeysType.PRIMARY_KEYS);
+                if (bfColumns != null && bfColumns.isEmpty()) {
+                    bfColumns = null;
+                }
+                double bfFpp = PropertyAnalyzer.analyzeBloomFilterFpp(properties);
+                if (bfColumns != null && bfFpp == 0) {
+                    bfFpp = FeConstants.DEFAULT_BLOOM_FILTER_FPP;
+                } else if (bfColumns == null) {
+                    bfFpp = 0;
+                }
+                Set<ColumnId> bfColumnIds = null;
+                if (bfColumns != null && !bfColumns.isEmpty()) {
+                    bfColumnIds = Sets.newTreeSet(ColumnId.CASE_INSENSITIVE_ORDER);
+                    for (String colName : bfColumns) {
+                        bfColumnIds.add(materializedView.getColumn(colName).getColumnId());
+                    }
+                }
+                materializedView.setBloomFilterInfo(bfColumnIds, bfFpp);
+            }
+            // mv_rewrite_staleness second.
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND)) {
+                int maxMVRewriteStaleness = PropertyAnalyzer.analyzeMVRewriteStaleness(properties);
+                materializedView.setMaxMVRewriteStaleness(maxMVRewriteStaleness);
+                materializedView.getTableProperty().getProperties().put(
+                        PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND,
+                        Integer.toString(maxMVRewriteStaleness));
+            }
+            // partition ttl
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL)) {
+                if (isNonPartitioned) {
+                    throw new AnalysisException(PropertyAnalyzer.PROPERTIES_PARTITION_TTL
+                            + " is only supported by partitioned materialized-view");
+                }
+
+                Pair<String, PeriodDuration> ttlDuration = PropertyAnalyzer.analyzePartitionTTL(properties, true);
+                materializedView.getTableProperty().getProperties()
+                        .put(PropertyAnalyzer.PROPERTIES_PARTITION_TTL, ttlDuration.first);
+                materializedView.getTableProperty().setPartitionTTL(ttlDuration.second);
+            }
+            // partition retention condition
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION)) {
+                if (isNonPartitioned) {
+                    throw new AnalysisException(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION
+                            + " is only supported by partitioned materialized-view");
+                }
+                String ttlRetentionCondition = PropertyAnalyzer.analyzePartitionRetentionCondition(db, materializedView,
+                        properties, true);
+                materializedView.getTableProperty().getProperties()
+                        .put(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION, ttlRetentionCondition);
+                materializedView.getTableProperty().setPartitionRetentionCondition(ttlRetentionCondition);
+            }
+
+            // partition ttl number
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)) {
+                int number = PropertyAnalyzer.analyzePartitionTTLNumber(properties);
+                materializedView.getTableProperty().getProperties()
+                        .put(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER, String.valueOf(number));
+                materializedView.getTableProperty().setPartitionTTLNumber(number);
+                if (!materializedView.getPartitionInfo().isRangePartition()) {
+                    throw new AnalysisException(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER
+                            + " does not support non-range-partitioned materialized view.");
+                }
+            }
+            // partition auto refresh partitions limit
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT)) {
+                int limit = PropertyAnalyzer.analyzeAutoRefreshPartitionsLimit(properties, materializedView);
+                materializedView.getTableProperty().getProperties()
+                        .put(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT, String.valueOf(limit));
+                materializedView.getTableProperty().setAutoRefreshPartitionsLimit(limit);
+                if (isNonPartitioned) {
+                    throw new AnalysisException(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT
+                            + " does not support non-range-partitioned materialized view.");
+                }
+            }
+            // partition refresh number
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER)) {
+                int number = PropertyAnalyzer.analyzePartitionRefreshNumber(properties);
+                materializedView.getTableProperty().getProperties()
+                        .put(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER, String.valueOf(number));
+                materializedView.getTableProperty().setPartitionRefreshNumber(number);
+                if (isNonPartitioned) {
+                    throw new AnalysisException(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER
+                            + " does not support non-partitioned materialized view.");
+                }
+            }
+            // exclude trigger tables
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)) {
+                List<TableName> tables = PropertyAnalyzer.analyzeExcludedTables(properties,
+                        PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES,
+                        materializedView);
+                String tableSb = getExcludeString(tables);
+                materializedView.getTableProperty().getProperties()
+                        .put(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES, tableSb);
+                materializedView.getTableProperty().setExcludedTriggerTables(tables);
+            }
+            // exclude refresh base tables
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXCLUDED_REFRESH_TABLES)) {
+                List<TableName> tables = PropertyAnalyzer.analyzeExcludedTables(properties,
+                        PropertyAnalyzer.PROPERTIES_EXCLUDED_REFRESH_TABLES,
+                        materializedView);
+                String tableSb = getExcludeString(tables);
+                materializedView.getTableProperty().getProperties()
+                        .put(PropertyAnalyzer.PROPERTIES_EXCLUDED_REFRESH_TABLES, tableSb);
+                materializedView.getTableProperty().setExcludedRefreshTables(tables);
+            }
+            // resource_group
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_RESOURCE_GROUP)) {
+                String resourceGroup = PropertyAnalyzer.analyzeResourceGroup(properties);
+                if (GlobalStateMgr.getCurrentState().getResourceGroupMgr().getResourceGroup(resourceGroup) == null) {
+                    throw new AnalysisException(PropertyAnalyzer.PROPERTIES_RESOURCE_GROUP
+                            + " " + resourceGroup + " does not exist.");
+                }
+                materializedView.getTableProperty().getProperties()
+                        .put(PropertyAnalyzer.PROPERTIES_RESOURCE_GROUP, resourceGroup);
+                materializedView.getTableProperty().setResourceGroup(resourceGroup);
+            }
+            // force external query rewrite
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE)) {
+                String propertyValue = properties.get(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE);
+                TableProperty.QueryRewriteConsistencyMode value =
+                        TableProperty.analyzeExternalTableQueryRewrite(propertyValue);
+                properties.remove(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE);
+                materializedView.getTableProperty().getProperties().
+                        put(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE, String.valueOf(value));
+                materializedView.getTableProperty().setForceExternalTableQueryRewrite(value);
+            }
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_QUERY_REWRITE_CONSISTENCY)) {
+                String propertyValue = properties.get(PropertyAnalyzer.PROPERTIES_QUERY_REWRITE_CONSISTENCY);
+                TableProperty.QueryRewriteConsistencyMode value = TableProperty.analyzeQueryRewriteMode(propertyValue);
+                properties.remove(PropertyAnalyzer.PROPERTIES_QUERY_REWRITE_CONSISTENCY);
+                materializedView.getTableProperty().getProperties().
+                        put(PropertyAnalyzer.PROPERTIES_QUERY_REWRITE_CONSISTENCY, String.valueOf(value));
+                materializedView.getTableProperty().setQueryRewriteConsistencyMode(value);
+            }
+            // unique keys
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {
+                List<UniqueConstraint> uniqueConstraints = PropertyAnalyzer.analyzeUniqueConstraint(properties, db,
+                        materializedView);
+                materializedView.setUniqueConstraints(uniqueConstraints);
+            }
+            // foreign keys
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)) {
+                List<ForeignKeyConstraint> foreignKeyConstraints = PropertyAnalyzer.analyzeForeignKeyConstraint(
+                        properties, db, materializedView);
+                materializedView.setForeignKeyConstraints(foreignKeyConstraints);
+            }
+
+            // labels.location
+            if (!materializedView.isCloudNativeMaterializedView()) {
+                analyzeLocation(materializedView, properties);
+            }
+
+            // colocate_with
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH)) {
+                String colocateGroup = PropertyAnalyzer.analyzeColocate(properties);
+                if (org.apache.commons.lang3.StringUtils.isNotEmpty(colocateGroup) &&
+                        !materializedView.getDefaultDistributionInfo().supportColocate()) {
+                    throw new AnalysisException(": random distribution does not support 'colocate_with'");
+                }
+                GlobalStateMgr.getCurrentState().getColocateTableIndex().addTableToGroup(
+                        db, materializedView, colocateGroup, materializedView.isCloudNativeMaterializedView());
+            }
+
+            // enable_query_rewrite
+            if (properties.containsKey(PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE)) {
+                String str = properties.get(PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE);
+                TableProperty.MVQueryRewriteSwitch value = TableProperty.analyzeQueryRewriteSwitch(str);
+                materializedView.getTableProperty().setMvQueryRewriteSwitch(value);
+                materializedView.getTableProperty().getProperties().put(
+                        PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE, str);
+                properties.remove(PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE);
+            }
+
+            // enable_query_rewrite
+            if (properties.containsKey(PropertyAnalyzer.PROPERTY_TRANSPARENT_MV_REWRITE_MODE)) {
+                String str = properties.get(PropertyAnalyzer.PROPERTY_TRANSPARENT_MV_REWRITE_MODE);
+                TableProperty.MVTransparentRewriteMode value = TableProperty.analyzeMVTransparentRewrite(str);
+                materializedView.getTableProperty().setMvTransparentRewriteMode(value);
+                materializedView.getTableProperty().getProperties().put(
+                        PropertyAnalyzer.PROPERTY_TRANSPARENT_MV_REWRITE_MODE, str);
+                properties.remove(PropertyAnalyzer.PROPERTY_TRANSPARENT_MV_REWRITE_MODE);
+            }
+
+            // compression
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_COMPRESSION)) {
+                String str = properties.get(PropertyAnalyzer.PROPERTIES_COMPRESSION);
+                materializedView.getTableProperty().getProperties().put(
+                        PropertyAnalyzer.PROPERTIES_COMPRESSION, str);
+                properties.remove(PropertyAnalyzer.PROPERTIES_COMPRESSION);
+            }
+
+            // ORDER BY() -> sortKeys
+            if (CollectionUtils.isNotEmpty(materializedView.getTableProperty().getMvSortKeys())) {
+                materializedView.getTableProperty().putMvSortKeys();
+            }
+
+            // lake storage info
+            if (materializedView.isCloudNativeMaterializedView()) {
+                String volume = "";
+                if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME)) {
+                    volume = properties.remove(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME);
+                }
+                StorageVolumeMgr svm = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
+                svm.bindTableToStorageVolume(volume, db.getId(), materializedView.getId());
+                String storageVolumeId = svm.getStorageVolumeIdOfTable(materializedView.getId());
+                GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .setLakeStorageInfo(db, materializedView, storageVolumeId, properties);
+            }
+
+            // warehouse
+            if (materializedView.isCloudNativeMaterializedView()) {
+                // use warehouse for current session（if u exec "set warehouse aaa" before you create mv1, then use aaa）
+                long warehouseId = ConnectContext.get().getCurrentWarehouseId();
+                if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
+                    String warehouseName = properties.remove(PropertyAnalyzer.PROPERTIES_WAREHOUSE);
+                    Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                            .getWarehouse(warehouseName);
+                    warehouseId = warehouse.getId();
+                }
+
+                materializedView.setWarehouseId(warehouseId);
+                LOG.debug("set warehouse {} in materializedView", warehouseId);
+            }
+
+            // datacache.partition_duration
+            if (materializedView.isCloudNativeMaterializedView()) {
+                if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION)) {
+                    PeriodDuration duration = PropertyAnalyzer.analyzeDataCachePartitionDuration(properties);
+                    materializedView.setDataCachePartitionDuration(duration);
+                }
+            }
+
+            // NOTE: for recognizing unknown properties, this should be put as the last if condition
+            // session properties
+            if (!properties.isEmpty()) {
+                // analyze properties
+                List<SetListItem> setListItems = Lists.newArrayList();
+                for (Map.Entry<String, String> entry : properties.entrySet()) {
+                    SystemVariable variable = getMVSystemVariable(properties, entry);
+                    GlobalStateMgr.getCurrentState().getVariableMgr().checkSystemVariableExist(variable);
+                    setListItems.add(variable);
+                }
+                SetStmtAnalyzer.analyze(new SetStmt(setListItems), null);
+
+                // set properties if there are no exceptions
+                materializedView.getTableProperty().getProperties().putAll(properties);
+            }
+        } catch (AnalysisException e) {
+            if (materializedView.isCloudNativeMaterializedView()) {
+                GlobalStateMgr.getCurrentState().getStorageVolumeMgr()
+                        .unbindTableToStorageVolume(materializedView.getId());
+            }
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER, e.getMessage());
+        }
+    }
+
+    @NotNull
+    private static String getExcludeString(List<TableName> tables) {
+        StringBuilder tableSb = new StringBuilder();
+        for (int i = 1; i <= tables.size(); i++) {
+            TableName tableName = tables.get(i - 1);
+            if (tableName.getDb() == null) {
+                tableSb.append(tableName.getTbl());
+            } else {
+                tableSb.append(tableName.getDb()).append(".").append(tableName.getTbl());
+            }
+            if (i != tables.size()) {
+                tableSb.append(",");
+            }
+        }
+        return tableSb.toString();
+    }
+
+    @NotNull
+    private static SystemVariable getMVSystemVariable(Map<String, String> properties, Map.Entry<String, String> entry)
+            throws AnalysisException {
+        if (!entry.getKey().startsWith(PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX)) {
+            throw new AnalysisException("Analyze materialized properties failed " +
+                    "because unknown properties: " + properties +
+                    ", please add `session.` prefix if you want add session variables for mv(" +
+                    "eg, \"session.insert_timeout\"=\"30000000\").");
+        }
+        String varKey = entry.getKey().substring(
+                PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX.length());
+        SystemVariable variable = new SystemVariable(varKey, new StringLiteral(entry.getValue()));
+        return variable;
+    }
+
+    public static DataProperty analyzeMVDataProperty(MaterializedView materializedView,
+                                                     Map<String, String> properties) {
+        DataProperty dataProperty;
+        // set storage medium
+        boolean hasMedium = properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM);
+        try {
+            dataProperty = PropertyAnalyzer.analyzeDataProperty(properties,
+                    DataProperty.getInferredDefaultDataProperty(), false);
+        } catch (AnalysisException e) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER, e.getMessage());
+            return null;
+        }
+        if (hasMedium && dataProperty.getStorageMedium() == TStorageMedium.SSD) {
+            materializedView.setStorageMedium(dataProperty.getStorageMedium());
+            // set storage cooldown time into table property,
+            // because we don't have property in MaterializedView
+            materializedView.getTableProperty().getProperties()
+                    .put(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME,
+                            String.valueOf(dataProperty.getCooldownTimeMs()));
+        }
+
+        return dataProperty;
+    }
+
+    /**
+     * Generate a string representation of properties like ('a'='1', 'b'='2')
+     */
+    public static String stringifyProperties(Map<String, String> properties) {
+        if (MapUtils.isEmpty(properties)) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder("(");
+        boolean first = true;
+        for (var entry : properties.entrySet()) {
+            if (!first) {
+                sb.append(",");
+            }
+            first = false;
+            sb.append("'").append(entry.getKey()).append("'=").append("'").append(entry.getValue()).append("'");
+        }
+        sb.append(")");
+        return sb.toString();
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

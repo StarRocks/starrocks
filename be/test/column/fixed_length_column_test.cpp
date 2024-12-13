@@ -168,7 +168,11 @@ TEST(FixedLengthColumnTest, test_append_strings) {
     auto c1 = Int32Column::create();
     auto nullable_c1 = NullableColumn::create(c1, NullColumn::create());
     ASSERT_FALSE(c1->append_strings(values));
+<<<<<<< HEAD
     ASSERT_FALSE(nullable_c1->append_strings(values));
+=======
+    ASSERT_FALSE(nullable_c1->append_strings(values.data(), values.size()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 // NOLINTNEXTLINE
@@ -523,7 +527,11 @@ TEST(FixedLengthColumnTest, test_update_rows) {
     }
 
     std::vector<uint32_t> replace_idxes = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
+<<<<<<< HEAD
     ASSERT_TRUE(column->update_rows(*replace_column.get(), replace_idxes.data()).ok());
+=======
+    column->update_rows(*replace_column.get(), replace_idxes.data());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     for (int i = 0; i < 10; i++) {
         ASSERT_EQ(column->get_data()[i], i + 100);
@@ -633,8 +641,13 @@ TEST(FixedLengthColumnTest, test_fill_range) {
     ASSERT_EQ(values.size(), c1->size());
 
     std::vector<int64_t> ids{0, 0, 0};
+<<<<<<< HEAD
     std::vector<uint8_t> filter{1, 0, 1, 0, 1};
     c1->fill_range(ids, filter);
+=======
+    Filter filter{1, 0, 1, 0, 1};
+    ASSERT_TRUE(c1->fill_range(ids, filter).ok());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     auto* p = reinterpret_cast<const int64_t*>(c1->raw_data());
     ASSERT_EQ(0, p[0]);

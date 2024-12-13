@@ -38,11 +38,14 @@ public class ModifyTablePropertiesClause extends AlterTableClause {
         this.opType = opType;
     }
 
+<<<<<<< HEAD
     public void setNeedTableStable(boolean needTableStable) {
         this.needTableStable = needTableStable;
     }
 
     @Override
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Nonnull
     public Map<String, String> getProperties() {
         return this.properties;

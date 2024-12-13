@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
             100.00 * sum(case
@@ -12,6 +13,8 @@ where
         l_partkey = p_partkey
   and l_shipdate >= date '1997-02-01'
   and l_shipdate < date '1997-03-01';
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 [fragment statistics]
 PLAN FRAGMENT 0(F03)
 Output Exprs:32: expr
@@ -94,7 +97,11 @@ probe runtime filters:
 - filter_id = 0, probe_expr = (18: P_PARTKEY)
 column statistics:
 * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
+<<<<<<< HEAD
 * P_TYPE-->[-Infinity, Infinity, 0.0, 25.0, 150.0] ESTIMATE
+=======
+* P_TYPE-->[-Infinity, Infinity, 0.0, 25.0, 150.0] MCV: [[ECONOMY ANODIZED STEEL:145100][LARGE PLATED STEEL:143400][PROMO BRUSHED BRASS:142000][LARGE PLATED BRASS:141500][MEDIUM BURNISHED COPPER:141500]] ESTIMATE
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 PLAN FRAGMENT 2(F01)
 
@@ -111,7 +118,11 @@ OutPut Exchange Id: 03
 |  column statistics:
 |  * L_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 7013946.675798152] ESTIMATE
 |  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
+<<<<<<< HEAD
 |  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
+=======
+|  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] MCV: [[0.05:54639500][0.07:54619200][0.02:54617300][0.01:54583400][0.10:54581500]] ESTIMATE
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 |
 1:OlapScanNode
 table: lineitem, rollup: lineitem
@@ -123,7 +134,13 @@ cardinality: 7013947
 column statistics:
 * L_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 7013946.675798152] ESTIMATE
 * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
+<<<<<<< HEAD
 * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
 * L_SHIPDATE-->[8.547264E8, 8.571456E8, 0.0, 4.0, 2526.0] ESTIMATE
 [end]
 
+=======
+* L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] MCV: [[0.05:54639500][0.07:54619200][0.02:54617300][0.01:54583400][0.10:54581500]] ESTIMATE
+* L_SHIPDATE-->[8.547264E8, 8.571456E8, 0.0, 4.0, 2526.0] MCV: [[1997-02-16:261100]] ESTIMATE
+[end]
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

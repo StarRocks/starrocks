@@ -114,11 +114,16 @@ private:
     size_t _probe_rows_index = 0;
 
     bool _eos = false;
+<<<<<<< HEAD
     bool _need_create_tuple_columns = true;
 
     Buffer<SlotDescriptor*> _col_types;
     Buffer<TupleId> _output_build_tuple_ids;
     Buffer<TupleId> _output_probe_tuple_ids;
+=======
+
+    Buffer<SlotDescriptor*> _col_types;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     size_t _probe_column_count = 0;
     size_t _build_column_count = 0;
 
@@ -130,6 +135,10 @@ private:
     std::vector<uint32_t> _buf_selective;
 
     std::vector<RuntimeFilterBuildDescriptor*> _build_runtime_filters;
+<<<<<<< HEAD
+=======
+    bool _interpolate_passthrough = false;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 } // namespace starrocks

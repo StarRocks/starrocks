@@ -201,7 +201,11 @@ public class SparkResource extends Resource {
     // Each SparkResource has and only has one SparkRepository.
     // This method get the remote archive which matches the dpp version from remote repository
     public synchronized SparkRepository.SparkArchive prepareArchive() throws LoadException {
+<<<<<<< HEAD
         String remoteRepositoryPath = workingDir + "/" + GlobalStateMgr.getCurrentState().getClusterId()
+=======
+        String remoteRepositoryPath = workingDir + "/" + GlobalStateMgr.getCurrentState().getNodeMgr().getClusterId()
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 + "/" + SparkRepository.REPOSITORY_DIR + name;
         BrokerDesc brokerDesc;
         if (hasBroker) {

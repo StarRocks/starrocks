@@ -18,10 +18,21 @@
 package com.starrocks.rpc;
 
 import com.baidu.bjf.remoting.protobuf.annotation.Ignore;
+<<<<<<< HEAD
 import org.apache.thrift.TBase;
 import org.apache.thrift.TDeserializer;
 import org.apache.thrift.TException;
 import org.apache.thrift.TSerializer;
+=======
+import com.starrocks.common.profile.Timer;
+import com.starrocks.common.profile.Tracers;
+import org.apache.thrift.TBase;
+import org.apache.thrift.TDeserializer;
+import org.apache.thrift.TException;
+import org.apache.thrift.TFieldIdEnum;
+import org.apache.thrift.TSerializer;
+import org.apache.thrift.transport.TTransportException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 // used to compatible with our older thrift protocol
 public class AttachmentRequest {
@@ -30,6 +41,7 @@ public class AttachmentRequest {
     @Ignore
     protected byte[] serializedResult;
 
+<<<<<<< HEAD
     public void setRequest(TBase request) throws TException {
         TSerializer serializer = new TSerializer();
         serializedRequest = serializer.serialize(request);
@@ -37,6 +49,29 @@ public class AttachmentRequest {
 
     public void setSerializedRequest(byte[] request) {
         this.serializedRequest = request;
+=======
+    public static TSerializer getSerializer(String protocol) throws TTransportException {
+        return ConfigurableSerDesFactory.getTSerializer(protocol);
+    }
+
+    public <T extends TBase<T, F>, F extends TFieldIdEnum> void setRequest(TBase<T, F> request, String protocol)
+            throws TException {
+        TSerializer serializer = getSerializer(protocol);
+        try (Timer ignored = Tracers.watchScope(Tracers.Module.SCHEDULER, "DeploySerializeTime")) {
+            serializedRequest = serializer.serialize(request);
+        }
+    }
+
+    public <T extends TBase<T, F>, F extends TFieldIdEnum> void setRequest(TBase<T, F> request)
+            throws TException {
+        TSerializer serializer = ConfigurableSerDesFactory.getTSerializer();
+
+        serializedRequest = serializer.serialize(request);
+    }
+
+    public void setRequest(byte[] request) {
+        serializedRequest = request;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public byte[] getSerializedRequest() {
@@ -51,8 +86,20 @@ public class AttachmentRequest {
         return serializedResult;
     }
 
+<<<<<<< HEAD
     public void getResult(TBase result) throws TException {
         TDeserializer deserializer = new TDeserializer();
         deserializer.deserialize(result, serializedResult);
     }
+=======
+    public <T extends TBase<T, F>, F extends TFieldIdEnum> void getResult(TBase<T, F> result) throws TException {
+        TDeserializer deserializer = ConfigurableSerDesFactory.getTDeserializer();
+        deserializer.deserialize(result, serializedResult);
+    }
+
+    public <T extends TBase<T, F>, F extends TFieldIdEnum> void getRequest(TBase<T, F> request) throws TException {
+        TDeserializer deserializer = ConfigurableSerDesFactory.getTDeserializer();
+        deserializer.deserialize(request, serializedRequest);
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

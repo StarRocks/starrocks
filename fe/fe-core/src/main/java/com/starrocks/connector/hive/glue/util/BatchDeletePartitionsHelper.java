@@ -15,6 +15,7 @@
 
 package com.starrocks.connector.hive.glue.util;
 
+<<<<<<< HEAD
 import com.amazonaws.services.glue.AWSGlue;
 import com.amazonaws.services.glue.model.BatchDeletePartitionRequest;
 import com.amazonaws.services.glue.model.BatchDeletePartitionResult;
@@ -24,10 +25,24 @@ import com.amazonaws.services.glue.model.GetPartitionRequest;
 import com.amazonaws.services.glue.model.GetPartitionResult;
 import com.amazonaws.services.glue.model.Partition;
 import com.amazonaws.services.glue.model.PartitionError;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.connector.hive.glue.converters.CatalogToHiveConverter;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
+<<<<<<< HEAD
+=======
+import software.amazon.awssdk.services.glue.GlueClient;
+import software.amazon.awssdk.services.glue.model.BatchDeletePartitionRequest;
+import software.amazon.awssdk.services.glue.model.BatchDeletePartitionResponse;
+import software.amazon.awssdk.services.glue.model.EntityNotFoundException;
+import software.amazon.awssdk.services.glue.model.ErrorDetail;
+import software.amazon.awssdk.services.glue.model.GetPartitionRequest;
+import software.amazon.awssdk.services.glue.model.GetPartitionResponse;
+import software.amazon.awssdk.services.glue.model.Partition;
+import software.amazon.awssdk.services.glue.model.PartitionError;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import java.util.Collection;
 import java.util.List;
@@ -37,7 +52,11 @@ public final class BatchDeletePartitionsHelper {
 
     private static final Logger LOGGER = LogManager.getLogger(BatchDeletePartitionsHelper.class);
 
+<<<<<<< HEAD
     private final AWSGlue client;
+=======
+    private final GlueClient client;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private final String namespaceName;
     private final String tableName;
     private final String catalogId;
@@ -45,7 +64,11 @@ public final class BatchDeletePartitionsHelper {
     private Map<PartitionKey, Partition> partitionMap;
     private TException firstTException;
 
+<<<<<<< HEAD
     public BatchDeletePartitionsHelper(AWSGlue client, String namespaceName, String tableName,
+=======
+    public BatchDeletePartitionsHelper(GlueClient client, String namespaceName, String tableName,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                        String catalogId, List<Partition> partitions) {
         this.client = client;
         this.namespaceName = namespaceName;
@@ -57,12 +80,21 @@ public final class BatchDeletePartitionsHelper {
     public BatchDeletePartitionsHelper deletePartitions() {
         partitionMap = PartitionUtils.buildPartitionMap(partitions);
 
+<<<<<<< HEAD
         BatchDeletePartitionRequest request = new BatchDeletePartitionRequest().withDatabaseName(namespaceName)
                 .withTableName(tableName).withCatalogId(catalogId)
                 .withPartitionsToDelete(PartitionUtils.getPartitionValuesList(partitionMap));
 
         try {
             BatchDeletePartitionResult result = client.batchDeletePartition(request);
+=======
+        BatchDeletePartitionRequest.Builder request = BatchDeletePartitionRequest.builder().databaseName(namespaceName)
+                .tableName(tableName).catalogId(catalogId)
+                .partitionsToDelete(PartitionUtils.getPartitionValuesList(partitionMap));
+
+        try {
+            BatchDeletePartitionResponse result = client.batchDeletePartition(request.build());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             processResult(result);
         } catch (Exception e) {
             LOGGER.error("Exception thrown while deleting partitions in DataCatalog: ", e);
@@ -80,8 +112,13 @@ public final class BatchDeletePartitionsHelper {
         partitionMap.clear();
     }
 
+<<<<<<< HEAD
     private void processResult(final BatchDeletePartitionResult batchDeletePartitionsResult) {
         List<PartitionError> partitionErrors = batchDeletePartitionsResult.getErrors();
+=======
+    private void processResult(final BatchDeletePartitionResponse batchDeletePartitionsResult) {
+        List<PartitionError> partitionErrors = batchDeletePartitionsResult.errors();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (partitionErrors == null || partitionErrors.isEmpty()) {
             return;
         }
@@ -90,8 +127,13 @@ public final class BatchDeletePartitionsHelper {
                 partitionErrors.size(), partitionMap.size()));
 
         for (PartitionError partitionError : partitionErrors) {
+<<<<<<< HEAD
             partitionMap.remove(new PartitionKey(partitionError.getPartitionValues()));
             ErrorDetail errorDetail = partitionError.getErrorDetail();
+=======
+            partitionMap.remove(new PartitionKey(partitionError.partitionValues()));
+            ErrorDetail errorDetail = partitionError.errorDetail();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             LOGGER.error(errorDetail.toString());
             if (firstTException == null) {
                 firstTException = CatalogToHiveConverter.errorDetailToHiveException(errorDetail);
@@ -108,6 +150,7 @@ public final class BatchDeletePartitionsHelper {
     }
 
     private boolean partitionDeleted(Partition partition) {
+<<<<<<< HEAD
         GetPartitionRequest request = new GetPartitionRequest()
                 .withDatabaseName(partition.getDatabaseName())
                 .withTableName(partition.getTableName())
@@ -117,6 +160,17 @@ public final class BatchDeletePartitionsHelper {
         try {
             GetPartitionResult result = client.getPartition(request);
             Partition partitionReturned = result.getPartition();
+=======
+        GetPartitionRequest.Builder request = GetPartitionRequest.builder()
+                .databaseName(partition.databaseName())
+                .tableName(partition.tableName())
+                .partitionValues(partition.values())
+                .catalogId(catalogId);
+
+        try {
+            GetPartitionResponse result = client.getPartition(request.build());
+            Partition partitionReturned = result.partition();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return partitionReturned == null; //probably always false
         } catch (EntityNotFoundException e) {
             // here we assume namespace and table exist. It is assured by calling "isInvalidUserInputException" method above

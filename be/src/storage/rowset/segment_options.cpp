@@ -14,8 +14,40 @@
 
 #include "segment_options.h"
 
+<<<<<<< HEAD
 namespace starrocks {
 
+=======
+#include "storage/predicate_tree/predicate_tree.hpp"
+
+namespace starrocks {
+
+struct PredicateTreeConverter {
+    template <CompoundNodeType ParentType>
+    Status operator()(const PredicateColumnNode& node, PredicateCompoundNode<ParentType>& parent) {
+        const auto* col_pred = node.col_pred();
+        const auto cid = col_pred->column_id();
+        const ColumnPredicate* new_col_pred;
+        RETURN_IF_ERROR(col_pred->convert_to(&new_col_pred, get_type_info(new_types[cid]), obj_pool));
+        parent.add_child(PredicateColumnNode{new_col_pred});
+        return Status::OK();
+    }
+
+    template <CompoundNodeType Type, CompoundNodeType ParentType>
+    Status operator()(const PredicateCompoundNode<Type>& node, PredicateCompoundNode<ParentType>& parent) {
+        PredicateCompoundNode<Type> new_node;
+        for (const auto& child : node.children()) {
+            RETURN_IF_ERROR(child.visit(*this, new_node));
+        }
+        parent.add_child(std::move(new_node));
+        return Status::OK();
+    }
+
+    const std::vector<LogicalType>& new_types;
+    ObjectPool* obj_pool;
+};
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 Status SegmentReadOptions::convert_to(SegmentReadOptions* dst, const std::vector<LogicalType>& new_types,
                                       ObjectPool* obj_pool) const {
     // ranges
@@ -26,6 +58,7 @@ Status SegmentReadOptions::convert_to(SegmentReadOptions* dst, const std::vector
     }
 
     // predicates
+<<<<<<< HEAD
     for (auto& pair : predicates) {
         auto cid = pair.first;
         int num_preds = pair.second.size();
@@ -35,6 +68,11 @@ Status SegmentReadOptions::convert_to(SegmentReadOptions* dst, const std::vector
         }
         dst->predicates.emplace(pair.first, std::move(new_preds));
     }
+=======
+    PredicateAndNode new_pred_root;
+    RETURN_IF_ERROR(pred_tree.visit(PredicateTreeConverter{new_types, obj_pool}, new_pred_root));
+    dst->pred_tree = PredicateTree::create(std::move(new_pred_root));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // delete predicates
     RETURN_IF_ERROR(delete_predicates.convert_to(&dst->delete_predicates, new_types, obj_pool));
@@ -47,6 +85,10 @@ Status SegmentReadOptions::convert_to(SegmentReadOptions* dst, const std::vector
     dst->global_dictmaps = global_dictmaps;
     dst->rowid_range_option = rowid_range_option;
     dst->short_key_ranges = short_key_ranges;
+<<<<<<< HEAD
+=======
+    dst->is_first_split_of_segment = is_first_split_of_segment;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     return Status::OK();
 }
@@ -61,6 +103,7 @@ std::string SegmentReadOptions::debug_string() const {
         ss << ranges[i].debug_string();
     }
     ss << "],predicates=[";
+<<<<<<< HEAD
     int i = 0;
     for (auto& pair : predicates) {
         if (i++ != 0) {
@@ -77,6 +120,11 @@ std::string SegmentReadOptions::debug_string() const {
     }
     ss << "],delete_predicates={";
     ss << "},tablet_schema={";
+=======
+    ss << pred_tree.root().debug_string();
+    ss << "],delete_predicates={";
+    ss << "},unsafe_tablet_schema_ref={";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ss << "},use_page_cache=" << use_page_cache;
     return ss.str();
 }

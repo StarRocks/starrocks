@@ -132,7 +132,11 @@ Status ESDataSource::_build_conjuncts() {
         } else {
             status = predicate->get_es_query_status();
             if (!status.ok()) {
+<<<<<<< HEAD
                 LOG(WARNING) << status.get_error_msg();
+=======
+                LOG(WARNING) << status.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 return status;
             }
         }

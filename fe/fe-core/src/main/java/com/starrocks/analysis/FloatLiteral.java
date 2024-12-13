@@ -34,6 +34,10 @@
 
 package com.starrocks.analysis;
 
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.PrimitiveType;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.NotImplementedException;
@@ -75,6 +79,14 @@ public class FloatLiteral extends LiteralExpr {
         this(value, NodePosition.ZERO);
     }
 
+<<<<<<< HEAD
+=======
+    public FloatLiteral(String value, Type type) throws AnalysisException {
+        this(value, NodePosition.ZERO);
+        this.type = type;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public FloatLiteral(String value, NodePosition pos) throws AnalysisException {
         super(pos);
         Double floatValue = null;
@@ -126,11 +138,15 @@ public class FloatLiteral extends LiteralExpr {
         // Figure out if this will fit in a FLOAT without loosing precision.
         float fvalue;
         fvalue = value.floatValue();
+<<<<<<< HEAD
         if (fvalue == this.value) {
             type = Type.FLOAT;
         } else {
             type = Type.DOUBLE;
         }
+=======
+        type = Float.toString(fvalue).equals(Double.toString(value)) ? Type.FLOAT : Type.DOUBLE;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     private void checkValue(Double value) throws AnalysisException {
@@ -239,5 +255,17 @@ public class FloatLiteral extends LiteralExpr {
     public boolean equals(Object obj) {
         return super.equals(obj);
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    public void parseMysqlParam(ByteBuffer data) {
+        if (type.getPrimitiveType() == PrimitiveType.FLOAT) {
+            value = data.getFloat();
+        } else if (type.getPrimitiveType() == PrimitiveType.DOUBLE) {
+            value = data.getDouble();
+        }
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 

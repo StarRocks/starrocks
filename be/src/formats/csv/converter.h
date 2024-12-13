@@ -59,6 +59,10 @@ public:
         // TODO: user configurable.
         bool bool_alpha = true;
 
+<<<<<<< HEAD
+=======
+        bool is_hive = false;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // Here used to control array parse format.
         // Considering Hive array format is different from traditional array format,
         // so here we provide some variables to customize array format, and you can

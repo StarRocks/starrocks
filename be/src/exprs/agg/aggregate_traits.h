@@ -38,9 +38,18 @@ struct AggDataTypeTraits<lt, FixedLengthLTGuard<lt>> {
     static void append_value(ColumnType* column, const ValueType& value) { column->append(value); }
 
     static RefType get_row_ref(const ColumnType& column, size_t row) { return column.get_data()[row]; }
+<<<<<<< HEAD
 
     static void update_max(ValueType& current, const RefType& input) { current = std::max<ValueType>(current, input); }
     static void update_min(ValueType& current, const RefType& input) { current = std::min<ValueType>(current, input); }
+=======
+    static RefType get_ref(const ValueType& value) { return value; }
+
+    static void update_max(ValueType& current, const RefType& input) { current = std::max<ValueType>(current, input); }
+    static void update_min(ValueType& current, const RefType& input) { current = std::min<ValueType>(current, input); }
+
+    static bool is_equal(const RefType& lhs, const RefType& rhs) { return lhs == rhs; }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 // For pointer ref types
@@ -55,11 +64,20 @@ struct AggDataTypeTraits<lt, ObjectFamilyLTGuard<lt>> {
     static void assign_value(ColumnType* column, size_t row, const ValueType& ref) { *column->get_object(row) = ref; }
 
     static void append_value(ColumnType* column, const ValueType& value) { column->append(&value); }
+<<<<<<< HEAD
+=======
+    static RefType get_ref(const ValueType& value) { return &value; }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     static const RefType get_row_ref(const ColumnType& column, size_t row) { return column.get_object(row); }
 
     static void update_max(ValueType& current, const RefType& input) { current = std::max<ValueType>(current, *input); }
     static void update_min(ValueType& current, const RefType& input) { current = std::min<ValueType>(current, *input); }
+<<<<<<< HEAD
+=======
+
+    static bool is_equal(const RefType& lhs, const RefType& rhs) { return *lhs == *rhs; }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 template <LogicalType lt>
@@ -79,6 +97,11 @@ struct AggDataTypeTraits<lt, StringLTGuard<lt>> {
 
     static RefType get_row_ref(const ColumnType& column, size_t row) { return column.get_slice(row); }
 
+<<<<<<< HEAD
+=======
+    static RefType get_ref(const ValueType& value) { return Slice(value.data(), value.size()); }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     static void update_max(ValueType& current, const RefType& input) {
         if (Slice(current.data(), current.size()).compare(input) < 0) {
             current.resize(input.size);
@@ -91,6 +114,11 @@ struct AggDataTypeTraits<lt, StringLTGuard<lt>> {
             memcpy(current.data(), input.data, input.size);
         }
     }
+<<<<<<< HEAD
+=======
+
+    static bool is_equal(const RefType& lhs, const RefType& rhs) { return lhs == rhs; }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 template <LogicalType lt>

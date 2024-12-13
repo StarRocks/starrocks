@@ -25,8 +25,16 @@ class AggregateDistinctBlockingSinkOperator : public Operator {
 public:
     AggregateDistinctBlockingSinkOperator(AggregatorPtr aggregator, OperatorFactory* factory, int32_t id,
                                           int32_t plan_node_id, int32_t driver_sequence,
+<<<<<<< HEAD
                                           const char* name = "aggregate_distinct_blocking_sink")
             : Operator(factory, id, name, plan_node_id, false, driver_sequence), _aggregator(std::move(aggregator)) {
+=======
+                                          std::atomic<int64_t>& shared_limit_countdown,
+                                          const char* name = "aggregate_distinct_blocking_sink")
+            : Operator(factory, id, name, plan_node_id, false, driver_sequence),
+              _aggregator(std::move(aggregator)),
+              _shared_limit_countdown(shared_limit_countdown) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         _aggregator->set_aggr_phase(AggrPhase2);
         _aggregator->ref();
     }
@@ -57,6 +65,10 @@ private:
     DECLARE_ONCE_DETECTOR(_set_finishing_once)
     // Whether prev operator has no output
     bool _is_finished = false;
+<<<<<<< HEAD
+=======
+    std::atomic<int64_t>& _shared_limit_countdown;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 class AggregateDistinctBlockingSinkOperatorFactory final : public OperatorFactory {
@@ -76,7 +88,12 @@ public:
     void close(RuntimeState* state) override { OperatorFactory::close(state); }
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         return std::make_shared<AggregateDistinctBlockingSinkOperator>(
+<<<<<<< HEAD
                 _aggregator_factory->get_or_create(driver_sequence), this, _id, _plan_node_id, driver_sequence);
+=======
+                _aggregator_factory->get_or_create(driver_sequence), this, _id, _plan_node_id, driver_sequence,
+                _aggregator_factory->get_shared_limit_countdown());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
 private:

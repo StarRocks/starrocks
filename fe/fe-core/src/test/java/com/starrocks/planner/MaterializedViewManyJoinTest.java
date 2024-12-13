@@ -35,8 +35,13 @@ import java.util.stream.Stream;
 public class MaterializedViewManyJoinTest extends MaterializedViewTestBase {
 
     @BeforeAll
+<<<<<<< HEAD
     public static void setUp() throws Exception {
         MaterializedViewTestBase.setUp();
+=======
+    public static void beforeClass() throws Exception {
+        MaterializedViewTestBase.beforeClass();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
         starRocksAssert.withTable(
                 "CREATE TABLE tbl_0 (\n" +
@@ -81,7 +86,11 @@ public class MaterializedViewManyJoinTest extends MaterializedViewTestBase {
 
     @ParameterizedTest(name = "{index}-{0}")
     @MethodSource("generateManyJoinArguments")
+<<<<<<< HEAD
     @Timeout(5)
+=======
+    @Timeout(30)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void testManyJoins(String name, String mvQuery, String query, boolean expectHitMv) throws Exception {
         LOG.info("create mv {}", mvQuery);
         String mvName = "mv_manyjoin";

@@ -22,7 +22,11 @@ The overall idea is to write code on the MacBook,  then automatically synchroniz
 
 ### MacBook Setup
 
+<<<<<<< HEAD
 **Thrift 0.13**
+=======
+#### Thrift 0.13
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 There is no 0.13 version of Thrift in the official brew repository; one of our committers created a version in their repo to install. 
 
@@ -37,7 +41,11 @@ $ thrift -version
 Thrift version 0.13.0
 ```
 
+<<<<<<< HEAD
 **Protobuf**
+=======
+#### Protobuf
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Just use the latest version v3 directly, because the latest version of Protobuf is compatible with the v2 version of the Protobuf protocol in StarRocks.
 
@@ -45,23 +53,39 @@ Just use the latest version v3 directly, because the latest version of Protobuf 
 brew install protobuf
 ```
 
+<<<<<<< HEAD
 **Maven**
+=======
+#### Maven
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ```bash
 brew install maven
 ```
 
+<<<<<<< HEAD
 **OpenJDK 1.8 or 11**
+=======
+#### OpenJDK 1.8 or 11
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ```bash
 brew install openjdk@11
 ```
 
+<<<<<<< HEAD
 **Python3**
 
 MacOS comes with it, no installation is needed.
 
 **Setup system env**
+=======
+#### Python3
+
+MacOS comes with it, no installation is needed.
+
+#### Setup system env
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ```bash
 export JAVA_HOME=xxxxx
@@ -70,11 +94,19 @@ export PYTHON=/usr/bin/python3
 
 ### Ubuntu22 server setup
 
+<<<<<<< HEAD
 **Clone StarRocks code**
 
 `git clone https://github.com/StarRocks/starrocks.git`
 
 **Install required tools for compilation**:
+=======
+#### Clone StarRocks code
+
+`git clone https://github.com/StarRocks/starrocks.git`
+
+#### Install required tools for compilation
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ```bash
 sudo apt update
@@ -90,7 +122,11 @@ Setup `JAVA_HOME` env
 export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
 ```
 
+<<<<<<< HEAD
 **Do a compilation of StarRocks**
+=======
+#### Do a compilation of StarRocks
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ```bash
 cd starrocks/
@@ -109,11 +145,19 @@ FE development is simple because you can compile it in MacOS directly. Just ente
 
 Then you can use IDEA to open `fe` folder directly, everything is ok.
 
+<<<<<<< HEAD
 **Local debug**
 
 The same as other Java applications.
 
 **Remote debug**
+=======
+#### Local debug
+
+The same as other Java applications.
+
+#### Remote debug
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 In Ubuntu server, run with `./start_fe.sh --debug`, then use IDEA remote debug to connect it. The default port is 5005, you can change it in `start_fe.sh` scripts.
 
@@ -153,7 +197,11 @@ Notice: Be careful not to check `Include system environment variables`.
 
 From here on, all setup is complete. After Clion and the remote server are synchronized for a while, the code jump will work normally.
 
+<<<<<<< HEAD
 **Debug**
+=======
+#### Debug
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 BE debug is a little difficult, you have to use gdb in your remote server. Of course, you can use gdb server + Clion remote gdb, but I don't recommend it, it's too stuck. 
 
@@ -187,7 +235,11 @@ Then just run `./bin/start_be.sh` without any flag.
 
 > If you face the error report when debugging for lakehouse, just add `handle SIGSEGV nostop noprint pass` in `~/.gdbinit`.
 
+<<<<<<< HEAD
 **LLVM**
+=======
+#### LLVM
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Of course, you can use LLVM tools to development be.
 

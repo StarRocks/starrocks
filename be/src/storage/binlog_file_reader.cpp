@@ -26,7 +26,11 @@ namespace starrocks {
 
 BinlogFileReader::BinlogFileReader(std::string file_name, std::shared_ptr<BinlogFileMetaPB> file_meta)
         : _file_path(std::move(file_name)),
+<<<<<<< HEAD
           _file_meta(file_meta),
+=======
+          _file_meta(std::move(file_meta)),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
           _file_size(0),
           _current_file_pos(0),
           _next_page_index(0) {}

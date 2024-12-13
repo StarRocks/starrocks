@@ -57,7 +57,11 @@ public class ExportStmtAnalyzer {
     }
 
 
+<<<<<<< HEAD
     static class ExportAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+=======
+    static class ExportAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         public void analyze(StatementBase statement, ConnectContext session) {
             visit(statement, session);
@@ -68,13 +72,25 @@ public class ExportStmtAnalyzer {
             GlobalStateMgr mgr = context.getGlobalStateMgr();
             TableName tableName = statement.getTableRef().getName();
             // make sure catalog, db, table
+<<<<<<< HEAD
             MetaUtils.normalizationTableName(context, tableName);
             Table table = MetaUtils.getTable(context, tableName);
+=======
+            tableName.normalization(context);
+            Table table = MetaUtils.getSessionAwareTable(context, null, tableName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (table.getType() == Table.TableType.OLAP &&
                     (((OlapTable) table).getState() == OlapTable.OlapTableState.RESTORE ||
                             ((OlapTable) table).getState() == OlapTable.OlapTableState.RESTORE_WITH_LOAD)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_STATE, "RESTORING");
             }
+<<<<<<< HEAD
+=======
+            if (table.isTemporaryTable()) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                        "Do not support exporting temporary table");
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             statement.setTblName(tableName);
             PartitionNames partitionNames = statement.getTableRef().getPartitionNames();
             if (partitionNames != null) {

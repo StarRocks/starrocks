@@ -163,7 +163,14 @@ public class TupleDescriptor {
     }
 
     public TTupleDescriptor toThrift() {
+<<<<<<< HEAD
         TTupleDescriptor ttupleDesc = new TTupleDescriptor(id.asInt(), -1, -1);
+=======
+        TTupleDescriptor ttupleDesc = new TTupleDescriptor();
+        ttupleDesc.setId(id.asInt());
+        ttupleDesc.setByteSize(-1);
+        ttupleDesc.setNumNullBytes(-1);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ttupleDesc.setNumNullSlots(-1);
         if (table != null && table.getId() >= 0) {
             ttupleDesc.setTableId((int) table.getId());

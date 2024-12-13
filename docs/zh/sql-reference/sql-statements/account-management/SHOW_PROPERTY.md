@@ -7,7 +7,11 @@ displayed_sidebar: docs
 
 ## 功能
 
+<<<<<<< HEAD
 查看单个用户的最大连接数。
+=======
+查看特定用户的属性。
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 :::tip
 
@@ -18,7 +22,11 @@ displayed_sidebar: docs
 ## 语法
 
 ```SQL
+<<<<<<< HEAD
 SHOW PROPERTY [FOR 'user_name'] [LIKE 'max_user_connections']
+=======
+SHOW PROPERTY [FOR 'user_name'] [LIKE '<property_name>']
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ```
 
 ## 参数说明
@@ -26,11 +34,19 @@ SHOW PROPERTY [FOR 'user_name'] [LIKE 'max_user_connections']
 | **参数**              | **必选** | **说明**                                    |
 | -------------------- | -------- | ----------------------------------------- |
 | user_name            | 否       | 用户名称。如不指定，默认查看当前用户的最大连接数。 |
+<<<<<<< HEAD
 | max_user_connections | 否       | 用户的最大连接数。                           |
 
 ## 示例
 
 示例一：查看当前用户的最大连接数。
+=======
+| property_name        | 否       | 用户属性名。                                 |
+
+## 示例
+
+示例一：查看当前用户的属性。
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ```Plain
 SHOW PROPERTY;
@@ -42,7 +58,11 @@ SHOW PROPERTY;
 +----------------------+-------+
 ```
 
+<<<<<<< HEAD
 示例二：查看用户 `jack` 的最大连接数。
+=======
+示例二：查看用户 `jack` 的属性。
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ```SQL
 SHOW PROPERTY FOR 'jack';
@@ -66,4 +86,8 @@ SHOW PROPERTY FOR 'jack' LIKE 'max_user_connections';
 
 ## 相关操作
 
+<<<<<<< HEAD
 如要设置用户的最大连接数，请参见 [SET PROPERTY](./SET_PROPERTY.md)。
+=======
+如要设置用户属性，请参见 [ALTER USER](./ALTER_USER.md)。
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

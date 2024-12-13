@@ -116,7 +116,11 @@ BfdParser* BfdParser::create() {
     }
 
     char prog_name[1024];
+<<<<<<< HEAD
     if (fscanf(file, "%s ", prog_name) != 1) {
+=======
+    if (fscanf(file, "%1023s ", prog_name) != 1) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         strcpy(prog_name, "read cmdline failed");
     }
     fclose(file);

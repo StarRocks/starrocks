@@ -40,12 +40,20 @@ import com.starrocks.catalog.Replica;
 import java.util.Set;
 
 public class TabletDeleteInfo {
+<<<<<<< HEAD
     private final long partitionId;
+=======
+    private final long physicalPartitionId;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private final long tabletId;
     private final Set<Replica> finishedReplicas;
 
     public TabletDeleteInfo(long partitionId, long tabletId) {
+<<<<<<< HEAD
         this.partitionId = partitionId;
+=======
+        this.physicalPartitionId = partitionId;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.tabletId = tabletId;
         this.finishedReplicas = Sets.newConcurrentHashSet();
     }
@@ -54,8 +62,13 @@ public class TabletDeleteInfo {
         return tabletId;
     }
 
+<<<<<<< HEAD
     public long getPartitionId() {
         return partitionId;
+=======
+    public long getPhysicalPartitionId() {
+        return physicalPartitionId;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public Set<Replica> getFinishedReplicas() {

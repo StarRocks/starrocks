@@ -23,7 +23,11 @@
 
 namespace starrocks {
 
+<<<<<<< HEAD
 class ColumnIsNullPredicate : public ColumnPredicate {
+=======
+class ColumnIsNullPredicate final : public ColumnPredicate {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public:
     explicit ColumnIsNullPredicate(const TypeInfoPtr& type_info, ColumnId id) : ColumnPredicate(type_info, id) {}
 
@@ -68,17 +72,40 @@ public:
         return min.is_null();
     }
 
+<<<<<<< HEAD
     Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange* range) const override {
         range->clear();
         if (iter->has_null_bitmap()) {
             range->add(Range(iter->bitmap_nums() - 1, iter->bitmap_nums()));
+=======
+    bool support_bitmap_filter() const override { return true; }
+
+    Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
+        range->clear();
+        if (iter->has_null_bitmap()) {
+            range->add(Range<>(iter->bitmap_nums() - 1, iter->bitmap_nums()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return Status::OK();
     }
 
+<<<<<<< HEAD
     bool support_bloom_filter() const override { return true; }
 
     bool bloom_filter(const BloomFilter* bf) const override { return bf->test_bytes(nullptr, 0); }
+=======
+    Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
+                               roaring::Roaring* row_bitmap) const override {
+        roaring::Roaring null_roaring;
+        RETURN_IF_ERROR(iterator->read_null(column_name, &null_roaring));
+        *row_bitmap &= null_roaring;
+        return Status::OK();
+    }
+
+    bool support_original_bloom_filter() const override { return true; }
+
+    bool original_bloom_filter(const BloomFilter* bf) const override { return bf->test_bytes(nullptr, 0); }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     PredicateType type() const override { return PredicateType::kIsNull; }
 
@@ -89,9 +116,17 @@ public:
         *output = this;
         return Status::OK();
     }
+<<<<<<< HEAD
 };
 
 class ColumnNotNullPredicate : public ColumnPredicate {
+=======
+
+    std::string debug_string() const override { return strings::Substitute("(ColumnId($0) IS NULL)", _column_id); }
+};
+
+class ColumnNotNullPredicate final : public ColumnPredicate {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public:
     explicit ColumnNotNullPredicate(const TypeInfoPtr& type_info, ColumnId id) : ColumnPredicate(type_info, id) {}
 
@@ -139,10 +174,27 @@ public:
         return !max.is_null();
     }
 
+<<<<<<< HEAD
     Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange* range) const override {
         return Status::Cancelled("not null predicate not support bitmap index");
     }
 
+=======
+    bool support_bitmap_filter() const override { return false; }
+
+    Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
+        return Status::Cancelled("not null predicate not support bitmap index");
+    }
+
+    Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
+                               roaring::Roaring* row_bitmap) const override {
+        roaring::Roaring null_roaring;
+        RETURN_IF_ERROR(iterator->read_null(column_name, &null_roaring));
+        *row_bitmap -= null_roaring;
+        return Status::OK();
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     PredicateType type() const override { return PredicateType::kNotNull; }
 
     bool can_vectorized() const override { return true; }
@@ -152,6 +204,11 @@ public:
         *output = this;
         return Status::OK();
     }
+<<<<<<< HEAD
+=======
+
+    std::string debug_string() const override { return strings::Substitute("(ColumnId($0) IS NOT NULL)", _column_id); }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 ColumnPredicate* new_column_null_predicate(const TypeInfoPtr& type_info, ColumnId id, bool is_null) {

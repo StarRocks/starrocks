@@ -14,11 +14,19 @@
 
 #pragma once
 
+<<<<<<< HEAD
+=======
+#include <cstdint>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include <functional>
 
 namespace starrocks {
 
 // take a sleep with small intervals until time out by `sleep_secs` or the `stop_condition()` is true
+<<<<<<< HEAD
 void nap_sleep(int32_t sleep_secs, std::function<bool()> stop_condition);
+=======
+void nap_sleep(int32_t sleep_secs, const std::function<bool()>& stop_condition);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 } // namespace starrocks

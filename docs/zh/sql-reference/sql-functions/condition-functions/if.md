@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # if
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 若参数 `expr1` 成立，返回结果 `expr2`，否则返回结果 `expr3`。
 

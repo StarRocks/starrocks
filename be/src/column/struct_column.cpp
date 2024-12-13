@@ -151,14 +151,23 @@ void StructColumn::fill_default(const Filter& filter) {
     }
 }
 
+<<<<<<< HEAD
 Status StructColumn::update_rows(const Column& src, const uint32_t* indexes) {
+=======
+void StructColumn::update_rows(const Column& src, const uint32_t* indexes) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     DCHECK(src.is_struct());
     const auto& src_column = down_cast<const StructColumn&>(src);
     DCHECK_EQ(_fields.size(), src_column._fields.size());
     for (size_t i = 0; i < _fields.size(); i++) {
+<<<<<<< HEAD
         RETURN_IF_ERROR(_fields[i]->update_rows(*src_column._fields[i], indexes));
     }
     return Status::OK();
+=======
+        _fields[i]->update_rows(*src_column._fields[i], indexes);
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 void StructColumn::append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) {
@@ -195,10 +204,13 @@ bool StructColumn::append_nulls(size_t count) {
     return true;
 }
 
+<<<<<<< HEAD
 bool StructColumn::append_strings(const Buffer<Slice>& strs) {
     return false;
 }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 size_t StructColumn::append_numbers(const void* buff, size_t length) {
     return -1;
 }
@@ -354,7 +366,11 @@ int64_t StructColumn::xor_checksum(uint32_t from, uint32_t to) const {
     return xor_checksum;
 }
 
+<<<<<<< HEAD
 void StructColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const {
+=======
+void StructColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol) const {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     DCHECK_LT(idx, size());
     buf->begin_push_bracket();
     for (size_t i = 0; i < _fields.size(); ++i) {
@@ -448,12 +464,20 @@ void StructColumn::swap_column(Column& rhs) {
     // _field_names dont need swap
 }
 
+<<<<<<< HEAD
 bool StructColumn::capacity_limit_reached(std::string* msg) const {
     bool res = false;
     for (const auto& column : _fields) {
         res = res || column->capacity_limit_reached(msg);
     }
     return res;
+=======
+Status StructColumn::capacity_limit_reached() const {
+    for (const auto& column : _fields) {
+        RETURN_IF_ERROR(column->capacity_limit_reached());
+    }
+    return Status::OK();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 void StructColumn::check_or_die() const {

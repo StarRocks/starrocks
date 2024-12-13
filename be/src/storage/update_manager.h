@@ -76,6 +76,11 @@ public:
 
     int64_t get_cache_expire_ms() const { return _cache_expire_ms; }
 
+<<<<<<< HEAD
+=======
+    int64_t get_index_cache_expire_ms(const Tablet& tablet) const;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     Status get_del_vec_in_meta(KVStore* meta, const TabletSegmentId& tsid, int64_t version, DelVector* delvec,
                                int64_t* latest_version);
 
@@ -140,12 +145,23 @@ public:
         return Status::OK();
     }
 
+<<<<<<< HEAD
+=======
+    bool keep_pindex_bf() { return _keep_pindex_bf; }
+    void set_keep_pindex_bf(bool keep_pindex_bf) { _keep_pindex_bf = keep_pindex_bf; }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // Used in UT only
     bool TEST_update_state_exist(Tablet* tablet, Rowset* rowset);
     bool TEST_primary_index_refcnt(int64_t tablet_id, uint32_t expected_cnt);
 
+<<<<<<< HEAD
     bool keep_pindex_bf() { return _keep_pindex_bf; }
     void set_keep_pindex_bf(bool keep_pindex_bf) { _keep_pindex_bf = keep_pindex_bf; }
+=======
+private:
+    void* _schedule_apply_thread_callback(void* arg);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 private:
     // default 6min

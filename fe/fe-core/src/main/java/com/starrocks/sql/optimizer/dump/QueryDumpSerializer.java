@@ -29,9 +29,15 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.Version;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
+<<<<<<< HEAD
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.system.BackendCoreStat;
+=======
+import com.starrocks.sql.analyzer.AstToStringBuilder;
+import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+import com.starrocks.system.BackendResourceStat;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -57,7 +63,11 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
         try {
             dumpJson.addProperty("session_variables", dumpInfo.getSessionVariable().getJsonString());
         } catch (IOException e) {
+<<<<<<< HEAD
             LOG.warn("serialize session variables failed. " + e);
+=======
+            LOG.warn("serialize session variables failed. ", e);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         // BE number
@@ -67,9 +77,15 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
         // backend core stat
         JsonObject backendCoreStat = new JsonObject();
         backendCoreStat.addProperty("numOfHardwareCoresPerBe",
+<<<<<<< HEAD
                 GsonUtils.GSON.toJson(BackendCoreStat.getNumOfHardwareCoresPerBe()));
         backendCoreStat.addProperty("cachedAvgNumOfHardwareCores",
                 BackendCoreStat.getCachedAvgNumOfHardwareCores());
+=======
+                GsonUtils.GSON.toJson(BackendResourceStat.getInstance().getNumHardwareCoresPerBe()));
+        backendCoreStat.addProperty("cachedAvgNumOfHardwareCores",
+                BackendResourceStat.getInstance().getCachedAvgNumHardwareCores());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         dumpJson.add("be_core_stat", backendCoreStat);
         // exception
         JsonArray exceptions = new JsonArray();
@@ -113,7 +129,11 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
         for (Pair<String, com.starrocks.catalog.Table> entry : tableMetaPairs) {
             String tableName = entry.first + "." + entry.second.getName();
             List<String> createTableStmt = Lists.newArrayList();
+<<<<<<< HEAD
             GlobalStateMgr.getDdlStmt(entry.second, createTableStmt, null, null, false, true /* hide password */);
+=======
+            AstToStringBuilder.getDdlStmt(entry.second, createTableStmt, null, null, false, true /* hide password */);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             tableMetaData.addProperty(tableName, createTableStmt.get(0));
         }
         dumpJson.add("table_meta", tableMetaData);
@@ -289,8 +309,13 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
         if (CollectionUtils.isNotEmpty(hiveMeta.getDataColumnNames())) {
             hiveTableDumpInfo.setDataColumnNames(
                     hiveMeta.getDataColumnNames().stream()
+<<<<<<< HEAD
                     .map(e -> DesensitizedSQLBuilder.desensitizeColName(e, dict))
                     .collect(Collectors.toList())
+=======
+                            .map(e -> DesensitizedSQLBuilder.desensitizeColName(e, dict))
+                            .collect(Collectors.toList())
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             );
         }
 

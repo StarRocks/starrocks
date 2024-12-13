@@ -80,6 +80,7 @@ jobs:
             -H "X-GitHub-Api-Version: 2022-11-28" \
             /repos/${{ github.repository }}/pulls/${PR_NUMBER}/requested_reviewers \
             -f "reviewers[]=" -f "team_reviewers[]=${PROTO_TEAM}" 1>/dev/null
+<<<<<<< HEAD
 
   feature-review:
     name: FEATURE REVIEW LABEL
@@ -110,3 +111,5 @@ jobs:
             -H "X-GitHub-Api-Version: 2022-11-28" \
             /repos/${{ github.repository }}/pulls/${PR_NUMBER}/requested_reviewers \
             -f "reviewers[]=" -f "team_reviewers[]=${TEAM}" 1>/dev/null
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

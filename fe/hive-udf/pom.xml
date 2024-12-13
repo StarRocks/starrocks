@@ -17,6 +17,10 @@
         <dependency>
             <groupId>io.trino.hive</groupId>
             <artifactId>hive-apache</artifactId>
+<<<<<<< HEAD
+=======
+            <scope>provided</scope>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         </dependency>
         <dependency>
             <groupId>com.starrocks</groupId>
@@ -25,7 +29,11 @@
         <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-client</artifactId>
+<<<<<<< HEAD
             <scope>compile</scope>
+=======
+            <scope>provided</scope>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         </dependency>
     </dependencies>
 
@@ -39,6 +47,10 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>
+<<<<<<< HEAD
+=======
+                <version>3.5.2</version>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 <configuration>
                     <minimizeJar>true</minimizeJar>
                     <relocations>
@@ -54,6 +66,17 @@
                                 <exclude>**</exclude>
                             </excludes>
                         </filter>
+<<<<<<< HEAD
+=======
+                        <filter>
+                            <artifact>*:*</artifact>
+                            <excludes>
+                                <exclude>META-INF/*.SF</exclude>
+                                <exclude>META-INF/*.DSA</exclude>
+                                <exclude>META-INF/*.RSA</exclude>
+                            </excludes>
+                        </filter>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     </filters>
                 </configuration>
                 <executions>
@@ -66,6 +89,27 @@
                 </executions>
             </plugin>
         </plugins>
+<<<<<<< HEAD
     </build>
 
 </project>
+=======
+
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-compiler-plugin</artifactId>
+                    <version>3.8.1</version>
+                    <configuration>
+                        <source>1.8</source>
+                        <target>1.8</target>
+                        <release>8</release>
+                    </configuration>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+    </build>
+
+</project>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

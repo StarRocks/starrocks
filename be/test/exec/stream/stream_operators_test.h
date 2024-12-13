@@ -48,7 +48,11 @@ public:
 
     // Use mv epoch manager to interact with FE
     Status prepare(RuntimeState* state) override {
+<<<<<<< HEAD
         SourceOperator::prepare(state);
+=======
+        (void)SourceOperator::prepare(state);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         _stream_epoch_manager = state->query_ctx()->stream_epoch_manager();
         DCHECK(_stream_epoch_manager);
         return Status::OK();
@@ -106,7 +110,11 @@ public:
 
     // Use mv epoch manager to interact with FE
     Status prepare(RuntimeState* state) override {
+<<<<<<< HEAD
         Operator::prepare(state);
+=======
+        (void)Operator::prepare(state);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return Status::OK();
     }
 

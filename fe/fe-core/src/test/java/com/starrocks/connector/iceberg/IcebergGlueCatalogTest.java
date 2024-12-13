@@ -15,10 +15,20 @@
 
 package com.starrocks.connector.iceberg;
 
+<<<<<<< HEAD
+=======
+import com.google.common.collect.ImmutableList;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.connector.iceberg.glue.IcebergGlueCatalog;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.hadoop.conf.Configuration;
+<<<<<<< HEAD
+=======
+import org.apache.iceberg.aws.glue.GlueCatalog;
+import org.apache.iceberg.catalog.Namespace;
+import org.apache.iceberg.catalog.TableIdentifier;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -30,12 +40,21 @@ import java.util.Map;
 public class IcebergGlueCatalogTest {
 
     @Test
+<<<<<<< HEAD
     public void testListAllDatabases(@Mocked IcebergGlueCatalog glueCatalog) {
         new Expectations() {
             {
                 glueCatalog.listAllDatabases();
                 result = Arrays.asList("db1", "db2");
                 minTimes = 0;
+=======
+    public void testListAllDatabases(@Mocked GlueCatalog glueCatalog) {
+        new Expectations() {
+            {
+                glueCatalog.listNamespaces();
+                result = ImmutableList.of(Namespace.of("db1"), Namespace.of("db2"));
+                times = 1;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         };
 
@@ -45,4 +64,37 @@ public class IcebergGlueCatalogTest {
         List<String> dbs = icebergGlueCatalog.listAllDatabases();
         Assert.assertEquals(Arrays.asList("db1", "db2"), dbs);
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testTableExists(@Mocked GlueCatalog glueCatalog) {
+        new Expectations() {
+            {
+                glueCatalog.tableExists((TableIdentifier) any);
+                result = true;
+            }
+        };
+        Map<String, String> icebergProperties = new HashMap<>();
+        IcebergGlueCatalog icebergGlueCatalog = new IcebergGlueCatalog(
+                "glue_native_catalog", new Configuration(), icebergProperties);
+        Assert.assertTrue(icebergGlueCatalog.tableExists("db1", "tbl1"));
+    }
+
+    @Test
+    public void testRenameTable(@Mocked GlueCatalog glueCatalog) {
+        new Expectations() {
+            {
+                glueCatalog.tableExists((TableIdentifier) any);
+                result = true;
+            }
+        };
+        Map<String, String> icebergProperties = new HashMap<>();
+        IcebergGlueCatalog icebergGlueCatalog = new IcebergGlueCatalog(
+                "glue_native_catalog", new Configuration(), icebergProperties);
+        icebergGlueCatalog.renameTable("db", "tb1", "tb2");
+        boolean exists = icebergGlueCatalog.tableExists("db", "tbl2");
+        Assert.assertTrue(exists);
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

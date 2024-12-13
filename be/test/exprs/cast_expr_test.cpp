@@ -26,6 +26,10 @@
 #include "column/struct_column.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
+<<<<<<< HEAD
+=======
+#include "exprs/exprs_test_helper.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "exprs/mock_vectorized_expr.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/Types_types.h"
@@ -63,6 +67,10 @@ TEST_F(VectorizedCastExprTest, IntCastToDate) {
 
     std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
 
+<<<<<<< HEAD
+=======
+    expr_node.type = gen_type_desc(expr_node.child_type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MockVectorizedExpr<TYPE_INT> col1(expr_node, 10, 20111101);
 
     expr->_children.push_back(&col1);
@@ -90,6 +98,10 @@ TEST_F(VectorizedCastExprTest, BigIntCastToTimestamp) {
 
     std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
 
+<<<<<<< HEAD
+=======
+    expr_node.type = gen_type_desc(expr_node.child_type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MockVectorizedExpr<TYPE_BIGINT> col1(expr_node, 10, 20220203112345);
 
     expr->_children.push_back(&col1);
@@ -117,6 +129,10 @@ TEST_F(VectorizedCastExprTest, BigIntCastToTimestampError) {
 
     std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
 
+<<<<<<< HEAD
+=======
+    expr_node.type = gen_type_desc(expr_node.child_type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MockVectorizedExpr<TYPE_BIGINT> col1(expr_node, 10, 20220003112345);
 
     expr->_children.push_back(&col1);
@@ -144,6 +160,10 @@ TEST_F(VectorizedCastExprTest, dateCastToBoolean) {
 
     std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
 
+<<<<<<< HEAD
+=======
+    expr_node.type = gen_type_desc(expr_node.child_type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MockVectorizedExpr<TYPE_DATE> col1(expr_node, 10, DateValue::create(123123, 1, 1));
 
     expr->_children.push_back(&col1);
@@ -172,6 +192,10 @@ TEST_F(VectorizedCastExprTest, timestampCastToBoolean) {
 
     std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
 
+<<<<<<< HEAD
+=======
+    expr_node.type = gen_type_desc(expr_node.child_type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MockVectorizedExpr<TYPE_DATETIME> col1(expr_node, 10, TimestampValue::create(12, 1, 1, 25, 1, 1));
 
     expr->_children.push_back(&col1);
@@ -200,6 +224,10 @@ TEST_F(VectorizedCastExprTest, stringLiteralTrueCastToBoolean) {
     std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
 
     std::string s = "true";
+<<<<<<< HEAD
+=======
+    expr_node.type = gen_type_desc(expr_node.child_type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MockVectorizedExpr<TYPE_CHAR> col1(expr_node, 10, Slice(s));
 
     expr->_children.push_back(&col1);
@@ -228,6 +256,10 @@ TEST_F(VectorizedCastExprTest, stringLiteralFalseCastToBoolean) {
     std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
 
     std::string s = "false";
+<<<<<<< HEAD
+=======
+    expr_node.type = gen_type_desc(expr_node.child_type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MockVectorizedExpr<TYPE_CHAR> col1(expr_node, 10, Slice(s));
 
     expr->_children.push_back(&col1);
@@ -256,6 +288,10 @@ TEST_F(VectorizedCastExprTest, stringLiteralIntCastToBoolean) {
     std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
 
     std::string s = "1";
+<<<<<<< HEAD
+=======
+    expr_node.type = gen_type_desc(expr_node.child_type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MockVectorizedExpr<TYPE_CHAR> col1(expr_node, 10, Slice(s));
 
     expr->_children.push_back(&col1);
@@ -278,12 +314,101 @@ TEST_F(VectorizedCastExprTest, stringLiteralIntCastToBoolean) {
     }
 }
 
+<<<<<<< HEAD
+=======
+template <LogicalType FromType, LogicalType ToType>
+static void numeric_cast_with_jit(RuntimeState* runtime_state, TExprNode& cast_expr) {
+    ObjectPool pool;
+    typedef RunTimeCppType<FromType> FromCppType;
+    typedef RunTimeCppType<ToType> ToCppType;
+    auto max = std::numeric_limits<FromCppType>::max();
+    auto min = std::numeric_limits<FromCppType>::min();
+    FromCppType data[] = {0,
+                          1,
+                          -1,
+                          max,
+                          min,
+                          static_cast<FromCppType>(max - 1),
+                          static_cast<FromCppType>(min + 1),
+                          static_cast<FromCppType>(max / 2),
+                          static_cast<FromCppType>(min / 2),
+                          static_cast<FromCppType>(max / 2 + 1),
+                          static_cast<FromCppType>(min / 2 - 1)};
+    cast_expr.child_type = to_thrift(FromType);
+    cast_expr.type = gen_type_desc(to_thrift(ToType));
+    if constexpr (std::numeric_limits<ToCppType>::max() < std::numeric_limits<FromCppType>::max()) {
+        cast_expr.is_nullable = true;
+    } else {
+        cast_expr.is_nullable = false;
+    }
+    cast_expr.type = gen_type_desc(cast_expr.child_type);
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(&pool, cast_expr));
+
+    for (auto& d : data) {
+        MockVectorizedExpr<FromType> col1(cast_expr, 1, d);
+        expr->_children.clear();
+        expr->_children.push_back(&col1);
+
+        ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+        ExprsTestHelper::verify_result_with_jit(ptr, expr.get(), runtime_state);
+    }
+}
+
+TEST_F(VectorizedCastExprTest, numericJITCast) {
+    numeric_cast_with_jit<TYPE_TINYINT, TYPE_TINYINT>(&runtime_state, expr_node);
+    numeric_cast_with_jit<TYPE_TINYINT, TYPE_SMALLINT>(&runtime_state, expr_node);
+    numeric_cast_with_jit<TYPE_TINYINT, TYPE_INT>(&runtime_state, expr_node);
+    numeric_cast_with_jit<TYPE_TINYINT, TYPE_BIGINT>(&runtime_state, expr_node);
+    numeric_cast_with_jit<TYPE_TINYINT, TYPE_FLOAT>(&runtime_state, expr_node);
+    numeric_cast_with_jit<TYPE_TINYINT, TYPE_DOUBLE>(&runtime_state, expr_node);
+
+    numeric_cast_with_jit<TYPE_SMALLINT, TYPE_TINYINT>(&runtime_state, expr_node);
+    numeric_cast_with_jit<TYPE_SMALLINT, TYPE_SMALLINT>(&runtime_state, expr_node);
+    numeric_cast_with_jit<TYPE_SMALLINT, TYPE_INT>(&runtime_state, expr_node);
+    numeric_cast_with_jit<TYPE_SMALLINT, TYPE_BIGINT>(&runtime_state, expr_node);
+    numeric_cast_with_jit<TYPE_SMALLINT, TYPE_FLOAT>(&runtime_state, expr_node);
+    numeric_cast_with_jit<TYPE_SMALLINT, TYPE_DOUBLE>(&runtime_state, expr_node);
+
+    numeric_cast_with_jit<TYPE_INT, TYPE_TINYINT>(&runtime_state, expr_node);
+    numeric_cast_with_jit<TYPE_INT, TYPE_SMALLINT>(&runtime_state, expr_node);
+    numeric_cast_with_jit<TYPE_INT, TYPE_INT>(&runtime_state, expr_node);
+    numeric_cast_with_jit<TYPE_INT, TYPE_BIGINT>(&runtime_state, expr_node);
+    numeric_cast_with_jit<TYPE_INT, TYPE_FLOAT>(&runtime_state, expr_node);
+    numeric_cast_with_jit<TYPE_INT, TYPE_DOUBLE>(&runtime_state, expr_node);
+
+    numeric_cast_with_jit<TYPE_BIGINT, TYPE_TINYINT>(&runtime_state, expr_node);
+    numeric_cast_with_jit<TYPE_BIGINT, TYPE_SMALLINT>(&runtime_state, expr_node);
+    numeric_cast_with_jit<TYPE_BIGINT, TYPE_INT>(&runtime_state, expr_node);
+    numeric_cast_with_jit<TYPE_BIGINT, TYPE_BIGINT>(&runtime_state, expr_node);
+    numeric_cast_with_jit<TYPE_BIGINT, TYPE_FLOAT>(&runtime_state, expr_node);
+    numeric_cast_with_jit<TYPE_BIGINT, TYPE_DOUBLE>(&runtime_state, expr_node);
+
+    numeric_cast_with_jit<TYPE_FLOAT, TYPE_TINYINT>(&runtime_state, expr_node);
+    numeric_cast_with_jit<TYPE_FLOAT, TYPE_SMALLINT>(&runtime_state, expr_node);
+    numeric_cast_with_jit<TYPE_FLOAT, TYPE_INT>(&runtime_state, expr_node);
+    numeric_cast_with_jit<TYPE_FLOAT, TYPE_BIGINT>(&runtime_state, expr_node);
+    numeric_cast_with_jit<TYPE_FLOAT, TYPE_FLOAT>(&runtime_state, expr_node);
+    numeric_cast_with_jit<TYPE_FLOAT, TYPE_DOUBLE>(&runtime_state, expr_node);
+
+    numeric_cast_with_jit<TYPE_DOUBLE, TYPE_TINYINT>(&runtime_state, expr_node);
+    numeric_cast_with_jit<TYPE_DOUBLE, TYPE_SMALLINT>(&runtime_state, expr_node);
+    numeric_cast_with_jit<TYPE_DOUBLE, TYPE_INT>(&runtime_state, expr_node);
+    numeric_cast_with_jit<TYPE_DOUBLE, TYPE_BIGINT>(&runtime_state, expr_node);
+    numeric_cast_with_jit<TYPE_DOUBLE, TYPE_FLOAT>(&runtime_state, expr_node);
+    numeric_cast_with_jit<TYPE_DOUBLE, TYPE_DOUBLE>(&runtime_state, expr_node);
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 TEST_F(VectorizedCastExprTest, intCastSelfExpr) {
     expr_node.child_type = TPrimitiveType::INT;
     expr_node.type = gen_type_desc(TPrimitiveType::INT);
 
     std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
 
+<<<<<<< HEAD
+=======
+    expr_node.type = gen_type_desc(expr_node.child_type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MockVectorizedExpr<TYPE_INT> col1(expr_node, 10, 10);
 
     expr->_children.push_back(&col1);
@@ -291,6 +416,7 @@ TEST_F(VectorizedCastExprTest, intCastSelfExpr) {
     {
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
 
+<<<<<<< HEAD
         ASSERT_TRUE(ptr->is_numeric());
 
         // right cast
@@ -303,6 +429,22 @@ TEST_F(VectorizedCastExprTest, intCastSelfExpr) {
 
         // error cast
         ASSERT_EQ(nullptr, std::dynamic_pointer_cast<Int64Column>(ptr));
+=======
+        ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
+            ASSERT_TRUE(ptr->is_numeric());
+
+            // right cast
+            auto v = std::static_pointer_cast<Int32Column>(ptr);
+            ASSERT_EQ(10, v->size());
+
+            for (int j = 0; j < v->size(); ++j) {
+                ASSERT_EQ(10, v->get_data()[j]);
+            }
+
+            // error cast
+            ASSERT_EQ(nullptr, std::dynamic_pointer_cast<Int64Column>(ptr));
+        });
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }
 
@@ -312,6 +454,10 @@ TEST_F(VectorizedCastExprTest, intToFloatCastExpr) {
 
     std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
 
+<<<<<<< HEAD
+=======
+    expr_node.type = gen_type_desc(expr_node.child_type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MockVectorizedExpr<TYPE_INT> col1(expr_node, 10, 10);
 
     expr->_children.push_back(&col1);
@@ -319,6 +465,7 @@ TEST_F(VectorizedCastExprTest, intToFloatCastExpr) {
     {
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
 
+<<<<<<< HEAD
         ASSERT_TRUE(ptr->is_numeric());
 
         // right cast
@@ -331,6 +478,22 @@ TEST_F(VectorizedCastExprTest, intToFloatCastExpr) {
 
         // error cast
         ASSERT_EQ(nullptr, std::dynamic_pointer_cast<Int64Column>(ptr));
+=======
+        ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
+            ASSERT_TRUE(ptr->is_numeric());
+
+            // right cast
+            auto v = std::static_pointer_cast<FloatColumn>(ptr);
+            ASSERT_EQ(10, v->size());
+
+            for (int j = 0; j < v->size(); ++j) {
+                ASSERT_EQ(10, v->get_data()[j]);
+            }
+
+            // error cast
+            ASSERT_EQ(nullptr, std::dynamic_pointer_cast<Int64Column>(ptr));
+        });
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }
 
@@ -340,12 +503,17 @@ TEST_F(VectorizedCastExprTest, intToInt8CastExpr) {
 
     std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
 
+<<<<<<< HEAD
+=======
+    expr_node.type = gen_type_desc(expr_node.child_type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MockVectorizedExpr<TYPE_INT> col1(expr_node, 10, 10);
 
     expr->_children.push_back(&col1);
 
     {
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+<<<<<<< HEAD
 
         ASSERT_TRUE(ptr->is_numeric());
 
@@ -359,6 +527,22 @@ TEST_F(VectorizedCastExprTest, intToInt8CastExpr) {
 
         // error cast
         ASSERT_EQ(nullptr, std::dynamic_pointer_cast<Int64Column>(ptr));
+=======
+        ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
+            ASSERT_TRUE(ptr->is_numeric());
+
+            // right cast
+            auto v = std::static_pointer_cast<Int8Column>(ptr);
+            ASSERT_EQ(10, v->size());
+
+            for (int j = 0; j < v->size(); ++j) {
+                ASSERT_EQ(10, v->get_data()[j]);
+            }
+
+            // error cast
+            ASSERT_EQ(nullptr, std::dynamic_pointer_cast<Int64Column>(ptr));
+        });
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }
 
@@ -368,6 +552,10 @@ TEST_F(VectorizedCastExprTest, intToBigIntCastExpr) {
 
     std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
 
+<<<<<<< HEAD
+=======
+    expr_node.type = gen_type_desc(expr_node.child_type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MockVectorizedExpr<TYPE_INT> col1(expr_node, 10, 10);
 
     expr->_children.push_back(&col1);
@@ -375,6 +563,7 @@ TEST_F(VectorizedCastExprTest, intToBigIntCastExpr) {
     {
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
 
+<<<<<<< HEAD
         ASSERT_TRUE(ptr->is_numeric());
 
         // right cast
@@ -387,22 +576,48 @@ TEST_F(VectorizedCastExprTest, intToBigIntCastExpr) {
 
         // error cast
         ASSERT_EQ(nullptr, std::dynamic_pointer_cast<Int8Column>(ptr));
+=======
+        ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
+            ASSERT_TRUE(ptr->is_numeric());
+
+            // right cast
+            auto v = std::static_pointer_cast<Int64Column>(ptr);
+            ASSERT_EQ(10, v->size());
+
+            for (int j = 0; j < v->size(); ++j) {
+                ASSERT_EQ(10, v->get_data()[j]);
+            }
+
+            // error cast
+            ASSERT_EQ(nullptr, std::dynamic_pointer_cast<Int8Column>(ptr));
+        });
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }
 
 TEST_F(VectorizedCastExprTest, NullableBooleanCastExpr) {
     expr_node.child_type = TPrimitiveType::INT;
     expr_node.type = gen_type_desc(TPrimitiveType::BOOLEAN);
+<<<<<<< HEAD
 
     std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
 
     MockNullVectorizedExpr<TYPE_INT> col1(expr_node, 10, 10);
+=======
+    expr_node.is_nullable = true;
+
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+
+    MockNullVectorizedExpr<TYPE_INT> col1(expr_node, 10, -1);
+    expr_node.is_nullable = false;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     expr->_children.push_back(&col1);
 
     {
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
 
+<<<<<<< HEAD
         ASSERT_FALSE(ptr->is_numeric());
         ASSERT_TRUE(ptr->is_nullable());
 
@@ -416,6 +631,24 @@ TEST_F(VectorizedCastExprTest, NullableBooleanCastExpr) {
 
         // error cast
         ASSERT_EQ(nullptr, std::dynamic_pointer_cast<Int64Column>(ptr));
+=======
+        ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
+            ASSERT_FALSE(ptr->is_numeric());
+            ASSERT_TRUE(ptr->is_nullable());
+
+            // right cast
+            auto v = std::static_pointer_cast<BooleanColumn>(
+                    std::static_pointer_cast<NullableColumn>(ptr)->data_column());
+            ASSERT_EQ(10, v->size());
+
+            for (int j = 0; j < v->size(); ++j) {
+                ASSERT_EQ(1, (v->get_data()[j]));
+            }
+
+            // error cast
+            ASSERT_EQ(nullptr, std::dynamic_pointer_cast<Int64Column>(ptr));
+        });
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }
 
@@ -427,6 +660,10 @@ TEST_F(VectorizedCastExprTest, dateCastToDecimalV2) {
 
     std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
 
+<<<<<<< HEAD
+=======
+    expr_node.type = gen_type_desc(expr_node.child_type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MockVectorizedExpr<TYPE_DATE> col1(expr_node, 10, DateValue::create(2000, 12, 31));
 
     expr->_children.push_back(&col1);
@@ -455,6 +692,10 @@ TEST_F(VectorizedCastExprTest, decimalV2CastToTimestamp) {
 
     std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
 
+<<<<<<< HEAD
+=======
+    expr_node.type = gen_type_desc(expr_node.child_type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MockVectorizedExpr<TYPE_DECIMALV2> col1(expr_node, 10, DecimalV2Value("20010129123000"));
 
     expr->_children.push_back(&col1);
@@ -483,6 +724,10 @@ TEST_F(VectorizedCastExprTest, dateCastToTimestamp) {
 
     std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
 
+<<<<<<< HEAD
+=======
+    expr_node.type = gen_type_desc(expr_node.child_type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MockVectorizedExpr<TYPE_DATE> col1(expr_node, 10, DateValue::create(2010, 10, 20));
 
     expr->_children.push_back(&col1);
@@ -512,6 +757,10 @@ TEST_F(VectorizedCastExprTest, decimalCastString) {
 
     std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
 
+<<<<<<< HEAD
+=======
+    expr_node.type = gen_type_desc(expr_node.child_type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MockVectorizedExpr<TYPE_DECIMALV2> col1(expr_node, 10, DecimalV2Value(123, 0));
 
     expr->_children.push_back(&col1);
@@ -541,6 +790,10 @@ TEST_F(VectorizedCastExprTest, intCastString) {
 
     std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
 
+<<<<<<< HEAD
+=======
+    expr_node.type = gen_type_desc(expr_node.child_type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MockVectorizedExpr<TYPE_INT> col1(expr_node, 10, 12345);
 
     expr->_children.push_back(&col1);
@@ -570,6 +823,10 @@ TEST_F(VectorizedCastExprTest, booleanCastString) {
 
     std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
 
+<<<<<<< HEAD
+=======
+    expr_node.type = gen_type_desc(expr_node.child_type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MockVectorizedExpr<TYPE_BOOLEAN> col1(expr_node, 10, true);
 
     expr->_children.push_back(&col1);
@@ -599,6 +856,10 @@ TEST_F(VectorizedCastExprTest, timestmapCastString) {
 
     std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
 
+<<<<<<< HEAD
+=======
+    expr_node.type = gen_type_desc(expr_node.child_type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MockVectorizedExpr<TYPE_DATETIME> col1(expr_node, 10, TimestampValue::create(2020, 02, 03, 1, 23, 45));
 
     expr->_children.push_back(&col1);
@@ -629,6 +890,10 @@ TEST_F(VectorizedCastExprTest, stringCastInt) {
 
     std::string p("1234");
 
+<<<<<<< HEAD
+=======
+    expr_node.type = gen_type_desc(expr_node.child_type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MockVectorizedExpr<TYPE_VARCHAR> col1(expr_node, 10, Slice(p));
 
     expr->_children.push_back(&col1);
@@ -659,6 +924,10 @@ TEST_F(VectorizedCastExprTest, stringCastIntError) {
 
     std::string p("123ad4");
 
+<<<<<<< HEAD
+=======
+    expr_node.type = gen_type_desc(expr_node.child_type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MockVectorizedExpr<TYPE_VARCHAR> col1(expr_node, 10, Slice(p));
 
     expr->_children.push_back(&col1);
@@ -689,6 +958,10 @@ TEST_F(VectorizedCastExprTest, stringCastDouble) {
 
     std::string p("1234.1234");
 
+<<<<<<< HEAD
+=======
+    expr_node.type = gen_type_desc(expr_node.child_type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MockVectorizedExpr<TYPE_VARCHAR> col1(expr_node, 10, Slice(p));
 
     expr->_children.push_back(&col1);
@@ -719,6 +992,10 @@ TEST_F(VectorizedCastExprTest, stringCastDoubleError) {
 
     std::string p("123ad4.123123");
 
+<<<<<<< HEAD
+=======
+    expr_node.type = gen_type_desc(expr_node.child_type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MockVectorizedExpr<TYPE_VARCHAR> col1(expr_node, 10, Slice(p));
 
     expr->_children.push_back(&col1);
@@ -753,6 +1030,10 @@ TEST_F(VectorizedCastExprTest, stringCastDecimal) {
     DecimalV2Value d(1794546454654654);
     std::string p = d.to_string();
 
+<<<<<<< HEAD
+=======
+    expr_node.type = gen_type_desc(expr_node.child_type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MockVectorizedExpr<TYPE_VARCHAR> col1(expr_node, 10, Slice(p));
 
     expr->_children.push_back(&col1);
@@ -785,6 +1066,10 @@ TEST_F(VectorizedCastExprTest, stringCastDecimalError) {
 
     std::string p("asdfadsf");
 
+<<<<<<< HEAD
+=======
+    expr_node.type = gen_type_desc(expr_node.child_type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MockVectorizedExpr<TYPE_VARCHAR> col1(expr_node, 10, Slice(p));
 
     expr->_children.push_back(&col1);
@@ -816,6 +1101,10 @@ TEST_F(VectorizedCastExprTest, stringCastDate) {
 
     std::string p("2023-12-02");
 
+<<<<<<< HEAD
+=======
+    expr_node.type = gen_type_desc(expr_node.child_type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MockVectorizedExpr<TYPE_VARCHAR> col1(expr_node, 10, Slice(p));
 
     expr->_children.push_back(&col1);
@@ -846,6 +1135,10 @@ TEST_F(VectorizedCastExprTest, stringCastDate2) {
 
     std::string p("   2023-12-02    ");
 
+<<<<<<< HEAD
+=======
+    expr_node.type = gen_type_desc(expr_node.child_type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MockVectorizedExpr<TYPE_VARCHAR> col1(expr_node, 10, Slice(p));
 
     expr->_children.push_back(&col1);
@@ -876,6 +1169,10 @@ TEST_F(VectorizedCastExprTest, stringCastDateError) {
 
     std::string p("2023-12-asdf");
 
+<<<<<<< HEAD
+=======
+    expr_node.type = gen_type_desc(expr_node.child_type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MockVectorizedExpr<TYPE_VARCHAR> col1(expr_node, 10, Slice(p));
 
     expr->_children.push_back(&col1);
@@ -906,6 +1203,10 @@ TEST_F(VectorizedCastExprTest, stringCastTimestmap) {
 
     std::string p("2022-02-03 11:23:45");
 
+<<<<<<< HEAD
+=======
+    expr_node.type = gen_type_desc(expr_node.child_type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MockVectorizedExpr<TYPE_VARCHAR> col1(expr_node, 10, Slice(p));
 
     expr->_children.push_back(&col1);
@@ -937,6 +1238,10 @@ TEST_F(VectorizedCastExprTest, stringCastBitmapFailed0) {
     // readable string
     std::string p("1, 342, 2222");
 
+<<<<<<< HEAD
+=======
+    expr_node.type = gen_type_desc(expr_node.child_type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MockVectorizedExpr<TYPE_VARCHAR> col1(expr_node, 10, Slice(p));
 
     expr->_children.push_back(&col1);
@@ -972,6 +1277,10 @@ TEST_F(VectorizedCastExprTest, stringCastBitmapFailed1) {
     // non-exist type bitmap.
     *((uint8_t*)(buf.c_str())) = (uint8_t)14;
 
+<<<<<<< HEAD
+=======
+    expr_node.type = gen_type_desc(expr_node.child_type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MockVectorizedExpr<TYPE_VARCHAR> col1(expr_node, 10, Slice(buf));
 
     expr->_children.push_back(&col1);
@@ -1002,6 +1311,10 @@ TEST_F(VectorizedCastExprTest, stringCastBitmapSingle) {
     buf.resize(bitmap_value.get_size_in_bytes());
     bitmap_value.write((char*)buf.c_str());
 
+<<<<<<< HEAD
+=======
+    expr_node.type = gen_type_desc(expr_node.child_type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MockVectorizedExpr<TYPE_VARCHAR> col1(expr_node, 10, Slice(buf));
 
     expr->_children.push_back(&col1);
@@ -1013,11 +1326,19 @@ TEST_F(VectorizedCastExprTest, stringCastBitmapSingle) {
         auto v = std::static_pointer_cast<BitmapColumn>(ptr);
         ASSERT_EQ(10, v->size());
 
+<<<<<<< HEAD
         std::vector<int64_t> expect_array;
         expect_array.push_back(1);
 
         for (int j = 0; j < v->size(); ++j) {
             std::vector<int64_t> array;
+=======
+        Buffer<int64_t> expect_array;
+        expect_array.push_back(1);
+
+        for (int j = 0; j < v->size(); ++j) {
+            Buffer<int64_t> array;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             v->get_data()[j]->to_array(&array);
             ASSERT_EQ(expect_array, array);
         }
@@ -1042,6 +1363,10 @@ TEST_F(VectorizedCastExprTest, stringCastBitmapSingleFailed) {
     // set smaller length.
     buf.resize(half_length);
 
+<<<<<<< HEAD
+=======
+    expr_node.type = gen_type_desc(expr_node.child_type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MockVectorizedExpr<TYPE_VARCHAR> col1(expr_node, 10, Slice(buf));
 
     expr->_children.push_back(&col1);
@@ -1073,6 +1398,10 @@ TEST_F(VectorizedCastExprTest, stringCastBitmapSet) {
     buf.resize(bitmap_value.get_size_in_bytes());
     bitmap_value.write((char*)buf.c_str());
 
+<<<<<<< HEAD
+=======
+    expr_node.type = gen_type_desc(expr_node.child_type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MockVectorizedExpr<TYPE_VARCHAR> col1(expr_node, 10, Slice(buf));
 
     expr->_children.push_back(&col1);
@@ -1084,12 +1413,20 @@ TEST_F(VectorizedCastExprTest, stringCastBitmapSet) {
         auto v = std::static_pointer_cast<BitmapColumn>(ptr);
         ASSERT_EQ(10, v->size());
 
+<<<<<<< HEAD
         std::vector<int64_t> expect_array;
+=======
+        Buffer<int64_t> expect_array;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         expect_array.push_back(1);
         expect_array.push_back(2);
 
         for (int j = 0; j < v->size(); ++j) {
+<<<<<<< HEAD
             std::vector<int64_t> array;
+=======
+            Buffer<int64_t> array;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             v->get_data()[j]->to_array(&array);
             ASSERT_EQ(expect_array, array);
         }
@@ -1115,6 +1452,10 @@ TEST_F(VectorizedCastExprTest, stringCastBitmapSetFailed) {
     // set smaller length.
     buf.resize(half_length);
 
+<<<<<<< HEAD
+=======
+    expr_node.type = gen_type_desc(expr_node.child_type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MockVectorizedExpr<TYPE_VARCHAR> col1(expr_node, 10, Slice(buf));
 
     expr->_children.push_back(&col1);
@@ -1148,6 +1489,10 @@ TEST_F(VectorizedCastExprTest, stringCastBitmapMap) {
     buf.resize(bitmap_value.get_size_in_bytes());
     bitmap_value.write((char*)buf.c_str());
 
+<<<<<<< HEAD
+=======
+    expr_node.type = gen_type_desc(expr_node.child_type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MockVectorizedExpr<TYPE_VARCHAR> col1(expr_node, 10, Slice(buf));
 
     expr->_children.push_back(&col1);
@@ -1159,13 +1504,21 @@ TEST_F(VectorizedCastExprTest, stringCastBitmapMap) {
         auto v = std::static_pointer_cast<BitmapColumn>(ptr);
         ASSERT_EQ(10, v->size());
 
+<<<<<<< HEAD
         std::vector<int64_t> expect_array;
+=======
+        Buffer<int64_t> expect_array;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         expect_array.push_back(1);
         expect_array.push_back(342);
         expect_array.push_back(2222);
 
         for (int j = 0; j < v->size(); ++j) {
+<<<<<<< HEAD
             std::vector<int64_t> array;
+=======
+            Buffer<int64_t> array;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             v->get_data()[j]->to_array(&array);
             ASSERT_EQ(expect_array, array);
         }
@@ -1192,6 +1545,10 @@ TEST_F(VectorizedCastExprTest, stringCastBitmapMapFailed) {
     // set smaller length.
     buf.resize(half_length);
 
+<<<<<<< HEAD
+=======
+    expr_node.type = gen_type_desc(expr_node.child_type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MockVectorizedExpr<TYPE_VARCHAR> col1(expr_node, 10, Slice(buf));
 
     expr->_children.push_back(&col1);
@@ -1217,6 +1574,10 @@ TEST_F(VectorizedCastExprTest, stringCastTimestmap2) {
 
     std::string p("    2022-02-03 11:23:45 ");
 
+<<<<<<< HEAD
+=======
+    expr_node.type = gen_type_desc(expr_node.child_type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MockVectorizedExpr<TYPE_VARCHAR> col1(expr_node, 10, Slice(p));
 
     expr->_children.push_back(&col1);
@@ -1247,6 +1608,10 @@ TEST_F(VectorizedCastExprTest, stringCastTimestmap3) {
 
     std::string p("2022-02-03     11:23:45");
 
+<<<<<<< HEAD
+=======
+    expr_node.type = gen_type_desc(expr_node.child_type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MockVectorizedExpr<TYPE_VARCHAR> col1(expr_node, 10, Slice(p));
 
     expr->_children.push_back(&col1);
@@ -1277,6 +1642,10 @@ TEST_F(VectorizedCastExprTest, stringCastTimestmap4) {
 
     std::string p("2022-02-03T11:23:45");
 
+<<<<<<< HEAD
+=======
+    expr_node.type = gen_type_desc(expr_node.child_type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MockVectorizedExpr<TYPE_VARCHAR> col1(expr_node, 10, Slice(p));
 
     expr->_children.push_back(&col1);
@@ -1307,6 +1676,10 @@ TEST_F(VectorizedCastExprTest, stringCastTimestmapError) {
 
     std::string p("2022-02-03 asdfa");
 
+<<<<<<< HEAD
+=======
+    expr_node.type = gen_type_desc(expr_node.child_type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MockVectorizedExpr<TYPE_VARCHAR> col1(expr_node, 10, Slice(p));
 
     expr->_children.push_back(&col1);
@@ -1328,20 +1701,40 @@ TEST_F(VectorizedCastExprTest, stringCastTimestmapError) {
 TEST_F(VectorizedCastExprTest, BigIntCastToInt) {
     expr_node.child_type = TPrimitiveType::BIGINT;
     expr_node.type = gen_type_desc(TPrimitiveType::INT);
+<<<<<<< HEAD
 
     std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
 
+=======
+    expr_node.is_nullable = true;
+
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+
+    expr_node.type = gen_type_desc(expr_node.child_type);
+    expr_node.is_nullable = false;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MockVectorizedExpr<TYPE_BIGINT> col1(expr_node, 10, INT64_MAX);
 
     expr->_children.push_back(&col1);
 
     {
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+<<<<<<< HEAD
         ASSERT_TRUE(ptr->is_nullable());
 
         for (int j = 0; j < ptr->size(); ++j) {
             ASSERT_TRUE(ptr->is_null(j));
         }
+=======
+
+        ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
+            ASSERT_TRUE(ptr->is_nullable());
+
+            for (int j = 0; j < ptr->size(); ++j) {
+                ASSERT_TRUE(ptr->is_null(j));
+            }
+        });
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }
 
@@ -1351,12 +1744,17 @@ TEST_F(VectorizedCastExprTest, BigIntCastToInt2) {
 
     std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
 
+<<<<<<< HEAD
+=======
+    expr_node.type = gen_type_desc(expr_node.child_type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MockVectorizedExpr<TYPE_BIGINT> col1(expr_node, 10, 10);
 
     expr->_children.push_back(&col1);
 
     {
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+<<<<<<< HEAD
         ASSERT_TRUE(ptr->is_numeric());
 
         // right cast
@@ -1366,6 +1764,20 @@ TEST_F(VectorizedCastExprTest, BigIntCastToInt2) {
         for (int j = 0; j < v->size(); ++j) {
             ASSERT_EQ(10, v->get_data()[j]);
         }
+=======
+
+        ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
+            ASSERT_TRUE(ptr->is_numeric());
+
+            // right cast
+            auto v = std::static_pointer_cast<Int32Column>(ptr);
+            ASSERT_EQ(10, v->size());
+
+            for (int j = 0; j < v->size(); ++j) {
+                ASSERT_EQ(10, v->get_data()[j]);
+            }
+        });
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }
 
@@ -1375,18 +1787,34 @@ TEST_F(VectorizedCastExprTest, IntCastToBigInt3) {
 
     std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
 
+<<<<<<< HEAD
+=======
+    expr_node.type = gen_type_desc(expr_node.child_type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MockVectorizedExpr<TYPE_INT> col1(expr_node, 10, INT_MAX);
 
     expr->_children.push_back(&col1);
 
     {
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+<<<<<<< HEAD
         ASSERT_FALSE(ptr->is_nullable());
 
         auto p = ColumnHelper::cast_to<TYPE_BIGINT>(ptr);
         for (int j = 0; j < p->size(); ++j) {
             ASSERT_EQ(INT_MAX, p->get_data()[j]);
         }
+=======
+
+        ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
+            ASSERT_FALSE(ptr->is_nullable());
+
+            auto p = ColumnHelper::cast_to<TYPE_BIGINT>(ptr);
+            for (int j = 0; j < p->size(); ++j) {
+                ASSERT_EQ(INT_MAX, p->get_data()[j]);
+            }
+        });
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }
 
@@ -1398,6 +1826,10 @@ TEST_F(VectorizedCastExprTest, stringCastToTime) {
 
     std::string p("15:15:15");
 
+<<<<<<< HEAD
+=======
+    expr_node.type = gen_type_desc(expr_node.child_type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MockVectorizedExpr<TYPE_VARCHAR> col1(expr_node, 10, Slice(p));
 
     expr->_children.push_back(&col1);
@@ -1423,6 +1855,10 @@ TEST_F(VectorizedCastExprTest, stringCastToTimeNull1) {
 
     std::string p("15:15:15:");
 
+<<<<<<< HEAD
+=======
+    expr_node.type = gen_type_desc(expr_node.child_type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MockVectorizedExpr<TYPE_VARCHAR> col1(expr_node, 10, Slice(p));
 
     expr->_children.push_back(&col1);
@@ -1449,6 +1885,10 @@ TEST_F(VectorizedCastExprTest, stringCastToTimeNull2) {
 
     std::string p("15:60:15");
 
+<<<<<<< HEAD
+=======
+    expr_node.type = gen_type_desc(expr_node.child_type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MockVectorizedExpr<TYPE_VARCHAR> col1(expr_node, 10, Slice(p));
 
     expr->_children.push_back(&col1);
@@ -1474,6 +1914,10 @@ TEST_F(VectorizedCastExprTest, stringCastToTimeNull3) {
 
     std::string p("15:15");
 
+<<<<<<< HEAD
+=======
+    expr_node.type = gen_type_desc(expr_node.child_type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MockVectorizedExpr<TYPE_VARCHAR> col1(expr_node, 10, Slice(p));
 
     expr->_children.push_back(&col1);
@@ -1499,6 +1943,10 @@ TEST_F(VectorizedCastExprTest, stringCastToTimeNull4) {
 
     std::string p("      :60:16");
 
+<<<<<<< HEAD
+=======
+    expr_node.type = gen_type_desc(expr_node.child_type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MockVectorizedExpr<TYPE_VARCHAR> col1(expr_node, 10, Slice(p));
 
     expr->_children.push_back(&col1);
@@ -1524,6 +1972,10 @@ TEST_F(VectorizedCastExprTest, stringCastToTimeNull5) {
 
     std::string p("15::15:15");
 
+<<<<<<< HEAD
+=======
+    expr_node.type = gen_type_desc(expr_node.child_type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MockVectorizedExpr<TYPE_VARCHAR> col1(expr_node, 10, Slice(p));
 
     expr->_children.push_back(&col1);
@@ -1571,6 +2023,10 @@ TEST_F(VectorizedCastExprTest, dateToTime) {
 
     std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
 
+<<<<<<< HEAD
+=======
+    expr_node.type = gen_type_desc(expr_node.child_type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MockVectorizedExpr<TYPE_DATE> col1(expr_node, 2, DateValue::create(2000, 12, 01));
     expr->_children.push_back(&col1);
 
@@ -1591,6 +2047,10 @@ TEST_F(VectorizedCastExprTest, datetimeToTime) {
     expr_node.type = gen_type_desc(TPrimitiveType::TIME);
 
     std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+<<<<<<< HEAD
+=======
+    expr_node.type = gen_type_desc(expr_node.child_type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MockVectorizedExpr<TYPE_DATETIME> col1(expr_node, 2, TimestampValue::create(2000, 12, 1, 12, 30, 00));
     expr->_children.push_back(&col1);
 
@@ -1611,6 +2071,10 @@ TEST_F(VectorizedCastExprTest, timeToInt) {
     expr_node.type = gen_type_desc(TPrimitiveType::INT);
 
     std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+<<<<<<< HEAD
+=======
+    expr_node.type = gen_type_desc(expr_node.child_type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MockVectorizedExpr<TYPE_TIME> col1(expr_node, 2, 76862);
     expr->_children.push_back(&col1);
 
@@ -1631,6 +2095,10 @@ TEST_F(VectorizedCastExprTest, timeToVarchar) {
     expr_node.type = gen_type_desc(TPrimitiveType::VARCHAR);
 
     std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+<<<<<<< HEAD
+=======
+    expr_node.type = gen_type_desc(expr_node.child_type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MockVectorizedExpr<TYPE_TIME> col1(expr_node, 2, 8521);
     expr->_children.push_back(&col1);
 
@@ -1659,6 +2127,10 @@ static typename RunTimeColumnType<toType>::Ptr evaluateCastFromJson(TExprNode& c
     if (!json.ok()) {
         return nullptr;
     }
+<<<<<<< HEAD
+=======
+    cast_expr.type = gen_type_desc(cast_expr.child_type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MockVectorizedExpr<TYPE_JSON> col1(cast_expr, 2, &json.value());
     expr->_children.push_back(&col1);
 
@@ -1684,6 +2156,10 @@ static ColumnPtr evaluateCastJsonNullable(TExprNode& cast_expr, JsonValueType js
     if (!json.ok()) {
         return nullptr;
     }
+<<<<<<< HEAD
+=======
+    cast_expr.type = gen_type_desc(cast_expr.child_type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MockVectorizedExpr<TYPE_JSON> col1(cast_expr, 2, &json.value());
     expr->_children.push_back(&col1);
 
@@ -1718,7 +2194,33 @@ TEST_F(VectorizedCastExprTest, jsonToValue) {
     EXPECT_EQ("true", evaluateCastFromJson<TYPE_VARCHAR>(cast_expr, "true")->get_data()[0]);
     EXPECT_EQ("star", evaluateCastFromJson<TYPE_VARCHAR>(cast_expr, "\"star\"")->get_data()[0]);
     EXPECT_EQ("{\"a\": 1}", evaluateCastFromJson<TYPE_VARCHAR>(cast_expr, "{\"a\": 1}")->get_data()[0]);
+<<<<<<< HEAD
     EXPECT_EQ("", evaluateCastFromJson<TYPE_VARCHAR>(cast_expr, "")->get_data()[0]);
+=======
+
+    EXPECT_EQ(true, evaluateCastFromJson<TYPE_BOOLEAN>(cast_expr, "\"1123\"")->get_data()[0]);
+    EXPECT_EQ(true, evaluateCastFromJson<TYPE_BOOLEAN>(cast_expr, "\"true\"")->get_data()[0]);
+    EXPECT_EQ(true, evaluateCastFromJson<TYPE_BOOLEAN>(cast_expr, 123)->get_data()[0]);
+    EXPECT_EQ(true, evaluateCastFromJson<TYPE_BOOLEAN>(cast_expr, 234.453)->get_data()[0]);
+
+    EXPECT_EQ(false, evaluateCastFromJson<TYPE_BOOLEAN>(cast_expr, "\"0\"")->get_data()[0]);
+    EXPECT_EQ(false, evaluateCastFromJson<TYPE_BOOLEAN>(cast_expr, "\"false\"")->get_data()[0]);
+    EXPECT_EQ(false, evaluateCastFromJson<TYPE_BOOLEAN>(cast_expr, 0)->get_data()[0]);
+    EXPECT_EQ(false, evaluateCastFromJson<TYPE_BOOLEAN>(cast_expr, 0.000)->get_data()[0]);
+
+    EXPECT_EQ(123123, evaluateCastFromJson<TYPE_INT>(cast_expr, "\"123123\"")->get_data()[0]);
+    EXPECT_EQ(123123, evaluateCastFromJson<TYPE_INT>(cast_expr, "123123")->get_data()[0]);
+    EXPECT_EQ(123, evaluateCastFromJson<TYPE_INT>(cast_expr, 123.123)->get_data()[0]);
+    EXPECT_EQ(1, evaluateCastFromJson<TYPE_INT>(cast_expr, true)->get_data()[0]);
+    EXPECT_EQ(0, evaluateCastFromJson<TYPE_INT>(cast_expr, false)->get_data()[0]);
+
+    EXPECT_EQ(123.123, evaluateCastFromJson<TYPE_DOUBLE>(cast_expr, "\"123.123\"")->get_data()[0]);
+    EXPECT_EQ(123, evaluateCastFromJson<TYPE_DOUBLE>(cast_expr, "\"123\"")->get_data()[0]);
+    EXPECT_EQ(123.123, evaluateCastFromJson<TYPE_DOUBLE>(cast_expr, "123.123")->get_data()[0]);
+    EXPECT_EQ(123, evaluateCastFromJson<TYPE_DOUBLE>(cast_expr, "123")->get_data()[0]);
+    EXPECT_EQ(1, evaluateCastFromJson<TYPE_DOUBLE>(cast_expr, true)->get_data()[0]);
+    EXPECT_EQ(0, evaluateCastFromJson<TYPE_DOUBLE>(cast_expr, false)->get_data()[0]);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // implicit json type case
     EXPECT_EQ(1.0, evaluateCastFromJson<TYPE_DOUBLE>(cast_expr, 1)->get_data()[0]);
@@ -1729,12 +2231,19 @@ TEST_F(VectorizedCastExprTest, jsonToValue) {
     EXPECT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_INT>(cast_expr, "false")));
     EXPECT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_INT>(cast_expr, "null")));
     EXPECT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_INT>(cast_expr, "[1,2]")));
+<<<<<<< HEAD
     EXPECT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_BOOLEAN>(cast_expr, "1")));
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     EXPECT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_BOOLEAN>(cast_expr, "\"a\"")));
     EXPECT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_BOOLEAN>(cast_expr, "1.0")));
     EXPECT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_BOOLEAN>(cast_expr, "null")));
     EXPECT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_BOOLEAN>(cast_expr, "[]")));
     EXPECT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_BOOLEAN>(cast_expr, "{}")));
+<<<<<<< HEAD
+=======
+    EXPECT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_INT>(cast_expr, "\"123.123\"")));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // overflow
     EXPECT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_TINYINT>(cast_expr, 100000)));
@@ -1768,6 +2277,10 @@ static std::string evaluateCastToJson(TExprNode& cast_expr, RunTimeCppType<fromT
     if (!expr.get()) {
         return "";
     }
+<<<<<<< HEAD
+=======
+    cast_expr.type = gen_type_desc(cast_expr.child_type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MockVectorizedExpr<fromType> col1(cast_expr, 2, value);
     expr->_children.push_back(&col1);
 
@@ -1882,6 +2395,10 @@ static std::string cast_string_to_array(TExprNode& cast_expr, TTypeDesc type_des
 
     ObjectPool pool;
     std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(&pool, cast_expr));
+<<<<<<< HEAD
+=======
+    cast_expr.type = gen_type_desc(cast_expr.child_type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MockVectorizedExpr<TYPE_VARCHAR> col1(cast_expr, 1, str);
     expr->_children.push_back(&col1);
     ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
@@ -2074,6 +2591,10 @@ static std::string cast_json_to_array(TExprNode& cast_expr, LogicalType element_
     if (!json.ok()) {
         return "INVALID JSON";
     }
+<<<<<<< HEAD
+=======
+    cast_expr.type = gen_type_desc(cast_expr.child_type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MockVectorizedExpr<TYPE_JSON> col1(cast_expr, 1, &json.value());
     expr->_children.push_back(&col1);
 
@@ -2193,4 +2714,101 @@ TEST_F(VectorizedCastExprTest, unsupported_test) {
     ASSERT_FALSE(Expr::create_vectorized_expr(&pool, cast_expr, &expr3, &runtime_state).ok());
 }
 
+<<<<<<< HEAD
+=======
+TTypeDesc gen_struct_type_desc(const std::vector<TPrimitiveType::type> field_types,
+                               const std::vector<std::string> field_names) {
+    std::vector<TTypeNode> types_list;
+    TTypeDesc type_desc;
+
+    TTypeNode type_struct;
+    type_struct.type = TTypeNodeType::STRUCT;
+    std::vector<TStructField> fields;
+    for (const auto& field_name : field_names) {
+        TStructField field;
+        field.__set_name(field_name);
+        fields.push_back(field);
+    }
+    type_struct.__set_struct_fields(fields);
+    types_list.push_back(type_struct);
+
+    for (int index = 0; index < field_types.size(); index++) {
+        TTypeNode type_scalar;
+        TScalarType scalar_type;
+        scalar_type.__set_type(field_types[index]);
+        scalar_type.__set_precision(0);
+        scalar_type.__set_scale(0);
+        scalar_type.__set_len(0);
+        type_scalar.__set_scalar_type(scalar_type);
+        types_list.push_back(type_scalar);
+    }
+    type_desc.__set_types(types_list);
+    return type_desc;
+}
+
+static std::string cast_json_to_struct(TExprNode& cast_expr, std::vector<LogicalType> element_types,
+                                       std::vector<std::string> field_names, const std::string& str) {
+    cast_expr.child_type = to_thrift(TYPE_JSON);
+    std::vector<TPrimitiveType::type> field_types;
+    for (const auto& element_type : element_types) {
+        field_types.emplace_back(to_thrift(element_type));
+    }
+    cast_expr.type = gen_struct_type_desc(field_types, field_names);
+    ObjectPool pool;
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(&pool, cast_expr));
+
+    auto json = JsonValue::parse(str);
+    if (!json.ok()) {
+        return "INVALID JSON";
+    }
+    cast_expr.type = gen_type_desc(cast_expr.child_type);
+    MockVectorizedExpr<TYPE_JSON> col1(cast_expr, 1, &json.value());
+    expr->_children.push_back(&col1);
+
+    ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+    if (ptr->size() != 1) {
+        return "EMPTY";
+    }
+    return ptr->debug_item(0);
+}
+
+TEST_F(VectorizedCastExprTest, json_to_struct) {
+    TExprNode cast_expr;
+    cast_expr.opcode = TExprOpcode::CAST;
+    cast_expr.node_type = TExprNodeType::CAST_EXPR;
+    cast_expr.num_children = 2;
+    cast_expr.__isset.opcode = true;
+    cast_expr.__isset.child_type = true;
+
+    EXPECT_EQ("{col1:1,col2:2,col3:3}",
+              cast_json_to_struct(cast_expr, {TYPE_INT, TYPE_INT, TYPE_INT}, {"col1", "col2", "col3"}, "[1,2,3]"));
+    EXPECT_EQ("{col1:1,col2:2,col3:3}",
+              cast_json_to_struct(cast_expr, {TYPE_INT, TYPE_INT, TYPE_INT}, {"col1", "col2", "col3"}, "[1,   2,  3]"));
+    EXPECT_EQ("{col1:NULL,col2:NULL,col3:NULL}",
+              cast_json_to_struct(cast_expr, {TYPE_INT, TYPE_INT, TYPE_INT}, {"col1", "col2", "col3"}, "[]"));
+    EXPECT_EQ("{col1:NULL}", cast_json_to_struct(cast_expr, {TYPE_INT}, {"col1"}, ""));
+    EXPECT_EQ("{col1:NULL}", cast_json_to_struct(cast_expr, {TYPE_INT}, {"col1"}, "a"));
+    EXPECT_EQ("{col1:NULL,col2:NULL}",
+              cast_json_to_struct(cast_expr, {TYPE_INT, TYPE_INT}, {"col1", "col2"}, R"(["a","b"])"));
+
+    EXPECT_EQ("{col1:1.1,col2:2.2,col3:3.3}", cast_json_to_struct(cast_expr, {TYPE_DOUBLE, TYPE_DOUBLE, TYPE_DOUBLE},
+                                                                  {"col1", "col2", "col3"}, "[1.1,2.2,3.3]"));
+
+    EXPECT_EQ("{col1:'a',col2:'b'}",
+              cast_json_to_struct(cast_expr, {TYPE_VARCHAR, TYPE_VARCHAR}, {"col1", "col2"}, R"(["a","b"])"));
+    EXPECT_EQ("{col1:'a',col2:' b'}",
+              cast_json_to_struct(cast_expr, {TYPE_VARCHAR, TYPE_VARCHAR}, {"col1", "col2"}, R"(["a", " b"])"));
+    EXPECT_EQ("{col1:'1',col2:'2'}",
+              cast_json_to_struct(cast_expr, {TYPE_VARCHAR, TYPE_VARCHAR}, {"col1", "col2"}, R"([1, 2])"));
+
+    EXPECT_EQ("{star:'rocks',number:1}", cast_json_to_struct(cast_expr, {TYPE_VARCHAR, TYPE_INT}, {"star", "number"},
+                                                             R"({"star": "rocks", "number": 1})"));
+    EXPECT_EQ("{number:1,star:'rocks'}", cast_json_to_struct(cast_expr, {TYPE_INT, TYPE_VARCHAR}, {"number", "star"},
+                                                             R"({"star": "rocks", "number": 1})"));
+    EXPECT_EQ("{number:1,not_found:NULL}",
+              cast_json_to_struct(cast_expr, {TYPE_INT, TYPE_VARCHAR}, {"number", "not_found"},
+                                  R"({"star": "rocks", "number": 1})"));
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // namespace starrocks

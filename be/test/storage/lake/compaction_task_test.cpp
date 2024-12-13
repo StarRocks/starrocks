@@ -14,6 +14,7 @@
 
 #include <gtest/gtest.h>
 
+<<<<<<< HEAD
 #include <algorithm>
 #include <memory>
 #include <random>
@@ -60,6 +61,29 @@
 #include "util/logging.h"
 #include "util/mem_info.h"
 #include "util/timezone_utils.h"
+=======
+#include <memory>
+#include <random>
+
+#include "column/chunk.h"
+#include "column/datum_tuple.h"
+#include "column/fixed_length_column.h"
+#include "column/schema.h"
+#include "common/config.h"
+#include "common/logging.h"
+#include "storage/chunk_helper.h"
+#include "storage/lake/compaction_test_utils.h"
+#include "storage/lake/delta_writer.h"
+#include "storage/lake/horizontal_compaction_task.h"
+#include "storage/lake/tablet_manager.h"
+#include "storage/lake/tablet_reader.h"
+#include "storage/lake/vertical_compaction_task.h"
+#include "storage/tablet_schema.h"
+#include "test_util.h"
+#include "testutil/assert.h"
+#include "testutil/id_generator.h"
+#include "testutil/init_test_env.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 namespace starrocks::lake {
 
@@ -77,6 +101,29 @@ public:
             ASSERT_TRUE(dynamic_cast<VerticalCompactionTask*>(task.get()) != nullptr);
         }
     }
+<<<<<<< HEAD
+=======
+
+protected:
+    void SetUp() override {
+        config::enable_size_tiered_compaction_strategy = GetParam().enable_size_tiered_compaction_strategy;
+        config::vertical_compaction_max_columns_per_group = GetParam().vertical_compaction_max_columns_per_group;
+        config::min_cumulative_compaction_num_singleton_deltas = 1;
+        clear_and_init_test_dir();
+    }
+
+    void TearDown() override {
+        remove_test_dir_ignore_error();
+        config::enable_size_tiered_compaction_strategy = _enable_size_tiered_compaction_strategy;
+        config::vertical_compaction_max_columns_per_group = _vertical_compaction_max_columns_per_group;
+        config::min_cumulative_compaction_num_singleton_deltas = _min_cumulative_compaction_num_singleton_deltas;
+    }
+
+private:
+    bool _enable_size_tiered_compaction_strategy = config::enable_size_tiered_compaction_strategy;
+    int64_t _vertical_compaction_max_columns_per_group = config::vertical_compaction_max_columns_per_group;
+    int64_t _min_cumulative_compaction_num_singleton_deltas = config::min_cumulative_compaction_num_singleton_deltas;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 class LakeDuplicateKeyCompactionTest : public LakeCompactionTest {
@@ -92,6 +139,7 @@ protected:
     constexpr static const int kChunkSize = 12;
 
     void SetUp() override {
+<<<<<<< HEAD
         config::enable_size_tiered_compaction_strategy = false;
         clear_and_init_test_dir();
         CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
@@ -99,6 +147,12 @@ protected:
 
     void TearDown() override { remove_test_dir_ignore_error(); }
 
+=======
+        LakeCompactionTest::SetUp();
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     Chunk generate_data(int64_t chunk_size) {
         std::vector<int> v0(chunk_size);
         std::vector<int> v1(chunk_size);
@@ -119,8 +173,13 @@ protected:
     }
 
     int64_t read(int64_t version) {
+<<<<<<< HEAD
         ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
         ASSIGN_OR_ABORT(auto reader, tablet.new_reader(version, *_schema));
+=======
+        ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version));
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         CHECK_OK(reader->prepare());
         CHECK_OK(reader->open(TabletReaderParams()));
         auto chunk = ChunkHelper::new_chunk(*_schema, 128);
@@ -140,11 +199,18 @@ protected:
     std::shared_ptr<TabletMetadata> _tablet_metadata;
     std::shared_ptr<TabletSchema> _tablet_schema;
     std::shared_ptr<Schema> _schema;
+<<<<<<< HEAD
     int64_t _partition_id = 4560;
 };
 
 TEST_P(LakeDuplicateKeyCompactionTest, test1) {
     config::vertical_compaction_max_columns_per_group = GetParam().vertical_compaction_max_columns_per_group;
+=======
+    int64_t _partition_id = next_id();
+};
+
+TEST_P(LakeDuplicateKeyCompactionTest, test1) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // Prepare data for writing
     auto chunk0 = generate_data(kChunkSize);
     auto indexes = std::vector<uint32_t>(kChunkSize);
@@ -156,11 +222,25 @@ TEST_P(LakeDuplicateKeyCompactionTest, test1) {
     auto tablet_id = _tablet_metadata->id();
     for (int i = 0; i < 3; i++) {
         auto txn_id = next_id();
+<<<<<<< HEAD
         auto delta_writer =
                 DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
+=======
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -168,6 +248,7 @@ TEST_P(LakeDuplicateKeyCompactionTest, test1) {
     }
     ASSERT_EQ(kChunkSize * 3, read(version));
 
+<<<<<<< HEAD
     ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id));
     ASSIGN_OR_ABORT(auto t, _tablet_mgr->get_tablet(tablet_id));
 
@@ -177,16 +258,33 @@ TEST_P(LakeDuplicateKeyCompactionTest, test1) {
     CompactionTask::Progress progress;
     ASSERT_OK(task->execute(&progress, CompactionTask::kNoCancelFn));
     EXPECT_EQ(100, progress.value());
+=======
+    auto txn_id = next_id();
+    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, false, nullptr);
+    ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
+    check_task(task);
+    ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
+    EXPECT_EQ(100, task_context->progress.value());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ASSERT_OK(publish_single_version(_tablet_metadata->id(), version + 1, txn_id).status());
     version++;
     ASSERT_EQ(kChunkSize * 3, read(version));
 
     ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+<<<<<<< HEAD
     ASSERT_EQ(1, new_tablet_metadata->cumulative_point());
+=======
+    if (GetParam().enable_size_tiered_compaction_strategy) {
+        ASSERT_EQ(0, new_tablet_metadata->cumulative_point());
+    } else {
+        ASSERT_EQ(1, new_tablet_metadata->cumulative_point());
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ASSERT_EQ(1, new_tablet_metadata->rowsets_size());
 }
 
 INSTANTIATE_TEST_SUITE_P(LakeDuplicateKeyCompactionTest, LakeDuplicateKeyCompactionTest,
+<<<<<<< HEAD
                          ::testing::Values(CompactionParam{HORIZONTAL_COMPACTION, 5},
                                            CompactionParam{VERTICAL_COMPACTION, 1}),
                          to_string_param_name);
@@ -203,6 +301,30 @@ TEST_F(LakeDuplicateKeyCompactionTest, test_empty_tablet) {
     CompactionTask::Progress progress;
     ASSERT_OK(task->execute(&progress, CompactionTask::kNoCancelFn));
     EXPECT_EQ(100, progress.value());
+=======
+                         ::testing::Values(CompactionParam{.algorithm = HORIZONTAL_COMPACTION,
+                                                           .enable_size_tiered_compaction_strategy = true},
+                                           CompactionParam{.algorithm = HORIZONTAL_COMPACTION,
+                                                           .enable_size_tiered_compaction_strategy = false},
+                                           CompactionParam{.algorithm = VERTICAL_COMPACTION,
+                                                           .vertical_compaction_max_columns_per_group = 1,
+                                                           .enable_size_tiered_compaction_strategy = true},
+                                           CompactionParam{.algorithm = VERTICAL_COMPACTION,
+                                                           .vertical_compaction_max_columns_per_group = 1,
+                                                           .enable_size_tiered_compaction_strategy = false}),
+                         to_string_param_name);
+
+TEST_P(LakeDuplicateKeyCompactionTest, test_empty_tablet) {
+    auto version = 1;
+    ASSERT_EQ(0, read(version));
+
+    auto txn_id = next_id();
+    auto tablet_id = _tablet_metadata->id();
+    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, false, nullptr);
+    ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
+    ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
+    EXPECT_EQ(100, task_context->progress.value());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ASSERT_OK(publish_single_version(_tablet_metadata->id(), version + 1, txn_id).status());
     version++;
     ASSERT_EQ(0, read(version));
@@ -221,12 +343,19 @@ protected:
     constexpr static const int kChunkSize = 12;
 
     void SetUp() override {
+<<<<<<< HEAD
         clear_and_init_test_dir();
         CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
     }
 
     void TearDown() override { remove_test_dir_ignore_error(); }
 
+=======
+        LakeCompactionTest::SetUp();
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     Chunk generate_data(int64_t chunk_size) {
         std::vector<int> v0(chunk_size);
         std::vector<int> v1(chunk_size);
@@ -247,8 +376,13 @@ protected:
     }
 
     int64_t read(int64_t version) {
+<<<<<<< HEAD
         ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
         ASSIGN_OR_ABORT(auto reader, tablet.new_reader(version, *_schema));
+=======
+        ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version));
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         CHECK_OK(reader->prepare());
         CHECK_OK(reader->open(TabletReaderParams()));
         auto chunk = ChunkHelper::new_chunk(*_schema, 128);
@@ -268,11 +402,18 @@ protected:
     std::shared_ptr<TabletMetadata> _tablet_metadata;
     std::shared_ptr<TabletSchema> _tablet_schema;
     std::shared_ptr<Schema> _schema;
+<<<<<<< HEAD
     int64_t _partition_id = 4563;
 };
 
 TEST_P(LakeDuplicateKeyOverlapSegmentsCompactionTest, test) {
     config::vertical_compaction_max_columns_per_group = GetParam().vertical_compaction_max_columns_per_group;
+=======
+    int64_t _partition_id = next_id();
+};
+
+TEST_P(LakeDuplicateKeyOverlapSegmentsCompactionTest, test) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // Prepare data for writing
     auto chunk0 = generate_data(kChunkSize);
     auto indexes = std::vector<uint32_t>(kChunkSize);
@@ -284,14 +425,29 @@ TEST_P(LakeDuplicateKeyOverlapSegmentsCompactionTest, test) {
     auto tablet_id = _tablet_metadata->id();
     for (int i = 0; i < 3; i++) {
         auto txn_id = next_id();
+<<<<<<< HEAD
         auto delta_writer =
                 DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, _mem_tracker.get());
+=======
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ASSERT_OK(delta_writer->open());
         for (int j = 0; j < i + 1; ++j) {
             ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
             ASSERT_OK(delta_writer->flush());
         }
+<<<<<<< HEAD
         ASSERT_OK(delta_writer->finish());
+=======
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -302,21 +458,38 @@ TEST_P(LakeDuplicateKeyOverlapSegmentsCompactionTest, test) {
     // Cancelled compaction task
     {
         auto txn_id = next_id();
+<<<<<<< HEAD
         ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(_tablet_metadata->id(), version, txn_id));
         check_task(task);
         CompactionTask::Progress progress;
         auto st = task->execute(&progress, CompactionTask::kCancelledFn);
         EXPECT_EQ(0, progress.value());
         EXPECT_TRUE(st.is_cancelled()) << st;
+=======
+        auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, false, nullptr);
+        ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
+        check_task(task);
+        auto st = task->execute(CompactionTask::kCancelledFn);
+        EXPECT_EQ(0, task_context->progress.value());
+        EXPECT_TRUE(st.is_aborted()) << st;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     // Completed compaction task without error
     {
         auto txn_id = next_id();
+<<<<<<< HEAD
         ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(_tablet_metadata->id(), version, txn_id));
         check_task(task);
         CompactionTask::Progress progress;
         ASSERT_OK(task->execute(&progress, CompactionTask::kNoCancelFn));
         EXPECT_EQ(100, progress.value());
+=======
+        auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, false, nullptr);
+        ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
+        check_task(task);
+        ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
+        EXPECT_EQ(100, task_context->progress.value());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ASSERT_OK(publish_single_version(_tablet_metadata->id(), version + 1, txn_id).status());
         version++;
         ASSERT_EQ(kChunkSize * 6, read(version));
@@ -324,13 +497,26 @@ TEST_P(LakeDuplicateKeyOverlapSegmentsCompactionTest, test) {
 
     // check metadata
     ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+<<<<<<< HEAD
     ASSERT_EQ(1, new_tablet_metadata->cumulative_point());
+=======
+    if (GetParam().enable_size_tiered_compaction_strategy) {
+        ASSERT_EQ(0, new_tablet_metadata->cumulative_point());
+    } else {
+        ASSERT_EQ(1, new_tablet_metadata->cumulative_point());
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ASSERT_EQ(1, new_tablet_metadata->rowsets_size());
     ASSERT_EQ(1, new_tablet_metadata->rowsets(0).segments_size());
 
     // check data
+<<<<<<< HEAD
     ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
     ASSIGN_OR_ABORT(auto reader, tablet.new_reader(version, *_schema));
+=======
+    ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version));
+    auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     CHECK_OK(reader->prepare());
     CHECK_OK(reader->open(TabletReaderParams()));
     auto chunk = ChunkHelper::new_chunk(*_schema, 128);
@@ -348,8 +534,21 @@ TEST_P(LakeDuplicateKeyOverlapSegmentsCompactionTest, test) {
 }
 
 INSTANTIATE_TEST_SUITE_P(LakeDuplicateKeyOverlapSegmentsCompactionTest, LakeDuplicateKeyOverlapSegmentsCompactionTest,
+<<<<<<< HEAD
                          ::testing::Values(CompactionParam{HORIZONTAL_COMPACTION, 5},
                                            CompactionParam{VERTICAL_COMPACTION, 1}),
+=======
+                         ::testing::Values(CompactionParam{.algorithm = HORIZONTAL_COMPACTION,
+                                                           .enable_size_tiered_compaction_strategy = true},
+                                           CompactionParam{.algorithm = HORIZONTAL_COMPACTION,
+                                                           .enable_size_tiered_compaction_strategy = false},
+                                           CompactionParam{.algorithm = VERTICAL_COMPACTION,
+                                                           .vertical_compaction_max_columns_per_group = 1,
+                                                           .enable_size_tiered_compaction_strategy = true},
+                                           CompactionParam{.algorithm = VERTICAL_COMPACTION,
+                                                           .vertical_compaction_max_columns_per_group = 1,
+                                                           .enable_size_tiered_compaction_strategy = false}),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                          to_string_param_name);
 
 class LakeUniqueKeyCompactionTest : public LakeCompactionTest {
@@ -365,12 +564,19 @@ protected:
     constexpr static const int kChunkSize = 12;
 
     void SetUp() override {
+<<<<<<< HEAD
         clear_and_init_test_dir();
         CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
     }
 
     void TearDown() override { remove_test_dir_ignore_error(); }
 
+=======
+        LakeCompactionTest::SetUp();
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     Chunk generate_data(int64_t chunk_size) {
         std::vector<int> v0(chunk_size);
         std::vector<int> v1(chunk_size);
@@ -391,8 +597,13 @@ protected:
     }
 
     int64_t read(int64_t version) {
+<<<<<<< HEAD
         ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
         ASSIGN_OR_ABORT(auto reader, tablet.new_reader(version, *_schema));
+=======
+        ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version));
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         CHECK_OK(reader->prepare());
         CHECK_OK(reader->open(TabletReaderParams()));
         auto chunk = ChunkHelper::new_chunk(*_schema, 128);
@@ -412,11 +623,18 @@ protected:
     std::shared_ptr<TabletMetadata> _tablet_metadata;
     std::shared_ptr<TabletSchema> _tablet_schema;
     std::shared_ptr<Schema> _schema;
+<<<<<<< HEAD
     int64_t _partition_id = 4561;
 };
 
 TEST_P(LakeUniqueKeyCompactionTest, test1) {
     config::vertical_compaction_max_columns_per_group = GetParam().vertical_compaction_max_columns_per_group;
+=======
+    int64_t _partition_id = next_id();
+};
+
+TEST_P(LakeUniqueKeyCompactionTest, test1) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // Prepare data for writing
     auto chunk0 = generate_data(kChunkSize);
     auto indexes = std::vector<uint32_t>(kChunkSize);
@@ -428,11 +646,25 @@ TEST_P(LakeUniqueKeyCompactionTest, test1) {
     auto tablet_id = _tablet_metadata->id();
     for (int i = 0; i < 3; i++) {
         auto txn_id = next_id();
+<<<<<<< HEAD
         auto delta_writer =
                 DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
+=======
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -440,6 +672,7 @@ TEST_P(LakeUniqueKeyCompactionTest, test1) {
     }
     ASSERT_EQ(kChunkSize, read(version));
 
+<<<<<<< HEAD
     ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id));
     ASSIGN_OR_ABORT(auto t, _tablet_mgr->get_tablet(tablet_id));
 
@@ -449,18 +682,47 @@ TEST_P(LakeUniqueKeyCompactionTest, test1) {
     CompactionTask::Progress progress;
     ASSERT_OK(task->execute(&progress, CompactionTask::kNoCancelFn));
     EXPECT_EQ(100, progress.value());
+=======
+    auto txn_id = next_id();
+    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, false, nullptr);
+    ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
+    check_task(task);
+    ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
+    EXPECT_EQ(100, task_context->progress.value());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ASSERT_OK(publish_single_version(_tablet_metadata->id(), version + 1, txn_id).status());
     version++;
     ASSERT_EQ(kChunkSize, read(version));
 
     ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+<<<<<<< HEAD
     ASSERT_EQ(1, new_tablet_metadata->cumulative_point());
+=======
+    if (GetParam().enable_size_tiered_compaction_strategy) {
+        ASSERT_EQ(0, new_tablet_metadata->cumulative_point());
+    } else {
+        ASSERT_EQ(1, new_tablet_metadata->cumulative_point());
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ASSERT_EQ(1, new_tablet_metadata->rowsets_size());
 }
 
 INSTANTIATE_TEST_SUITE_P(LakeUniqueKeyCompactionTest, LakeUniqueKeyCompactionTest,
+<<<<<<< HEAD
                          ::testing::Values(CompactionParam{HORIZONTAL_COMPACTION, 5},
                                            CompactionParam{VERTICAL_COMPACTION, 1}),
+=======
+                         ::testing::Values(CompactionParam{.algorithm = HORIZONTAL_COMPACTION,
+                                                           .enable_size_tiered_compaction_strategy = true},
+                                           CompactionParam{.algorithm = HORIZONTAL_COMPACTION,
+                                                           .enable_size_tiered_compaction_strategy = false},
+                                           CompactionParam{.algorithm = VERTICAL_COMPACTION,
+                                                           .vertical_compaction_max_columns_per_group = 1,
+                                                           .enable_size_tiered_compaction_strategy = true},
+                                           CompactionParam{.algorithm = VERTICAL_COMPACTION,
+                                                           .vertical_compaction_max_columns_per_group = 1,
+                                                           .enable_size_tiered_compaction_strategy = false}),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                          to_string_param_name);
 
 class LakeUniqueKeyCompactionWithDeleteTest : public LakeCompactionTest {
@@ -476,12 +738,19 @@ protected:
     constexpr static const int kChunkSize = 12;
 
     void SetUp() override {
+<<<<<<< HEAD
         clear_and_init_test_dir();
         CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
     }
 
     void TearDown() override { remove_test_dir_ignore_error(); }
 
+=======
+        LakeCompactionTest::SetUp();
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     Chunk generate_data(int64_t chunk_size) {
         std::vector<int> v0(chunk_size);
         std::vector<int> v1(chunk_size);
@@ -502,8 +771,13 @@ protected:
     }
 
     int64_t read(int64_t version) {
+<<<<<<< HEAD
         ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
         ASSIGN_OR_ABORT(auto reader, tablet.new_reader(version, *_schema));
+=======
+        ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version));
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         CHECK_OK(reader->prepare());
         CHECK_OK(reader->open(TabletReaderParams()));
         auto chunk = ChunkHelper::new_chunk(*_schema, 128);
@@ -523,11 +797,18 @@ protected:
     std::shared_ptr<TabletMetadata> _tablet_metadata;
     std::shared_ptr<TabletSchema> _tablet_schema;
     std::shared_ptr<Schema> _schema;
+<<<<<<< HEAD
     int64_t _partition_id = 4562;
 };
 
 TEST_P(LakeUniqueKeyCompactionWithDeleteTest, test_base_compaction_with_delete) {
     config::vertical_compaction_max_columns_per_group = GetParam().vertical_compaction_max_columns_per_group;
+=======
+    int64_t _partition_id = next_id();
+};
+
+TEST_P(LakeUniqueKeyCompactionWithDeleteTest, test_base_compaction_with_delete) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // Prepare data for writing
     auto chunk0 = generate_data(kChunkSize);
     auto indexes = std::vector<uint32_t>(kChunkSize);
@@ -539,11 +820,25 @@ TEST_P(LakeUniqueKeyCompactionWithDeleteTest, test_base_compaction_with_delete) 
     auto tablet_id = _tablet_metadata->id();
     for (int i = 0; i < 3; i++) {
         auto txn_id = next_id();
+<<<<<<< HEAD
         auto delta_writer =
                 DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
+=======
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -551,9 +846,12 @@ TEST_P(LakeUniqueKeyCompactionWithDeleteTest, test_base_compaction_with_delete) 
     }
     ASSERT_EQ(kChunkSize, read(version));
 
+<<<<<<< HEAD
     ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id));
     ASSIGN_OR_ABORT(auto t, _tablet_mgr->get_tablet(tablet_id));
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // add delete rowset version
     {
         ASSIGN_OR_ABORT(auto tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
@@ -579,28 +877,58 @@ TEST_P(LakeUniqueKeyCompactionWithDeleteTest, test_base_compaction_with_delete) 
     }
 
     auto txn_id = next_id();
+<<<<<<< HEAD
     ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(_tablet_metadata->id(), version, txn_id));
     check_task(task);
     CompactionTask::Progress progress;
     ASSERT_OK(task->execute(&progress, CompactionTask::kNoCancelFn));
     EXPECT_EQ(100, progress.value());
+=======
+    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, false, nullptr);
+    ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
+    check_task(task);
+    ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
+    EXPECT_EQ(100, task_context->progress.value());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ASSERT_OK(publish_single_version(_tablet_metadata->id(), version + 1, txn_id).status());
     version++;
     ASSERT_EQ(kChunkSize - 4, read(version));
 
     ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+<<<<<<< HEAD
     ASSERT_EQ(1, new_tablet_metadata->cumulative_point());
+=======
+    if (GetParam().enable_size_tiered_compaction_strategy) {
+        ASSERT_EQ(0, new_tablet_metadata->cumulative_point());
+    } else {
+        ASSERT_EQ(1, new_tablet_metadata->cumulative_point());
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ASSERT_EQ(1, new_tablet_metadata->rowsets_size());
 }
 
 INSTANTIATE_TEST_SUITE_P(LakeUniqueKeyCompactionWithDeleteTest, LakeUniqueKeyCompactionWithDeleteTest,
+<<<<<<< HEAD
                          ::testing::Values(CompactionParam{HORIZONTAL_COMPACTION, 5},
                                            CompactionParam{VERTICAL_COMPACTION, 1}),
+=======
+                         ::testing::Values(CompactionParam{.algorithm = HORIZONTAL_COMPACTION,
+                                                           .enable_size_tiered_compaction_strategy = true},
+                                           CompactionParam{.algorithm = HORIZONTAL_COMPACTION,
+                                                           .enable_size_tiered_compaction_strategy = false},
+                                           CompactionParam{.algorithm = VERTICAL_COMPACTION,
+                                                           .vertical_compaction_max_columns_per_group = 1,
+                                                           .enable_size_tiered_compaction_strategy = true},
+                                           CompactionParam{.algorithm = VERTICAL_COMPACTION,
+                                                           .vertical_compaction_max_columns_per_group = 1,
+                                                           .enable_size_tiered_compaction_strategy = false}),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                          to_string_param_name);
 
 } // namespace starrocks::lake
 
 int main(int argc, char** argv) {
+<<<<<<< HEAD
     ::testing::InitGoogleTest(&argc, argv);
     if (getenv("STARROCKS_HOME") == nullptr) {
         fprintf(stderr, "you need set STARROCKS_HOME environment variable.\n");
@@ -678,4 +1006,7 @@ int main(int argc, char** argv) {
     starrocks::shutdown_logging();
 
     return r;
+=======
+    starrocks::init_test_env(argc, argv);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

@@ -110,6 +110,13 @@ public class TableIndexes implements Writable {
         this.properties = properties;
     }
 
+<<<<<<< HEAD
+=======
+
+    public TableIndexes shallowCopy() {
+        return new TableIndexes(getCopiedIndexes(), getCopiedProperties());
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public void write(DataOutput out) throws IOException {
         Text.writeString(out, GsonUtils.GSON.toJson(this));

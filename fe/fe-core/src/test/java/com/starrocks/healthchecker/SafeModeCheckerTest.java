@@ -36,7 +36,11 @@ public class SafeModeCheckerTest {
 
     @Before
     public void setUp() {
+<<<<<<< HEAD
         globalStateMgr.getClusterInfo().addBackend(be);
+=======
+        globalStateMgr.getNodeMgr().getClusterInfo().addBackend(be);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ImmutableMap<String, DiskInfo> disksRef;
         DiskInfo diskInfo = new DiskInfo("");
         diskInfo.setTotalCapacityB(100);
@@ -50,7 +54,11 @@ public class SafeModeCheckerTest {
                 minTimes = 0;
                 result = globalStateMgr;
 
+<<<<<<< HEAD
                 GlobalStateMgr.getCurrentSystemInfo().getBackends();
+=======
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackends();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 minTimes = 0;
                 result = be;
             }
@@ -59,7 +67,11 @@ public class SafeModeCheckerTest {
 
     @After
     public void tearDown() throws DdlException {
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentState().getClusterInfo().dropBackend(be);
+=======
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().dropBackend(be);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         GlobalStateMgr.getCurrentState().setSafeMode(false);
     }
 

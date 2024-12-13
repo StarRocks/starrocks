@@ -29,6 +29,13 @@ import java.util.List;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+<<<<<<< HEAD
+=======
+/**
+ * Show all the unfinished queries retrieving from the slot manager.
+ * <p> Note that it only shows the queries managed by the slot manager, that is, enabling query queue.
+ */
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public class ShowRunningQueriesStmt extends ShowStmt {
     private static final List<Pair<Column, Function<LogicalSlot, String>>> META_DATA = ImmutableList.of(
             Pair.create(new Column("QueryId", ScalarType.createVarchar(64)),

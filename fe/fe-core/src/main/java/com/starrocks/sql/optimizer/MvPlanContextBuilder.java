@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer;
 
+<<<<<<< HEAD
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.qe.ConnectContext;
@@ -30,5 +31,36 @@ public class MvPlanContextBuilder {
             connectContext.setThreadLocalInfo();
         }
         return mvOptimizer.optimize(mv, connectContext);
+=======
+import com.google.common.collect.Lists;
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MvPlanContext;
+import com.starrocks.catalog.Table.TableType;
+import com.starrocks.qe.ConnectContext;
+
+import java.util.List;
+
+public class MvPlanContextBuilder {
+    public static List<MvPlanContext> getPlanContext(MaterializedView mv) {
+        // build mv query logical plan
+        MaterializedViewOptimizer mvOptimizer = new MaterializedViewOptimizer();
+
+        // If the caller is not from query (eg. background schema change thread), set thread local info to avoid
+        // NPE in the planning.
+        ConnectContext connectContext = ConnectContext.get() == null ? new ConnectContext() : ConnectContext.get();
+
+        List<MvPlanContext> results = Lists.newArrayList();
+        try (var guard = connectContext.bindScope()) {
+            MvPlanContext contextWithoutView = mvOptimizer.optimize(mv, connectContext);
+            results.add(contextWithoutView);
+
+            // TODO: Only add context with view when view rewrite is set on.
+            if (mv.getBaseTableTypes().stream().anyMatch(type -> type == TableType.VIEW)) {
+                MvPlanContext contextWithView = mvOptimizer.optimize(mv, connectContext, false);
+                results.add(contextWithView);
+            }
+        }
+        return results;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }

@@ -37,7 +37,11 @@ Steps to enable tracing in SR:
     decster@decster-MS-7C94:~/soft/jaeger-1.31.0-linux-amd64$ ./jaeger-all-in-one 
 ```
 
+<<<<<<< HEAD
 2.  Config FE\&FE to enable tracing
+=======
+2.  Config FE\&FE to enable tracing.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     Currently, opentelemetry java & cpp sdk use different protocols, java uses grpc proto, while cpp uses thrift\&UDP, so the endpoint ports are different.
 
 ```
@@ -54,7 +58,11 @@ Steps to enable tracing in SR:
 ```
 
 3.  Open jaeger web UI, usually in `http://localhost:16686/search`
+<<<<<<< HEAD
 4.  Do some data ingestion (streamload\/insert into) and search TXN traces on web UI
+=======
+4.  Do some data ingestion (streamload/insert into) and search TXN traces on web UI
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ![trace_pic2.png](../../_assets/trace_pic2.png)(trace_pic2.png) 
 ![trace_pic3.png](../../_assets/trace_pic3.png)(trace_pic3.png) 

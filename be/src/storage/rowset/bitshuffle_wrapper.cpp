@@ -42,6 +42,10 @@
 
 // Include the bitshuffle header again, but this time importing the
 // AVX2-compiled symbols by defining some macros.
+<<<<<<< HEAD
+=======
+// See `build_bitshuffle` in `build-thirdparty.sh` for detail.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #undef BITSHUFFLE_H
 #define bshuf_compress_lz4_bound bshuf_compress_lz4_bound_avx512
 #define bshuf_compress_lz4 bshuf_compress_lz4_avx512
@@ -60,6 +64,18 @@
 #undef bshuf_compress_lz4
 #undef bshuf_decompress_lz4
 
+<<<<<<< HEAD
+=======
+#undef BITSHUFFLE_H
+#define bshuf_compress_lz4_bound bshuf_compress_lz4_bound_neon
+#define bshuf_compress_lz4 bshuf_compress_lz4_neon
+#define bshuf_decompress_lz4 bshuf_decompress_lz4_neon
+#include <bitshuffle/bitshuffle.h> // NOLINT(*)
+#undef bshuf_compress_lz4_bound
+#undef bshuf_compress_lz4
+#undef bshuf_decompress_lz4
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 using base::CPU;
 
 namespace starrocks::bitshuffle {
@@ -92,6 +108,13 @@ __attribute__((constructor)) void SelectBitshuffleFunctions() {
         g_bshuf_compress_lz4 = bshuf_compress_lz4;
         g_bshuf_decompress_lz4 = bshuf_decompress_lz4;
     }
+<<<<<<< HEAD
+=======
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+    g_bshuf_compress_lz4_bound = bshuf_compress_lz4_bound_neon;
+    g_bshuf_compress_lz4 = bshuf_compress_lz4_neon;
+    g_bshuf_decompress_lz4 = bshuf_decompress_lz4_neon;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #else
     g_bshuf_compress_lz4_bound = bshuf_compress_lz4_bound;
     g_bshuf_compress_lz4 = bshuf_compress_lz4;

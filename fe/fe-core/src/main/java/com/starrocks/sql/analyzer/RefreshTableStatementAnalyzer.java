@@ -24,14 +24,21 @@ import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.DdlStmt;
 import com.starrocks.sql.ast.RefreshTableStmt;
+<<<<<<< HEAD
 import com.starrocks.sql.common.MetaUtils;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 public class RefreshTableStatementAnalyzer {
     public static void analyze(RefreshTableStmt statement, ConnectContext context) {
         new RefreshTableStatementAnalyzer.RefreshTableStatementAnalyzerVisitor().visit(statement, context);
     }
 
+<<<<<<< HEAD
     static class RefreshTableStatementAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+=======
+    static class RefreshTableStatementAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         private final MetadataMgr metadataMgr;
 
         public RefreshTableStatementAnalyzerVisitor() {
@@ -45,7 +52,11 @@ public class RefreshTableStatementAnalyzer {
         @Override
         public Void visitRefreshTableStatement(RefreshTableStmt statement, ConnectContext context) {
             TableName tableName = statement.getTableName();
+<<<<<<< HEAD
             MetaUtils.normalizationTableName(context, tableName);
+=======
+            tableName.normalization(context);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             String catalogName = tableName.getCatalog();
             String dbName = tableName.getDb();
             String tblName = tableName.getTbl();

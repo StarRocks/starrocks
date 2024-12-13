@@ -53,7 +53,11 @@ public class EsScanNodeTest extends EsTestCase {
 
         new Expectations() {
             {
+<<<<<<< HEAD
                 globalStateMgr.getCurrentSystemInfo();
+=======
+                globalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 result = systemInfoService;
                 minTimes = 0;
 

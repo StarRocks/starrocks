@@ -28,8 +28,13 @@ import java.util.Map;
 // 3. Modify Partition (*) set ("replication_num" = "3")
 public class ModifyPartitionClause extends AlterTableClause {
 
+<<<<<<< HEAD
     private List<String> partitionNames;
     private Map<String, String> properties;
+=======
+    private final List<String> partitionNames;
+    private final Map<String, String> properties;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private boolean needExpand = false;
 
     public List<String> getPartitionNames() {
@@ -46,6 +51,7 @@ public class ModifyPartitionClause extends AlterTableClause {
         this.partitionNames = partitionNames;
         this.properties = properties;
         this.needExpand = false;
+<<<<<<< HEAD
         // ATTN: currently, modify partition only allow 3 kinds of operations:
         // 1. modify replication num
         // 2. modify data property
@@ -53,6 +59,8 @@ public class ModifyPartitionClause extends AlterTableClause {
         // And these 3 operations does not require table to be stable.
         // If other kinds of operations be added later, "needTableStable" may be changed.
         this.needTableStable = false;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     // c'tor for 'Modify Partition(*)' clause
@@ -61,7 +69,10 @@ public class ModifyPartitionClause extends AlterTableClause {
         this.partitionNames = Lists.newArrayList();
         this.properties = properties;
         this.needExpand = true;
+<<<<<<< HEAD
         this.needTableStable = false;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public static ModifyPartitionClause createStarClause(Map<String, String> properties) {
@@ -73,7 +84,10 @@ public class ModifyPartitionClause extends AlterTableClause {
         return new ModifyPartitionClause(properties, pos);
     }
 
+<<<<<<< HEAD
     @Override
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public Map<String, String> getProperties() {
         return this.properties;
     }

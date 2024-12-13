@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # array_contains_all
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 检查数组`arr1`是否包含数组`arr2`中的所有元素，即`arr2`是否为`arr1`的子集。是的话返回`1`，否则返回`0`。
 

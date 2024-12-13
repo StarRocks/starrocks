@@ -20,7 +20,11 @@
 #ifdef __x86_64__
 #include <immintrin.h>
 #endif
+<<<<<<< HEAD
 #if defined(__ARM_NEON__) || defined(__aarch64__)
+=======
+#if defined(__ARM_NEON) && defined(__aarch64__)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include <arm_acle.h>
 #include <arm_neon.h>
 #endif
@@ -33,6 +37,10 @@
 #include "gutil/bits.h"
 #include "gutil/casts.h"
 #include "gutil/cpu.h"
+<<<<<<< HEAD
+=======
+#include "simd/simd.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "types/logical_type.h"
 #include "types/logical_type_infra.h"
 #include "util/phmap/phmap.h"
@@ -80,7 +88,11 @@ public:
     // Find the first non-null value in [start, end), return end if all null
     static size_t find_nonnull(const Column* col, size_t start, size_t end);
 
+<<<<<<< HEAD
     // Find the non-null value in reversed order in [start, end), return start if all null
+=======
+    // Find the non-null value in reversed order in [start, end), return end if all null
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     static size_t last_nonnull(const Column* col, size_t start, size_t end);
 
     // Find first value in range [start, end) that not equal to target
@@ -265,6 +277,14 @@ public:
         return down_cast<RunTimeColumnType<Type>*>(value);
     }
 
+<<<<<<< HEAD
+=======
+    template <LogicalType Type>
+    static inline const RunTimeColumnType<Type>* cast_to_raw(const Column* value) {
+        return down_cast<const RunTimeColumnType<Type>*>(value);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     /**
      * Cast columnPtr to special type ColumnPtr
      * Plz sure actual column type by yourself
@@ -386,6 +406,10 @@ public:
     using ColumnsConstIterator = Columns::const_iterator;
     static bool is_all_const(ColumnsConstIterator const& begin, ColumnsConstIterator const& end);
     static size_t compute_bytes_size(ColumnsConstIterator const& begin, ColumnsConstIterator const& end);
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     template <typename T, bool avx512f>
     static size_t t_filter_range(const Filter& filter, T* data, size_t from, size_t to) {
         auto start_offset = from;
@@ -418,9 +442,15 @@ public:
         auto m = (mask >> SHIFT) & MASK;                                        \
         if (m) {                                                                \
             __m512i dst;                                                        \
+<<<<<<< HEAD
             __m512i src = _mm512_loadu_epi##WIDTH(data + start_offset + SHIFT); \
             dst = _mm512_mask_compress_epi##WIDTH(dst, m, src);                 \
             _mm512_storeu_epi##WIDTH(data + result_offset, dst);                \
+=======
+            __m512i src = _mm512_loadu_epi## WIDTH(data + start_offset + SHIFT); \
+            dst = _mm512_mask_compress_epi## WIDTH(dst, m, src);                 \
+            _mm512_storeu_epi## WIDTH(data + result_offset, dst);                \
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             result_offset += __builtin_popcount(m);                             \
         }                                                                       \
     }
@@ -459,12 +489,18 @@ public:
 
             start_offset += kBatchNums;
         }
+<<<<<<< HEAD
 #elif defined(__ARM_NEON__) || defined(__aarch64__)
         const uint8_t* f_data = filter.data() + from;
+=======
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+        const uint8_t* filter_data = filter.data() + from;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         constexpr size_t data_type_size = sizeof(T);
 
         constexpr size_t kBatchNums = 128 / (8 * sizeof(uint8_t));
         while (start_offset + kBatchNums < to) {
+<<<<<<< HEAD
             uint8x16_t filter = vld1q_u8(f_data);
             if (vmaxvq_u8(filter) == 0) {
                 // skip
@@ -483,11 +519,30 @@ public:
 #endif
                         *(data + result_offset++) = *(data + start_offset + i);
                     }
+=======
+            const uint8x16_t vfilter = vld1q_u8(filter_data);
+            uint64_t nibble_mask = SIMD::get_nibble_mask(vmvnq_u8(vceqzq_u8(vfilter)));
+            if (nibble_mask == 0) {
+                // skip
+            } else if (nibble_mask == 0xffff'ffff'ffff'ffffull) {
+                memmove(data + result_offset, data + start_offset, kBatchNums * data_type_size);
+                result_offset += kBatchNums;
+            } else {
+                // Make each nibble only keep the highest bit 1, that is 0b1111 -> 0b1000.
+                nibble_mask &= 0x8888'8888'8888'8888ull;
+                for (; nibble_mask > 0; nibble_mask &= nibble_mask - 1) {
+                    uint32_t index = __builtin_ctzll(nibble_mask) >> 2;
+                    *(data + result_offset++) = *(data + start_offset + index);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
             }
 
             start_offset += kBatchNums;
+<<<<<<< HEAD
             f_data += kBatchNums;
+=======
+            filter_data += kBatchNums;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 #endif
         // clang-format on
@@ -535,21 +590,34 @@ public:
 
     static ColumnPtr convert_time_column_from_double_to_str(const ColumnPtr& column);
 
+<<<<<<< HEAD
     static NullColumnPtr one_size_not_null_column;
 
     static NullColumnPtr one_size_null_column;
+=======
+    // unpack array column, return offsets_column, elements_column, elements_null_column
+    static std::tuple<UInt32Column::Ptr, ColumnPtr, NullColumnPtr> unpack_array_column(const ColumnPtr& column);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 // Hold a slice of chunk
 template <class Ptr = ChunkUniquePtr>
 struct ChunkSliceTemplate {
     Ptr chunk;
+<<<<<<< HEAD
+=======
+    size_t segment_id = 0;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     size_t offset = 0;
 
     bool empty() const;
     size_t rows() const;
     size_t skip(size_t skip_rows);
+<<<<<<< HEAD
     Ptr cutoff(size_t required_rows);
+=======
+    ChunkUniquePtr cutoff(size_t required_rows);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     void reset(Ptr input);
 };
 
@@ -574,11 +642,18 @@ struct GetContainer {
             return ColumnHelper::as_raw_column<BinaryColumn>(column.get())->get_proxy_data(); \
         }                                                                                     \
     };
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 APPLY_FOR_ALL_STRING_TYPE(GET_CONTAINER)
 #undef GET_CONTAINER
 
 using ChunkSlice = ChunkSliceTemplate<ChunkUniquePtr>;
 using ChunkSharedSlice = ChunkSliceTemplate<ChunkPtr>;
+<<<<<<< HEAD
+=======
+using SegmentedChunkSlice = ChunkSliceTemplate<SegmentedChunkPtr>;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 } // namespace starrocks

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # months_add
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Adds a specified number of months to the date, accurate to the month.
 

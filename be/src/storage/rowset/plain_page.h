@@ -60,6 +60,14 @@ public:
         reset();
     }
 
+<<<<<<< HEAD
+=======
+    void reserve_head(uint8_t head_size) override {
+        CHECK(_reserved_head_size == 0);
+        _reserved_head_size = head_size;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     bool is_page_full() override { return _buffer.size() > _options.data_page_size; }
 
     uint32_t add(const uint8_t* vals, uint32_t count) override {
@@ -80,7 +88,17 @@ public:
             _first_value.assign_copy(&_buffer[PLAIN_PAGE_HEADER_SIZE], SIZE_OF_TYPE);
             _last_value.assign_copy(&_buffer[PLAIN_PAGE_HEADER_SIZE + (_count - 1) * SIZE_OF_TYPE], SIZE_OF_TYPE);
         }
+<<<<<<< HEAD
         return &_buffer;
+=======
+        if (_reserved_head_size == 0) {
+            return &_buffer;
+        } else {
+            _plus_header_buffer.resize(_reserved_head_size + _buffer.size());
+            memcpy(&_plus_header_buffer[_reserved_head_size], _buffer.data(), _buffer.size());
+            return &_plus_header_buffer;
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     void reset() override {
@@ -119,10 +137,20 @@ private:
     enum { SIZE_OF_TYPE = TypeTraits<Type>::size };
     faststring _first_value;
     faststring _last_value;
+<<<<<<< HEAD
+=======
+    uint8_t _reserved_head_size{0};
+    faststring _plus_header_buffer;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 template <LogicalType Type>
 class PlainPageDecoder : public PageDecoder {
+<<<<<<< HEAD
+=======
+    using ValueType = typename CppTypeTraits<Type>::CppType;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public:
     PlainPageDecoder(Slice data) : _data(data) {}
 
@@ -147,7 +175,11 @@ public:
 
         _parsed = true;
 
+<<<<<<< HEAD
         seek_to_position_in_page(0);
+=======
+        RETURN_IF_ERROR(seek_to_position_in_page(0));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return Status::OK();
     }
 
@@ -204,15 +236,25 @@ public:
     }
 
     Status next_batch(size_t* count, Column* dst) override {
+<<<<<<< HEAD
         SparseRange read_range;
         uint32_t begin = current_index();
         read_range.add(Range(begin, begin + *count));
+=======
+        SparseRange<> read_range;
+        uint32_t begin = current_index();
+        read_range.add(Range<>(begin, begin + *count));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         RETURN_IF_ERROR(next_batch(read_range, dst));
         *count = current_index() - begin;
         return Status::OK();
     }
 
+<<<<<<< HEAD
     Status next_batch(const SparseRange& range, Column* dst) override {
+=======
+    Status next_batch(const SparseRange<>& range, Column* dst) override {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         DCHECK(_parsed);
 
         size_t to_read = range.span_size();
@@ -220,10 +262,17 @@ public:
             return Status::OK();
         }
 
+<<<<<<< HEAD
         SparseRangeIterator iter = range.new_iterator();
         while (iter.has_more() && _cur_idx < _num_elems) {
             _cur_idx = iter.begin();
             Range r = iter.next(to_read);
+=======
+        SparseRangeIterator<> iter = range.new_iterator();
+        while (iter.has_more() && _cur_idx < _num_elems) {
+            _cur_idx = iter.begin();
+            Range<> r = iter.next(to_read);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             uint32_t max_fetch = std::min(r.span_size(), _num_elems - _cur_idx);
             int n = dst->append_numbers(&_data[PLAIN_PAGE_HEADER_SIZE + _cur_idx * SIZE_OF_TYPE],
                                         max_fetch * SIZE_OF_TYPE);
@@ -243,6 +292,13 @@ public:
         return _cur_idx;
     }
 
+<<<<<<< HEAD
+=======
+    void at_index(uint32_t idx, ValueType* out) const {
+        memcpy(out, &_data[PLAIN_PAGE_HEADER_SIZE + idx * SIZE_OF_TYPE], SIZE_OF_TYPE);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     EncodingTypePB encoding_type() const override { return PLAIN_ENCODING; }
 
 private:

@@ -41,8 +41,13 @@ DIAGNOSTIC_POP
 #include <exec/arrow_type_traits.h>
 
 #include "column/column_helper.h"
+<<<<<<< HEAD
 #include "runtime/large_int_value.h"
 #include "storage/tablet_schema_helper.h"
+=======
+#include "storage/tablet_schema_helper.h"
+#include "types/large_int_value.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 namespace starrocks {
 struct StarRocksColumnToArrowTest : public testing::Test {};
@@ -567,11 +572,17 @@ TEST_F(StarRocksColumnToArrowTest, testArrayColumn) {
     convert_to_arrow(array_type_desc, column, arrow_type, memory_pool.get(), &result);
     std::shared_ptr<arrow::Array> array = result->column(0);
 
+<<<<<<< HEAD
     std::shared_ptr<arrow::Array> expect_array;
     auto s = arrow::ipc::internal::json::ArrayFromJSON(arrow_type, "[[1, 2, 3], [4, null, 5, 6], [], [null, null]]",
                                                        &expect_array);
     ASSERT_TRUE(s.ok());
     ASSERT_TRUE(expect_array->Equals(array));
+=======
+    auto s = arrow::ipc::internal::json::ArrayFromJSON(arrow_type, "[[1, 2, 3], [4, null, 5, 6], [], [null, null]]");
+    ASSERT_TRUE(s.ok());
+    ASSERT_TRUE(s.ValueUnsafe()->Equals(array));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 TEST_F(StarRocksColumnToArrowTest, testNullableArrayColumn) {
@@ -596,6 +607,7 @@ TEST_F(StarRocksColumnToArrowTest, testNullableArrayColumn) {
     std::shared_ptr<arrow::Array> array = result->column(0);
 
     std::shared_ptr<arrow::Array> expect_array;
+<<<<<<< HEAD
     auto s = arrow::ipc::internal::json::ArrayFromJSON(
             arrow_type, "[[1, 2, 3], null, [4, null, 5, 6], [], [null, null]]", &expect_array);
     ASSERT_TRUE(s.ok());
@@ -608,6 +620,18 @@ TEST_F(StarRocksColumnToArrowTest, testStructColumn) {
     struct_type_desc.field_names.emplace_back("name");
     struct_type_desc.children.emplace_back(TYPE_INT);
     struct_type_desc.children.emplace_back(TYPE_CHAR);
+=======
+    auto s = arrow::ipc::internal::json::ArrayFromJSON(arrow_type,
+                                                       "[[1, 2, 3], null, [4, null, 5, 6], [], [null, null]]");
+    ASSERT_TRUE(s.ok());
+    ASSERT_TRUE(s.ValueUnsafe()->Equals(array));
+}
+
+TEST_F(StarRocksColumnToArrowTest, testStructColumn) {
+    std::vector<std::string> field_names{"id", "name"};
+    auto struct_type_desc =
+            TypeDescriptor::create_struct_type(field_names, {TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_CHAR)});
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     auto column = ColumnHelper::create_column(struct_type_desc, false, false, 0, false);
 
     // {1, "test1"}
@@ -626,13 +650,17 @@ TEST_F(StarRocksColumnToArrowTest, testStructColumn) {
     convert_to_arrow(struct_type_desc, column, arrow_type, memory_pool.get(), &result);
     std::shared_ptr<arrow::Array> array = result->column(0);
 
+<<<<<<< HEAD
     std::shared_ptr<arrow::Array> expect_array;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     auto s = arrow::ipc::internal::json::ArrayFromJSON(arrow_type,
                                                        R"([
                         {"id": 1, "name": "test1"},
                         {"id": null, "name": "test2"},
                         {"id": 2, "name": null},
                         {"id": null, "name": null}
+<<<<<<< HEAD
                     ])",
                                                        &expect_array);
     ASSERT_TRUE(s.ok());
@@ -645,6 +673,17 @@ TEST_F(StarRocksColumnToArrowTest, testNullableStructColumn) {
     struct_type_desc.field_names.emplace_back("name");
     struct_type_desc.children.emplace_back(TYPE_INT);
     struct_type_desc.children.emplace_back(TYPE_CHAR);
+=======
+                    ])");
+    ASSERT_TRUE(s.ok());
+    ASSERT_TRUE(s.ValueUnsafe()->Equals(array));
+}
+
+TEST_F(StarRocksColumnToArrowTest, testNullableStructColumn) {
+    std::vector<std::string> field_names{"id", "name"};
+    auto struct_type_desc =
+            TypeDescriptor::create_struct_type(field_names, {TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_CHAR)});
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     auto column = ColumnHelper::create_column(struct_type_desc, true, false, 0, false);
 
     // {1, "test1"}
@@ -673,10 +712,16 @@ TEST_F(StarRocksColumnToArrowTest, testNullableStructColumn) {
                         {"id": null, "name": "test2"},
                         {"id": 2, "name": null},
                         {"id": null, "name": null}
+<<<<<<< HEAD
                     ])",
                                                        &expect_array);
     ASSERT_TRUE(s.ok());
     ASSERT_TRUE(expect_array->Equals(array));
+=======
+                    ])");
+    ASSERT_TRUE(s.ok());
+    ASSERT_TRUE(s.ValueUnsafe()->Equals(array));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 TEST_F(StarRocksColumnToArrowTest, testMapColumn) {
@@ -772,11 +817,16 @@ TEST_F(StarRocksColumnToArrowTest, testNullableMapColumn) {
 TEST_F(StarRocksColumnToArrowTest, testNestedArrayStructMap) {
     // ARRAY<STRUCT<INT,MAP<INT,CHAR>>>>
     auto map_type_desc = TypeDescriptor::create_map_type(TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_CHAR));
+<<<<<<< HEAD
     TypeDescriptor struct_type_desc(TYPE_STRUCT);
     struct_type_desc.field_names.emplace_back("id");
     struct_type_desc.field_names.emplace_back("map");
     struct_type_desc.children.emplace_back(TYPE_INT);
     struct_type_desc.children.emplace_back(map_type_desc);
+=======
+    std::vector<std::string> field_names{"id", "map"};
+    auto struct_type_desc = TypeDescriptor::create_struct_type(field_names, {TypeDescriptor(TYPE_INT), map_type_desc});
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     auto array_type_desc = TypeDescriptor::create_array_type(struct_type_desc);
     auto column = ColumnHelper::create_column(array_type_desc, true, false, 0, false);
     // [{"id": 1, "map": {11:"test11"},{111:"test111"}}, null]

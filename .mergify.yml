@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 
 commands_restrictions:
   backport:
@@ -6,6 +7,20 @@ commands_restrictions:
   rebase:
     conditions:
       - sender-permission>=read
+=======
+commands_restrictions:
+  backport:
+    conditions:
+      - or:
+        - sender-permission>=read
+        - sender=github-actions[bot]
+
+  rebase:
+    conditions:
+      - or:
+        - sender-permission>=read
+        - sender=github-actions[bot]
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 pull_request_rules:
   - name: assign PRs with the pr author
@@ -16,6 +31,7 @@ pull_request_rules:
         add_users: 
           - "{{author}}"
 
+<<<<<<< HEAD
   - name: assign backport PRs with the pr author
     conditions:
       - merged
@@ -25,6 +41,8 @@ pull_request_rules:
         assignees: 
           - "{{author}}"
   
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
   - name: close pr when conflict
     conditions:
       - label=conflicts

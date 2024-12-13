@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     n_name,
@@ -23,6 +24,8 @@ group by
     n_name
 order by
     revenue desc ;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 [fragment statistics]
 PLAN FRAGMENT 0(F16)
 Output Exprs:42: n_name | 49: sum
@@ -167,7 +170,11 @@ TABLE: customer
 NON-PARTITION PREDICATES: 1: c_custkey IS NOT NULL
 partitions=1/1
 avgRowSize=12.0
+<<<<<<< HEAD
 numNodes=0
+=======
+dataCacheOptions={populate: false}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 cardinality: 15000000
 column statistics:
 * c_custkey-->[1.0, 1.5E7, 0.0, 8.0, 1.5E7] ESTIMATE
@@ -191,10 +198,17 @@ OutPut Exchange Id: 17
 15:HdfsScanNode
 TABLE: orders
 NON-PARTITION PREDICATES: 13: o_orderdate >= '1995-01-01', 13: o_orderdate < '1996-01-01'
+<<<<<<< HEAD
 MIN/MAX PREDICATES: 52: o_orderdate >= '1995-01-01', 53: o_orderdate < '1996-01-01'
 partitions=1/1
 avgRowSize=20.0
 numNodes=0
+=======
+MIN/MAX PREDICATES: 13: o_orderdate >= '1995-01-01', 13: o_orderdate < '1996-01-01'
+partitions=1/1
+avgRowSize=20.0
+dataCacheOptions={populate: false}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 cardinality: 22765073
 column statistics:
 * o_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 2.2765072765072763E7] ESTIMATE
@@ -246,7 +260,11 @@ TABLE: lineitem
 NON-PARTITION PREDICATES: 18: l_orderkey IS NOT NULL
 partitions=1/1
 avgRowSize=28.0
+<<<<<<< HEAD
 numNodes=0
+=======
+dataCacheOptions={populate: false}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 cardinality: 600037902
 probe runtime filters:
 - filter_id = 2, probe_expr = (20: l_suppkey)
@@ -296,7 +314,11 @@ TABLE: supplier
 NON-PARTITION PREDICATES: 34: s_suppkey IS NOT NULL, 37: s_nationkey IS NOT NULL
 partitions=1/1
 avgRowSize=8.0
+<<<<<<< HEAD
 numNodes=0
+=======
+dataCacheOptions={populate: false}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 cardinality: 1000000
 probe runtime filters:
 - filter_id = 1, probe_expr = (37: s_nationkey)
@@ -341,7 +363,11 @@ TABLE: nation
 NON-PARTITION PREDICATES: 41: n_nationkey IS NOT NULL
 partitions=1/1
 avgRowSize=33.0
+<<<<<<< HEAD
 numNodes=0
+=======
+dataCacheOptions={populate: false}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 cardinality: 25
 probe runtime filters:
 - filter_id = 0, probe_expr = (43: n_regionkey)
@@ -366,10 +392,17 @@ OutPut Exchange Id: 05
 3:HdfsScanNode
 TABLE: region
 NON-PARTITION PREDICATES: 46: r_name = 'AFRICA'
+<<<<<<< HEAD
 MIN/MAX PREDICATES: 50: r_name <= 'AFRICA', 51: r_name >= 'AFRICA'
 partitions=1/1
 avgRowSize=10.8
 numNodes=0
+=======
+MIN/MAX PREDICATES: 46: r_name <= 'AFRICA', 46: r_name >= 'AFRICA'
+partitions=1/1
+avgRowSize=10.8
+dataCacheOptions={populate: false}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 cardinality: 1
 column statistics:
 * r_regionkey-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE

@@ -14,19 +14,29 @@
 
 package com.starrocks.planner;
 
+<<<<<<< HEAD
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.BeforeClass;
 import org.junit.FixMethodOrder;
 import org.junit.Ignore;
+=======
+import org.junit.BeforeClass;
+import org.junit.FixMethodOrder;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.junit.Test;
 import org.junit.runners.MethodSorters;
 
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 public class MaterializedViewHiveTPCHTest extends MaterializedViewTestBase {
     @BeforeClass
+<<<<<<< HEAD
     public static void setUp() throws Exception {
         PlanTestBase.beforeClass();
         MaterializedViewTestBase.setUp();
+=======
+    public static void beforeClass() throws Exception {
+        MaterializedViewTestBase.beforeClass();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
 
         executeSqlFile("sql/materialized-view/tpch-hive/ddl_tpch_mv1.sql");
@@ -63,7 +73,10 @@ public class MaterializedViewHiveTPCHTest extends MaterializedViewTestBase {
     }
 
     @Test
+<<<<<<< HEAD
     @Ignore
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void testQuery7() {
         runFileUnitTest("materialized-view/tpch-hive/q7");
     }
@@ -108,8 +121,12 @@ public class MaterializedViewHiveTPCHTest extends MaterializedViewTestBase {
         runFileUnitTest("materialized-view/tpch-hive/q17");
     }
 
+<<<<<<< HEAD
     // @Test
     // Ken is working on this, disable this case before it is fixed.
+=======
+    @Test
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void testQuery18() {
         runFileUnitTest("materialized-view/tpch-hive/q18");
     }

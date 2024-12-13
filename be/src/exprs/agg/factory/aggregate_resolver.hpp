@@ -22,7 +22,10 @@
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/factory/aggregate_factory.hpp"
 #include "types/logical_type.h"
+<<<<<<< HEAD
 #include "types/logical_type_infra.h"
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "udf/java/java_function_fwd.h"
 
 namespace starrocks {
@@ -68,6 +71,10 @@ public:
     void register_approx();
     void register_others();
     void register_retract_functions();
+<<<<<<< HEAD
+=======
+    void register_hypothesis_testing();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     const std::vector<LogicalType>& aggregate_types() const {
         const static std::vector<LogicalType> kTypes{
@@ -106,6 +113,22 @@ public:
         }
     }
 
+<<<<<<< HEAD
+=======
+    template <class StateType, typename SpecificAggFunctionPtr = AggregateFunctionPtr, bool IgnoreNull = true>
+    void add_general_mapping(const std::string& name, bool is_window, SpecificAggFunctionPtr fun) {
+        _general_mapping.emplace(std::make_tuple(name, false, false), fun);
+        auto nullable_agg = AggregateFactory::MakeNullableAggregateFunctionUnary<StateType, false, IgnoreNull>(fun);
+        _general_mapping.emplace(std::make_tuple(name, false, true), nullable_agg);
+
+        if (is_window) {
+            _general_mapping.emplace(std::make_tuple(name, true, false), fun);
+            auto nullable_agg = AggregateFactory::MakeNullableAggregateFunctionUnary<StateType, true, IgnoreNull>(fun);
+            _general_mapping.emplace(std::make_tuple(name, true, true), nullable_agg);
+        }
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     template <LogicalType ArgType, LogicalType RetType, typename SpecificAggFunctionPtr = AggregateFunctionPtr>
     void add_aggregate_mapping_notnull(const std::string& name, bool is_window, SpecificAggFunctionPtr fun) {
         _infos_mapping.emplace(std::make_tuple(name, ArgType, RetType, false, false), fun);
@@ -118,7 +141,11 @@ public:
 
     template <LogicalType ArgType, LogicalType RetType, class StateType,
               typename SpecificAggFunctionPtr = AggregateFunctionPtr, bool IgnoreNull = true,
+<<<<<<< HEAD
               typename AggNullPred = AggNonNullPred<StateType>>
+=======
+              IsAggNullPred<StateType> AggNullPred = AggNonNullPred<StateType>>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     void add_aggregate_mapping(const std::string& name, bool is_window, SpecificAggFunctionPtr fun,
                                AggNullPred null_pred = AggNullPred()) {
         _infos_mapping.emplace(std::make_tuple(name, ArgType, RetType, false, false), fun);
@@ -135,7 +162,12 @@ public:
     }
 
     template <LogicalType ArgType, LogicalType RetType, class StateType,
+<<<<<<< HEAD
               typename SpecificAggFunctionPtr = AggregateFunctionPtr, typename AggNullPred = AggNonNullPred<StateType>>
+=======
+              typename SpecificAggFunctionPtr = AggregateFunctionPtr,
+              IsAggNullPred<StateType> AggNullPred = AggNonNullPred<StateType>>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     void add_aggregate_mapping_variadic(const std::string& name, bool is_window, SpecificAggFunctionPtr fun,
                                         AggNullPred null_pred = AggNullPred()) {
         _infos_mapping.emplace(std::make_tuple(name, ArgType, RetType, false, false), fun);

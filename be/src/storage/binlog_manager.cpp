@@ -32,13 +32,21 @@ BinlogManager::BinlogManager(int64_t tablet_id, std::string path, int64_t max_fi
           _max_file_size(max_file_size),
           _max_page_size(max_page_size),
           _compression_type(compression_type),
+<<<<<<< HEAD
           _rowset_fetcher(rowset_fetcher),
+=======
+          _rowset_fetcher(std::move(rowset_fetcher)),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
           _unused_binlog_file_ids(UINT64_MAX) {}
 
 BinlogManager::~BinlogManager() {
     std::unique_lock lock(_meta_lock);
     if (_active_binlog_writer != nullptr) {
+<<<<<<< HEAD
         _active_binlog_writer->close(true);
+=======
+        WARN_IF_ERROR(_active_binlog_writer->close(true), "Close binlog writer failed");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         _active_binlog_writer.reset();
     }
 }
@@ -60,7 +68,11 @@ Status BinlogManager::init(BinlogLsn min_valid_lsn, std::vector<int64_t>& sorted
     std::vector<int64_t> useless_file_ids;
     std::vector<BinlogFileMetaPBPtr> recovered_file_metas;
     recovered_file_metas.reserve(binlog_file_ids.size());
+<<<<<<< HEAD
     std::list<int64_t>::reverse_iterator file_id_it = binlog_file_ids.rbegin();
+=======
+    auto file_id_it = binlog_file_ids.rbegin();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     int64_t next_version_index = sorted_valid_versions.size() - 1;
     while (next_version_index >= 0) {
         int64_t version = sorted_valid_versions[next_version_index];
@@ -255,6 +267,7 @@ StatusOr<BinlogBuilderParamsPtr> BinlogManager::begin_ingestion(int64_t version)
     return params;
 }
 
+<<<<<<< HEAD
 void BinlogManager::precommit_ingestion(int64_t version, BinlogBuildResultPtr result) {
     VLOG(3) << "Pre-commit ingestion, tablet: " << _tablet_id << ", version: " << version << ", path: " << _path;
     DCHECK_EQ(version, _ingestion_version);
@@ -263,6 +276,16 @@ void BinlogManager::precommit_ingestion(int64_t version, BinlogBuildResultPtr re
 }
 
 void BinlogManager::abort_ingestion(int64_t version, BinlogBuildResultPtr result) {
+=======
+void BinlogManager::precommit_ingestion(int64_t version, const BinlogBuildResultPtr& result) {
+    VLOG(3) << "Pre-commit ingestion, tablet: " << _tablet_id << ", version: " << version << ", path: " << _path;
+    DCHECK_EQ(version, _ingestion_version);
+    DCHECK(_build_result == nullptr);
+    _build_result = std::move(result);
+}
+
+void BinlogManager::abort_ingestion(int64_t version, const BinlogBuildResultPtr& result) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     VLOG(3) << "Abort ingestion, tablet: " << _tablet_id << ", version: " << version << ", path: " << _path;
     DCHECK_EQ(version, _ingestion_version);
     DCHECK(_build_result == nullptr);
@@ -499,8 +522,13 @@ void BinlogManager::delete_all_binlog() {
             _unused_binlog_file_ids.blocking_put(binlog_file->file_meta()->id());
             _wait_reader_binlog_files.pop_front();
         }
+<<<<<<< HEAD
         for (auto it = _alive_binlog_files.begin(); it != _alive_binlog_files.end(); it++) {
             _unused_binlog_file_ids.blocking_put(it->second->file_meta()->id());
+=======
+        for (const auto& iter : _alive_binlog_files) {
+            _unused_binlog_file_ids.blocking_put((iter.second)->file_meta()->id());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         _alive_binlog_files.clear();
         _alive_rowset_count_map.clear();
@@ -518,7 +546,11 @@ bool BinlogManager::is_rowset_used(int64_t rowset_id) {
     return _alive_rowset_count_map.count(rowset_id) >= 1 || _wait_reader_rowset_count_map.count(rowset_id) >= 1;
 }
 
+<<<<<<< HEAD
 StatusOr<int64_t> BinlogManager::register_reader(std::shared_ptr<BinlogReader> reader) {
+=======
+StatusOr<int64_t> BinlogManager::register_reader(const std::shared_ptr<BinlogReader>& reader) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     RETURN_IF_ERROR(_check_init_failure());
     std::unique_lock lock(_meta_lock);
     int64_t reader_id = _next_reader_id++;
@@ -565,6 +597,7 @@ BinlogRange BinlogManager::current_binlog_range() {
 
     BinlogFilePtr& start = _alive_binlog_files.begin()->second;
     BinlogFilePtr& end = _alive_binlog_files.rbegin()->second;
+<<<<<<< HEAD
     return BinlogRange(start->file_meta()->start_version(), start->file_meta()->start_seq_id(),
                        end->file_meta()->end_version(), end->file_meta()->end_seq_id());
 }
@@ -572,6 +605,16 @@ BinlogRange BinlogManager::current_binlog_range() {
 void BinlogManager::close_active_writer() {
     if (_active_binlog_writer != nullptr) {
         _active_binlog_writer->close(true);
+=======
+    return {start->file_meta()->start_version(), start->file_meta()->start_seq_id(), end->file_meta()->end_version(),
+            end->file_meta()->end_seq_id()};
+}
+
+// close_active_writer only used for UT
+void BinlogManager::close_active_writer() {
+    if (_active_binlog_writer != nullptr) {
+        (void)_active_binlog_writer->close(true);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         _active_binlog_writer.reset();
     }
 }

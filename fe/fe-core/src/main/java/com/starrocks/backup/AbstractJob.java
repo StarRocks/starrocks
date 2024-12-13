@@ -43,7 +43,10 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.lake.backup.LakeBackupJob;
 import com.starrocks.lake.backup.LakeRestoreJob;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
 import com.starrocks.server.WarehouseManager;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -124,11 +127,14 @@ public abstract class AbstractJob implements Writable {
         this.repoId = repoId;
     }
 
+<<<<<<< HEAD
     public String getCurrentWarehouse() {
         // TODO(lzh): pass the current warehouse.
         return WarehouseManager.DEFAULT_WAREHOUSE_NAME;
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public JobType getType() {
         return type;
     }

@@ -210,6 +210,7 @@ public class SelectStmtWithMultiLikeTest {
                         " then  '04'\n" +
                         " else  '00'\n" +
                         " end) = '02'\n",
+<<<<<<< HEAD
                         "region REGEXP '^((中央\\\\..*黄土)|" +
                                 "(东方\\\\..*青木.*)|" +
                                 "(南方\\\\..*赤火.*)|" +
@@ -220,6 +221,10 @@ public class SelectStmtWithMultiLikeTest {
                                 "(戊己\\\\..*辰巳)|" +
                                 "(庚辛\\\\..*午未)|" +
                                 "(壬癸\\\\..*申酉))$'",
+=======
+                        "region REGEXP '^((中央\\\\..*黄土)|(东方\\\\..*青木.*)|(南方\\\\..*赤火.*)|(北方\\\\.....'",
+                        "region REGEXP '^((甲乙\\\\..*子丑)|(丙丁\\\\..*寅卯)|(戊己\\\\..*辰巳)|(庚辛\\\\..*午未)...'",
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 },
                 {"region like '\\\\b%' or region like '\\\\d%' or region like '\\\\S+'",
                         "region LIKE '\\\\b%'",

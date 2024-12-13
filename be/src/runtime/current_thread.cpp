@@ -39,6 +39,13 @@ starrocks::MemTracker* CurrentThread::mem_tracker() {
     }
 }
 
+<<<<<<< HEAD
+=======
+starrocks::MemTracker* CurrentThread::singleton_check_mem_tracker() {
+    return tls_singleton_check_mem_tracker;
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 CurrentThread& CurrentThread::current() {
     return tls_thread_status;
 }

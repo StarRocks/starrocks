@@ -70,6 +70,7 @@ public class SelectList {
         isDistinct = value;
     }
 
+<<<<<<< HEAD
     public List<HintNode> getHintNodes() {
         return hintNodes;
     }
@@ -78,6 +79,8 @@ public class SelectList {
         this.hintNodes = hintNodes;
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void reset() {
         for (SelectListItem item : items) {
             if (!item.isStar()) {
@@ -90,4 +93,15 @@ public class SelectList {
     public SelectList clone() {
         return new SelectList(this);
     }
+<<<<<<< HEAD
+=======
+
+    public List<HintNode> getHintNodes() {
+        return hintNodes;
+    }
+
+    public void setHintNodes(List<HintNode> hintNodes) {
+        this.hintNodes = hintNodes;
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

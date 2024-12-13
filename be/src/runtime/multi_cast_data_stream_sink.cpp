@@ -16,8 +16,11 @@
 
 namespace starrocks {
 
+<<<<<<< HEAD
 static Status kOnlyPipelinedEngine = Status::NotSupported("Don't support non-pipelined query engine");
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 MultiCastDataStreamSink::MultiCastDataStreamSink(RuntimeState* state) : _sinks() {}
 
 void MultiCastDataStreamSink::add_data_stream_sink(std::unique_ptr<DataStreamSender> data_stream_sink) {
@@ -32,6 +35,7 @@ Status MultiCastDataStreamSink::init(const TDataSink& thrift_sink, RuntimeState*
 }
 
 Status MultiCastDataStreamSink::prepare(RuntimeState* state) {
+<<<<<<< HEAD
     return kOnlyPipelinedEngine;
 }
 
@@ -45,5 +49,20 @@ Status MultiCastDataStreamSink::close(RuntimeState* state, Status exec_status) {
 
 Status MultiCastDataStreamSink::send_chunk(RuntimeState* state, Chunk* chunk) {
     return kOnlyPipelinedEngine;
+=======
+    return Status::NotSupported("Don't support non-pipelined query engine");
+}
+
+Status MultiCastDataStreamSink::open(RuntimeState* state) {
+    return Status::NotSupported("Don't support non-pipelined query engine");
+}
+
+Status MultiCastDataStreamSink::close(RuntimeState* state, Status exec_status) {
+    return Status::NotSupported("Don't support non-pipelined query engine");
+}
+
+Status MultiCastDataStreamSink::send_chunk(RuntimeState* state, Chunk* chunk) {
+    return Status::NotSupported("Don't support non-pipelined query engine");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 } // namespace starrocks

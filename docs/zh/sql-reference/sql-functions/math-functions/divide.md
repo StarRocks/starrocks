@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # divide
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 除法函数，返回 `x` 除以 `y` 的结果，如果 `y` 为 0，则返回null。
 

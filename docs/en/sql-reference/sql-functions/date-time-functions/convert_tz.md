@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # convert_tz
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Converts a DATE or DATETIME value from one time zone to another.
 

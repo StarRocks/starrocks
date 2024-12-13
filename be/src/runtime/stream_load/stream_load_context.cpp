@@ -59,8 +59,14 @@ std::string StreamLoadContext::to_resp_json(const std::string& txn_op, const Sta
         break;
     }
     // msg
+<<<<<<< HEAD
     writer.Key("Message");
     writer.String(st.get_error_msg().c_str());
+=======
+    std::string_view msg = st.message();
+    writer.Key("Message");
+    writer.String(msg.data(), msg.size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     if (st.ok()) {
         // label
@@ -135,7 +141,11 @@ std::string StreamLoadContext::to_json() const {
 
     // label
     writer.Key("Label");
+<<<<<<< HEAD
     writer.String(label.c_str());
+=======
+    writer.String(enable_batch_write ? batch_write_label.c_str() : label.c_str());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // status
     writer.Key("Status");
@@ -160,7 +170,12 @@ std::string StreamLoadContext::to_json() const {
     if (status.ok()) {
         writer.String("OK");
     } else {
+<<<<<<< HEAD
         writer.String(status.get_error_msg().c_str());
+=======
+        std::string_view msg = status.message();
+        writer.String(msg.data(), msg.size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     // number_load_rows
     writer.Key("NumberTotalRows");
@@ -194,6 +209,17 @@ std::string StreamLoadContext::to_json() const {
         writer.Key("RejectedRecordPath");
         writer.String(rejected_record_path.c_str());
     }
+<<<<<<< HEAD
+=======
+    if (enable_batch_write) {
+        // if enable batch write, the user-provided label is treated as the request id
+        writer.Key("RequestId");
+        writer.String(label.c_str());
+        writer.Key("LeftTimeMs");
+        writer.Int64(batch_left_time_nanos / 1000000);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     writer.EndObject();
     return s.GetString();
 }
@@ -239,8 +265,21 @@ std::string StreamLoadContext::brief(bool detail) const {
 }
 
 bool StreamLoadContext::check_and_set_http_limiter(ConcurrentLimiter* limiter) {
+<<<<<<< HEAD
     _http_limiter_guard.reset(new ConcurrentLimiterGuard());
     return _http_limiter_guard->set_limiter(limiter);
 }
 
+=======
+    _http_limiter_guard = std::make_unique<ConcurrentLimiterGuard>();
+    return _http_limiter_guard->set_limiter(limiter);
+}
+
+void StreamLoadContext::release(StreamLoadContext* context) {
+    if (context != nullptr && context->unref()) {
+        delete context;
+    }
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // namespace starrocks

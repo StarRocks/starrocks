@@ -71,7 +71,11 @@ Status PrimaryKeyDump::_dump_rowset_meta() {
     for (const auto& each : (*rowset_map)) {
         RowsetMetaIdPB rowset_meta_id;
         rowset_meta_id.set_rowset_id(each.first);
+<<<<<<< HEAD
         each.second->rowset_meta()->to_rowset_pb(rowset_meta_id.mutable_rowset_meta());
+=======
+        rowset_meta_id.mutable_rowset_meta()->CopyFrom(each.second->rowset_meta()->get_meta_pb_without_schema());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         _dump_pb.add_rowset_metas()->CopyFrom(rowset_meta_id);
     }
     return Status::OK();
@@ -165,7 +169,11 @@ public:
         WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::OpenMode::CREATE_OR_OPEN_WITH_TRUNCATE};
         ASSIGN_OR_RETURN(auto wfile, fs->new_writable_file(opts, _tmp_file));
         SegmentWriterOptions writer_options;
+<<<<<<< HEAD
         _writer = std::make_unique<SegmentWriter>(std::move(wfile), _pk_column_pb->segment_id(), tablet_schema.get(),
+=======
+        _writer = std::make_unique<SegmentWriter>(std::move(wfile), _pk_column_pb->segment_id(), tablet_schema,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                                   writer_options);
         RETURN_IF_ERROR(_writer->init(false));
         return Status::OK();
@@ -202,6 +210,10 @@ public:
         SegmentReadOptions seg_options;
         seg_options.fs = fs;
         seg_options.stats = &_stats;
+<<<<<<< HEAD
+=======
+        seg_options.tablet_schema = tablet_schema;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ASSIGN_OR_RETURN(auto seg_ptr,
                          Segment::open(fs, FileInfo{_tmp_file}, pk_column_pb.segment_id(), tablet_schema));
         return seg_ptr->new_iterator(schema, seg_options);
@@ -221,10 +233,17 @@ private:
     OlapReaderStatistics _stats;
 };
 
+<<<<<<< HEAD
 static std::pair<Schema, std::shared_ptr<TabletSchema>> build_pkey_schema(const TabletSchema& tablet_schema) {
     vector<uint32_t> pk_columns;
     vector<int32_t> pk_columns2;
     for (size_t i = 0; i < tablet_schema.num_key_columns(); i++) {
+=======
+static std::pair<Schema, std::shared_ptr<TabletSchema>> build_pkey_schema(const TabletSchemaCSPtr& tablet_schema) {
+    vector<uint32_t> pk_columns;
+    vector<int32_t> pk_columns2;
+    for (size_t i = 0; i < tablet_schema->num_key_columns(); i++) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         pk_columns.push_back((uint32_t)i);
         pk_columns2.push_back((int32_t)i);
     }
@@ -235,7 +254,12 @@ static std::pair<Schema, std::shared_ptr<TabletSchema>> build_pkey_schema(const 
 
 Status PrimaryKeyDump::_dump_segment_keys() {
     // 1. generate primary key schema
+<<<<<<< HEAD
     auto schema_pair = build_pkey_schema(_tablet->tablet_schema());
+=======
+    auto tablet_schema = _tablet->tablet_schema();
+    auto schema_pair = build_pkey_schema(tablet_schema);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     Schema& pkey_schema = schema_pair.first;
     auto pkey_tschema = schema_pair.second;
     // 2. scan all rowset
@@ -246,12 +270,20 @@ Status PrimaryKeyDump::_dump_segment_keys() {
     auto chunk = chunk_shared_ptr.get();
     for (auto& rowset : *rowset_map) {
         RowsetReleaseGuard guard(rowset.second);
+<<<<<<< HEAD
         auto res = rowset.second->get_segment_iterators2(pkey_schema, nullptr, 0, &stats);
+=======
+        auto res = rowset.second->get_segment_iterators2(pkey_schema, tablet_schema, nullptr, 0, &stats);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (!res.ok()) {
             return res.status();
         }
         auto& itrs = res.value();
+<<<<<<< HEAD
         CHECK(itrs.size() == rowset.second->num_segments()) << "itrs.size != num_segments";
+=======
+        RETURN_ERROR_IF_FALSE(itrs.size() == rowset.second->num_segments(), "itrs.size != num_segments");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         for (size_t i = 0; i < itrs.size(); i++) {
             auto itr = itrs[i].get();
             if (itr == nullptr) {
@@ -350,7 +382,11 @@ Status PrimaryKeyDump::deserialize_pkcol_pkindex_from_meta(
     // 1. deserialize pk column
     for (const auto& primary_key_column : dump_pb.primary_key_column()) {
         TabletSchemaCSPtr tablet_schema = std::make_shared<TabletSchema>(dump_pb.tablet_meta().schema());
+<<<<<<< HEAD
         auto schema_pair = build_pkey_schema(*tablet_schema);
+=======
+        auto schema_pair = build_pkey_schema(tablet_schema);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Schema& pkey_schema = schema_pair.first;
         auto pkey_tschema = schema_pair.second;
         auto chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, 4096);

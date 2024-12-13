@@ -31,7 +31,11 @@ public class CancelCompactionStmtAnalyzer {
         new CancelCompactionStmtAnalyzerVisitor().analyze(statement, context);
     }
 
+<<<<<<< HEAD
     static class CancelCompactionStmtAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+=======
+    static class CancelCompactionStmtAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         public void analyze(CancelCompactionStmt statement, ConnectContext context) {
             visit(statement, context);

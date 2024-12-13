@@ -21,7 +21,10 @@ import org.junit.Test;
 
 import java.math.BigInteger;
 import java.time.LocalDateTime;
+<<<<<<< HEAD
 import java.time.format.DateTimeParseException;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 public class ConstantOperatorTest {
     @Test
@@ -57,8 +60,13 @@ public class ConstantOperatorTest {
 
         for (String[] c : testCases) {
             ConstantOperator in = ConstantOperator.createVarchar(c[0]);
+<<<<<<< HEAD
             Assert.assertEquals(c[1], in.castTo(Type.DATE).getDate().toString());
             Assert.assertEquals(c[2], in.castTo(Type.DATETIME).getDate().toString());
+=======
+            Assert.assertEquals(c[1], in.castTo(Type.DATE).get().getDate().toString());
+            Assert.assertEquals(c[2], in.castTo(Type.DATETIME).get().getDate().toString());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -105,12 +113,53 @@ public class ConstantOperatorTest {
         };
         for (String c : testCases) {
             ConstantOperator in = ConstantOperator.createVarchar(c);
+<<<<<<< HEAD
             Assert.assertThrows(in.getVarchar(), DateTimeParseException.class, () -> in.castTo(Type.DATE));
             Assert.assertThrows(in.getVarchar(), DateTimeParseException.class, () -> in.castTo(Type.DATETIME));
+=======
+            Assert.assertFalse(in.castTo(Type.DATE).isPresent());
+            Assert.assertFalse(in.castTo(Type.DATETIME).isPresent());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testCaseDateToNumber() throws Exception {
+        ConstantOperator date = ConstantOperator.createDate(LocalDateTime.of(2023, 01, 01, 0, 0));
+        ConstantOperator datetime = ConstantOperator.createDatetime(LocalDateTime.of(2023, 01, 01, 0, 0, 0));
+
+        ConstantOperator intNumber = ConstantOperator.createInt(20230101);
+        Assert.assertEquals(intNumber, date.castTo(Type.INT).get());
+
+        ConstantOperator dateBigintNumber = ConstantOperator.createBigint(20230101L);
+        Assert.assertEquals(dateBigintNumber, date.castTo(Type.BIGINT).get());
+
+        ConstantOperator datetimeBigintNumber = ConstantOperator.createBigint(20230101000000L);
+        Assert.assertEquals(datetimeBigintNumber, datetime.castTo(Type.BIGINT).get());
+
+        ConstantOperator dateLargeintNumber = ConstantOperator.createLargeInt(new BigInteger("20230101"));
+        Assert.assertEquals(dateLargeintNumber, date.castTo(Type.LARGEINT).get());
+
+        ConstantOperator datetimeLargeintNumber = ConstantOperator.createLargeInt(new BigInteger("20230101000000"));
+        Assert.assertEquals(datetimeLargeintNumber, datetime.castTo(Type.LARGEINT).get());
+
+        ConstantOperator dateFloatNumber = ConstantOperator.createFloat(20230101);
+        Assert.assertEquals(dateFloatNumber, date.castTo(Type.FLOAT).get());
+
+        ConstantOperator datetimeFloatNumber = ConstantOperator.createFloat(20230101000000L);
+        Assert.assertEquals(datetimeFloatNumber, datetime.castTo(Type.FLOAT).get());
+
+        ConstantOperator dateDoubleNumber = ConstantOperator.createDouble(20230101);
+        Assert.assertEquals(dateDoubleNumber, date.castTo(Type.DOUBLE).get());
+
+        ConstantOperator datetimeDoubleNumber = ConstantOperator.createDouble(20230101000000L);
+        Assert.assertEquals(datetimeDoubleNumber, datetime.castTo(Type.DOUBLE).get());
+    }
+
+    @Test
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void testDistance() {
         {
             // tinyint

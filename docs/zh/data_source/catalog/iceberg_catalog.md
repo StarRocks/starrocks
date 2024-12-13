@@ -1,6 +1,10 @@
 ---
 displayed_sidebar: docs
 toc_max_heading_level: 5
+<<<<<<< HEAD
+=======
+keywords: ['iceberg']
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ---
 
 # Iceberg catalog
@@ -24,12 +28,21 @@ Iceberg Catalog 是一种 External Catalog。StarRocks 从 2.4 版本开始支�
 
 ## 使用说明
 
+<<<<<<< HEAD
 - StarRocks 查询 Iceberg 数据时，支持 Parquet 和 ORC 文件格式，其中：
 
   - Parquet 文件支持 SNAPPY、LZ4、ZSTD、GZIP 和 NO_COMPRESSION 压缩格式。
   - ORC 文件支持 ZLIB、SNAPPY、LZO、LZ4、ZSTD 和 NO_COMPRESSION 压缩格式。
 
 - Iceberg Catalog 支持查询 v1 表数据。自 3.0 版本起支持查询 ORC 格式的 v2 表数据，自 3.1 版本起支持查询 Parquet 格式的 v2 表数据。
+=======
+StarRocks 查询 Iceberg 数据时，注意以下几点：
+
+| **文件格式** | **压缩格式**                                   | **Iceberg 表版本**                                           |
+| ------------ | ---------------------------------------------- | ------------------------------------------------------------ |
+| Parquet      | SNAPPY、LZ4、ZSTD、GZIP 和 NO_COMPRESSION      | <ul><li>v1 表：支持。</li><li>v2 表：自 StarRocks 3.1 版本起支持 position-delete，自3.1.10+、3.2.5+、3.3 版本起支持 equality-delete。</li></ul> |
+| ORC          | ZLIB、SNAPPY、LZO、LZ4、ZSTD 和 NO_COMPRESSION | <ul><li>v1 表：支持。</li><li>v2 表：自 StarRocks 3.0 版本起支持 position-delete，自3.1.8+、3.2.3+、3.3 版本起支持 equality-delete。</li></ul> |
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ## 准备工作
 
@@ -78,7 +91,12 @@ PROPERTIES
 (
     "type" = "iceberg",
     MetastoreParams,
+<<<<<<< HEAD
     StorageCredentialParams
+=======
+    StorageCredentialParams,
+    MetadataUpdateParams
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 )
 ```
 
@@ -168,14 +186,25 @@ StarRocks 访问 Iceberg 集群元数据服务的相关参数配置。
 
 有关如何选择用于访问 AWS Glue 的鉴权方式、以及如何在 AWS IAM 控制台配置访问控制策略，参见[访问 AWS Glue 的认证参数](../../integrations/authenticate_to_aws_resources.md#访问-aws-glue-的认证参数)。
 
+<<<<<<< HEAD
 ##### Tabular
 
 如果您使用 Tabular 作为元数据服务，则必须设置元数据服务的类型为 REST (`"iceberg.catalog.type" = "rest"`)，请按如下配置 `MetastoreParams`：
+=======
+##### REST
+
+如果您使用 REST 作为元数据服务，则必须设置元数据服务的类型为 REST (`"iceberg.catalog.type" = "rest"`)，请按如下配置 `MetastoreParams`：
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ```SQL
 "iceberg.catalog.type" = "rest",
 "iceberg.catalog.uri" = "<rest_server_api_endpoint>",
+<<<<<<< HEAD
 "iceberg.catalog.credential" = "<credential>",
+=======
+"iceberg.catalog.security" = "oauth2",
+"iceberg.catalog.oauth2.credential" = "<credential>",
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 "iceberg.catalog.warehouse" = "<identifier_or_path_to_warehouse>"
 ```
 
@@ -184,8 +213,18 @@ StarRocks 访问 Iceberg 集群元数据服务的相关参数配置。
 | 参数                       | 是否必须 | 说明                                                         |
 | -------------------------- | ------ | ------------------------------------------------------------ |
 | iceberg.catalog.type       | 是      | Iceberg 集群所使用的元数据服务的类型。设置为 `rest`。           |
+<<<<<<< HEAD
 | iceberg.catalog.uri        | 是      | Tabular 服务 Endpoint 的 URI，如 `https://api.tabular.io/ws`。      |
 | iceberg.catalog.credential | 是      | Tabular 服务的认证信息。                                        |
+=======
+| iceberg.catalog.uri        | 是      | REST 服务 Endpoint 的 URI，如 `https://api.tabular.io/ws`。      |
+| iceberg.catalog.security   | 否      | 要使用的授权协议类型。默认值：`NONE`。有效值：`OAUTH2`。使用 `OAUTH2` 需要指定 `token` 或 `credential`。 |
+| iceberg.catalog.oauth2.token | 否    | 用于与服务器交互的 Bearer Token。使用 `OAUTH2` 需要指定 `token` 或 `credential`。示例：`AbCdEf123456`。 |
+| iceberg.catalog.oauth2.credential | 否  | 用于与服务器的 OAuth2 客户端 Credentials Flow 交换 Token 的 Credential。使用 `OAUTH2` 需要指定 `token` 或 `credential`。示例：`AbCdEf123456`。 |
+| iceberg.catalog.oauth2.scope | 否  | 与 REST Catalog 通信时使用的范围。仅在使用 `credential` 时适用。 |
+| iceberg.catalog.oauth2.server-uri | 否  | 从 OAuth2 服务器获取 Token 的端点。 |
+| iceberg.catalog.vended-credentials-enabled | 否  | 是否支持查询嵌套 namespace 下的对象。默认：`true`。|
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 | iceberg.catalog.warehouse  | 否      | Catalog 的仓库位置或标志符，如 `s3://my_bucket/warehouse_location` 或 `sandbox`。 |
 
 例如，创建一个名为 `tabular` 的 Iceberg Catalog，使用 Tabular 作为元数据服务：
@@ -202,6 +241,37 @@ PROPERTIES
 );
 ```
 
+<<<<<<< HEAD
+=======
+以下示例创建了一个名为 `smith_polaris` 的 Iceberg Catalog，使用 Polaris 作为元数据服务：
+
+```sql
+CREATE EXTERNAL CATALOG smith_polaris 
+PROPERTIES (   
+    "iceberg.catalog.uri"  = "http://xxx.xx.xx.xxx:8181/api/catalog", 
+    "type"  =  "iceberg",   
+    "iceberg.catalog.type"  =  "rest",   
+    "iceberg.catalog.warehouse" = "starrocks_catalog",
+    "iceberg.catalog.security" = "oauth2",
+    "iceberg.catalog.oauth2.credential" = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "iceberg.catalog.oauth2.scope"='PRINCIPAL_ROLE:ALL'
+ );
+
+# `ns1.ns2.tpch_namespace` 为嵌套 namespace
+create table smith_polaris.`ns1.ns2.tpch_namespace`.tbl (c1 string);
+
+mysql> select * from smith_polaris.`ns1.ns2.tpch_namespace`.tbl;
++------+
+| c1   |
++------+
+| 1    |
+| 2    |
+| 3    |
++------+
+3 rows in set (0.34 sec)
+```
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #### StorageCredentialParams
 
 StarRocks 访问 Iceberg 集群文件存储的相关参数配置。
@@ -480,6 +550,24 @@ Iceberg Catalog 从 3.0 版本起支持 Google GCS。
     | gcp.gcs.service_account_private_key    | ""         | "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n"  | 创建 Meta Service Account 时生成的 JSON 文件中的 Private Key。 |
     | gcp.gcs.impersonation_service_account  | ""         | "hello"                                                      | 需要模拟的目标 Data Service Account。 |
 
+<<<<<<< HEAD
+=======
+#### MetadataUpdateParams
+
+指定元数据缓存更新策略的一组参数。StarRocks 根据该策略更新缓存的 Iceberg 元数据。此组参数为可选。
+
+自 v3.3.3 起，StarRocks 采用[元数据周期性后台刷新方案](#附录元数据周期性后台刷新方案)，开箱即用。因此，一般情况下，您可以忽略 `MetadataUpdateParams`，无需对其中的策略参数进行调优。大多数情况下，推荐您通过系统变量 [`plan_mode`](../../sql-reference/System_variable.md#plan_mode) 调整 Iceberg Catalog 元数据检索方案。
+
+如果 Iceberg 数据更新频率较高，那么您可以对这些参数进行调优，从而优化该方案的性能。
+
+| **参数**                                       | **默认值**             | **说明**                                                      |
+| :-------------------------------------------- | :-------------------- | :----------------------------------------------------------- |
+| enable_iceberg_metadata_cache                 | true                  | 是否缓存 Iceberg 相关的元数据，包括 Table Cache，Partition Name Cache，以及 Manifest 中的 Data File Cache 和 Delete Data File Cache。 |
+| iceberg_manifest_cache_with_column_statistics | false                 | 是否缓存列统计信息。                                         |
+| iceberg_manifest_cache_max_num                | 100000                | 可缓存的 Manifest 文件的最大数量。                           |
+| refresh_iceberg_manifest_min_length           | 2 * 1024 * 1024       | 触发 Data File Cache 刷新的最小 Manifest 文件长度。          |
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ### 示例
 
 以下示例创建了一个名为 `iceberg_catalog_hms` 或 `iceberg_catalog_glue` 的 Iceberg Catalog，用于查询 Iceberg 集群里的数据。
@@ -981,7 +1069,11 @@ PARTITION BY (par_col1[, par_col2...])
 | ----------------- | ------------------------------------------------------------ |
 | location          | Iceberg 表所在的文件路径。使用 HMS 作为元数据服务时，您无需指定 `location` 参数。使用 AWS Glue 作为元数据服务时：<ul><li>如果在创建当前数据库时指定了 `location` 参数，那么在当前数据库下建表时不需要再指定 `location` 参数，StarRocks 默认把表建在当前数据库所在的文件路径下。</li><li>如果在创建当前数据库时没有指定 `location` 参数，那么在当前数据库建表时必须指定 `location` 参数。</li></ul> |
 | file_format       | Iceberg 表的文件格式。当前仅支持 Parquet 格式。默认值：`parquet`。 |
+<<<<<<< HEAD
 | compression_codec | Iceberg 表的压缩格式。当前支持 SNAPPY、GZIP、ZSTD 和 LZ4。默认值：`gzip`。 |
+=======
+| compression_codec | Iceberg 表的压缩格式。当前支持 SNAPPY、GZIP、ZSTD 和 LZ4。默认值：`gzip`。该属性自 3.2.3 版本起弃用，此后写入 Iceberg 表时的压缩算法统一由会话变量 [connector_sink_compression_codec](../../sql-reference/System_variable.md#connector_sink_compression_codec) 控制。 |
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ### 示例
 
@@ -1122,7 +1214,11 @@ PARTITION (par_col1=<value> [, par_col2=<value>...])
 DROP TABLE <table_name> [FORCE];
 ```
 
+<<<<<<< HEAD
 ## 配置元数据缓存方式
+=======
+## 配置元数据缓存及刷新策略
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Iceberg 的元数据文件可能存储在 AWS S3 或 HDFS 上。StarRocks 默认在内存中缓存 Iceberg 元数据。为了加速查询，StarRocks 提供了基于内存和磁盘的元数据两级缓存机制，在初次查询时触发缓存，在后续查询中会优先使用缓存。如果缓存中无对应元数据，则会直接访问远端存储。
 
@@ -1142,3 +1238,36 @@ StarRocks 采用 Least Recently Used (LRU) 策略来缓存和淘汰数据，基�
 | iceberg_metadata_memory_cache_expiration_seconds | 秒       | `86500`                                              | 内存中的缓存自最后一次访问后的过期时间。                     |
 | iceberg_metadata_disk_cache_expiration_seconds   | 秒       | `604800`，即一周                                     | 磁盘中的缓存自最后一次访问后的过期时间。                     |
 | iceberg_metadata_cache_max_entry_size            | 字节     | `8388608`，即 8 MB                                   | 缓存的单个文件最大大小，以防止单个文件过大挤占其他文件空间。超过此大小的文件不会缓存，如果查询命中则会直接访问远端元数据文件。 |
+<<<<<<< HEAD
+=======
+
+自 v3.3.3 起，Iceberg Catalog 支持 [元数据周期性后台刷新方案](#附录元数据周期性后台刷新方案)。您可以通过系统变量 [`plan_mode`](../../sql-reference/System_variable.md#plan_mode) 调整 Iceberg Catalog 元数据检索方案。
+
+您可以通过以下 FE 配置项来设置 Iceberg 元数据缓存刷新行为：
+
+| **配置项**                                                    | **单位** | **默认值**                  | **含义**                                                    |
+| :----------------------------------------------------------- | :--- | :-------------------------- | :----------------------------------------------------------- |
+| enable_background_refresh_connector_metadata                 | 无   | true | 是否开启 Iceberg 元数据缓存周期性刷新。开启后，StarRocks 会轮询 Iceberg 集群的元数据服务（HMS 或 AWS Glue），并刷新经常访问的 Iceberg 外部数据目录的元数据缓存，以感知数据更新。`true` 代表开启，`false` 代表关闭。 |
+| background_refresh_metadata_interval_millis                  | 毫秒 | 600000（10 分钟）           | 接连两次 Iceberg 元数据缓存刷新之间的间隔。                     |
+| background_refresh_metadata_time_secs_since_last_access_sec  | 秒   | 86400（24 小时）            | Iceberg 元数据缓存刷新任务过期时间。对于已被访问过的 Iceberg Catalog，如果超过该时间没有被访问，则停止刷新其元数据缓存。对于未被访问过的 Iceberg Catalog，StarRocks 不会刷新其元数据缓存。 |
+
+## 附录：元数据周期性后台刷新方案
+
+元数据周期性后台刷新方案是 StarRocks 用于加速检索 Iceberg Catalog 中元数据的策略。
+
+自 v3.3.3 起，StarRocks 优化了 Iceberg 元数据的缓存机制，针对不同元数据使用场景，分别设定了不同检索方案。
+
+- **针对大体量元数据的分布式方案**
+
+  为了有效处理大体量元数据，StarRocks 通过多 BE/CN 节点实现分布式元数据检索方案。该方案利用现代查询引擎的并行计算能力，可以将读取、解压和过滤 Manifest 文件等任务分布在多个节点上。通过并行处理这些 Manifest 文件，可以显著减少元数据检索所需的时间，从而加快作业计划的速度。该方案对涉及大量 Manifest 文件的大型查询特别有利，因为可以消除单点瓶颈，提高整体查询执行效率。
+
+- **针对小体量元数据的本地方案**
+
+  对于小型查询，由于反复解压和解析 Manifest 文件会引入不必要的延迟，StarRocks 采用了一种不同的策略。StarRocks 会将反序列化后的内存对象（尤其是 Avro 文件）缓存下来，以应对延迟问题。通过将这些反序列化的文件缓存在内存中，系统可以在后续查询中跳过解压和解析阶段，直接访问所需的元数据。这种缓存机制显著减少了检索时间，使系统响应更快，更能满足高查询需求和物化视图改写的要求。
+
+- **自适应的元数据检索方案（默认）**
+
+  默认设置下，StarRocks 可以根据各种因素自动选择合适的元数据检索方法，包括 FE/BE/CN 节点的数量、核心数以及当前查询所需读取的 Manifest 文件数量。这种自适应的方法确保系统可以动态优化元数据的检索，无需手动调整元数据相关的参数。通过该方案，StarRocks 能在不同条件下平衡分布式和本地方案，实现最佳的查询性能，为用户提供无缝体验。
+
+您可以通过系统变量 [`plan_mode`](../../sql-reference/System_variable.md#plan_mode) 调整 Iceberg Catalog 元数据检索方案。
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

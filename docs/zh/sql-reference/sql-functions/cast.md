@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # CAST
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 将 `input` 转换成指定数据类型的值，如 `cast (input as BIGINT)` 将当前 `input` 转换为 BIGINT 类型的值。
 

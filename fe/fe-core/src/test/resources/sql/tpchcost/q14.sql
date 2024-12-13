@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
             100.00 * sum(case
@@ -12,6 +13,8 @@ where
         l_partkey = p_partkey
   and l_shipdate >= date '1997-02-01'
   and l_shipdate < date '1997-03-01';
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 [fragment]
 PLAN FRAGMENT 0
 OUTPUT EXPRS:32: expr
@@ -63,7 +66,10 @@ rollup: part
 tabletRatio=10/10
 cardinality=20000000
 avgRowSize=33.0
+<<<<<<< HEAD
 numNodes=0
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 PLAN FRAGMENT 2
 OUTPUT EXPRS:
@@ -87,6 +93,9 @@ rollup: lineitem
 tabletRatio=20/20
 cardinality=6653465
 avgRowSize=28.0
+<<<<<<< HEAD
 numNodes=0
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 [end]
 

@@ -73,7 +73,11 @@ public class AuditEventProcessor {
         try {
             eventQueue.put(auditEvent);
         } catch (InterruptedException e) {
+<<<<<<< HEAD
             LOG.debug("encounter exception when handle audit event, ignore", e);
+=======
+            LOG.warn("encounter exception when handle audit event, ignore", e);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -96,7 +100,11 @@ public class AuditEventProcessor {
                         continue;
                     }
                 } catch (InterruptedException e) {
+<<<<<<< HEAD
                     LOG.debug("encounter exception when getting audit event from queue, ignore", e);
+=======
+                    LOG.warn("encounter exception when getting audit event from queue, ignore", e);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     continue;
                 }
 
@@ -107,7 +115,11 @@ public class AuditEventProcessor {
                         }
                     }
                 } catch (Exception e) {
+<<<<<<< HEAD
                     LOG.debug("encounter exception when processing audit event.", e);
+=======
+                    LOG.warn("encounter exception when processing audit event.", e);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
             }
         }

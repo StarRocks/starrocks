@@ -156,6 +156,18 @@ public:
     DEFINE_VECTORIZED_FN(week_of_year);
 
     /**
+<<<<<<< HEAD
+=======
+     * Get yearweek.
+     * @param context
+     * @param columns [TimestampColumn] Columns that hold timestamps.
+     * @return  IntColumn year_week:
+     */
+    DEFINE_VECTORIZED_FN(year_week_with_default_mode);
+    DEFINE_VECTORIZED_FN(year_week_with_mode);
+
+    /**
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
      * Get week of the year.
      * @param context
      * @param column[0] [TimestampColumn] Columns that hold timestamps.
@@ -694,6 +706,10 @@ public:
      */
     DEFINE_VECTORIZED_FN(from_unix_to_datetime_64);
     DEFINE_VECTORIZED_FN(from_unix_to_datetime_32);
+<<<<<<< HEAD
+=======
+    DEFINE_VECTORIZED_FN(from_unix_to_datetime_ms_64);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // from_unix_datetime with format's auxiliary method
     static Status from_unix_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
@@ -770,7 +786,11 @@ public:
     static int compute_weekday(long daynr, bool sunday_first_day_of_week);
     static uint32_t compute_days_in_year(uint year);
     static uint week_mode(uint mode);
+<<<<<<< HEAD
     static int32_t compute_week(uint year, uint month, uint day, uint week_behaviour);
+=======
+    static int32_t compute_week(uint year, uint month, uint day, uint week_behaviour, uint* year_local);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     /**
      * calculate a date by year and day of year
@@ -789,9 +809,25 @@ public:
     // so this value is 253402329599(UTC 9999-12-31 23:59:59) - 24 * 3600(for all timezones)
     constexpr static const int64_t MAX_UNIX_TIMESTAMP = 253402243199L;
 
+<<<<<<< HEAD
 private:
     DEFINE_VECTORIZED_FN_TEMPLATE(_t_from_unix_to_datetime);
 
+=======
+    /**
+     * Format a time value according to a format string.
+     * @param: [time_value, format_str]
+     * @paramType columns: [TYPE_TIME, TYPE_VARCHAR]
+     * @return ColumnPtr A column holding formatted time strings.
+     */
+    DEFINE_VECTORIZED_FN(time_format);
+
+private:
+    DEFINE_VECTORIZED_FN_TEMPLATE(_t_from_unix_to_datetime);
+
+    DEFINE_VECTORIZED_FN_TEMPLATE(_t_from_unix_to_datetime_ms);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     DEFINE_VECTORIZED_FN_TEMPLATE(_t_to_unix_from_datetime);
 
     DEFINE_VECTORIZED_FN_TEMPLATE(_t_to_unix_from_date);

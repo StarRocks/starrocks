@@ -36,4 +36,12 @@ public class DecommissionBackendClause extends BackendClause {
     public void setType(DecommissionType type) {
         this.type = type;
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitDecommissionBackendClause(this, context);
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

@@ -21,7 +21,12 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
 import com.starrocks.sql.PlannerProfile;
+=======
+import com.starrocks.common.profile.Timer;
+import com.starrocks.common.profile.Tracers;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -91,8 +96,12 @@ public class ReorderJoinRule extends Rule {
 
     Optional<OptExpression> enumerate(JoinOrder reorderAlgorithm, OptimizerContext context, OptExpression innerJoinRoot,
                                       MultiJoinNode multiJoinNode, boolean copyIntoMemo) {
+<<<<<<< HEAD
         try (PlannerProfile.ScopedTimer ignore = PlannerProfile.getScopedTimer(
                 reorderAlgorithm.getClass().getSimpleName())) {
+=======
+        try (Timer ignore = Tracers.watchScope(Tracers.Module.OPTIMIZER, reorderAlgorithm.getClass().getSimpleName())) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             reorderAlgorithm.reorder(Lists.newArrayList(multiJoinNode.getAtoms()),
                     multiJoinNode.getPredicates(), multiJoinNode.getExpressionMap());
         }
@@ -157,6 +166,15 @@ public class ReorderJoinRule extends Rule {
             if (copyIntoMemo) {
                 context.getMemo().copyIn(innerJoinRoot.getGroupExpression().getGroup(), joinExpr);
             } else {
+<<<<<<< HEAD
+=======
+                joinExpr.deriveLogicalPropertyItself();
+                ExpressionContext expressionContext = new ExpressionContext(joinExpr);
+                StatisticsCalculator statisticsCalculator =
+                        new StatisticsCalculator(expressionContext, context.getColumnRefFactory(), context);
+                statisticsCalculator.estimatorStats();
+                joinExpr.setStatistics(expressionContext.getStatistics());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 return Optional.of(joinExpr);
             }
         }
@@ -166,6 +184,13 @@ public class ReorderJoinRule extends Rule {
     // This method is only called in RBO phase, so it return the rewritten plan instead of copying its into memo,
     // it adopts JoinReorderCardinalityPreserving algorithm to reorder multi-joins to adapt to table pruning.
     public OptExpression rewrite(OptExpression input, OptimizerContext context) {
+<<<<<<< HEAD
+=======
+        return rewrite(input, JoinReorderFactory.createJoinReorderCardinalityPreserving(), context);
+    }
+
+    public OptExpression rewrite(OptExpression input, JoinReorderFactory joinReorderFactory, OptimizerContext context) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<Pair<OptExpression, Pair<OptExpression, Integer>>> innerJoinTreesAndParents = Lists.newArrayList();
         extractRootInnerJoin(null, -1, input, innerJoinTreesAndParents, false);
         if (!innerJoinTreesAndParents.isEmpty()) {
@@ -180,8 +205,21 @@ public class ReorderJoinRule extends Rule {
                 if (!multiJoinNode.checkDependsPredicate()) {
                     continue;
                 }
+<<<<<<< HEAD
                 Optional<OptExpression> newChild =
                         enumerate(new JoinReorderCardinalityPreserving(context), context, child, multiJoinNode, false);
+=======
+
+                List<JoinOrder> orderAlgorithms = joinReorderFactory.create(context, multiJoinNode);
+                Optional<OptExpression> newChild = Optional.empty();
+                for (JoinOrder orderAlgorithm : orderAlgorithms) {
+                    newChild = enumerate(orderAlgorithm, context, child, multiJoinNode, false);
+                    if (newChild.isEmpty()) {
+                        break;
+                    }
+                }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (newChild.isPresent()) {
                     int prevNumCrossJoins =
                             Utils.countJoinNodeSize(child, Sets.newHashSet(JoinOperator.CROSS_JOIN));

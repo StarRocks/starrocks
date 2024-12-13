@@ -180,4 +180,14 @@ void PartitionHashMapVariant::set_passthrough() {
     });
 }
 
+<<<<<<< HEAD
+=======
+void PartitionHashMapVariant::set_enable_pre_agg() {
+    visit([](auto& hash_map_with_key) {
+        DCHECK(hash_map_with_key != nullptr);
+        hash_map_with_key->enable_pre_agg = true;
+    });
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // namespace starrocks

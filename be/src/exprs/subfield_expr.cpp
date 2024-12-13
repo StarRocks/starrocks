@@ -26,7 +26,15 @@ namespace starrocks {
 
 class SubfieldExpr final : public Expr {
 public:
+<<<<<<< HEAD
     explicit SubfieldExpr(const TExprNode& node) : Expr(node), _used_subfield_names(node.used_subfield_names) {}
+=======
+    explicit SubfieldExpr(const TExprNode& node) : Expr(node), _used_subfield_names(node.used_subfield_names) {
+        if (node.__isset.copy_flag) {
+            _copy_flag = node.copy_flag;
+        }
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     SubfieldExpr(const SubfieldExpr&) = default;
     SubfieldExpr(SubfieldExpr&&) = default;
@@ -66,19 +74,38 @@ public:
 
         DCHECK_EQ(col->size(), union_null_column->size());
 
+<<<<<<< HEAD
         // We need clone a new subfield column
         return NullableColumn::create(col->clone_shared(), union_null_column);
+=======
+        // We need to clone a new subfield column
+        if (_copy_flag) {
+            return NullableColumn::create(col->clone_shared(), union_null_column);
+        } else {
+            return NullableColumn::create(col, union_null_column);
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new SubfieldExpr(*this)); }
 
     int get_subfields(std::vector<std::vector<std::string>>* subfields) const override {
+<<<<<<< HEAD
         subfields->push_back(_used_subfield_names);
+=======
+        if (subfields != nullptr) {
+            subfields->push_back(_used_subfield_names);
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return 1;
     }
 
 private:
     std::vector<std::string> _used_subfield_names;
+<<<<<<< HEAD
+=======
+    bool _copy_flag = true;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 Expr* SubfieldExprFactory::from_thrift(const TExprNode& node) {
@@ -87,4 +114,8 @@ Expr* SubfieldExprFactory::from_thrift(const TExprNode& node) {
     return new SubfieldExpr(node);
 }
 
+<<<<<<< HEAD
 } // namespace starrocks
+=======
+} // namespace starrocks
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

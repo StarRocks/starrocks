@@ -18,7 +18,11 @@ For an understanding of the basic principles of Routine Load, refer to the secti
 
 ### Prepare StarRocks and test data
 
+<<<<<<< HEAD
 Ensure you have a running StarRocks cluster. For demonstration purposes, this article follow the [deployment guide](../quick_start/deploy_with_docker.md) to install a StarRocks cluster on a Linux machine via Docker.
+=======
+Ensure you have a running StarRocks cluster.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Creating a database and a Primary Key table for testing:
 

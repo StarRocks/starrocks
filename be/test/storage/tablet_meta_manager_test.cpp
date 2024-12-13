@@ -23,15 +23,26 @@
 
 namespace starrocks {
 
+<<<<<<< HEAD
 namespace fs = std::filesystem;
+=======
+namespace sfs = std::filesystem;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 class TabletMetaManagerTest : public ::testing::Test {
 protected:
     void SetUp() override {
+<<<<<<< HEAD
         fs::path tmp = fs::temp_directory_path();
         fs::path dir = tmp / "tablet_meta_manager_test";
         fs::remove_all(dir);
         CHECK(fs::create_directory(dir));
+=======
+        sfs::path tmp = sfs::temp_directory_path();
+        sfs::path dir = tmp / "tablet_meta_manager_test";
+        sfs::remove_all(dir);
+        CHECK(sfs::create_directory(dir));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         _data_dir = std::make_unique<DataDir>(dir.string());
         Status st = _data_dir->init();
         CHECK(st.ok()) << st.to_string();
@@ -39,9 +50,15 @@ protected:
 
     void TearDown() override {
         _data_dir.reset();
+<<<<<<< HEAD
         fs::path tmp = fs::temp_directory_path();
         fs::path dir = tmp / "tablet_meta_manager_test";
         fs::remove_all(dir);
+=======
+        sfs::path tmp = sfs::temp_directory_path();
+        sfs::path dir = tmp / "tablet_meta_manager_test";
+        sfs::remove_all(dir);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     std::unique_ptr<DataDir> _data_dir;
@@ -318,9 +335,15 @@ protected:
     static constexpr int64_t kMaxRowset = 1000;
 
     static void SetUpTestCase() {
+<<<<<<< HEAD
         fs::path cwd = fs::current_path();
         fs::path dir = cwd / "tablet_meta_manager_performance_test";
         CHECK(fs::create_directory(dir));
+=======
+        sfs::path cwd = sfs::current_path();
+        sfs::path dir = cwd / "tablet_meta_manager_performance_test";
+        CHECK(sfs::create_directory(dir));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         _s_data_dir = std::make_unique<DataDir>(dir.string());
         Status st = _s_data_dir->init();
         CHECK(st.ok()) << st.to_string();
@@ -349,8 +372,13 @@ protected:
 
                     EditVersionMetaPB edit;
                     auto v = edit.mutable_version();
+<<<<<<< HEAD
                     v->set_major(i + 1);
                     v->set_minor(0);
+=======
+                    v->set_major_number(i + 1);
+                    v->set_minor_number(0);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     edit.set_creation_time(time(nullptr));
                     edit.add_rowsets_add(rowset_meta_pb.rowset_seg_id());
                     edit.add_deltas(rowset_meta_pb.rowset_seg_id());
@@ -382,9 +410,15 @@ protected:
     static void TearDownTestCase() {
         LOG(INFO) << "Tear down test case";
         _s_data_dir.reset();
+<<<<<<< HEAD
         fs::path cwd = fs::current_path();
         fs::path dir = cwd / "tablet_meta_manager_performance_test";
         fs::remove_all(dir);
+=======
+        sfs::path cwd = sfs::current_path();
+        sfs::path dir = cwd / "tablet_meta_manager_performance_test";
+        sfs::remove_all(dir);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     inline static std::unique_ptr<DataDir> _s_data_dir;
@@ -412,6 +446,10 @@ TEST_F(TabletMetaManagerTest, delta_column_group_operations) {
         CHECK(TabletMetaManager::get_delta_column_group(meta, tablet_id, segid, i, &dcgs).ok());
         ASSERT_EQ(dcgs.size(), i);
         ASSERT_EQ(dcgs[0]->column_files("111").front(), "111/1110.cols");
+<<<<<<< HEAD
+=======
+        ASSERT_EQ(dcgs[0]->column_file_by_idx("111", 0).value(), "111/1110.cols");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ASSERT_EQ(dcgs[0]->get_column_idx(10).first, 0);
         ASSERT_EQ(dcgs[0]->get_column_idx(10).second, 1);
         ASSERT_EQ(dcgs[0]->get_column_idx(11).first, -1);
@@ -425,7 +463,11 @@ TEST_F(TabletMetaManagerTest, delta_column_group_operations) {
         int segid = (rand() % 20) + 1;
         CHECK(TabletMetaManager::scan_delta_column_group(meta, tablet_id, segid, i, i + len, &dcgs).ok());
         ASSERT_EQ(dcgs.size(), len);
+<<<<<<< HEAD
         ASSERT_EQ(dcgs[0]->column_files("111").front(), "111/1110.cols");
+=======
+        ASSERT_EQ(dcgs[0]->column_file_by_idx("111", 0).value(), "111/1110.cols");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ASSERT_EQ(dcgs[0]->get_column_idx(10).first, 0);
         ASSERT_EQ(dcgs[0]->get_column_idx(10).second, 1);
         ASSERT_EQ(dcgs[0]->get_column_idx(11).first, -1);
@@ -472,9 +514,15 @@ protected:
     static constexpr int64_t kDeleteVectorSize = 10000;
 
     static void SetUpTestCase() {
+<<<<<<< HEAD
         fs::path tmp = fs::temp_directory_path();
         fs::path dir = tmp / kCaseName;
         CHECK(fs::create_directory(dir));
+=======
+        sfs::path tmp = sfs::temp_directory_path();
+        sfs::path dir = tmp / kCaseName;
+        CHECK(sfs::create_directory(dir));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         _s_data_dir = std::make_unique<DataDir>(dir.string());
         Status st = _s_data_dir->init();
         CHECK(st.ok()) << st.to_string();
@@ -503,9 +551,15 @@ protected:
     static void TearDownTestCase() {
         LOG(INFO) << "Tear down test case";
         _s_data_dir.reset();
+<<<<<<< HEAD
         fs::path tmp = fs::temp_directory_path();
         fs::path dir = tmp / kCaseName;
         fs::remove_all(dir);
+=======
+        sfs::path tmp = sfs::temp_directory_path();
+        sfs::path dir = tmp / kCaseName;
+        sfs::remove_all(dir);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     inline static std::unique_ptr<DataDir> _s_data_dir;
@@ -549,9 +603,15 @@ TEST_F(DeleteVectorPerformanceTest, get_del_vector) {
 
 /*
 TEST(DeleteVectorTest, delete_del_vector) {
+<<<<<<< HEAD
     fs::path dir = fs::temp_directory_path() / "delete_del_vector";
     fs::remove_all(dir);
     CHECK(fs::create_directory(dir));
+=======
+    sfs::path dir = sfs::temp_directory_path() / "delete_del_vector";
+    sfs::remove_all(dir);
+    CHECK(sfs::create_directory(dir));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     auto data_dir = std::make_unique<DataDir>(dir.string());
     Status st = data_dir->init();
     CHECK(st.ok()) << st.to_string();
@@ -620,7 +680,11 @@ TEST(DeleteVectorTest, delete_del_vector) {
         auto cost = std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0);
         LOG(INFO) << "perform " << rssid_size * tablet_size << " get_del_vector " << cost.count() << "ms";
     }
+<<<<<<< HEAD
     fs::remove_all(dir);
+=======
+    sfs::remove_all(dir);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 */
 

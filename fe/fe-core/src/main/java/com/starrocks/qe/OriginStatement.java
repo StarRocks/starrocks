@@ -44,6 +44,13 @@ public class OriginStatement implements Writable {
         this.idx = idx;
     }
 
+<<<<<<< HEAD
+=======
+    public OriginStatement(String singleOriginStmt) {
+        this(singleOriginStmt, 0);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static OriginStatement read(DataInput in) throws IOException {
         String json = Text.readString(in);
         return GsonUtils.GSON.fromJson(json, OriginStatement.class);
@@ -62,4 +69,15 @@ public class OriginStatement implements Writable {
                 ", idx=" + idx +
                 '}';
     }
+<<<<<<< HEAD
+=======
+
+    public String getOrigStmt() {
+        return originStmt;
+    }
+
+    public int getIdx() {
+        return idx;
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

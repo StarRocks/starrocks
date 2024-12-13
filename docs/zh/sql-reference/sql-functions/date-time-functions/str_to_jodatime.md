@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # str_to_jodatime
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 将某一个 Joda 格式的字符串转换为指定的 Joda DateTime 格式（如 `yyyy-MM-dd HH:mm:ss`）的 DATETIME 值。
 

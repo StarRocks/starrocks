@@ -14,26 +14,62 @@
 
 package com.starrocks.statistic;
 
+<<<<<<< HEAD
+=======
+import com.google.common.collect.ImmutableList;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
+<<<<<<< HEAD
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
+=======
+import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Type;
+import com.starrocks.common.Config;
+import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.connector.PartitionInfo;
+import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.partitiontraits.DefaultTraits;
+import com.starrocks.connector.statistics.ConnectorTableColumnStats;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
+import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+import com.starrocks.sql.plan.ConnectorPlanTestBase;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.plan.PlanTestNoneDBBase;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.commons.lang3.StringUtils;
+<<<<<<< HEAD
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
+=======
+import org.apache.iceberg.PartitionField;
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.BeforeClass;
+import org.junit.ClassRule;
+import org.junit.Rule;
+import org.junit.Test;
+import org.junit.rules.ExpectedException;
+import org.junit.rules.TemporaryFolder;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import java.time.Clock;
 import java.time.LocalDateTime;
@@ -42,6 +78,10 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+<<<<<<< HEAD
+=======
+import java.util.function.Function;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.stream.Collectors;
 
 public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
@@ -49,10 +89,24 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
     private static LocalDateTime t0UpdateTime = LocalDateTime.of(2022, 1, 1, 1, 1, 1);
 
+<<<<<<< HEAD
+=======
+    @ClassRule
+    public static TemporaryFolder temp = new TemporaryFolder();
+
+    @Rule
+    public ExpectedException expectedException = ExpectedException.none();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @BeforeClass
     public static void beforeClass() throws Exception {
         PlanTestNoneDBBase.beforeClass();
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+<<<<<<< HEAD
+=======
+        ConnectorPlanTestBase.mockAllCatalogs(connectContext, temp.newFolder().toURI().toString());
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         String dbName = "test";
         starRocksAssert.withDatabase(dbName).useDatabase(dbName);
 
@@ -70,10 +124,17 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 "\"in_memory\" = \"false\"\n" +
                 ");");
 
+<<<<<<< HEAD
         OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0_stats");
         t0StatsTableId = t0.getId();
         Partition partition = new ArrayList<>(t0.getPartitions()).get(0);
         partition.updateVisibleVersion(2, t0UpdateTime
+=======
+        OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0_stats");
+        t0StatsTableId = t0.getId();
+        Partition partition = new ArrayList<>(t0.getPartitions()).get(0);
+        partition.getDefaultPhysicalPartition().updateVisibleVersion(2, t0UpdateTime
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 .atZone(Clock.systemDefaultZone().getZone()).toEpochSecond() * 1000);
         setTableStatistics(t0, 20000000);
 
@@ -89,8 +150,13 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 "\"in_memory\" = \"false\"\n" +
                 ");");
 
+<<<<<<< HEAD
         OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("t1_stats");
         new ArrayList<>(t1.getPartitions()).get(0).updateVisibleVersion(2);
+=======
+        OlapTable t1 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t1_stats");
+        new ArrayList<>(t1.getPartitions()).get(0).getDefaultPhysicalPartition().updateVisibleVersion(2);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         setTableStatistics(t1, 20000000);
 
         starRocksAssert.withTable("CREATE TABLE `t0_stats_partition` (\n" +
@@ -117,8 +183,13 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\"\n" +
                 ");");
+<<<<<<< HEAD
         OlapTable t0p = (OlapTable) globalStateMgr.getDb("test").getTable("t0_stats_partition");
         new ArrayList<>(t0p.getPartitions()).get(0).updateVisibleVersion(2);
+=======
+        OlapTable t0p = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0_stats_partition");
+        new ArrayList<>(t0p.getPartitions()).get(0).getDefaultPhysicalPartition().updateVisibleVersion(2);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         setTableStatistics(t0p, 20000000);
 
         starRocksAssert.withDatabase("stats");
@@ -135,8 +206,13 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 "\"in_memory\" = \"false\"\n" +
                 ");");
 
+<<<<<<< HEAD
         OlapTable tps = (OlapTable) globalStateMgr.getDb("stats").getTable("tprimary_stats");
         new ArrayList<>(tps.getPartitions()).get(0).updateVisibleVersion(2);
+=======
+        OlapTable tps = (OlapTable) globalStateMgr.getLocalMetastore().getDb("stats").getTable("tprimary_stats");
+        new ArrayList<>(tps.getPartitions()).get(0).getDefaultPhysicalPartition().updateVisibleVersion(2);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         setTableStatistics(tps, 20000000);
 
         starRocksAssert.withTable("CREATE TABLE `tunique_stats` (\n" +
@@ -151,8 +227,13 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 "\"in_memory\" = \"false\"\n" +
                 ");");
 
+<<<<<<< HEAD
         OlapTable tus = (OlapTable) globalStateMgr.getDb("stats").getTable("tunique_stats");
         new ArrayList<>(tus.getPartitions()).get(0).updateVisibleVersion(2);
+=======
+        OlapTable tus = (OlapTable) globalStateMgr.getLocalMetastore().getDb("stats").getTable("tunique_stats");
+        new ArrayList<>(tus.getPartitions()).get(0).getDefaultPhysicalPartition().updateVisibleVersion(2);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         setTableStatistics(tps, 20000000);
 
         starRocksAssert.withTable("CREATE TABLE `tcount` (\n" +
@@ -166,24 +247,55 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 "\"in_memory\" = \"false\"\n" +
                 ");");
 
+<<<<<<< HEAD
         OlapTable tcount = (OlapTable) globalStateMgr.getDb("stats").getTable("tcount");
         new ArrayList<>(tcount.getPartitions()).get(0).updateVisibleVersion(2);
         setTableStatistics(tcount, 20000000);
+=======
+        OlapTable tcount = (OlapTable) globalStateMgr.getLocalMetastore().getDb("stats").getTable("tcount");
+        new ArrayList<>(tcount.getPartitions()).get(0).getDefaultPhysicalPartition().updateVisibleVersion(2);
+        setTableStatistics(tcount, 20000000);
+
+        String createStructTableSql = "CREATE TABLE struct_a(\n" +
+                "a INT, \n" +
+                "b STRUCT<a INT, c INT> COMMENT 'smith',\n" +
+                "c STRUCT<a INT, b DOUBLE>,\n" +
+                "d STRUCT<a INT, b ARRAY<STRUCT<a INT, b DOUBLE>>, c STRUCT<a INT>>,\n" +
+                "struct_a STRUCT<struct_a STRUCT<struct_a INT>, other INT> COMMENT 'alias test'\n" +
+                ") DISTRIBUTED BY HASH(`a`) BUCKETS 1\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");";
+        starRocksAssert.withTable(createStructTableSql);
+        OlapTable structTable = (OlapTable) globalStateMgr.getLocalMetastore().getDb("stats").getTable("struct_a");
+        new ArrayList<>(structTable.getPartitions()).get(0).getDefaultPhysicalPartition().updateVisibleVersion(2);
+        setTableStatistics(structTable, 20000000);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Before
     public void setUp() {
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().clear();
+=======
+        super.setUp();
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().getBasicStatsMetaMap().clear();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
     public void testAnalyzeALLDB() {
         List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
+<<<<<<< HEAD
                 new AnalyzeJob(StatsConstants.DEFAULT_ALL_ID, StatsConstants.DEFAULT_ALL_ID, null,
+=======
+                new NativeAnalyzeJob(StatsConstants.DEFAULT_ALL_ID, StatsConstants.DEFAULT_ALL_ID, null, null,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
                         Maps.newHashMap(),
                         StatsConstants.ScheduleStatus.PENDING,
                         LocalDateTime.MIN));
+<<<<<<< HEAD
         Assert.assertEquals(6, jobs.size());
         Assert.assertTrue(jobs.get(0) instanceof FullStatisticsCollectJob);
         jobs = jobs.stream().sorted(Comparator.comparingLong(o -> o.getTable().getId())).collect(Collectors.toList());
@@ -194,18 +306,37 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         fullStatisticsCollectJob = (FullStatisticsCollectJob) jobs.get(1);
         Assert.assertTrue("[v4, v5, v6]".contains(
                 fullStatisticsCollectJob.getColumns().toString()));
+=======
+        Assert.assertEquals(7, jobs.size());
+        Assert.assertTrue(jobs.get(0) instanceof HyperStatisticsCollectJob);
+        jobs = jobs.stream().sorted(Comparator.comparingLong(o -> o.getTable().getId())).collect(Collectors.toList());
+        HyperStatisticsCollectJob fullStatisticsCollectJob = (HyperStatisticsCollectJob) jobs.get(0);
+        Assert.assertTrue("[v1, v2, v3, v4, v5]".contains(
+                fullStatisticsCollectJob.getColumnNames().toString()));
+        Assert.assertTrue(jobs.get(1) instanceof HyperStatisticsCollectJob);
+        fullStatisticsCollectJob = (HyperStatisticsCollectJob) jobs.get(1);
+        Assert.assertTrue("[v4, v5, v6]".contains(
+                fullStatisticsCollectJob.getColumnNames().toString()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
     public void testAnalyzeDB() {
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
                 new AnalyzeJob(db.getId(), StatsConstants.DEFAULT_ALL_ID, null,
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
+                new NativeAnalyzeJob(db.getId(), StatsConstants.DEFAULT_ALL_ID, null, null,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
                         Maps.newHashMap(),
                         StatsConstants.ScheduleStatus.PENDING,
                         LocalDateTime.MIN));
         Assert.assertEquals(3, jobs.size());
+<<<<<<< HEAD
         Assert.assertTrue(jobs.get(0) instanceof FullStatisticsCollectJob);
         jobs = jobs.stream().sorted(Comparator.comparingLong(o -> o.getTable().getId())).collect(Collectors.toList());
         FullStatisticsCollectJob fullStatisticsCollectJob = (FullStatisticsCollectJob) jobs.get(0);
@@ -213,18 +344,34 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         Assert.assertTrue(jobs.get(1) instanceof FullStatisticsCollectJob);
         fullStatisticsCollectJob = (FullStatisticsCollectJob) jobs.get(1);
         Assert.assertEquals("[v4, v5, v6]", fullStatisticsCollectJob.getColumns().toString());
+=======
+        Assert.assertTrue(jobs.get(0) instanceof HyperStatisticsCollectJob);
+        jobs = jobs.stream().sorted(Comparator.comparingLong(o -> o.getTable().getId())).collect(Collectors.toList());
+        HyperStatisticsCollectJob fullStatisticsCollectJob = (HyperStatisticsCollectJob) jobs.get(0);
+        Assert.assertEquals("[v1, v2, v3, v4, v5]", fullStatisticsCollectJob.getColumnNames().toString());
+        Assert.assertTrue(jobs.get(1) instanceof HyperStatisticsCollectJob);
+        fullStatisticsCollectJob = (HyperStatisticsCollectJob) jobs.get(1);
+        Assert.assertEquals("[v4, v5, v6]", fullStatisticsCollectJob.getColumnNames().toString());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
     public void testAnalyzeTable() {
+<<<<<<< HEAD
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
                 new AnalyzeJob(testDb.getId(), t0StatsTableId, null,
+=======
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
+                new NativeAnalyzeJob(testDb.getId(), t0StatsTableId, null, null,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
                         Maps.newHashMap(),
                         StatsConstants.ScheduleStatus.PENDING,
                         LocalDateTime.MIN));
         Assert.assertEquals(1, jobs.size());
+<<<<<<< HEAD
         Assert.assertTrue(jobs.get(0) instanceof FullStatisticsCollectJob);
         FullStatisticsCollectJob fullStatisticsCollectJob = (FullStatisticsCollectJob) jobs.get(0);
         Assert.assertEquals("t0_stats", fullStatisticsCollectJob.getTable().getName());
@@ -234,11 +381,23 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         Table table = db.getTable("tprimary_stats");
         jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
                 new AnalyzeJob(db.getId(), table.getId(), null,
+=======
+        Assert.assertTrue(jobs.get(0) instanceof HyperStatisticsCollectJob);
+        HyperStatisticsCollectJob fullStatisticsCollectJob = (HyperStatisticsCollectJob) jobs.get(0);
+        Assert.assertEquals("t0_stats", fullStatisticsCollectJob.getTable().getName());
+        Assert.assertEquals("[v1, v2, v3, v4, v5]", fullStatisticsCollectJob.getColumnNames().toString());
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("stats");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tprimary_stats");
+        jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
+                new NativeAnalyzeJob(db.getId(), table.getId(), null, null,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
                         Maps.newHashMap(),
                         StatsConstants.ScheduleStatus.PENDING,
                         LocalDateTime.MIN));
         Assert.assertEquals(1, jobs.size());
+<<<<<<< HEAD
         Assert.assertTrue(jobs.get(0) instanceof FullStatisticsCollectJob);
         fullStatisticsCollectJob = (FullStatisticsCollectJob) jobs.get(0);
         Assert.assertEquals("tprimary_stats", fullStatisticsCollectJob.getTable().getName());
@@ -247,60 +406,135 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         table = db.getTable("tunique_stats");
         jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
                 new AnalyzeJob(db.getId(), table.getId(), null,
+=======
+        Assert.assertTrue(jobs.get(0) instanceof HyperStatisticsCollectJob);
+        fullStatisticsCollectJob = (HyperStatisticsCollectJob) jobs.get(0);
+        Assert.assertEquals("tprimary_stats", fullStatisticsCollectJob.getTable().getName());
+        Assert.assertEquals("[pk, v1, v2]", fullStatisticsCollectJob.getColumnNames().toString());
+
+        table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tunique_stats");
+        jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
+                new NativeAnalyzeJob(db.getId(), table.getId(), null, null,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
                         Maps.newHashMap(),
                         StatsConstants.ScheduleStatus.PENDING,
                         LocalDateTime.MIN));
         Assert.assertEquals(1, jobs.size());
+<<<<<<< HEAD
         Assert.assertTrue(jobs.get(0) instanceof FullStatisticsCollectJob);
         fullStatisticsCollectJob = (FullStatisticsCollectJob) jobs.get(0);
         Assert.assertEquals("tunique_stats", fullStatisticsCollectJob.getTable().getName());
         Assert.assertEquals("[pk]", fullStatisticsCollectJob.getColumns().toString());
+=======
+        Assert.assertTrue(jobs.get(0) instanceof HyperStatisticsCollectJob);
+        fullStatisticsCollectJob = (HyperStatisticsCollectJob) jobs.get(0);
+        Assert.assertEquals("tunique_stats", fullStatisticsCollectJob.getTable().getName());
+        Assert.assertEquals("[pk]", fullStatisticsCollectJob.getColumnNames().toString());
     }
 
     @Test
-    public void testAnalyzeColumn() {
-        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+    public void testAnalyzeStructSubFiled() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("stats");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "struct_a");
         List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
-                new AnalyzeJob(db.getId(), t0StatsTableId, Lists.newArrayList("v2"),
+                new NativeAnalyzeJob(db.getId(), table.getId(), ImmutableList.of("b.a", "b.c", "d.c.a"),
+                        ImmutableList.of(Type.INT, Type.INT, Type.INT),
                         StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
                         Maps.newHashMap(),
                         StatsConstants.ScheduleStatus.PENDING,
                         LocalDateTime.MIN));
         Assert.assertEquals(1, jobs.size());
+        Assert.assertTrue(jobs.get(0) instanceof HyperStatisticsCollectJob);
+        HyperStatisticsCollectJob fullStatisticsCollectJob = (HyperStatisticsCollectJob) jobs.get(0);
+        Assert.assertEquals("struct_a", fullStatisticsCollectJob.getTable().getName());
+        Assert.assertEquals("[b.a, b.c, d.c.a]", fullStatisticsCollectJob.getColumnNames().toString());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
+    }
+
+    @Test
+    public void testAnalyzeColumn() {
+<<<<<<< HEAD
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
+                new AnalyzeJob(db.getId(), t0StatsTableId, Lists.newArrayList("v2"),
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
+                new NativeAnalyzeJob(db.getId(), t0StatsTableId, Lists.newArrayList("v2"),
+                        Lists.newArrayList(Type.BIGINT),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
+                        StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
+                        Maps.newHashMap(),
+                        StatsConstants.ScheduleStatus.PENDING,
+                        LocalDateTime.MIN));
+        Assert.assertEquals(1, jobs.size());
+<<<<<<< HEAD
         Assert.assertTrue(jobs.get(0) instanceof FullStatisticsCollectJob);
         FullStatisticsCollectJob fullStatisticsCollectJob = (FullStatisticsCollectJob) jobs.get(0);
         Assert.assertEquals("[v2]", fullStatisticsCollectJob.getColumns().toString());
+=======
+        Assert.assertTrue(jobs.get(0) instanceof HyperStatisticsCollectJob);
+        HyperStatisticsCollectJob fullStatisticsCollectJob = (HyperStatisticsCollectJob) jobs.get(0);
+        Assert.assertEquals("[v2]", fullStatisticsCollectJob.getColumnNames().toString());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
     public void testAnalyzeColumnSample() {
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
                 new AnalyzeJob(db.getId(), t0StatsTableId, Lists.newArrayList("v2"),
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
+                new NativeAnalyzeJob(db.getId(), t0StatsTableId, Lists.newArrayList("v2"),
+                        Lists.newArrayList(Type.BIGINT),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         StatsConstants.AnalyzeType.SAMPLE, StatsConstants.ScheduleType.SCHEDULE,
                         Maps.newHashMap(),
                         StatsConstants.ScheduleStatus.PENDING,
                         LocalDateTime.MIN));
         Assert.assertEquals(1, jobs.size());
+<<<<<<< HEAD
         Assert.assertTrue(jobs.get(0) instanceof SampleStatisticsCollectJob);
         SampleStatisticsCollectJob sampleStatisticsCollectJob = (SampleStatisticsCollectJob) jobs.get(0);
         Assert.assertEquals("[v2]", sampleStatisticsCollectJob.getColumns().toString());
+=======
+        Assert.assertTrue(jobs.get(0) instanceof HyperStatisticsCollectJob);
+        HyperStatisticsCollectJob sampleStatisticsCollectJob = (HyperStatisticsCollectJob) jobs.get(0);
+        Assert.assertEquals("[v2]", sampleStatisticsCollectJob.getColumnNames().toString());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
     public void testAnalyzeColumnSample2() {
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable olapTable = (OlapTable) db.getTable("t0_stats");
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable olapTable =
+                (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t0_stats");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         BasicStatsMeta basicStatsMeta = new BasicStatsMeta(db.getId(), olapTable.getId(), null,
                 StatsConstants.AnalyzeType.SAMPLE,
                 LocalDateTime.of(2020, 1, 1, 1, 1, 1), Maps.newHashMap());
         basicStatsMeta.increaseDeltaRows(10000000L);
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(basicStatsMeta);
 
         List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
                 new AnalyzeJob(db.getId(), olapTable.getId(), Lists.newArrayList("v2"),
+=======
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(basicStatsMeta);
+
+        List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
+                new NativeAnalyzeJob(db.getId(), olapTable.getId(), Lists.newArrayList("v2"),
+                        Lists.newArrayList(Type.BIGINT),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         StatsConstants.AnalyzeType.SAMPLE, StatsConstants.ScheduleType.SCHEDULE,
                         Maps.newHashMap(),
                         StatsConstants.ScheduleStatus.PENDING,
@@ -308,7 +542,12 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         Assert.assertEquals(1, jobs.size());
 
         jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
+<<<<<<< HEAD
                 new AnalyzeJob(db.getId(), olapTable.getId(), Lists.newArrayList("v2"),
+=======
+                new NativeAnalyzeJob(db.getId(), olapTable.getId(), Lists.newArrayList("v2"),
+                        Lists.newArrayList(Type.BIGINT),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
                         Maps.newHashMap(),
                         StatsConstants.ScheduleStatus.PENDING,
@@ -319,10 +558,18 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 StatsConstants.AnalyzeType.SAMPLE,
                 LocalDateTime.of(2022, 1, 1, 1, 1, 1), Maps.newHashMap(),
                 basicStatsMeta.getUpdateRows());
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(basicStatsMeta2);
 
         List<StatisticsCollectJob> jobs2 = StatisticsCollectJobFactory.buildStatisticsCollectJob(
                 new AnalyzeJob(db.getId(), olapTable.getId(), Lists.newArrayList("v2"),
+=======
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(basicStatsMeta2);
+
+        List<StatisticsCollectJob> jobs2 = StatisticsCollectJobFactory.buildStatisticsCollectJob(
+                new NativeAnalyzeJob(db.getId(), olapTable.getId(), Lists.newArrayList("v2"),
+                        Lists.newArrayList(Type.BIGINT),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         StatsConstants.AnalyzeType.SAMPLE, StatsConstants.ScheduleType.SCHEDULE,
                         Maps.newHashMap(),
                         StatsConstants.ScheduleStatus.PENDING,
@@ -332,8 +579,14 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
     @Test
     public void testAnalyzeHistogram() {
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable olapTable = (OlapTable) db.getTable("t0_stats");
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable olapTable =
+                (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t0_stats");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         long dbid = db.getId();
 
         Map<String, String> properties = new HashMap<>();
@@ -341,6 +594,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         properties.put(StatsConstants.HISTOGRAM_BUCKET_NUM, "64");
         properties.put(StatsConstants.HISTOGRAM_MCV_SIZE, "100");
         HistogramStatisticsCollectJob histogramStatisticsCollectJob = new HistogramStatisticsCollectJob(
+<<<<<<< HEAD
                 db, olapTable, Lists.newArrayList("v2"),
                 StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE,
                 properties);
@@ -352,31 +606,74 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         "(SELECT `v2` FROM `test`.`t0_stats` where rand() <= 0.1 and `v2` is not null  " +
                         "ORDER BY `v2` LIMIT 10000000) t",
                 t0StatsTableId, dbid), sql);
+=======
+                db, olapTable, Lists.newArrayList("v2"), Lists.newArrayList(Type.BIGINT),
+                StatsConstants.ScheduleType.ONCE, properties);
+
+        Config.histogram_enable_table_sample = false;
+        Function<String, String> normalize = str -> str.replaceAll(" +", " ").toLowerCase();
+        String sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
+                db, olapTable, 0.1, 64L, Maps.newHashMap(), "v2", Type.BIGINT);
+        Assert.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics SELECT %s, 'v2', %d, " +
+                        "'test.t0_stats', histogram(`column_key`, cast(64 as int), cast(0.1 as double)),  " +
+                        "NULL, NOW() FROM (   SELECT `v2` as column_key    FROM `test`.`t0_stats`     " +
+                        "WHERE  rand() <= 0.100000 and `v2` is not null    ORDER BY `v2` LIMIT 10000000) t",
+                t0StatsTableId, dbid)), normalize.apply(sql));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         Map<String, String> mostCommonValues = new HashMap<>();
         mostCommonValues.put("1", "10");
         mostCommonValues.put("2", "20");
         sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
+<<<<<<< HEAD
                 db, olapTable, 0.1, 64L, mostCommonValues, "v2");
         Assert.assertEquals(String.format("INSERT INTO histogram_statistics SELECT %s, 'v2', %d, 'test.t0_stats', " +
                 "histogram(`v2`, cast(64 as int), cast(0.1 as double)),  '[[\"1\",\"10\"],[\"2\",\"20\"]]', NOW() " +
                 "FROM (SELECT `v2` FROM `test`.`t0_stats` where rand() <= 0.1 and `v2` is not null  and `v2` not in (1,2) " +
                 "ORDER BY `v2` LIMIT 10000000) t", t0StatsTableId, dbid), sql);
+=======
+                db, olapTable, 0.1, 64L, mostCommonValues, "v2", Type.BIGINT);
+        Assert.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics SELECT %d, 'v2', %d, " +
+                "'test" +
+                ".t0_stats'," +
+                " " +
+                "histogram(`column_key`, cast(64 as int), cast(0.1 as double)),  '[[\"1\",\"10\"],[\"2\",\"20\"]]', NOW() " +
+                "FROM (   SELECT `v2` as column_key FROM `test`.`t0_stats` where rand() <= 0.100000 and `v2` is not " +
+                "null " +
+                " and `v2` " +
+                "not in (1,2) ORDER BY `v2` LIMIT 10000000) t", t0StatsTableId, dbid)), normalize.apply(sql));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         mostCommonValues.clear();
         mostCommonValues.put("0000-01-01", "10");
         mostCommonValues.put("1991-01-01", "20");
         sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
+<<<<<<< HEAD
                 db, olapTable, 0.1, 64L, mostCommonValues, "v4");
         Assert.assertEquals(String.format("INSERT INTO histogram_statistics SELECT %s, 'v4', %d, 'test.t0_stats', " +
                 "histogram(`v4`, cast(64 as int), cast(0.1 as double)),  '[[\"0000-01-01\",\"10\"],[\"1991-01-01\",\"20\"]]', " +
                 "NOW() FROM (SELECT `v4` FROM `test`.`t0_stats` where rand() <= 0.1 and `v4` is not null  and `v4` not in " +
                 "(\"0000-01-01\",\"1991-01-01\") ORDER BY `v4` LIMIT 10000000) t", t0StatsTableId, dbid), sql);
+=======
+                db, olapTable, 0.1, 64L, mostCommonValues, "v4", Type.DATE);
+        Assert.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics SELECT %d, 'v4', %d, " +
+                        "'test" +
+                        ".t0_stats', " +
+                "histogram(`column_key`, cast(64 as int), cast(0.1 as double)),  " +
+                "'[[\"0000-01-01\",\"10\"],[\"1991-01-01\",\"20\"]]', NOW() FROM " +
+                        "( SELECT `v4` as column_key FROM `test`.`t0_stats` where rand() <= 0.100000 and `v4` is not " +
+                        "null  " +
+                        "and `v4` " +
+                        "not in (\"0000-01-01\",\"1991-01-01\") ORDER BY `v4` LIMIT 10000000) t", t0StatsTableId,
+                        dbid)),
+                normalize.apply(sql));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         mostCommonValues.clear();
         mostCommonValues.put("0000-01-01 00:00:00", "10");
         mostCommonValues.put("1991-01-01 00:00:00", "20");
         sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
+<<<<<<< HEAD
                 db, olapTable, 0.1, 64L, mostCommonValues, "v5");
         Assert.assertEquals("INSERT INTO histogram_statistics SELECT " + t0StatsTableId + ", 'v5', " + dbid +
                         ", 'test" +
@@ -402,10 +699,204 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
                 new AnalyzeJob(db.getId(), t0StatsTableId, null,
                         StatsConstants.AnalyzeType.SAMPLE, StatsConstants.ScheduleType.SCHEDULE,
+=======
+                db, olapTable, 0.1, 64L, mostCommonValues, "v5", Type.DATETIME);
+        Assert.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics SELECT %d, 'v5', %d, " +
+                        "'test.t0_stats', " +
+                        "histogram(`column_key`, cast(64 as int), cast(0.1 as double)),  " +
+                        "'[[\"1991-01-01 00:00:00\",\"20\"],[\"0000-01-01 00:00:00\",\"10\"]]', NOW() FROM " +
+                        "( SELECT `v5` as column_key FROM `test`.`t0_stats` where rand() <= 0.100000 and `v5` is not " +
+                        "null  and " +
+                        "`v5` not in (\"1991-01-01 00:00:00\",\"0000-01-01 00:00:00\") ORDER BY `v5` LIMIT 10000000) t",
+                t0StatsTableId, dbid)), normalize.apply(sql));
+
+        Config.histogram_enable_table_sample = true;
+        sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
+                db, olapTable, 0.1, 64L, mostCommonValues, "v5", Type.DATETIME);
+        Assert.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics SELECT %d, 'v5', %d, " +
+                        "'test.t0_stats', " +
+                        "histogram(`column_key`, cast(64 as int), cast(0.1 as double)),  " +
+                        "'[[\"1991-01-01 00:00:00\",\"20\"],[\"0000-01-01 00:00:00\",\"10\"]]', NOW() FROM " +
+                        "( SELECT `v5` as column_key FROM `test`.`t0_stats` SAMPLE('percent'='10') where true and " +
+                        "`v5` is not null  and " +
+                        "`v5` not in (\"1991-01-01 00:00:00\",\"0000-01-01 00:00:00\") ORDER BY `v5` LIMIT 10000000) t",
+                t0StatsTableId, dbid)), normalize.apply(sql));
+
+        sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectMCV",
+                db, olapTable, 100L, "v2", 0.1);
+        Assert.assertEquals(normalize.apply("select cast(version as INT), cast(db_id as BIGINT), cast(table_id as " +
+                "BIGINT), " +
+                "cast(column_key as varchar), cast(column_value as varchar) from (select 2 as version, " + dbid +
+                " as db_id, " + t0StatsTableId +
+                " as table_id, `v2` as column_key, count(`v2`) as column_value from `test`.`t0_stats` sample" +
+                "('percent'='10') " +
+                "where `v2` is not null group by `v2` order by count(`v2`) desc limit 100 ) t"), normalize.apply(sql));
+    }
+
+    @Test
+    public void testNativeAnalyzeJob() {
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+
+        NativeAnalyzeJob nativeAnalyzeJob = new NativeAnalyzeJob(testDb.getId(), t0StatsTableId, null, null,
+                StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
+                Maps.newHashMap(),
+                StatsConstants.ScheduleStatus.PENDING,
+                LocalDateTime.MIN);
+        Assert.assertEquals(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, nativeAnalyzeJob.getCatalogName());
+
+        nativeAnalyzeJob.setWorkTime(LocalDateTime.of(2023, 1, 1, 12, 0, 0));
+        Assert.assertEquals("2023-01-01T12:00", nativeAnalyzeJob.getWorkTime().toString());
+
+        nativeAnalyzeJob.setReason("test");
+        Assert.assertEquals("test", nativeAnalyzeJob.getReason());
+
+        nativeAnalyzeJob.setStatus(StatsConstants.ScheduleStatus.FINISH);
+        Assert.assertEquals(StatsConstants.ScheduleStatus.FINISH, nativeAnalyzeJob.getStatus());
+
+        ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
+        statsConnectCtx.setStatisticsConnection(true);
+        statsConnectCtx.setThreadLocalInfo();
+        StatisticExecutor statisticExecutor = new StatisticExecutor();
+
+        new MockUp<HyperStatisticsCollectJob>() {
+            @Mock
+            public void collect(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
+            }
+        };
+
+        nativeAnalyzeJob.run(statsConnectCtx, statisticExecutor);
+        Assert.assertEquals(StatsConstants.ScheduleStatus.FINISH, nativeAnalyzeJob.getStatus());
+
+        new MockUp<HyperStatisticsCollectJob>() {
+            @Mock
+            public void collect(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
+                throw new RuntimeException("mock exception");
+            }
+        };
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("stats");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tprimary_stats");
+        nativeAnalyzeJob = new NativeAnalyzeJob(db.getId(), table.getId(), null, null,
+                StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
+                Maps.newHashMap(),
+                StatsConstants.ScheduleStatus.PENDING,
+                LocalDateTime.MIN);
+        nativeAnalyzeJob.run(statsConnectCtx, statisticExecutor);
+        Assert.assertEquals(StatsConstants.ScheduleStatus.FAILED, nativeAnalyzeJob.getStatus());
+        Assert.assertEquals("mock exception", nativeAnalyzeJob.getReason());
+    }
+
+    @Test
+    public void testExternalAnalyzeJob() {
+        Database database = connectContext.getGlobalStateMgr().getMetadataMgr().getDb("hive0", "partitioned_db");
+        Table table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("hive0", "partitioned_db", "t1");
+
+        ExternalAnalyzeJob externalAnalyzeJob = new ExternalAnalyzeJob("hive0", database.getFullName(),
+                table.getName(), null, null,
+                StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
+                Maps.newHashMap(),
+                StatsConstants.ScheduleStatus.PENDING,
+                LocalDateTime.MIN);
+        Assert.assertEquals("hive0", externalAnalyzeJob.getCatalogName());
+
+        externalAnalyzeJob.setWorkTime(LocalDateTime.of(2023, 1, 1, 12, 0, 0));
+        Assert.assertEquals("2023-01-01T12:00", externalAnalyzeJob.getWorkTime().toString());
+
+        externalAnalyzeJob.setReason("test");
+        Assert.assertEquals("test", externalAnalyzeJob.getReason());
+
+        externalAnalyzeJob.setStatus(StatsConstants.ScheduleStatus.FINISH);
+        Assert.assertEquals(StatsConstants.ScheduleStatus.FINISH, externalAnalyzeJob.getStatus());
+
+        Assert.assertEquals("ExternalAnalyzeJob{id=-1, dbName=partitioned_db, tableName=t1, columns=null, " +
+                "type=FULL, scheduleType=SCHEDULE, properties={}, status=FINISH, " +
+                "workTime=2023-01-01T12:00, reason='test'}", externalAnalyzeJob.toString());
+    }
+
+    @Test
+    public void testExternalAnalyzeJobCollect() {
+        Database database = connectContext.getGlobalStateMgr().getMetadataMgr().getDb("hive0", "partitioned_db");
+        Table table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("hive0", "partitioned_db", "t1");
+
+        ExternalAnalyzeJob externalAnalyzeJob = new ExternalAnalyzeJob("hive0", database.getFullName(),
+                table.getName(), null, null,
+                StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
+                Maps.newHashMap(),
+                StatsConstants.ScheduleStatus.PENDING,
+                LocalDateTime.MIN);
+
+        ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
+        statsConnectCtx.setStatisticsConnection(true);
+        statsConnectCtx.setThreadLocalInfo();
+        StatisticExecutor statisticExecutor = new StatisticExecutor();
+
+        new MockUp<ExternalFullStatisticsCollectJob>() {
+            @Mock
+            public void collect(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
+            }
+        };
+
+        externalAnalyzeJob.run(statsConnectCtx, statisticExecutor);
+        Assert.assertEquals(StatsConstants.ScheduleStatus.FINISH, externalAnalyzeJob.getStatus());
+
+        new MockUp<ExternalFullStatisticsCollectJob>() {
+            @Mock
+            public void collect(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
+                throw new RuntimeException("mock exception");
+            }
+        };
+        new MockUp<AnalyzeMgr>() {
+            @Mock
+            public Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> getExternalBasicStatsMetaMap() {
+                Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> metaMap = Maps.newHashMap();
+                metaMap.put(new AnalyzeMgr.StatsMetaKey("hive0", "partitioned_db", "t1"),
+                        new ExternalBasicStatsMeta("hive0", "partitioned_db", "t1", null,
+                                StatsConstants.AnalyzeType.FULL,
+                                LocalDateTime.now().minusHours(2), Maps.newHashMap()));
+                return metaMap;
+            }
+        };
+        new MockUp<CachedStatisticStorage>() {
+            @Mock
+            public List<ConnectorTableColumnStats> getConnectorTableStatisticsSync(Table table, List<String> columns) {
+                return ImmutableList.of(new ConnectorTableColumnStats(new ColumnStatistic(1, 100, 0, 4, 100),
+                        100, ""));
+            }
+        };
+
+        externalAnalyzeJob.run(statsConnectCtx, statisticExecutor);
+        Assert.assertEquals(StatsConstants.ScheduleStatus.FAILED, externalAnalyzeJob.getStatus());
+        Assert.assertEquals("mock exception", externalAnalyzeJob.getReason());
+    }
+
+    @Test
+    public void testExternalAnalyzeDb() {
+        new MockUp<AnalyzeMgr>() {
+            @Mock
+            public Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> getExternalBasicStatsMetaMap() {
+                return Maps.newHashMap();
+            }
+        };
+        List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildExternalStatisticsCollectJob(
+                new ExternalAnalyzeJob("hive0", "partitioned_db", null, null,
+                        null, StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
+                        Maps.newHashMap(),
+                        StatsConstants.ScheduleStatus.PENDING,
+                        LocalDateTime.MIN));
+        Assert.assertEquals(13, jobs.size());
+    }
+
+    @Test
+    public void testExternalAnalyzeTable() {
+        List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildExternalStatisticsCollectJob(
+                new ExternalAnalyzeJob("hive0", "partitioned_db", "t1", null,
+                        null, StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         Maps.newHashMap(),
                         StatsConstants.ScheduleStatus.PENDING,
                         LocalDateTime.MIN));
         Assert.assertEquals(1, jobs.size());
+<<<<<<< HEAD
         Assert.assertTrue(jobs.get(0) instanceof SampleStatisticsCollectJob);
 
         int splitSize = Deencapsulation.invoke(jobs.get(0), "splitColumns", 10L);
@@ -421,11 +912,225 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
         splitSize = Deencapsulation.invoke(jobs.get(0), "splitColumns", 0L);
         Assert.assertEquals(5, splitSize);
+=======
+        StatisticsCollectJob statisticsCollectJob = jobs.get(0);
+        Assert.assertTrue(statisticsCollectJob instanceof ExternalFullStatisticsCollectJob);
+        Assert.assertEquals("hive0", statisticsCollectJob.getCatalogName());
+        Assert.assertEquals("partitioned_db", statisticsCollectJob.getDb().getFullName());
+        Assert.assertEquals("t1", statisticsCollectJob.getTable().getName());
+        Assert.assertTrue("[c1, c2, c3, par_col]".contains(
+                statisticsCollectJob.getColumnNames().toString()));
+    }
+
+    @Test
+    public void testCreateHiveAnalyzeJob() {
+        ExternalAnalyzeJob analyzeJob = new ExternalAnalyzeJob("hive0", "partitioned_db",
+                "t1", List.of("c1"), null,
+                StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
+                Maps.newHashMap(),
+                StatsConstants.ScheduleStatus.PENDING,
+                LocalDateTime.MIN);
+        // do not have stats meta, need to collect
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().
+                removeExternalBasicStatsMeta("hive0", "partitioned_db", "t1");
+        List<StatisticsCollectJob> statsJobs = StatisticsCollectJobFactory.buildExternalStatisticsCollectJob(analyzeJob);
+        Assert.assertEquals(1, statsJobs.size());
+
+        // test collect statistics time after table update time
+        new MockUp<AnalyzeMgr>() {
+            @Mock
+            public Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> getExternalBasicStatsMetaMap() {
+                Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> metaMap = Maps.newHashMap();
+                ExternalBasicStatsMeta externalBasicStatsMeta = new ExternalBasicStatsMeta("hive0",
+                        "partitioned_db", "t1", null,
+                        StatsConstants.AnalyzeType.FULL,
+                        LocalDateTime.now().plusHours(2), Maps.newHashMap());
+                externalBasicStatsMeta.addColumnStatsMeta(new ColumnStatsMeta("c1", StatsConstants.AnalyzeType.FULL,
+                        LocalDateTime.now().plusHours(2)));
+                metaMap.put(new AnalyzeMgr.StatsMetaKey("hive0", "partitioned_db", "t1"),
+                        externalBasicStatsMeta);
+                return metaMap;
+            }
+        };
+        new MockUp<StatisticUtils>() {
+            @Mock
+            public LocalDateTime getTableLastUpdateTime(Table table) {
+                return LocalDateTime.now();
+            }
+        };
+        statsJobs = StatisticsCollectJobFactory.buildExternalStatisticsCollectJob(analyzeJob);
+        Assert.assertEquals(0, statsJobs.size());
+
+        // test collect statistics time before table update time
+        new MockUp<AnalyzeMgr>() {
+            @Mock
+            public Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> getExternalBasicStatsMetaMap() {
+                Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> metaMap = Maps.newHashMap();
+                ExternalBasicStatsMeta externalBasicStatsMeta = new ExternalBasicStatsMeta("hive0",
+                        "partitioned_db", "t1", null,
+                        StatsConstants.AnalyzeType.FULL,
+                        LocalDateTime.now().minusHours(2), Maps.newHashMap());
+                externalBasicStatsMeta.addColumnStatsMeta(new ColumnStatsMeta("c1", StatsConstants.AnalyzeType.FULL,
+                        LocalDateTime.now().minusHours(2)));
+                metaMap.put(new AnalyzeMgr.StatsMetaKey("hive0", "partitioned_db", "t1"),
+                        externalBasicStatsMeta);
+                return metaMap;
+            }
+        };
+        // the default row count is Config.statistic_auto_collect_small_table_rows -1 , need to collect statistics now
+        statsJobs = StatisticsCollectJobFactory.buildExternalStatisticsCollectJob(analyzeJob);
+        Assert.assertEquals(1, statsJobs.size());
+
+        // test collect statistics time before table update time, and row count is 100, need to collect statistics
+        new MockUp<CachedStatisticStorage>() {
+            @Mock
+            public List<ConnectorTableColumnStats> getConnectorTableStatisticsSync(Table table, List<String> columns) {
+                return ImmutableList.of(new ConnectorTableColumnStats(new ColumnStatistic(1, 100, 0, 4, 100),
+                        100, ""));
+            }
+        };
+        statsJobs = StatisticsCollectJobFactory.buildExternalStatisticsCollectJob(analyzeJob);
+        Assert.assertEquals(1, statsJobs.size());
+        Assert.assertEquals(3, ((ExternalFullStatisticsCollectJob) statsJobs.get(0)).getPartitionNames().size());
+
+        // test set property STATISTIC_AUTO_COLLECT_INTERVAL to 300s
+        new MockUp<CachedStatisticStorage>() {
+            @Mock
+            public List<ConnectorTableColumnStats> getConnectorTableStatisticsSync(Table table, List<String> columns) {
+                return ImmutableList.of(new ConnectorTableColumnStats(new ColumnStatistic(1, 100, 0, 4, 100),
+                        100000000, ""));
+            }
+        };
+        // analyze all columns
+        analyzeJob = new ExternalAnalyzeJob("hive0", "partitioned_db",
+                "t1", null, null,
+                StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
+                ImmutableMap.of(StatsConstants.STATISTIC_AUTO_COLLECT_INTERVAL, "300"),
+                StatsConstants.ScheduleStatus.PENDING,
+                LocalDateTime.MIN);
+        statsJobs = StatisticsCollectJobFactory.buildExternalStatisticsCollectJob(analyzeJob);
+        Assert.assertEquals(1, statsJobs.size());
+        Assert.assertEquals(3, ((ExternalFullStatisticsCollectJob) statsJobs.get(0)).getPartitionNames().size());
+    }
+
+    @Test
+    public void testCreateIcebergAnalyzeJob() {
+        ExternalAnalyzeJob analyzeJob = new ExternalAnalyzeJob("iceberg0", "partitioned_db",
+                "t1", List.of("id"), null,
+                StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
+                Maps.newHashMap(),
+                StatsConstants.ScheduleStatus.PENDING,
+                LocalDateTime.MIN);
+        // do not have stats meta, need to collect
+        List<StatisticsCollectJob> statsJobs = StatisticsCollectJobFactory.buildExternalStatisticsCollectJob(analyzeJob);
+        Assert.assertEquals(1, statsJobs.size());
+
+        // test collect statistics time after table update time
+        new MockUp<AnalyzeMgr>() {
+            @Mock
+            public Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> getExternalBasicStatsMetaMap() {
+                Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> metaMap = Maps.newHashMap();
+
+                ExternalBasicStatsMeta externalBasicStatsMeta = new ExternalBasicStatsMeta("iceberg0",
+                        "partitioned_db", "t1",  List.of("id"), StatsConstants.AnalyzeType.FULL,
+                        LocalDateTime.now().plusHours(2), Maps.newHashMap());
+                externalBasicStatsMeta.addColumnStatsMeta(new ColumnStatsMeta("id", StatsConstants.AnalyzeType.FULL,
+                        LocalDateTime.now().plusHours(2)));
+                metaMap.put(new AnalyzeMgr.StatsMetaKey("iceberg0", "partitioned_db", "t1"),
+                        externalBasicStatsMeta);
+                return metaMap;
+            }
+        };
+        new MockUp<StatisticUtils>() {
+            @Mock
+            public LocalDateTime getTableLastUpdateTime(Table table) {
+                return LocalDateTime.now();
+            }
+        };
+        statsJobs = StatisticsCollectJobFactory.buildExternalStatisticsCollectJob(analyzeJob);
+        Assert.assertEquals(0, statsJobs.size());
+
+        // test collect statistics time before table update time
+        LocalDateTime statsUpdateTime = LocalDateTime.now().minusHours(2);
+        new MockUp<AnalyzeMgr>() {
+            @Mock
+            public Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> getExternalBasicStatsMetaMap() {
+                Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> metaMap = Maps.newHashMap();
+                ExternalBasicStatsMeta externalBasicStatsMeta = new ExternalBasicStatsMeta("iceberg0",
+                        "partitioned_db", "t1", List.of("id"), StatsConstants.AnalyzeType.FULL,
+                        statsUpdateTime, Maps.newHashMap());
+                externalBasicStatsMeta.addColumnStatsMeta(new ColumnStatsMeta("id", StatsConstants.AnalyzeType.FULL,
+                        statsUpdateTime));
+                metaMap.put(new AnalyzeMgr.StatsMetaKey("iceberg0", "partitioned_db", "t1"),
+                        externalBasicStatsMeta);
+                return metaMap;
+            }
+        };
+        new MockUp<DefaultTraits>() {
+            @Mock
+            public Map<String, PartitionInfo> getPartitionNameWithPartitionInfo() {
+                return ImmutableMap.of("date=2020-01-01", new com.starrocks.connector.iceberg.Partition(
+                        statsUpdateTime.plusSeconds(2).atZone(Clock.systemDefaultZone().getZone()).
+                                toInstant().toEpochMilli() * 1000));
+            }
+        };
+
+        // the default row count is Config.statistic_auto_collect_small_table_rows - 1, need to collect statistics now
+        statsJobs = StatisticsCollectJobFactory.buildExternalStatisticsCollectJob(analyzeJob);
+        Assert.assertEquals(1, statsJobs.size());
+        Assert.assertEquals(1, ((ExternalFullStatisticsCollectJob) statsJobs.get(0)).getPartitionNames().size());
+
+        // test collect statistics time before table update time, and row count is 100, need to collect statistics
+        new MockUp<CachedStatisticStorage>() {
+            @Mock
+            public List<ConnectorTableColumnStats> getConnectorTableStatisticsSync(Table table, List<String> columns) {
+                return ImmutableList.of(new ConnectorTableColumnStats(new ColumnStatistic(1, 100, 0, 4, 100),
+                        100, ""));
+            }
+        };
+        new MockUp<DefaultTraits>() {
+            @Mock
+            public Map<String, PartitionInfo> getPartitionNameWithPartitionInfo() {
+                long needUpdateTime = statsUpdateTime.plusSeconds(120).
+                        atZone(Clock.systemDefaultZone().getZone()).toInstant().toEpochMilli() * 1000;
+                long noNeedUpdateTime = statsUpdateTime.minusSeconds(120).
+                        atZone(Clock.systemDefaultZone().getZone()).toInstant().toEpochMilli() * 1000;
+                return ImmutableMap.of("date=2020-01-01", new com.starrocks.connector.iceberg.Partition(needUpdateTime),
+                        "date=2020-01-02", new com.starrocks.connector.iceberg.Partition(needUpdateTime),
+                        "date=2020-01-03", new com.starrocks.connector.iceberg.Partition(needUpdateTime),
+                        "date=2020-01-04", new com.starrocks.connector.iceberg.Partition(noNeedUpdateTime),
+                        "date=2020-01-05", new com.starrocks.connector.iceberg.Partition(noNeedUpdateTime));
+            }
+        };
+        statsJobs = StatisticsCollectJobFactory.buildExternalStatisticsCollectJob(analyzeJob);
+        Assert.assertEquals(1, statsJobs.size());
+        Assert.assertEquals(3, ((ExternalFullStatisticsCollectJob) statsJobs.get(0)).getPartitionNames().size());
+
+        // test set property STATISTIC_AUTO_COLLECT_INTERVAL to 300s
+        new MockUp<CachedStatisticStorage>() {
+            @Mock
+            public List<ConnectorTableColumnStats> getConnectorTableStatisticsSync(Table table, List<String> columns) {
+                return ImmutableList.of(new ConnectorTableColumnStats(new ColumnStatistic(1, 100, 0, 4, 100),
+                        100000000, ""));
+            }
+        };
+        // analyze all columns
+        analyzeJob = new ExternalAnalyzeJob("iceberg0", "partitioned_db",
+                "t1", null, null,
+                StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
+                ImmutableMap.of(StatsConstants.STATISTIC_AUTO_COLLECT_INTERVAL, "300"),
+                StatsConstants.ScheduleStatus.PENDING,
+                LocalDateTime.MIN);
+        statsJobs = StatisticsCollectJobFactory.buildExternalStatisticsCollectJob(analyzeJob);
+        Assert.assertEquals(1, statsJobs.size());
+        Assert.assertEquals(5, ((ExternalFullStatisticsCollectJob) statsJobs.get(0)).getPartitionNames().size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
     public void testFullStatisticsBuildCollectSQLList() {
         OlapTable t0p = (OlapTable) connectContext.getGlobalStateMgr()
+<<<<<<< HEAD
                 .getDb("test").getTable("t0_stats_partition");
         int i = 1;
         for (Partition p : t0p.getAllPartitions()) {
@@ -436,6 +1141,19 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
         Database database = connectContext.getGlobalStateMgr().getDb("test");
         OlapTable table = (OlapTable) database.getTable("t0_stats_partition");
+=======
+                .getLocalMetastore().getDb("test").getTable("t0_stats_partition");
+        int i = 1;
+        for (Partition p : t0p.getAllPartitions()) {
+            p.getDefaultPhysicalPartition().updateVisibleVersion(2);
+            p.getDefaultPhysicalPartition().getBaseIndex().setRowCount(i * 100L);
+            i++;
+        }
+
+        Database database = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(database.getFullName(), "t0_stats_partition");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<Long> partitionIdList =
                 table.getAllPartitions().stream().map(Partition::getId).collect(Collectors.toList());
 
@@ -443,7 +1161,12 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 Lists.newArrayList("v1", "v2", "v3", "v4", "v5"),
                 StatsConstants.AnalyzeType.FULL,
                 StatsConstants.ScheduleType.SCHEDULE,
+<<<<<<< HEAD
                 Maps.newHashMap());
+=======
+                Maps.newHashMap()
+        );
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         List<List<String>> collectSqlList = collectJob.buildCollectSQLList(1);
         Assert.assertEquals(50, collectSqlList.size());
@@ -452,9 +1175,13 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         Assert.assertEquals(1, collectSqlList.size());
         assertContains(collectSqlList.get(0).toString(), "v1", "v2", "v3", "v4", "v5");
         assertContains(collectSqlList.get(0).toString(), "p0", "p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8", "p9");
+<<<<<<< HEAD
         Assert.assertEquals(10, StringUtils.countMatches(collectSqlList.toString(), "COUNT(`v1`)"));
         Assert.assertEquals(10, StringUtils.countMatches(collectSqlList.toString(), "COUNT(`v3`)"));
         Assert.assertEquals(10, StringUtils.countMatches(collectSqlList.toString(), "COUNT(`v5`)"));
+=======
+        Assert.assertEquals(50, StringUtils.countMatches(collectSqlList.toString(), "COUNT(`column_key`)"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals(5, StringUtils.countMatches(collectSqlList.toString(), "partition `p0`"));
         Assert.assertEquals(5, StringUtils.countMatches(collectSqlList.toString(), "partition `p1`"));
         Assert.assertEquals(5, StringUtils.countMatches(collectSqlList.toString(), "partition `p9`"));
@@ -463,8 +1190,13 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         Assert.assertEquals(4, collectSqlList.size());
 
         for (Partition p : t0p.getAllPartitions()) {
+<<<<<<< HEAD
             p.updateVisibleVersion(2);
             p.getBaseIndex().setRowCount(0);
+=======
+            p.getDefaultPhysicalPartition().updateVisibleVersion(2);
+            p.getDefaultPhysicalPartition().getBaseIndex().setRowCount(0);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         collectSqlList = collectJob.buildCollectSQLList(1);
@@ -472,6 +1204,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
     }
 
     @Test
+<<<<<<< HEAD
     public void testExcludeStatistics() {
         OlapTable table = (OlapTable) connectContext.getGlobalStateMgr()
                 .getDb("test").getTable("t0_stats_partition");
@@ -479,16 +1212,309 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         Database database = connectContext.getGlobalStateMgr().getDb("test");
 
         AnalyzeJob job = new AnalyzeJob(StatsConstants.DEFAULT_ALL_ID, StatsConstants.DEFAULT_ALL_ID, null,
+=======
+    public void testExternalFullStatisticsBuildCollectSQLList() {
+        Database database = connectContext.getGlobalStateMgr().getMetadataMgr().getDb("hive0", "partitioned_db");
+        Table table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("hive0", "partitioned_db", "t1");
+
+        ExternalFullStatisticsCollectJob collectJob = (ExternalFullStatisticsCollectJob)
+                StatisticsCollectJobFactory.buildExternalStatisticsCollectJob("hive0",
+                        database,
+                        table, null,
+                        Lists.newArrayList("c1", "c2", "c3", "par_col"),
+                        StatsConstants.AnalyzeType.FULL,
+                        StatsConstants.ScheduleType.ONCE,
+                        Maps.newHashMap());
+        List<List<String>> collectSqlList = collectJob.buildCollectSQLList(1);
+        Assert.assertEquals(12, collectSqlList.size());
+
+        collectSqlList = collectJob.buildCollectSQLList(128);
+        Assert.assertEquals(1, collectSqlList.size());
+        assertContains(collectSqlList.get(0).toString(), "c1", "c2", "c3", "par_col");
+        assertContains(collectSqlList.get(0).toString(), "`par_col` = '0'", "`par_col` = '1'", "`par_col` = '2'");
+
+        collectSqlList = collectJob.buildCollectSQLList(3);
+        Assert.assertEquals(4, collectSqlList.size());
+
+        database = connectContext.getGlobalStateMgr().getMetadataMgr().getDb("hive0", "tpch");
+        table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("hive0", "tpch", "region");
+        collectJob = (ExternalFullStatisticsCollectJob)
+                StatisticsCollectJobFactory.buildExternalStatisticsCollectJob("hive0",
+                        database,
+                        table, null,
+                        Lists.newArrayList("r_regionkey", "r_name", "r_comment"),
+                        StatsConstants.AnalyzeType.FULL,
+                        StatsConstants.ScheduleType.ONCE,
+                        Maps.newHashMap());
+        collectSqlList = collectJob.buildCollectSQLList(1);
+        Assert.assertEquals(3, collectSqlList.size());
+
+        collectSqlList = collectJob.buildCollectSQLList(128);
+        Assert.assertEquals(1, collectSqlList.size());
+        assertContains(collectSqlList.get(0).toString(), "r_regionkey", "r_name", "r_comment");
+        assertContains(collectSqlList.get(0).toString(), "1=1");
+
+        database = connectContext.getGlobalStateMgr().getMetadataMgr().getDb("hive0", "partitioned_db");
+        table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("hive0", "partitioned_db", "t1_par_null");
+        collectJob = (ExternalFullStatisticsCollectJob)
+                StatisticsCollectJobFactory.buildExternalStatisticsCollectJob("hive0",
+                        database,
+                        table, null,
+                        Lists.newArrayList("c1", "c2", "c3", "par_col", "par_date"),
+                        StatsConstants.AnalyzeType.FULL,
+                        StatsConstants.ScheduleType.ONCE,
+                        Maps.newHashMap());
+        collectSqlList = collectJob.buildCollectSQLList(1);
+        Assert.assertEquals(30, collectSqlList.size());
+        collectSqlList = collectJob.buildCollectSQLList(128);
+        Assert.assertEquals(1, collectSqlList.size());
+        assertContains(collectSqlList.get(0).toString(), "par_col=1/par_date=NULL");
+        assertContains(collectSqlList.get(0).toString(), "`par_col` = '1' AND `par_date` IS NULL");
+        assertContains(collectSqlList.get(0).toString(), "par_col=NULL/par_date=2020-01-03");
+        assertContains(collectSqlList.get(0).toString(), "`par_col` IS NULL AND `par_date` = '2020-01-03'");
+    }
+
+    @Test
+    public void testIcebergPartitionTransformFullStatisticsBuildCollectSQLList() {
+        // test partition column type is timestamp without time zone
+        Database database =
+                connectContext.getGlobalStateMgr().getMetadataMgr().getDb("iceberg0", "partitioned_transforms_db");
+        Table table =
+                connectContext.getGlobalStateMgr().getMetadataMgr().getTable("iceberg0", "partitioned_transforms_db",
+                        "t0_year");
+
+        ExternalFullStatisticsCollectJob collectJob = (ExternalFullStatisticsCollectJob)
+                StatisticsCollectJobFactory.buildExternalStatisticsCollectJob("iceberg0",
+                        database,
+                        table, null,
+                        Lists.newArrayList("id", "data", "ts"),
+                        StatsConstants.AnalyzeType.FULL,
+                        StatsConstants.ScheduleType.ONCE,
+                        Maps.newHashMap());
+        List<List<String>> collectSqlList = collectJob.buildCollectSQLList(1);
+        assertContains(collectSqlList.get(0).toString(),
+                "`ts` >= '2019-01-01 00:00:00' and `ts` < '2020-01-01 00:00:00'");
+
+        table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("iceberg0", "partitioned_transforms_db",
+                "t0_month");
+        collectJob = (ExternalFullStatisticsCollectJob)
+                StatisticsCollectJobFactory.buildExternalStatisticsCollectJob("iceberg0",
+                        database,
+                        table, null,
+                        Lists.newArrayList("id", "data", "ts"),
+                        StatsConstants.AnalyzeType.FULL,
+                        StatsConstants.ScheduleType.ONCE,
+                        Maps.newHashMap());
+        collectSqlList = collectJob.buildCollectSQLList(1);
+        assertContains(collectSqlList.get(0).toString(),
+                "ts` >= '2022-01-01 00:00:00' and `ts` < '2022-02-01 00:00:00'");
+
+        table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("iceberg0", "partitioned_transforms_db",
+                "t0_day");
+        collectJob = (ExternalFullStatisticsCollectJob)
+                StatisticsCollectJobFactory.buildExternalStatisticsCollectJob("iceberg0",
+                        database,
+                        table, null,
+                        Lists.newArrayList("id", "data", "ts"),
+                        StatsConstants.AnalyzeType.FULL,
+                        StatsConstants.ScheduleType.ONCE,
+                        Maps.newHashMap());
+        collectSqlList = collectJob.buildCollectSQLList(1);
+        assertContains(collectSqlList.get(0).toString(),
+                "`ts` >= '2022-01-01 00:00:00' and `ts` < '2022-01-02 00:00:00'");
+
+        table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("iceberg0", "partitioned_transforms_db",
+                "t0_hour");
+        collectJob = (ExternalFullStatisticsCollectJob)
+                StatisticsCollectJobFactory.buildExternalStatisticsCollectJob("iceberg0",
+                        database,
+                        table, null,
+                        Lists.newArrayList("id", "data", "ts"),
+                        StatsConstants.AnalyzeType.FULL,
+                        StatsConstants.ScheduleType.ONCE,
+                        Maps.newHashMap());
+        collectSqlList = collectJob.buildCollectSQLList(1);
+        assertContains(collectSqlList.get(0).toString(),
+                "`ts` >= '2022-01-01 00:00:00' and `ts` < '2022-01-01 01:00:00'");
+
+        // test partition column type is timestamp with time zone
+        String oldTimeZone = connectContext.getSessionVariable().getTimeZone();
+        connectContext.getSessionVariable().setTimeZone("America/New_York");
+        connectContext.setThreadLocalInfo();
+
+        table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("iceberg0", "partitioned_transforms_db",
+                "t0_year_tz");
+        collectJob = (ExternalFullStatisticsCollectJob)
+                StatisticsCollectJobFactory.buildExternalStatisticsCollectJob("iceberg0",
+                        database,
+                        table, null,
+                        Lists.newArrayList("id", "data", "ts"),
+                        StatsConstants.AnalyzeType.FULL,
+                        StatsConstants.ScheduleType.ONCE,
+                        Maps.newHashMap());
+        collectSqlList = collectJob.buildCollectSQLList(1);
+        assertContains(collectSqlList.get(0).toString(),
+                "`ts` >= '2018-12-31 19:00:00' and `ts` < '2019-12-31 19:00:00'");
+
+        table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("iceberg0", "partitioned_transforms_db",
+                "t0_month_tz");
+        collectJob = (ExternalFullStatisticsCollectJob)
+                StatisticsCollectJobFactory.buildExternalStatisticsCollectJob("iceberg0",
+                        database,
+                        table, null,
+                        Lists.newArrayList("id", "data", "ts"),
+                        StatsConstants.AnalyzeType.FULL,
+                        StatsConstants.ScheduleType.ONCE,
+                        Maps.newHashMap());
+        collectSqlList = collectJob.buildCollectSQLList(1);
+        assertContains(collectSqlList.get(0).toString(),
+                "`ts` >= '2021-12-31 19:00:00' and `ts` < '2022-01-31 19:00:00'");
+
+        table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("iceberg0", "partitioned_transforms_db",
+                "t0_day_tz");
+        collectJob = (ExternalFullStatisticsCollectJob)
+                StatisticsCollectJobFactory.buildExternalStatisticsCollectJob("iceberg0",
+                        database,
+                        table, null,
+                        Lists.newArrayList("id", "data", "ts"),
+                        StatsConstants.AnalyzeType.FULL,
+                        StatsConstants.ScheduleType.ONCE,
+                        Maps.newHashMap());
+        collectSqlList = collectJob.buildCollectSQLList(1);
+        assertContains(collectSqlList.get(0).toString(),
+                "`ts` >= '2021-12-31 19:00:00' and `ts` < '2022-01-01 19:00:00'");
+
+        table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("iceberg0", "partitioned_transforms_db",
+                "t0_hour_tz");
+        collectJob = (ExternalFullStatisticsCollectJob)
+                StatisticsCollectJobFactory.buildExternalStatisticsCollectJob("iceberg0",
+                        database,
+                        table, null,
+                        Lists.newArrayList("id", "data", "ts"),
+                        StatsConstants.AnalyzeType.FULL,
+                        StatsConstants.ScheduleType.ONCE,
+                        Maps.newHashMap());
+        collectSqlList = collectJob.buildCollectSQLList(1);
+        assertContains(collectSqlList.get(0).toString(),
+                "`ts` >= '2021-12-31 19:00:00' and `ts` < '2021-12-31 20:00:00'");
+        connectContext.getSessionVariable().setTimeZone(oldTimeZone);
+
+        // test partition transform is identity
+        database = connectContext.getGlobalStateMgr().getMetadataMgr().getDb("iceberg0", "partitioned_db");
+        table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("iceberg0", "partitioned_db",
+                "t1");
+        collectJob = (ExternalFullStatisticsCollectJob)
+                StatisticsCollectJobFactory.buildExternalStatisticsCollectJob("iceberg0",
+                        database,
+                        table, null,
+                        Lists.newArrayList("id", "data", "date"),
+                        StatsConstants.AnalyzeType.FULL,
+                        StatsConstants.ScheduleType.ONCE,
+                        Maps.newHashMap());
+        collectSqlList = collectJob.buildCollectSQLList(1);
+        assertContains(collectSqlList.get(0).toString(), "`date` = '2020-01-01'");
+    }
+
+    @Test
+    public void testExternalFullStatisticsBuildCollectSQLWithException1() {
+        // test partition transform is bucket
+        Database database =
+                connectContext.getGlobalStateMgr().getMetadataMgr().getDb("iceberg0", "partitioned_transforms_db");
+        Table table =
+                connectContext.getGlobalStateMgr().getMetadataMgr().getTable("iceberg0", "partitioned_transforms_db",
+                        "t0_bucket");
+        ExternalFullStatisticsCollectJob collectJob = (ExternalFullStatisticsCollectJob)
+                StatisticsCollectJobFactory.buildExternalStatisticsCollectJob("iceberg0",
+                        database,
+                        table, null,
+                        Lists.newArrayList("id", "data", "ts"),
+                        StatsConstants.AnalyzeType.FULL,
+                        StatsConstants.ScheduleType.ONCE,
+                        Maps.newHashMap());
+
+        expectedException.expect(StarRocksConnectorException.class);
+        expectedException.expectMessage("Partition transform BUCKET not supported to analyze, table: t0_bucket");
+        collectJob.buildCollectSQLList(1);
+    }
+
+    @Test
+    public void testExternalFullStatisticsBuildCollectSQLWithException2() {
+        // test partition field is null
+        Database database =
+                connectContext.getGlobalStateMgr().getMetadataMgr().getDb("iceberg0", "partitioned_db");
+        Table table =
+                connectContext.getGlobalStateMgr().getMetadataMgr().getTable("iceberg0", "partitioned_db",
+                        "t1");
+        ExternalFullStatisticsCollectJob collectJob = (ExternalFullStatisticsCollectJob)
+                StatisticsCollectJobFactory.buildExternalStatisticsCollectJob("iceberg0",
+                        database,
+                        table, null,
+                        Lists.newArrayList("id", "data", "date"),
+                        StatsConstants.AnalyzeType.FULL,
+                        StatsConstants.ScheduleType.ONCE,
+                        Maps.newHashMap());
+        new MockUp<IcebergTable>() {
+            @Mock
+            public PartitionField getPartitionFiled(String colName) {
+                return null;
+            }
+        };
+
+        expectedException.expect(StarRocksConnectorException.class);
+        expectedException.expectMessage("Partition column date not found in table iceberg0.partitioned_db.t1");
+        collectJob.buildCollectSQLList(1);
+    }
+
+    @Test
+    public void testExternalFullStatisticsBuildCollectSQLWithException3() {
+        // test partition transform is bucket
+        Database database =
+                connectContext.getGlobalStateMgr().getMetadataMgr().getDb("iceberg0", "partitioned_transforms_db");
+        Table table =
+                connectContext.getGlobalStateMgr().getMetadataMgr().getTable("iceberg0", "partitioned_transforms_db",
+                        "t0_date_month_identity_evolution");
+        ExternalFullStatisticsCollectJob collectJob = (ExternalFullStatisticsCollectJob)
+                StatisticsCollectJobFactory.buildExternalStatisticsCollectJob("iceberg0",
+                        database,
+                        table, null,
+                        Lists.newArrayList("id", "data", "ts"),
+                        StatsConstants.AnalyzeType.FULL,
+                        StatsConstants.ScheduleType.ONCE,
+                        Maps.newHashMap());
+
+        expectedException.expect(StarRocksConnectorException.class);
+        expectedException.expectMessage("Do not supported analyze iceberg table" +
+                " t0_date_month_identity_evolution with partition evolution");
+        collectJob.buildCollectSQLList(1);
+    }
+
+    @Test
+    public void testExcludeStatistics() {
+        OlapTable table = (OlapTable) connectContext.getGlobalStateMgr()
+                .getLocalMetastore().getDb("test").getTable("t0_stats_partition");
+
+        Database database = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
+
+        NativeAnalyzeJob job = new NativeAnalyzeJob(StatsConstants.DEFAULT_ALL_ID, StatsConstants.DEFAULT_ALL_ID,
+                null, null,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 StatsConstants.AnalyzeType.FULL,
                 StatsConstants.ScheduleType.ONCE,
                 ImmutableMap.of(),
                 StatsConstants.ScheduleStatus.PENDING, LocalDateTime.MIN);
         List<StatisticsCollectJob> allJobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(job);
 
+<<<<<<< HEAD
         Assert.assertEquals(6, allJobs.size());
         Assert.assertTrue(allJobs.stream().anyMatch(j -> table.equals(j.getTable())));
 
         job = new AnalyzeJob(database.getId(), StatsConstants.DEFAULT_ALL_ID, null,
+=======
+        Assert.assertEquals(7, allJobs.size());
+        Assert.assertTrue(allJobs.stream().anyMatch(j -> table.equals(j.getTable())));
+
+        job = new NativeAnalyzeJob(database.getId(), StatsConstants.DEFAULT_ALL_ID, null, null,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 StatsConstants.AnalyzeType.FULL,
                 StatsConstants.ScheduleType.ONCE,
                 ImmutableMap.of(StatsConstants.STATISTIC_EXCLUDE_PATTERN, ".*"),
@@ -496,7 +1522,11 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         allJobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(job);
         Assert.assertEquals(0, allJobs.size());
 
+<<<<<<< HEAD
         job = new AnalyzeJob(database.getId(), StatsConstants.DEFAULT_ALL_ID, null,
+=======
+        job = new NativeAnalyzeJob(database.getId(), StatsConstants.DEFAULT_ALL_ID, null, null,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 StatsConstants.AnalyzeType.FULL,
                 StatsConstants.ScheduleType.ONCE,
                 ImmutableMap.of(StatsConstants.STATISTIC_EXCLUDE_PATTERN, "test/."),
@@ -504,7 +1534,11 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         allJobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(job);
         Assert.assertEquals(3, allJobs.size());
 
+<<<<<<< HEAD
         job = new AnalyzeJob(database.getId(), StatsConstants.DEFAULT_ALL_ID, null,
+=======
+        job = new NativeAnalyzeJob(database.getId(), StatsConstants.DEFAULT_ALL_ID, null, null,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 StatsConstants.AnalyzeType.FULL,
                 StatsConstants.ScheduleType.ONCE,
                 ImmutableMap.of(StatsConstants.STATISTIC_EXCLUDE_PATTERN, "test.t0_stats_partition"),
@@ -513,7 +1547,11 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         Assert.assertEquals(2, allJobs.size());
         Assert.assertTrue(allJobs.stream().noneMatch(j -> j.getTable().getName().contains("t0_stats_partition")));
 
+<<<<<<< HEAD
         job = new AnalyzeJob(database.getId(), StatsConstants.DEFAULT_ALL_ID, null,
+=======
+        job = new NativeAnalyzeJob(database.getId(), StatsConstants.DEFAULT_ALL_ID, null, null,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 StatsConstants.AnalyzeType.FULL,
                 StatsConstants.ScheduleType.ONCE,
                 ImmutableMap.of(StatsConstants.STATISTIC_EXCLUDE_PATTERN, "(test.t0_stats_partition)|(test.t1_stats)"),
@@ -526,8 +1564,14 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
     @Test
     public void testCount() throws Exception {
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb("stats");
         OlapTable olapTable = (OlapTable) db.getTable("tcount");
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("stats");
+        OlapTable olapTable =
+                (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tcount");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         long dbid = db.getId();
 
         SampleStatisticsCollectJob sampleStatisticsCollectJob = new SampleStatisticsCollectJob(
@@ -535,28 +1579,43 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 StatsConstants.AnalyzeType.SAMPLE, StatsConstants.ScheduleType.ONCE,
                 Maps.newHashMap());
 
+<<<<<<< HEAD
         String sql = Deencapsulation.invoke(sampleStatisticsCollectJob, "buildSampleInsertSQL",
                 dbid, olapTable.getId(), Lists.newArrayList("v1", "count"), 100L);
         assertContains(sql, "`stats`.`tcount`  Tablet(");
         UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sql, connectContext);
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         FullStatisticsCollectJob fullStatisticsCollectJob = new FullStatisticsCollectJob(
                 db, olapTable,
                 olapTable.getAllPartitionIds(),
                 Lists.newArrayList("v1", "count"),
                 StatsConstants.AnalyzeType.FULL,
                 StatsConstants.ScheduleType.ONCE,
+<<<<<<< HEAD
                 Maps.newHashMap());
         sql = Deencapsulation.invoke(fullStatisticsCollectJob, "buildBatchCollectFullStatisticSQL",
                 olapTable, olapTable.getPartition("tcount"), "count");
+=======
+                Maps.newHashMap()
+        );
+        String sql = Deencapsulation.invoke(fullStatisticsCollectJob, "buildBatchCollectFullStatisticSQL",
+                olapTable, olapTable.getPartition("tcount"), "count", Type.INT);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         assertContains(sql, "`stats`.`tcount` partition `tcount`");
         UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sql, connectContext);
     }
 
     @Test
     public void testAnalyzeBeforeUpdate() {
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         AnalyzeJob job = new AnalyzeJob(db.getId(), t0StatsTableId, null,
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        NativeAnalyzeJob job = new NativeAnalyzeJob(db.getId(), t0StatsTableId, null, null,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
                 Maps.newHashMap(),
                 StatsConstants.ScheduleStatus.PENDING,
@@ -564,15 +1623,26 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
         List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(job);
         Assert.assertEquals(1, jobs.size());
+<<<<<<< HEAD
         Assert.assertTrue(jobs.get(0) instanceof FullStatisticsCollectJob);
         FullStatisticsCollectJob fjb = (FullStatisticsCollectJob) jobs.get(0);
         Assert.assertEquals("t0_stats", fjb.getTable().getName());
         Assert.assertEquals("[v1, v2, v3, v4, v5]", fjb.getColumns().toString());
+=======
+        Assert.assertTrue(jobs.get(0) instanceof HyperStatisticsCollectJob);
+        HyperStatisticsCollectJob fjb = (HyperStatisticsCollectJob) jobs.get(0);
+        Assert.assertEquals("t0_stats", fjb.getTable().getName());
+        Assert.assertEquals("[v1, v2, v3, v4, v5]", fjb.getColumnNames().toString());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // collect 1st
         BasicStatsMeta execMeta = new BasicStatsMeta(db.getId(), t0StatsTableId, null,
                 StatsConstants.AnalyzeType.FULL, LocalDateTime.now(), Maps.newHashMap());
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(execMeta);
+=======
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(execMeta);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         new MockUp<StatisticUtils>() {
             @Mock
@@ -606,12 +1676,20 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
             }
         };
 
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         BasicStatsMeta execMeta1 = new BasicStatsMeta(db.getId(), t0StatsTableId, null,
                 StatsConstants.AnalyzeType.FULL,
                 now.minusSeconds(Config.statistic_auto_collect_large_table_interval).minusHours(1),
                 Maps.newHashMap());
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(execMeta1);
+=======
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(execMeta1);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         new Expectations(execMeta1) {
             {
@@ -620,7 +1698,11 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
             }
         };
 
+<<<<<<< HEAD
         AnalyzeJob job = new AnalyzeJob(db.getId(), t0StatsTableId, null,
+=======
+        NativeAnalyzeJob job = new NativeAnalyzeJob(db.getId(), t0StatsTableId, null, null,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
                 Maps.newHashMap(),
                 StatsConstants.ScheduleStatus.PENDING,
@@ -628,15 +1710,25 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
         List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(job);
         Assert.assertEquals(1, jobs.size());
+<<<<<<< HEAD
         Assert.assertTrue(jobs.get(0) instanceof FullStatisticsCollectJob);
         FullStatisticsCollectJob fjb = (FullStatisticsCollectJob) jobs.get(0);
         Assert.assertEquals("[v1, v2, v3, v4, v5]", fjb.getColumns().toString());
+=======
+        Assert.assertTrue(jobs.get(0) instanceof HyperStatisticsCollectJob);
+        HyperStatisticsCollectJob fjb = (HyperStatisticsCollectJob) jobs.get(0);
+        Assert.assertEquals("[v1, v2, v3, v4, v5]", fjb.getColumnNames().toString());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         BasicStatsMeta execMeta2 = new BasicStatsMeta(db.getId(), t0StatsTableId, null,
                 StatsConstants.AnalyzeType.FULL,
                 now.minusHours(1),
                 Maps.newHashMap());
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(execMeta2);
+=======
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(execMeta2);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         new Expectations(execMeta2) {
             {
@@ -670,12 +1762,20 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
             }
         };
 
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         BasicStatsMeta execMeta1 = new BasicStatsMeta(db.getId(), t0StatsTableId, null,
                 StatsConstants.AnalyzeType.FULL,
                 now.minusSeconds(Config.statistic_auto_collect_large_table_interval).minusHours(1),
                 Maps.newHashMap());
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(execMeta1);
+=======
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(execMeta1);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         new Expectations(execMeta1) {
             {
@@ -684,7 +1784,11 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
             }
         };
 
+<<<<<<< HEAD
         AnalyzeJob job = new AnalyzeJob(db.getId(), t0StatsTableId, null,
+=======
+        NativeAnalyzeJob job = new NativeAnalyzeJob(db.getId(), t0StatsTableId, null, null,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
                 Maps.newHashMap(),
                 StatsConstants.ScheduleStatus.PENDING,
@@ -692,16 +1796,26 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
         List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(job);
         Assert.assertEquals(1, jobs.size());
+<<<<<<< HEAD
         Assert.assertTrue(jobs.get(0) instanceof FullStatisticsCollectJob);
         FullStatisticsCollectJob fjb = (FullStatisticsCollectJob) jobs.get(0);
         Assert.assertEquals("[v1, v2, v3, v4, v5]", fjb.getColumns().toString());
+=======
+        Assert.assertTrue(jobs.get(0) instanceof HyperStatisticsCollectJob);
+        HyperStatisticsCollectJob fjb = (HyperStatisticsCollectJob) jobs.get(0);
+        Assert.assertEquals("[v1, v2, v3, v4, v5]", fjb.getColumnNames().toString());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         Config.statistic_auto_collect_small_table_interval = 100;
         BasicStatsMeta execMeta2 = new BasicStatsMeta(db.getId(), t0StatsTableId, null,
                 StatsConstants.AnalyzeType.FULL,
                 now.minusSeconds(50),
                 Maps.newHashMap());
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(execMeta2);
+=======
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(execMeta2);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         Config.statistic_auto_collect_small_table_interval = 100;
         jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(job);
@@ -730,14 +1844,24 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
             }
         };
 
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         BasicStatsMeta execMeta = new BasicStatsMeta(db.getId(), t0StatsTableId, null,
                 StatsConstants.AnalyzeType.FULL,
                 now.minusSeconds(Config.statistic_auto_collect_large_table_interval).minusHours(1),
                 Maps.newHashMap());
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(execMeta);
 
         AnalyzeJob job = new AnalyzeJob(db.getId(), t0StatsTableId, null,
+=======
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(execMeta);
+
+        NativeAnalyzeJob job = new NativeAnalyzeJob(db.getId(), t0StatsTableId, null, null,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
                 Maps.newHashMap(),
                 StatsConstants.ScheduleStatus.PENDING,
@@ -759,7 +1883,11 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
         {
             // healthy = 0.7
+<<<<<<< HEAD
             GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(execMeta);
+=======
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(execMeta);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
             new Expectations(execMeta) {
                 {
@@ -770,9 +1898,15 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
             List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(job);
             Assert.assertEquals(1, jobs.size());
+<<<<<<< HEAD
             Assert.assertTrue(jobs.get(0) instanceof FullStatisticsCollectJob);
             FullStatisticsCollectJob fjb = (FullStatisticsCollectJob) jobs.get(0);
             Assert.assertEquals("[v1, v2, v3, v4, v5]", fjb.getColumns().toString());
+=======
+            Assert.assertTrue(jobs.get(0) instanceof HyperStatisticsCollectJob);
+            HyperStatisticsCollectJob fjb = (HyperStatisticsCollectJob) jobs.get(0);
+            Assert.assertEquals("[v1, v2, v3, v4, v5]", fjb.getColumnNames().toString());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         {
@@ -786,9 +1920,15 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
             List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(job);
             Assert.assertEquals(1, jobs.size());
+<<<<<<< HEAD
             Assert.assertTrue(jobs.get(0) instanceof SampleStatisticsCollectJob);
             SampleStatisticsCollectJob fjb = (SampleStatisticsCollectJob) jobs.get(0);
             Assert.assertEquals("[v1, v2, v3, v4, v5]", fjb.getColumns().toString());
+=======
+            Assert.assertTrue(jobs.get(0) instanceof HyperStatisticsCollectJob);
+            HyperStatisticsCollectJob fjb = (HyperStatisticsCollectJob) jobs.get(0);
+            Assert.assertEquals("[v1, v2, v3, v4, v5]", fjb.getColumnNames().toString());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         {
@@ -808,9 +1948,15 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
             List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(job);
             Assert.assertEquals(1, jobs.size());
+<<<<<<< HEAD
             Assert.assertTrue(jobs.get(0) instanceof FullStatisticsCollectJob);
             FullStatisticsCollectJob fjb = (FullStatisticsCollectJob) jobs.get(0);
             Assert.assertEquals("[v1, v2, v3, v4, v5]", fjb.getColumns().toString());
+=======
+            Assert.assertTrue(jobs.get(0) instanceof HyperStatisticsCollectJob);
+            HyperStatisticsCollectJob fjb = (HyperStatisticsCollectJob) jobs.get(0);
+            Assert.assertEquals("[v1, v2, v3, v4, v5]", fjb.getColumnNames().toString());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 

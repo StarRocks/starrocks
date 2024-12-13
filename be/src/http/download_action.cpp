@@ -50,8 +50,11 @@
 namespace starrocks {
 
 const std::string FILE_PARAMETER = "file";
+<<<<<<< HEAD
 const std::string DB_PARAMETER = "db";
 const std::string LABEL_PARAMETER = "label";
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 const std::string TOKEN_PARAMETER = "token";
 
 DownloadAction::DownloadAction(ExecEnv* exec_env, const std::vector<std::string>& allow_dirs)
@@ -75,8 +78,12 @@ void DownloadAction::handle_normal(HttpRequest* req, const std::string& file_par
     if (config::enable_token_check) {
         status = check_token(req);
         if (!status.ok()) {
+<<<<<<< HEAD
             std::string error_msg = status.get_error_msg();
             HttpChannel::send_reply(req, error_msg);
+=======
+            HttpChannel::send_reply(req, status.message());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             LOG(WARNING) << "Download method:" << to_method_desc(req->method()) << " " << file_param
                          << " error:" << status;
             return;
@@ -85,18 +92,28 @@ void DownloadAction::handle_normal(HttpRequest* req, const std::string& file_par
 
     status = check_path_is_allowed(file_param);
     if (!status.ok()) {
+<<<<<<< HEAD
         std::string error_msg = status.get_error_msg();
         HttpChannel::send_reply(req, error_msg);
+=======
+        HttpChannel::send_reply(req, status.message());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         LOG(WARNING) << "Download method:" << to_method_desc(req->method()) << " " << file_param << " error:" << status;
         return;
     }
     auto is_dir = fs::is_directory(file_param);
     if (!is_dir.ok()) {
+<<<<<<< HEAD
         std::string error_msg = is_dir.status().get_error_msg();
         HttpChannel::send_reply(req, error_msg);
         LOG(WARNING) << "Download method:" << to_method_desc(req->method()) << " " << file_param
                      << " error:" << is_dir.status();
         return;
+=======
+        HttpChannel::send_reply(req, is_dir.status().message());
+        LOG(WARNING) << "Download method:" << to_method_desc(req->method()) << " " << file_param
+                     << " error:" << is_dir.status();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     if (*is_dir) {
         do_dir_response(file_param, req);
@@ -110,14 +127,22 @@ void DownloadAction::handle_error_log(HttpRequest* req, const std::string& file_
 
     Status status = check_log_path_is_allowed(absolute_path);
     if (!status.ok()) {
+<<<<<<< HEAD
         std::string error_msg = status.get_error_msg();
         HttpChannel::send_reply(req, error_msg);
+=======
+        HttpChannel::send_reply(req, status.message());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return;
     }
     auto is_dir = fs::is_directory(absolute_path);
     if (!is_dir.ok()) {
+<<<<<<< HEAD
         std::string error_msg = is_dir.status().get_error_msg();
         HttpChannel::send_reply(req, error_msg);
+=======
+        HttpChannel::send_reply(req, is_dir.status().message());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return;
     }
     if (*is_dir) {

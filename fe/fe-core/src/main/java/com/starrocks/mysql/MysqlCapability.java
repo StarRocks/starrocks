@@ -127,6 +127,13 @@ public class MysqlCapability {
         return sb.toString();
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isDeprecateEof() {
+        return (flags & Flag.CLIENT_DEPRECATE_EOF.getFlagBit()) != 0;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public boolean isProtocol41() {
         return (flags & Flag.CLIENT_PROTOCOL_41.getFlagBit()) != 0;
     }

@@ -147,7 +147,11 @@ public class HaAction extends WebBaseAction {
             buffer.append("<p>last checkpoint time: " + date + "</p>");
             buffer.append("</pre>");
         } catch (IOException e) {
+<<<<<<< HEAD
             LOG.warn(e);
+=======
+            LOG.warn("Failed to execute appendImageInfo", e);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -168,7 +172,11 @@ public class HaAction extends WebBaseAction {
     }
 
     private void appendFe(StringBuilder buffer) {
+<<<<<<< HEAD
         List<Frontend> fes = GlobalStateMgr.getCurrentState().getFrontends(null /* all */);
+=======
+        List<Frontend> fes = GlobalStateMgr.getCurrentState().getNodeMgr().getFrontends(null /* all */);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (fes == null) {
             return;
         }
@@ -182,7 +190,11 @@ public class HaAction extends WebBaseAction {
     }
 
     private void appendRemovedFe(StringBuilder buffer) {
+<<<<<<< HEAD
         List<String> feNames = GlobalStateMgr.getCurrentState().getRemovedFrontendNames();
+=======
+        List<String> feNames = GlobalStateMgr.getCurrentState().getNodeMgr().getRemovedFrontendNames();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         buffer.append("<h2>Removed Frontends</h2>");
         buffer.append("<pre>");
         for (String feName : feNames) {
@@ -191,4 +203,8 @@ public class HaAction extends WebBaseAction {
         buffer.append("</pre>");
     }
 
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

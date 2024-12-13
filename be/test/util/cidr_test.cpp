@@ -50,9 +50,27 @@ TEST(CIDR, normal) {
 
 TEST(CIDR, contains) {
     CIDR cidr;
+<<<<<<< HEAD
     EXPECT_TRUE(cidr.reset("192.168.17.0/16"));
     EXPECT_TRUE(cidr.contains("192.168.88.99"));
     EXPECT_FALSE(cidr.contains("192.2.88.99"));
+=======
+    CIDR ip;
+    EXPECT_TRUE(cidr.reset("192.168.17.0/16"));
+    ip.reset("192.168.88.99");
+    EXPECT_TRUE(cidr.contains(ip));
+    ip.reset("192.2.88.99");
+    EXPECT_FALSE(cidr.contains(ip));
+    ip.reset("192.168.88.99");
+    EXPECT_TRUE(cidr.contains(ip));
+    ip.reset("192.2.88.99");
+    EXPECT_FALSE(cidr.contains(ip));
+    EXPECT_TRUE(cidr.reset("1234:5678:9abc:def0:1234:5678:9abc:def0/124"));
+    ip.reset("1234:5678:9abc:def0:1234:5678:9abc:def1");
+    EXPECT_TRUE(cidr.contains(ip));
+    ip.reset("1234:5678:9abc:def0:1234:5678:9abc:deef");
+    EXPECT_FALSE(cidr.contains(ip));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 } // end namespace starrocks

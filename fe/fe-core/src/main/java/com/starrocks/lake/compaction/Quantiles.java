@@ -50,6 +50,13 @@ public class Quantiles implements Comparable<Quantiles> {
         this.max = max;
     }
 
+<<<<<<< HEAD
+=======
+    public Quantiles(@NotNull Quantiles q) {
+        this(q.getAvg(), q.getP50(), q.getMax());
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public double getAvg() {
         return avg;
     }

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # sqrt, dsqrt
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 返回参数 `x` 的平方根。dsqrt() 和 sqrt() 功能相同。
 

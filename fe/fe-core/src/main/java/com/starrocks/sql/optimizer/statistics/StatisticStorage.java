@@ -18,6 +18,10 @@ package com.starrocks.sql.optimizer.statistics;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
+<<<<<<< HEAD
+=======
+import com.starrocks.connector.statistics.ConnectorTableColumnStats;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import java.util.Collection;
 import java.util.List;
@@ -31,18 +35,52 @@ public interface StatisticStorage {
         return partitions.stream().collect(Collectors.toMap(Partition::getId, p -> Optional.empty()));
     }
 
+<<<<<<< HEAD
     default void refreshTableStatistic(Table table) {
     }
 
     default void refreshTableStatisticSync(Table table) {
+=======
+    default void refreshTableStatistic(Table table, boolean isSync) {
+    }
+
+    default void refreshColumnStatistics(Table table, List<String> columns, boolean isSync) {
+    }
+
+    /**
+     * Overwrite the statistics of `targetPartition` with `sourcePartition`
+     */
+    default void overwritePartitionStatistics(long tableId, long sourcePartition, long targetPartition) {
+    }
+
+    default void updatePartitionStatistics(long tableId, long partition, long rows) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     ColumnStatistic getColumnStatistic(Table table, String column);
 
     List<ColumnStatistic> getColumnStatistics(Table table, List<String> columns);
 
+<<<<<<< HEAD
     default List<ColumnStatistic> getColumnStatisticsSync(Table table, List<String> columns) {
         return getColumnStatistics(table, columns);
+=======
+    /**
+     * Return partition-level column statistics, it may not exist
+     */
+    default Map<Long, List<ColumnStatistic>> getColumnStatisticsOfPartitionLevel(Table table, List<Long> partitions,
+                                                                                 List<String> columns) {
+        return null;
+    }
+
+    default List<ConnectorTableColumnStats> getConnectorTableStatistics(Table table, List<String> columns) {
+        return columns.stream().
+                map(col -> ConnectorTableColumnStats.unknown()).collect(Collectors.toList());
+    }
+
+    default List<ConnectorTableColumnStats> getConnectorTableStatisticsSync(Table table, List<String> columns) {
+        return getConnectorTableStatistics(table, columns);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     default Map<String, Histogram> getHistogramStatistics(Table table, List<String> columns) {
@@ -53,11 +91,34 @@ public interface StatisticStorage {
         return getHistogramStatistics(table, columns);
     }
 
+<<<<<<< HEAD
+=======
+    default Map<String, Histogram> getConnectorHistogramStatistics(Table table, List<String> columns) {
+        return Maps.newHashMap();
+    }
+
+    default Map<String, Histogram> getConnectorHistogramStatisticsSync(Table table, List<String> columns) {
+        return getConnectorHistogramStatistics(table, columns);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     default void expireHistogramStatistics(Long tableId, List<String> columns) {
     }
 
     default void expireTableAndColumnStatistics(Table table, List<String> columns) {
     }
 
+<<<<<<< HEAD
+=======
+    default void expireConnectorTableColumnStatistics(Table table, List<String> columns) {
+    }
+
+    default void refreshConnectorTableColumnStatistics(Table table, List<String> columns, boolean isSync) {
+    }
+
+    default void expireConnectorHistogramStatistics(Table table, List<String> columns) {
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     void addColumnStatistic(Table table, String column, ColumnStatistic columnStatistic);
 }

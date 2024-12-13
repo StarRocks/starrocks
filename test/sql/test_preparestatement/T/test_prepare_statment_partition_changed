@@ -1,0 +1,9 @@
+-- name: test_prepare_statement_partition_changed
+CREATE TABLE IF NOT EXISTS prepare_stmt (
+    k1 INT,
+    k2 INT
+)
+PRIMARY KEY (k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES("replication_num" = "1");
+
+PREPARE stmt1 FROM insert overwrite prepare_stmt values (?, ?);

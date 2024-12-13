@@ -16,6 +16,7 @@ package com.starrocks.planner;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
+<<<<<<< HEAD
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.ImmutableCollection;
 import com.google.common.collect.ImmutableList;
@@ -89,6 +90,41 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+=======
+import com.starrocks.analysis.SlotDescriptor;
+import com.starrocks.analysis.TupleDescriptor;
+import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.Type;
+import com.starrocks.common.StarRocksException;
+import com.starrocks.connector.CatalogConnector;
+import com.starrocks.connector.ConnectorMetadatRequestContext;
+import com.starrocks.connector.GetRemoteFilesParams;
+import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.RemoteFileInfoDefaultSource;
+import com.starrocks.connector.RemoteFileInfoSource;
+import com.starrocks.connector.TableVersionRange;
+import com.starrocks.connector.iceberg.IcebergConnectorScanRangeSource;
+import com.starrocks.connector.iceberg.IcebergGetRemoteFilesParams;
+import com.starrocks.connector.iceberg.IcebergMORParams;
+import com.starrocks.connector.iceberg.IcebergRemoteSourceTrigger;
+import com.starrocks.connector.iceberg.QueueIcebergRemoteFileInfoSource;
+import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.credential.CloudConfigurationFactory;
+import com.starrocks.credential.CloudType;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.plan.HDFSScanNodePredicates;
+import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.THdfsScanNode;
+import com.starrocks.thrift.TPlanNode;
+import com.starrocks.thrift.TPlanNodeType;
+import com.starrocks.thrift.TScanRangeLocations;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+import java.util.Deque;
+import java.util.List;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -98,6 +134,7 @@ import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceM
 public class IcebergScanNode extends ScanNode {
     private static final Logger LOG = LogManager.getLogger(IcebergScanNode.class);
 
+<<<<<<< HEAD
     private IcebergTable icebergTable; // table definition in starRocks
 
     private HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
@@ -124,6 +161,86 @@ public class IcebergScanNode extends ScanNode {
         setupCloudCredential();
     }
 
+=======
+    protected final IcebergTable icebergTable;
+    private final HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
+    private ScalarOperator icebergJobPlanningPredicate = null;
+    private CloudConfiguration cloudConfiguration = null;
+    protected Optional<Long> snapshotId;
+    private IcebergConnectorScanRangeSource scanRangeSource = null;
+    private final List<IcebergMORParams> tableFullMORParams;
+    private final IcebergMORParams morParams;
+    private int selectedPartitionCount = -1;
+
+    public IcebergScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName,
+                           List<IcebergMORParams> tableFullMORParams, IcebergMORParams morParams) {
+        super(id, desc, planNodeName);
+        this.icebergTable = (IcebergTable) desc.getTable();
+        this.tableFullMORParams = tableFullMORParams;
+        this.morParams = morParams;
+        setupCloudCredential();
+    }
+
+    @Override
+    public boolean hasMoreScanRanges() {
+        if (scanRangeSource == null) {
+            return false;
+        }
+
+        return scanRangeSource.hasMoreOutput();
+    }
+
+    @Override
+    public List<TScanRangeLocations> getScanRangeLocations(long maxScanRangeLength) {
+        if (snapshotId.isEmpty() || scanRangeSource == null) {
+            return List.of();
+        }
+
+        if (maxScanRangeLength == 0) {
+            return scanRangeSource.getAllOutputs();
+        }
+        return scanRangeSource.getOutputs((int) maxScanRangeLength);
+    }
+
+    public void setupScanRangeLocations(boolean enableIncrementalScanRanges) throws StarRocksException {
+        Preconditions.checkNotNull(snapshotId, "snapshot id is null");
+        if (snapshotId.isEmpty()) {
+            LOG.warn(String.format("Table %s has no snapshot!", icebergTable.getCatalogTableName()));
+            return;
+        }
+
+        GetRemoteFilesParams params =
+                IcebergGetRemoteFilesParams.newBuilder()
+                        .setAllParams(tableFullMORParams)
+                        .setParams(morParams)
+                        .setTableVersionRange(TableVersionRange.withEnd(snapshotId))
+                        .setPredicate(icebergJobPlanningPredicate)
+                        .build();
+
+        RemoteFileInfoSource remoteFileInfoSource;
+        if (enableIncrementalScanRanges) {
+            remoteFileInfoSource = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFilesAsync(icebergTable, params);
+        } else {
+            List<RemoteFileInfo> splits = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFiles(icebergTable, params);
+            if (splits.isEmpty()) {
+                LOG.warn("There is no scan tasks after planFies on {}.{} and predicate: [{}]",
+                        icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(), icebergJobPlanningPredicate);
+                return;
+            }
+            remoteFileInfoSource = new RemoteFileInfoDefaultSource(splits);
+            if (morParams != IcebergMORParams.EMPTY) {
+                boolean needToCheckEqualityIds = tableFullMORParams.size() != 3;
+                IcebergRemoteSourceTrigger trigger = new IcebergRemoteSourceTrigger(
+                        remoteFileInfoSource, morParams, needToCheckEqualityIds);
+                Deque<RemoteFileInfo> remoteFileInfoDeque = trigger.getQueue(morParams);
+                remoteFileInfoSource = new QueueIcebergRemoteFileInfoSource(trigger, remoteFileInfoDeque);
+            }
+        }
+
+        scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable, remoteFileInfoSource, morParams, desc);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private void setupCloudCredential() {
         String catalogName = icebergTable.getCatalogName();
         if (catalogName == null) {
@@ -132,6 +249,7 @@ public class IcebergScanNode extends ScanNode {
 
         // Hard coding here
         // Try to get tabular signed temporary credential
+<<<<<<< HEAD
         CloudConfiguration tabularTempCloudConfiguration = CloudConfigurationFactory.
                 buildCloudConfigurationForTabular(icebergTable.getNativeTable().io().properties());
         if (tabularTempCloudConfiguration.getCloudType() != CloudType.DEFAULT) {
@@ -139,6 +257,15 @@ public class IcebergScanNode extends ScanNode {
             cloudConfiguration = tabularTempCloudConfiguration;
         } else {
             Connector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
+=======
+        CloudConfiguration vendedCredentialsCloudConfiguration = CloudConfigurationFactory.
+                buildCloudConfigurationForVendedCredentials(icebergTable.getNativeTable().io().properties());
+        if (vendedCredentialsCloudConfiguration.getCloudType() != CloudType.DEFAULT) {
+            // If we get CloudConfiguration succeed from iceberg FileIO's properties, we just using it.
+            cloudConfiguration = vendedCredentialsCloudConfiguration;
+        } else {
+            CatalogConnector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             Preconditions.checkState(connector != null,
                     String.format("connector of catalog %s should not be null", catalogName));
             cloudConfiguration = connector.getMetadata().getCloudConfiguration();
@@ -147,6 +274,7 @@ public class IcebergScanNode extends ScanNode {
         }
     }
 
+<<<<<<< HEAD
     @Override
     public void init(Analyzer analyzer) throws UserException {
         super.init(analyzer);
@@ -392,12 +520,49 @@ public class IcebergScanNode extends ScanNode {
         }
 
         scanNodePredicates.setSelectedPartitionIds(partitionKeyToId.values());
+=======
+    public void setCloudConfiguration(CloudConfiguration cloudConfiguration) {
+        this.cloudConfiguration = cloudConfiguration;
+    }
+
+    public void preProcessIcebergPredicate(ScalarOperator predicate) {
+        this.icebergJobPlanningPredicate = predicate;
+    }
+
+    // for unit tests
+    public ScalarOperator getIcebergJobPlanningPredicate() {
+        return icebergJobPlanningPredicate;
+    }
+
+    // for unit tests
+    public List<Integer> getExtendedColumnSlotIds() {
+        return scanRangeSource.getExtendedColumnSlotIds();
+    }
+
+    public Set<String> getSeenEqualityDeleteFiles() {
+        return scanRangeSource.getSeenEqDeleteFiles();
+    }
+
+    // for unit tests
+    public IcebergMORParams getMORParams() {
+        return morParams;
+    }
+
+    // for unit tests
+    public List<IcebergMORParams> getTableFullMORParams() {
+        return tableFullMORParams;
+    }
+
+    public void setSnapshotId(Optional<Long> snapshotId) {
+        this.snapshotId = snapshotId;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public HDFSScanNodePredicates getScanNodePredicates() {
         return scanNodePredicates;
     }
 
+<<<<<<< HEAD
     private void prepareRequiredColumnsForDeletes(List<Integer> equalityIds) {
         Schema schema = icebergTable.getNativeTable().schema();
         List<String> equalityColNames = equalityIds.stream().map(schema::findColumnName).collect(Collectors.toList());
@@ -423,6 +588,8 @@ public class IcebergScanNode extends ScanNode {
         }
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     protected String debugString() {
         MoreObjects.ToStringHelper helper = MoreObjects.toStringHelper(this);
@@ -435,7 +602,15 @@ public class IcebergScanNode extends ScanNode {
     protected String getNodeExplainString(String prefix, TExplainLevel detailLevel) {
         StringBuilder output = new StringBuilder();
 
+<<<<<<< HEAD
         output.append(prefix).append("TABLE: ").append(icebergTable.getNativeTable()).append("\n");
+=======
+        output.append(prefix).append("TABLE: ")
+                .append(icebergTable.getCatalogDBName())
+                .append(".")
+                .append(icebergTable.getName())
+                .append("\n");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         if (null != sortColumn) {
             output.append(prefix).append("SORT COLUMN: ").append(sortColumn).append("\n");
@@ -455,10 +630,16 @@ public class IcebergScanNode extends ScanNode {
         output.append(prefix).append(String.format("avgRowSize=%s", avgRowSize));
         output.append("\n");
 
+<<<<<<< HEAD
         output.append(prefix).append(String.format("numNodes=%s", numNodes));
         output.append("\n");
 
         if (detailLevel == TExplainLevel.VERBOSE) {
+=======
+        if (detailLevel == TExplainLevel.VERBOSE) {
+            HdfsScanNode.appendDataCacheOptionsInExplain(output, prefix, dataCacheOptions);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             for (SlotDescriptor slotDescriptor : desc.getSlots()) {
                 Type type = slotDescriptor.getOriginType();
                 if (type.isComplexType()) {
@@ -469,12 +650,44 @@ public class IcebergScanNode extends ScanNode {
         }
 
         if (detailLevel == TExplainLevel.VERBOSE && !isResourceMappingCatalog(icebergTable.getCatalogName())) {
+<<<<<<< HEAD
             List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
                     icebergTable.getCatalogName(), icebergTable.getRemoteDbName(), icebergTable.getRemoteTableName());
 
             output.append(prefix).append(
                     String.format("partitions=%s/%s", scanNodePredicates.getSelectedPartitionIds().size(),
                             partitionNames.size() == 0 ? 1 : partitionNames.size()));
+=======
+            ConnectorMetadatRequestContext requestContext = new ConnectorMetadatRequestContext();
+            requestContext.setTableVersionRange(TableVersionRange.withEnd(snapshotId));
+            List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
+                    icebergTable.getCatalogName(), icebergTable.getCatalogDBName(),
+                    icebergTable.getCatalogTableName(), requestContext);
+
+            if (selectedPartitionCount == -1) {
+                if (scanRangeSource != null) {
+                    // we have to consume all scan ranges to know how many partition been selected.
+                    while (scanRangeSource.hasMoreOutput()) {
+                        scanRangeSource.getOutputs(1000);
+                    }
+                    selectedPartitionCount = scanRangeSource.selectedPartitionCount();
+                } else {
+                    selectedPartitionCount = 0;
+                }
+            }
+
+            output.append(prefix).append(
+                    String.format("partitions=%s/%s", selectedPartitionCount,
+                            partitionNames.isEmpty() ? 1 : partitionNames.size()));
+            output.append("\n");
+        }
+
+        if (morParams.getScanTaskType() == IcebergMORParams.ScanTaskType.EQ_DELETE) {
+            List<String> identifierColumnNames = morParams.getEqualityIds().stream()
+                    .map(id -> icebergTable.getNativeTable().schema().findColumnName(id))
+                    .collect(Collectors.toList());
+            output.append(prefix).append("Iceberg identifier columns: ").append(identifierColumnNames);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             output.append("\n");
         }
 
@@ -482,6 +695,7 @@ public class IcebergScanNode extends ScanNode {
     }
 
     @Override
+<<<<<<< HEAD
     public int getNumInstances() {
         return result.size();
     }
@@ -503,6 +717,8 @@ public class IcebergScanNode extends ScanNode {
     }
 
     @Override
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     protected void toThrift(TPlanNode msg) {
         msg.node_type = TPlanNodeType.HDFS_SCAN_NODE;
         THdfsScanNode tHdfsScanNode = new THdfsScanNode();
@@ -511,6 +727,7 @@ public class IcebergScanNode extends ScanNode {
 
         String sqlPredicates = getExplainString(conjuncts);
         msg.hdfs_scan_node.setSql_predicates(sqlPredicates);
+<<<<<<< HEAD
 
         msg.hdfs_scan_node.setTable_name(icebergTable.getRemoteTableName());
 
@@ -526,10 +743,29 @@ public class IcebergScanNode extends ScanNode {
     @Override
     public boolean canUsePipeLine() {
         return true;
+=======
+        if (scanRangeSource != null) {
+            msg.hdfs_scan_node.setExtended_slot_ids(scanRangeSource.getExtendedColumnSlotIds());
+        }
+        msg.hdfs_scan_node.setTable_name(icebergTable.getName());
+        HdfsScanNode.setScanOptimizeOptionToThrift(tHdfsScanNode, this);
+        HdfsScanNode.setCloudConfigurationToThrift(tHdfsScanNode, cloudConfiguration);
+        HdfsScanNode.setMinMaxConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
+        HdfsScanNode.setDataCacheOptionsToThrift(tHdfsScanNode, dataCacheOptions);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
     public boolean canUseRuntimeAdaptiveDop() {
         return true;
     }
+<<<<<<< HEAD
 }
+=======
+
+    @Override
+    protected boolean supportTopNRuntimeFilter() {
+        return !icebergTable.isV2Format();
+    }
+}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

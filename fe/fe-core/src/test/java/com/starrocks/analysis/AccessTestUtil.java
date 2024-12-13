@@ -38,12 +38,17 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.FakeEditLog;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+<<<<<<< HEAD
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Type;
@@ -56,6 +61,17 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SetPassVar;
+=======
+import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.RandomDistributionInfo;
+import com.starrocks.catalog.SinglePartitionInfo;
+import com.starrocks.catalog.Type;
+import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.journal.JournalTask;
+import com.starrocks.persist.EditLog;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageType;
 import mockit.Expectations;
@@ -71,6 +87,7 @@ public class AccessTestUtil {
         return new SystemInfoService();
     }
 
+<<<<<<< HEAD
     public static Auth fetchAdminAccess() {
         Auth auth = new Auth();
         try {
@@ -98,12 +115,15 @@ public class AccessTestUtil {
         return auth;
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static GlobalStateMgr fetchAdminCatalog() {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         BlockingQueue<JournalTask> journalQueue = new ArrayBlockingQueue<JournalTask>(100);
         EditLog editLog = new EditLog(journalQueue);
         globalStateMgr.setEditLog(editLog);
 
+<<<<<<< HEAD
         Database db = new Database(50000L, "testCluster:testDb");
         MaterializedIndex baseIndex = new MaterializedIndex(30001, IndexState.NORMAL);
         RandomDistributionInfo distributionInfo = new RandomDistributionInfo(10);
@@ -114,6 +134,19 @@ public class AccessTestUtil {
         OlapTable table = new OlapTable(30000, "testTbl", baseSchema,
                 KeysType.AGG_KEYS, new SinglePartitionInfo(), distributionInfo, globalStateMgr.getClusterId(),
                 null);
+=======
+        FakeEditLog fakeEditLog = new FakeEditLog();
+
+        Database db = new Database(50000L, "testCluster:testDb");
+        MaterializedIndex baseIndex = new MaterializedIndex(30001, IndexState.NORMAL);
+        RandomDistributionInfo distributionInfo = new RandomDistributionInfo(10);
+        Partition partition = new Partition(20000L, 20001L,"testTbl", baseIndex, distributionInfo);
+        List<Column> baseSchema = new LinkedList<Column>();
+        Column column = new Column("k1", Type.INT);
+        baseSchema.add(column);
+        OlapTable table = new OlapTable(30000, "testTbl", baseSchema,
+                KeysType.AGG_KEYS, new SinglePartitionInfo(), distributionInfo, null);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         table.setIndexMeta(baseIndex.getId(), "testTbl", baseSchema, 0, 1, (short) 1,
                 TStorageType.COLUMN, KeysType.AGG_KEYS);
         table.addPartition(partition);
@@ -122,6 +155,7 @@ public class AccessTestUtil {
         return globalStateMgr;
     }
 
+<<<<<<< HEAD
     public static Auth fetchBlockAccess() {
         Auth auth = new Auth();
         new Expectations(auth) {
@@ -142,6 +176,8 @@ public class AccessTestUtil {
         return auth;
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static OlapTable mockTable(String name) {
         Column column1 = new Column("col1", Type.BIGINT);
         Column column2 = new Column("col2", Type.DOUBLE);
@@ -155,6 +191,7 @@ public class AccessTestUtil {
             }
         };
 
+<<<<<<< HEAD
         Partition partition = Deencapsulation.newInstance(Partition.class);
         new Expectations(partition) {
             {
@@ -163,11 +200,33 @@ public class AccessTestUtil {
                 result = index;
 
                 partition.getIndex(30000L);
+=======
+        PhysicalPartition physicalPartition = Deencapsulation.newInstance(PhysicalPartition.class);
+        new Expectations(physicalPartition) {
+            {
+                physicalPartition.getBaseIndex();
+                minTimes = 0;
+                result = index;
+
+                physicalPartition.getIndex(30000L);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 minTimes = 0;
                 result = index;
             }
         };
 
+<<<<<<< HEAD
+=======
+        Partition partition = Deencapsulation.newInstance(Partition.class);
+        new Expectations(partition) {
+            {
+                partition.getDefaultPhysicalPartition();
+                minTimes = 0;
+                result = physicalPartition;
+            }
+        };
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         OlapTable table = new OlapTable();
         new Expectations(table) {
             {
@@ -205,12 +264,15 @@ public class AccessTestUtil {
                 minTimes = 0;
                 result = Lists.newArrayList(olapTable);
 
+<<<<<<< HEAD
                 db.readLock();
                 minTimes = 0;
 
                 db.readUnlock();
                 minTimes = 0;
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 db.getFullName();
                 minTimes = 0;
                 result = name;
@@ -220,6 +282,7 @@ public class AccessTestUtil {
     }
 
     public static GlobalStateMgr fetchBlockCatalog() {
+<<<<<<< HEAD
         try {
             GlobalStateMgr globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
 
@@ -261,6 +324,35 @@ public class AccessTestUtil {
         } catch (DdlException e) {
             return null;
         }
+=======
+        GlobalStateMgr globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
+
+        Database db = mockDb("testDb");
+
+        /*
+        new Expectations(globalStateMgr) {
+            {
+                globalStateMgr.getLocalMetastore().getDb("testDb");
+                minTimes = 0;
+                result = db;
+
+                globalStateMgr.getLocalMetastore().getDb("emptyDb");
+                minTimes = 0;
+                result = null;
+
+                globalStateMgr.getLocalMetastore().getDb(anyString);
+                minTimes = 0;
+                result = new Database();
+
+                globalStateMgr.getLocalMetastore().getDb("emptyCluster");
+                minTimes = 0;
+                result = null;
+            }
+        };
+
+         */
+        return globalStateMgr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public static Analyzer fetchAdminAnalyzer() {
@@ -306,6 +398,7 @@ public class AccessTestUtil {
             }
         };
 
+<<<<<<< HEAD
         Partition partition = Deencapsulation.newInstance(Partition.class);
         new Expectations(partition) {
             {
@@ -314,11 +407,33 @@ public class AccessTestUtil {
                 result = index;
 
                 partition.getIndex(30000L);
+=======
+        PhysicalPartition physicalPartition = Deencapsulation.newInstance(PhysicalPartition.class);
+        new Expectations(physicalPartition) {
+            {
+                physicalPartition.getBaseIndex();
+                minTimes = 0;
+                result = index;
+
+                physicalPartition.getIndex(30000L);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 minTimes = 0;
                 result = index;
             }
         };
 
+<<<<<<< HEAD
+=======
+        Partition partition = Deencapsulation.newInstance(Partition.class);
+        new Expectations(partition) {
+            {
+                partition.getDefaultPhysicalPartition();
+                minTimes = 0;
+                result = physicalPartition;
+            }
+        };
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         OlapTable table = new OlapTable();
         new Expectations(table) {
             {
@@ -368,12 +483,15 @@ public class AccessTestUtil {
                 minTimes = 0;
                 result = Lists.newArrayList(table);
 
+<<<<<<< HEAD
                 db.readLock();
                 minTimes = 0;
 
                 db.readUnlock();
                 minTimes = 0;
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 db.getFullName();
                 minTimes = 0;
                 result = "testDb";

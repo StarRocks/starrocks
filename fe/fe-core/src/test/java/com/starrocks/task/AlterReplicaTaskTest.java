@@ -21,12 +21,21 @@ import com.starrocks.thrift.TTabletType;
 import org.junit.Assert;
 import org.junit.Test;
 
+<<<<<<< HEAD
+=======
+import java.util.Collections;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public class AlterReplicaTaskTest {
 
     @Test
     public void testAlterLocalTablet() {
         AlterReplicaTask task = AlterReplicaTask.alterLocalTablet(1, 2, 3, 4, 5, 6,
+<<<<<<< HEAD
                 7, 8, 9, 10, 11, 12, null);
+=======
+                7, 8, 9, 10, 11, 12, null, Collections.emptyList());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         Assert.assertEquals(1, task.getBackendId());
         Assert.assertEquals(2, task.getDbId());
@@ -80,7 +89,11 @@ public class AlterReplicaTaskTest {
     @Test
     public void testRollupLocalTablet() {
         AlterReplicaTask task = AlterReplicaTask.rollupLocalTablet(1, 2, 3, 4, 5, 6,
+<<<<<<< HEAD
                 7, 8, 9, 10, 11, 12, null);
+=======
+                7, 8, 9, 10, 11, 12, null, null);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         Assert.assertEquals(1, task.getBackendId());
         Assert.assertEquals(2, task.getDbId());

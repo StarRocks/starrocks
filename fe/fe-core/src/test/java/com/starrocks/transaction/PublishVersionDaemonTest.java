@@ -131,4 +131,27 @@ public class PublishVersionDaemonTest {
             Assert.assertEquals(hardCodeDefaultMaxThreads, Config.lake_publish_version_max_threads);
         }
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testUpdateDeleteTxnLogExecutorThreads()
+            throws InvocationTargetException, NoSuchMethodException, IllegalAccessException {
+        PublishVersionDaemon daemon = new PublishVersionDaemon();
+
+        ThreadPoolExecutor executor = (ThreadPoolExecutor) MethodUtils.invokeMethod(daemon, true, "getDeleteTxnLogExecutor");
+        Assert.assertNotNull(executor);
+        ConfigRefreshDaemon configDaemon = GlobalStateMgr.getCurrentState().getConfigRefreshDaemon();
+
+        // scale out
+        Config.lake_publish_delete_txnlog_max_threads += 10;
+        MethodUtils.invokeMethod(configDaemon, true, "runAfterCatalogReady");
+        Assert.assertEquals(Config.lake_publish_delete_txnlog_max_threads, executor.getMaximumPoolSize());
+
+        // scale in
+        Config.lake_publish_delete_txnlog_max_threads -= 5;
+        MethodUtils.invokeMethod(configDaemon, true, "runAfterCatalogReady");
+        Assert.assertEquals(Config.lake_publish_delete_txnlog_max_threads, executor.getMaximumPoolSize());
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

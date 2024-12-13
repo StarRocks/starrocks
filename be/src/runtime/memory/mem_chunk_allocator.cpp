@@ -44,6 +44,10 @@
 #include "util/bit_util.h"
 #include "util/cpu_info.h"
 #include "util/defer_op.h"
+<<<<<<< HEAD
+=======
+#include "util/failpoint/fail_point.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "util/runtime_profile.h"
 #include "util/spinlock.h"
 #include "util/starrocks_metrics.h"
@@ -146,6 +150,10 @@ MemChunkAllocator::MemChunkAllocator(MemTracker* mem_tracker, size_t reserve_lim
 }
 
 bool MemChunkAllocator::allocate(size_t size, MemChunk* chunk) {
+<<<<<<< HEAD
+=======
+    FAIL_POINT_TRIGGER_RETURN(random_error, false);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     bool ret = true;
 #ifndef BE_TEST
     MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker);

@@ -61,7 +61,11 @@ public:
         auto column = ChunkHelper::column_from_field_type(type, false);
 
         size_t n = 1;
+<<<<<<< HEAD
         decoder->next_batch(&n, column.get());
+=======
+        ASSERT_TRUE(decoder->next_batch(&n, column.get()).ok());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ASSERT_EQ(1, n);
         *ret = *reinterpret_cast<const typename TypeTraits<type>::CppType*>(column->raw_data());
     }
@@ -113,9 +117,15 @@ public:
         // Test Seek within block by ordinal
         for (int i = 0; i < 100; i++) {
             uint32_t seek_off = random() % size;
+<<<<<<< HEAD
             rle_page_decoder.seek_to_position_in_page(seek_off);
             EXPECT_EQ((int32_t)(seek_off), rle_page_decoder.current_index());
             CppType ret;
+=======
+            ASSERT_TRUE(rle_page_decoder.seek_to_position_in_page(seek_off).ok());
+            EXPECT_EQ((int32_t)(seek_off), rle_page_decoder.current_index());
+            CppType ret{};
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             copy_one<Type, RlePageDecoder<Type>>(&rle_page_decoder, &ret);
             EXPECT_EQ(values[seek_off], ret);
         }
@@ -142,6 +152,7 @@ public:
             ASSERT_EQ(src[i], column->get_data()[i]);
         }
 
+<<<<<<< HEAD
         rle_page_decoder.seek_to_position_in_page(0);
         ASSERT_EQ(0, rle_page_decoder.current_index());
         auto column1 = FixedLengthColumn<CppType>::create();
@@ -149,6 +160,15 @@ public:
         read_range.add(Range(0, size / 3));
         read_range.add(Range(size / 2, (size * 2 / 3)));
         read_range.add(Range((size * 3 / 4), size));
+=======
+        ASSERT_TRUE(rle_page_decoder.seek_to_position_in_page(0).ok());
+        ASSERT_EQ(0, rle_page_decoder.current_index());
+        auto column1 = FixedLengthColumn<CppType>::create();
+        SparseRange<> read_range;
+        read_range.add(Range<>(0, size / 3));
+        read_range.add(Range<>(size / 2, (size * 2 / 3)));
+        read_range.add(Range<>((size * 3 / 4), size));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         size_t read_num = read_range.span_size();
 
         status = rle_page_decoder.next_batch(read_range, column1.get());
@@ -156,9 +176,15 @@ public:
         ASSERT_EQ(read_num, column1->size());
 
         size_t offset = 0;
+<<<<<<< HEAD
         SparseRangeIterator read_iter = read_range.new_iterator();
         while (read_iter.has_more()) {
             Range r = read_iter.next(read_num);
+=======
+        SparseRangeIterator<> read_iter = read_range.new_iterator();
+        while (read_iter.has_more()) {
+            Range<> r = read_iter.next(read_num);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             for (uint i = 0; i < r.span_size(); ++i) {
                 ASSERT_EQ(src[r.begin() + i], column1->get_data()[i + offset]);
             }

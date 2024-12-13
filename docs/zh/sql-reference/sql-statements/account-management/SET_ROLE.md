@@ -48,7 +48,11 @@ SET ROLE ALL;
 
 2. 激活 `db_admin` 角色。
 
+<<<<<<< HEAD
     ```undefined
+=======
+    ```plain
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     SET ROLE db_admin;
     ```
 

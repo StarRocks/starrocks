@@ -50,7 +50,11 @@ public class ShowColumnStmtTest {
         String dropSQL = "drop table test_default";
         try {
             DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
+<<<<<<< HEAD
             GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+=======
+            GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } catch (Exception ex) {
 
         }
@@ -61,8 +65,12 @@ public class ShowColumnStmtTest {
         ConnectContext ctx = starRocksAssert.getCtx();
         String sql = "show full columns from test_default;";
         ShowColumnStmt showColumnStmt = (ShowColumnStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+<<<<<<< HEAD
         ShowExecutor executor = new ShowExecutor(ctx, showColumnStmt);
         ShowResultSet resultSet = executor.execute();
+=======
+        ShowResultSet resultSet = ShowExecutor.execute(showColumnStmt, ctx);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals("uuid()", resultSet.getResultRows().get(0).get(5));
     }
 
@@ -71,8 +79,12 @@ public class ShowColumnStmtTest {
         ConnectContext ctx = starRocksAssert.getCtx();
         String sql = "show full columns from test_only_metric_default;";
         ShowColumnStmt showColumnStmt = (ShowColumnStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+<<<<<<< HEAD
         ShowExecutor executor = new ShowExecutor(ctx, showColumnStmt);
         ShowResultSet resultSet = executor.execute();
+=======
+        ShowResultSet resultSet = ShowExecutor.execute(showColumnStmt, ctx);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // here must set null not \N
         Assert.assertNull(resultSet.getResultRows().get(0).get(5));
         Assert.assertNull(resultSet.getResultRows().get(1).get(5));

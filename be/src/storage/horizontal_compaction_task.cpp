@@ -60,21 +60,38 @@ Status HorizontalCompactionTask::_horizontal_compact_data(Statistics* statistics
 
     std::unique_ptr<RowsetWriter> output_rs_writer;
     RETURN_IF_ERROR(CompactionUtils::construct_output_rowset_writer(
+<<<<<<< HEAD
             _tablet.get(), max_rows_per_segment, _task_info.algorithm, _task_info.output_version, &output_rs_writer));
 
     Schema schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
     TabletReader reader(std::static_pointer_cast<Tablet>(_tablet->shared_from_this()), output_rs_writer->version(),
                         schema);
+=======
+            _tablet.get(), max_rows_per_segment, _task_info.algorithm, _task_info.output_version, _task_info.gtid,
+            &output_rs_writer, _tablet_schema));
+
+    Schema schema = ChunkHelper::convert_schema(_tablet_schema);
+    TabletReader reader(std::static_pointer_cast<Tablet>(_tablet->shared_from_this()), output_rs_writer->version(),
+                        schema, _tablet_schema);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     TabletReaderParams reader_params;
     DCHECK(compaction_type() == BASE_COMPACTION || compaction_type() == CUMULATIVE_COMPACTION);
     reader_params.reader_type =
             compaction_type() == BASE_COMPACTION ? READER_BASE_COMPACTION : READER_CUMULATIVE_COMPACTION;
     reader_params.profile = _runtime_profile.create_child("merge_rowsets");
+<<<<<<< HEAD
+=======
+    reader_params.column_access_paths = &_column_access_paths;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     int32_t chunk_size = CompactionUtils::get_read_chunk_size(
             config::compaction_memory_limit_per_worker, config::vector_chunk_size, _task_info.input_rows_num,
             _task_info.input_rowsets_size, _task_info.segment_iterator_num);
+<<<<<<< HEAD
     VLOG(1) << "compaction task_id:" << _task_info.task_id << ", tablet=" << _tablet->tablet_id()
+=======
+    VLOG(2) << "compaction task_id:" << _task_info.task_id << ", tablet=" << _tablet->tablet_id()
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             << ", reader chunk size=" << chunk_size;
     reader_params.chunk_size = chunk_size;
     RETURN_IF_ERROR(reader.prepare());
@@ -150,7 +167,11 @@ StatusOr<size_t> HorizontalCompactionTask::_compact_data(int32_t chunk_size, Tab
             }
         }
 
+<<<<<<< HEAD
         ChunkHelper::padding_char_columns(char_field_indexes, schema, _tablet->tablet_schema(), chunk.get());
+=======
+        ChunkHelper::padding_char_columns(char_field_indexes, schema, _tablet_schema, chunk.get());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         RETURN_IF_ERROR(output_rs_writer->add_chunk(*chunk));
         output_rows += chunk->num_rows();

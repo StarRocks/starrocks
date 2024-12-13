@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
@@ -19,6 +20,14 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+=======
+package com.starrocks.sql.optimizer.rule.transformation;
+
+import com.google.common.collect.Lists;
+import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.operator.Operator;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
@@ -73,6 +82,7 @@ public class MergeLimitWithLimitRule extends TransformationRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalLimitOperator l1 = (LogicalLimitOperator) input.getOp();
+<<<<<<< HEAD
         LogicalLimitOperator l2 = (LogicalLimitOperator) input.getInputs().get(0).getOp();
 
         Preconditions.checkState(!l1.hasOffset());
@@ -97,6 +107,44 @@ public class MergeLimitWithLimitRule extends TransformationRule {
         }
 
         List<OptExpression> inputs = input.getInputs().get(0).getInputs();
+=======
+        // l2 must global
+        LogicalLimitOperator l2 = (LogicalLimitOperator) input.getInputs().get(0).getOp();
+
+        LogicalLimitOperator result;
+        if (l1.hasOffset() || l2.hasOffset()) {
+            // l2 range
+            long l2Min = l2.hasOffset() ? l2.getOffset() : Operator.DEFAULT_OFFSET;
+            long l2Max = l2Min + l2.getLimit();
+
+            // l1 range
+            long l1Min = l1.hasOffset() ? l2Min + l1.getOffset() : l2Min;
+            long l1Max = l1Min + l1.getLimit();
+
+            long offset = Math.max(l2Min, l1Min);
+            long limit = Math.min(l2Max, l1Max) - offset;
+
+            if (limit <= 0) {
+                limit = 0;
+                offset = Operator.DEFAULT_OFFSET;
+            }
+
+            if (offset <= 0) {
+                offset = Operator.DEFAULT_OFFSET;
+            }
+
+            result = LogicalLimitOperator.init(limit, offset);
+
+        } else {
+            if (l1.getLimit() <= l2.getLimit()) {
+                result = LogicalLimitOperator.init(l1.getLimit());
+            } else {
+                result = l2;
+            }
+        }
+        List<OptExpression> inputs = input.getInputs().get(0).getInputs();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (result.isInit()) {
             LogicalLimitOperator global = LogicalLimitOperator.global(result.getLimit(), result.getOffset());
             LogicalLimitOperator local = LogicalLimitOperator.local(result.getLimit() + result.getOffset());

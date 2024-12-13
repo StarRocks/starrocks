@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # array_cum_sum
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 对数组中的元素进行向前累加。
 

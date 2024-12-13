@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     l_orderkey,
@@ -21,6 +22,8 @@ group by
 order by
     revenue desc,
     o_orderdate limit 10;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 [fragment statistics]
 PLAN FRAGMENT 0(F05)
 Output Exprs:20: L_ORDERKEY | 38: sum | 14: O_ORDERDATE | 17: O_SHIPPRIORITY
@@ -107,7 +110,11 @@ OutPut Exchange Id: 13
 |  column statistics:
 |  * L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
 |  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
+<<<<<<< HEAD
 |  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
+=======
+|  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] MCV: [[0.05:54639500][0.07:54619200][0.02:54617300][0.01:54583400][0.10:54581500]] ESTIMATE
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 |
 0:OlapScanNode
 table: lineitem, rollup: lineitem
@@ -121,8 +128,13 @@ probe runtime filters:
 column statistics:
 * L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
 * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
+<<<<<<< HEAD
 * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
 * L_SHIPDATE-->[7.948512E8, 9.124416E8, 0.0, 4.0, 2526.0] ESTIMATE
+=======
+* L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] MCV: [[0.05:54639500][0.07:54619200][0.02:54617300][0.01:54583400][0.10:54581500]] ESTIMATE
+* L_SHIPDATE-->[7.948512E8, 9.124416E8, 0.0, 4.0, 2526.0] MCV: [[1997-06-01:270700][1998-01-17:269100][1995-09-18:267300][1996-11-29:266400][1995-09-26:265700]] ESTIMATE
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 PLAN FRAGMENT 2(F01)
 
@@ -171,7 +183,11 @@ probe runtime filters:
 column statistics:
 * O_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 7.2480814E7] ESTIMATE
 * O_CUSTKEY-->[1.0, 1.49999E7, 0.0, 8.0, 9999600.0] ESTIMATE
+<<<<<<< HEAD
 * O_ORDERDATE-->[6.941952E8, 7.948512E8, 0.0, 4.0, 2406.0] ESTIMATE
+=======
+* O_ORDERDATE-->[6.941952E8, 7.948512E8, 0.0, 4.0, 2406.0] MCV: [[1995-01-13:70200][1993-03-19:69500][1994-09-12:69400][1992-10-24:69200][1993-01-22:69000]] ESTIMATE
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 * O_SHIPPRIORITY-->[0.0, 0.0, 0.0, 4.0, 1.0] ESTIMATE
 
 PLAN FRAGMENT 3(F02)
@@ -196,5 +212,10 @@ actualRows=0, avgRowSize=18.0
 cardinality: 3018900
 column statistics:
 * C_CUSTKEY-->[1.0, 1.5E7, 0.0, 8.0, 3018900.0] ESTIMATE
+<<<<<<< HEAD
 * C_MKTSEGMENT-->[-Infinity, Infinity, 0.0, 10.0, 1.0] ESTIMATE
 [end]
+=======
+* C_MKTSEGMENT-->[-Infinity, Infinity, 0.0, 10.0, 1.0] MCV: [[HOUSEHOLD:3018900][BUILDING:3014200][FURNITURE:2996800][MACHINERY:2994900][AUTOMOBILE:2975200]] ESTIMATE
+[end]
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

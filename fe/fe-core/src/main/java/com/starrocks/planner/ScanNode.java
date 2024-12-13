@@ -39,10 +39,20 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.ColumnAccessPath;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
 import com.starrocks.sql.optimizer.ScanOptimzeOption;
 import com.starrocks.thrift.TColumnAccessPath;
 import com.starrocks.thrift.TScanRangeLocations;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.datacache.DataCacheOptions;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.optimizer.ScanOptimzeOption;
+import com.starrocks.thrift.TColumnAccessPath;
+import com.starrocks.thrift.TScanRangeLocations;
+import org.jetbrains.annotations.TestOnly;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import java.util.Collections;
 import java.util.List;
@@ -57,6 +67,11 @@ public abstract class ScanNode extends PlanNode {
     protected Map<String, PartitionColumnFilter> columnFilters;
     protected String sortColumn = null;
     protected List<ColumnAccessPath> columnAccessPaths;
+<<<<<<< HEAD
+=======
+    protected DataCacheOptions dataCacheOptions = null;
+    protected long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     protected ScanOptimzeOption scanOptimzeOption;
 
     public ScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
@@ -72,6 +87,22 @@ public abstract class ScanNode extends PlanNode {
         this.columnAccessPaths = columnAccessPaths;
     }
 
+<<<<<<< HEAD
+=======
+    @TestOnly
+    public List<ColumnAccessPath> getColumnAccessPaths() {
+        return this.columnAccessPaths;
+    }
+
+    public void setDataCacheOptions(DataCacheOptions dataCacheOptions) {
+        this.dataCacheOptions = dataCacheOptions;
+    }
+
+    public void setWarehouseId(long warehouseId) {
+        this.warehouseId = warehouseId;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void setScanOptimzeOption(ScanOptimzeOption opt) {
         this.scanOptimzeOption = opt.copy();
     }
@@ -84,10 +115,25 @@ public abstract class ScanNode extends PlanNode {
         return desc.getTable().getName();
     }
 
+<<<<<<< HEAD
     /**
      * cast expr to SlotDescriptor type
      */
     protected Expr castToSlot(SlotDescriptor slotDesc, Expr expr) throws UserException {
+=======
+    public boolean isLocalNativeTable() {
+        return false;
+    }
+
+    public boolean hasMoreScanRanges() {
+        return false;
+    }
+
+    /**
+     * cast expr to SlotDescriptor type
+     */
+    protected Expr castToSlot(SlotDescriptor slotDesc, Expr expr) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (!slotDesc.getType().matchesType(expr.getType())) {
             return expr.castTo(slotDesc.getType());
         } else {
@@ -138,8 +184,25 @@ public abstract class ScanNode extends PlanNode {
 
         return columnAccessPaths.stream().map(ColumnAccessPath::toThrift).collect(Collectors.toList());
     }
+<<<<<<< HEAD
     
     public boolean isOlapScanNode() {
         return this instanceof OlapScanNode;
+=======
+
+    protected boolean supportTopNRuntimeFilter() {
+        return false;
+    }
+
+    @Override
+    public boolean needCollectExecStats() {
+        return true;
+    }
+
+    // We use this flag to know how many connector scan nodes at BE side, and connector framework
+    // will use this number to fair share memory usage between those scan nodes.
+    public boolean isRunningAsConnectorOperator() {
+        return true;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }

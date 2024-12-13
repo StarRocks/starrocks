@@ -35,4 +35,12 @@ public class AnalyzeHistogramDesc extends AnalyzeTypeDesc {
     public void setBuckets(long buckets) {
         this.buckets = buckets;
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    public boolean isHistogram() {
+        return true;
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

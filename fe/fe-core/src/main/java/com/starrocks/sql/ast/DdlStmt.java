@@ -19,7 +19,10 @@ import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.sql.parser.NodePosition;
 
 public abstract class DdlStmt extends StatementBase {
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     protected DdlStmt(NodePosition pos) {
         super(pos);
     }
@@ -33,4 +36,8 @@ public abstract class DdlStmt extends StatementBase {
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitDDLStatement(this, context);
     }
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

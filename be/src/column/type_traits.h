@@ -342,11 +342,27 @@ struct ColumnTraits<int8_t> {
 };
 
 template <>
+<<<<<<< HEAD
+=======
+struct ColumnTraits<uint8_t> {
+    using ColumnType = UInt8Column;
+};
+
+template <>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 struct ColumnTraits<int16_t> {
     using ColumnType = Int16Column;
 };
 
 template <>
+<<<<<<< HEAD
+=======
+struct ColumnTraits<uint16_t> {
+    using ColumnType = UInt16Column;
+};
+
+template <>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 struct ColumnTraits<int32_t> {
     using ColumnType = Int32Column;
 };

@@ -62,6 +62,10 @@ private:
     size_t num_buffered_chunks() const override;
     size_t buffer_size() const override;
     size_t buffer_capacity() const override;
+<<<<<<< HEAD
+=======
+    size_t buffer_memory_usage() const override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     size_t default_buffer_capacity() const override;
     ChunkBufferTokenPtr pin_chunk(int num_chunks) override;
     bool is_buffer_full() const override;

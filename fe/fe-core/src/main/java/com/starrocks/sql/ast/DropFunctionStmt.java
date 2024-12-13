@@ -32,6 +32,7 @@ public class DropFunctionStmt extends DdlStmt {
     // set after analyzed
     private FunctionSearchDesc functionSearchDesc;
 
+<<<<<<< HEAD
     public DropFunctionStmt(FunctionName functionName, FunctionArgsDef argsDef) {
         this(functionName, argsDef, NodePosition.ZERO);
     }
@@ -40,6 +41,19 @@ public class DropFunctionStmt extends DdlStmt {
         super(pos);
         this.functionName = functionName;
         this.argsDef = argsDef;
+=======
+    private final boolean dropIfExists;
+
+    public DropFunctionStmt(FunctionName functionName, FunctionArgsDef argsDef, boolean dropIfExists) {
+        this(functionName, argsDef, NodePosition.ZERO, dropIfExists);
+    }
+
+    public DropFunctionStmt(FunctionName functionName, FunctionArgsDef argsDef, NodePosition pos, boolean dropIfExists) {
+        super(pos);
+        this.functionName = functionName;
+        this.argsDef = argsDef;
+        this.dropIfExists = dropIfExists;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public FunctionName getFunctionName() {
@@ -54,6 +68,13 @@ public class DropFunctionStmt extends DdlStmt {
         this.functionSearchDesc = functionSearchDesc;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean dropIfExists() {
+        return dropIfExists;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public RedirectStatus getRedirectStatus() {
         return RedirectStatus.FORWARD_WITH_SYNC;

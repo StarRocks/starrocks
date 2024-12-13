@@ -37,7 +37,11 @@ template <LogicalType LT>
 struct MaxAggregateDataRetractable<LT, FixedLengthLTGuard<LT>> : public StreamDetailState<LT> {
     using T = RunTimeCppType<LT>;
 
+<<<<<<< HEAD
     MaxAggregateDataRetractable() {}
+=======
+    MaxAggregateDataRetractable() = default;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     T result = RunTimeTypeLimits<LT>::min_value();
     void reset_result() { result = RunTimeTypeLimits<LT>::min_value(); }
@@ -159,7 +163,11 @@ public:
                 column->append(this->data(state).slice());
             }
         } else {
+<<<<<<< HEAD
             InputColumnType* column = down_cast<InputColumnType*>(dst);
+=======
+            auto* column = down_cast<InputColumnType*>(dst);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             for (size_t i = start; i < end; ++i) {
                 column->get_data()[i] = this->data(state).result;
             }
@@ -249,7 +257,11 @@ public:
 
     void output_is_sync(FunctionContext* ctx, size_t chunk_size, Column* to,
                         AggDataPtr __restrict state) const override {
+<<<<<<< HEAD
         UInt8Column* sync_col = down_cast<UInt8Column*>(to);
+=======
+        auto* sync_col = down_cast<UInt8Column*>(to);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         uint8_t is_sync = this->data(state).is_sync();
         sync_col->append(is_sync);
     }
@@ -262,8 +274,13 @@ public:
             DCHECK((*to[0]).is_numeric());
         }
         DCHECK((*to[1]).is_numeric());
+<<<<<<< HEAD
         InputColumnType* column0 = down_cast<InputColumnType*>(to[0].get());
         Int64Column* column1 = down_cast<Int64Column*>(to[1].get());
+=======
+        auto* column0 = down_cast<InputColumnType*>(to[0].get());
+        auto* column1 = down_cast<Int64Column*>(to[1].get());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         auto& detail_state = this->data(state).detail_state();
         for (auto iter = detail_state.cbegin(); iter != detail_state.cend(); iter++) {
             // is it possible that count is negative?
@@ -271,7 +288,11 @@ public:
             column0->append(iter->first);
             column1->append(iter->second);
         }
+<<<<<<< HEAD
         Int64Column* count_col = down_cast<Int64Column*>(count);
+=======
+        auto* count_col = down_cast<Int64Column*>(count);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         count_col->append(detail_state.size());
     }
     std::string get_name() const override { return "retract_maxmin"; }

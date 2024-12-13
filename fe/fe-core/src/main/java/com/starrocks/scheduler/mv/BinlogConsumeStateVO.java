@@ -51,7 +51,11 @@ public class BinlogConsumeStateVO implements Writable {
             TabletMeta meta = tabletIndex.getTabletMeta(key.getTabletId());
             scan.setTable_id(meta.getTableId());
             scan.setTablet_id(key.getTabletId());
+<<<<<<< HEAD
             scan.setPartition_id(meta.getPartitionId());
+=======
+            scan.setPartition_id(meta.getPhysicalPartitionId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             scan.setOffset(value.toThrift());
             res.add(scan);
         });

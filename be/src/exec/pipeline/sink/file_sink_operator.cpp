@@ -58,6 +58,7 @@ private:
 };
 
 Status FileSinkIOBuffer::prepare(RuntimeState* state, RuntimeProfile* parent_profile) {
+<<<<<<< HEAD
     bool expected = false;
     if (!_is_prepared.compare_exchange_strong(expected, true)) {
         return Status::OK();
@@ -79,6 +80,19 @@ Status FileSinkIOBuffer::prepare(RuntimeState* state, RuntimeProfile* parent_pro
         return Status::InternalError("start execution queue error");
     }
     return Status::OK();
+=======
+    if (is_prepared()) {
+        return Status::OK();
+    }
+
+    auto dop = state->query_options().pipeline_dop;
+    RETURN_IF_ERROR(state->exec_env()->result_mgr()->create_sender(state->fragment_instance_id(),
+                                                                   std::min(dop << 1, 1024), &_sender));
+    _writer = std::make_shared<FileResultWriter>(_file_opts.get(), _output_expr_ctxs, parent_profile);
+    RETURN_IF_ERROR(_writer->init(state));
+
+    return SinkIOBuffer::prepare(state, parent_profile);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 void FileSinkIOBuffer::close(RuntimeState* state) {
@@ -104,11 +118,19 @@ void FileSinkIOBuffer::close(RuntimeState* state) {
         if (!io_status.ok() && final_status.ok()) {
             final_status = io_status;
         }
+<<<<<<< HEAD
         _sender->close(final_status);
         _sender.reset();
 
         _state->exec_env()->result_mgr()->cancel_at_time(time(nullptr) + config::result_buffer_cancelled_interval_time,
                                                          state->fragment_instance_id());
+=======
+        WARN_IF_ERROR(_sender->close(final_status), "close sender failed");
+        _sender.reset();
+
+        (void)_state->exec_env()->result_mgr()->cancel_at_time(
+                time(nullptr) + config::result_buffer_cancelled_interval_time, state->fragment_instance_id());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     SinkIOBuffer::close(state);
 }

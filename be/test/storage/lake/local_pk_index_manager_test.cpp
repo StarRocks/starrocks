@@ -24,6 +24,10 @@
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/test_util.h"
+<<<<<<< HEAD
+=======
+#include "storage/lake/versioned_tablet.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "storage/tablet_schema.h"
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
@@ -34,7 +38,11 @@ namespace starrocks::lake {
 class LocalPkIndexManagerTest : public TestBase {
 public:
     LocalPkIndexManagerTest() : TestBase(kTestGroupPath) {
+<<<<<<< HEAD
         _tablet_metadata = std::make_unique<TabletMetadata>();
+=======
+        _tablet_metadata = std::make_shared<TabletMetadata>();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         _tablet_metadata->set_id(next_id());
         _tablet_metadata->set_version(1);
         _tablet_metadata->set_next_rowset_id(1);
@@ -69,7 +77,11 @@ public:
         }
 
         _tablet_schema = TabletSchema::create(*schema);
+<<<<<<< HEAD
         _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(*_tablet_schema));
+=======
+        _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     void SetUp() override {
@@ -85,7 +97,11 @@ public:
 protected:
     constexpr static const char* const kTestGroupPath = "test_local_pk_index_gc";
 
+<<<<<<< HEAD
     std::unique_ptr<TabletMetadata> _tablet_metadata;
+=======
+    std::shared_ptr<TabletMetadata> _tablet_metadata;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::shared_ptr<TabletSchema> _tablet_schema;
     std::shared_ptr<Schema> _schema;
     int64_t _partition_id = next_id();
@@ -106,8 +122,13 @@ TEST_F(LocalPkIndexManagerTest, test_gc) {
     auto rowset_txn_meta = std::make_unique<RowsetTxnMetaPB>();
 
     int64_t txn_id = next_id();
+<<<<<<< HEAD
     ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
     std::shared_ptr<const TabletSchema> const_schema = _tablet_schema;
+=======
+    std::shared_ptr<const TabletSchema> const_schema = _tablet_schema;
+    VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, txn_id));
     ASSERT_OK(writer->open());
 
@@ -172,6 +193,113 @@ TEST_F(LocalPkIndexManagerTest, test_gc) {
     ASSERT_OK(publish_single_version(_tablet_metadata->id(), 2, txn_id).status());
 }
 
+<<<<<<< HEAD
+=======
+TEST_F(LocalPkIndexManagerTest, test_gc_while_index_dir_changed) {
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->SetCallBack("LocalPkIndexManager:index_dir_changed:1",
+                                          [](void* arg) { *(bool*)arg = true; });
+    SyncPoint::GetInstance()->SetCallBack("LocalPkIndexManager:index_dir_changed:2",
+                                          [](void* arg) { *(bool*)arg = true; });
+    std::vector<int> k0{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22};
+    std::vector<int> v0{2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 41, 44};
+
+    auto c0 = Int32Column::create();
+    auto c1 = Int32Column::create();
+    c0->append_numbers(k0.data(), k0.size() * sizeof(int));
+    c1->append_numbers(v0.data(), v0.size() * sizeof(int));
+
+    Chunk chunk0({c0, c1}, _schema);
+    auto rowset_txn_meta = std::make_unique<RowsetTxnMetaPB>();
+
+    int64_t txn_id = next_id();
+    std::shared_ptr<const TabletSchema> const_schema = _tablet_schema;
+    VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
+    ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, txn_id));
+    ASSERT_OK(writer->open());
+
+    // write segment #1
+    ASSERT_OK(writer->write(chunk0));
+    ASSERT_OK(writer->finish());
+
+    // write txnlog
+    auto txn_log = std::make_shared<TxnLog>();
+    txn_log->set_tablet_id(_tablet_metadata->id());
+    txn_log->set_txn_id(txn_id);
+    auto op_write = txn_log->mutable_op_write();
+    for (auto& f : writer->files()) {
+        op_write->mutable_rowset()->add_segments(std::move(f.path));
+    }
+    op_write->mutable_rowset()->set_num_rows(writer->num_rows());
+    op_write->mutable_rowset()->set_data_size(writer->data_size());
+    op_write->mutable_rowset()->set_overlapped(false);
+
+    ASSERT_OK(_tablet_mgr->put_txn_log(txn_log));
+
+    writer->close();
+    ASSERT_OK(publish_single_version(_tablet_metadata->id(), 2, txn_id).status());
+    auto stores = StorageEngine::instance()->get_stores();
+    ASSERT_TRUE(stores.size() > 0);
+    ASSERT_OK(FileSystem::Default()->path_exists(stores[0]->get_persistent_index_path() + "/" +
+                                                 std::to_string(_tablet_metadata->id())));
+
+    auto* data_dir = stores[0];
+    auto pk_path = data_dir->get_persistent_index_path();
+    std::set<std::string> tablet_ids;
+    ASSERT_OK(fs::list_dirs_files(pk_path, &tablet_ids, nullptr));
+
+    {
+        // lock acquire failed
+        SyncPoint::GetInstance()->SetCallBack("LocalPkIndexManager:index_dir_changed:3",
+                                              [](void* arg) { *(bool*)arg = false; });
+        LocalPkIndexManager::gc(ExecEnv::GetInstance()->lake_update_manager(), data_dir, tablet_ids);
+        // no index dir removed
+        ASSERT_OK(FileSystem::Default()->path_exists(stores[0]->get_persistent_index_path() + "/" +
+                                                     std::to_string(_tablet_metadata->id())));
+        SyncPoint::GetInstance()->ClearCallBack("LocalPkIndexManager:index_dir_changed:3");
+    }
+
+    {
+        // lock acquire succeed
+        SyncPoint::GetInstance()->SetCallBack("LocalPkIndexManager:index_dir_changed:3",
+                                              [](void* arg) { *(bool*)arg = true; });
+        LocalPkIndexManager::gc(ExecEnv::GetInstance()->lake_update_manager(), data_dir, tablet_ids);
+        // index dir removed
+        ASSERT_ERROR(FileSystem::Default()->path_exists(stores[0]->get_persistent_index_path() + "/" +
+                                                        std::to_string(_tablet_metadata->id())));
+        SyncPoint::GetInstance()->ClearCallBack("LocalPkIndexManager:index_dir_changed:3");
+    }
+
+    SyncPoint::GetInstance()->ClearCallBack("LocalPkIndexManager:index_dir_changed:1");
+    SyncPoint::GetInstance()->ClearCallBack("LocalPkIndexManager:index_dir_changed:2");
+    SyncPoint::GetInstance()->DisableProcessing();
+
+    txn_id = next_id();
+    ASSIGN_OR_ABORT(writer, tablet.new_writer(kHorizontal, txn_id));
+    ASSERT_OK(writer->open());
+
+    // write segment #2
+    ASSERT_OK(writer->write(chunk0));
+    ASSERT_OK(writer->finish());
+
+    // write txnlog
+    txn_log = std::make_shared<TxnLog>();
+    txn_log->set_tablet_id(_tablet_metadata->id());
+    txn_log->set_txn_id(txn_id);
+    op_write = txn_log->mutable_op_write();
+    for (auto& f : writer->files()) {
+        op_write->mutable_rowset()->add_segments(std::move(f.path));
+    }
+    op_write->mutable_rowset()->set_num_rows(writer->num_rows());
+    op_write->mutable_rowset()->set_data_size(writer->data_size());
+    ASSERT_OK(_tablet_mgr->put_txn_log(txn_log));
+
+    writer->close();
+    // publish again should be successful, persistent index will be reloaded.
+    ASSERT_OK(publish_single_version(_tablet_metadata->id(), 2, txn_id).status());
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 TEST_F(LocalPkIndexManagerTest, test_evict) {
     SyncPoint::GetInstance()->EnableProcessing();
     SyncPoint::GetInstance()->SetCallBack("LocalPkIndexManager::evict:1", [](void* arg) { *(bool*)arg = true; });
@@ -189,8 +317,13 @@ TEST_F(LocalPkIndexManagerTest, test_evict) {
     auto rowset_txn_meta = std::make_unique<RowsetTxnMetaPB>();
 
     int64_t txn_id = next_id();
+<<<<<<< HEAD
     ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
     std::shared_ptr<const TabletSchema> const_schema = _tablet_schema;
+=======
+    std::shared_ptr<const TabletSchema> const_schema = _tablet_schema;
+    VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, txn_id));
     ASSERT_OK(writer->open());
 
@@ -257,4 +390,169 @@ TEST_F(LocalPkIndexManagerTest, test_evict) {
     ASSERT_OK(publish_single_version(_tablet_metadata->id(), 2, txn_id).status());
 }
 
+<<<<<<< HEAD
+=======
+TEST_F(LocalPkIndexManagerTest, test_major_compaction) {
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->SetCallBack("UpdateManager::pick_tablets_to_do_pk_index_major_compaction:1",
+                                          [](void* arg) { *(double*)arg = 1.0; });
+    std::vector<int> k0{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22};
+    std::vector<int> v0{2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 41, 44};
+
+    auto c0 = Int32Column::create();
+    auto c1 = Int32Column::create();
+    c0->append_numbers(k0.data(), k0.size() * sizeof(int));
+    c1->append_numbers(v0.data(), v0.size() * sizeof(int));
+
+    Chunk chunk0({c0, c1}, _schema);
+    auto rowset_txn_meta = std::make_unique<RowsetTxnMetaPB>();
+
+    int64_t txn_id = next_id();
+    std::shared_ptr<const TabletSchema> const_schema = _tablet_schema;
+    VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
+    ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, txn_id));
+    ASSERT_OK(writer->open());
+
+    // write segment #1
+    ASSERT_OK(writer->write(chunk0));
+    ASSERT_OK(writer->finish());
+
+    // write txnlog
+    auto txn_log = std::make_shared<TxnLog>();
+    txn_log->set_tablet_id(_tablet_metadata->id());
+    txn_log->set_txn_id(txn_id);
+    auto op_write = txn_log->mutable_op_write();
+    for (auto& f : writer->files()) {
+        op_write->mutable_rowset()->add_segments(std::move(f.path));
+    }
+    op_write->mutable_rowset()->set_num_rows(writer->num_rows());
+    op_write->mutable_rowset()->set_data_size(writer->data_size());
+    op_write->mutable_rowset()->set_overlapped(false);
+
+    ASSERT_OK(_tablet_mgr->put_txn_log(txn_log));
+
+    writer->close();
+    ASSERT_OK(publish_single_version(_tablet_metadata->id(), 2, txn_id).status());
+    auto stores = StorageEngine::instance()->get_stores();
+    ASSERT_TRUE(stores.size() > 0);
+    ASSERT_OK(FileSystem::Default()->path_exists(stores[0]->get_persistent_index_path() + "/" +
+                                                 std::to_string(_tablet_metadata->id())));
+    auto local_pk_index_manager = std::make_unique<LocalPkIndexManager>();
+    ASSERT_OK(local_pk_index_manager->init());
+    local_pk_index_manager->schedule(
+            [&]() { return local_pk_index_manager->pick_tablets_to_do_pk_index_major_compaction(_update_mgr.get()); });
+    // LocalPkIndexManager use the global update manager to do major compaction.
+    // But we are using _update_mgr constructed in ut, so we have to call pk_index_major_compaction explicitly.
+    std::vector<TabletAndScore> pick_tablets =
+            local_pk_index_manager->pick_tablets_to_do_pk_index_major_compaction(_update_mgr.get());
+    for (auto& tablet_score : pick_tablets) {
+        auto tablet_id = tablet_score.first;
+        auto* data_dir = StorageEngine::instance()->get_persistent_index_store(tablet_id);
+        if (data_dir == nullptr) {
+            continue;
+        }
+        _update_mgr->pk_index_major_compaction(tablet_id, data_dir);
+    }
+
+    SyncPoint::GetInstance()->ClearCallBack("UpdateManager::pick_tablets_to_do_pk_index_major_compaction:1");
+    SyncPoint::GetInstance()->DisableProcessing();
+
+    txn_id = next_id();
+    ASSIGN_OR_ABORT(writer, tablet.new_writer(kHorizontal, txn_id));
+    ASSERT_OK(writer->open());
+
+    // write segment #2
+    ASSERT_OK(writer->write(chunk0));
+    ASSERT_OK(writer->finish());
+
+    // write txnlog
+    txn_log = std::make_shared<TxnLog>();
+    txn_log->set_tablet_id(_tablet_metadata->id());
+    txn_id = next_id();
+    txn_log->set_txn_id(txn_id);
+    op_write = txn_log->mutable_op_write();
+    for (auto& f : writer->files()) {
+        op_write->mutable_rowset()->add_segments(std::move(f.path));
+    }
+    op_write->mutable_rowset()->set_num_rows(writer->num_rows());
+    op_write->mutable_rowset()->set_data_size(writer->data_size());
+    ASSERT_OK(_tablet_mgr->put_txn_log(txn_log));
+
+    writer->close();
+    // publish again should be successful
+    ASSERT_OK(publish_single_version(_tablet_metadata->id(), 3, txn_id).status());
+}
+
+TEST_F(LocalPkIndexManagerTest, test_major_compaction_with_unload) {
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->SetCallBack("UpdateManager::pick_tablets_to_do_pk_index_major_compaction:1",
+                                          [](void* arg) { *(double*)arg = 1.0; });
+    std::vector<int> k0{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22};
+    std::vector<int> v0{2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 41, 44};
+
+    auto c0 = Int32Column::create();
+    auto c1 = Int32Column::create();
+    c0->append_numbers(k0.data(), k0.size() * sizeof(int));
+    c1->append_numbers(v0.data(), v0.size() * sizeof(int));
+
+    Chunk chunk0({c0, c1}, _schema);
+    auto rowset_txn_meta = std::make_unique<RowsetTxnMetaPB>();
+
+    int64_t txn_id = next_id();
+    std::shared_ptr<const TabletSchema> const_schema = _tablet_schema;
+    VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
+    ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, txn_id));
+    ASSERT_OK(writer->open());
+
+    // write segment #1
+    ASSERT_OK(writer->write(chunk0));
+    ASSERT_OK(writer->finish());
+
+    // write txnlog
+    auto txn_log = std::make_shared<TxnLog>();
+    txn_log->set_tablet_id(_tablet_metadata->id());
+    txn_log->set_txn_id(txn_id);
+    auto op_write = txn_log->mutable_op_write();
+    for (auto& f : writer->files()) {
+        op_write->mutable_rowset()->add_segments(std::move(f.path));
+    }
+    op_write->mutable_rowset()->set_num_rows(writer->num_rows());
+    op_write->mutable_rowset()->set_data_size(writer->data_size());
+    op_write->mutable_rowset()->set_overlapped(false);
+
+    ASSERT_OK(_tablet_mgr->put_txn_log(txn_log));
+
+    writer->close();
+    ASSERT_OK(publish_single_version(_tablet_metadata->id(), 2, txn_id).status());
+    auto stores = StorageEngine::instance()->get_stores();
+    ASSERT_TRUE(stores.size() > 0);
+    ASSERT_OK(FileSystem::Default()->path_exists(stores[0]->get_persistent_index_path() + "/" +
+                                                 std::to_string(_tablet_metadata->id())));
+    auto local_pk_index_manager = std::make_unique<LocalPkIndexManager>();
+    ASSERT_OK(local_pk_index_manager->init());
+    local_pk_index_manager->schedule(
+            [&]() { return local_pk_index_manager->pick_tablets_to_do_pk_index_major_compaction(_update_mgr.get()); });
+    // LocalPkIndexManager use the global update manager to do major compaction.
+    // But we are using _update_mgr constructed in ut, so we have to call pk_index_major_compaction explicitly.
+    std::vector<TabletAndScore> pick_tablets =
+            local_pk_index_manager->pick_tablets_to_do_pk_index_major_compaction(_update_mgr.get());
+    for (auto& tablet_score : pick_tablets) {
+        auto tablet_id = tablet_score.first;
+        auto* data_dir = StorageEngine::instance()->get_persistent_index_store(tablet_id);
+        if (data_dir == nullptr) {
+            continue;
+        }
+        std::vector<std::thread> jobs;
+        jobs.emplace_back([&]() { _update_mgr->pk_index_major_compaction(tablet_id, data_dir); });
+        jobs.emplace_back([&]() { _update_mgr->unload_primary_index(tablet_id); });
+        for (auto& job : jobs) {
+            job.join();
+        }
+    }
+
+    SyncPoint::GetInstance()->ClearCallBack("UpdateManager::pick_tablets_to_do_pk_index_major_compaction:1");
+    SyncPoint::GetInstance()->DisableProcessing();
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // namespace starrocks::lake

@@ -24,7 +24,11 @@ import com.starrocks.catalog.View;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+<<<<<<< HEAD
 import com.starrocks.qe.VariableMgr;
+=======
+import com.starrocks.server.GlobalStateMgr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.MaterializedViewOptimizer;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
@@ -78,7 +82,11 @@ public class QueryDumpInfo implements DumpInfo {
 
     public QueryDumpInfo() {
         this.connectContext = null;
+<<<<<<< HEAD
         this.sessionVariable = VariableMgr.newSessionVariable();
+=======
+        this.sessionVariable = GlobalStateMgr.getCurrentState().getVariableMgr().newSessionVariable();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override

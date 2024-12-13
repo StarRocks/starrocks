@@ -47,7 +47,11 @@ public class TriggerActionTest extends StarRocksHttpTestCase {
         MetricRepo.init();
         ExecuteEnv.setup();
         FeConstants.runningUnitTest = true;
+<<<<<<< HEAD
         Config.dynamic_partition_enable = true;
+=======
+        Config.dynamic_partition_enable = false;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Config.enable_strict_storage_medium_check = false;
         UtFrameUtils.createMinStarRocksCluster();
         try {

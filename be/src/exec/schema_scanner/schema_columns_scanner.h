@@ -42,6 +42,10 @@ private:
     TGetDbsResult _db_result;
     TGetTablesResult _table_result;
     TDescribeTableResult _desc_result;
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     static SchemaScanner::ColumnDesc _s_col_columns[];
 };
 

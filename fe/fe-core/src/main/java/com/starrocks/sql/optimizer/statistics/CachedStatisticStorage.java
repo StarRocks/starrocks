@@ -12,12 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 package com.starrocks.sql.optimizer.statistics;
 
 import com.github.benmanes.caffeine.cache.AsyncLoadingCache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.google.common.base.Preconditions;
+<<<<<<< HEAD
+=======
+import com.google.common.collect.ImmutableMap;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
@@ -25,8 +32,22 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.statistic.StatisticUtils;
+=======
+import com.starrocks.connector.statistics.ConnectorColumnStatsCacheLoader;
+import com.starrocks.connector.statistics.ConnectorHistogramColumnStatsCacheLoader;
+import com.starrocks.connector.statistics.ConnectorTableColumnKey;
+import com.starrocks.connector.statistics.ConnectorTableColumnStats;
+import com.starrocks.connector.statistics.StatisticsUtils;
+import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.statistic.StatisticUtils;
+import org.apache.commons.collections4.MapUtils;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -42,7 +63,11 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
+<<<<<<< HEAD
 public class CachedStatisticStorage implements StatisticStorage {
+=======
+public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private static final Logger LOG = LogManager.getLogger(CachedStatisticStorage.class);
 
     private final Executor statsCacheRefresherExecutor = Executors.newFixedThreadPool(Config.statistic_cache_thread_pool_size,
@@ -55,13 +80,34 @@ public class CachedStatisticStorage implements StatisticStorage {
             .executor(statsCacheRefresherExecutor)
             .buildAsync(new TableStatsCacheLoader());
 
+<<<<<<< HEAD
     AsyncLoadingCache<ColumnStatsCacheKey, Optional<ColumnStatistic>> cachedStatistics = Caffeine.newBuilder()
+=======
+    AsyncLoadingCache<ColumnStatsCacheKey, Optional<ColumnStatistic>> columnStatistics = Caffeine.newBuilder()
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             .expireAfterWrite(Config.statistic_update_interval_sec * 2, TimeUnit.SECONDS)
             .refreshAfterWrite(Config.statistic_update_interval_sec, TimeUnit.SECONDS)
             .maximumSize(Config.statistic_cache_columns)
             .executor(statsCacheRefresherExecutor)
             .buildAsync(new ColumnBasicStatsCacheLoader());
 
+<<<<<<< HEAD
+=======
+    AsyncLoadingCache<ColumnStatsCacheKey, Optional<PartitionStats>> partitionStatistics = Caffeine.newBuilder()
+            .expireAfterWrite(Config.statistic_update_interval_sec * 2, TimeUnit.SECONDS)
+            .refreshAfterWrite(Config.statistic_update_interval_sec, TimeUnit.SECONDS)
+            .maximumSize(Config.statistic_cache_columns)
+            .executor(statsCacheRefresherExecutor)
+            .buildAsync(new PartitionStatsCacheLoader());
+
+    AsyncLoadingCache<ConnectorTableColumnKey, Optional<ConnectorTableColumnStats>> connectorTableCachedStatistics =
+            Caffeine.newBuilder().expireAfterWrite(Config.statistic_update_interval_sec * 2, TimeUnit.SECONDS)
+            .refreshAfterWrite(Config.statistic_update_interval_sec, TimeUnit.SECONDS)
+            .maximumSize(Config.statistic_cache_columns)
+            .executor(statsCacheRefresherExecutor)
+            .buildAsync(new ConnectorColumnStatsCacheLoader());
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     AsyncLoadingCache<ColumnStatsCacheKey, Optional<Histogram>> histogramCache = Caffeine.newBuilder()
             .expireAfterWrite(Config.statistic_update_interval_sec * 2, TimeUnit.SECONDS)
             .refreshAfterWrite(Config.statistic_update_interval_sec, TimeUnit.SECONDS)
@@ -69,6 +115,17 @@ public class CachedStatisticStorage implements StatisticStorage {
             .executor(statsCacheRefresherExecutor)
             .buildAsync(new ColumnHistogramStatsCacheLoader());
 
+<<<<<<< HEAD
+=======
+    AsyncLoadingCache<ConnectorTableColumnKey, Optional<Histogram>> connectorHistogramCache = Caffeine.newBuilder()
+            .expireAfterWrite(Config.statistic_update_interval_sec * 2, TimeUnit.SECONDS)
+            .refreshAfterWrite(Config.statistic_update_interval_sec, TimeUnit.SECONDS)
+            .maximumSize(Config.statistic_cache_columns)
+            .executor(statsCacheRefresherExecutor)
+            .buildAsync(new ConnectorHistogramColumnStatsCacheLoader());
+
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public Map<Long, Optional<Long>> getTableStatistics(Long tableId, Collection<Partition> partitions) {
         // get Statistics Table column info, just return default column statistics
@@ -87,22 +144,34 @@ public class CachedStatisticStorage implements StatisticStorage {
                         k -> data.getOrDefault(k, Optional.empty())));
             }
         } catch (InterruptedException e) {
+<<<<<<< HEAD
             LOG.warn(e);
             Thread.currentThread().interrupt();
         } catch (Exception e) {
             LOG.warn(e);
+=======
+            LOG.warn("Failed to execute tableStatsCache.getAll", e);
+            Thread.currentThread().interrupt();
+        } catch (Exception e) {
+            LOG.warn("Faied to execute tableStatsCache.getAll", e);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return partitions.stream().collect(Collectors.toMap(Partition::getId, p -> Optional.empty()));
     }
 
     @Override
+<<<<<<< HEAD
     public void refreshTableStatistic(Table table) {
+=======
+    public void refreshTableStatistic(Table table, boolean isSync) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<TableStatsCacheKey> statsCacheKeyList = new ArrayList<>();
         for (Partition partition : table.getPartitions()) {
             statsCacheKeyList.add(new TableStatsCacheKey(table.getId(), partition.getId()));
         }
 
         try {
+<<<<<<< HEAD
             CompletableFuture<Map<TableStatsCacheKey, Optional<Long>>> completableFuture
                     = tableStatsCache.getAll(statsCacheKeyList);
             if (completableFuture.isDone()) {
@@ -113,10 +182,27 @@ public class CachedStatisticStorage implements StatisticStorage {
             Thread.currentThread().interrupt();
         } catch (Exception e) {
             LOG.warn(e);
+=======
+            TableStatsCacheLoader loader = new TableStatsCacheLoader();
+            CompletableFuture<Map<TableStatsCacheKey, Optional<Long>>> future = loader.asyncLoadAll(statsCacheKeyList,
+                    statsCacheRefresherExecutor);
+            if (isSync) {
+                Map<TableStatsCacheKey, Optional<Long>> result = future.get();
+                tableStatsCache.synchronous().putAll(result);
+            } else {
+                future.whenComplete((result, e) -> tableStatsCache.synchronous().putAll(result));
+            }
+        } catch (InterruptedException e) {
+            LOG.warn("Failed to execute refreshTableStatistic", e);
+            Thread.currentThread().interrupt();
+        } catch (Exception e) {
+            LOG.warn("Failed to execute refreshTableStatistic", e);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
     @Override
+<<<<<<< HEAD
     public void refreshTableStatisticSync(Table table) {
         List<TableStatsCacheKey> statsCacheKeyList = new ArrayList<>();
         for (Partition partition : table.getPartitions()) {
@@ -124,6 +210,169 @@ public class CachedStatisticStorage implements StatisticStorage {
         }
 
         tableStatsCache.synchronous().getAll(statsCacheKeyList);
+=======
+    public void refreshColumnStatistics(Table table, List<String> columns, boolean isSync) {
+        Preconditions.checkState(table != null);
+
+        // get Statistics Table column info, just return default column statistics
+        if (StatisticUtils.statisticTableBlackListCheck(table.getId()) ||
+                !StatisticUtils.checkStatisticTableStateNormal()) {
+            return;
+        }
+
+        List<ColumnStatsCacheKey> cacheKeys = new ArrayList<>();
+        long tableId = table.getId();
+        for (String column : columns) {
+            cacheKeys.add(new ColumnStatsCacheKey(tableId, column));
+        }
+
+        try {
+            ColumnBasicStatsCacheLoader loader = new ColumnBasicStatsCacheLoader();
+            CompletableFuture<Map<ColumnStatsCacheKey, Optional<ColumnStatistic>>> future =
+                    loader.asyncLoadAll(cacheKeys, statsCacheRefresherExecutor);
+            if (isSync) {
+                Map<ColumnStatsCacheKey, Optional<ColumnStatistic>> result = future.get();
+                columnStatistics.synchronous().putAll(result);
+            } else {
+                future.whenComplete((res, e) -> columnStatistics.synchronous().putAll(res));
+            }
+        } catch (Exception e) {
+            LOG.warn("Failed to refresh getColumnStatistics", e);
+        }
+    }
+
+    @Override
+    public List<ConnectorTableColumnStats> getConnectorTableStatistics(Table table, List<String> columns) {
+        Preconditions.checkState(table != null);
+
+        // get Statistics Table column info, just return default column statistics
+        if (StatisticUtils.statisticTableBlackListCheck(table.getId())) {
+            return getDefaultConnectorTableStatistics(columns);
+        }
+
+        if (!StatisticUtils.checkStatisticTableStateNormal()) {
+            return getDefaultConnectorTableStatistics(columns);
+        }
+
+        List<ConnectorTableColumnKey> cacheKeys = new ArrayList<>();
+        for (String column : columns) {
+            cacheKeys.add(new ConnectorTableColumnKey(table.getUUID(), column));
+        }
+
+        try {
+            CompletableFuture<Map<ConnectorTableColumnKey, Optional<ConnectorTableColumnStats>>> result =
+                    connectorTableCachedStatistics.getAll(cacheKeys);
+
+            SessionVariable sessionVariable = ConnectContext.get() == null ?
+                    GlobalStateMgr.getCurrentState().getVariableMgr().newSessionVariable() :
+                    ConnectContext.get().getSessionVariable();
+            result.whenCompleteAsync((res, e) -> {
+                if (e != null) {
+                    LOG.warn("Get connector table column statistics filed, exception: ", e);
+                    return;
+                }
+                if (sessionVariable.isEnableQueryTriggerAnalyze() && GlobalStateMgr.getCurrentState().isLeader()) {
+                    GlobalStateMgr.getCurrentState().getConnectorTableTriggerAnalyzeMgr().checkAndUpdateTableStats(res);
+                }
+            }, statsCacheRefresherExecutor);
+            if (result.isDone()) {
+                List<ConnectorTableColumnStats> columnStatistics = new ArrayList<>();
+                Map<ConnectorTableColumnKey, Optional<ConnectorTableColumnStats>> realResult;
+                realResult = result.get();
+                for (String column : columns) {
+                    Optional<ConnectorTableColumnStats> columnStatistic =
+                            realResult.getOrDefault(new ConnectorTableColumnKey(table.getUUID(), column),
+                                    Optional.empty());
+                    if (columnStatistic.isPresent()) {
+                        columnStatistics.add(
+                                StatisticsUtils.estimateColumnStatistics(table, column, columnStatistic.get()));
+                    } else {
+                        columnStatistics.add(ConnectorTableColumnStats.unknown());
+                    }
+                }
+                return columnStatistics;
+            } else {
+                return getDefaultConnectorTableStatistics(columns);
+            }
+        } catch (Exception e) {
+            LOG.warn("Failed to execute connectorTableCachedStatistics.getAll", e);
+            return getDefaultConnectorTableStatistics(columns);
+        }
+    }
+
+    @Override
+    public List<ConnectorTableColumnStats> getConnectorTableStatisticsSync(Table table, List<String> columns) {
+        Preconditions.checkState(table != null);
+
+        if (!StatisticUtils.checkStatisticTableStateNormal()) {
+            return getDefaultConnectorTableStatistics(columns);
+        }
+
+        List<ConnectorTableColumnKey> cacheKeys = new ArrayList<>();
+        for (String column : columns) {
+            cacheKeys.add(new ConnectorTableColumnKey(table.getUUID(), column));
+        }
+
+        try {
+            Map<ConnectorTableColumnKey, Optional<ConnectorTableColumnStats>> result =
+                    connectorTableCachedStatistics.synchronous().getAll(cacheKeys);
+            List<ConnectorTableColumnStats> columnStatistics = new ArrayList<>();
+
+            for (String column : columns) {
+                Optional<ConnectorTableColumnStats> columnStatistic =
+                        result.getOrDefault(new ConnectorTableColumnKey(table.getUUID(), column), Optional.empty());
+                if (columnStatistic.isPresent()) {
+                    columnStatistics.add(columnStatistic.get());
+                } else {
+                    columnStatistics.add(ConnectorTableColumnStats.unknown());
+                }
+            }
+            return columnStatistics;
+        } catch (Exception e) {
+            LOG.warn("Failed to execute getConnectorTableStatisticsSync", e);
+            return getDefaultConnectorTableStatistics(columns);
+        }
+    }
+
+    @Override
+    public void expireConnectorTableColumnStatistics(Table table, List<String> columns) {
+        if (table == null || columns == null) {
+            return;
+        }
+        List<ConnectorTableColumnKey> allKeys = Lists.newArrayList();
+        for (String column : columns) {
+            ConnectorTableColumnKey key = new ConnectorTableColumnKey(table.getUUID(), column);
+            allKeys.add(key);
+        }
+        connectorTableCachedStatistics.synchronous().invalidateAll(allKeys);
+    }
+
+    @Override
+    public void refreshConnectorTableColumnStatistics(Table table, List<String> columns, boolean isSync) {
+        Preconditions.checkState(table != null);
+        if (!StatisticUtils.checkStatisticTableStateNormal()) {
+            return;
+        }
+
+        List<ConnectorTableColumnKey> cacheKeys = new ArrayList<>();
+        for (String column : columns) {
+            cacheKeys.add(new ConnectorTableColumnKey(table.getUUID(), column));
+        }
+
+        try {
+            ConnectorColumnStatsCacheLoader loader = new ConnectorColumnStatsCacheLoader();
+            CompletableFuture<Map<ConnectorTableColumnKey, Optional<ConnectorTableColumnStats>>> future =
+                    loader.asyncLoadAll(cacheKeys, statsCacheRefresherExecutor);
+            if (isSync) {
+                Map<ConnectorTableColumnKey, Optional<ConnectorTableColumnStats>> result = future.get();
+                connectorTableCachedStatistics.synchronous().putAll(result);
+            } else {
+                future.whenComplete((res, e) -> connectorTableCachedStatistics.synchronous().putAll(res));
+            }
+        } catch (Exception e) {
+            LOG.warn("Failed to refresh getConnectorTableStatistics", e);
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -140,7 +389,11 @@ public class CachedStatisticStorage implements StatisticStorage {
         }
         try {
             CompletableFuture<Optional<ColumnStatistic>> result =
+<<<<<<< HEAD
                     cachedStatistics.get(new ColumnStatsCacheKey(table.getId(), column));
+=======
+                        columnStatistics.get(new ColumnStatsCacheKey(table.getId(), column));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (result.isDone()) {
                 Optional<ColumnStatistic> realResult;
                 realResult = result.get();
@@ -149,7 +402,11 @@ public class CachedStatisticStorage implements StatisticStorage {
                 return ColumnStatistic.unknown();
             }
         } catch (Exception e) {
+<<<<<<< HEAD
             LOG.warn(e);
+=======
+            LOG.warn("Failed to execute getColumnStatistic", e);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return ColumnStatistic.unknown();
         }
     }
@@ -175,7 +432,12 @@ public class CachedStatisticStorage implements StatisticStorage {
         }
 
         try {
+<<<<<<< HEAD
             CompletableFuture<Map<ColumnStatsCacheKey, Optional<ColumnStatistic>>> result = cachedStatistics.getAll(cacheKeys);
+=======
+            CompletableFuture<Map<ColumnStatsCacheKey, Optional<ColumnStatistic>>> result =
+                    columnStatistics.getAll(cacheKeys);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (result.isDone()) {
                 List<ColumnStatistic> columnStatistics = new ArrayList<>();
                 Map<ColumnStatsCacheKey, Optional<ColumnStatistic>> realResult;
@@ -194,11 +456,16 @@ public class CachedStatisticStorage implements StatisticStorage {
                 return getDefaultColumnStatisticList(columns);
             }
         } catch (Exception e) {
+<<<<<<< HEAD
             LOG.warn(e);
+=======
+            LOG.warn("Failed to execute getColumnStatistics", e);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return getDefaultColumnStatisticList(columns);
         }
     }
 
+<<<<<<< HEAD
     @Override
     public List<ColumnStatistic> getColumnStatisticsSync(Table table, List<String> columns) {
         Preconditions.checkState(table != null);
@@ -211,6 +478,13 @@ public class CachedStatisticStorage implements StatisticStorage {
         if (!StatisticUtils.checkStatisticTableStateNormal()) {
             return getDefaultColumnStatisticList(columns);
         }
+=======
+    /**
+     *
+     */
+    private Map<String, PartitionStats> getColumnNDVForPartitions(Table table, List<Long> partitions,
+                                                                  List<String> columns) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         List<ColumnStatsCacheKey> cacheKeys = new ArrayList<>();
         long tableId = table.getId();
@@ -219,6 +493,7 @@ public class CachedStatisticStorage implements StatisticStorage {
         }
 
         try {
+<<<<<<< HEAD
             Map<ColumnStatsCacheKey, Optional<ColumnStatistic>> result = cachedStatistics.synchronous().getAll(cacheKeys);
             List<ColumnStatistic> columnStatistics = new ArrayList<>();
 
@@ -238,6 +513,75 @@ public class CachedStatisticStorage implements StatisticStorage {
         }
     }
 
+=======
+            Map<ColumnStatsCacheKey, Optional<PartitionStats>> result =
+                    partitionStatistics.synchronous().getAll(cacheKeys);
+
+            Map<String, PartitionStats> columnStatistics = Maps.newHashMap();
+            for (String column : columns) {
+                Optional<PartitionStats> columnStatistic = result.get(new ColumnStatsCacheKey(tableId, column));
+                columnStatistics.put(column, columnStatistic.orElse(null));
+            }
+            return columnStatistics;
+        } catch (Exception e) {
+            LOG.warn("Get partition NDV fail", e);
+            return null;
+        }
+    }
+
+    /**
+     * We don't really maintain all statistics for partition, as most of them are not necessary.
+     * Currently, the only partition-level statistics is DistinctCount, which may differs a lot among partitions
+     */
+    @Override
+    public Map<Long, List<ColumnStatistic>> getColumnStatisticsOfPartitionLevel(Table table, List<Long> partitions,
+                                                                                List<String> columns) {
+
+        Preconditions.checkState(table != null);
+
+        // get Statistics Table column info, just return default column statistics
+        if (StatisticUtils.statisticTableBlackListCheck(table.getId())) {
+            return null;
+        }
+        if (!StatisticUtils.checkStatisticTableStateNormal()) {
+            return null;
+        }
+
+        long tableId = table.getId();
+        List<ColumnStatsCacheKey> cacheKeys = columns.stream()
+                .map(x -> new ColumnStatsCacheKey(tableId, x))
+                .collect(Collectors.toList());
+        List<ColumnStatistic> columnStatistics = getColumnStatistics(table, columns);
+        Map<String, PartitionStats> columnNDVForPartitions = getColumnNDVForPartitions(table, partitions, columns);
+        if (MapUtils.isEmpty(columnNDVForPartitions)) {
+            return null;
+        }
+
+        Map<Long, List<ColumnStatistic>> result = Maps.newHashMap();
+        for (long partition : partitions) {
+            List<ColumnStatistic> newStatistics = Lists.newArrayList();
+            for (int i = 0; i < columns.size(); i++) {
+                ColumnStatistic columnStatistic = columnStatistics.get(i);
+                PartitionStats partitionStats = columnNDVForPartitions.get(columns.get(i));
+                if (partitionStats == null) {
+                    // some of the columns miss statistics
+                    return null;
+                }
+                if (!partitionStats.getDistinctCount().containsKey(partition)) {
+                    // some of the partitions miss statistics
+                    return null;
+                }
+                double distinctCount = partitionStats.getDistinctCount().get(partition);
+                ColumnStatistic newStats = ColumnStatistic.buildFrom(columnStatistic)
+                                .setDistinctValuesCount(distinctCount).build();
+                newStatistics.add(newStats);
+            }
+            result.put(partition, newStatistics);
+        }
+        return result;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public void expireTableAndColumnStatistics(Table table, List<String> columns) {
         List<TableStatsCacheKey> tableStatsCacheKeys = Lists.newArrayList();
@@ -254,12 +598,21 @@ public class CachedStatisticStorage implements StatisticStorage {
             ColumnStatsCacheKey key = new ColumnStatsCacheKey(table.getId(), column);
             allKeys.add(key);
         }
+<<<<<<< HEAD
         cachedStatistics.synchronous().invalidateAll(allKeys);
+=======
+        columnStatistics.synchronous().invalidateAll(allKeys);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
     public void addColumnStatistic(Table table, String column, ColumnStatistic columnStatistic) {
+<<<<<<< HEAD
         this.cachedStatistics.synchronous().put(new ColumnStatsCacheKey(table.getId(), column), Optional.of(columnStatistic));
+=======
+        this.columnStatistics.synchronous()
+                .put(new ColumnStatsCacheKey(table.getId(), column), Optional.of(columnStatistic));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -268,7 +621,11 @@ public class CachedStatisticStorage implements StatisticStorage {
 
         List<String> columnHasHistogram = new ArrayList<>();
         for (String columnName : columns) {
+<<<<<<< HEAD
             if (GlobalStateMgr.getCurrentAnalyzeMgr().getHistogramStatsMetaMap()
+=======
+            if (GlobalStateMgr.getCurrentState().getAnalyzeMgr().getHistogramStatsMetaMap()
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     .get(new Pair<>(table.getId(), columnName)) != null) {
                 columnHasHistogram.add(columnName);
             }
@@ -297,7 +654,42 @@ public class CachedStatisticStorage implements StatisticStorage {
                 return Maps.newHashMap();
             }
         } catch (Exception e) {
+<<<<<<< HEAD
             LOG.warn(e);
+=======
+            LOG.warn("Failed to execute getHistogramStatistics", e);
+            return Maps.newHashMap();
+        }
+    }
+
+    @Override
+    public Map<String, Histogram> getConnectorHistogramStatistics(Table table, List<String> columns) {
+        Preconditions.checkState(table != null);
+
+        List<ConnectorTableColumnKey> cacheKeys = new ArrayList<>();
+        for (String columnName : columns) {
+            cacheKeys.add(new ConnectorTableColumnKey(table.getUUID(), columnName));
+        }
+
+        try {
+            CompletableFuture<Map<ConnectorTableColumnKey, Optional<Histogram>>> result =
+                    connectorHistogramCache.getAll(cacheKeys);
+            if (result.isDone()) {
+                Map<ConnectorTableColumnKey, Optional<Histogram>> realResult = result.get();
+
+                Map<String, Histogram> histogramStats = Maps.newHashMap();
+                for (String columnName : columns) {
+                    Optional<Histogram> histogramStatistics =
+                            realResult.getOrDefault(new ConnectorTableColumnKey(table.getUUID(), columnName), Optional.empty());
+                    histogramStatistics.ifPresent(histogram -> histogramStats.put(columnName, histogram));
+                }
+                return histogramStats;
+            } else {
+                return Maps.newHashMap();
+            }
+        } catch (Exception e) {
+            LOG.warn("Failed to execute getConnectorHistogramStatistics", e);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return Maps.newHashMap();
         }
     }
@@ -314,6 +706,22 @@ public class CachedStatisticStorage implements StatisticStorage {
         histogramCache.synchronous().invalidateAll(allKeys);
     }
 
+<<<<<<< HEAD
+=======
+    @Override
+    public void expireConnectorHistogramStatistics(Table table, List<String> columns) {
+        if (table == null || columns == null) {
+            return;
+        }
+        List<ConnectorTableColumnKey> allKeys = Lists.newArrayList();
+        for (String column : columns) {
+            ConnectorTableColumnKey key = new ConnectorTableColumnKey(table.getUUID(), column);
+            allKeys.add(key);
+        }
+        connectorHistogramCache.synchronous().invalidateAll(allKeys);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private List<ColumnStatistic> getDefaultColumnStatisticList(List<String> columns) {
         List<ColumnStatistic> columnStatisticList = new ArrayList<>();
         for (int i = 0; i < columns.size(); ++i) {
@@ -321,4 +729,53 @@ public class CachedStatisticStorage implements StatisticStorage {
         }
         return columnStatisticList;
     }
+<<<<<<< HEAD
+=======
+
+    private List<ConnectorTableColumnStats> getDefaultConnectorTableStatistics(List<String> columns) {
+        List<ConnectorTableColumnStats> connectorTableColumnStatsList = new ArrayList<>();
+        for (int i = 0; i < columns.size(); ++i) {
+            connectorTableColumnStatsList.add(ConnectorTableColumnStats.unknown());
+        }
+        return connectorTableColumnStatsList;
+    }
+
+    @Override
+    public Map<String, Long> estimateCount() {
+        return ImmutableMap.<String, Long>builder()
+                .put("TableStats", tableStatsCache.synchronous().estimatedSize())
+                .put("ColumnStats", columnStatistics.synchronous().estimatedSize())
+                .put("PartitionStats", partitionStatistics.synchronous().estimatedSize())
+                .put("HistogramStats", histogramCache.synchronous().estimatedSize())
+                .put("ConnectorTableStats", connectorTableCachedStatistics.synchronous().estimatedSize())
+                .put("ConnectorHistogramStats", connectorHistogramCache.synchronous().estimatedSize())
+                .build();
+    }
+
+    private <K, V> Pair<List<Object>, Long> sampleFromCache(AsyncLoadingCache<K, V> cache) {
+        Map<K, CompletableFuture<V>> map = cache.asMap();
+        if (map.isEmpty()) {
+            return Pair.create(List.of(), 0L);
+        }
+        Map.Entry<K, CompletableFuture<V>> next = map.entrySet().iterator().next();
+        V value = null;
+        try {
+            value = next.getValue().getNow(null);
+        } catch (Exception ignored) {
+        }
+        return Pair.create(List.of(next.getKey(), value), cache.synchronous().estimatedSize());
+    }
+
+    @Override
+    public List<Pair<List<Object>, Long>> getSamples() {
+        return List.of(
+                sampleFromCache(tableStatsCache),
+                sampleFromCache(columnStatistics),
+                sampleFromCache(partitionStatistics),
+                sampleFromCache(histogramCache),
+                sampleFromCache(connectorHistogramCache),
+                sampleFromCache(connectorTableCachedStatistics)
+        );
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

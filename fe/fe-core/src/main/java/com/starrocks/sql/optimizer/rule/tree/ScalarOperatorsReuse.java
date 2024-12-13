@@ -15,6 +15,10 @@
 package com.starrocks.sql.optimizer.rule.tree;
 
 import com.google.common.base.Preconditions;
+<<<<<<< HEAD
+=======
+import com.google.common.collect.ImmutableList;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -32,17 +36,32 @@ import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.DictMappingOperator;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.operator.scalar.DictionaryGetOperator;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.optimizer.operator.scalar.ExistsPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
+<<<<<<< HEAD
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.rewrite.scalar.NormalizePredicateRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.ScalarOperatorRewriteRule;
 
 import java.util.Collections;
+=======
+import com.starrocks.sql.optimizer.operator.scalar.MapOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
+import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
+import com.starrocks.sql.optimizer.rewrite.scalar.NormalizePredicateRule;
+import com.starrocks.sql.optimizer.rewrite.scalar.ReduceCastRule;
+import com.starrocks.sql.optimizer.rewrite.scalar.ScalarOperatorRewriteRule;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -65,7 +84,11 @@ public class ScalarOperatorsReuse {
                                                         ColumnRefFactory factory) {
         Map<Integer, Map<ScalarOperator, ColumnRefOperator>>
                 commonSubOperatorsByDepth = collectCommonSubScalarOperators(null, operators,
+<<<<<<< HEAD
                 factory, false);
+=======
+                factory);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         Map<ScalarOperator, ColumnRefOperator> commonSubOperators =
                 commonSubOperatorsByDepth.values().stream()
@@ -93,10 +116,18 @@ public class ScalarOperatorsReuse {
     public static Map<Integer, Map<ScalarOperator, ColumnRefOperator>> collectCommonSubScalarOperators(
             Projection projection,
             List<ScalarOperator> scalarOperators,
+<<<<<<< HEAD
             ColumnRefFactory columnRefFactory, boolean reuseLambdaDependentExpr) {
         // 1. Recursively collect common sub operators for the input operators
         CommonSubScalarOperatorCollector operatorCollector = new CommonSubScalarOperatorCollector(reuseLambdaDependentExpr);
         scalarOperators.forEach(operator -> operator.accept(operatorCollector, null));
+=======
+            ColumnRefFactory columnRefFactory) {
+        // 1. Recursively collect common sub operators for the input operators
+        CommonSubScalarOperatorCollector operatorCollector = new CommonSubScalarOperatorCollector();
+        scalarOperators.forEach(operator -> operator.accept(operatorCollector,
+                new CommonSubScalarOperatorCollectorContext(false)));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (projection != null) {
             projection.setNeedReuseLambdaDependentExpr(operatorCollector.hasLambdaFunction());
         }
@@ -177,6 +208,17 @@ public class ScalarOperatorsReuse {
         }
 
         @Override
+<<<<<<< HEAD
+=======
+        public ScalarOperator visitMap(MapOperator operator, Void context) {
+            ScalarOperator newOperator = new MapOperator(operator.getType(),
+                    operator.getChildren().stream().map(argument -> argument.accept(this, null)).
+                            collect(Collectors.toList()));
+            return tryRewrite(newOperator);
+        }
+
+        @Override
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         public ScalarOperator visitCaseWhenOperator(CaseWhenOperator operator, Void context) {
             List<ScalarOperator> newChildren =
                     operator.getChildren().stream().map(argument -> argument.accept(this, null)).
@@ -241,6 +283,30 @@ public class ScalarOperatorsReuse {
         }
 
         @Override
+<<<<<<< HEAD
+=======
+        public ScalarOperator visitSubfield(SubfieldOperator predicate, Void context) {
+            // only rewrite subfield operator if and only if child is DictionaryGetOperator
+            if (predicate.getChild(0) instanceof DictionaryGetOperator) {
+                ScalarOperator operator = new SubfieldOperator(predicate.getChild(0).accept(this, null),
+                                predicate.getType(), predicate.getFieldNames(), predicate.getCopyFlag());
+                return tryRewrite(operator);
+            }
+            return predicate;
+        }
+
+        @Override
+        public ScalarOperator visitDictionaryGetOperator(DictionaryGetOperator predicate, Void context) {
+            ScalarOperator operator = new DictionaryGetOperator(
+                    predicate.getChildren().stream().map(
+                        argument -> argument.accept(this, null)).collect(Collectors.toList()),
+                            predicate.getType(), predicate.getDictionaryId(),
+                                predicate.getDictionaryTxnId(), predicate.getKeySize(), predicate.getNullIfNotExist());
+            return tryRewrite(operator);
+        }
+
+        @Override
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         public ScalarOperator visitDictMappingOperator(DictMappingOperator operator, Void context) {
             return tryRewrite(operator.clone());
         }
@@ -251,8 +317,34 @@ public class ScalarOperatorsReuse {
             return tryRewrite(clone);
         }
     }
+<<<<<<< HEAD
 
     private static class CommonSubScalarOperatorCollector extends ScalarOperatorVisitor<Integer, Void> {
+=======
+    private static class CommonSubScalarOperatorCollectorContext {
+        public boolean isPartOfLambdaExpr = false;
+        // used to record the lambda arguments during visiting operator.
+
+        // take map_apply((k,v)->(k, array_sum(array_map(arg -> arg * v, array_column), map_column))) as an example,
+        // when visiting `array_sum(array_map(arg -> arg * v, array_column))`,
+        // currentLambdaArguments will contain k and v,
+        // outerLambdaArguments will be empty since there are no higher-order lambda functions nested outside.
+        // when visiting `arg * v`,
+        // currentLambdaArguments will contain arg,
+        // outerLambdaArguments will contain k and v since there is a map_apply's lambda expr outside.
+
+        // this information will help us determine whether an operator can be reused.
+        public Set<ColumnRefOperator> currentLambdaArguments = Sets.newHashSet();
+        public Set<ColumnRefOperator> outerLambdaArguments = Sets.newHashSet();
+
+        public CommonSubScalarOperatorCollectorContext(boolean isPartOfLambdaExpr) {
+            this.isPartOfLambdaExpr = isPartOfLambdaExpr;
+        }
+    }
+
+    private static class CommonSubScalarOperatorCollector extends
+            ScalarOperatorVisitor<Integer, CommonSubScalarOperatorCollectorContext> {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // The key is operator tree depth, the value is operator set with same tree depth.
         // For operator list [a + b, a + b + c, a + d]
         // The operatorsByDepth is
@@ -262,6 +354,7 @@ public class ScalarOperatorsReuse {
         private final Map<Integer, Set<ScalarOperator>> operatorsByDepth = new HashMap<>();
         private final Map<Integer, Set<ScalarOperator>> commonOperatorsByDepth = new HashMap<>();
 
+<<<<<<< HEAD
         // isLambdaDependent means whether an expression is dependent on outer lambda arguments,
         // it works when not reuse lambda-dependent sub expressions. For example, select array_length(a), array_sum(a)
         // from (select array_map(x->2*x+1+2*x, array) as a from t)A; when reuseLambdaDependentExpr is
@@ -272,12 +365,15 @@ public class ScalarOperatorsReuse {
 
         private final boolean reuseLambdaDependentExpr;
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         public boolean hasLambdaFunction() {
             return hasLambdaFunction;
         }
 
         // enable some special logic codes only for lambda functions.
         private boolean hasLambdaFunction;
+<<<<<<< HEAD
         private Set<ColumnRefOperator> lambdaArguments = Sets.newHashSet();
 
         private CommonSubScalarOperatorCollector(boolean reuseLambdaDependentExpr) {
@@ -298,10 +394,63 @@ public class ScalarOperatorsReuse {
             // lambda-dependent expressions should not be put into operators.
             if (!isLambdaDependent) {
                 operators.add(operator);
+=======
+
+        private CommonSubScalarOperatorCollector() {
+        }
+
+
+        private int collectCommonOperatorsByDepth(int depth, ScalarOperator operator,
+                                                  CommonSubScalarOperatorCollectorContext context) {
+            Set<ScalarOperator> operators = getOperatorsByDepth(depth, operatorsByDepth);
+
+            boolean isDependentOnOuterLambda = isDependentOnOuterLambdaArguments(operator, context);
+            if (!isDependentOnOuterLambda) {
+                boolean isDependentOnCurrentLambdaArguments = isDependentOnCurrentLambdaArguments(operator, context);
+                // if this operator has appeared before,
+                // ot it is within a lambda function but does not depend on current lambda function's arguments,
+                // we treat it as a common operator.
+                if (operators.contains(operator) || (context.isPartOfLambdaExpr && !isDependentOnCurrentLambdaArguments)) {
+                    Set<ScalarOperator> commonOperators = getOperatorsByDepth(depth, commonOperatorsByDepth);
+                    commonOperators.add(operator);
+                }
+                if (!isDependentOnCurrentLambdaArguments) {
+                    operators.add(operator);
+                }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
             return depth;
         }
 
+<<<<<<< HEAD
+=======
+        private boolean isDependentOnCurrentLambdaArguments(ScalarOperator operator,
+                                                            CommonSubScalarOperatorCollectorContext context) {
+            if (operator.getOpType().equals(OperatorType.LAMBDA_ARGUMENT)) {
+                return context.currentLambdaArguments.contains(operator);
+            }
+            for (ScalarOperator child : operator.getChildren()) {
+                if (isDependentOnCurrentLambdaArguments(child, context)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private boolean isDependentOnOuterLambdaArguments(ScalarOperator operator,
+                                                          CommonSubScalarOperatorCollectorContext context) {
+            if (operator.getOpType().equals(OperatorType.LAMBDA_ARGUMENT)) {
+                return context.outerLambdaArguments.contains(operator);
+            }
+            for (ScalarOperator child : operator.getChildren()) {
+                if (isDependentOnOuterLambdaArguments(child, context)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         private static Set<ScalarOperator> getOperatorsByDepth(int depth,
                                                                Map<Integer, Set<ScalarOperator>> operatorsByDepth) {
             operatorsByDepth.putIfAbsent(depth, new LinkedHashSet<>());
@@ -309,6 +458,7 @@ public class ScalarOperatorsReuse {
         }
 
         @Override
+<<<<<<< HEAD
         public Integer visit(ScalarOperator scalarOperator, Void context) {
             if (scalarOperator.getChildren().isEmpty()) {
                 return 0;
@@ -327,22 +477,64 @@ public class ScalarOperatorsReuse {
 
         @Override
         public Integer visitCall(CallOperator scalarOperator, Void context) {
+=======
+        public Integer visit(ScalarOperator scalarOperator, CommonSubScalarOperatorCollectorContext context) {
+            if (scalarOperator.isConstant() || scalarOperator.getChildren().isEmpty()) {
+                return 0;
+            }
+
+
+            if (scalarOperator instanceof LambdaFunctionOperator) {
+                context.currentLambdaArguments.addAll(((LambdaFunctionOperator) scalarOperator).getRefColumns());
+            }
+
+            return collectCommonOperatorsByDepth(scalarOperator.getChildren().stream().map(argument ->
+                            argument.accept(this, context)).reduce(Math::max).map(m -> m + 1).orElse(1),
+                    scalarOperator, context);
+        }
+
+        @Override
+        public Integer visitLambdaFunctionOperator(LambdaFunctionOperator scalarOperator,
+                                                   CommonSubScalarOperatorCollectorContext context) {
+            // a lambda function like  x->x+1 can't be reused anymore, so directly visit its lambda expression.
+            hasLambdaFunction = true;
+            CommonSubScalarOperatorCollectorContext newContext = new CommonSubScalarOperatorCollectorContext(true);
+            newContext.outerLambdaArguments.addAll(context.outerLambdaArguments);
+            newContext.outerLambdaArguments.addAll(context.currentLambdaArguments);
+            newContext.currentLambdaArguments.addAll(scalarOperator.getRefColumns());
+            return visit(scalarOperator.getLambdaExpr(), newContext);
+        }
+
+        @Override
+        public Integer visitCall(CallOperator scalarOperator, CommonSubScalarOperatorCollectorContext context) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             CallOperator callOperator = scalarOperator.cast();
             if (FunctionSet.nonDeterministicFunctions.contains(callOperator.getFnName())) {
                 // try to reuse non deterministic function
                 // for example:
                 // select (rnd + 1) as rnd1, (rnd + 2) as rnd2 from (select rand() as rnd) sub
+<<<<<<< HEAD
                 return collectCommonOperatorsByDepth(1, scalarOperator);
             } else if (scalarOperator.getChildren().isEmpty()) {
+=======
+                return collectCommonOperatorsByDepth(1, scalarOperator, context);
+            } else if (scalarOperator.isConstant() || scalarOperator.getChildren().isEmpty()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 // to keep the same logic as origin
                 return 0;
             } else {
                 return collectCommonOperatorsByDepth(scalarOperator.getChildren().stream().map(argument ->
+<<<<<<< HEAD
                         argument.accept(this, context)).reduce(Math::max).map(m -> m + 1).orElse(1), scalarOperator);
+=======
+                        argument.accept(this, context)).reduce(Math::max).map(m -> m + 1).orElse(1),
+                        scalarOperator, context);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
 
         @Override
+<<<<<<< HEAD
         public Integer visitDictMappingOperator(DictMappingOperator scalarOperator, Void context) {
             return collectCommonOperatorsByDepth(1, scalarOperator);
         }
@@ -372,17 +564,30 @@ public class ScalarOperatorsReuse {
                 }
             }
             return false;
+=======
+        public Integer visitDictMappingOperator(DictMappingOperator scalarOperator,
+                                                CommonSubScalarOperatorCollectorContext context) {
+            return collectCommonOperatorsByDepth(1, scalarOperator, context);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
 
+<<<<<<< HEAD
     public static Projection rewriteProjectionOrLambdaExpr(Projection projection, ColumnRefFactory columnRefFactory,
                                                            boolean reuseLambdaDependentExpr) {
+=======
+    public static Projection rewriteProjectionOrLambdaExpr(Projection projection, ColumnRefFactory columnRefFactory) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Map<ColumnRefOperator, ScalarOperator> columnRefMap = projection.getColumnRefMap();
         List<ScalarOperator> scalarOperators = Lists.newArrayList(columnRefMap.values());
         Map<Integer, Map<ScalarOperator, ColumnRefOperator>> commonSubOperatorsByDepth = ScalarOperatorsReuse
                 .collectCommonSubScalarOperators(projection, scalarOperators,
+<<<<<<< HEAD
                         columnRefFactory, reuseLambdaDependentExpr);
+=======
+                        columnRefFactory);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         Map<ScalarOperator, ColumnRefOperator> commonSubOperators =
                 commonSubOperatorsByDepth.values().stream()
@@ -415,7 +620,12 @@ public class ScalarOperatorsReuse {
             // Apply to normalize rule to eliminate invalid ColumnRef usage for in-predicate
             com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter rewriter =
                     new com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter();
+<<<<<<< HEAD
             List<ScalarOperatorRewriteRule> rules = Collections.singletonList(new NormalizePredicateRule());
+=======
+            List<ScalarOperatorRewriteRule> rules =
+                    ImmutableList.of(new NormalizePredicateRule(), new ReduceCastRule());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             for (Map.Entry<ColumnRefOperator, ScalarOperator> kv : columnRefMap.entrySet()) {
                 ScalarOperator rewriteOperator =
                         ScalarOperatorsReuse.rewriteOperatorWithCommonOperator(kv.getValue(), commonSubOperators);
@@ -468,7 +678,11 @@ public class ScalarOperatorsReuse {
                     operator.isNullable(), false);
             columnRefMap.put(keyCol, operator.getLambdaExpr());
             Projection fakeProjection =
+<<<<<<< HEAD
                     rewriteProjectionOrLambdaExpr(new Projection(columnRefMap), columnRefFactory, true);
+=======
+                    rewriteProjectionOrLambdaExpr(new Projection(columnRefMap), columnRefFactory);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             columnRefMap = fakeProjection.getCommonSubOperatorMap();
             if (!columnRefMap.isEmpty()) {
                 operator.addColumnToExpr(columnRefMap);

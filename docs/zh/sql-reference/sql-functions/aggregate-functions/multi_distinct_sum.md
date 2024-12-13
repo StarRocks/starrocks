@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # multi_distinct_sum
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 返回 `expr` 中去除重复值后的总和，功能等同于 sum(distinct expr)。
 

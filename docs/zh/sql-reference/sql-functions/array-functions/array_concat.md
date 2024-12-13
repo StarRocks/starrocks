@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # array_concat
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 将多个数组拼接成一个数组。拼接后的数组包含多个数组里的所有元素。待拼接的数组元素类型可以相同，也可以不同，但是建议对相同元素类型的数组进行拼接。
 

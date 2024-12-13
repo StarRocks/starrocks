@@ -19,9 +19,14 @@ package com.starrocks.mysql;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+<<<<<<< HEAD
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+=======
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReportException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -255,21 +260,37 @@ public class MysqlPassword {
         return checkScrambledPlainPass(scrambledPass, pass);
     }
 
+<<<<<<< HEAD
     public static byte[] checkPassword(String passwdString) throws AnalysisException {
+=======
+    public static byte[] checkPassword(String passwdString) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (Strings.isNullOrEmpty(passwdString)) {
             return EMPTY_PASSWORD;
         }
 
+<<<<<<< HEAD
         byte[] passwd = null;
         passwdString = passwdString.toUpperCase();
         passwd = passwdString.getBytes(StandardCharsets.UTF_8);
         if (passwd.length != SCRAMBLE_LENGTH_HEX_LENGTH || passwd[0] != PVERSION41_CHAR) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_PASSWD_LENGTH, 41);
+=======
+        byte[] passwd;
+        passwdString = passwdString.toUpperCase();
+        passwd = passwdString.getBytes(StandardCharsets.UTF_8);
+        if (passwd.length != SCRAMBLE_LENGTH_HEX_LENGTH || passwd[0] != PVERSION41_CHAR) {
+            throw ErrorReportException.report(ErrorCode.ERR_PASSWD_LENGTH, 41);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         for (int i = 1; i < passwd.length; ++i) {
             if (!((passwd[i] <= '9' && passwd[i] >= '0') || passwd[i] >= 'A' && passwd[i] <= 'F')) {
+<<<<<<< HEAD
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_PASSWD_LENGTH, 41);
+=======
+                throw ErrorReportException.report(ErrorCode.ERR_PASSWD_LENGTH, 41);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
 

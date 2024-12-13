@@ -20,6 +20,10 @@
 #include "column/vectorized_fwd.h"
 #include "exec/pipeline/exchange/local_exchange.h"
 #include "exec/pipeline/fragment_context.h"
+<<<<<<< HEAD
+=======
+#include "exec/pipeline/group_execution/execution_group_fwd.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/stream_epoch_manager.h"
 #include "gtest/gtest.h"
@@ -31,8 +35,13 @@ class ConnectorScanNode;
 }
 
 namespace starrocks::stream {
+<<<<<<< HEAD
 
 using InitiliazeFunc = std::function<Status()>;
+=======
+class StreamPipelineTest;
+using InitiliazeFunc = std::function<Status(StreamPipelineTest*)>;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 class StreamPipelineTest {
 public:
@@ -54,7 +63,12 @@ public:
     uint32_t next_pipeline_id() { return _pipeline_context->next_pipe_id(); }
 
 protected:
+<<<<<<< HEAD
     OpFactories maybe_interpolate_local_passthrough_exchange(OpFactories& pred_operators);
+=======
+    OpFactories maybe_interpolate_local_passthrough_exchange(OpFactories& pred_operators,
+                                                             pipeline::ExecutionGroupRawPtr exec_group);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     ExecEnv* _exec_env = nullptr;
     pipeline::QueryContext* _query_ctx = nullptr;
@@ -66,6 +80,10 @@ protected:
     // lambda used to init _pipelines
     std::function<void(RuntimeState*)> _pipeline_builder;
     pipeline::Pipelines _pipelines;
+<<<<<<< HEAD
+=======
+    pipeline::ExecutionGroupPtr exec_group;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::vector<int64_t> _tablet_ids;
     std::shared_ptr<starrocks::ConnectorScanNode> _connector_node;
     size_t _degree_of_parallelism;
@@ -79,6 +97,7 @@ template <typename T>
 std::vector<ChunkPtr> StreamPipelineTest::fetch_results(const EpochInfo& epoch_info) {
     VLOG_ROW << "FetchResults: " << epoch_info.debug_string();
     std::vector<ChunkPtr> result_chunks;
+<<<<<<< HEAD
     const auto& pipelines = _fragment_ctx->pipelines();
     for (auto& pipeline : pipelines) {
         for (auto& driver : pipeline->drivers()) {
@@ -93,6 +112,18 @@ std::vector<ChunkPtr> StreamPipelineTest::fetch_results(const EpochInfo& epoch_i
             }
         }
     }
+=======
+    _fragment_ctx->iterate_drivers([this, &result_chunks](auto driver) {
+        auto* sink_op = driver->sink_operator();
+        if (auto* stream_sink_op = dynamic_cast<T*>(sink_op); stream_sink_op != nullptr) {
+            result_chunks = stream_sink_op->output_chunks();
+            for (auto& chunk : result_chunks) {
+                VLOG_ROW << "FetchResults, result: " << chunk->debug_columns();
+            }
+            CHECK(stream_sink_op->reset_epoch(nullptr).ok());
+        }
+    });
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     return result_chunks;
 }
 

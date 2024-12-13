@@ -42,7 +42,10 @@
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "exec/data_sink.h"
+<<<<<<< HEAD
 #include "gen_cpp/doris_internal_service.pb.h"
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "gen_cpp/internal_service.pb.h"
 #include "serde/protobuf_serde.h"
 #include "util/raw_container.h"
@@ -75,12 +78,19 @@ class DataStreamSender final : public DataSink {
 public:
     // Construct a sender according to the output specification (sink),
     // sending to the given destinations.
+<<<<<<< HEAD
     // Per_channel_buffer_size is the buffer size allocated to each channel
     // and is specified in bytes.
     // The RowDescriptor must live until close() is called.
     // NOTE: supported partition types are UNPARTITIONED (broadcast) and HASH_PARTITIONED
     DataStreamSender(RuntimeState* state, int sender_id, const RowDescriptor& row_desc, const TDataStreamSink& sink,
                      const std::vector<TPlanFragmentDestination>& destinations, int per_channel_buffer_size,
+=======
+    // The RowDescriptor must live until close() is called.
+    // NOTE: supported partition types are UNPARTITIONED (broadcast) and HASH_PARTITIONED
+    DataStreamSender(RuntimeState* state, int sender_id, const RowDescriptor& row_desc, const TDataStreamSink& sink,
+                     const std::vector<TPlanFragmentDestination>& destinations,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                      bool send_query_statistics_with_every_batch, bool enable_exchange_pass_through,
                      bool enable_exchange_perf);
     ~DataStreamSender() override;

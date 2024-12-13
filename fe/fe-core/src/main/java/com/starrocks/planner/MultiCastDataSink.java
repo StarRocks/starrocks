@@ -87,11 +87,14 @@ public class MultiCastDataSink extends DataSink {
     }
 
     @Override
+<<<<<<< HEAD
     public boolean canUsePipeLine() {
         return true;
     }
 
     @Override
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public boolean canUseRuntimeAdaptiveDop() {
         return true;
     }

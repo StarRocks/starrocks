@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # null_or_empty
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 如果字符串为空字符串或者 NULL 则返回 true，否则返回 false。
 

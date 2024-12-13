@@ -25,6 +25,10 @@ import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+<<<<<<< HEAD
+=======
+import java.util.Map;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.Optional;
 
 public class HistogramStatisticsTest {
@@ -195,4 +199,54 @@ public class HistogramStatisticsTest {
                 Optional.of(new ConstantOperator(18, Type.BIGINT)), true);
         Assert.assertEquals(exist.get().getBuckets().size(), 2);
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testHitBucketInHist() {
+        List<Bucket> bucketList = new ArrayList<>();
+        bucketList.add(new Bucket(1D, 10D, 100L, 20L));
+        bucketList.add(new Bucket(15D, 20D, 200L, 20L));
+        bucketList.add(new Bucket(25, 30, 300L, 20L));
+
+        Map<String, Long> mcv = Maps.newHashMap();
+        mcv.put("11", 500L);
+        Histogram histogram = new Histogram(bucketList, mcv);
+        ColumnRefOperator columnRefOperator = new ColumnRefOperator(0, Type.BIGINT, "v1", true);
+        ColumnStatistic columnStatistic = new ColumnStatistic(1, 50, 0, 4, 40,
+                histogram, ColumnStatistic.StatisticType.ESTIMATE);
+        BinaryPredicateOperator eq10 = new BinaryPredicateOperator(
+                BinaryType.EQ,
+                columnRefOperator,
+                ConstantOperator.createBigint(10));
+        Statistics.Builder builder = Statistics.builder();
+        builder.setOutputRowCount(100000);
+        builder.addColumnStatistic(columnRefOperator, columnStatistic);
+        Statistics statistics = builder.build();
+
+        // hit upper bound
+        Statistics estimated = BinaryPredicateStatisticCalculator.estimateColumnToConstantComparison(
+                Optional.of(columnRefOperator),
+                columnStatistic, eq10, Optional.of(ConstantOperator.createBigint(10)), statistics);
+        Assert.assertEquals(20, estimated.getOutputRowCount(), 0.001);
+
+        // in second bucket
+        BinaryPredicateOperator eq15 = new BinaryPredicateOperator(
+                BinaryType.EQ,
+                columnRefOperator,
+                ConstantOperator.createBigint(15));
+        estimated = BinaryPredicateStatisticCalculator.estimateColumnToConstantComparison(Optional.of(columnRefOperator),
+                columnStatistic, eq10, Optional.of(ConstantOperator.createBigint(15)), statistics);
+        Assert.assertEquals(16, estimated.getOutputRowCount(), 0.001);
+
+        // not in bucket
+        BinaryPredicateOperator eq35 = new BinaryPredicateOperator(
+                BinaryType.EQ,
+                columnRefOperator,
+                ConstantOperator.createBigint(35));
+        estimated = BinaryPredicateStatisticCalculator.estimateColumnToConstantComparison(Optional.of(columnRefOperator),
+                columnStatistic, eq35, Optional.of(ConstantOperator.createBigint(35)), statistics);
+        Assert.assertEquals(961.53846, estimated.getOutputRowCount(), 0.001);
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

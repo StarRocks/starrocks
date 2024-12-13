@@ -12,11 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 package com.starrocks.sql.plan;
 
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.OlapTable;
+<<<<<<< HEAD
+=======
+import com.starrocks.planner.TablePruningTestBase;
+import org.junit.Assert;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.junit.BeforeClass;
 
 import java.io.BufferedReader;
@@ -24,7 +32,13 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
 import java.lang.reflect.Field;
+<<<<<<< HEAD
 import java.util.HashMap;
+=======
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.Map;
 import java.util.Objects;
 
@@ -56,6 +70,12 @@ public class TPCDSPlanTestBase extends PlanTestBase {
             .put("web_site", 30L)
             .build();
 
+<<<<<<< HEAD
+=======
+    // query name -> query sql
+    private static final Map<String, String> SQL_MAP = new LinkedHashMap<>();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void setTPCDSFactor(int factor) {
         ROW_COUNT_MAP.forEach((t, v) -> {
             OlapTable table = getOlapTable(t);
@@ -82,6 +102,17 @@ public class TPCDSPlanTestBase extends PlanTestBase {
         });
     }
 
+<<<<<<< HEAD
+=======
+    public static Map<String, String> getSqlMap() {
+        return SQL_MAP;
+    }
+
+    public static String getSql(String queryName) {
+        return SQL_MAP.get(queryName);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @BeforeClass
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
@@ -93,7 +124,12 @@ public class TPCDSPlanTestBase extends PlanTestBase {
 
     private static String from(String name) {
         String path = Objects.requireNonNull(ClassLoader.getSystemClassLoader().getResource("sql")).getPath();
+<<<<<<< HEAD
         File file = new File(path + "/tpcds/query" + name + ".sql");
+=======
+        String queryName = "query" + name;
+        File file = new File(path + "/tpcds/" + queryName + ".sql");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         StringBuilder sb = new StringBuilder();
         try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
             String str;
@@ -103,7 +139,13 @@ public class TPCDSPlanTestBase extends PlanTestBase {
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
+<<<<<<< HEAD
         return sb.toString();
+=======
+        String sql = sb.toString();
+        SQL_MAP.put(queryName, sql);
+        return sql;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public static final String Q01 = from("01");
@@ -149,6 +191,11 @@ public class TPCDSPlanTestBase extends PlanTestBase {
     public static final String Q38 = from("38");
     public static final String Q39_1 = from("39-1");
     public static final String Q39_2 = from("39-2");
+<<<<<<< HEAD
+=======
+    public static final String Q39_1_2 = from("39-1-2");
+    public static final String Q39_2_2 = from("39-2-2");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static final String Q40 = from("40");
     public static final String Q41 = from("41");
     public static final String Q42 = from("42");
@@ -174,6 +221,10 @@ public class TPCDSPlanTestBase extends PlanTestBase {
     public static final String Q62 = from("62");
     public static final String Q63 = from("63");
     public static final String Q64 = from("64");
+<<<<<<< HEAD
+=======
+    public static final String Q64_2 = from("64-2");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static final String Q65 = from("65");
     public static final String Q66 = from("66");
     public static final String Q67 = from("67");
@@ -219,4 +270,31 @@ public class TPCDSPlanTestBase extends PlanTestBase {
             throw new RuntimeException(e);
         }
     }
+<<<<<<< HEAD
+=======
+
+    protected static void prepareUniqueKeys() {
+        TablePruningTestBase.getSqlList("sql/tpcds_constraints/", "AddUniqueKeys")
+                .forEach(stmts -> Arrays.stream(stmts.split("\n")).forEach(q -> {
+                            try {
+                                starRocksAssert.alterTableProperties(q);
+                            } catch (Exception e) {
+                                Assert.fail();
+                            }
+                        }
+                ));
+    }
+
+    protected static void prepareForeignKeys() {
+        TablePruningTestBase.getSqlList("sql/tpcds_constraints/", "AddForeignKeys")
+                .forEach(stmts -> Arrays.stream(stmts.split("\n")).forEach(q -> {
+                            try {
+                                starRocksAssert.alterTableProperties(q);
+                            } catch (Exception e) {
+                                Assert.fail();
+                            }
+                        }
+                ));
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

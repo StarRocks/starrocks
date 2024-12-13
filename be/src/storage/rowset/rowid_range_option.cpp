@@ -16,18 +16,28 @@
 
 #include <utility>
 
+<<<<<<< HEAD
 #include "storage/rowset/rowset.h"
+=======
+#include "storage/rowset/base_rowset.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "storage/rowset/segment.h"
 
 namespace starrocks {
 
+<<<<<<< HEAD
 void RowidRangeOption::add(const Rowset* rowset, const Segment* segment, SparseRangePtr rowid_range) {
+=======
+void RowidRangeOption::add(const BaseRowset* rowset, const Segment* segment, SparseRangePtr rowid_range,
+                           bool is_first_split_of_segment) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     auto rowset_it = rowid_range_per_segment_per_rowset.find(rowset->rowset_id());
     if (rowset_it == rowid_range_per_segment_per_rowset.end()) {
         rowset_it = rowid_range_per_segment_per_rowset.emplace(rowset->rowset_id(), SetgmentRowidRangeMap()).first;
     }
 
     auto& segment_map = rowset_it->second;
+<<<<<<< HEAD
     segment_map.emplace(segment->id(), std::move(rowid_range));
 }
 
@@ -39,12 +49,30 @@ SparseRangePtr RowidRangeOption::get_segment_rowid_range(const Rowset* rowset, c
     auto rowset_it = rowid_range_per_segment_per_rowset.find(rowset->rowset_id());
     if (rowset_it == rowid_range_per_segment_per_rowset.end()) {
         return nullptr;
+=======
+    segment_map.emplace(segment->id(), SegmentSplit{std::move(rowid_range), is_first_split_of_segment});
+}
+
+bool RowidRangeOption::contains_rowset(const BaseRowset* rowset) const {
+    return rowid_range_per_segment_per_rowset.find(rowset->rowset_id()) != rowid_range_per_segment_per_rowset.end();
+}
+
+RowidRangeOption::SegmentSplit RowidRangeOption::get_segment_rowid_range(const BaseRowset* rowset,
+                                                                         const Segment* segment) {
+    auto rowset_it = rowid_range_per_segment_per_rowset.find(rowset->rowset_id());
+    if (rowset_it == rowid_range_per_segment_per_rowset.end()) {
+        return {nullptr, false};
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     auto& segment_map = rowset_it->second;
     auto segment_it = segment_map.find(segment->id());
     if (segment_it == segment_map.end()) {
+<<<<<<< HEAD
         return nullptr;
+=======
+        return {nullptr, false};
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     return segment_it->second;
 }

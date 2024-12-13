@@ -18,6 +18,7 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
+<<<<<<< HEAD
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddRollupClause;
@@ -38,6 +39,23 @@ public class AddRollupClauseTest {
         AddRollupClause clause = new AddRollupClause("testRollup", Lists.newArrayList("col1", "col2"),
                 null, "baseRollup", null);
         clause.analyze(analyzer);
+=======
+import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AddRollupClause;
+import com.starrocks.sql.ast.RollupRenameClause;
+import org.junit.Assert;
+import org.junit.Test;
+
+public class AddRollupClauseTest {
+    @Test
+    public void testNormal() {
+        AddRollupClause clause = new AddRollupClause("testRollup", Lists.newArrayList("col1", "col2"),
+                null, "baseRollup", null);
+        AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(null);
+        analyzer.analyze(null, clause);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals("ADD ROLLUP `testRollup` (`col1`, `col2`) FROM `baseRollup`", clause.toString());
         Assert.assertEquals("baseRollup", clause.getBaseRollupName());
         Assert.assertEquals("testRollup", clause.getRollupName());
@@ -45,6 +63,7 @@ public class AddRollupClauseTest {
         Assert.assertNull(clause.getProperties());
 
         clause = new AddRollupClause("testRollup", Lists.newArrayList("col1", "col2"), null, null, null);
+<<<<<<< HEAD
         clause.analyze(analyzer);
         Assert.assertEquals("ADD ROLLUP `testRollup` (`col1`, `col2`)", clause.toString());
 
@@ -82,4 +101,69 @@ public class AddRollupClauseTest {
         clause.analyze(analyzer);
         Assert.fail("No exception throws.");
     }
+=======
+        analyzer.analyze(null, clause);
+        Assert.assertEquals("ADD ROLLUP `testRollup` (`col1`, `col2`)", clause.toString());
+
+        clause = new AddRollupClause("testRollup", Lists.newArrayList("col1", "col2"), null, null, null);
+        analyzer.analyze(null, clause);
+        Assert.assertEquals("ADD ROLLUP `testRollup` (`col1`, `col2`)", clause.toString());
+    }
+
+    @Test(expected = SemanticException.class)
+    public void testNoRollup() {
+        AddRollupClause clause = new AddRollupClause("", Lists.newArrayList("col1", "col2"), null, null, null);
+        AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(null);
+        analyzer.analyze(null, clause);
+        Assert.fail("No exception throws.");
+    }
+
+    @Test(expected = SemanticException.class)
+    public void testNoCol() {
+        AddRollupClause clause = new AddRollupClause("testRollup", null, null, null, null);
+        AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(null);
+        analyzer.analyze(null, clause);
+        Assert.fail("No exception throws.");
+    }
+
+    @Test(expected = SemanticException.class)
+    public void testDupCol() {
+        AddRollupClause clause = new AddRollupClause("testRollup",
+                Lists.newArrayList("col1", "col1"), null, null, null);
+        AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(null);
+        analyzer.analyze(null, clause);
+        Assert.fail("No exception throws.");
+    }
+
+    @Test(expected = SemanticException.class)
+    public void testInvalidCol() {
+        AddRollupClause clause = new AddRollupClause("testRollup", Lists.newArrayList("", "col1"), null, null, null);
+        AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(null);
+        analyzer.analyze(null, clause);
+        Assert.fail("No exception throws.");
+    }
+
+    @Test(expected = SemanticException.class)
+    public void testRename1() {
+        RollupRenameClause clause = new RollupRenameClause("testRollup", "");
+        AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(null);
+        analyzer.analyze(null, clause);
+        Assert.fail("No exception throws.");
+    }
+
+    @Test(expected = SemanticException.class)
+    public void testRename2() {
+        RollupRenameClause clause = new RollupRenameClause("", "testRollup");
+        AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(null);
+        analyzer.analyze(null, clause);
+        Assert.fail("No exception throws.");
+    }
+
+    @Test
+    public void testRename3() {
+        RollupRenameClause clause = new RollupRenameClause("testRollup", "testRollup2");
+        AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(null);
+        analyzer.analyze(null, clause);
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

@@ -35,6 +35,12 @@ void OperatorMemoryResourceManager::to_low_memory_mode() {
         if (_spillable) {
             _query_spill_manager->increase_spilling_operators();
         }
+<<<<<<< HEAD
+=======
+        if (_op->releaseable()) {
+            set_releasing();
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }
 

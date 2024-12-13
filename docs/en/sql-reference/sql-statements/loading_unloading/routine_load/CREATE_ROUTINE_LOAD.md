@@ -2,8 +2,17 @@
 displayed_sidebar: docs
 ---
 
+<<<<<<< HEAD
 # CREATE ROUTINE LOAD
 
+=======
+import Tip from '../../../../_assets/commonMarkdown/quickstart-routine-load-tip.mdx';
+
+# CREATE ROUTINE LOAD
+
+<Tip />
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 Routine Load can continuously consume messages from Apache Kafka® and load data into StarRocks. Routine Load can consume CSV, JSON, and Avro (supported since v3.0.1) data from a Kafka cluster and access Kafka via multiple security protocols, including `plaintext`, `ssl`, `sasl_plaintext`, and `sasl_ssl`.
 
 This topic describes the syntax, parameters, and examples of the CREATE ROUTINE LOAD statement.
@@ -112,7 +121,12 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 | strict_mode               | No           | Specifies whether to enable the [strict mode](../../../../loading/load_concept/strict_mode.md). Valid values: `true` and `false`. Default value: `false`. When the strict mode is enabled, if the value for a column in the loaded data is `NULL` but the target table does not allow a `NULL` value for this column, the data row will be filtered out. |
 | log_rejected_record_num | No | Specifies the maximum number of unqualified data rows that can be logged. This parameter is supported from v3.1 onwards. Valid values: `0`, `-1`, and any non-zero positive integer. Default value: `0`.<ul><li>The value `0` specifies that data rows that are filtered out will not be logged.</li><li>The value `-1` specifies that all data rows that are filtered out will be logged.</li><li>A non-zero positive integer such as `n` specifies that up to `n` data rows that are filtered out can be logged on each BE.</li></ul> |
 | timezone                  | No           | The time zone used by the load job. Default value: `Asia/Shanghai`. The value of this parameter affects the results returned by functions such as strftime(), alignment_timestamp(), and from_unixtime(). The time zone specified by this parameter is a session-level time zone. For more information, see [Configure a time zone](../../../../administration/management/timezone.md). |
+<<<<<<< HEAD
 | merge_condition           | No           | Specifies the name of the column you want to use as the condition to determine whether to update data. Data will be updated only when the value of the data to be loaded into this column is greater than or equal to the current value of this column.<br />**NOTE**<br />Only Primary Key tables support conditional updates. The column that you specify cannot be a primary key column. |
+=======
+| partial_update | No | Whether to use partial updates. Valid values: `TRUE` and `FALSE`. Default value: `FALSE`, indicating to disable this feature. |
+| merge_condition           | No           | Specifies the name of the column you want to use as the condition to determine whether to update data. Data will be updated only when the value of the data to be loaded into this column is greater than or equal to the current value of this column. **NOTE**<br />Only Primary Key tables support conditional updates. The column that you specify cannot be a primary key column. |
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 | format                    | No           | The format of the data to be loaded. Valid values: `CSV`, `JSON`, and `Avro` (supported since v3.0.1). Default value: `CSV`. |
 | trim_space                | No           | Specifies whether to remove spaces preceding and following column separators from the data file when the data file is in CSV format. Type: BOOLEAN. Default value: `false`.<br />For some databases, spaces are added to column separators when you export data as a CSV-formatted data file. Such spaces are called leading spaces or trailing spaces depending on their locations. By setting the `trim_space` parameter, you can enable StarRocks to remove such unnecessary spaces during data loading.<br />Note that StarRocks does not remove the spaces (including leading spaces and trailing spaces) within a field wrapped in a pair of `enclose`-specified characters. For example, the following field values use pipe (<code class="language-text">&#124;</code>) as the column separator and double quotation marks (`"`) as the `enclose`-specified character: <code class="language-text">&#124; "Love StarRocks" &#124;</code>. If you set `trim_space` to `true`, StarRocks processes the preceding field values as <code class="language-text">&#124;"Love StarRocks"&#124;</code>. |
 | enclose                   | No           | Specifies the character that is used to wrap the field values in the data file according to [RFC4180](https://www.rfc-editor.org/rfc/rfc4180) when the data file is in CSV format. Type: single-byte character. Default value: `NONE`. The most prevalent characters are single quotation mark (`'`) and double quotation mark (`"`).<br />All special characters (including row separators and column separators) wrapped by using the `enclose`-specified character are considered normal symbols. StarRocks can do more than RFC4180 as it allows you to specify any single-byte character as the `enclose`-specified character.<br />If a field value contains an `enclose`-specified character, you can use the same character to escape that `enclose`-specified character. For example, you set `enclose` to `"`, and a field value is `a "quoted" c`. In this case, you can enter the field value as `"a ""quoted"" c"` into the data file. |
@@ -149,7 +163,11 @@ The properties of the data source.
 | property.kafka_default_offsets| No| The default starting offset for all consumer partitions. The supported values for this property are same as those for the `kafka_offsets` property.|
 | confluent.schema.registry.url|No |The URL of the Schema Registry where the Avro schema is registered. StarRocks retrieves the Avro schema by using this URL. The format is as follows:<br />`confluent.schema.registry.url = http[s]://[<schema-registry-api-key>:<schema-registry-api-secret>@]<hostname or ip address>[:<port>]`|
 
+<<<<<<< HEAD
 **More data source-related properties**
+=======
+#### More data source-related properties
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 You can specify additional data source (Kafka) related properties, which are equivalent to using the Kafka command line `--property`. For more supported properties, see the properties for a Kafka consumer client in [librdkafka configuration properties](https://github.com/confluentinc/librdkafka/blob/master/CONFIGURATION.md).
 
@@ -282,7 +300,11 @@ This section uses  CSV-formatted data as an example to describe how you can empl
 
 Suppose you want to load CSV-formatted data from a Kafka topic named `ordertest1`.Every message in the dataset includes six columns: order ID, payment date, customer name, nationality, gender, and price.
 
+<<<<<<< HEAD
 ```undefined
+=======
+```plaintext
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 2020050802,2020-05-08,Johann Georg Faust,Deutschland,male,895
 2020050802,2020-05-08,Julien Sorel,France,male,893
 2020050803,2020-05-08,Dorian Grey,UK,male,1262

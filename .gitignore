@@ -21,8 +21,15 @@ thirdparty/installed
 core.*
 extension/spark-doris-connector/.classpath
 extension/spark-doris-connector/target
+<<<<<<< HEAD
 fe/log
 **/ut_ports
+=======
+contrib/trino-connector/target/
+fe/log
+**/ut_ports
+venv/
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 custom_env.sh
 ut_dir
 log/
@@ -34,15 +41,29 @@ fe/*/target
 fe/fe-core/gen
 fe/fe-common/.classpath
 fe/fe-core/src/main/java/com/starrocks/sql/parser/gen
+<<<<<<< HEAD
 fs_brokers/apache_hdfs_broker/src/main/resources/
 fs_brokers/apache_hdfs_broker/src/main/thrift/
 fs_brokers/apache_hdfs_broker/jindosdk-4.6.2
 test/common/data
 test/nosetests.xml
+=======
+fe/fe-core/src/main/java/com/starrocks/builtins
+fe/fe-core/src/main/java/com/starrocks/common/Version.java
+fe/fe-core/src/main/java/com/starrocks/proto
+fe/fe-core/src/main/java/com/starrocks/thrift
+fs_brokers/apache_hdfs_broker/src/main/resources/
+fs_brokers/apache_hdfs_broker/src/main/thrift/
+fs_brokers/apache_hdfs_broker/jindosdk-4.6.2
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 dependency-reduced-pom.xml
 test/conf/
 test/conf/sr.conf
 test/nosetests.xml
+<<<<<<< HEAD
+=======
+test/common/data
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 tags
 .tags
 .cache
@@ -67,6 +88,10 @@ StarRocksLex.tokens
 /Default/
 be/cmake-build*
 be/.vscode
+<<<<<<< HEAD
+=======
+be/src/gen_cpp/cmake-build*
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 be/src/gen_cpp/*.cc
 be/src/gen_cpp/*.cpp
 be/src/gen_cpp/*.h

@@ -19,6 +19,10 @@ import com.starrocks.utils.loader.ChildFirstClassLoader;
 import java.io.File;
 import java.net.MalformedURLException;
 import java.net.URL;
+<<<<<<< HEAD
+=======
+import java.util.ArrayList;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.List;
 import java.util.function.Function;
 
@@ -63,4 +67,20 @@ public class ScannerHelper {
                                     Function<String, Void> errorHandler) {
         parseKeyValuePairs(value, ",", "=", addHandler, errorHandler);
     }
+<<<<<<< HEAD
+=======
+
+    public static String[] splitAndOmitEmptyStrings(String value, String separator) {
+        if (value == null) {
+            return new String[0];
+        }
+        ArrayList<String> res = new ArrayList<>();
+        for (String s : value.split(separator)) {
+            if (!s.equals("")) {
+                res.add(s);
+            }
+        }
+        return res.toArray(new String[0]);
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

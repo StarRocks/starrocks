@@ -4,9 +4,15 @@ displayed_sidebar: docs
 
 # stddev_samp
 
+<<<<<<< HEAD
 ## 功能
 
 返回 expr 表达式的样本标准差。
+=======
+
+
+返回 `expr` 表达式的样本标准差。从 2.5.10 版本开始，该函数也可以用作窗口函数。
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ## 语法
 
@@ -16,7 +22,11 @@ STDDEV_SAMP(expr)
 
 ## 参数说明
 
+<<<<<<< HEAD
 `epxr`: 被选取的表达式。
+=======
+`exPr`: 被选取的表达式。当表达式为表中一列时，支持以下数据类型: TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、DECIMAL。
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ## 返回值说明
 
@@ -30,7 +40,11 @@ $$ -->
 
 ## 示例
 
+<<<<<<< HEAD
 ```plain text
+=======
+```plaintext
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 MySQL > select stddev_samp(scan_rows)
 from log_statis
 group by datetime;

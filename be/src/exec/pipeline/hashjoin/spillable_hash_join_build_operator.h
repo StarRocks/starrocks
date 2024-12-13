@@ -20,12 +20,21 @@
 #include <utility>
 
 #include "column/vectorized_fwd.h"
+<<<<<<< HEAD
 #include "exec/pipeline/hashjoin/hash_join_build_operator.h"
+=======
+#include "exec/join_hash_map.h"
+#include "exec/pipeline/hashjoin/hash_join_build_operator.h"
+#include "exec/pipeline/hashjoin/hash_joiner_fwd.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "exec/spill/spiller.h"
 #include "exprs/expr_context.h"
 
 namespace starrocks::pipeline {
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 class SpillableHashJoinBuildOperator final : public HashJoinBuildOperator {
 public:
     template <class... Args>
@@ -52,17 +61,31 @@ public:
     size_t estimated_memory_reserved() override;
 
 private:
+<<<<<<< HEAD
     void set_spill_strategy(spill::SpillStrategy strategy) { _join_builder->set_spill_strategy(strategy); }
     spill::SpillStrategy spill_strategy() const { return _join_builder->spill_strategy(); }
 
     std::function<StatusOr<ChunkPtr>()> _convert_hash_map_to_chunk();
+=======
+    void set_spill_strategy(spill::SpillStrategy strategy);
+    spill::SpillStrategy spill_strategy() const;
+
+    StatusOr<std::function<StatusOr<ChunkPtr>()>> _convert_hash_map_to_chunk();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     Status publish_runtime_filters(RuntimeState* state);
 
     Status append_hash_columns(const ChunkPtr& chunk);
 
+<<<<<<< HEAD
     Status init_spiller_partitions(RuntimeState* state, JoinHashTable& ht);
 
+=======
+    Status init_spiller_partitions(RuntimeState* state, HashJoinBuilder* builder);
+
+    size_t _hash_table_iterate_idx = 0;
+    std::vector<JoinHashTable*> _hash_tables;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ChunkSharedSlice _hash_table_build_chunk_slice;
     std::function<StatusOr<ChunkPtr>()> _hash_table_slice_iterator;
     bool _is_first_time_spill = true;

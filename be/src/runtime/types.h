@@ -75,8 +75,17 @@ struct TypeDescriptor {
     /// Empty for scalar types
     std::vector<TypeDescriptor> children;
 
+<<<<<<< HEAD
     /// Only set if type == TYPE_STRUCT. The field name of each child.
     std::vector<std::string> field_names;
+=======
+    /// Only set if type == TYPE_STRUCT. The field logical name of each child.
+    std::vector<std::string> field_names;
+    // Only set if type == TYPE_STRUCT. The field id of each child.
+    std::vector<int32_t> field_ids;
+    // Only set if type == TYPE_STRUCT. The field physical name of each child.
+    std::vector<std::string> field_physical_names;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     TypeDescriptor() = default;
 
@@ -110,7 +119,11 @@ struct TypeDescriptor {
         return res;
     }
 
+<<<<<<< HEAD
     static TypeDescriptor create_array_type(TypeDescriptor children) {
+=======
+    static TypeDescriptor create_array_type(const TypeDescriptor& children) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         TypeDescriptor res;
         res.type = TYPE_ARRAY;
         res.children.push_back(children);
@@ -125,6 +138,18 @@ struct TypeDescriptor {
         return res;
     }
 
+<<<<<<< HEAD
+=======
+    static TypeDescriptor create_struct_type(const std::vector<std::string> field_names,
+                                             const std::vector<TypeDescriptor>& filed_types) {
+        TypeDescriptor res;
+        res.type = TYPE_STRUCT;
+        res.field_names = field_names;
+        res.children = filed_types;
+        return res;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     static TypeDescriptor create_hll_type() {
         TypeDescriptor ret;
         ret.type = TYPE_HLL;
@@ -245,7 +270,11 @@ struct TypeDescriptor {
         if (children != o.children) {
             return false;
         }
+<<<<<<< HEAD
         if (type == TYPE_CHAR) {
+=======
+        if (is_string_type()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return len == o.len;
         }
         if (is_decimal_type()) {
@@ -295,6 +324,16 @@ struct TypeDescriptor {
 
     inline bool is_collection_type() const { return type == TYPE_ARRAY || type == TYPE_MAP; }
 
+<<<<<<< HEAD
+=======
+    inline bool is_integer_type() const {
+        return type == TYPE_TINYINT || type == TYPE_SMALLINT || type == TYPE_INT || type == TYPE_BIGINT ||
+               type == TYPE_LARGEINT;
+    }
+
+    inline bool is_float_type() const { return type == TYPE_FLOAT || type == TYPE_DOUBLE; }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // Could this type be used at join on conjuncts
     bool support_join() const;
     // Could this type be used at order by clause
@@ -309,6 +348,11 @@ struct TypeDescriptor {
     /// Returns the size of a slot for this type.
     int get_slot_size() const;
 
+<<<<<<< HEAD
+=======
+    size_t get_flat_size() const;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     static inline int get_decimal_byte_size(int precision) {
         DCHECK_GT(precision, 0);
         if (precision <= MAX_DECIMAL4_PRECISION) {
@@ -328,6 +372,11 @@ struct TypeDescriptor {
 
     size_t get_array_depth_limit() const;
 
+<<<<<<< HEAD
+=======
+    static TypeDescriptor promote_types(const TypeDescriptor& type1, const TypeDescriptor& type2);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 private:
     /// Used to create a possibly nested type from the flattened Thrift representation.
     ///
@@ -339,6 +388,11 @@ private:
     void to_protobuf(PTypeDesc* proto_type) const;
 };
 
+<<<<<<< HEAD
+=======
+static const TypeDescriptor TYPE_INT_DESC = TypeDescriptor(LogicalType::TYPE_INT);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 inline std::ostream& operator<<(std::ostream& os, const TypeDescriptor& type) {
     os << type.debug_string();
     return os;

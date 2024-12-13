@@ -14,18 +14,40 @@
 
 package com.starrocks.server;
 
+<<<<<<< HEAD
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.FrontendHbResponse;
 import org.junit.Assert;
+=======
+import com.starrocks.common.Pair;
+import com.starrocks.ha.FrontendNodeType;
+import com.starrocks.system.Frontend;
+import com.starrocks.system.FrontendHbResponse;
+import com.starrocks.utframe.UtFrameUtils;
+import org.junit.Assert;
+import org.junit.BeforeClass;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.junit.Test;
 
 import java.io.File;
 import java.net.UnknownHostException;
+<<<<<<< HEAD
+=======
+import java.util.List;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.UUID;
 
 public class NodeMgrTest {
 
+<<<<<<< HEAD
+=======
+    @BeforeClass
+    public static void setUp() {
+        UtFrameUtils.setUpForPersistTest();
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Test(expected = UnknownHostException.class)
     public void testCheckFeExistByIpOrFqdnException() throws UnknownHostException {
         NodeMgr nodeMgr = new NodeMgr();
@@ -45,7 +67,11 @@ public class NodeMgrTest {
         NodeMgr nodeMgr = new NodeMgr();
         Frontend fe = new Frontend(FrontendNodeType.FOLLOWER, "node1", "10.0.0.3", 9010);
         fe.handleHbResponse(new FrontendHbResponse("node1", 9030, 9020, 1,
+<<<<<<< HEAD
                 System.currentTimeMillis(), System.currentTimeMillis(), "v1"), true);
+=======
+                System.currentTimeMillis(), System.currentTimeMillis(), "v1", 0.5f), true);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         nodeMgr.replayAddFrontend(fe);
 
         Assert.assertTrue(nodeMgr.checkFeExistByRPCPort("10.0.0.3", 9020));
@@ -71,4 +97,25 @@ public class NodeMgrTest {
         nodeMgr.removeClusterIdAndRole();
         Assert.assertTrue(nodeMgr.isVersionAndRoleFilesNotExist());
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testResetFrontends() throws Exception {
+        FrontendNodeType role = FrontendNodeType.FOLLOWER;
+        String nodeName = "node1";
+        Pair<String, Integer> selfNode = Pair.create("192.168.3.5", 9010);
+        NodeMgr leaderNodeMgr = new NodeMgr(role, nodeName, selfNode);
+        leaderNodeMgr.resetFrontends();
+
+        UtFrameUtils.PseudoJournalReplayer.replayJournalToEnd();
+
+        List<Frontend> frontends = GlobalStateMgr.getCurrentState().getNodeMgr().getFrontends(FrontendNodeType.FOLLOWER);
+        Assert.assertEquals(1, frontends.size());
+        Assert.assertEquals(role, frontends.get(0).getRole());
+        Assert.assertEquals(nodeName, frontends.get(0).getNodeName());
+        Assert.assertEquals(selfNode.first, frontends.get(0).getHost());
+        Assert.assertEquals((int) selfNode.second, frontends.get(0).getEditLogPort());
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

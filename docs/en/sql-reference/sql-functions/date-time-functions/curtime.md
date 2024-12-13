@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # curtime,current_time
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Obtains the current time and returns a value of the TIME type.
 

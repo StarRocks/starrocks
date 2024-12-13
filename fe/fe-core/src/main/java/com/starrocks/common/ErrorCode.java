@@ -36,13 +36,27 @@ package com.starrocks.common;
 
 import java.util.MissingFormatArgumentException;
 
+<<<<<<< HEAD
 // Error code used to indicate what error happened.
 public enum ErrorCode {
     // Try our best to compatible with MySQL's
+=======
+/**
+ * 1、ErrorCode: The most granular error message, recording the error cause at the bottom of the call stack
+ * <p>
+ * 2、SqlState: Coarse-grained error information is also recorded in ErrorCode
+ * Main references: <a href="https://www.postgresql.org/docs/15/errcodes-appendix.html">...</a>
+ * <p>
+ * 3、ErrorType: The most coarse-grained error message, which determines the error category
+ * based on the first two digits of SQLSTATE. For example, Internal Error, Syntax Error
+ */
+public enum ErrorCode {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ERR_CANT_CREATE_TABLE(1005, new byte[] {'H', 'Y', '0', '0', '0'}, "Can't create table '%s' (errno: %s)"),
     ERR_DB_CREATE_EXISTS(1007, new byte[] {'H', 'Y', '0', '0', '0'}, "Can't create database '%s'; database exists"),
     ERR_DB_DROP_EXISTS(1008, new byte[] {'H', 'Y', '0', '0', '0'},
             "Can't drop database '%s'; database doesn't exist"),
+<<<<<<< HEAD
     ERR_DB_ACCESS_DENIED(1044, new byte[] {'4', '2', '0', '0', '0'}, "Access denied for user '%s' to database '%s'"),
     ERR_ACCESS_DENIED_ERROR(1045, new byte[] {'2', '8', '0', '0', '0'},
             "Access denied for user '%s' (using password: %s)"),
@@ -55,18 +69,33 @@ public enum ErrorCode {
     ERR_ILLEGAL_COLUMN_REFERENCE_ERROR(1053, new byte[] {'2', '3', '0', '0', '1'},
             "Illegal column/field reference '%s' of semi-/anti-join"),
     ERR_BAD_FIELD_ERROR(1054, new byte[] {'4', '2', 'S', '2', '2'}, "Unknown column '%s' in '%s'"),
+=======
+    ERR_AUTHENTICATION_FAIL(1045, new byte[] {'2', '8', '0', '0', '0'},
+            "Access denied for user '%s' (using password: %s)"),
+    ERR_NO_DB_ERROR(1046, new byte[] {'3', 'D', '0', '0', '0'}, "No database selected"),
+    ERR_UNKNOWN_COM_ERROR(1047, new byte[] {'0', '8', 'S', '0', '1'}, "Unknown command"),
+    ERR_TABLE_EXISTS_ERROR(1050, new byte[] {'4', '2', 'S', '0', '1'}, "Table '%s' already exists"),
+    ERR_NON_UNIQ_ERROR(1052, new byte[] {'2', '3', '0', '0', '0'}, "Column '%s' in is ambiguous"),
+    ERR_ILLEGAL_COLUMN_REFERENCE_ERROR(1053, new byte[] {'2', '3', '0', '0', '1'},
+            "Illegal column/field reference '%s' of semi-/anti-join"),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ERR_BAD_FUNC_ERROR(1055, new byte[] {'4', '2', '0', '0', '0'}, "Unknown function '%s'"),
     ERR_WRONG_VALUE_COUNT(1058, new byte[] {'2', '1', 'S', '0', '1'}, "Column count doesn't match value count"),
     ERR_DUP_FIELDNAME(1060, new byte[] {'4', '2', 'S', '2', '1'}, "Duplicate column name '%s'"),
     ERR_NONUNIQ_TABLE(1066, new byte[] {'4', '2', '0', '0', '0'}, "Not unique table/alias: '%s'"),
+<<<<<<< HEAD
     ERR_NO_CATALOG_ERROR(1090, new byte[] {'4', '2', '0', '0', '0'}, "No catalog selected"),
     ERR_NO_SUCH_THREAD(1094, new byte[] {'H', 'Y', '0', '0', '0'}, "Unknown thread id: %d"),
     ERR_KILL_DENIED_ERROR(1095, new byte[] {'H', 'Y', '0', '0', '0'}, "You are not owner of thread %d"),
+=======
+    ERR_NO_SUCH_THREAD(1094, new byte[] {'H', 'Y', '0', '0', '0'}, "Unknown thread id: %d"),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ERR_NO_TABLES_USED(1096, new byte[] {'H', 'Y', '0', '0', '0'}, "No tables used"),
     ERR_WRONG_DB_NAME(1102, new byte[] {'4', '2', '0', '0', '0'}, "Incorrect database name '%s'"),
     ERR_WRONG_TABLE_NAME(1104, new byte[] {'4', '2', '0', '0', '0'}, "Incorrect table name '%s'"),
     ERR_UNKNOWN_ERROR(1105, new byte[] {'H', 'Y', '0', '0', '0'}, "Unknown error"),
     ERR_FIELD_SPECIFIED_TWICE(1110, new byte[] {'4', '2', '0', '0', '0'}, "Column '%s' specified twice"),
+<<<<<<< HEAD
     ERR_INVALID_GROUP_FUNC_USE(1111, new byte[] {'H', 'Y', '0', '0', '0'}, "Invalid use of group function"),
     ERR_TABLE_MUST_HAVE_COLUMNS(1113, new byte[] {'4', '2', '0', '0', '0'}, "A table must have at least 1 column"),
     ERR_UNKNOWN_CHARACTER_SET(1115, new byte[] {'4', '2', '0', '0', '0'}, "Unknown character set: '%s'"),
@@ -83,15 +112,29 @@ public enum ErrorCode {
             "%s command denied to user '%s'@'%s' for materialized view '%s'"),
     ERR_FUNC_ACCESS_DENIED_ERROR(1144, new byte[] {'4', '2', '0', '0', '0'},
             "%s command denied to user '%s'@'%s' for function '%s'"),
+=======
+    ERR_TABLE_MUST_HAVE_COLUMNS(1113, new byte[] {'4', '2', '0', '0', '0'}, "A table must have at least 1 column"),
+    ERR_UNKNOWN_CHARACTER_SET(1115, new byte[] {'4', '2', '0', '0', '0'}, "Unknown character set: '%s'"),
+    ERR_TOO_MANY_COLUMNS(1117, new byte[] {'4', '2', '0', '0', '0'},
+            "The number of columns in a table must be less than or equal to %d," +
+                    " Please decrease the number of columns or increase frontend config 'max_column_number_per_table'."),
+    ERR_IP_NOT_ALLOWED(1130, new byte[] {'4', '2', '0', '0', '0'},
+            "Host %s is not allowed to connect to this MySQL server"),
+    ERR_NONEXISTING_GRANT(1141, new byte[] {'4', '2', '0', '0', '0'},
+            "There is no such grant defined for user '%s' on host '%s'"),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ERR_WRONG_COLUMN_NAME(1166, new byte[] {'4', '2', '0', '0', '0'}, "Incorrect column name '%s'"),
     ERR_UNKNOWN_SYSTEM_VARIABLE(1193, new byte[] {'H', 'Y', '0', '0', '0'}, "Unknown system variable '%s', " +
             "the most similar variables are %s"),
     ERR_TOO_MANY_USER_CONNECTIONS(1203, new byte[] {'4', '2', '0', '0', '0'},
             "User %s already has more than 'max_user_connections' active connections"),
+<<<<<<< HEAD
     ERR_NO_PERMISSION_TO_CREATE_USER(1211, new byte[] {'4', '2', '0', '0', '0'},
             "'%s' is not allowed to create new users"),
     ERR_SPECIFIC_ACCESS_DENIED_ERROR(1227, new byte[] {'4', '2', '0', '0', '0'},
             "Access denied; you need (at least one of) the %s privilege(s) for this operation"),
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ERR_LOCAL_VARIABLE(1228, new byte[] {'H', 'Y', '0', '0', '0'},
             "Variable '%s' is a SESSION variable and can't be used with SET GLOBAL"),
     ERR_GLOBAL_VARIABLE(1229, new byte[] {'H', 'Y', '0', '0', '0'},
@@ -100,6 +143,7 @@ public enum ErrorCode {
     ERR_WRONG_VALUE_FOR_VAR(1231, new byte[] {'4', '2', '0', '0', '0'},
             "Variable '%s' can't be set to the value of '%s'"),
     ERR_WRONG_TYPE_FOR_VAR(1232, new byte[] {'4', '2', '0', '0', '0'}, "Incorrect argument type to variable '%s'"),
+<<<<<<< HEAD
     ERR_ANY_ACTION_IN_DB_ACCESS_DENIED_ERROR(1233, new byte[] {'4', '2', '0', '0', '0'},
             "You need any privilege on any TABLE/VIEW/MV in database %s to perform this operation"),
     ERR_DERIVED_MUST_HAVE_ALIAS(1248, new byte[] {'4', '2', '0', '0', '0'},
@@ -115,16 +159,30 @@ public enum ErrorCode {
             "Access denied; you need (at least one of) the %s privilege(s) on %s%s for this operation"),
 
     ERR_UNKNOWN_STORAGE_ENGINE(1286, new byte[] {'4', '2', '0', '0', '0'}, "Unknown storage engine '%s'"),
+=======
+    ERR_DERIVED_MUST_HAVE_ALIAS(1248, new byte[] {'4', '2', '0', '0', '0'},
+            "Every derived table must have its own alias"),
+    ERR_NOT_SUPPORTED_AUTH_MODE(1251, new byte[] {'0', '8', '0', '0', '4'},
+            "Client does not support authentication protocol requested by server; consider upgrading MySQL client"),
+    ERR_UNKNOWN_STORAGE_ENGINE(1286, new byte[] {'4', '2', '0', '0', '0'}, "Unknown storage engine '%s'"),
+    ERR_UNSUPPORTED_PS(1295, "HY000".getBytes(),
+            "This command is not supported in the prepared statement protocol yet"),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ERR_UNKNOWN_TIME_ZONE(1298, new byte[] {'H', 'Y', '0', '0', '0'}, "Unknown or incorrect time zone: '%s'"),
     ERR_WRONG_OBJECT(1347, new byte[] {'H', 'Y', '0', '0', '0'}, "'%s'.'%s' is not '%s'"),
     ERR_VIEW_WRONG_LIST(1353, new byte[] {'H', 'Y', '0', '0', '0'},
             "View's SELECT and view's field list have different column counts"),
     ERR_NO_DEFAULT_FOR_FIELD(1364, new byte[] {'H', 'Y', '0', '0', '0'},
             "Field '%s' is not null but doesn't have a default value"),
+<<<<<<< HEAD
     ERR_NO_SUCH_QUERY(1365, new byte[] {'H', 'Y', '0', '0', '0'}, "Unknown query id: %s"),
 
     ERR_PASSWD_LENGTH(1372, new byte[] {'H', 'Y', '0', '0', '0'},
             "Password hash should be a %d-digit hexadecimal number"),
+=======
+    ERR_NO_SUCH_QUERY(1365, new byte[] {'4', '2', '0', '0', '0'}, "Unknown query id: %s"),
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ERR_CANNOT_USER(1396, new byte[] {'H', 'Y', '0', '0', '0'}, "Operation %s failed for %s"),
     ERR_NON_INSERTABLE_TABLE(1471, new byte[] {'H', 'Y', '0', '0', '0'},
             "The target table %s of the %s is not insertable-into"),
@@ -142,10 +200,15 @@ public enum ErrorCode {
     ERR_EMPTY_PARTITION_IN_TABLE(1748, new byte[] {'H', 'Y', '0', '0', '0'},
             "data cannot be inserted into table with empty partition. " +
                     "Use `SHOW PARTITIONS FROM %s` to see the currently partitions of this table. "),
+<<<<<<< HEAD
     ERR_NO_SUCH_PARTITION(1749, new byte[] {'H', 'Y', '0', '0', '0'}, "partition '%s' doesn't exist"),
 
     // Following is StarRocks's error code, which start from 5000
     ERR_NOT_OLAP_TABLE(5000, new byte[] {'H', 'Y', '0', '0', '0'}, "Table '%s' is not a OLAP table"),
+=======
+
+    // Following is StarRocks's error code, which start from 5000
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ERR_WRONG_PROC_PATH(5001, new byte[] {'H', 'Y', '0', '0', '0'}, "Proc path '%s' doesn't exist"),
     ERR_COL_NOT_MENTIONED(5002, new byte[] {'H', 'Y', '0', '0', '0'},
             "'%s' must be explicitly mentioned in column permutation"),
@@ -171,6 +234,7 @@ public enum ErrorCode {
     ERR_PARTITION_HAS_LOADING_JOBS(5016, new byte[] {'H', 'Y', '0', '0', '0'}, "Partition has loading jobs: '%s'"),
     ERR_NOT_KEY_COLUMN(5017, new byte[] {'H', 'Y', '0', '0', '0'}, "Column is not a key column: '%s'"),
     ERR_INVALID_VALUE(5018, new byte[] {'H', 'Y', '0', '0', '0'}, "Invalid %s: '%s'. Expected values should be %s"),
+<<<<<<< HEAD
     ERR_REPLICA_NOT_CATCH_UP_WITH_VERSION(5019, new byte[] {'H', 'Y', '0', '0', '0'},
             "Replica does not catch up with version: '%s':'%s'"),
     ERR_BACKEND_OFFLINE(5021, new byte[] {'H', 'Y', '0', '0', '0'}, "Backend is offline: '%s'"),
@@ -180,10 +244,16 @@ public enum ErrorCode {
             "No operation in alter statement"),
     ERR_QUERY_TIMEOUT(5024, new byte[] {'H', 'Y', '0', '0', '0'},
             "Query timeout. %s"),
+=======
+    ERR_NO_ALTER_OPERATION(5023, new byte[] {'H', 'Y', '0', '0', '0'},
+            "No operation in alter statement"),
+    ERR_TIMEOUT(5024, new byte[] {'H', 'Y', '0', '0', '0'}, "%s reached its timeout of %d seconds, %s"),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ERR_FAILED_WHEN_INSERT(5025, new byte[] {'H', 'Y', '0', '0', '0'}, "Failed when INSERT execute"),
     ERR_UNSUPPORTED_TYPE_IN_CTAS(5026, new byte[] {'H', 'Y', '0', '0', '0'},
             "Unsupported type '%s' in create table as select statement"),
     ERR_MISSING_PARAM(5027, new byte[] {'H', 'Y', '0', '0', '0'}, "Missing param: %s "),
+<<<<<<< HEAD
     ERR_CLUSTER_NO_EXISTS(5028, new byte[] {'H', 'Y', '0', '0', '0'}, "Unknown cluster '%s'"),
     ERR_CLUSTER_NO_AUTHORITY(5030, new byte[] {'H', 'Y', '0', '0', '0'},
             "User '%s' has no permissions '%s' cluster"),
@@ -227,16 +297,21 @@ public enum ErrorCode {
             "Cluster '%s' has backends in decommission"),
     ERR_WRONG_CLUSTER_NAME(5062, new byte[] {'4', '2', '0', '0', '0'},
             "Incorrect cluster name '%s'(name 'default_cluster' is a reserved name)"),
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ERR_WRONG_NAME_FORMAT(5063, new byte[] {'4', '2', '0', '0', '0'},
             "Incorrect %s name '%s'"),
     ERR_COMMON_ERROR(5064, new byte[] {'4', '2', '0', '0', '0'},
             "%s"),
+<<<<<<< HEAD
     ERR_COLOCATE_FEATURE_DISABLED(5063, new byte[] {'4', '2', '0', '0', '0'},
             "Colocate feature is disabled by Admin"),
     ERR_COLOCATE_TABLE_NOT_EXIST(5063, new byte[] {'4', '2', '0', '0', '0'},
             "Colocate table '%s' does not exist"),
     ERR_COLOCATE_TABLE_MUST_BE_OLAP_TABLE(5063, new byte[] {'4', '2', '0', '0', '0'},
             "Colocate table '%s' must be OLAP table"),
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ERR_COLOCATE_TABLE_MUST_HAS_SAME_REPLICATION_NUM(5063, new byte[] {'4', '2', '0', '0', '0'},
             "Colocate tables must have same replication num: %s, with group %s," +
                     " partition info %s"),
@@ -251,7 +326,10 @@ public enum ErrorCode {
                     " current col: %s, should be: %s, current info %s"),
     ERR_COLOCATE_NOT_COLOCATE_TABLE(5064, new byte[] {'4', '2', '0', '0', '0'},
             "Table %s is not a colocated table"),
+<<<<<<< HEAD
     ERR_INVALID_OPERATION(5065, new byte[] {'4', '2', '0', '0', '0'}, "Operation %s is invalid"),
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ERROR_DYNAMIC_PARTITION_TIME_UNIT(5065, new byte[] {'4', '2', '0', '0', '0'},
             "Unsupported time unit %s. Expect DAY/WEEK/MONTH/YEAR."),
     ERROR_DYNAMIC_PARTITION_START_ZERO(5066, new byte[] {'4', '2', '0', '0', '0'},
@@ -298,27 +376,40 @@ public enum ErrorCode {
             "Only support like 'function_pattern' syntax."),
     ERR_WRONG_LABEL_NAME(5082, new byte[] {'4', '2', '0', '0', '0'},
             "Incorrect label name '%s'"),
+<<<<<<< HEAD
     ERR_CHANGE_TO_SSL_CONNECTION_FAILED(5083, new byte[] {'4', '2', '0', '0', '0'},
             "Change to ssl connection failed"),
     ERR_CATALOG_ACCESS_DENIED(5084, new byte[] {'4', '2', '0', '0', '0'},
             "Access denied for user '%s' to catalog '%s'"),
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ERR_PRIVILEGE_TABLE_NOT_FOUND(5085, new byte[] {'4', '2', '0', '0', '0'},
             "Table not found when checking privilege"),
     ERR_PRIVILEGE_DB_NOT_FOUND(5086, new byte[] {'4', '2', '0', '0', '0'},
             "Db [%s] not found when checking privilege"),
+<<<<<<< HEAD
     ERR_PRIVILEGE_ACCESS_RESOURCE_DENIED(5087, new byte[] {'4', '2', '0', '0', '0'},
             "%s denied to user '%s'@'%s' for resource '%s' when checking privilege"),
     ERR_PRIVILEGE_ACCESS_TABLE_DENIED(5088, new byte[] {'4', '2', '0', '0', '0'},
             "Access denied for user '%s' to table '%s' when checking privilege"),
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ERR_PRIVILEGE_ROUTINELODE_JOB_NOT_FOUND(5089, new byte[] {'4', '2', '0', '0', '0'},
             "Routine load job [%s] not found when checking privilege"),
     ERR_PRIVILEGE_EXPORT_JOB_NOT_FOUND(5090, new byte[] {'4', '2', '0', '0', '0'},
             "Export job [%s] not found when checking privilege"),
+<<<<<<< HEAD
     ERR_PRIVILEGE_BACKUP_JOB_NOT_FOUND(5091, new byte[] {'4', '2', '0', '0', '0'},
             "Backup job not found when checking privilege"),
     ERROR_DYNAMIC_PARTITION_HISTORY_PARTITION_NUM_ZERO(5092, new byte[] {'4', '2', '0', '0', '0'},
             "Dynamic history partition num must greater than 0"),
     ERR_FORWARD_TOO_MANY_TIMES(5401, new byte[] {'X', 'X', '0', '0', '0'}, "forward too many times %d"),
+=======
+    ERROR_DYNAMIC_PARTITION_HISTORY_PARTITION_NUM_ZERO(5092, new byte[] {'4', '2', '0', '0', '0'},
+            "Dynamic history partition num must greater than 0"),
+    ERR_CATALOG_EXISTED_ERROR(5700, new byte[] {'4', '2', '0', '0', '0'},
+            "Catalog '%s' already exists"),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ERR_PLAN_VALIDATE_ERROR(6000, new byte[] {'0', '7', '0', '0', '0'},
             "Incorrect logical plan found in operator: %s. Invalid reason: %s"),
     ERR_INVALID_DATE_ERROR(6001, new byte[] {'2', '2', '0', '0', '0'}, "Incorrect %s value %s"),
@@ -326,10 +417,23 @@ public enum ErrorCode {
     ERR_BAD_WAREHOUSE_ERROR(6002, new byte[] {'4', '2', '0', '0', '0'},
             "Unknown warehouse '%s'"),
 
+<<<<<<< HEAD
     ERR_INVALID_PARAMETER(6013, new byte[] {'4', '2', '0', '0', '0'}, "Invalid parameter %s"),
 
     ERR_PRIVILEGE_STORAGE_VOLUME_DENIED(6020, new byte[] {'4', '2', '0', '0', '0'},
             "Access denied for user '%s' to storage volume '%s' when checking privilege"),
+=======
+    ERR_BAD_PIPE_STATEMENT(6010, new byte[] {'4', '2', '0', '0', '0'}, "Bad pipe statement: '%s'"),
+    ERR_UNKNOWN_PIPE(6011, new byte[] {'4', '2', '0', '0', '0'}, "Unknown pipe '%s'"),
+    ERR_PIPE_EXISTS(6012, new byte[] {'4', '2', '0', '0', '0'}, "Pipe exists"),
+    ERR_UNKNOWN_PROPERTY(6013, new byte[] {'4', '2', '0', '0', '0'}, "Unknown property %s"),
+    ERR_INVALID_PARAMETER(6013, new byte[] {'4', '2', '0', '0', '0'}, "Invalid parameter %s"),
+
+    ERR_MISSING_KEY_COLUMNS(6014, new byte[] {'4', '2', '0', '0', '0'},
+            "missing key columns:%s for primary key table"),
+    ERR_MISSING_DEPENDENCY_FOR_GENERATED_COLUMN(6015, new byte[] {'4', '2', '0', '0', '0'},
+            "missing dependency column for generated column %s"),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     /*
      * The following ErrorCode has been reviewed.
@@ -338,6 +442,7 @@ public enum ErrorCode {
      */
 
     /**
+<<<<<<< HEAD
      * 5600 - 5699: DML operation failure
      */
     ERR_NO_FILES_FOUND(5600, new byte[] {'5', '8', '0', '3', '0'},
@@ -345,11 +450,84 @@ public enum ErrorCode {
     ERR_EXPR_REFERENCED_COLUMN_NOT_FOUND(5601, new byte[] {'4', '2', '0', '0', '0'},
             "Referenced column '%s' in expr '%s' can't be found in column list, derived column is '%s'"),
     ERR_MAPPING_EXPR_INVALID(5602, new byte[] {'4', '2', '0', '0', '0'}, "Expr '%s' analyze error: %s, derived column is '%s'"),
+=======
+     * 5200 - 5299: Authentication and Authorization
+     */
+    ERR_PASSWD_LENGTH(5201, new byte[] {'H', 'Y', '0', '0', '0'},
+            "Password hash should be a %d-digit hexadecimal number"),
+    ERR_SQL_IN_BLACKLIST_ERROR(5202, new byte[] {'4', '2', '0', '0', '0'},
+            "Access denied; This sql is in blacklist, please contact your admin"),
+    ERR_ACCESS_DENIED(5203, new byte[] {'4', '2', '0', '0', '0'},
+            "Access denied; you need (at least one of) the %s privilege(s) on %s%s for this operation. " +
+                    ErrorCode.ERR_ACCESS_DENIED_HINT_MSG_FORMAT),
+    ERR_ACCESS_DENIED_FOR_EXTERNAL_ACCESS_CONTROLLER(5204, new byte[] {'4', '2', '0', '0', '0'},
+            "Access denied; you need (at least one of) the %s privilege(s) on %s%s for this operation."),
+
+    /**
+     * 5300 - 5399: Lock and Transaction
+     */
+    ERR_LOCK_ERROR(5300, new byte[] {'5', '5', 'P', '0', '3'}, "Failed to acquire lock: %s"),
+    ERR_BEGIN_TXN_FAILED(5301, new byte[] {'5', '5', 'P', '0', '3'}, "Failed to begin transaction: %s"),
+
+    /**
+     * 5400 - 5499: Internal error
+     */
+    ERR_CHANGE_TO_SSL_CONNECTION_FAILED(5400, new byte[] {'X', 'X', '0', '0', '0'},
+            "Failed to change to SSL connection"),
+    ERR_FORWARD_TOO_MANY_TIMES(5401, new byte[] {'X', 'X', '0', '0', '0'}, "forward too many times %d"),
+
+    /**
+     * 5500 - 5599: DDL operation failure
+     */
+    ERR_LOC_AWARE_UNSUPPORTED_FOR_COLOCATE_TBL(5500, new byte[] {'4', '2', '0', '0', '0'},
+            "table '%s' has location property and cannot be colocated"),
+    ERR_BAD_DB_ERROR(5501, new byte[] {'3', 'F', '0', '0', '0'}, "Unknown database '%s'"),
+    ERR_BAD_TABLE_ERROR(5502, new byte[] {'4', '2', '6', '0', '2'}, "Unknown table '%s'"),
+    ERR_NOT_OLAP_TABLE(5503, new byte[] {'4', '2', '0', '0', '0'}, "Table '%s' is not a OLAP table"),
+    ERR_MULTI_SUB_PARTITION(5504, new byte[] {'4', '2', '0', '0', '0'},
+            "Partition '%s' has sub partitions, should specify the partition id"),
+    ERR_NO_SUCH_PARTITION(5505, new byte[] {'4', '2', '0', '0', '0'}, "Partition '%s' doesn't exist"),
+    ERR_NO_DEFAULT_STORAGE_VOLUME(5506, new byte[] {'5', '5', '0', '0', '0'},
+            "The default storage volume does not exist. " +
+                    "A default storage volume can be created by following these steps: " +
+                    "1. Create a storage volume. 2. Set the storage volume as default"),
+    ERR_GIN_REPLICATED_STORAGE_NOT_SUPPORTED(5507, new byte[] {'0', 'A', '0', '0', '0'},
+            "Can not enable replicated storage when the table has GIN"),
+    ERR_BATCH_DROP_PARTITION_UNSUPPORTED_FOR_NONRANGEPARTITIONINFO(5507, new byte[] {'4', '2', '0', '0', '0'},
+            "Batch drop partition only support RangePartitionInfo"),
+    ERR_BATCH_DROP_PARTITION_UNSUPPORTED_FOR_MULTIPARTITIONCOLUMNS(5508, new byte[] {'4', '2', '0', '0', '0'},
+            "Batch deletion of partitions only support range partition tables with only a column, current column num is  [%s]"),
+    ERR_BAD_FIELD_ERROR(5509, new byte[] {'4', '2', 'S', '2', '2'}, "Unknown column '%s' in '%s'"),
+    ERR_TOO_MANY_BUCKETS(5510, new byte[] {'4', '2', '0', '0', '0'},
+            "The number of buckets is too large, the maximum is %d. Please reduce the number of buckets " +
+                    "or increase frontend config max_bucket_number_per_partition."),
+    ERR_COLUMN_RENAME_ONLY_FOR_OLAP_TABLE(5511, new byte[] {'4', '2', '0', '0', '0'},
+            "Column renaming is only supported for olap table"),
+    ERR_CANNOT_RENAME_COLUMN_IN_INTERNAL_DB(5512, new byte[] {'4', '2', '0', '0', '0'},
+            "Can not rename column in internal database: %s"),
+    ERR_CANNOT_RENAME_COLUMN_OF_NOT_NORMAL_TABLE(5513, new byte[] {'4', '2', '0', '0', '0'},
+            "Can not rename column of table in %s state"),
+
+    /**
+     * 5600 - 5699: DML operation failure
+     */
+    ERR_NO_FILES_FOUND(5600, new byte[] {'5', '8', '0', '3', '0'},
+            "No files were found matching the pattern(s) or path(s): '%s'. You should check whether there are " +
+                    "files under the path, and make sure the process has the permission to access the path"),
+    ERR_EXPR_REFERENCED_COLUMN_NOT_FOUND(5601, new byte[] {'4', '2', '0', '0', '0'},
+            "Referenced column '%s' in expr '%s' can't be found in column list, derived column is '%s'"),
+    ERR_MAPPING_EXPR_INVALID(5602, new byte[] {'4', '2', '0', '0', '0'},
+            "Expr '%s' analyze error: %s, derived column is '%s'"),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ERR_NO_PARTITIONS_HAVE_DATA_LOAD(5603, new byte[] {'0', '2', '0', '0', '0'},
             "No partitions have data available for loading. If you are sure there may be no data to be loaded, " +
                     "you can use `ADMIN SET FRONTEND CONFIG ('empty_load_as_error' = 'false')` " +
                     "to ensure such load jobs can succeed"),
+<<<<<<< HEAD
     ERR_INSERTED_COLUMN_MISMATCH(5604, new byte[] {'2', '2', '0', '0', '0'},
+=======
+    ERR_INSERT_COLUMN_COUNT_MISMATCH(5604, new byte[] {'4', '2', '6', '0', '1'},
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             "Inserted target column count: %d doesn't match select/value column count: %d"),
     ERR_ILLEGAL_BYTES_LENGTH(5605, new byte[] {'4', '2', '0', '0', '0'}, "The valid bytes length for '%s' is [%d, %d]"),
     ERR_TOO_MANY_ERROR_ROWS(5606, new byte[] {'2', '2', '0', '0', '0'},
@@ -357,11 +535,49 @@ public enum ErrorCode {
                     "you can set '%s' property to a greater value through ALTER ROUTINE LOAD and RESUME the job"),
     ERR_ROUTINE_LOAD_OFFSET_INVALID(5607, new byte[] {'0', '2', '0', '0', '0'},
             "Consume offset: %d is greater than the latest offset: %d in kafka partition: %d. " +
+<<<<<<< HEAD
             "You can modify 'kafka_offsets' property through ALTER ROUTINE LOAD and RESUME the job"),
+=======
+                    "You can modify 'kafka_offsets' property through ALTER ROUTINE LOAD and RESUME the job"),
+    ERR_INSERT_COLUMN_NAME_MISMATCH(5608, new byte[] {'4', '2', '6', '0', '1'},
+            "%s column: %s has no matching %s column"),
+
+    /**
+     * 5700 - 5799: Partition
+     */
+    ERR_ADD_PARTITION_WITH_ERROR_PARTITION_TYPE(5700, new byte[] {'4', '2', '0', '0', '0'},
+            "Cannot add a Range partition to a table that partition type is not of Range"),
+
+    ERR_ADD_PARTITION_WITH_ERROR_STEP_LENGTH(5701, new byte[] {'4', '2', '0', '0', '0'},
+            "Step length [%d] in the operation is not equal to the partition step length [%d] stored in the table"),
+
+    ERR_MULTI_PARTITION_COLUMN_NOT_SUPPORT_ADD_MULTI_RANGE(5702, new byte[] {'4', '2', '0', '0', '0'},
+            "Can't add multi range partition to multi partition column table"),
+
+    ERR_MULTI_PARTITION_STEP_LQ_ZERO(5703, new byte[] {'4', '2', '0', '0', '0'},
+            "The interval of the Multi-Range Partition must be greater than 0"),
+
+    /**
+     * 10000 - 10099: warehouse
+     */
+    ERR_UNKNOWN_WAREHOUSE(10001, new byte[] {'4', '2', '0', '0', '0'}, "Warehouse %s not exist."),
+    ERR_WAREHOUSE_EXISTS(10002, new byte[] {'4', '2', '0', '0', '0'}, "Warehouse %s already exists."),
+    ERR_WAREHOUSE_SUSPENDED(10003, new byte[] {'4', '2', '0', '0', '0'}, "Warehouse %s has been suspended."),
+    ERR_WAREHOUSE_UNAVAILABLE(10004, new byte[] {'4', '2', '0', '0', '0'}, "Warehouse %s is not available."),
+    ERR_NO_NODES_IN_WAREHOUSE(10005, new byte[] {'4', '2', '0', '0', '0'},
+            "No alive backend or compute node in warehouse %s."),
+    ERR_INVALID_WAREHOUSE_NAME(10006, new byte[] {'4', '2', '0', '0', '0'}, "Warehouse name can not be null or empty"),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     ERR_NOT_SUPPORTED_STATEMENT_IN_SHARED_NOTHING_MODE(10007, new byte[] {'4', '2', '0', '0', '0'},
             "unsupported statement in shared_nothing mode");
 
+<<<<<<< HEAD
+=======
+    public static final String ERR_ACCESS_DENIED_HINT_MSG_FORMAT = "Please ask the admin to grant permission(s) or" +
+            " try activating existing roles using <set [default] role>. Current role(s): %s. Inactivated role(s): %s.";
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ErrorCode(int code, byte[] sqlState, String errorMsg) {
         this.code = code;
         this.sqlState = sqlState;
@@ -369,11 +585,19 @@ public enum ErrorCode {
     }
 
     // This is error code
+<<<<<<< HEAD
     private int code;
     // This sql state is compatible with ANSI SQL
     private byte[] sqlState;
     // Error message format
     private String errorMsg;
+=======
+    private final int code;
+    // This sql state is compatible with ANSI SQL
+    private final byte[] sqlState;
+    // Error message format
+    private final String errorMsg;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public int getCode() {
         return code;

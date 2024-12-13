@@ -94,7 +94,11 @@ TEST_F(MemoryFileSystemTest, test_canonicalize) {
 
     for (const auto& t : cases) {
         std::string result;
+<<<<<<< HEAD
         Status st = _fs->canonicalize(t.input, &result);
+=======
+        auto st = _fs->canonicalize(t.input, &result);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (t.success) {
             EXPECT_EQ(t.output, result) << st.to_string();
         } else {
@@ -211,8 +215,13 @@ TEST_F(MemoryFileSystemTest, test_new_writable_file) {
     WritableFileOptions opts{.sync_on_close = false, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
     EXPECT_STATUS(Status::IOError(""), _fs->new_writable_file(opts, "/").status());
     file = *_fs->new_writable_file(opts, "/1.csv");
+<<<<<<< HEAD
     file->append("abc");
     file->close();
+=======
+    ASSERT_OK(file->append("abc"));
+    ASSERT_OK(file->close());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::vector<std::string> children;
     EXPECT_STATUS(Status::OK(), _fs->get_children("/", &children));
     ASSERT_EQ(1, children.size()) << JoinStrings(children, ",");
@@ -225,8 +234,13 @@ TEST_F(MemoryFileSystemTest, test_new_writable_file) {
 TEST_F(MemoryFileSystemTest, test_delete_file) {
     WritableFileOptions opts{.sync_on_close = false, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
     auto file = *_fs->new_writable_file(opts, "/1.csv");
+<<<<<<< HEAD
     file->append("abc");
     file->close();
+=======
+    ASSERT_OK(file->append("abc"));
+    ASSERT_OK(file->close());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     EXPECT_STATUS(Status::NotFound(""), _fs->delete_file("/tmp"));
     EXPECT_STATUS(Status::NotFound(""), _fs->delete_dir("/1.csv"));
@@ -258,7 +272,11 @@ TEST_F(MemoryFileSystemTest, test_CREATE_OR_OPEN_WITH_TRUNCATE) {
     auto writable_file = *_fs->new_writable_file(opts, "/a.txt");
     EXPECT_STATUS(Status::OK(), writable_file->append("first line\n"));
     EXPECT_STATUS(Status::OK(), writable_file->append("second line\n"));
+<<<<<<< HEAD
     writable_file->close();
+=======
+    ASSERT_OK(writable_file->close());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     writable_file = *_fs->new_writable_file(opts, "/a.txt");
 
@@ -273,7 +291,11 @@ TEST_F(MemoryFileSystemTest, test_CREATE_OR_OPEN) {
     auto writable_file = *_fs->new_writable_file(opts, "/a.txt");
     EXPECT_STATUS(Status::OK(), writable_file->append("first line\n"));
     EXPECT_STATUS(Status::OK(), writable_file->append("second line\n"));
+<<<<<<< HEAD
     writable_file->close();
+=======
+    ASSERT_OK(writable_file->close());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     opts.mode = FileSystem::CREATE_OR_OPEN;
     writable_file = *_fs->new_writable_file(opts, "/a.txt");
@@ -290,7 +312,11 @@ TEST_F(MemoryFileSystemTest, test_MUST_EXIST) {
     auto writable_file = *_fs->new_writable_file(opts, "/a.txt");
     EXPECT_STATUS(Status::OK(), writable_file->append("first line\n"));
     EXPECT_STATUS(Status::OK(), writable_file->append("second line\n"));
+<<<<<<< HEAD
     writable_file->close();
+=======
+    ASSERT_OK(writable_file->close());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     opts.mode = FileSystem::MUST_EXIST;
     writable_file = *_fs->new_writable_file(opts, "/a.txt");
@@ -307,7 +333,11 @@ TEST_F(MemoryFileSystemTest, test_MUST_CREATE) {
     std::unique_ptr<WritableFile> writable_file = *_fs->new_writable_file(opts, "/a.txt");
     EXPECT_STATUS(Status::OK(), writable_file->append("first line\n"));
     EXPECT_STATUS(Status::OK(), writable_file->append("second line\n"));
+<<<<<<< HEAD
     writable_file->close();
+=======
+    ASSERT_OK(writable_file->close());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     opts.mode = FileSystem::MUST_CREATE;
     EXPECT_STATUS(Status::AlreadyExist(""), _fs->new_writable_file(opts, "/a.txt").status());

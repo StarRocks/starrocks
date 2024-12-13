@@ -21,12 +21,21 @@ import com.starrocks.common.Id;
 import com.starrocks.common.IdGenerator;
 
 public class PlanNodeId extends Id<PlanNodeId> {
+<<<<<<< HEAD
+=======
+    public static final PlanNodeId DUMMY_PLAN_NODE_ID = new PlanNodeId(-1000);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public PlanNodeId(int id) {
         super(id);
     }
 
     public static IdGenerator<PlanNodeId> createGenerator() {
+<<<<<<< HEAD
         return new IdGenerator<PlanNodeId>() {
+=======
+        return new IdGenerator<>() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             @Override
             public PlanNodeId getNextId() {
                 return new PlanNodeId(nextId++);

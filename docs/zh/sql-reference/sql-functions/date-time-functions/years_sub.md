@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # years_sub
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 从指定日期时间或日期减去指定年数。
 

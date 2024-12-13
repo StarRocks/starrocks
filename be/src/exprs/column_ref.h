@@ -45,6 +45,10 @@ public:
     bool is_constant() const override { return false; }
 
     int get_slot_ids(std::vector<SlotId>* slot_ids) const override;
+<<<<<<< HEAD
+=======
+    void for_each_slot_id(const std::function<void(SlotId)>& cb) const override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     std::string debug_string() const override;
 

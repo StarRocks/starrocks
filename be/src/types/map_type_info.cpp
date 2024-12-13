@@ -24,8 +24,13 @@ namespace starrocks {
 class MapTypeInfo final : public TypeInfo {
 public:
     virtual ~MapTypeInfo() = default;
+<<<<<<< HEAD
     explicit MapTypeInfo(const TypeInfoPtr& key_type, const TypeInfoPtr& value_type)
             : _key_type(key_type), _value_type(value_type) {}
+=======
+    explicit MapTypeInfo(TypeInfoPtr key_type, TypeInfoPtr value_type)
+            : _key_type(std::move(key_type)), _value_type(std::move(value_type)) {}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     void shallow_copy(void* dest, const void* src) const override { CHECK(false); }
 

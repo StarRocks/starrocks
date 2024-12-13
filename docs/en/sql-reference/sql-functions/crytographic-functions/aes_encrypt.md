@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # aes_encrypt
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Uses the AES_128_ECB algorithm to encrypt a string and returns a binary string.
 

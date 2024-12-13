@@ -40,8 +40,12 @@ StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
 
 ## 前提条件
 
+<<<<<<< HEAD
 - 已经部署安装 Apache Ranger 2.0.0 及以上版本。详细的部署步骤，参见 [快速开始](https://ranger.apache.org/quick_start_guide.html)。
 
+=======
+- 已经部署安装 Apache Ranger 2.1.0 及以上版本。详细的部署步骤，参见 [快速开始](https://ranger.apache.org/quick_start_guide.html)。
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 - 确保 StarRocks 所有 FE 机器都能够访问 Ranger。您可以在 FE 节点的机器上执行以下语句来判断:
 
   ```SQL
@@ -132,7 +136,11 @@ StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
    ![service](../../_assets/ranger_added_service.png)
 
 5. 点击 **Test connection** 测试连通性，连通成功后保存。需要注意，如果您没有安装 ranger-starrocks-plugin，则可以跳过测试直接保存。
+<<<<<<< HEAD
 6. 在 StarRocks 集群的每一台 FE 机器上，在 `fe/conf` 文件夹内创建 [`ranger-starrocks-security.xml`](https://github.com/StarRocks/ranger/blob/master/plugin-starrocks/conf/ranger-starrocks-security.xml)，并将内容拷贝，必须修改两处内容并保存：
+=======
+6. 在 StarRocks 集群的每一台 FE 机器上，在 `fe/conf` 文件夹内创建 [ranger-starrocks-security.xml](https://github.com/StarRocks/ranger/blob/master/plugin-starrocks/conf/ranger-starrocks-security.xml)，并将内容拷贝，必须修改两处内容并保存：
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
    - `ranger.plugin.starrocks.service.name` 改为刚刚创建的 StarRocks Service 的名称。
    - `ranger.plugin.starrocks.policy.rest.url` 改为 Ranger Admin 的地址。
@@ -141,7 +149,11 @@ StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
 
    ```SQL
    vim ranger-starrocks-security.xml
+<<<<<<< HEAD
    
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
    ...
        <property>
            <name>ranger.plugin.starrocks.service.name</name>
@@ -152,6 +164,10 @@ StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
        </property>
    ...
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
    ...
        <property>
            <name>ranger.plugin.starrocks.policy.rest.url</name>
@@ -159,7 +175,11 @@ StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
            <description>
                URL to Ranger Admin
            </description>
+<<<<<<< HEAD
        </property>
+=======
+       </property>   
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
    ...
    ```
 
@@ -177,7 +197,11 @@ StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
    ```SQL
    -- 回到 FE 文件夹内
    cd..
+<<<<<<< HEAD
    
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
    bin/stop_fe.sh
    bin/start_fe.sh
    ```
@@ -202,7 +226,11 @@ StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
       )
     ```
 
+<<<<<<< HEAD
    - 也可以对已有的 External Catalog 添加该属性。将已有的 Catalog 转换为通过 Ranger 鉴权。
+=======
+    - 也可以对已有的 External Catalog 添加该属性。将已有的 Catalog 转换为通过 Ranger 鉴权。
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     ```SQL
       ALTER CATALOG hive_catalog_1

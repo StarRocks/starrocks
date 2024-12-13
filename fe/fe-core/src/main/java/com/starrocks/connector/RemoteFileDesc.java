@@ -12,11 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 package com.starrocks.connector;
 
 import com.google.common.collect.ImmutableList;
 import com.starrocks.connector.hive.TextFileFormatDesc;
+<<<<<<< HEAD
 import com.starrocks.connector.paimon.PaimonSplitsInfo;
 import org.apache.iceberg.FileScanTask;
 
@@ -56,11 +60,29 @@ public class RemoteFileDesc {
 
     public RemoteFileDesc(String fileName, String compression, long length, long modificationTime,
                           ImmutableList<RemoteFileBlockDesc> blockDescs, ImmutableList<String> hudiDeltaLogs) {
+=======
+
+public class RemoteFileDesc {
+    protected final String fileName;
+    // Optional.
+    // The full path of the remote file.
+    protected String fullPath;
+    protected final String compression;
+    protected final long length;
+    protected final long modificationTime;
+    protected final ImmutableList<RemoteFileBlockDesc> blockDescs;
+    protected boolean splittable;
+    protected TextFileFormatDesc textFileFormatDesc;
+
+    public RemoteFileDesc(String fileName, String compression, long length, long modificationTime,
+                          ImmutableList<RemoteFileBlockDesc> blockDescs) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.fileName = fileName;
         this.compression = compression;
         this.length = length;
         this.modificationTime = modificationTime;
         this.blockDescs = blockDescs;
+<<<<<<< HEAD
         this.hudiDeltaLogs = hudiDeltaLogs;
     }
 
@@ -70,6 +92,8 @@ public class RemoteFileDesc {
 
     public static RemoteFileDesc createPamonRemoteFileDesc(PaimonSplitsInfo paimonSplitsInfo) {
         return new RemoteFileDesc(null, null, 0, 0, null, null, null, paimonSplitsInfo);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public String getFileName() {
@@ -96,25 +120,43 @@ public class RemoteFileDesc {
         return splittable;
     }
 
+<<<<<<< HEAD
     public TextFileFormatDesc getTextFileFormatDesc() {
         return textFileFormatDesc;
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public RemoteFileDesc setSplittable(boolean splittable) {
         this.splittable = splittable;
         return this;
     }
 
+<<<<<<< HEAD
+=======
+    public TextFileFormatDesc getTextFileFormatDesc() {
+        return textFileFormatDesc;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public RemoteFileDesc setTextFileFormatDesc(TextFileFormatDesc textFileFormatDesc) {
         this.textFileFormatDesc = textFileFormatDesc;
         return this;
     }
 
+<<<<<<< HEAD
+=======
+    public String getFullPath() {
+        return this.fullPath;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public RemoteFileDesc setFullPath(String fullPath) {
         this.fullPath = fullPath;
         return this;
     }
 
+<<<<<<< HEAD
     public String getFullPath() {
         return this.fullPath;
     }
@@ -149,3 +191,19 @@ public class RemoteFileDesc {
         return sb.toString();
     }
 }
+=======
+    @Override
+    public String toString() {
+        return "RemoteFileDesc{" + "fileName='" + fileName + '\'' +
+                "fullPath='" + fullPath + '\'' +
+                ", compression='" + compression + '\'' +
+                ", length=" + length +
+                ", modificationTime=" + modificationTime +
+                ", blockDescs=" + blockDescs +
+                ", splittable=" + splittable +
+                ", textFileFormatDesc=" + textFileFormatDesc +
+                '}';
+    }
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

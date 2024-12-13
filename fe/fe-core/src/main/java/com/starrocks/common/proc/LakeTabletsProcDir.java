@@ -25,8 +25,16 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.ListComparator;
+<<<<<<< HEAD
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.monitor.unit.ByteSizeValue;
+=======
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.lake.LakeTablet;
+import com.starrocks.monitor.unit.ByteSizeValue;
+import com.starrocks.qe.ConnectContext;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -69,19 +77,33 @@ public class LakeTabletsProcDir implements ProcDirInterface {
         Preconditions.checkState(table.isCloudNativeTableOrMaterializedView());
 
         List<List<Comparable>> tabletInfos = Lists.newArrayList();
+<<<<<<< HEAD
         db.readLock();
+=======
+
+        Locker locker = new Locker();
+        locker.lockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         try {
             for (Tablet tablet : index.getTablets()) {
                 List<Comparable> tabletInfo = Lists.newArrayList();
                 LakeTablet lakeTablet = (LakeTablet) tablet;
                 tabletInfo.add(lakeTablet.getId());
+<<<<<<< HEAD
                 tabletInfo.add(new Gson().toJson(lakeTablet.getBackendIds()));
+=======
+                tabletInfo.add(new Gson().toJson(lakeTablet.getBackendIds(ConnectContext.get().getCurrentWarehouseId())));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 tabletInfo.add(new ByteSizeValue(lakeTablet.getDataSize(true)));
                 tabletInfo.add(lakeTablet.getRowCount(0L));
                 tabletInfos.add(tabletInfo);
             }
         } finally {
+<<<<<<< HEAD
             db.readUnlock();
+=======
+            locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return tabletInfos;
     }
@@ -127,7 +149,12 @@ public class LakeTabletsProcDir implements ProcDirInterface {
             throw new AnalysisException("Invalid tablet id format: " + tabletIdStr);
         }
 
+<<<<<<< HEAD
         db.readLock();
+=======
+        Locker locker = new Locker();
+        locker.lockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         try {
             Tablet tablet = index.getTablet(tabletId);
             if (tablet == null) {
@@ -136,29 +163,56 @@ public class LakeTabletsProcDir implements ProcDirInterface {
             Preconditions.checkState(tablet instanceof LakeTablet);
             return new LakeTabletProcNode((LakeTablet) tablet);
         } finally {
+<<<<<<< HEAD
             db.readUnlock();
+=======
+            locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
     // Handle showing single tablet info
     public static class LakeTabletProcNode implements ProcNodeInterface {
         private final LakeTablet tablet;
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         public LakeTabletProcNode(LakeTablet tablet) {
             this.tablet = tablet;
         }
 
         @Override
+<<<<<<< HEAD
         public ProcResult fetchResult() throws AnalysisException {
             BaseProcResult result = new BaseProcResult();
             result.setNames(TITLE_NAMES);
             List<String> row = Arrays.asList(
                     String.valueOf(tablet.getId()),
                     new Gson().toJson(tablet.getBackendIds()),
+=======
+        public ProcResult fetchResult() {
+            BaseProcResult result = new BaseProcResult();
+            result.setNames(TITLE_NAMES);
+
+            // get current warehouse
+            long warehouseId = ConnectContext.get().getCurrentWarehouseId();
+            List<String> row = Arrays.asList(
+                    String.valueOf(tablet.getId()),
+                    new Gson().toJson(tablet.getBackendIds(warehouseId)),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     new ByteSizeValue(tablet.getDataSize(true)).toString(),
                     String.valueOf(tablet.getRowCount(0L))
             );
             result.addRow(row);
+<<<<<<< HEAD
             return result;
         }
     };
+=======
+
+            return result;
+        }
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

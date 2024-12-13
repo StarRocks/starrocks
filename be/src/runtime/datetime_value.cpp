@@ -36,6 +36,10 @@
 
 #include <cctz/civil_time.h>
 #include <cctz/time_zone.h>
+<<<<<<< HEAD
+=======
+#include <fmt/format.h>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 #include <cctype>
 #include <cstring>
@@ -411,8 +415,12 @@ bool JodaFormat::prepare(std::string_view format) {
         case joda::JodaFormatChar::TIME_ZONE:
         case joda::JodaFormatChar::TIME_ZONE_OFFSET: {
             _token_parsers.emplace_back([&](JodaRuntimeState* state, const char* val_end) {
+<<<<<<< HEAD
                 const char* val = *(state->valptr);
                 std::string_view tz(val, val_end - val);
+=======
+                std::string_view tz(*(state->valptr), val_end);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (!TimezoneUtils::find_cctz_time_zone(tz, state->ctz)) {
                     return false;
                 }
@@ -1523,7 +1531,11 @@ bool DateTimeValue::to_format_string(const char* format, int len, char* to) cons
             to = append_with_prefix(buf, pos - buf, '0', 1, to);
             break;
         case 'f':
+<<<<<<< HEAD
             if (write_size + 2 >= buffer_size) return false;
+=======
+            if (write_size + 6 >= buffer_size) return false;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             // Microseconds (000000..999999)
             pos = int_to_str(_microsecond, buf);
             to = append_with_prefix(buf, pos - buf, '0', 6, to);

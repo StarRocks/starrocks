@@ -22,6 +22,10 @@
 #include "column/struct_column.h"
 #include "column/type_traits.h"
 #include "exprs/agg/aggregate.h"
+<<<<<<< HEAD
+=======
+#include "exprs/agg/aggregate_state_allocator.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "exprs/agg/aggregate_traits.h"
 #include "runtime/mem_pool.h"
 #include "types/logical_type.h"
@@ -50,7 +54,11 @@ struct ApproxTopKState {
     int32_t k = 0;
     int32_t counter_num = 0;
     int32_t unused_idx = 0;
+<<<<<<< HEAD
     mutable std::vector<Counter> counters;
+=======
+    mutable VectorWithAggStateAllocator<Counter> counters;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     mutable Counter null_counter{0};
     using EQ = std::conditional_t<IsSlice<CppType>, SliceEqual, phmap::priv::hash_default_eq<CppType>>;
     phmap::flat_hash_map<CppType, Counter*, PhmapDefaultHashFunc<LT, PhmapSeed1>, EQ> table;

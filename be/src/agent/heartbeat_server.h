@@ -79,6 +79,12 @@ private:
 
     StatusOr<CmpResult> compare_master_info(const TMasterInfo& master_info);
 
+<<<<<<< HEAD
+=======
+    // New function to print TMasterInfo object as a string
+    std::string print_master_info(const TMasterInfo& master_info) const;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     StorageEngine* _olap_engine;
 }; // class HeartBeatServer
 

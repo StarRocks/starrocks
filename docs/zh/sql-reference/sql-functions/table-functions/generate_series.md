@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # generate_series
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 生成一系列从 `start` 到 `end` 的数值，步长为 `step`，`step` 默认为 1。
 

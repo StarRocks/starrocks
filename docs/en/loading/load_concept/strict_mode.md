@@ -41,7 +41,11 @@ If strict mode is disabled, StarRocks loads all the four rows.
 
 If strict mode is enabled, StarRocks loads only the rows that hold `\N` or `1` and filters out the rows that hold `abc` or `2000`. The rows filtered out are counted against the maximum percentage of rows that can be filtered out due to inadequate data quality as specified by the `max_filter_ratio` parameter.
 
+<<<<<<< HEAD
 **Final loaded data with strict mode disabled**
+=======
+### Final loaded data with strict mode disabled
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 | Source column value | Column value upon conversion to TINYINT | Load result when destination column allows NULL values | Load result when destination column does not allow NULL values |
 | ------------------- | --------------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------ |
@@ -50,7 +54,11 @@ If strict mode is enabled, StarRocks loads only the rows that hold `\N` or `1` a
 | 2000                | NULL                                    | The value `NULL` is loaded.                            | An error is reported.                                        |
 | 1                   | 1                                       | The value `1` is loaded.                               | The value `1` is loaded.                                     |
 
+<<<<<<< HEAD
 **Final loaded data with strict mode enabled**
+=======
+### Final loaded data with strict mode enabled
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 | Source column value | Column value upon conversion to TINYINT | Load result when destination column allows NULL values       | Load result when destination column does not allow NULL values |
 | ------------------- | --------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |

@@ -14,6 +14,10 @@
 
 #pragma once
 
+<<<<<<< HEAD
+=======
+#include "column/datum.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "exec/schema_scanner.h"
 #include "gen_cpp/FrontendService_types.h"
 
@@ -29,6 +33,10 @@ public:
 
 private:
     Status fill_chunk(ChunkPtr* chunk);
+<<<<<<< HEAD
+=======
+    DatumArray _build_row();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     int _task_index{0};
     TGetTaskInfoResult _task_result;

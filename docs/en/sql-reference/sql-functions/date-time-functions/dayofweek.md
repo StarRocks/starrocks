@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # dayofweek
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Returns the weekday index for a given date. For example, the index for Sunday is 1, for Monday is 2, for Saturday is 7.
 

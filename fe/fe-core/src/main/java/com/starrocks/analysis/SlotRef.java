@@ -39,6 +39,10 @@ import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Column;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.ColumnId;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Table;
@@ -52,7 +56,10 @@ import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.thrift.TSlotRef;
+<<<<<<< HEAD
 import org.apache.arrow.util.VisibleForTesting;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -63,9 +70,17 @@ import static com.google.common.base.Preconditions.checkArgument;
 
 public class SlotRef extends Expr {
     private TableName tblName;
+<<<<<<< HEAD
     private String col;
     // Used in toSql
     private String label;
+=======
+    private String colName;
+    private ColumnId columnId;
+    //label/isBackQuoted used in toSql
+    private String label;
+    private boolean isBackQuoted = false;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     private QualifiedName qualifiedName;
 
@@ -92,14 +107,22 @@ public class SlotRef extends Expr {
     public SlotRef(TableName tblName, String col) {
         super();
         this.tblName = tblName;
+<<<<<<< HEAD
         this.col = col;
+=======
+        this.colName = col;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.label = "`" + col + "`";
     }
 
     public SlotRef(TableName tblName, String col, String label) {
         super();
         this.tblName = tblName;
+<<<<<<< HEAD
         this.col = col;
+=======
+        this.colName = col;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.label = label;
     }
 
@@ -111,6 +134,7 @@ public class SlotRef extends Expr {
         checkArgument(parts.size() > 0);
         this.qualifiedName = QualifiedName.of(qualifiedName.getParts(), qualifiedName.getPos());
         if (parts.size() == 1) {
+<<<<<<< HEAD
             this.col = parts.get(0);
             this.label = parts.get(0);
         } else if (parts.size() == 2) {
@@ -124,13 +148,32 @@ public class SlotRef extends Expr {
         } else if (parts.size() == 4) {
             this.tblName = new TableName(parts.get(0), parts.get(1), parts.get(2), qualifiedName.getPos());
             this.col = parts.get(3);
+=======
+            this.colName = parts.get(0);
+            this.label = parts.get(0);
+        } else if (parts.size() == 2) {
+            this.tblName = new TableName(null, null, parts.get(0), qualifiedName.getPos());
+            this.colName = parts.get(1);
+            this.label = parts.get(1);
+        } else if (parts.size() == 3) {
+            this.tblName = new TableName(null, parts.get(0), parts.get(1), qualifiedName.getPos());
+            this.colName = parts.get(2);
+            this.label = parts.get(2);
+        } else if (parts.size() == 4) {
+            this.tblName = new TableName(parts.get(0), parts.get(1), parts.get(2), qualifiedName.getPos());
+            this.colName = parts.get(3);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             this.label = parts.get(3);
         } else {
             // If parts.size() > 4, it must refer to a struct subfield name, so we set SlotRef's TableName null value,
             // set col, label a qualified name here[Of course it's a wrong value].
             // Correct value will be parsed in Analyzer according context.
             this.tblName = null;
+<<<<<<< HEAD
             this.col = qualifiedName.toString();
+=======
+            this.colName = qualifiedName.toString();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             this.label = qualifiedName.toString();
         }
     }
@@ -140,7 +183,11 @@ public class SlotRef extends Expr {
     public SlotRef(SlotDescriptor desc) {
         super();
         this.tblName = null;
+<<<<<<< HEAD
         this.col = desc.getLabel();
+=======
+        this.colName = desc.getLabel();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.desc = desc;
         this.type = desc.getType();
         this.originType = desc.getOriginType();
@@ -154,7 +201,12 @@ public class SlotRef extends Expr {
     protected SlotRef(SlotRef other) {
         super(other);
         tblName = other.tblName;
+<<<<<<< HEAD
         col = other.col;
+=======
+        colName = other.colName;
+        columnId = other.columnId;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         label = other.label;
         desc = other.desc;
         qualifiedName = other.qualifiedName;
@@ -170,6 +222,17 @@ public class SlotRef extends Expr {
         this(new SlotDescriptor(slotId, "", Type.INVALID, false));
     }
 
+<<<<<<< HEAD
+=======
+    public void setBackQuoted(boolean isBackQuoted) {
+        this.isBackQuoted = isBackQuoted;
+    }
+
+    public boolean isBackQuoted() {
+        return isBackQuoted;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public QualifiedName getQualifiedName() {
         return qualifiedName;
     }
@@ -193,7 +256,11 @@ public class SlotRef extends Expr {
         checkArgument(usedStructFieldPos.size() > 0);
 
         StringBuilder colStr = new StringBuilder();
+<<<<<<< HEAD
         colStr.append(col);
+=======
+        colStr.append(colName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         setOriginType(type);
         Type tmpType = type;
@@ -206,7 +273,11 @@ public class SlotRef extends Expr {
         // Set type to subfield's type
         type = tmpType;
         // col name like a.b.c
+<<<<<<< HEAD
         col = colStr.toString();
+=======
+        colName = colStr.toString();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -269,7 +340,11 @@ public class SlotRef extends Expr {
     public String debugString() {
         MoreObjects.ToStringHelper helper = MoreObjects.toStringHelper(this);
         helper.add("slotDesc", desc != null ? desc.debugString() : "null");
+<<<<<<< HEAD
         helper.add("col", col);
+=======
+        helper.add("col", colName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         helper.add("label", label);
         helper.add("tblName", tblName != null ? tblName.toSql() : "null");
         return helper.toString();
@@ -279,9 +354,20 @@ public class SlotRef extends Expr {
     public String toSqlImpl() {
         StringBuilder sb = new StringBuilder();
         if (tblName != null && !isFromLambda()) {
+<<<<<<< HEAD
             return tblName.toSql() + "." + "`" + col + "`";
         } else if (label != null) {
             return label;
+=======
+            return tblName.toSql() + "." + "`" + colName + "`";
+        } else if (label != null) {
+            if (isBackQuoted && !(label.startsWith("`") && label.endsWith("`"))) {
+                sb.append("`").append(label).append("`");
+                return sb.toString();
+            } else {
+                return label;
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } else if (desc.getSourceExprs() != null) {
             sb.append("<slot ").append(desc.getId().asInt()).append(">");
             for (Expr expr : desc.getSourceExprs()) {
@@ -294,6 +380,13 @@ public class SlotRef extends Expr {
         }
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isColumnRef() {
+        return tblName != null && !isFromLambda();
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public String explainImpl() {
         if (label != null) {
@@ -401,10 +494,17 @@ public class SlotRef extends Expr {
         if (tblName != null && !tblName.equals(other.tblName)) {
             return false;
         }
+<<<<<<< HEAD
         if ((col == null) != (other.col == null)) {
             return false;
         }
         if (col != null && !col.equalsIgnoreCase(other.col)) {
+=======
+        if ((colName == null) != (other.colName == null)) {
+            return false;
+        }
+        if (colName != null && !colName.equalsIgnoreCase(other.colName)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return false;
         }
 
@@ -453,6 +553,7 @@ public class SlotRef extends Expr {
     }
 
     public String getColumnName() {
+<<<<<<< HEAD
         return col;
     }
 
@@ -462,6 +563,21 @@ public class SlotRef extends Expr {
 
     public void setCol(String col) {
         this.col = col;
+=======
+        return colName;
+    }
+
+    public void setColumnName(String columnName) {
+        this.colName = columnName;
+    }
+
+    public ColumnId getColumnId() {
+        return columnId;
+    }
+
+    public void setColumnId(ColumnId columnId) {
+        this.columnId = columnId;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public String getLabel() {
@@ -486,7 +602,11 @@ public class SlotRef extends Expr {
             out.writeBoolean(true);
             tblName.write(out);
         }
+<<<<<<< HEAD
         Text.writeString(out, col);
+=======
+        Text.writeString(out, colName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public void readFields(DataInput in) throws IOException {
@@ -494,7 +614,11 @@ public class SlotRef extends Expr {
             tblName = new TableName();
             tblName.readFields(in);
         }
+<<<<<<< HEAD
         col = Text.readString(in);
+=======
+        colName = Text.readString(in);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public static SlotRef read(DataInput in) throws IOException {

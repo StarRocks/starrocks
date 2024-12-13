@@ -16,23 +16,45 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
+<<<<<<< HEAD
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.NotImplementedException;
+=======
+import com.google.common.collect.Maps;
+import com.starrocks.analysis.DescriptorTable;
+import com.starrocks.analysis.SlotDescriptor;
+import com.starrocks.analysis.TupleDescriptor;
+import com.starrocks.common.AnalysisException;
+import com.starrocks.common.DdlException;
+import com.starrocks.common.StarRocksException;
+import com.starrocks.planner.OlapTableSink;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TruncateTableStmt;
+<<<<<<< HEAD
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+=======
+import com.starrocks.thrift.TDataSink;
+import com.starrocks.thrift.TUniqueId;
+import com.starrocks.thrift.TWriteQuorumType;
+import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.UtFrameUtils;
+import mockit.Expectations;
+import mockit.Injectable;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+<<<<<<< HEAD
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
@@ -42,6 +64,9 @@ import java.io.IOException;
 import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
+=======
+import java.util.ArrayList;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -95,7 +120,11 @@ public class ListPartitionInfoTest {
         ConnectContext ctx = starRocksAssert.getCtx();
         String truncateSql = "truncate table t_recharge_detail partition(p1)";
         TruncateTableStmt truncateTableStmt = (TruncateTableStmt) UtFrameUtils.parseStmtWithNewParser(truncateSql, ctx);
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentState().truncateTable(truncateTableStmt);
+=======
+        GlobalStateMgr.getCurrentState().getLocalMetastore().truncateTable(truncateTableStmt, ctx);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         String showSql = "show partitions from t_recharge_detail;";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(showSql, ctx);
         StmtExecutor executor = new StmtExecutor(ctx, statementBase);
@@ -104,6 +133,7 @@ public class ListPartitionInfoTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testWriteOutAndReadIn() throws IOException,
             NotImplementedException, ParseException {
         // Write objects to file
@@ -155,6 +185,67 @@ public class ListPartitionInfoTest {
     }
 
 
+=======
+    public void testMultiListPartition(@Injectable OlapTable dstTable) throws StarRocksException {
+
+        DescriptorTable descTable = new DescriptorTable();
+        TupleDescriptor tuple = descTable.createTupleDescriptor("DstTable");
+        // k1
+        SlotDescriptor k1 = descTable.addSlotDescriptor(tuple);
+        k1.setColumn(new Column("k1", Type.BIGINT));
+        k1.setIsMaterialized(true);
+
+        // k2
+        SlotDescriptor k2 = descTable.addSlotDescriptor(tuple);
+        k2.setColumn(new Column("k2", ScalarType.createVarchar(25)));
+        k2.setIsMaterialized(true);
+        // v1
+        SlotDescriptor v1 = descTable.addSlotDescriptor(tuple);
+        v1.setColumn(new Column("v1", ScalarType.createVarchar(25)));
+        v1.setIsMaterialized(true);
+        // v2
+        SlotDescriptor v2 = descTable.addSlotDescriptor(tuple);
+        v2.setColumn(new Column("v2", Type.BIGINT));
+        v2.setIsMaterialized(true);
+
+        ListPartitionInfo listPartitionInfo = new ListPartitionInfo(PartitionType.LIST,
+                Lists.newArrayList(new Column("dt", Type.STRING), new Column("province", Type.STRING)));
+        List<String> multiItems = Lists.newArrayList("dt", "shanghai");
+        List<List<String>> multiValues = new ArrayList<>();
+        multiValues.add(multiItems);
+
+        listPartitionInfo.setMultiValues(1, multiValues);
+        listPartitionInfo.setReplicationNum(1, (short) 3);
+        MaterializedIndex index = new MaterializedIndex(1, MaterializedIndex.IndexState.NORMAL);
+        HashDistributionInfo distInfo = new HashDistributionInfo(
+                3, Lists.newArrayList(new Column("id", Type.BIGINT)));
+        Partition partition = new Partition(1, 11, "p1", index, distInfo);
+
+        Map<ColumnId, Column> idToColumn = Maps.newTreeMap(ColumnId.CASE_INSENSITIVE_ORDER);
+        idToColumn.put(ColumnId.create("dt"), new Column("dt", Type.STRING));
+        idToColumn.put(ColumnId.create("province"), new Column("province", Type.STRING));
+        new Expectations() {{
+                dstTable.getId();
+                result = 1;
+                dstTable.getPartitions();
+                result = Lists.newArrayList(partition);
+                dstTable.getPartition(1L);
+                result = partition;
+                dstTable.getPartitionInfo();
+                result = listPartitionInfo;
+                dstTable.getIdToColumn();
+                result = idToColumn;
+            }};
+
+        OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(1L),
+                TWriteQuorumType.MAJORITY, false, false, false);
+        sink.init(new TUniqueId(1, 2), 3, 4, 1000);
+        sink.complete();
+
+        Assert.assertTrue(sink.toThrift() instanceof TDataSink);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Test
     public void testToSqlForSingle() {
         List<Long> partitionId = Lists.newArrayList(10001L, 10002L);
@@ -198,8 +289,13 @@ public class ListPartitionInfoTest {
         HashDistributionInfo distributionInfo =
                 new HashDistributionInfo(1, Lists.newArrayList(new Column("id", Type.BIGINT)));
 
+<<<<<<< HEAD
         Partition p1 = new Partition(10001L, "p1", materializedIndex, distributionInfo);
         Partition p2 = new Partition(10002L, "p2", materializedIndex, distributionInfo);
+=======
+        Partition p1 = new Partition(10001L, 10003L, "p1", materializedIndex, distributionInfo);
+        Partition p2 = new Partition(10002L, 10004L, "p2", materializedIndex, distributionInfo);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         table.addPartition(p1);
         table.addPartition(p2);
         return table;
@@ -224,8 +320,13 @@ public class ListPartitionInfoTest {
         HashDistributionInfo distributionInfo =
                 new HashDistributionInfo(1, Lists.newArrayList(new Column("id", Type.BIGINT)));
 
+<<<<<<< HEAD
         Partition p1 = new Partition(10001L, "p1", materializedIndex, distributionInfo);
         Partition p2 = new Partition(10002L, "p2", materializedIndex, distributionInfo);
+=======
+        Partition p1 = new Partition(10001L, 10003L, "p1", materializedIndex, distributionInfo);
+        Partition p2 = new Partition(10002L, 10004L, "p2", materializedIndex, distributionInfo);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         table.addPartition(p1);
         table.addPartition(p2);
         return table;

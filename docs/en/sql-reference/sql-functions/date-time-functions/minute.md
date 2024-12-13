@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # minute
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Returns the minute for a given date. The return value ranges from 0 to 59.
 

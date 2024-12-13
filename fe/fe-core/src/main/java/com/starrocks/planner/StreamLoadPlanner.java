@@ -38,10 +38,13 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.DescriptorTable;
+<<<<<<< HEAD
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.PartitionNames;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.AggregateType;
@@ -56,15 +59,30 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
 import com.starrocks.load.Load;
 import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.server.GlobalStateMgr;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.DebugUtil;
+import com.starrocks.load.Load;
+import com.starrocks.load.streamload.StreamLoadInfo;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.ast.PartitionNames;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.thrift.InternalServiceVersion;
 import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TNetworkAddress;
+<<<<<<< HEAD
+=======
+import com.starrocks.thrift.TPartialUpdateMode;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.TPlanFragmentExecParams;
 import com.starrocks.thrift.TQueryGlobals;
 import com.starrocks.thrift.TQueryOptions;
@@ -105,11 +123,20 @@ public class StreamLoadPlanner {
     // just for using session variable
     private ConnectContext connectContext;
 
+<<<<<<< HEAD
+=======
+    private long warehouseId;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public StreamLoadPlanner(Database db, OlapTable destTable, StreamLoadInfo streamLoadInfo) {
         this.db = db;
         this.destTable = destTable;
         this.streamLoadInfo = streamLoadInfo;
         this.connectContext = new ConnectContext();
+<<<<<<< HEAD
+=======
+        this.warehouseId = streamLoadInfo.getWarehouseId();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     private void resetAnalyzer() {
@@ -126,8 +153,17 @@ public class StreamLoadPlanner {
         return connectContext;
     }
 
+<<<<<<< HEAD
     // create the plan. the plan's query id and load id are same, using the parameter 'loadId'
     public TExecPlanFragmentParams plan(TUniqueId loadId) throws UserException {
+=======
+    public long getWarehouseId() {
+        return warehouseId;
+    }
+
+    // create the plan. the plan's query id and load id are same, using the parameter 'loadId'
+    public TExecPlanFragmentParams plan(TUniqueId loadId) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         boolean isPrimaryKey = destTable.getKeysType() == KeysType.PRIMARY_KEYS;
         resetAnalyzer();
         // construct tuple descriptor, used for scanNode and dataSink
@@ -137,6 +173,13 @@ public class StreamLoadPlanner {
             if (negative) {
                 throw new DdlException("Primary key table does not support negative load");
             }
+<<<<<<< HEAD
+=======
+            if (destTable.hasRowStorageType() && streamLoadInfo.isPartialUpdate() &&
+                    streamLoadInfo.getPartialUpdateMode() != TPartialUpdateMode.ROW_MODE) {
+                throw new DdlException("column with row table only support row mode partial update");
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } else {
             if (streamLoadInfo.isPartialUpdate()) {
                 throw new DdlException("Only primary key table support partial update");
@@ -146,7 +189,12 @@ public class StreamLoadPlanner {
         List<Column> destColumns;
         List<Boolean> missAutoIncrementColumn = Lists.newArrayList();
         if (streamLoadInfo.isPartialUpdate()) {
+<<<<<<< HEAD
             destColumns = Load.getPartialUpateColumns(destTable, streamLoadInfo.getColumnExprDescs(), missAutoIncrementColumn);
+=======
+            destColumns = Load.getPartialUpateColumns(destTable, streamLoadInfo.getColumnExprDescs(),
+                    missAutoIncrementColumn);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } else {
             destColumns = destTable.getFullSchema();
         }
@@ -161,8 +209,13 @@ public class StreamLoadPlanner {
 
             if (col.getType().isVarchar() && Config.enable_dict_optimize_stream_load &&
                     IDictManager.getInstance().hasGlobalDict(destTable.getId(),
+<<<<<<< HEAD
                             col.getName())) {
                 Optional<ColumnDict> dict = IDictManager.getInstance().getGlobalDict(destTable.getId(), col.getName());
+=======
+                            col.getColumnId())) {
+                Optional<ColumnDict> dict = IDictManager.getInstance().getGlobalDict(destTable.getId(), col.getColumnId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 dict.ifPresent(columnDict -> globalDicts.add(new Pair<>(slotDesc.getId().asInt(), columnDict)));
             }
         }
@@ -180,6 +233,10 @@ public class StreamLoadPlanner {
         scanNode.setUseVectorizedLoad(true);
         scanNode.init(analyzer);
         scanNode.finalizeStats(analyzer);
+<<<<<<< HEAD
+=======
+        scanNode.setWarehouseId(streamLoadInfo.getWarehouseId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         descTable.computeMemLayout();
 
@@ -195,12 +252,25 @@ public class StreamLoadPlanner {
         }
         OlapTableSink olapTableSink = new OlapTableSink(destTable, tupleDesc, partitionIds, writeQuorum,
                 destTable.enableReplicatedStorage(), scanNode.nullExprInAutoIncrement(),
+<<<<<<< HEAD
                 enableAutomaticPartition);
         if (missAutoIncrementColumn.size() == 1 && missAutoIncrementColumn.get(0) == Boolean.TRUE) {
             olapTableSink.setMissAutoIncrementColumn();
         }
         olapTableSink.init(loadId, streamLoadInfo.getTxnId(), db.getId(), streamLoadInfo.getTimeout());
         Load.checkMergeCondition(streamLoadInfo.getMergeConditionStr(), destTable, destColumns, olapTableSink.missAutoIncrementColumn());
+=======
+                enableAutomaticPartition, streamLoadInfo.getWarehouseId());
+        if (missAutoIncrementColumn.size() == 1 && missAutoIncrementColumn.get(0) == Boolean.TRUE) {
+            olapTableSink.setMissAutoIncrementColumn();
+        }
+        if (destTable.getAutomaticBucketSize() > 0) {
+            olapTableSink.setAutomaticBucketSize(destTable.getAutomaticBucketSize());
+        }
+        olapTableSink.init(loadId, streamLoadInfo.getTxnId(), db.getId(), streamLoadInfo.getTimeout());
+        Load.checkMergeCondition(streamLoadInfo.getMergeConditionStr(), destTable, destColumns,
+                olapTableSink.missAutoIncrementColumn());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         olapTableSink.setPartialUpdateMode(streamLoadInfo.getPartialUpdateMode());
         olapTableSink.complete(streamLoadInfo.getMergeConditionStr());
 
@@ -262,8 +332,24 @@ public class StreamLoadPlanner {
         queryOptions.setMem_limit(streamLoadInfo.getExecMemLimit());
         queryOptions.setLoad_mem_limit(streamLoadInfo.getLoadMemLimit());
 
+<<<<<<< HEAD
         if (connectContext.getSessionVariable().isEnableLoadProfile()) {
             queryOptions.setEnable_profile(true);
+=======
+        boolean enableLoadProfile = false;
+        enableLoadProfile |= destTable.enableLoadProfile();
+        enableLoadProfile |= connectContext.getSessionVariable().isEnableLoadProfile();
+        if (Config.load_profile_collect_interval_second > 0
+                && System.currentTimeMillis() - destTable.getLastCollectProfileTime()
+                        < Config.load_profile_collect_interval_second * 1000) {
+            enableLoadProfile = false;
+        }
+
+        if (enableLoadProfile) {
+            queryOptions.setEnable_profile(true);
+            queryOptions.setLoad_profile_collect_second(Config.stream_load_profile_collect_threshold_second);
+            destTable.updateLastCollectProfileTime();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         params.setQuery_options(queryOptions);
@@ -279,9 +365,15 @@ public class StreamLoadPlanner {
         TNetworkAddress coordAddress = new TNetworkAddress(FrontendOptions.getLocalHostAddress(), Config.rpc_port);
         params.setCoord(coordAddress);
 
+<<<<<<< HEAD
         LOG.info("load job id: {}, txn id: {}, parallel: {}, compress: {}, replicated: {}, quorum: {}",
                 DebugUtil.printId(loadId), streamLoadInfo.getTxnId(), queryOptions.getLoad_dop(),
                 queryOptions.getLoad_transmission_compression_type(), destTable.enableReplicatedStorage(), writeQuorum);
+=======
+        LOG.debug("load job id: {}, txn id: {}, parallel: {}, compress: {}, replicated: {}, quorum: {}",
+                 DebugUtil.printId(loadId), streamLoadInfo.getTxnId(), queryOptions.getLoad_dop(),
+                 queryOptions.getLoad_transmission_compression_type(), destTable.enableReplicatedStorage(), writeQuorum);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.execPlanFragmentParams = params;
         return params;
     }

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # bitmap_to_base64
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Converts a bitmap to a Base64-encoded string. This function is supported from v2.5.
 

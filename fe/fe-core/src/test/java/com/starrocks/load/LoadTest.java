@@ -37,9 +37,16 @@ import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ExceptionChecker;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.thrift.TBrokerScanRangeParams;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.sql.ast.ImportColumnDesc;
+import com.starrocks.thrift.TBrokerScanRangeParams;
+import com.starrocks.thrift.TFileFormatType;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -80,6 +87,10 @@ public class LoadTest {
             {
                 analyzer.getDescTbl();
                 result = descTable;
+<<<<<<< HEAD
+=======
+                minTimes = 0;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         };
 
@@ -92,7 +103,11 @@ public class LoadTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testInitColumnsPathColumns() throws UserException {
+=======
+    public void testInitColumnsPathColumns() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // columns
         String c0Name = "c0";
         columns.add(new Column(c0Name, Type.INT, true, null, true, null, ""));
@@ -137,7 +152,11 @@ public class LoadTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testInitColumnsColumnInSchemaAndExprArgs() throws UserException {
+=======
+    public void testInitColumnsColumnInSchemaAndExprArgs() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         table = new OlapTable(1, "test", columns, KeysType.AGG_KEYS,
                 new SinglePartitionInfo(), new RandomDistributionInfo(3));
 
@@ -214,7 +233,11 @@ public class LoadTest {
      * set (C1 = year(c1))
      */
     @Test
+<<<<<<< HEAD
     public void testSourceColumnCaseSensitive() throws UserException {
+=======
+    public void testSourceColumnCaseSensitive() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // columns
         String c0Name = "c0";
         columns.add(new Column(c0Name, Type.INT, true, null, true, null, ""));
@@ -289,4 +312,24 @@ public class LoadTest {
                 () -> Load.initColumns(table, columnExprs, null, exprsByName, analyzer, srcTupleDesc,
                         slotDescByName, params, true, true, columnsFromPath));
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testGetFormatType() {
+        Assert.assertEquals(TFileFormatType.FORMAT_PARQUET, Load.getFormatType("parquet", "hdfs://127.0.0.1:9000/some_file"));
+        Assert.assertEquals(TFileFormatType.FORMAT_ORC, Load.getFormatType("orc", "hdfs://127.0.0.1:9000/some_file"));
+        Assert.assertEquals(TFileFormatType.FORMAT_JSON, Load.getFormatType("json", "hdfs://127.0.0.1:9000/some_file"));
+
+        Assert.assertEquals(TFileFormatType.FORMAT_PARQUET, Load.getFormatType("", "hdfs://127.0.0.1:9000/some_file.parq"));
+        Assert.assertEquals(TFileFormatType.FORMAT_PARQUET, Load.getFormatType("", "hdfs://127.0.0.1:9000/some_file.parquet"));
+        Assert.assertEquals(TFileFormatType.FORMAT_ORC, Load.getFormatType("", "hdfs://127.0.0.1:9000/some_file.orc"));
+        Assert.assertEquals(TFileFormatType.FORMAT_CSV_GZ, Load.getFormatType("csv", "hdfs://127.0.0.1:9000/some_file.gz"));
+        Assert.assertEquals(TFileFormatType.FORMAT_CSV_BZ2, Load.getFormatType("csv", "hdfs://127.0.0.1:9000/some_file.bz2"));
+        Assert.assertEquals(TFileFormatType.FORMAT_CSV_LZ4_FRAME, Load.getFormatType("csv", "hdfs://127.0.0.1:9000/some_file.lz4"));
+        Assert.assertEquals(TFileFormatType.FORMAT_CSV_DEFLATE, Load.getFormatType("csv", "hdfs://127.0.0.1:9000/some_file.deflate"));
+        Assert.assertEquals(TFileFormatType.FORMAT_CSV_ZSTD, Load.getFormatType("csv", "hdfs://127.0.0.1:9000/some_file.zst"));
+        Assert.assertEquals(TFileFormatType.FORMAT_CSV_PLAIN, Load.getFormatType("csv", "hdfs://127.0.0.1:9000/some_file"));
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

@@ -14,7 +14,13 @@
 
 package com.starrocks.qe;
 
+<<<<<<< HEAD
 import com.google.common.collect.Lists;
+=======
+import com.google.common.base.Strings;
+import com.google.common.collect.Lists;
+import com.starrocks.alter.SystemHandler;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.catalog.Database;
@@ -24,11 +30,25 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskManager;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.datacache.DataCacheMgr;
+import com.starrocks.datacache.DataCacheSelectExecutor;
+import com.starrocks.datacache.DataCacheSelectMetrics;
+import com.starrocks.load.EtlJobType;
+import com.starrocks.plugin.PluginInfo;
+import com.starrocks.scheduler.Constants;
+import com.starrocks.scheduler.Task;
+import com.starrocks.scheduler.TaskManager;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
@@ -60,10 +80,22 @@ import com.starrocks.sql.ast.CancelBackupStmt;
 import com.starrocks.sql.ast.CancelCompactionStmt;
 import com.starrocks.sql.ast.CancelExportStmt;
 import com.starrocks.sql.ast.CancelLoadStmt;
+<<<<<<< HEAD
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
+=======
+import com.starrocks.sql.ast.CancelRefreshDictionaryStmt;
+import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
+import com.starrocks.sql.ast.CleanTemporaryTableStmt;
+import com.starrocks.sql.ast.ClearDataCacheRulesStmt;
+import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
+import com.starrocks.sql.ast.CreateCatalogStmt;
+import com.starrocks.sql.ast.CreateDataCacheRuleStmt;
+import com.starrocks.sql.ast.CreateDbStmt;
+import com.starrocks.sql.ast.CreateDictionaryStmt;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.CreateFileStmt;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
@@ -73,6 +105,7 @@ import com.starrocks.sql.ast.CreateResourceGroupStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
+<<<<<<< HEAD
 import com.starrocks.sql.ast.CreateSecurityIntegrationStatement;
 import com.starrocks.sql.ast.CreateStorageVolumeStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
@@ -82,6 +115,21 @@ import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DropAnalyzeJobStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.DropDbStmt;
+=======
+import com.starrocks.sql.ast.CreateStorageVolumeStmt;
+import com.starrocks.sql.ast.CreateTableLikeStmt;
+import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.CreateTemporaryTableLikeStmt;
+import com.starrocks.sql.ast.CreateTemporaryTableStmt;
+import com.starrocks.sql.ast.CreateUserStmt;
+import com.starrocks.sql.ast.CreateViewStmt;
+import com.starrocks.sql.ast.DataCacheSelectStatement;
+import com.starrocks.sql.ast.DropAnalyzeJobStmt;
+import com.starrocks.sql.ast.DropCatalogStmt;
+import com.starrocks.sql.ast.DropDataCacheRuleStmt;
+import com.starrocks.sql.ast.DropDbStmt;
+import com.starrocks.sql.ast.DropDictionaryStmt;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.DropFileStmt;
 import com.starrocks.sql.ast.DropFunctionStmt;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
@@ -92,6 +140,10 @@ import com.starrocks.sql.ast.DropRoleStmt;
 import com.starrocks.sql.ast.DropStorageVolumeStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.DropTaskStmt;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.DropTemporaryTableStmt;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
@@ -101,6 +153,10 @@ import com.starrocks.sql.ast.PauseRoutineLoadStmt;
 import com.starrocks.sql.ast.RecoverDbStmt;
 import com.starrocks.sql.ast.RecoverPartitionStmt;
 import com.starrocks.sql.ast.RecoverTableStmt;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.RefreshDictionaryStmt;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.ast.RestoreStmt;
@@ -115,13 +171,30 @@ import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.SyncStmt;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.UninstallPluginStmt;
+<<<<<<< HEAD
 import com.starrocks.statistic.AnalyzeJob;
+=======
+import com.starrocks.sql.ast.pipe.AlterPipeStmt;
+import com.starrocks.sql.ast.pipe.CreatePipeStmt;
+import com.starrocks.sql.ast.pipe.DropPipeStmt;
+import com.starrocks.sql.ast.warehouse.AlterWarehouseStmt;
+import com.starrocks.sql.ast.warehouse.CreateWarehouseStmt;
+import com.starrocks.sql.ast.warehouse.DropWarehouseStmt;
+import com.starrocks.sql.ast.warehouse.ResumeWarehouseStmt;
+import com.starrocks.sql.ast.warehouse.SuspendWarehouseStmt;
+import com.starrocks.statistic.AnalyzeJob;
+import com.starrocks.statistic.ExternalAnalyzeJob;
+import com.starrocks.statistic.NativeAnalyzeJob;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.statistic.StatisticExecutor;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.StatsConstants;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+<<<<<<< HEAD
 import org.apache.parquet.Strings;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import java.io.IOException;
 import java.time.LocalDateTime;
@@ -132,12 +205,25 @@ import java.util.Map;
 
 public class DDLStmtExecutor {
 
+<<<<<<< HEAD
+=======
+    private final StmtExecutorVisitor stmtExecutorVisitor;
+
+    public DDLStmtExecutor(StmtExecutorVisitor stmtExecutorVisitor) {
+        this.stmtExecutorVisitor = stmtExecutorVisitor;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     /**
      * Execute various ddl statement
      */
     public static ShowResultSet execute(StatementBase stmt, ConnectContext context) throws Exception {
         try {
+<<<<<<< HEAD
             return stmt.accept(StmtExecutorVisitor.getInstance(), context);
+=======
+            return GlobalStateMgr.getCurrentState().getDdlStmtExecutor().stmtExecutorVisitor.visit(stmt, context);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } catch (RuntimeException re) {
             if (re.getCause() instanceof DdlException) {
                 throw (DdlException) re.getCause();
@@ -151,16 +237,27 @@ public class DDLStmtExecutor {
         }
     }
 
+<<<<<<< HEAD
     static class StmtExecutorVisitor extends AstVisitor<ShowResultSet, ConnectContext> {
 
         private static final Logger LOG = LogManager.getLogger(StmtExecutorVisitor.class);
 
+=======
+    public static class StmtExecutorVisitor implements AstVisitor<ShowResultSet, ConnectContext> {
+        private static final Logger LOG = LogManager.getLogger(StmtExecutorVisitor.class);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         private static final StmtExecutorVisitor INSTANCE = new StmtExecutorVisitor();
 
         public static StmtExecutorVisitor getInstance() {
             return INSTANCE;
         }
 
+<<<<<<< HEAD
+=======
+        protected StmtExecutorVisitor() {
+        }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         @Override
         public ShowResultSet visitNode(ParseNode node, ConnectContext context) {
             throw new RuntimeException(new DdlException("unsupported statement: " + node.toSql()));
@@ -210,6 +307,7 @@ public class DDLStmtExecutor {
             ErrorReport.wrapWithRuntimeException(() -> {
                 FunctionName name = stmt.getFunctionName();
                 if (name.isGlobalFunction()) {
+<<<<<<< HEAD
                     context.getGlobalStateMgr().getGlobalFunctionMgr().userAddFunction(stmt.getFunction());
                 } else {
                     Database db = context.getGlobalStateMgr().getDb(name.getDb());
@@ -217,6 +315,17 @@ public class DDLStmtExecutor {
                         ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, name.getDb());
                     }
                     db.addFunction(stmt.getFunction());
+=======
+                    context.getGlobalStateMgr()
+                            .getGlobalFunctionMgr()
+                            .userAddFunction(stmt.getFunction(), stmt.shouldReplaceIfExists(), stmt.createIfNotExists());
+                } else {
+                    Database db = context.getGlobalStateMgr().getLocalMetastore().getDb(name.getDb());
+                    if (db == null) {
+                        ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, name.getDb());
+                    }
+                    db.addFunction(stmt.getFunction(), stmt.shouldReplaceIfExists(), stmt.createIfNotExists());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
             });
             return null;
@@ -227,6 +336,7 @@ public class DDLStmtExecutor {
             ErrorReport.wrapWithRuntimeException(() -> {
                 FunctionName name = stmt.getFunctionName();
                 if (name.isGlobalFunction()) {
+<<<<<<< HEAD
                     context.getGlobalStateMgr().getGlobalFunctionMgr().userDropFunction(stmt.getFunctionSearchDesc());
                 } else {
                     Database db = context.getGlobalStateMgr().getDb(name.getDb());
@@ -234,6 +344,16 @@ public class DDLStmtExecutor {
                         ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, name.getDb());
                     }
                     db.dropFunction(stmt.getFunctionSearchDesc());
+=======
+                    context.getGlobalStateMgr().getGlobalFunctionMgr()
+                            .userDropFunction(stmt.getFunctionSearchDesc(), stmt.dropIfExists());
+                } else {
+                    Database db = context.getGlobalStateMgr().getLocalMetastore().getDb(name.getDb());
+                    if (db == null) {
+                        ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, name.getDb());
+                    }
+                    db.dropFunction(stmt.getFunctionSearchDesc(), stmt.dropIfExists());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
             });
             return null;
@@ -248,9 +368,33 @@ public class DDLStmtExecutor {
         }
 
         @Override
+<<<<<<< HEAD
         public ShowResultSet visitCreateTableLikeStatement(CreateTableLikeStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 context.getGlobalStateMgr().createTableLike(stmt);
+=======
+        public ShowResultSet visitCreateTemporaryTableStatement(CreateTemporaryTableStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getMetadataMgr().createTemporaryTable(stmt);
+            });
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitCreateTableLikeStatement(CreateTableLikeStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getMetadataMgr().createTableLike(stmt);
+            });
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitCreateTemporaryTableLikeStatement(
+                CreateTemporaryTableLikeStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getMetadataMgr()
+                        .createTemporaryTable((CreateTemporaryTableStmt) stmt.getCreateTableStmt());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             });
             return null;
         }
@@ -258,7 +402,34 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitDropTableStatement(DropTableStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
+<<<<<<< HEAD
                 context.getGlobalStateMgr().getMetadataMgr().dropTable(stmt);
+=======
+                if (stmt.getTemporaryTableMark()) {
+                    DropTemporaryTableStmt dropTemporaryTableStmt = new DropTemporaryTableStmt(
+                            stmt.isSetIfExists(), stmt.getTbl(), stmt.isForceDrop());
+                    dropTemporaryTableStmt.setSessionId(context.getSessionId());
+                    context.getGlobalStateMgr().getMetadataMgr().dropTemporaryTable(dropTemporaryTableStmt);
+                } else {
+                    context.getGlobalStateMgr().getMetadataMgr().dropTable(stmt);
+                }
+            });
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitDropTemporaryTableStatement(DropTemporaryTableStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getMetadataMgr().dropTemporaryTable(stmt);
+            });
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitCleanTemporaryTableStatement(CleanTemporaryTableStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getMetadataMgr().cleanTemporaryTables(stmt);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             });
             return null;
         }
@@ -266,7 +437,11 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitCreateMaterializedViewStmt(CreateMaterializedViewStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
+<<<<<<< HEAD
                 context.getGlobalStateMgr().createMaterializedView(stmt);
+=======
+                context.getGlobalStateMgr().getLocalMetastore().createMaterializedView(stmt);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             });
             return null;
         }
@@ -275,7 +450,11 @@ public class DDLStmtExecutor {
         public ShowResultSet visitCreateMaterializedViewStatement(CreateMaterializedViewStatement stmt,
                                                                   ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
+<<<<<<< HEAD
                 context.getGlobalStateMgr().createMaterializedView(stmt);
+=======
+                context.getGlobalStateMgr().getLocalMetastore().createMaterializedView(stmt);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             });
             return null;
         }
@@ -283,7 +462,11 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitDropMaterializedViewStatement(DropMaterializedViewStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
+<<<<<<< HEAD
                 context.getGlobalStateMgr().dropMaterializedView(stmt);
+=======
+                context.getGlobalStateMgr().getLocalMetastore().dropMaterializedView(stmt);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             });
             return null;
         }
@@ -292,7 +475,11 @@ public class DDLStmtExecutor {
         public ShowResultSet visitAlterMaterializedViewStatement(AlterMaterializedViewStmt stmt,
                                                                  ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
+<<<<<<< HEAD
                 context.getGlobalStateMgr().alterMaterializedView(stmt);
+=======
+                context.getGlobalStateMgr().getLocalMetastore().alterMaterializedView(stmt);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             });
             return null;
         }
@@ -322,7 +509,11 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitAlterTableStatement(AlterTableStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
+<<<<<<< HEAD
                 context.getGlobalStateMgr().alterTable(stmt);
+=======
+                context.getGlobalStateMgr().getMetadataMgr().alterTable(context, stmt);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             });
             return null;
         }
@@ -330,7 +521,11 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitAlterViewStatement(AlterViewStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
+<<<<<<< HEAD
                 context.getGlobalStateMgr().alterView(stmt);
+=======
+                context.getGlobalStateMgr().getLocalMetastore().alterView(stmt);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             });
             return null;
         }
@@ -338,7 +533,11 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitCancelAlterTableStatement(CancelAlterTableStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
+<<<<<<< HEAD
                 context.getGlobalStateMgr().cancelAlter(stmt);
+=======
+                context.getGlobalStateMgr().getLocalMetastore().cancelAlter(stmt);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             });
             return null;
         }
@@ -436,7 +635,11 @@ public class DDLStmtExecutor {
         public ShowResultSet visitAlterUserStatement(AlterUserStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 context.getGlobalStateMgr().getAuthenticationMgr()
+<<<<<<< HEAD
                         .alterUser(stmt.getUserIdentity(), stmt.getAuthenticationInfo());
+=======
+                        .alterUser(stmt.getUserIdentity(), stmt.getAuthenticationInfo(), stmt.getProperties());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             });
             return null;
         }
@@ -512,6 +715,7 @@ public class DDLStmtExecutor {
         }
 
         @Override
+<<<<<<< HEAD
         public ShowResultSet visitCreateSecurityIntegrationStatement(CreateSecurityIntegrationStatement stmt,
                                                                      ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
@@ -526,6 +730,12 @@ public class DDLStmtExecutor {
         public ShowResultSet visitAlterSystemStatement(AlterSystemStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 context.getGlobalStateMgr().alterCluster(stmt);
+=======
+        public ShowResultSet visitAlterSystemStatement(AlterSystemStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                SystemHandler systemHandler = GlobalStateMgr.getCurrentState().getAlterJobMgr().getClusterHandler();
+                systemHandler.process(Collections.singletonList(stmt.getAlterClause()), null, null);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             });
             return null;
         }
@@ -533,7 +743,11 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitCancelAlterSystemStatement(CancelAlterSystemStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
+<<<<<<< HEAD
                 context.getGlobalStateMgr().cancelAlterCluster(stmt);
+=======
+                context.getGlobalStateMgr().getAlterJobMgr().getClusterHandler().cancel(stmt);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             });
             return null;
         }
@@ -541,7 +755,11 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitAlterDatabaseQuotaStatement(AlterDatabaseQuotaStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
+<<<<<<< HEAD
                 context.getGlobalStateMgr().alterDatabaseQuota(stmt);
+=======
+                context.getGlobalStateMgr().getLocalMetastore().alterDatabaseQuota(stmt);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             });
             return null;
         }
@@ -550,7 +768,11 @@ public class DDLStmtExecutor {
         public ShowResultSet visitAlterDatabaseRenameStatement(AlterDatabaseRenameStatement stmt,
                                                                ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
+<<<<<<< HEAD
                 context.getGlobalStateMgr().renameDatabase(stmt);
+=======
+                context.getGlobalStateMgr().getLocalMetastore().renameDatabase(stmt);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             });
             return null;
         }
@@ -558,7 +780,11 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitRecoverDbStatement(RecoverDbStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
+<<<<<<< HEAD
                 context.getGlobalStateMgr().recoverDatabase(stmt);
+=======
+                context.getGlobalStateMgr().getLocalMetastore().recoverDatabase(stmt);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             });
             return null;
         }
@@ -566,7 +792,11 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitRecoverTableStatement(RecoverTableStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
+<<<<<<< HEAD
                 context.getGlobalStateMgr().recoverTable(stmt);
+=======
+                context.getGlobalStateMgr().getLocalMetastore().recoverTable(stmt);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             });
             return null;
         }
@@ -574,7 +804,11 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitRecoverPartitionStatement(RecoverPartitionStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
+<<<<<<< HEAD
                 context.getGlobalStateMgr().recoverPartition(stmt);
+=======
+                context.getGlobalStateMgr().getLocalMetastore().recoverPartition(stmt);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             });
             return null;
         }
@@ -582,7 +816,11 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitCreateViewStatement(CreateViewStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
+<<<<<<< HEAD
                 context.getGlobalStateMgr().createView(stmt);
+=======
+                GlobalStateMgr.getCurrentState().getMetadataMgr().createView(stmt);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             });
             return null;
         }
@@ -590,7 +828,11 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitBackupStatement(BackupStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
+<<<<<<< HEAD
                 context.getGlobalStateMgr().backup(stmt);
+=======
+                context.getGlobalStateMgr().getBackupHandler().process(stmt);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             });
             return null;
         }
@@ -598,7 +840,11 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitRestoreStatement(RestoreStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
+<<<<<<< HEAD
                 context.getGlobalStateMgr().restore(stmt);
+=======
+                context.getGlobalStateMgr().getBackupHandler().process(stmt);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             });
             return null;
         }
@@ -606,7 +852,11 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitCancelBackupStatement(CancelBackupStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
+<<<<<<< HEAD
                 context.getGlobalStateMgr().cancelBackup(stmt);
+=======
+                context.getGlobalStateMgr().getBackupHandler().cancel(stmt);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             });
             return null;
         }
@@ -637,7 +887,11 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitTruncateTableStatement(TruncateTableStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
+<<<<<<< HEAD
                 context.getGlobalStateMgr().truncateTable(stmt);
+=======
+                context.getGlobalStateMgr().getLocalMetastore().truncateTable(stmt, context);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             });
             return null;
         }
@@ -662,7 +916,11 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitAdminSetConfigStatement(AdminSetConfigStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
+<<<<<<< HEAD
                 context.getGlobalStateMgr().setConfig(stmt);
+=======
+                context.getGlobalStateMgr().getNodeMgr().setConfig(stmt);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (stmt.getConfig().containsKey("mysql_server_version")) {
                     String version = stmt.getConfig().getMap().get("mysql_server_version");
                     if (!Strings.isNullOrEmpty(version)) {
@@ -693,7 +951,11 @@ public class DDLStmtExecutor {
         public ShowResultSet visitInstallPluginStatement(InstallPluginStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 try {
+<<<<<<< HEAD
                     context.getGlobalStateMgr().installPlugin(stmt);
+=======
+                    context.getGlobalStateMgr().getPluginMgr().installPlugin(stmt);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 } catch (IOException e) {
                     throw new RuntimeException(e);
                 }
@@ -705,7 +967,16 @@ public class DDLStmtExecutor {
         public ShowResultSet visitUninstallPluginStatement(UninstallPluginStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 try {
+<<<<<<< HEAD
                     context.getGlobalStateMgr().uninstallPlugin(stmt);
+=======
+                    PluginInfo info = context.getGlobalStateMgr().getPluginMgr().uninstallPlugin(stmt.getPluginName());
+                    if (null != info) {
+                        GlobalStateMgr.getCurrentState().getEditLog().logUninstallPlugin(info);
+                    }
+                    LOG.info("uninstall plugin = " + stmt.getPluginName());
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 } catch (IOException e) {
                     throw new RuntimeException(e);
                 }
@@ -716,7 +987,11 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitAdminCheckTabletsStatement(AdminCheckTabletsStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
+<<<<<<< HEAD
                 context.getGlobalStateMgr().checkTablets(stmt);
+=======
+                context.getGlobalStateMgr().getLocalMetastore().checkTablets(stmt);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             });
             return null;
         }
@@ -732,7 +1007,11 @@ public class DDLStmtExecutor {
         public ShowResultSet visitAdminSetReplicaStatusStatement(AdminSetReplicaStatusStmt stmt,
                                                                  ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
+<<<<<<< HEAD
                 context.getGlobalStateMgr().setReplicaStatus(stmt);
+=======
+                context.getGlobalStateMgr().getLocalMetastore().setReplicaStatus(stmt);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             });
             return null;
         }
@@ -772,6 +1051,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitCreateAnalyzeJobStatement(CreateAnalyzeJobStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
+<<<<<<< HEAD
                 AnalyzeJob analyzeJob = new AnalyzeJob(stmt.getDbId(),
                         stmt.getTableId(),
                         stmt.getColumnNames(),
@@ -780,6 +1060,27 @@ public class DDLStmtExecutor {
                         stmt.getProperties(), StatsConstants.ScheduleStatus.PENDING,
                         LocalDateTime.MIN);
 
+=======
+                AnalyzeJob analyzeJob;
+                if (stmt.isNative()) {
+                    analyzeJob = new NativeAnalyzeJob(stmt.getDbId(),
+                            stmt.getTableId(),
+                            stmt.getColumnNames(),
+                            stmt.getColumnTypes(),
+                            stmt.getAnalyzeType(),
+                            StatsConstants.ScheduleType.SCHEDULE,
+                            stmt.getProperties(), StatsConstants.ScheduleStatus.PENDING,
+                            LocalDateTime.MIN);
+                } else {
+                    analyzeJob = new ExternalAnalyzeJob(stmt.getTableName().getCatalog(), stmt.getTableName().getDb(),
+                            stmt.getTableName().getTbl(), stmt.getColumnNames(),
+                            stmt.getColumnTypes(),
+                            stmt.getAnalyzeType(),
+                            StatsConstants.ScheduleType.SCHEDULE,
+                            stmt.getProperties(), StatsConstants.ScheduleStatus.PENDING,
+                            LocalDateTime.MIN);
+                }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 context.getGlobalStateMgr().getAnalyzeMgr().addAnalyzeJob(analyzeJob);
 
                 ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
@@ -838,6 +1139,18 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitCreateCatalogStatement(CreateCatalogStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
+<<<<<<< HEAD
+=======
+                String catalogName = stmt.getCatalogName();
+                if (context.getGlobalStateMgr().getCatalogMgr().catalogExists(catalogName)) {
+                    if (stmt.isIfNotExists()) {
+                        LOG.info("create catalog[{}] which already exists", catalogName);
+                        return;
+                    } else {
+                        ErrorReport.reportDdlException(ErrorCode.ERR_CATALOG_EXISTED_ERROR, catalogName);
+                    }
+                }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 context.getGlobalStateMgr().getCatalogMgr().createCatalog(stmt);
             });
             return null;
@@ -846,6 +1159,18 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitDropCatalogStatement(DropCatalogStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
+<<<<<<< HEAD
+=======
+                String catalogName = stmt.getName();
+                if (!context.getGlobalStateMgr().getCatalogMgr().catalogExists(catalogName)) {
+                    if (stmt.isIfExists()) {
+                        LOG.info("drop catalog[{}] which does not exist", catalogName);
+                        return;
+                    } else {
+                        ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalogName);
+                    }
+                }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 context.getGlobalStateMgr().getCatalogMgr().dropCatalog(stmt);
             });
             return null;
@@ -863,7 +1188,11 @@ public class DDLStmtExecutor {
         public ShowResultSet visitSubmitTaskStatement(SubmitTaskStmt stmt, ConnectContext context) {
             try {
                 return context.getGlobalStateMgr().getTaskManager().handleSubmitTaskStmt(stmt);
+<<<<<<< HEAD
             } catch (UserException e) {
+=======
+            } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 throw new RuntimeException(e);
             }
         }
@@ -933,6 +1262,157 @@ public class DDLStmtExecutor {
             );
             return null;
         }
+<<<<<<< HEAD
+=======
+
+        //=========================================== Pipe Statement ==================================================
+        @Override
+        public ShowResultSet visitCreatePipeStatement(CreatePipeStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() ->
+                    context.getGlobalStateMgr().getPipeManager().createPipe(stmt)
+            );
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitDropPipeStatement(DropPipeStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() ->
+                    context.getGlobalStateMgr().getPipeManager().dropPipe(stmt)
+            );
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitAlterPipeStatement(AlterPipeStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() ->
+                    context.getGlobalStateMgr().getPipeManager().alterPipe(stmt)
+            );
+            return null;
+        }
+
+        // ==========================================Data Cache Management==============================================
+        @Override
+        public ShowResultSet visitCreateDataCacheRuleStatement(CreateDataCacheRuleStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                DataCacheMgr.getInstance().createCacheRule(stmt.getTarget(), stmt.getPredicates(), stmt.getPriority(),
+                        stmt.getProperties());
+            });
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitDropDataCacheRuleStatement(DropDataCacheRuleStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                DataCacheMgr.getInstance().dropCacheRule(stmt.getCacheRuleId());
+            });
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitClearDataCacheRulesStatement(ClearDataCacheRulesStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                DataCacheMgr.getInstance().clearRules();
+            });
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitDataCacheSelectStatement(DataCacheSelectStatement statement, ConnectContext context) {
+            DataCacheSelectMetrics metrics = null;
+            try {
+                metrics = DataCacheSelectExecutor.cacheSelect(statement, context);
+            } catch (Exception e) {
+                LOG.warn("Failed to execute cacheSelect", e);
+                throw new RuntimeException(e.getMessage());
+            }
+
+            return metrics.getShowResultSet(statement.isVerbose());
+        }
+
+        //=========================================== Dictionary Statement ==================================================
+        @Override
+        public ShowResultSet visitCreateDictionaryStatement(CreateDictionaryStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getDictionaryMgr().createDictionary(stmt,
+                        context.getCurrentCatalog(), context.getDatabase());
+            });
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitDropDictionaryStatement(DropDictionaryStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getDictionaryMgr().dropDictionary(stmt.getDictionaryName(),
+                        stmt.isCacheOnly(), false);
+            });
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitRefreshDictionaryStatement(RefreshDictionaryStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getDictionaryMgr().refreshDictionary(stmt.getDictionaryName());
+            });
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitCancelRefreshDictionaryStatement(CancelRefreshDictionaryStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getDictionaryMgr().cancelRefreshDictionary(stmt.getDictionaryName());
+            });
+            return null;
+        }
+
+        //=========================================== Warehouse Statement ==================================================
+
+        @Override
+        public ShowResultSet visitCreateWarehouseStatement(CreateWarehouseStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                WarehouseManager warehouseMgr = context.getGlobalStateMgr().getWarehouseMgr();
+                warehouseMgr.createWarehouse(stmt);
+
+            });
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitSuspendWarehouseStatement(SuspendWarehouseStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                WarehouseManager warehouseMgr = context.getGlobalStateMgr().getWarehouseMgr();
+                warehouseMgr.suspendWarehouse(stmt);
+
+            });
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitResumeWarehouseStatement(ResumeWarehouseStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                WarehouseManager warehouseMgr = context.getGlobalStateMgr().getWarehouseMgr();
+                warehouseMgr.resumeWarehouse(stmt);
+            });
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitDropWarehouseStatement(DropWarehouseStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                WarehouseManager warehouseMgr = context.getGlobalStateMgr().getWarehouseMgr();
+                warehouseMgr.dropWarehouse(stmt);
+            });
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitAlterWarehouseStatement(AlterWarehouseStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                WarehouseManager warehouseMgr = context.getGlobalStateMgr().getWarehouseMgr();
+                warehouseMgr.alterWarehouse(stmt);
+            });
+            return null;
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
 }

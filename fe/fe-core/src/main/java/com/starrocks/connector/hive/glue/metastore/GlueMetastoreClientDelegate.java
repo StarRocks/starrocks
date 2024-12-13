@@ -15,6 +15,7 @@
 
 package com.starrocks.connector.hive.glue.metastore;
 
+<<<<<<< HEAD
 import com.amazonaws.AmazonServiceException;
 import com.amazonaws.services.glue.model.Column;
 import com.amazonaws.services.glue.model.Database;
@@ -27,6 +28,8 @@ import com.amazonaws.services.glue.model.Table;
 import com.amazonaws.services.glue.model.TableInput;
 import com.amazonaws.services.glue.model.UserDefinedFunction;
 import com.amazonaws.services.glue.model.UserDefinedFunctionInput;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.connector.hive.glue.converters.CatalogToHiveConverter;
@@ -86,6 +89,21 @@ import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
+<<<<<<< HEAD
+=======
+import software.amazon.awssdk.core.exception.SdkException;
+import software.amazon.awssdk.services.glue.model.Column;
+import software.amazon.awssdk.services.glue.model.Database;
+import software.amazon.awssdk.services.glue.model.DatabaseInput;
+import software.amazon.awssdk.services.glue.model.EntityNotFoundException;
+import software.amazon.awssdk.services.glue.model.Partition;
+import software.amazon.awssdk.services.glue.model.PartitionInput;
+import software.amazon.awssdk.services.glue.model.PartitionValueList;
+import software.amazon.awssdk.services.glue.model.Table;
+import software.amazon.awssdk.services.glue.model.TableInput;
+import software.amazon.awssdk.services.glue.model.UserDefinedFunction;
+import software.amazon.awssdk.services.glue.model.UserDefinedFunctionInput;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -161,6 +179,7 @@ public class GlueMetastoreClientDelegate {
     public void createDatabase(org.apache.hadoop.hive.metastore.api.Database database) throws TException {
         checkNotNull(database, "database cannot be null");
 
+<<<<<<< HEAD
         if (StringUtils.isEmpty(database.getLocationUri())) {
             database.setLocationUri(wh.getDefaultDatabasePath(database.getName()).toString());
         } else {
@@ -168,12 +187,26 @@ public class GlueMetastoreClientDelegate {
         }
         Path dbPath = new Path(database.getLocationUri());
         boolean madeDir = MetastoreClientUtils.makeDirs(wh, dbPath);
+=======
+        Path dbPath = null;
+        boolean makeDir = false;
+        if (!StringUtils.isEmpty(database.getLocationUri())) {
+            database.setLocationUri(wh.getDnsPath(new Path(database.getLocationUri())).toString());
+            dbPath = new Path(database.getLocationUri());
+            makeDir = MetastoreClientUtils.makeDirs(wh, dbPath);
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         try {
             DatabaseInput catalogDatabase = GlueInputConverter.convertToDatabaseInput(database);
             glueMetastore.createDatabase(catalogDatabase);
+<<<<<<< HEAD
         } catch (AmazonServiceException e) {
             if (madeDir) {
+=======
+        } catch (SdkException e) {
+            if (makeDir) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 wh.deleteDir(dbPath, true, database);
             }
             throw CatalogToHiveConverter.wrapInHiveException(e);
@@ -190,7 +223,11 @@ public class GlueMetastoreClientDelegate {
         try {
             Database catalogDatabase = glueMetastore.getDatabase(name);
             return CatalogToHiveConverter.convertDatabase(catalogDatabase);
+<<<<<<< HEAD
         } catch (AmazonServiceException e) {
+=======
+        } catch (SdkException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             throw CatalogToHiveConverter.wrapInHiveException(e);
         } catch (Exception e) {
             String msg = "Unable to get database object: ";
@@ -212,13 +249,21 @@ public class GlueMetastoreClientDelegate {
 
             //filter by pattern
             for (Database db : allDatabases) {
+<<<<<<< HEAD
                 String name = db.getName();
+=======
+                String name = db.name();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (Pattern.matches(pattern, name)) {
                     ret.add(name);
                 }
             }
             return ret;
+<<<<<<< HEAD
         } catch (AmazonServiceException e) {
+=======
+        } catch (SdkException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             throw CatalogToHiveConverter.wrapInHiveException(e);
         } catch (Exception e) {
             String msg = "Unable to get databases: ";
@@ -235,7 +280,11 @@ public class GlueMetastoreClientDelegate {
         try {
             DatabaseInput catalogDatabase = GlueInputConverter.convertToDatabaseInput(database);
             glueMetastore.updateDatabase(databaseName, catalogDatabase);
+<<<<<<< HEAD
         } catch (AmazonServiceException e) {
+=======
+        } catch (SdkException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             throw CatalogToHiveConverter.wrapInHiveException(e);
         } catch (Exception e) {
             String msg = "Unable to alter database: ";
@@ -268,7 +317,11 @@ public class GlueMetastoreClientDelegate {
             } else {
                 throw e;
             }
+<<<<<<< HEAD
         } catch (AmazonServiceException e) {
+=======
+        } catch (SdkException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             throw CatalogToHiveConverter.wrapInHiveException(e);
         } catch (Exception e) {
             String msg = "Unable to drop database: ";
@@ -292,7 +345,11 @@ public class GlueMetastoreClientDelegate {
             getDatabase(dbName);
         } catch (NoSuchObjectException e) {
             return false;
+<<<<<<< HEAD
         } catch (AmazonServiceException e) {
+=======
+        } catch (SdkException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             throw new TException(e);
         } catch (Exception e) {
             throw new MetaException(e.getMessage());
@@ -314,7 +371,11 @@ public class GlueMetastoreClientDelegate {
 
             TableInput tableInput = GlueInputConverter.convertToTableInput(tbl);
             glueMetastore.createTable(tbl.getDbName(), tableInput);
+<<<<<<< HEAD
         } catch (AmazonServiceException e) {
+=======
+        } catch (SdkException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (dirCreated) {
                 Path tblPath = new Path(tbl.getSd().getLocation());
                 wh.deleteDir(tblPath, true, getDatabase(tbl.getDbName()));
@@ -339,7 +400,11 @@ public class GlueMetastoreClientDelegate {
             return true;
         } catch (EntityNotFoundException e) {
             return false;
+<<<<<<< HEAD
         } catch (AmazonServiceException e) {
+=======
+        } catch (SdkException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             throw CatalogToHiveConverter.wrapInHiveException(e);
         } catch (Exception e) {
             String msg = "Unable to check table exist: ";
@@ -356,7 +421,11 @@ public class GlueMetastoreClientDelegate {
             Table table = glueMetastore.getTable(dbName, tableName);
             MetastoreClientUtils.validateGlueTable(table);
             return CatalogToHiveConverter.convertTable(table, dbName);
+<<<<<<< HEAD
         } catch (AmazonServiceException e) {
+=======
+        } catch (SdkException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             throw CatalogToHiveConverter.wrapInHiveException(e);
         } catch (Exception e) {
             String msg = "Unable to get table: ";
@@ -372,10 +441,17 @@ public class GlueMetastoreClientDelegate {
         try {
             List<Table> tables = glueMetastore.getTables(dbname, tablePattern);
             for (Table catalogTable : tables) {
+<<<<<<< HEAD
                 names.add(catalogTable.getName());
             }
             return names;
         } catch (AmazonServiceException e) {
+=======
+                names.add(catalogTable.name());
+            }
+            return names;
+        } catch (SdkException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             throw CatalogToHiveConverter.wrapInHiveException(e);
         } catch (Exception e) {
             String msg = "Unable to get tables: ";
@@ -397,7 +473,11 @@ public class GlueMetastoreClientDelegate {
             for (Table catalogTable : dbTables) {
                 if (tableTypes == null ||
                         tableTypes.isEmpty() ||
+<<<<<<< HEAD
                         tableTypes.contains(catalogTable.getTableType())) {
+=======
+                        tableTypes.contains(catalogTable.tableType())) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     tables.add(CatalogToHiveConverter.convertTableMeta(catalogTable, dbName));
                 }
             }
@@ -443,7 +523,11 @@ public class GlueMetastoreClientDelegate {
         try {
             TableInput newTableInput = GlueInputConverter.convertToTableInput(newTable);
             glueMetastore.updateTable(dbName, newTableInput);
+<<<<<<< HEAD
         } catch (AmazonServiceException e) {
+=======
+        } catch (SdkException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             throw CatalogToHiveConverter.wrapInHiveException(e);
         } catch (Exception e) {
             String msg = "Unable to alter table: " + oldTableName;
@@ -483,7 +567,11 @@ public class GlueMetastoreClientDelegate {
 
         try {
             glueMetastore.deleteTable(dbName, tableName);
+<<<<<<< HEAD
         } catch (AmazonServiceException e) {
+=======
+        } catch (SdkException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             throw CatalogToHiveConverter.wrapInHiveException(e);
         } catch (Exception e) {
             String msg = "Unable to drop table: ";
@@ -496,7 +584,13 @@ public class GlueMetastoreClientDelegate {
             try {
                 wh.deleteDir(tblPath, true, ifPurge, getDatabase(dbName));
             } catch (Exception e) {
+<<<<<<< HEAD
                 LOGGER.error("Unable to remove table directory " + tblPath, e);
+=======
+                String msg = "Unable to remove table directory " + tblPath;
+                LOGGER.error(msg, e);
+                throw new MetaException(msg + e);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
     }
@@ -752,14 +846,22 @@ public class GlueMetastoreClientDelegate {
 
         List<PartitionValueList> partitionsToGet = Lists.newArrayList();
         for (String partitionName : partitionNames) {
+<<<<<<< HEAD
             partitionsToGet.add(new PartitionValueList().withValues(partitionNameToVals(partitionName)));
+=======
+            partitionsToGet.add(PartitionValueList.builder().values(partitionNameToVals(partitionName)).build());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         try {
             List<Partition> partitions =
                     glueMetastore.getPartitionsByNames(databaseName, tableName, partitionsToGet);
 
             return CatalogToHiveConverter.convertPartitions(partitions);
+<<<<<<< HEAD
         } catch (AmazonServiceException e) {
+=======
+        } catch (SdkException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             throw CatalogToHiveConverter.wrapInHiveException(e);
         } catch (Exception e) {
             String msg = "Unable to get partition by names: " + StringUtils.join(partitionNames, "/");
@@ -793,7 +895,11 @@ public class GlueMetastoreClientDelegate {
                                 values);
                 return null;
             }
+<<<<<<< HEAD
         } catch (AmazonServiceException e) {
+=======
+        } catch (SdkException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             throw CatalogToHiveConverter.wrapInHiveException(e);
         } catch (Exception e) {
             String msg = "Unable to get partition with values: " + StringUtils.join(values, "/");
@@ -825,7 +931,11 @@ public class GlueMetastoreClientDelegate {
         checkArgument(StringUtils.isNotEmpty(tableName), "tableName cannot be null or empty");
         try {
             return glueMetastore.getPartitions(databaseName, tableName, expression, max);
+<<<<<<< HEAD
         } catch (AmazonServiceException e) {
+=======
+        } catch (SdkException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             throw CatalogToHiveConverter.wrapInHiveException(e);
         } catch (Exception e) {
             String msg = "Unable to get partitions with expression: " + expression;
@@ -857,7 +967,11 @@ public class GlueMetastoreClientDelegate {
 
         try {
             glueMetastore.deletePartition(dbName, tblName, partition.getValues());
+<<<<<<< HEAD
         } catch (AmazonServiceException e) {
+=======
+        } catch (SdkException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             throw CatalogToHiveConverter.wrapInHiveException(e);
         } catch (Exception e) {
             String msg = "Unable to drop partition with values: " + StringUtils.join(values, "/");
@@ -932,7 +1046,11 @@ public class GlueMetastoreClientDelegate {
 
             try {
                 glueMetastore.updatePartition(dbName, tblName, part.getValues(), partitionInput);
+<<<<<<< HEAD
             } catch (AmazonServiceException e) {
+=======
+            } catch (SdkException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 throw CatalogToHiveConverter.wrapInHiveException(e);
             } catch (Exception e) {
                 String msg = "Unable to alter partition: ";
@@ -1083,7 +1201,11 @@ public class GlueMetastoreClientDelegate {
         checkNotNull(colNames, "colNames cannot be null");
         try {
             return glueMetastore.getPartitionColumnStatistics(dbName, tableName, partitionNames, colNames);
+<<<<<<< HEAD
         } catch (AmazonServiceException e) {
+=======
+        } catch (SdkException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             throw CatalogToHiveConverter.wrapInHiveException(e);
         } catch (Exception e) {
             String msg = String.format("Unable to get table column statistics, %s.%s", dbName, tableName);
@@ -1102,7 +1224,11 @@ public class GlueMetastoreClientDelegate {
         checkNotNull(colNames, "colNames cannot be null");
         try {
             return glueMetastore.getTableColumnStatistics(dbName, tableName, colNames);
+<<<<<<< HEAD
         } catch (AmazonServiceException e) {
+=======
+        } catch (SdkException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             throw CatalogToHiveConverter.wrapInHiveException(e);
         } catch (Exception e) {
             String msg = String.format("Unable to get table column statistics, %s.%s", dbName, tableName);
@@ -1441,7 +1567,11 @@ public class GlueMetastoreClientDelegate {
         try {
             UserDefinedFunction userDefinedFunction = glueMetastore.getUserDefinedFunction(dbName, functionName);
             return CatalogToHiveConverter.convertFunction(dbName, userDefinedFunction);
+<<<<<<< HEAD
         } catch (AmazonServiceException e) {
+=======
+        } catch (SdkException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             LOGGER.error(e);
             throw CatalogToHiveConverter.wrapInHiveException(e);
         } catch (Exception e) {
@@ -1467,10 +1597,17 @@ public class GlueMetastoreClientDelegate {
             List<UserDefinedFunction> functions =
                     glueMetastore.getUserDefinedFunctions(dbName, pattern);
             for (UserDefinedFunction catalogFunction : functions) {
+<<<<<<< HEAD
                 functionNames.add(catalogFunction.getFunctionName());
             }
             return functionNames;
         } catch (AmazonServiceException e) {
+=======
+                functionNames.add(catalogFunction.functionName());
+            }
+            return functionNames;
+        } catch (SdkException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             LOGGER.error(e);
             throw CatalogToHiveConverter.wrapInHiveException(e);
         } catch (Exception e) {
@@ -1493,7 +1630,11 @@ public class GlueMetastoreClientDelegate {
         try {
             UserDefinedFunctionInput functionInput = GlueInputConverter.convertToUserDefinedFunctionInput(function);
             glueMetastore.createUserDefinedFunction(function.getDbName(), functionInput);
+<<<<<<< HEAD
         } catch (AmazonServiceException e) {
+=======
+        } catch (SdkException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             LOGGER.error(e);
             throw CatalogToHiveConverter.wrapInHiveException(e);
         } catch (Exception e) {
@@ -1518,7 +1659,11 @@ public class GlueMetastoreClientDelegate {
             InvalidObjectException, org.apache.hadoop.hive.metastore.api.InvalidInputException, TException {
         try {
             glueMetastore.deleteUserDefinedFunction(dbName, functionName);
+<<<<<<< HEAD
         } catch (AmazonServiceException e) {
+=======
+        } catch (SdkException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             LOGGER.error(e);
             throw CatalogToHiveConverter.wrapInHiveException(e);
         } catch (Exception e) {
@@ -1545,7 +1690,11 @@ public class GlueMetastoreClientDelegate {
         try {
             UserDefinedFunctionInput functionInput = GlueInputConverter.convertToUserDefinedFunctionInput(newFunction);
             glueMetastore.updateUserDefinedFunction(dbName, functionName, functionInput);
+<<<<<<< HEAD
         } catch (AmazonServiceException e) {
+=======
+        } catch (SdkException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             LOGGER.error(e);
             throw CatalogToHiveConverter.wrapInHiveException(e);
         } catch (Exception e) {
@@ -1570,8 +1719,13 @@ public class GlueMetastoreClientDelegate {
             UnknownTableException, UnknownDBException {
         try {
             Table table = glueMetastore.getTable(db, tableName);
+<<<<<<< HEAD
             return CatalogToHiveConverter.convertFieldSchemaList(table.getStorageDescriptor().getColumns());
         } catch (AmazonServiceException e) {
+=======
+            return CatalogToHiveConverter.convertFieldSchemaList(table.storageDescriptor().columns());
+        } catch (SdkException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             throw CatalogToHiveConverter.wrapInHiveException(e);
         } catch (Exception e) {
             String msg = "Unable to get field from table: ";
@@ -1595,12 +1749,21 @@ public class GlueMetastoreClientDelegate {
             UnknownTableException, UnknownDBException {
         try {
             Table table = glueMetastore.getTable(db, tableName);
+<<<<<<< HEAD
             List<Column> schemas = table.getStorageDescriptor().getColumns();
             if (table.getPartitionKeys() != null && !table.getPartitionKeys().isEmpty()) {
                 schemas.addAll(table.getPartitionKeys());
             }
             return CatalogToHiveConverter.convertFieldSchemaList(schemas);
         } catch (AmazonServiceException e) {
+=======
+            List<Column> schemas = table.storageDescriptor().columns();
+            if (table.partitionKeys() != null && !table.partitionKeys().isEmpty()) {
+                schemas.addAll(table.partitionKeys());
+            }
+            return CatalogToHiveConverter.convertFieldSchemaList(schemas);
+        } catch (SdkException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             throw CatalogToHiveConverter.wrapInHiveException(e);
         } catch (Exception e) {
             String msg = "Unable to get field from table: ";
@@ -1627,7 +1790,11 @@ public class GlueMetastoreClientDelegate {
         try {
             PartitionInput partitionInput = GlueInputConverter.convertToPartitionInput(newPartition);
             glueMetastore.updatePartition(databaseName, tableName, partitionValues, partitionInput);
+<<<<<<< HEAD
         } catch (AmazonServiceException e) {
+=======
+        } catch (SdkException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             throw CatalogToHiveConverter.wrapInHiveException(e);
         }
     }

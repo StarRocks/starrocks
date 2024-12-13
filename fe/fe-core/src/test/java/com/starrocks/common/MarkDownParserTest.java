@@ -27,7 +27,11 @@ import java.util.Map;
 public class MarkDownParserTest {
 
     @Test
+<<<<<<< HEAD
     public void testNormal() throws UserException {
+=======
+    public void testNormal() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<String> lines = Lists.newArrayList();
         lines.add("# SHOW TABLES");
         lines.add("## name");
@@ -55,7 +59,11 @@ public class MarkDownParserTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testMultiDoc() throws UserException {
+=======
+    public void testMultiDoc() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<String> lines = Lists.newArrayList();
         lines.add(" name");
         lines.add("# SHOW TABLES");
@@ -85,7 +93,11 @@ public class MarkDownParserTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testNoDoc() throws UserException {
+=======
+    public void testNoDoc() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<String> lines = Lists.newArrayList();
         lines.add(" SHOW TABLES");
         lines.add(" name");
@@ -108,8 +120,13 @@ public class MarkDownParserTest {
         Assert.assertNull(map.get("DATABASES abc"));
     }
 
+<<<<<<< HEAD
     @Test(expected = UserException.class)
     public void testNoFirst() throws UserException {
+=======
+    @Test(expected = StarRocksException.class)
+    public void testNoFirst() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<String> lines = Lists.newArrayList();
         lines.add("## SHOW TABLES");
         MarkDownParser parser = new MarkDownParser(lines);
@@ -130,7 +147,11 @@ public class MarkDownParserTest {
     //    }
 
     @Test
+<<<<<<< HEAD
     public void testMultiHeadLevel() throws UserException {
+=======
+    public void testMultiHeadLevel() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<String> lines = Lists.newArrayList();
         lines.add("# SHOW TABLES");
         lines.add("## name");
@@ -160,7 +181,11 @@ public class MarkDownParserTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testEmptyTitle() throws UserException {
+=======
+    public void testEmptyTitle() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<String> lines = Lists.newArrayList();
         lines.add("#");
         lines.add("## ");
@@ -183,7 +208,11 @@ public class MarkDownParserTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testOneName() throws UserException {
+=======
+    public void testOneName() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<String> lines = Lists.newArrayList();
         lines.add("# TABLES");
         lines.add("# TABLE");

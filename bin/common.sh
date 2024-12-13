@@ -55,6 +55,18 @@ jvm_arch() {
     echo $jvm_arch
 }
 
+<<<<<<< HEAD
+=======
+read_var_from_conf() {
+    local var_name=$1
+    local conf_file=$2
+    local var_line=`grep $var_name $conf_file | sed 's/[[:blank:]]*=[[:blank:]]*/=/g' | sed 's/^[[:blank:]]*//g' | grep ^$var_name=`
+    if [[ $var_line == *"="* ]]; then
+        eval "$var_line"
+    fi
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 export_env_from_conf() {
     while read line; do
         envline=`echo $line | sed 's/[[:blank:]]*=[[:blank:]]*/=/g' | sed 's/^[[:blank:]]*//g' | egrep "^[[:upper:]]([[:upper:]]|_|[[:digit:]])*="`
@@ -86,12 +98,15 @@ export_shared_envvars() {
     # ===================================================================================
 }
 
+<<<<<<< HEAD
 # Export cachelib libraries
 export_cachelib_lib_path() {
     CACHELIB_DIR=$STARROCKS_HOME/lib/cachelib
     export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$CACHELIB_DIR/lib64
 }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 update_submodules()
 {
     pushd ${STARROCKS_HOME} &>/dev/null

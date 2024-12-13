@@ -167,6 +167,18 @@ public:
     template <LogicalType TYPE, bool isNorm>
     DEFINE_VECTORIZED_FN(cosine_similarity);
 
+<<<<<<< HEAD
+=======
+    template <LogicalType TYPE, bool isNorm>
+    DEFINE_VECTORIZED_FN(cosine_similarity2);
+
+    template <LogicalType TYPE>
+    DEFINE_VECTORIZED_FN(l2_distance);
+
+    template <LogicalType TYPE>
+    DEFINE_VECTORIZED_FN(l2_distance2);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     /**
     * @param columns: [DoubleColumn]
     * @return BigIntColumn
@@ -260,6 +272,14 @@ public:
     */
     DEFINE_VECTORIZED_FN(sqrt);
     /**
+<<<<<<< HEAD
+=======
+    * @param: [DoubleColumn]
+    * @return: DoubleColumn
+    */
+    DEFINE_VECTORIZED_FN(cbrt);
+    /**
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     * @param: [DoubleColumn base, DoubleColumn exp]
     * @return: DoubleColumn
     */

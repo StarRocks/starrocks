@@ -12,12 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+<<<<<<< HEAD
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
@@ -27,6 +31,23 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
+=======
+import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.Table;
+import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
+import com.starrocks.connector.ConnectorMetadatRequestContext;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.CatalogMgr;
+import com.starrocks.server.GlobalStateMgr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.AnalyzeHistogramDesc;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.AnalyzeTypeDesc;
@@ -36,17 +57,39 @@ import com.starrocks.sql.ast.DropHistogramStmt;
 import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.MetaUtils;
+<<<<<<< HEAD
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.StatsConstants;
+=======
+import com.starrocks.sql.optimizer.Memo;
+import com.starrocks.sql.optimizer.OptimizerConfig;
+import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.statistic.StatisticUtils;
+import com.starrocks.statistic.StatsConstants;
+import org.apache.commons.lang3.NotImplementedException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.commons.lang3.math.NumberUtils;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+<<<<<<< HEAD
+=======
+import java.util.ArrayList;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
+<<<<<<< HEAD
+=======
+import java.util.stream.Collectors;
+
+import static com.starrocks.connector.PartitionUtil.createPartitionKey;
+import static com.starrocks.connector.PartitionUtil.toPartitionValues;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 public class AnalyzeStmtAnalyzer {
     public static void analyze(StatementBase statement, ConnectContext session) {
@@ -76,15 +119,28 @@ public class AnalyzeStmtAnalyzer {
                     StatsConstants.HISTOGRAM_MCV_SIZE,
                     StatsConstants.HISTOGRAM_SAMPLE_RATIO)).build();
 
+<<<<<<< HEAD
     static class AnalyzeStatementAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+=======
+    public static boolean isSupportedHistogramAnalyzeTableType(Table table) {
+        return table.isNativeTableOrMaterializedView() || table.isHiveTable();
+    }
+
+    static class AnalyzeStatementAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         public void analyze(StatementBase statement, ConnectContext session) {
             visit(statement, session);
         }
 
         @Override
         public Void visitAnalyzeStatement(AnalyzeStmt statement, ConnectContext session) {
+<<<<<<< HEAD
             MetaUtils.normalizationTableName(session, statement.getTableName());
             Table analyzeTable = MetaUtils.getTable(session, statement.getTableName());
+=======
+            statement.getTableName().normalization(session);
+            Table analyzeTable = MetaUtils.getSessionAwareTable(session, null, statement.getTableName());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
             if (StatisticUtils.statisticDatabaseBlackListCheck(statement.getTableName().getDb())) {
                 throw new SemanticException("Forbidden collect database: %s", statement.getTableName().getDb());
@@ -92,6 +148,7 @@ public class AnalyzeStmtAnalyzer {
 
             // Analyze columns mentioned in the statement.
             Set<String> mentionedColumns = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+<<<<<<< HEAD
 
             List<String> columnNames = statement.getColumnNames();
             if (columnNames != null) {
@@ -104,17 +161,61 @@ public class AnalyzeStmtAnalyzer {
                         throw new SemanticException("Column '%s' specified twice", colName);
                     }
                 }
+=======
+            List<Expr> columns = statement.getColumns();
+            // The actual column name, avoiding case sensitivity issues
+            List<String> realColumnNames = Lists.newArrayList();
+            if (columns != null && !columns.isEmpty()) {
+                for (Expr column : columns) {
+                    ExpressionAnalyzer.analyzeExpression(column, new AnalyzeState(), new Scope(RelationId.anonymous(),
+                            new RelationFields(analyzeTable.getBaseSchema().stream().map(col -> new Field(col.getName(),
+                                            col.getType(), statement.getTableName(), null))
+                                    .collect(Collectors.toList()))), session);
+                    String colName = StatisticUtils.getColumnName(analyzeTable, column);
+                    if (!mentionedColumns.add(colName)) {
+                        throw new SemanticException("Column '%s' specified twice", colName);
+                    }
+                    realColumnNames.add(colName);
+                }
+                statement.setColumnNames(realColumnNames);
+            }
+
+            if (statement.getPartitionNames() != null) {
+                if (!analyzeTable.isNativeTableOrMaterializedView()) {
+                    throw new SemanticException("Analyze partition only support olap table");
+                }
+                List<Long> pidList = Lists.newArrayList();
+                for (String partitionName : statement.getPartitionNames().getPartitionNames()) {
+                    Partition p = analyzeTable.getPartition(partitionName);
+                    if (p == null) {
+                        throw new SemanticException("Partition '%s' not found", partitionName);
+                    }
+                    pidList.add(p.getId());
+                }
+                statement.setPartitionIds(pidList);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
 
             analyzeProperties(statement.getProperties());
             analyzeAnalyzeTypeDesc(session, statement, statement.getAnalyzeTypeDesc());
 
             if (CatalogMgr.isExternalCatalog(statement.getTableName().getCatalog())) {
+<<<<<<< HEAD
                 if (statement.isSample()) {
                     throw new SemanticException("External table %s don't support SAMPLE analyze",
                             statement.getTableName().toString());
                 }
                 statement.setExternal(true);
+=======
+                if (!analyzeTable.isAnalyzableExternalTable()) {
+                    throw new SemanticException(
+                            "Analyze external table only support hive, iceberg, deltalake and odps table",
+                            statement.getTableName().toString());
+                }
+                statement.setExternal(true);
+            } else if (CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog(analyzeTable.getCatalogName())) {
+                throw new SemanticException("Don't support analyze external table created by resource mapping");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
             return null;
         }
@@ -127,6 +228,7 @@ public class AnalyzeStmtAnalyzer {
                 if ((Strings.isNullOrEmpty(tbl.getCatalog()) &&
                         CatalogMgr.isExternalCatalog(session.getCurrentCatalog())) ||
                         CatalogMgr.isExternalCatalog(tbl.getCatalog())) {
+<<<<<<< HEAD
                     throw new SemanticException("External Table don't support analyze job");
                 }
 
@@ -134,18 +236,65 @@ public class AnalyzeStmtAnalyzer {
                     Database db = MetaUtils.getDatabase(session, tbl);
 
                     if (StatisticUtils.statisticDatabaseBlackListCheck(statement.getTableName().getDb())) {
+=======
+                    if (tbl.getTbl() == null) {
+                        throw new SemanticException("External catalog don't support analyze all tables, please give a" +
+                                " specific table");
+                    }
+                    String catalogName = Strings.isNullOrEmpty(tbl.getCatalog()) ?
+                            session.getCurrentCatalog() : tbl.getCatalog();
+                    tbl.setCatalog(catalogName);
+                    statement.setCatalogName(catalogName);
+                    String dbName = Strings.isNullOrEmpty(tbl.getDb()) ?
+                            session.getDatabase() : tbl.getDb();
+                    tbl.setDb(dbName);
+                    Table analyzeTable = MetaUtils.getSessionAwareTable(session, null, statement.getTableName());
+                    if (!analyzeTable.isAnalyzableExternalTable()) {
+                        throw new SemanticException("Analyze external table only support hive, iceberg, deltalake and odps table",
+                                statement.getTableName().toString());
+                    }
+                }
+
+                if (null != tbl.getDb() && null == tbl.getTbl()) {
+                    Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(tbl.getCatalog(), tbl.getDb());
+                    if (db == null) {
+                        throw new SemanticException("Database %s is not found", tbl.getCatalogAndDb());
+                    }
+
+                    if (statement.isNative() &&
+                            StatisticUtils.statisticDatabaseBlackListCheck(statement.getTableName().getDb())) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         throw new SemanticException("Forbidden collect database: %s", statement.getTableName().getDb());
                     }
 
                     statement.setDbId(db.getId());
                 } else if (null != statement.getTableName().getTbl()) {
+<<<<<<< HEAD
                     MetaUtils.normalizationTableName(session, statement.getTableName());
                     Database db = MetaUtils.getDatabase(session, statement.getTableName());
                     Table analyzeTable = MetaUtils.getTable(session, statement.getTableName());
+=======
+                    statement.getTableName().normalization(session);
+                    Database db = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                            .getDb(statement.getTableName().getCatalog(), statement.getTableName().getDb());
+                    if (db == null) {
+                        throw new SemanticException("Database %s is not found", statement.getTableName().getCatalogAndDb());
+                    }
+                    Table analyzeTable = MetaUtils.getSessionAwareTable(session, db, statement.getTableName());
+
+                    if (analyzeTable.isTemporaryTable()) {
+                        throw new SemanticException("Don't support create analyze job for temporary table");
+                    }
+
+                    if (CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog(analyzeTable.getCatalogName())) {
+                        throw new SemanticException("Don't support analyze external table created by resource mapping");
+                    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
                     // Analyze columns mentioned in the statement.
                     Set<String> mentionedColumns = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
 
+<<<<<<< HEAD
                     List<String> columnNames = statement.getColumnNames();
                     if (columnNames != null && !columnNames.isEmpty()) {
                         for (String colName : columnNames) {
@@ -158,13 +307,42 @@ public class AnalyzeStmtAnalyzer {
                                 throw new SemanticException("Column '%s' specified twice", colName);
                             }
                         }
+=======
+                    List<Expr> columns = statement.getColumns();
+                    // The actual column name, avoiding case sensitivity issues
+                    List<String> realColumnNames = Lists.newArrayList();
+                    if (columns != null && !columns.isEmpty()) {
+                        for (Expr column : columns) {
+                            ExpressionAnalyzer.analyzeExpression(column, new AnalyzeState(), new Scope(RelationId.anonymous(),
+                                    new RelationFields(analyzeTable.getBaseSchema().stream().map(col -> new Field(col.getName(),
+                                                    col.getType(), statement.getTableName(), null))
+                                            .collect(Collectors.toList()))), session);
+                            String colName = StatisticUtils.getColumnName(analyzeTable, column);
+                            if (!mentionedColumns.add(colName)) {
+                                throw new SemanticException("Column '%s' specified twice", colName);
+                            }
+                            realColumnNames.add(colName);
+                        }
+                        statement.setColumnNames(realColumnNames);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     }
 
                     statement.setDbId(db.getId());
                     statement.setTableId(analyzeTable.getId());
                 }
+<<<<<<< HEAD
             }
             analyzeProperties(statement.getProperties());
+=======
+            } else {
+                if (CatalogMgr.isExternalCatalog(session.getCurrentCatalog())) {
+                    throw new SemanticException("External catalog %s don't support analyze all databases",
+                            session.getCurrentCatalog());
+                }
+            }
+            analyzeProperties(statement.getProperties());
+            analyzeAnalyzeTypeDesc(session, statement, statement.getAnalyzeTypeDesc());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return null;
         }
 
@@ -193,6 +371,7 @@ public class AnalyzeStmtAnalyzer {
             }
         }
 
+<<<<<<< HEAD
         private void analyzeAnalyzeTypeDesc(ConnectContext session, AnalyzeStmt statement,
                                             AnalyzeTypeDesc analyzeTypeDesc) {
             if (analyzeTypeDesc instanceof AnalyzeHistogramDesc) {
@@ -205,6 +384,34 @@ public class AnalyzeStmtAnalyzer {
 
                 for (String columnName : columns) {
                     Column column = analyzeTable.getColumn(columnName);
+=======
+        private void analyzeAnalyzeTypeDesc(ConnectContext session, StatementBase statement,
+                                            AnalyzeTypeDesc analyzeTypeDesc) {
+            if (analyzeTypeDesc instanceof AnalyzeHistogramDesc) {
+                List<Expr> columns;
+                Map<String, String> properties;
+                TableName tableName;
+                if (statement instanceof AnalyzeStmt) {
+                    AnalyzeStmt analyzeStmt = (AnalyzeStmt) statement;
+                    columns = analyzeStmt.getColumns();
+                    properties = analyzeStmt.getProperties();
+                    tableName = analyzeStmt.getTableName();
+                } else if (statement instanceof CreateAnalyzeJobStmt) {
+                    CreateAnalyzeJobStmt createAnalyzeJobStmt = (CreateAnalyzeJobStmt) statement;
+                    columns = createAnalyzeJobStmt.getColumns();
+                    properties = createAnalyzeJobStmt.getProperties();
+                    tableName = createAnalyzeJobStmt.getTableName();
+                } else {
+                    throw new NotImplementedException("unreachable");
+                }
+
+                Table analyzeTable = MetaUtils.getSessionAwareTable(session, null, tableName);
+                if (!isSupportedHistogramAnalyzeTableType(analyzeTable)) {
+                    throw new SemanticException("Can't create histogram statistics on table type is %s",
+                            analyzeTable.getType().name());
+                }
+                for (Expr column : columns) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     if (column.getType().isComplexType()
                             || column.getType().isJsonType()
                             || column.getType().isOnlyMetricType()) {
@@ -213,35 +420,83 @@ public class AnalyzeStmtAnalyzer {
                     }
                 }
 
+<<<<<<< HEAD
                 Map<String, String> properties = statement.getProperties();
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 long bucket = ((AnalyzeHistogramDesc) analyzeTypeDesc).getBuckets();
                 if (bucket <= 0) {
                     throw new SemanticException("Bucket number can't less than 1");
                 }
+<<<<<<< HEAD
                 statement.getProperties().put(StatsConstants.HISTOGRAM_BUCKET_NUM, String.valueOf(bucket));
+=======
+                properties.put(StatsConstants.HISTOGRAM_BUCKET_NUM, String.valueOf(bucket));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
                 properties.computeIfAbsent(StatsConstants.HISTOGRAM_MCV_SIZE,
                         p -> String.valueOf(Config.histogram_mcv_size));
                 properties.computeIfAbsent(StatsConstants.HISTOGRAM_SAMPLE_RATIO,
                         p -> String.valueOf(Config.histogram_sample_ratio));
 
+<<<<<<< HEAD
                 long totalRows = analyzeTable.getRowCount();
                 long sampleRows = (long) (totalRows *
                         Double.parseDouble(properties.get(StatsConstants.HISTOGRAM_SAMPLE_RATIO)));
 
+=======
+                double totalRows = 0;
+                if (analyzeTable.isNativeTableOrMaterializedView()) {
+                    OlapTable analyzedOlapTable = (OlapTable) analyzeTable;
+                    totalRows = analyzedOlapTable.getRowCount();
+                } else {
+                    List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                            .listPartitionNames(tableName.getCatalog(), tableName.getDb(),
+                                    tableName.getTbl(), ConnectorMetadatRequestContext.DEFAULT);
+                    List<PartitionKey> keys = new ArrayList<>();
+                    try {
+                        for (String partName : partitionNames) {
+                            List<String> values = toPartitionValues(partName);
+                            PartitionKey partitionKey = createPartitionKey(values, analyzeTable.getPartitionColumns(),
+                                    analyzeTable);
+                            keys.add(partitionKey);
+                        }
+                    } catch (AnalysisException e) {
+                        throw new SemanticException("can not get partition keys for table : %s.%s.%s, %s",
+                                tableName.getCatalog(), tableName.getDb(), tableName.getTbl(), e.getMessage());
+                    }
+
+                    Statistics tableStats = session.getGlobalStateMgr().getMetadataMgr().
+                            getTableStatistics(new OptimizerContext(new Memo(), new ColumnRefFactory(), session,
+                                            OptimizerConfig.defaultConfig()),
+                                    tableName.getCatalog(), analyzeTable, Maps.newHashMap(), keys, null);
+                    totalRows = tableStats.getOutputRowCount();
+                }
+                double sampleRows = totalRows *
+                        Double.parseDouble(properties.get(StatsConstants.HISTOGRAM_SAMPLE_RATIO));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (sampleRows < Config.statistic_sample_collect_rows && totalRows != 0) {
                     if (Config.statistic_sample_collect_rows > totalRows) {
                         properties.put(StatsConstants.HISTOGRAM_SAMPLE_RATIO, "1");
                     } else {
                         properties.put(StatsConstants.HISTOGRAM_SAMPLE_RATIO, String.valueOf(
+<<<<<<< HEAD
                                 BigDecimal.valueOf((double) Config.statistic_sample_collect_rows / (double) totalRows)
+=======
+                                BigDecimal.valueOf(
+                                                (double) Config.statistic_sample_collect_rows / totalRows)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                         .setScale(8, RoundingMode.HALF_UP).doubleValue()));
                     }
                 } else if (sampleRows > Config.histogram_max_sample_row_count) {
                     properties.put(StatsConstants.HISTOGRAM_SAMPLE_RATIO, String.valueOf(
                             BigDecimal.valueOf((double) Config.histogram_max_sample_row_count /
+<<<<<<< HEAD
                                             (double) (totalRows == 0L ? 1L : totalRows))
+=======
+                                            (totalRows == 0L ? 1L : totalRows))
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                     .setScale(8, RoundingMode.HALF_UP).doubleValue()));
                 }
             }
@@ -249,7 +504,11 @@ public class AnalyzeStmtAnalyzer {
 
         @Override
         public Void visitDropStatsStatement(DropStatsStmt statement, ConnectContext session) {
+<<<<<<< HEAD
             MetaUtils.normalizationTableName(session, statement.getTableName());
+=======
+            statement.getTableName().normalization(session);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (CatalogMgr.isExternalCatalog(statement.getTableName().getCatalog())) {
                 statement.setExternal(true);
             }
@@ -258,6 +517,7 @@ public class AnalyzeStmtAnalyzer {
 
         @Override
         public Void visitDropHistogramStatement(DropHistogramStmt statement, ConnectContext session) {
+<<<<<<< HEAD
             MetaUtils.normalizationTableName(session, statement.getTableName());
             Table analyzeTable = MetaUtils.getTable(session, statement.getTableName());
             List<String> columnNames = statement.getColumnNames();
@@ -267,6 +527,25 @@ public class AnalyzeStmtAnalyzer {
                     throw new SemanticException("Unknown column '%s' in '%s'", colName, analyzeTable.getName());
                 }
             }
+=======
+            statement.getTableName().normalization(session);
+            if (CatalogMgr.isExternalCatalog(statement.getTableName().getCatalog())) {
+                statement.setExternal(true);
+            }
+
+            Table analyzeTable = MetaUtils.getSessionAwareTable(session, null, statement.getTableName());
+            List<Expr> columns = statement.getColumns();
+            List<String> realColumnNames = Lists.newArrayList();
+            for (Expr column : columns) {
+                ExpressionAnalyzer.analyzeExpression(column, new AnalyzeState(), new Scope(RelationId.anonymous(),
+                        new RelationFields(analyzeTable.getBaseSchema().stream().map(col -> new Field(col.getName(),
+                                        col.getType(), statement.getTableName(), null))
+                                .collect(Collectors.toList()))), session);
+                String colName = StatisticUtils.getColumnName(analyzeTable, column);
+                realColumnNames.add(colName);
+            }
+            statement.setColumnNames(realColumnNames);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return null;
         }
     }

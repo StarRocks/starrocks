@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # json_length
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
  Returns the length of a JSON document. If a path is specified, this function returns the length of the value identified by the path.
 
@@ -38,7 +42,11 @@ An error is returned if the JSON document is not a valid document.
 
 0 is returned in any of the following scenarios:
 
+<<<<<<< HEAD
 - The **`path`** does not identify a value in the document.
+=======
+- The **`path`** does not identify a value in the document. 
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 - The path is not a valid path expression.
 

@@ -19,6 +19,10 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
+<<<<<<< HEAD
+=======
+import org.apache.commons.collections4.MapUtils;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -92,4 +96,11 @@ public class HistogramStatsMeta implements Writable {
     public Map<String, String> getProperties() {
         return properties;
     }
+<<<<<<< HEAD
+=======
+
+    public boolean isInitJobMeta() {
+        return MapUtils.isNotEmpty(properties) && properties.containsKey(StatsConstants.INIT_SAMPLE_STATS_JOB);
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

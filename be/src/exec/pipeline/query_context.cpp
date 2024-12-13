@@ -20,6 +20,10 @@
 #include "agent/master_info.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_fwd.h"
+<<<<<<< HEAD
+=======
+#include "exec/pipeline/scan/connector_scan_operator.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "exec/spill/query_spill_manager.h"
 #include "exec/workgroup/work_group.h"
 #include "runtime/client_cache.h"
@@ -29,6 +33,7 @@
 #include "runtime/query_statistics.h"
 #include "runtime/runtime_filter_cache.h"
 #include "util/thread.h"
+<<<<<<< HEAD
 
 namespace starrocks::pipeline {
 
@@ -36,6 +41,12 @@ using apache::thrift::TException;
 using apache::thrift::TProcessor;
 using apache::thrift::transport::TTransportException;
 
+=======
+#include "util/thrift_rpc_helper.h"
+
+namespace starrocks::pipeline {
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 QueryContext::QueryContext()
         : _fragment_mgr(new FragmentContextManager()),
           _total_fragments(0),
@@ -61,6 +72,10 @@ QueryContext::~QueryContext() noexcept {
                 "bytes:{}",
                 print_id(query_id()), lifetime(), cpu_cost(), mem_cost_bytes(), get_scan_bytes(), get_spill_bytes());
     }
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     {
         SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker.get());
         _fragment_mgr.reset();
@@ -74,6 +89,14 @@ QueryContext::~QueryContext() noexcept {
         }
         _exec_env->runtime_filter_cache()->remove(_query_id);
     }
+<<<<<<< HEAD
+=======
+
+    // Make sure all bytes are released back to parent trackers.
+    if (_connector_scan_mem_tracker != nullptr) {
+        _connector_scan_mem_tracker->release_without_root();
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 void QueryContext::count_down_fragments() {
@@ -91,7 +114,11 @@ void QueryContext::count_down_fragments() {
     // considering that this feature is generally used for debugging,
     // I think it should not have a big impact now
     if (query_trace != nullptr) {
+<<<<<<< HEAD
         query_trace->dump();
+=======
+        (void)query_trace->dump();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }
 
@@ -100,6 +127,7 @@ FragmentContextManager* QueryContext::fragment_mgr() {
 }
 
 void QueryContext::cancel(const Status& status) {
+<<<<<<< HEAD
     _fragment_mgr->cancel(status);
 }
 
@@ -130,6 +158,15 @@ int64_t QueryContext::compute_query_mem_limit(int64_t parent_mem_limit, int64_t 
 
 void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent, int64_t big_query_mem_limit,
                                     std::optional<double> spill_mem_reserve_ratio, workgroup::WorkGroup* wg) {
+=======
+    _is_cancelled = true;
+    _fragment_mgr->cancel(status);
+}
+
+void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent, int64_t big_query_mem_limit,
+                                    std::optional<double> spill_mem_reserve_ratio, workgroup::WorkGroup* wg,
+                                    RuntimeState* runtime_state, int connector_scan_node_number) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::call_once(_init_mem_tracker_once, [=]() {
         _profile = std::make_shared<RuntimeProfile>("Query" + print_id(_query_id));
         auto* mem_tracker_counter =
@@ -141,7 +178,13 @@ void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent,
         if (spill_mem_reserve_ratio.has_value()) {
             tracker_reserve_limit = lowest_limit * spill_mem_reserve_ratio.value();
         }
+<<<<<<< HEAD
         if (wg != nullptr && big_query_mem_limit > 0 && big_query_mem_limit < query_mem_limit) {
+=======
+
+        if (wg != nullptr && big_query_mem_limit > 0 &&
+            (query_mem_limit <= 0 || big_query_mem_limit < query_mem_limit)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             std::string label = "Group=" + wg->name() + ", " + _profile->name();
             _mem_tracker = std::make_shared<MemTracker>(MemTracker::RESOURCE_GROUP_BIG_QUERY, big_query_mem_limit,
                                                         std::move(label), parent);
@@ -155,9 +198,43 @@ void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent,
         if (query_mem_limit > 0) {
             _static_query_mem_limit = std::min(query_mem_limit, _static_query_mem_limit);
         }
+<<<<<<< HEAD
     });
 }
 
+=======
+        if (big_query_mem_limit > 0) {
+            _static_query_mem_limit = std::min(big_query_mem_limit, _static_query_mem_limit);
+        }
+        _connector_scan_operator_mem_share_arbitrator = _object_pool.add(
+                new ConnectorScanOperatorMemShareArbitrator(_static_query_mem_limit, connector_scan_node_number));
+
+        {
+            MemTracker* connector_scan_parent = GlobalEnv::GetInstance()->connector_scan_pool_mem_tracker();
+            if (wg != nullptr) {
+                connector_scan_parent = wg->connector_scan_mem_tracker();
+            }
+            double connector_scan_use_query_mem_ratio = config::connector_scan_use_query_mem_ratio;
+            if (runtime_state != nullptr && runtime_state->query_options().__isset.connector_scan_use_query_mem_ratio) {
+                connector_scan_use_query_mem_ratio = runtime_state->query_options().connector_scan_use_query_mem_ratio;
+            }
+            _connector_scan_mem_tracker = std::make_shared<MemTracker>(
+                    MemTracker::QUERY, _static_query_mem_limit * connector_scan_use_query_mem_ratio,
+                    _profile->name() + "/connector_scan", connector_scan_parent);
+        }
+    });
+}
+
+Status QueryContext::init_spill_manager(const TQueryOptions& query_options) {
+    Status st;
+    std::call_once(_init_spill_manager_once, [this, &st, &query_options]() {
+        _spill_manager = std::make_unique<spill::QuerySpillManager>(_query_id);
+        st = _spill_manager->init_block_manager(query_options);
+    });
+    return st;
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 Status QueryContext::init_query_once(workgroup::WorkGroup* wg, bool enable_group_level_query_queue) {
     Status st = Status::OK();
     if (wg != nullptr) {
@@ -170,8 +247,11 @@ Status QueryContext::init_query_once(workgroup::WorkGroup* wg, bool enable_group
             } else {
                 st = maybe_token.status();
             }
+<<<<<<< HEAD
 
             _spill_manager = std::make_unique<spill::QuerySpillManager>(_query_id);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         });
     }
 
@@ -212,6 +292,15 @@ std::shared_ptr<QueryStatistics> QueryContext::intermediate_query_statistic() {
             query_statistic->add_stats_item(stats_item);
         }
     }
+<<<<<<< HEAD
+=======
+    for (const auto& [node_id, exec_stats] : _node_exec_stats) {
+        query_statistic->add_exec_stats_item(
+                node_id, exec_stats->push_rows.exchange(0), exec_stats->pull_rows.exchange(0),
+                exec_stats->pred_filter_rows.exchange(0), exec_stats->index_filter_rows.exchange(0),
+                exec_stats->rf_filter_rows.exchange(0));
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     _sub_plan_query_statistics_recvr->aggregate(query_statistic.get());
     return query_statistic;
 }
@@ -233,6 +322,15 @@ std::shared_ptr<QueryStatistics> QueryContext::final_query_statistic() {
             res->add_stats_item(stats_item);
         }
     }
+<<<<<<< HEAD
+=======
+
+    for (const auto& [node_id, exec_stats] : _node_exec_stats) {
+        res->add_exec_stats_item(node_id, exec_stats->push_rows, exec_stats->pull_rows, exec_stats->pred_filter_rows,
+                                 exec_stats->index_filter_rows, exec_stats->rf_filter_rows);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     _sub_plan_query_statistics_recvr->aggregate(res.get());
     return res;
 }
@@ -255,6 +353,18 @@ void QueryContext::update_scan_stats(int64_t table_id, int64_t scan_rows_num, in
     stats->delta_scan_bytes += scan_bytes;
 }
 
+<<<<<<< HEAD
+=======
+void QueryContext::init_node_exec_stats(const std::vector<int32_t>& exec_stats_node_ids) {
+    std::call_once(_node_exec_stats_init_flag, [this, &exec_stats_node_ids]() {
+        for (int32_t node_id : exec_stats_node_ids) {
+            auto node_exec_stats = std::make_shared<NodeExecStats>();
+            _node_exec_stats[node_id] = node_exec_stats;
+        }
+    });
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 QueryContextManager::QueryContextManager(size_t log2_num_slots)
         : _num_slots(1 << log2_num_slots),
           _slot_mask(_num_slots - 1),
@@ -322,6 +432,19 @@ QueryContextManager::~QueryContextManager() {
     }
 }
 
+<<<<<<< HEAD
+=======
+#define RETURN_NULL_IF_CTX_CANCELLED(query_ctx) \
+    if (query_ctx->is_cancelled()) {            \
+        return nullptr;                         \
+    }                                           \
+    query_ctx->increment_num_fragments();       \
+    if (query_ctx->is_cancelled()) {            \
+        query_ctx->rollback_inc_fragments();    \
+        return nullptr;                         \
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 QueryContext* QueryContextManager::get_or_register(const TUniqueId& query_id) {
     size_t i = _slot_idx(query_id);
     auto& mutex = _mutexes[i];
@@ -333,7 +456,11 @@ QueryContext* QueryContextManager::get_or_register(const TUniqueId& query_id) {
         // lookup query context in context_map
         auto it = context_map.find(query_id);
         if (it != context_map.end()) {
+<<<<<<< HEAD
             it->second->increment_num_fragments();
+=======
+            RETURN_NULL_IF_CTX_CANCELLED(it->second);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return it->second.get();
         }
     }
@@ -343,14 +470,23 @@ QueryContext* QueryContextManager::get_or_register(const TUniqueId& query_id) {
         auto it = context_map.find(query_id);
         auto sc_it = sc_map.find(query_id);
         if (it != context_map.end()) {
+<<<<<<< HEAD
             it->second->increment_num_fragments();
+=======
+            RETURN_NULL_IF_CTX_CANCELLED(it->second);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return it->second.get();
         } else {
             // lookup query context for the second chance in sc_map
             if (sc_it != sc_map.end()) {
                 auto ctx = std::move(sc_it->second);
+<<<<<<< HEAD
                 ctx->increment_num_fragments();
                 sc_map.erase(sc_it);
+=======
+                sc_map.erase(sc_it);
+                RETURN_NULL_IF_CTX_CANCELLED(ctx);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 auto* raw_ctx_ptr = ctx.get();
                 context_map.emplace(query_id, std::move(ctx));
                 return raw_ctx_ptr;
@@ -464,7 +600,11 @@ void QueryContextManager::report_fragments_with_same_host(
         if (reported[i] == false) {
             FragmentContext* fragment_ctx = need_report_fragment_context[i].get();
 
+<<<<<<< HEAD
             if (fragment_ctx->all_pipelines_finished()) {
+=======
+            if (fragment_ctx->all_execution_groups_finished()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 reported[i] = true;
                 continue;
             }
@@ -477,7 +617,10 @@ void QueryContextManager::report_fragments_with_same_host(
                 continue;
             }
 
+<<<<<<< HEAD
             Status fe_connection_status;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             auto fe_addr = fragment_ctx->fe_addr();
             auto fragment_id = fragment_ctx->fragment_instance_id();
             auto* runtime_state = fragment_ctx->runtime_state();
@@ -567,7 +710,11 @@ void QueryContextManager::report_fragments(
 
             FragmentContext* fragment_ctx = need_report_fragment_context[i].get();
 
+<<<<<<< HEAD
             if (fragment_ctx->all_pipelines_finished()) {
+=======
+            if (fragment_ctx->all_execution_groups_finished()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 continue;
             }
 
@@ -578,13 +725,18 @@ void QueryContextManager::report_fragments(
                 continue;
             }
 
+<<<<<<< HEAD
             Status fe_connection_status;
             auto fe_addr = fragment_ctx->fe_addr();
             auto exec_env = fragment_ctx->runtime_state()->exec_env();
+=======
+            auto fe_addr = fragment_ctx->fe_addr();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             auto fragment_id = fragment_ctx->fragment_instance_id();
             auto* runtime_state = fragment_ctx->runtime_state();
             DCHECK(runtime_state != nullptr);
 
+<<<<<<< HEAD
             FrontendServiceConnection fe_connection(exec_env->frontend_client_cache(), fe_addr,
                                                     config::thrift_rpc_timeout_ms, &fe_connection_status);
             if (!fe_connection_status.ok()) {
@@ -597,6 +749,8 @@ void QueryContextManager::report_fragments(
                 continue;
             }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             std::vector<TReportExecStatusParams> report_exec_status_params_vector;
 
             TReportExecStatusParams params;
@@ -633,6 +787,7 @@ void QueryContextManager::report_fragments(
             Status rpc_status;
 
             VLOG_ROW << "debug: reportExecStatus params is " << apache::thrift::ThriftDebugString(params).c_str();
+<<<<<<< HEAD
 
             // TODO: refactor me
             try {
@@ -652,6 +807,17 @@ void QueryContextManager::report_fragments(
                 std::stringstream msg;
                 msg << "ReportExecStatus() to " << fe_addr << " failed:\n" << e.what();
                 LOG(WARNING) << msg.str();
+=======
+            rpc_status = ThriftRpcHelper::rpc<FrontendServiceClient>(
+                    fe_addr,
+                    [&res, &report_batch](FrontendServiceConnection& client) {
+                        client->batchReportExecStatus(res, report_batch);
+                    },
+                    config::thrift_rpc_timeout_ms);
+            if (!rpc_status.ok()) {
+                LOG(WARNING) << "thrift rpc error:" << rpc_status;
+                continue;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
 
             const std::vector<TStatus>& status_list = res.status_list;

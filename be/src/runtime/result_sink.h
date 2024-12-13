@@ -73,13 +73,32 @@ public:
 
     TResultSinkType::type get_sink_type() const { return _sink_type; }
 
+<<<<<<< HEAD
+=======
+    TResultSinkFormatType::type get_format_type() const { return _format_type; }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     const std::vector<TExpr>& get_output_exprs() const { return _t_output_expr; }
 
     std::shared_ptr<ResultFileOptions> get_file_opts() const { return _file_opts; }
 
+<<<<<<< HEAD
 private:
     Status prepare_exprs(RuntimeState* state);
     TResultSinkType::type _sink_type;
+=======
+    bool isBinaryFormat() const { return _is_binary_format; }
+
+    const RowDescriptor& get_row_desc() const { return _row_desc; }
+
+private:
+    Status prepare_exprs(RuntimeState* state);
+    const RowDescriptor& _row_desc;
+    TResultSinkType::type _sink_type;
+    bool _is_binary_format;
+    // set format_type when sink type is HTTP
+    TResultSinkFormatType::type _format_type;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // set file options when sink type is FILE
     std::shared_ptr<ResultFileOptions> _file_opts;
 

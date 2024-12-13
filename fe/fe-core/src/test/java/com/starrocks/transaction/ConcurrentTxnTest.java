@@ -41,7 +41,11 @@ public class ConcurrentTxnTest {
 
     int runTime = 2;
     int numDB = 2;
+<<<<<<< HEAD
     int numTable = 100;
+=======
+    int numTable = 20;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     int numThread = 2;
     // 0 means random num of tablets
     int numTabletPerTable = 0;

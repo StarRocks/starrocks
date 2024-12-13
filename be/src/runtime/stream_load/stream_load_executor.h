@@ -37,8 +37,13 @@
 namespace starrocks {
 
 class ExecEnv;
+<<<<<<< HEAD
 class StreamLoadContext;
 class Status;
+=======
+class Status;
+class StreamLoadContext;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 class TTxnCommitAttachment;
 
 class StreamLoadExecutor {

@@ -12,11 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
 package com.starrocks.lake;
 
 import com.google.common.collect.ImmutableCollection;
 import com.google.common.collect.ImmutableList;
+=======
+package com.starrocks.lake;
+
+import com.google.common.collect.ImmutableMap;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.google.common.collect.Lists;
 import com.staros.client.StarClientException;
 import com.staros.proto.ShardGroupInfo;
@@ -32,11 +38,19 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.PhysicalPartition;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.concurrent.lock.LockManager;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.proto.DeleteTabletRequest;
 import com.starrocks.proto.DeleteTabletResponse;
 import com.starrocks.proto.StatusPB;
@@ -45,16 +59,32 @@ import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
+=======
+import com.starrocks.server.LocalMetastore;
+import com.starrocks.server.NodeMgr;
+import com.starrocks.server.WarehouseManager;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStatusCode;
+<<<<<<< HEAD
+=======
+import com.starrocks.transaction.GtidGenerator;
+import com.starrocks.warehouse.DefaultWarehouse;
+import com.starrocks.warehouse.Warehouse;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
+<<<<<<< HEAD
+=======
+import org.junit.Ignore;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.junit.Test;
 import org.junit.jupiter.api.Assertions;
 
@@ -75,6 +105,12 @@ public class StarMgrMetaSyncerTest {
     private GlobalStateMgr globalStateMgr;
 
     @Mocked
+<<<<<<< HEAD
+=======
+    private NodeMgr nodeMgr;
+
+    @Mocked
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private SystemInfoService systemInfoService;
 
     @Mocked
@@ -83,6 +119,15 @@ public class StarMgrMetaSyncerTest {
     @Mocked
     private ColocateTableIndex colocateTableIndex;
 
+<<<<<<< HEAD
+=======
+    @Mocked
+    private LocalMetastore localMetastore;
+
+    @Mocked
+    private WarehouseManager warehouseManager;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     long shardGroupId = 12L;
 
     @Before
@@ -90,6 +135,7 @@ public class StarMgrMetaSyncerTest {
         long dbId = 1L;
         long tableId = 2L;
         long partitionId = 3L;
+<<<<<<< HEAD
 
         new MockUp<GlobalStateMgr>() {
             @Mock
@@ -137,6 +183,44 @@ public class StarMgrMetaSyncerTest {
             @Mock
             public Database getDb(String dbName) {
                 return new Database(dbId, dbName);
+=======
+        long physicalPartitionId = 4L;
+
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+            }
+        };
+
+        new Expectations(globalStateMgr) {
+            {
+                globalStateMgr.getNodeMgr();
+                minTimes = 0;
+                result = nodeMgr;
+
+                globalStateMgr.getLocalMetastore();
+                minTimes = 0;
+                result = localMetastore;
+
+                globalStateMgr.getStarOSAgent();
+                minTimes = 0;
+                result = starOSAgent;
+
+                globalStateMgr.getWarehouseMgr();
+                minTimes = 0;
+                result = warehouseManager;
+
+                globalStateMgr.getLockManager();
+                minTimes = 0;
+                result = new LockManager();
+
+                globalStateMgr.getGtidGenerator();
+                minTimes = 0;
+                result = new GtidGenerator();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         };
 
@@ -152,6 +236,87 @@ public class StarMgrMetaSyncerTest {
             }
         };
 
+<<<<<<< HEAD
+=======
+        new Expectations(nodeMgr) {
+            {
+                nodeMgr.getClusterInfo();
+                minTimes = 0;
+                result = systemInfoService;
+            }
+        };
+
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(String dbName) {
+                return new Database(dbId, dbName);
+            }
+
+            @Mock
+             public List<Long> getDbIdsIncludeRecycleBin() {
+                return Stream.of(dbId).collect(Collectors.toList());
+            }
+
+            @Mock
+            public ColocateTableIndex getColocateTableIndex() {
+                return colocateTableIndex;
+            }
+
+            @Mock
+            public Database getDbIncludeRecycleBin(long dbId) {
+                return new Database(dbId, "test");
+            }
+
+            @Mock
+            public List<Table> getTablesIncludeRecycleBin(Database db) {
+                List<Column> baseSchema = new ArrayList<>();
+                KeysType keysType = KeysType.AGG_KEYS;
+                PartitionInfo partitionInfo = new PartitionInfo(PartitionType.RANGE);
+                DistributionInfo defaultDistributionInfo = new HashDistributionInfo();
+                Table table = new LakeTable(tableId, "lake_table", baseSchema, keysType, partitionInfo, defaultDistributionInfo);
+                List<Table> tableList = new ArrayList<>();
+                tableList.add(table);
+                return tableList;
+            }
+
+            @Mock
+            public Collection<Partition> getAllPartitionsIncludeRecycleBin(OlapTable tbl) {
+                MaterializedIndex baseIndex = new MaterializedIndex();
+                baseIndex.setShardGroupId(shardGroupId);
+                DistributionInfo distributionInfo = new HashDistributionInfo();
+                return Lists.newArrayList(new Partition(partitionId, physicalPartitionId,
+                        "p1", baseIndex, distributionInfo));
+            }
+        };
+
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public Warehouse getWarehouse(long warehouseId) {
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                        WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            }
+
+            @Mock
+            public ComputeNode getComputeNode(LakeTablet tablet) {
+                return new ComputeNode(1L, "127.0.0.1", 9030);
+            }
+
+            @Mock
+            public ComputeNode getComputeNode(String warehouseName, LakeTablet tablet) {
+                return new ComputeNode(1L, "127.0.0.1", 9030);
+            }
+
+            @Mock
+            public ComputeNode getComputeNode(Long warehouseId, LakeTablet tablet) {
+                return new ComputeNode(1L, "127.0.0.1", 9030);
+            }
+
+            @Mock
+            public ImmutableMap<Long, ComputeNode> getComputeNodesFromWarehouse(long warehouseId) {
+                return ImmutableMap.of(1L, new ComputeNode(1L, "127.0.0.1", 9030));
+            }
+        };
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -163,9 +328,15 @@ public class StarMgrMetaSyncerTest {
         List<ShardGroupInfo> shardGroupInfos = new ArrayList<>();
         for (long groupId : allShardGroupId) {
             ShardGroupInfo info = ShardGroupInfo.newBuilder()
+<<<<<<< HEAD
                             .setGroupId(groupId)
                             .putProperties("createTime", String.valueOf(System.currentTimeMillis()))
                             .build();
+=======
+                    .setGroupId(groupId)
+                    .putProperties("createTime", String.valueOf(System.currentTimeMillis()))
+                    .build();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             shardGroupInfos.add(info);
         }
 
@@ -178,6 +349,10 @@ public class StarMgrMetaSyncerTest {
                     shardGroupInfos.removeIf(item -> item.getGroupId() == groupId);
                 }
             }
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             @Mock
             public List<ShardGroupInfo> listShardGroup() {
                 return shardGroupInfos;
@@ -201,20 +376,34 @@ public class StarMgrMetaSyncerTest {
                 backends.add(be2);
                 return backends;
             }
+<<<<<<< HEAD
             @Mock
             public ImmutableCollection<ComputeNode> getComputeNodes(boolean needAlive) {
+=======
+
+            @Mock
+            public List<ComputeNode> getComputeNodes() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 List<ComputeNode> computeNodes = new ArrayList<>();
                 ComputeNode cn1 = new ComputeNode(10003, "host3", 1003);
                 cn1.setStarletPort(999);
                 computeNodes.add(cn1);
                 ComputeNode cn2 = new ComputeNode(10004, "host4", 1004);
                 computeNodes.add(cn2);
+<<<<<<< HEAD
                 return ImmutableList.copyOf(computeNodes);
+=======
+                return computeNodes;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         };
         new MockUp<StarOSAgent>() {
             @Mock
+<<<<<<< HEAD
             public List<String> listDefaultWorkerGroupIpPort() {
+=======
+            public List<String> listWorkerGroupIpPort(long workerGroupId) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 List<String> addresses = new ArrayList<>();
                 addresses.add("host0:777");
                 addresses.add("host1:888");
@@ -274,6 +463,10 @@ public class StarMgrMetaSyncerTest {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    @Ignore
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void testSyncTableMeta() throws Exception {
         long dbId = 100;
         long tableId = 1000;
@@ -330,7 +523,11 @@ public class StarMgrMetaSyncerTest {
             }
         };
 
+<<<<<<< HEAD
         new MockUp<Partition>() {
+=======
+        new MockUp<PhysicalPartition>() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             @Mock
             public long getShardGroupId() {
                 return 444;
@@ -357,7 +554,11 @@ public class StarMgrMetaSyncerTest {
 
             @Mock
             public void updateLakeTableColocationInfo(OlapTable olapTable, boolean isJoin,
+<<<<<<< HEAD
                     GroupId expectGroupId) throws DdlException {
+=======
+                                                      GroupId expectGroupId) throws DdlException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 return;
             }
         };
@@ -542,4 +743,112 @@ public class StarMgrMetaSyncerTest {
 
         Config.meta_sync_force_delete_shard_meta = false;
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testSyncTableMetaInternal() throws Exception {
+        long dbId = 100;
+        long tableId = 1000;
+        List<Long> shards = new ArrayList<>();
+        Database db = new Database(dbId, "db");
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public Database getDb(String dbName) {
+                return db;
+            }
+
+            @Mock
+            public Database getDb(long id) {
+                return db;
+            }
+
+            @Mock
+            public List<Long> getDbIds() {
+                return Lists.newArrayList(dbId);
+            }
+        };
+
+        List<Column> baseSchema = new ArrayList<>();
+        KeysType keysType = KeysType.AGG_KEYS;
+        PartitionInfo partitionInfo = new PartitionInfo(PartitionType.RANGE);
+        DistributionInfo defaultDistributionInfo = new HashDistributionInfo();
+        Table table = new LakeTable(tableId, "bbb", baseSchema, keysType, partitionInfo, defaultDistributionInfo);
+
+        new MockUp<Database>() {
+            @Mock
+            public Table getTable(String tableName) {
+                return table;
+            }
+
+            @Mock
+            public Table getTable(long tableId) {
+                return table;
+            }
+
+            @Mock
+            public List<Table> getTables() {
+                return Lists.newArrayList(table);
+            }
+        };
+
+        new MockUp<MaterializedIndex>() {
+            @Mock
+            public List<Tablet> getTablets() {
+                List<Tablet> tablets = new ArrayList<>();
+                tablets.add(new LakeTablet(111));
+                tablets.add(new LakeTablet(222));
+                tablets.add(new LakeTablet(333));
+                return tablets;
+            }
+        };
+
+        new MockUp<PhysicalPartition>() {
+            @Mock
+            public long getShardGroupId() {
+                return 444;
+            }
+        };
+
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public List<Long> listShard(long groupId) throws DdlException {
+                return shards;
+            }
+
+            @Mock
+            public void deleteShards(Set<Long> shardIds) throws DdlException {
+                shards.removeAll(shardIds);
+            }
+        };
+
+        new MockUp<ColocateTableIndex>() {
+            @Mock
+            public boolean isLakeColocateTable(long tableId) {
+                return true;
+            }
+
+            @Mock
+            public void updateLakeTableColocationInfo(OlapTable olapTable, boolean isJoin,
+                                                      GroupId expectGroupId) throws DdlException {
+                return;
+            }
+        };
+
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public ComputeNode getBackendOrComputeNode(long nodeId) {
+                return null;
+            }
+        };
+
+        shards.clear();
+        shards.add(111L);
+        shards.add(222L);
+        shards.add(333L);
+        starMgrMetaSyncer.syncTableMetaInternal(db, (OlapTable) table, true);
+        Assert.assertEquals(3, shards.size());
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

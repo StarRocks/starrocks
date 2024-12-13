@@ -138,8 +138,13 @@ TEST_F(StringFunctionPadTest, padNotConstASCIITest) {
     std::string x65531(65531, 'x');
     TestCaseArray cases = {
             {"test", 10, "123", false, "123123test", "test123123"},
+<<<<<<< HEAD
             {"test", OLAP_STRING_MAX_LENGTH + 1, "123", true, "", ""},
             {"test", -OLAP_STRING_MAX_LENGTH - 1, "123", true, "", ""},
+=======
+            {"test", get_olap_string_max_length() + 1, "123", true, "", ""},
+            {"test", -get_olap_string_max_length() - 1, "123", true, "", ""},
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             {"test", -1, "123", true, "", ""},
             {"test", 0, "x", false, "", ""},
             {"test", 10, "", false, "test", "test"},
@@ -183,8 +188,13 @@ TEST_F(StringFunctionPadTest, padNotConstUTF8Test) {
     std::string x65531(65531, 'x');
     TestCaseArray cases = {
             {"test", 10, "123", false, "123123test", "test123123"},
+<<<<<<< HEAD
             {"test", OLAP_STRING_MAX_LENGTH + 1, "123", true, "", ""},
             {"test", -OLAP_STRING_MAX_LENGTH - 1, "123", true, "", ""},
+=======
+            {"test", get_olap_string_max_length() + 1, "123", true, "", ""},
+            {"test", -get_olap_string_max_length() - 1, "123", true, "", ""},
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             {"test", -1, "123", true, "", ""},
             {"test", 0, "x", false, "", ""},
             {"test", 10, "", false, "test", "test"},
@@ -269,8 +279,13 @@ TEST_F(StringFunctionPadTest, padConstPadTest) {
     std::string x65531(65531, 'x');
     TestCaseArray cases = {
             {"test", 10, "123", false, "123123test", "test123123"},
+<<<<<<< HEAD
             {"test", OLAP_STRING_MAX_LENGTH + 1, "123", true, "", ""},
             {"test", -OLAP_STRING_MAX_LENGTH - 1, "123", true, "", ""},
+=======
+            {"test", get_olap_string_max_length() + 1, "123", true, "", ""},
+            {"test", -get_olap_string_max_length() - 1, "123", true, "", ""},
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             {"test", -1, "123", true, "", ""},
             {"test", 0, "x", false, "", ""},
             {"test", 10, "", false, "test", "test"},
@@ -304,7 +319,10 @@ TEST_F(StringFunctionPadTest, padConstPadTest) {
     for (auto& c : cases) {
         test_const_pad(1, c);
         test_const_pad(20, c);
+<<<<<<< HEAD
         test_const_pad(200, c);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }
 
@@ -367,8 +385,13 @@ TEST_F(StringFunctionPadTest, padConstLenAndPadTest) {
     std::string x65531(65531, 'x');
     TestCaseArray cases = {
             {"test", 10, "123", false, "123123test", "test123123"},
+<<<<<<< HEAD
             {"test", OLAP_STRING_MAX_LENGTH + 1, "123", true, "", ""},
             {"test", -OLAP_STRING_MAX_LENGTH - 1, "123", true, "", ""},
+=======
+            {"test", get_olap_string_max_length() + 1, "123", true, "", ""},
+            {"test", -get_olap_string_max_length() - 1, "123", true, "", ""},
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             {"test", -1, "123", true, "", ""},
             {"test", 0, "x", false, "", ""},
             {"test", 10, "", false, "test", "test"},

@@ -14,6 +14,10 @@
 
 package com.starrocks.scheduler;
 
+<<<<<<< HEAD
+=======
+import com.starrocks.common.profile.Tracers;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.StmtExecutor;
@@ -41,7 +45,13 @@ public class SqlTaskRunProcessor extends BaseTaskRunProcessor {
                     .setUser(ctx.getQualifiedUser())
                     .setDb(ctx.getDatabase())
                     .setCatalog(ctx.getCurrentCatalog());
+<<<<<<< HEAD
             ctx.getPlannerProfile().reset();
+=======
+            Tracers.register(ctx);
+            Tracers.init(ctx, Tracers.Mode.TIMER, null);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             StatementBase sqlStmt = SqlParser.parse(context.getDefinition(), ctx.getSessionVariable()).get(0);
             sqlStmt.setOrigStmt(new OriginStatement(context.getDefinition(), 0));
             //Build View SQL without Policy Rewrite
@@ -56,10 +66,20 @@ public class SqlTaskRunProcessor extends BaseTaskRunProcessor {
             executor = new StmtExecutor(ctx, sqlStmt);
             ctx.setExecutor(executor);
             ctx.setThreadLocalInfo();
+<<<<<<< HEAD
             executor.execute();
         } finally {
             if (executor != null) {
                 auditAfterExec(context, executor.getParsedStmt(), executor.getQueryStatisticsForAuditLog());
+=======
+            executor.addRunningQueryDetail(sqlStmt);
+            executor.execute();
+        } finally {
+            Tracers.close();
+            if (executor != null) {
+                auditAfterExec(context, executor.getParsedStmt(), executor.getQueryStatisticsForAuditLog());
+                executor.addFinishedQueryDetail();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             } else {
                 // executor can be null if we encounter analysis error.
                 auditAfterExec(context, null, null);

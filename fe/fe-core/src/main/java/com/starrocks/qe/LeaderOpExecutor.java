@@ -38,12 +38,22 @@ import com.google.common.base.Preconditions;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReportException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.AuditStatisticsUtil;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.qe.QueryState.MysqlStateType;
+<<<<<<< HEAD
 import com.starrocks.rpc.FrontendServiceProxy;
+=======
+import com.starrocks.rpc.ThriftConnectionPool;
+import com.starrocks.rpc.ThriftRPCRequestExecutor;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.SetListItem;
@@ -94,6 +104,7 @@ public class LeaderOpExecutor {
         this.originStmt = originStmt;
         this.ctx = ctx;
         if (status.isNeedToWaitJournalSync()) {
+<<<<<<< HEAD
             this.waitTimeoutMs = ctx.getSessionVariable().getQueryTimeoutS() * 1000;
         } else {
             this.waitTimeoutMs = 0;
@@ -103,6 +114,17 @@ public class LeaderOpExecutor {
         this.thriftTimeoutMs = ctx.getSessionVariable().getQueryTimeoutS() * 1000 + Config.thrift_rpc_timeout_ms;
         if (this.thriftTimeoutMs < 0) {
             this.thriftTimeoutMs = ctx.getSessionVariable().getQueryTimeoutS() * 1000;
+=======
+            this.waitTimeoutMs = ctx.getExecTimeout() * 1000;
+        } else {
+            this.waitTimeoutMs = 0;
+        }
+        // set thriftTimeoutMs to exec timeout + thrift_rpc_timeout_ms
+        // so that we can return an execution timeout instead of a network timeout
+        this.thriftTimeoutMs = ctx.getExecTimeout() * 1000 + Config.thrift_rpc_timeout_ms;
+        if (this.thriftTimeoutMs < 0) {
+            this.thriftTimeoutMs = ctx.getExecTimeout() * 1000;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         this.parsedStmt = parsedStmt;
     }
@@ -146,7 +168,12 @@ public class LeaderOpExecutor {
                 SetStmt stmt = (SetStmt) parsedStmt;
                 for (SetListItem var : stmt.getSetListItems()) {
                     if (var instanceof SystemVariable) {
+<<<<<<< HEAD
                         VariableMgr.setSystemVariable(ctx.getSessionVariable(), (SystemVariable) var, true);
+=======
+                        GlobalStateMgr.getCurrentState().getVariableMgr().setSystemVariable(
+                                ctx.getSessionVariable(), (SystemVariable) var, true);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     }
                 }
             } catch (DdlException e) {
@@ -169,6 +196,7 @@ public class LeaderOpExecutor {
         }
         if (forwardTimes > MAX_FORWARD_TIMES) {
             LOG.warn("too many forward times, max allowed forward time is {}", MAX_FORWARD_TIMES);
+<<<<<<< HEAD
             throw new DdlException("forward too many times");
         }
 
@@ -212,6 +240,19 @@ public class LeaderOpExecutor {
         result = FrontendServiceProxy.call(thriftAddress,
                 thriftTimeoutMs,
                 Config.thrift_rpc_retry_times,
+=======
+            throw ErrorReportException.report(ErrorCode.ERR_FORWARD_TOO_MANY_TIMES, forwardTimes);
+        }
+
+        TNetworkAddress thriftAddress = new TNetworkAddress(ipAndPort.first, ipAndPort.second);
+        TMasterOpRequest params = createTMasterOpRequest(ctx, forwardTimes);
+        LOG.info("Forward statement {} to Leader {}", ctx.getStmtId(), thriftAddress);
+
+        result = ThriftRPCRequestExecutor.call(
+                ThriftConnectionPool.frontendPool,
+                thriftAddress,
+                thriftTimeoutMs,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 client -> client.forward(params));
     }
 
@@ -254,5 +295,51 @@ public class LeaderOpExecutor {
     public void setResult(TMasterOpResult result) {
         this.result = result;
     }
+<<<<<<< HEAD
+=======
+
+    public TMasterOpRequest createTMasterOpRequest(ConnectContext ctx, int forwardTimes) {
+        TMasterOpRequest params = new TMasterOpRequest();
+        params.setCluster(SystemInfoService.DEFAULT_CLUSTER);
+        params.setSql(originStmt.originStmt);
+        params.setStmtIdx(originStmt.idx);
+        params.setUser(ctx.getQualifiedUser());
+        params.setCatalog(ctx.getCurrentCatalog());
+        params.setDb(ctx.getDatabase());
+        params.setSqlMode(ctx.getSessionVariable().getSqlMode());
+        params.setUser_ip(ctx.getRemoteIP());
+        params.setTime_zone(ctx.getSessionVariable().getTimeZone());
+        params.setStmt_id(ctx.getStmtId());
+        params.setEnableStrictMode(ctx.getSessionVariable().getEnableInsertStrict());
+        params.setCurrent_user_ident(ctx.getCurrentUserIdentity().toThrift());
+        params.setForward_times(forwardTimes);
+        params.setSession_id(ctx.getSessionId().toString());
+        params.setConnectionId(ctx.getConnectionId());
+
+        TUserRoles currentRoles = new TUserRoles();
+        Preconditions.checkState(ctx.getCurrentRoleIds() != null);
+        currentRoles.setRole_id_list(new ArrayList<>(ctx.getCurrentRoleIds()));
+        params.setUser_roles(currentRoles);
+
+        params.setIsLastStmt(ctx.getIsLastStmt());
+
+        TQueryOptions queryOptions = new TQueryOptions();
+        queryOptions.setMem_limit(ctx.getSessionVariable().getMaxExecMemByte());
+        queryOptions.setQuery_timeout(ctx.getSessionVariable().getQueryTimeoutS());
+        queryOptions.setLoad_mem_limit(ctx.getSessionVariable().getLoadMemLimit());
+        params.setQuery_options(queryOptions);
+
+        params.setQueryId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
+        // forward all session variables
+        SetStmt setStmt = ctx.getModifiedSessionVariables();
+        if (setStmt != null) {
+            params.setModified_variables_sql(AstToSQLBuilder.toSQL(setStmt));
+        }
+
+        params.setWarehouse_id(ctx.getCurrentWarehouseId());
+
+        return params;
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 

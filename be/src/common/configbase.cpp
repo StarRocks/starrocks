@@ -153,12 +153,25 @@ inline bool parse_key_value_pairs(std::istream& input) {
 
         auto op_field = Field::get(kv.first);
         if (!op_field.has_value()) {
+<<<<<<< HEAD
             std::cerr << fmt::format("Ignored unknown config: {}\n", kv.first);
+=======
+            // A valid env var name should be: [A-Z_][A-Z0-9_]*
+            static const std::string ENV_CHARSET("ABCDEFGHIJKLMNOPQRSTUVWXYZ01234567890_");
+            if (kv.first.find_first_not_of(ENV_CHARSET) != std::string::npos) {
+                // only report error when the var name appears not to be valid, not strict here.
+                std::cerr << fmt::format("Ignored unknown config: {}\n", kv.first);
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             continue;
         }
         auto field = op_field.value();
         if (assigned_fields.count(field) > 0) {
+<<<<<<< HEAD
             std::cerr << fmt::format("Duplicate assignment to config '{}', previous assignmet will be ignored\n",
+=======
+            std::cerr << fmt::format("Duplicate assignment to config '{}', previous assignment will be ignored\n",
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                      field->name());
         }
         assigned_fields.insert(field);
@@ -184,7 +197,25 @@ bool Field::set_value(std::string value) {
         return false;
     }
     StripWhiteSpace(&value);
+<<<<<<< HEAD
     return parse_value(value);
+=======
+    bool success = parse_value(value);
+    if (success) {
+        _last_set_val.swap(_current_set_val);
+        _current_set_val = value;
+    }
+    return success;
+}
+
+bool Field::rollback() {
+    bool success = parse_value(_last_set_val);
+    if (success) {
+        _current_set_val.swap(_last_set_val);
+        _last_set_val.clear();
+    }
+    return success;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 // Init conf fields.
@@ -232,6 +263,21 @@ Status set_config(const std::string& field, const std::string& value) {
     return Status::OK();
 }
 
+<<<<<<< HEAD
+=======
+Status rollback_config(const std::string& field) {
+    auto it = Field::fields().find(field);
+    if (it == Field::fields().end()) {
+        return Status::NotFound(fmt::format("'{}' is not found in rollback", field));
+    }
+
+    if (!it->second->rollback()) {
+        return Status::InvalidArgument(fmt::format("Invalid value of config '{}' in rollback", field));
+    }
+    return Status::OK();
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 std::vector<ConfigInfo> list_configs() {
     std::vector<ConfigInfo> infos;
     for (const auto& [name, field] : Field::fields()) {

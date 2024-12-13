@@ -28,13 +28,21 @@ public class ErrorReportException extends RuntimeException {
         return errorCode;
     }
 
+<<<<<<< HEAD
     public static String report(ErrorCode errorCode, Object... objs) {
+=======
+    public static ErrorReportException report(ErrorCode errorCode, Object... objs) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         String errMsg = errorCode.formatErrorMsg(objs);
         ConnectContext ctx = ConnectContext.get();
         if (ctx != null) {
             ctx.getState().setError(errMsg);
             ctx.getState().setErrorCode(errorCode);
         }
+<<<<<<< HEAD
         throw new ErrorReportException(errorCode, errMsg);
+=======
+        return new ErrorReportException(errorCode, errMsg);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }

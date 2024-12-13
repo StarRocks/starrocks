@@ -16,7 +16,11 @@ You can submit an asynchronous CTAS task using [SUBMIT TASK](../loading_unloadin
 - Synchronously query a table and create a new table based on the query result, and then insert the query result into the new table.
 
   ```SQL
+<<<<<<< HEAD
   CREATE TABLE [IF NOT EXISTS] [database.]table_name
+=======
+  CREATE [TEMPORARY] TABLE [IF NOT EXISTS] [database.]table_name
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
   [column_name1 [, column_name2, ...]]
   [index_definition1 [, index_definition2, ...]]
   [key_desc]
@@ -49,13 +53,23 @@ You can submit an asynchronous CTAS task using [SUBMIT TASK](../loading_unloadin
 
 | **Parameter**     | **Required** | **Description**                                              |
 | ----------------- | ------------ | ------------------------------------------------------------ |
+<<<<<<< HEAD
 | column_name       | No          | The name of a column in the new table. You do not need to specify the data type for the column. StarRocks automatically specifies an appropriate data type for the column. StarRocks converts FLOAT and DOUBLE data into DECIMAL(38,9) data. StarRocks also converts CHAR, VARCHAR, and STRING data into VARCHAR(65533) data. |
 | index_definition| No          | Since v3.1.8, a bitmap index can be created for the new table. The syntax is `INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] COMMENT 'xxxxxx'`. For more information about parameter descriptions and usage notes, see [Bitmap indexes](../../../using_starrocks/Bitmap_index.md). | 
+=======
+| TEMPORARY         | No           | Creates a temporary table. From v3.3.1, StarRocks supports creating temporary tables in the Default Catalog. For more information, see [Temporary Table](../../../table_design/StarRocks_table_design.md#temporary-table). Currently, StarRocks does not support creating temporary tables with asynchronous tasks by using SUBMIT TASK. |
+| column_name       | No          | The name of a column in the new table. You do not need to specify the data type for the column. StarRocks automatically specifies an appropriate data type for the column. StarRocks converts FLOAT and DOUBLE data into DECIMAL(38,9) data. StarRocks also converts CHAR, VARCHAR, and STRING data into VARCHAR(65533) data. |
+| index_definition| No          | Since v3.1.8, a bitmap index can be created for the new table. The syntax is `INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] COMMENT 'xxxxxx'`. For more information about parameter descriptions and usage notes, see [Bitmap indexes](../../../table_design/indexes/Bitmap_index.md). |
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 | key_desc          | No           | The syntax is `key_type ( <col_name1> [, <col_name2> , ...])`.<br />**Parameters**:<ul><li>`key_type`: [the key type of the new table](../../../table_design/table_types/table_types.md). Valid values: `DUPLICATE KEY` and `PRIMARY KEY`. Default value: `DUPLICATE KEY`.</li><li> `col_name`: the column to form the key.</li></ul> |
 | COMMENT           | No           | The comment of the new table.                                |
 | partition_desc    | No           | The partitioning method of the new table. By default, if you do not specify this parameter, the new table has no partition. For more information about partitioning, see [CREATE TABLE](./CREATE_TABLE.md#partition_desc). |
 | distribution_desc | No           | The bucketing method of the new table. If you do not specify this parameter, the bucket column defaults to the column with the highest cardinality collected by the cost-based optimizer (CBO). The number of buckets defaults to 10. If the CBO does not collect information about the cardinality, the bucket column defaults to the first column in the new table. For more information about bucketing, see [CREATE TABLE](./CREATE_TABLE.md#distribution_desc). |
+<<<<<<< HEAD
 | ORDER BY | No | Since v3.1.8, a sort key can be specified for the new table if the new table is a Primary Key table. The sort key can be a combination of any columns. A Primary Key table is a table for which `PRIMARY KEY (xxx)` is specified at table creation.| 
+=======
+| ORDER BY | No | Since v3.1.8, a sort key can be specified for the new table if the new table is a Primary Key table. The sort key can be a combination of any columns. A Primary Key table is a table for which `PRIMARY KEY (xxx)` is specified at table creation.|
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 | Properties        | No           | The properties of the new table.                             |
 | AS SELECT query   | Yes          | The query result.  You can specify columns in `... AS SELECT query`, for example, `... AS SELECT a, b, c FROM table_a;`. In this example, `a`, `b`, and `c` indicates the column names of the table that is queried. If you do not specify the column names of the new table, the column names of the new table are also `a`, `b`, and `c`. You can specify expressions in `... AS SELECT query`, for example, `... AS SELECT a+1 AS x, b+2 AS y, c*c AS z FROM table_a;`. In this example, `a+1`, `b+2`, and `c*c` indicates the column names of the table that is queried, and `x`, `y`, and `z` indicates the column names of the new table. Note:  The number of columns in the new table need to be the same as the number of the columns specified in the SELECT statement . We recommend that you use column names that are easy to identify. |
 
@@ -143,7 +157,11 @@ ORDER BY (first_name,last_name)
 AS SELECT  * FROM customers;
 ```
 
+<<<<<<< HEAD
 Example 6: Use CTAS to create a Primary Key table. Note that the number of data rows in the Primary Key table may be less than that in the query result. It is because the [Primary Key](../../../table_design/table_types/primary_key_table.md) table only stores the most recent data row among a group of rows that have the same primary key. 
+=======
+Example 6: Use CTAS to create a Primary Key table. Note that the number of data rows in the Primary Key table may be less than that in the query result. It is because the [Primary Key](../../../table_design/table_types/primary_key_table.md) table only stores the most recent data row among a group of rows that have the same primary key.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ```SQL
 CREATE TABLE employee_new

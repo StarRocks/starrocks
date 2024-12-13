@@ -27,4 +27,12 @@ public class DropObserverClause extends FrontendClause {
     public DropObserverClause(String hostPort, NodePosition pos) {
         super(hostPort, FrontendNodeType.OBSERVER, pos);
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitDropObserverClause(this, context);
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

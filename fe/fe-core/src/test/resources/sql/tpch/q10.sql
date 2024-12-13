@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     c_custkey,
@@ -30,6 +31,8 @@ group by
     c_comment
 order by
     revenue desc limit 20;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 [result]
 TOP-N (order by [[43: sum DESC NULLS LAST]])
     TOP-N (order by [[43: sum DESC NULLS LAST]])

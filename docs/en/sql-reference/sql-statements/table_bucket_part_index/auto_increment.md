@@ -35,7 +35,11 @@ PROPERTIES("replicated_storage" = "true");
 
 ### Assign values for `AUTO_INCREMENT` column
 
+<<<<<<< HEAD
 **Assign values implicitly**
+=======
+#### Assign values implicitly
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 When you load data into a StarRocks table, you do not need to specify the values for the `AUTO_INCREMENT` column. StarRocks automatically assigns unique integer values for that column and inserts them into the table.
 
@@ -101,7 +105,11 @@ mysql > SELECT * FROM test_tbl1 ORDER BY id;
 6 rows in set (0.01 sec)
 ```
 
+<<<<<<< HEAD
 **Specify values explicitly**
+=======
+#### Specify values explicitly
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 You can also explicitly specify the values for the `AUTO_INCREMENT` column and insert them into the table.
 
@@ -240,7 +248,11 @@ This section explains how to update only a few specified columns in a table that
 
 > **NOTE**
 >
+<<<<<<< HEAD
 > Currently, only primary key tables support partial updates.
+=======
+> Currently, only Primary Key tables support partial updates.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ### `AUTO_INCREMENT` column is primary key
 

@@ -21,13 +21,21 @@
 namespace starrocks {
 
 struct MergeConfig {
+<<<<<<< HEAD
     size_t chunk_size;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     CompactionAlgorithm algorithm = HORIZONTAL_COMPACTION;
 };
 
 // heap based rowset merger used for updatable tablet's compaction
 
 Status compaction_merge_rowsets(Tablet& tablet, int64_t version, const vector<RowsetSharedPtr>& rowsets,
+<<<<<<< HEAD
                                 RowsetWriter* writer, const MergeConfig& cfg);
+=======
+                                RowsetWriter* writer, const MergeConfig& cfg,
+                                const starrocks::TabletSchemaCSPtr& cur_tablet_schema = nullptr);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 } // namespace starrocks

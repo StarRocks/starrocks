@@ -250,7 +250,11 @@ protected:
 };
 
 template <LogicalType field_type>
+<<<<<<< HEAD
 class ColumnGePredicate : public ColumnPredicateCmpBase<field_type, GeEval<field_type>> {
+=======
+class ColumnGePredicate final : public ColumnPredicateCmpBase<field_type, GeEval<field_type>> {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public:
     using ValueType = typename CppTypeTraits<field_type>::CppType;
     using Base = ColumnPredicateCmpBase<field_type, GeEval<field_type>>;
@@ -263,20 +267,42 @@ public:
         return this->type_info()->cmp(Datum(this->_value), max) <= 0;
     }
 
+<<<<<<< HEAD
     Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange* range) const override {
+=======
+    bool support_bitmap_filter() const override { return true; }
+
+    Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         range->clear();
         bool exact_match;
         Status s = iter->seek_dictionary(&this->_value, &exact_match);
         if (s.ok()) {
             rowid_t seeked_ordinal = iter->current_ordinal();
             rowid_t ordinal_limit = iter->bitmap_nums() - iter->has_null_bitmap();
+<<<<<<< HEAD
             range->add(Range(seeked_ordinal, ordinal_limit));
+=======
+            range->add(Range<>(seeked_ordinal, ordinal_limit));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } else if (!s.is_not_found()) {
             return s;
         }
         return Status::OK();
     }
 
+<<<<<<< HEAD
+=======
+    Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
+                               roaring::Roaring* row_bitmap) const override {
+        InvertedIndexQueryType query_type = InvertedIndexQueryType::GREATER_EQUAL_QUERY;
+        roaring::Roaring roaring;
+        RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &this->_value, query_type, &roaring));
+        *row_bitmap &= roaring;
+        return Status::OK();
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     Status convert_to(const ColumnPredicate** output, const TypeInfoPtr& target_type_info,
                       ObjectPool* obj_pool) const override {
         return predicate_convert_to<field_type>(*this, this->_value, new_column_ge_predicate, output, target_type_info,
@@ -285,7 +311,11 @@ public:
 };
 
 template <LogicalType field_type>
+<<<<<<< HEAD
 class ColumnGtPredicate : public ColumnPredicateCmpBase<field_type, GtEval<field_type>> {
+=======
+class ColumnGtPredicate final : public ColumnPredicateCmpBase<field_type, GtEval<field_type>> {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public:
     using ValueType = typename CppTypeTraits<field_type>::CppType;
     using Base = ColumnPredicateCmpBase<field_type, GtEval<field_type>>;
@@ -298,20 +328,42 @@ public:
         return this->type_info()->cmp(Datum(this->_value), max) < 0;
     }
 
+<<<<<<< HEAD
     Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange* range) const override {
+=======
+    bool support_bitmap_filter() const override { return true; }
+
+    Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         range->clear();
         bool exact_match = false;
         Status s = iter->seek_dictionary(&this->_value, &exact_match);
         if (s.ok()) {
             rowid_t seeked_ordinal = iter->current_ordinal() + exact_match;
             rowid_t ordinal_limit = iter->bitmap_nums() - iter->has_null_bitmap();
+<<<<<<< HEAD
             range->add(Range(seeked_ordinal, ordinal_limit));
+=======
+            range->add(Range<>(seeked_ordinal, ordinal_limit));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } else if (!s.is_not_found()) {
             return s;
         }
         return Status::OK();
     }
 
+<<<<<<< HEAD
+=======
+    Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
+                               roaring::Roaring* row_bitmap) const override {
+        InvertedIndexQueryType query_type = InvertedIndexQueryType::GREATER_THAN_QUERY;
+        roaring::Roaring roaring;
+        RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &this->_value, query_type, &roaring));
+        *row_bitmap &= roaring;
+        return Status::OK();
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     Status convert_to(const ColumnPredicate** output, const TypeInfoPtr& target_type_info,
                       ObjectPool* obj_pool) const override {
         return predicate_convert_to<field_type>(*this, this->_value, new_column_gt_predicate, output, target_type_info,
@@ -320,7 +372,11 @@ public:
 };
 
 template <LogicalType field_type>
+<<<<<<< HEAD
 class ColumnLePredicate : public ColumnPredicateCmpBase<field_type, LeEval<field_type>> {
+=======
+class ColumnLePredicate final : public ColumnPredicateCmpBase<field_type, LeEval<field_type>> {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public:
     using ValueType = typename CppTypeTraits<field_type>::CppType;
     using Base = ColumnPredicateCmpBase<field_type, LeEval<field_type>>;
@@ -334,20 +390,44 @@ public:
         return (this->type_info()->cmp(Datum(this->_value), min) >= 0) & !max.is_null();
     }
 
+<<<<<<< HEAD
     Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange* range) const override {
+=======
+    bool support_bitmap_filter() const override { return true; }
+
+    Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         range->clear();
         bool exact_match = false;
         Status st = iter->seek_dictionary(&this->_value, &exact_match);
         if (st.ok()) {
             rowid_t seeked_ordinal = iter->current_ordinal() + exact_match;
+<<<<<<< HEAD
             range->add(Range(0, seeked_ordinal));
         } else if (st.is_not_found()) {
             range->add(Range(0, iter->bitmap_nums() - iter->has_null_bitmap()));
+=======
+            range->add(Range<>(0, seeked_ordinal));
+        } else if (st.is_not_found()) {
+            range->add(Range<>(0, iter->bitmap_nums() - iter->has_null_bitmap()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             st = Status::OK();
         }
         return st;
     }
 
+<<<<<<< HEAD
+=======
+    Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
+                               roaring::Roaring* row_bitmap) const override {
+        InvertedIndexQueryType query_type = InvertedIndexQueryType::LESS_EQUAL_QUERY;
+        roaring::Roaring roaring;
+        RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &this->_value, query_type, &roaring));
+        *row_bitmap &= roaring;
+        return Status::OK();
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     Status convert_to(const ColumnPredicate** output, const TypeInfoPtr& target_type_info,
                       ObjectPool* obj_pool) const override {
         return predicate_convert_to<field_type>(*this, this->_value, new_column_le_predicate, output, target_type_info,
@@ -356,7 +436,11 @@ public:
 };
 
 template <LogicalType field_type>
+<<<<<<< HEAD
 class ColumnLtPredicate : public ColumnPredicateCmpBase<field_type, LtEval<field_type>> {
+=======
+class ColumnLtPredicate final : public ColumnPredicateCmpBase<field_type, LtEval<field_type>> {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public:
     using ValueType = typename CppTypeTraits<field_type>::CppType;
     using Base = ColumnPredicateCmpBase<field_type, LtEval<field_type>>;
@@ -370,20 +454,44 @@ public:
         return (this->type_info()->cmp(Datum(this->_value), min) > 0) & !max.is_null();
     }
 
+<<<<<<< HEAD
     Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange* range) const override {
+=======
+    bool support_bitmap_filter() const override { return true; }
+
+    Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         range->clear();
         bool exact_match = false;
         Status st = iter->seek_dictionary(&this->_value, &exact_match);
         if (st.ok()) {
             rowid_t seeked_ordinal = iter->current_ordinal();
+<<<<<<< HEAD
             range->add(Range(0, seeked_ordinal));
         } else if (st.is_not_found()) {
             range->add(Range(0, iter->bitmap_nums() - iter->has_null_bitmap()));
+=======
+            range->add(Range<>(0, seeked_ordinal));
+        } else if (st.is_not_found()) {
+            range->add(Range<>(0, iter->bitmap_nums() - iter->has_null_bitmap()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             st = Status::OK();
         }
         return st;
     }
 
+<<<<<<< HEAD
+=======
+    Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
+                               roaring::Roaring* row_bitmap) const override {
+        InvertedIndexQueryType query_type = InvertedIndexQueryType::LESS_THAN_QUERY;
+        roaring::Roaring roaring;
+        RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &this->_value, query_type, &roaring));
+        *row_bitmap &= roaring;
+        return Status::OK();
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     Status convert_to(const ColumnPredicate** output, const TypeInfoPtr& target_type_info,
                       ObjectPool* obj_pool) const override {
         return predicate_convert_to<field_type>(*this, this->_value, new_column_lt_predicate, output, target_type_info,
@@ -392,7 +500,11 @@ public:
 };
 
 template <LogicalType field_type>
+<<<<<<< HEAD
 class ColumnEqPredicate : public ColumnPredicateCmpBase<field_type, EqEval<field_type>> {
+=======
+class ColumnEqPredicate final : public ColumnPredicateCmpBase<field_type, EqEval<field_type>> {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public:
     using ValueType = typename CppTypeTraits<field_type>::CppType;
     using Base = ColumnPredicateCmpBase<field_type, EqEval<field_type>>;
@@ -407,14 +519,24 @@ public:
         return type_info->cmp(Datum(this->_value), min) >= 0 && type_info->cmp(Datum(this->_value), max) <= 0;
     }
 
+<<<<<<< HEAD
     Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange* range) const override {
+=======
+    bool support_bitmap_filter() const override { return true; }
+
+    Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         range->clear();
         bool exact_match = false;
         Status s = iter->seek_dictionary(&this->_value, &exact_match);
         if (s.ok()) {
             if (exact_match) {
                 rowid_t ordinal = iter->current_ordinal();
+<<<<<<< HEAD
                 range->add(Range(ordinal, ordinal + 1));
+=======
+                range->add(Range<>(ordinal, ordinal + 1));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         } else if (!s.is_not_found()) {
             return s;
@@ -422,9 +544,24 @@ public:
         return Status::OK();
     }
 
+<<<<<<< HEAD
     bool support_bloom_filter() const override { return true; }
 
     bool bloom_filter(const BloomFilter* bf) const override {
+=======
+    Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
+                               roaring::Roaring* row_bitmap) const override {
+        InvertedIndexQueryType query_type = InvertedIndexQueryType::EQUAL_QUERY;
+        roaring::Roaring roaring;
+        RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &this->_value, query_type, &roaring));
+        *row_bitmap &= roaring;
+        return Status::OK();
+    }
+
+    bool support_original_bloom_filter() const override { return true; }
+
+    bool original_bloom_filter(const BloomFilter* bf) const override {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         static_assert(field_type != TYPE_JSON, "TODO");
         static_assert(field_type != TYPE_HLL, "TODO");
         static_assert(field_type != TYPE_OBJECT, "TODO");
@@ -440,7 +577,11 @@ public:
 };
 
 template <LogicalType field_type>
+<<<<<<< HEAD
 class ColumnNePredicate : public ColumnPredicateCmpBase<field_type, NeEval<field_type>> {
+=======
+class ColumnNePredicate final : public ColumnPredicateCmpBase<field_type, NeEval<field_type>> {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public:
     using ValueType = typename CppTypeTraits<field_type>::CppType;
     using Base = ColumnPredicateCmpBase<field_type, NeEval<field_type>>;
@@ -450,10 +591,28 @@ public:
 
     bool zone_map_filter(const ZoneMapDetail& detail) const override { return true; }
 
+<<<<<<< HEAD
     Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange* range) const override {
         return Status::Cancelled("not-equal predicate not support bitmap index");
     }
 
+=======
+    bool support_bitmap_filter() const override { return false; }
+
+    Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
+        return Status::Cancelled("not-equal predicate not support bitmap index");
+    }
+
+    Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
+                               roaring::Roaring* row_bitmap) const override {
+        InvertedIndexQueryType query_type = InvertedIndexQueryType::EQUAL_QUERY;
+        roaring::Roaring roaring;
+        RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &this->_value, query_type, &roaring));
+        *row_bitmap -= roaring;
+        return Status::OK();
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     Status convert_to(const ColumnPredicate** output, const TypeInfoPtr& target_type_info,
                       ObjectPool* obj_pool) const override {
         return predicate_convert_to<field_type>(*this, this->_value, new_column_ne_predicate, output, target_type_info,
@@ -548,7 +707,11 @@ public:
 
     bool can_vectorized() const override { return false; }
 
+<<<<<<< HEAD
     bool support_bloom_filter() const override { return false; }
+=======
+    bool support_original_bloom_filter() const override { return false; }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     Status convert_to(const ColumnPredicate** output, const TypeInfoPtr& target_type_info,
                       ObjectPool* obj_pool) const override {
@@ -581,7 +744,11 @@ protected:
 };
 
 template <LogicalType field_type>
+<<<<<<< HEAD
 class BinaryColumnEqPredicate : public BinaryColumnPredicateCmpBase<field_type, EqEval<field_type>> {
+=======
+class BinaryColumnEqPredicate final : public BinaryColumnPredicateCmpBase<field_type, EqEval<field_type>> {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public:
     using ValueType = Slice;
     using Base = BinaryColumnPredicateCmpBase<field_type, std::equal_to<ValueType>>;
@@ -596,14 +763,26 @@ public:
         return type_info->cmp(Datum(this->_value), min) >= 0 && type_info->cmp(Datum(this->_value), max) <= 0;
     }
 
+<<<<<<< HEAD
     bool support_bloom_filter() const override { return true; }
 
     bool bloom_filter(const BloomFilter* bf) const override {
+=======
+    bool support_original_bloom_filter() const override { return true; }
+
+    bool original_bloom_filter(const BloomFilter* bf) const override {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Slice padded(Base::_zero_padded_str);
         return bf->test_bytes(padded.data, padded.size);
     }
 
+<<<<<<< HEAD
     Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange* range) const override {
+=======
+    bool support_bitmap_filter() const override { return true; }
+
+    Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // see the comment in `predicate_parser.cpp`.
         Slice padded_value(Base::_zero_padded_str);
         range->clear();
@@ -612,17 +791,38 @@ public:
         if (s.ok()) {
             if (exact_match) {
                 rowid_t ordinal = iter->current_ordinal();
+<<<<<<< HEAD
                 range->add(Range(ordinal, ordinal + 1));
+=======
+                range->add(Range<>(ordinal, ordinal + 1));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         } else if (!s.is_not_found()) {
             return s;
         }
         return Status::OK();
     }
+<<<<<<< HEAD
 };
 
 template <LogicalType field_type>
 class BinaryColumnGePredicate : public BinaryColumnPredicateCmpBase<field_type, GeEval<field_type>> {
+=======
+
+    Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
+                               roaring::Roaring* row_bitmap) const override {
+        Slice padded_value(Base::_zero_padded_str);
+        InvertedIndexQueryType query_type = InvertedIndexQueryType::EQUAL_QUERY;
+        roaring::Roaring roaring;
+        RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &padded_value, query_type, &roaring));
+        *row_bitmap &= roaring;
+        return Status::OK();
+    }
+};
+
+template <LogicalType field_type>
+class BinaryColumnGePredicate final : public BinaryColumnPredicateCmpBase<field_type, GeEval<field_type>> {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public:
     using ValueType = Slice;
     using Base = BinaryColumnPredicateCmpBase<field_type, std::greater_equal<ValueType>>;
@@ -635,7 +835,13 @@ public:
         return this->type_info()->cmp(Datum(this->_value), max) <= 0;
     }
 
+<<<<<<< HEAD
     Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange* range) const override {
+=======
+    bool support_bitmap_filter() const override { return true; }
+
+    Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // Can NOT use `_value` here, see the comment in `predicate_parser.cpp`.
         Slice padded_value(Base::_zero_padded_str);
 
@@ -645,16 +851,37 @@ public:
         if (s.ok()) {
             rowid_t seeked_ordinal = iter->current_ordinal();
             rowid_t ordinal_limit = iter->bitmap_nums() - iter->has_null_bitmap();
+<<<<<<< HEAD
             range->add(Range(seeked_ordinal, ordinal_limit));
+=======
+            range->add(Range<>(seeked_ordinal, ordinal_limit));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } else if (!s.is_not_found()) {
             return s;
         }
         return Status::OK();
     }
+<<<<<<< HEAD
 };
 
 template <LogicalType field_type>
 class BinaryColumnGtPredicate : public BinaryColumnPredicateCmpBase<field_type, GtEval<field_type>> {
+=======
+
+    Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
+                               roaring::Roaring* row_bitmap) const override {
+        Slice padded_value(Base::_zero_padded_str);
+        InvertedIndexQueryType query_type = InvertedIndexQueryType::GREATER_EQUAL_QUERY;
+        roaring::Roaring roaring;
+        RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &padded_value, query_type, &roaring));
+        *row_bitmap &= roaring;
+        return Status::OK();
+    }
+};
+
+template <LogicalType field_type>
+class BinaryColumnGtPredicate final : public BinaryColumnPredicateCmpBase<field_type, GtEval<field_type>> {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public:
     using ValueType = Slice;
     using Base = BinaryColumnPredicateCmpBase<field_type, std::greater<ValueType>>;
@@ -667,7 +894,13 @@ public:
         return this->type_info()->cmp(Datum(this->_value), max) < 0;
     }
 
+<<<<<<< HEAD
     Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange* range) const override {
+=======
+    bool support_bitmap_filter() const override { return true; }
+
+    Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // Can NOT use `_value` here, see comment in predicate_parser.cpp.
         Slice padded_value(Base::_zero_padded_str);
         range->clear();
@@ -676,16 +909,37 @@ public:
         if (s.ok()) {
             rowid_t seeked_ordinal = iter->current_ordinal() + exact_match;
             rowid_t ordinal_limit = iter->bitmap_nums() - iter->has_null_bitmap();
+<<<<<<< HEAD
             range->add(Range(seeked_ordinal, ordinal_limit));
+=======
+            range->add(Range<>(seeked_ordinal, ordinal_limit));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } else if (!s.is_not_found()) {
             return s;
         }
         return Status::OK();
     }
+<<<<<<< HEAD
 };
 
 template <LogicalType field_type>
 class BinaryColumnLtPredicate : public BinaryColumnPredicateCmpBase<field_type, LtEval<field_type>> {
+=======
+
+    Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
+                               roaring::Roaring* row_bitmap) const override {
+        Slice padded_value(Base::_zero_padded_str);
+        InvertedIndexQueryType query_type = InvertedIndexQueryType::GREATER_THAN_QUERY;
+        roaring::Roaring roaring;
+        RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &padded_value, query_type, &roaring));
+        *row_bitmap &= roaring;
+        return Status::OK();
+    }
+};
+
+template <LogicalType field_type>
+class BinaryColumnLtPredicate final : public BinaryColumnPredicateCmpBase<field_type, LtEval<field_type>> {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public:
     using ValueType = Slice;
     using Base = BinaryColumnPredicateCmpBase<field_type, std::less<ValueType>>;
@@ -700,24 +954,53 @@ public:
         return (type_info->cmp(Datum(this->_value), min) > 0) & !max.is_null();
     }
 
+<<<<<<< HEAD
     Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange* range) const override {
+=======
+    bool support_bitmap_filter() const override { return true; }
+
+    Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Slice padded_value(Base::_zero_padded_str);
         range->clear();
         bool exact_match = false;
         Status st = iter->seek_dictionary(&padded_value, &exact_match);
         if (st.ok()) {
             rowid_t seeked_ordinal = iter->current_ordinal();
+<<<<<<< HEAD
             range->add(Range(0, seeked_ordinal));
         } else if (st.is_not_found()) {
             range->add(Range(0, iter->bitmap_nums() - iter->has_null_bitmap()));
+=======
+            range->add(Range<>(0, seeked_ordinal));
+        } else if (st.is_not_found()) {
+            range->add(Range<>(0, iter->bitmap_nums() - iter->has_null_bitmap()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             st = Status::OK();
         }
         return st;
     }
+<<<<<<< HEAD
 };
 
 template <LogicalType field_type>
 class BinaryColumnLePredicate : public BinaryColumnPredicateCmpBase<field_type, LeEval<field_type>> {
+=======
+
+    Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
+                               roaring::Roaring* row_bitmap) const override {
+        Slice padded_value(Base::_zero_padded_str);
+        InvertedIndexQueryType query_type = InvertedIndexQueryType::LESS_THAN_QUERY;
+        roaring::Roaring roaring;
+        RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &padded_value, query_type, &roaring));
+        *row_bitmap &= roaring;
+        return Status::OK();
+    }
+};
+
+template <LogicalType field_type>
+class BinaryColumnLePredicate final : public BinaryColumnPredicateCmpBase<field_type, LeEval<field_type>> {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public:
     using ValueType = Slice;
     using Base = BinaryColumnPredicateCmpBase<field_type, std::less_equal<ValueType>>;
@@ -731,24 +1014,53 @@ public:
         return (this->type_info()->cmp(Datum(this->_value), min) >= 0) & !max.is_null();
     }
 
+<<<<<<< HEAD
     Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange* range) const override {
+=======
+    bool support_bitmap_filter() const override { return true; }
+
+    Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Slice padded_value(Base::_zero_padded_str);
         range->clear();
         bool exact_match = false;
         Status st = iter->seek_dictionary(&padded_value, &exact_match);
         if (st.ok()) {
             rowid_t seeked_ordinal = iter->current_ordinal() + exact_match;
+<<<<<<< HEAD
             range->add(Range(0, seeked_ordinal));
         } else if (st.is_not_found()) {
             range->add(Range(0, iter->bitmap_nums() - iter->has_null_bitmap()));
+=======
+            range->add(Range<>(0, seeked_ordinal));
+        } else if (st.is_not_found()) {
+            range->add(Range<>(0, iter->bitmap_nums() - iter->has_null_bitmap()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             st = Status::OK();
         }
         return st;
     }
+<<<<<<< HEAD
 };
 
 template <LogicalType field_type>
 class BinaryColumnNePredicate : public BinaryColumnPredicateCmpBase<field_type, NeEval<field_type>> {
+=======
+
+    Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
+                               roaring::Roaring* row_bitmap) const override {
+        Slice padded_value(Base::_zero_padded_str);
+        InvertedIndexQueryType query_type = InvertedIndexQueryType::LESS_EQUAL_QUERY;
+        roaring::Roaring roaring;
+        RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &padded_value, query_type, &roaring));
+        *row_bitmap &= roaring;
+        return Status::OK();
+    }
+};
+
+template <LogicalType field_type>
+class BinaryColumnNePredicate final : public BinaryColumnPredicateCmpBase<field_type, NeEval<field_type>> {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public:
     using ValueType = Slice;
     using Base = BinaryColumnPredicateCmpBase<field_type, std::not_equal_to<ValueType>>;
@@ -758,9 +1070,27 @@ public:
 
     bool zone_map_filter(const ZoneMapDetail& detail) const override { return true; }
 
+<<<<<<< HEAD
     Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange* range) const override {
         return Status::Cancelled("not-equal predicate not support bitmap index");
     }
+=======
+    bool support_bitmap_filter() const override { return false; }
+
+    Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
+        return Status::Cancelled("not-equal predicate not support bitmap index");
+    }
+
+    Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
+                               roaring::Roaring* row_bitmap) const override {
+        Slice padded_value(Base::_zero_padded_str);
+        InvertedIndexQueryType query_type = InvertedIndexQueryType::EQUAL_QUERY;
+        roaring::Roaring roaring;
+        RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &padded_value, query_type, &roaring));
+        *row_bitmap -= roaring;
+        return Status::OK();
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 ColumnPredicate* new_column_ne_predicate(const TypeInfoPtr& type_info, ColumnId id, const Slice& operand) {

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # bit_shift_left
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 将一个数值或数值表达式的二进制表示向左移动指定的位数。该函数执行**算术左移**。
 

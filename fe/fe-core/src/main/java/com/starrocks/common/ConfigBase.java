@@ -34,15 +34,28 @@
 
 package com.starrocks.common;
 
+<<<<<<< HEAD
+=======
+import com.google.common.annotations.VisibleForTesting;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.FileReader;
+<<<<<<< HEAD
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.reflect.Field;
+=======
+import java.io.FileWriter;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.reflect.Field;
+import java.nio.file.Files;
+import java.nio.file.Path;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -53,6 +66,10 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public class ConfigBase {
     private static final Logger LOG = LogManager.getLogger(ConfigBase.class);
 
@@ -75,12 +92,19 @@ public class ConfigBase {
         String[] aliases() default {};
     }
 
+<<<<<<< HEAD
     protected Properties props;
+=======
+    protected Properties props = new Properties();
+    private static String mutableConfigPath;
+    private static boolean isPersisted = false;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     protected static Field[] configFields;
     protected static Map<String, Field> allMutableConfigs = new HashMap<>();
 
     public void init(String propFile) throws Exception {
         configFields = this.getClass().getFields();
+<<<<<<< HEAD
         initAllMutableConfigs();
         props = new Properties();
         FileReader reader = null;
@@ -98,6 +122,32 @@ public class ConfigBase {
         setFields();
     }
 
+=======
+        try (FileReader reader = new FileReader(propFile)) {
+            props.load(reader);
+        }
+        replacedByEnv();
+    }
+
+    public void initMutable(String propFile) throws Exception {
+
+        Path path = Path.of(propFile);
+        if (!Files.exists(path)) {
+            Files.createFile(path);
+        }
+        mutableConfigPath = propFile;
+        initAllMutableConfigs();
+        try (FileReader reader = new FileReader(mutableConfigPath)) {
+            props.load(reader);
+        }
+        setFields();
+        if (Files.isWritable(path)) {
+            isPersisted = true;
+        }
+    }
+
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static void initAllMutableConfigs() {
         for (Field field : configFields) {
             ConfField confField = field.getAnnotation(ConfField.class);
@@ -303,6 +353,10 @@ public class ConfigBase {
 
         try {
             ConfigBase.setConfigField(field, value);
+<<<<<<< HEAD
+=======
+            ConfigBase.storeMutable(key, value);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } catch (Exception e) {
             throw new InvalidConfException("Failed to set config '" + key + "'. err: " + e.getMessage());
         }
@@ -310,6 +364,24 @@ public class ConfigBase {
         LOG.info("set config {} to {}", key, value);
     }
 
+<<<<<<< HEAD
+=======
+    public static void storeMutable(String key, String value) throws Exception {
+        if (!isPersisted) {
+            LOG.warn("Config file:{} is not writable, skip saving config", mutableConfigPath);
+            return;
+        }
+        Properties props = new Properties();
+        try (FileReader reader = new FileReader(mutableConfigPath)) {
+            props.load(reader);
+            props.setProperty(key, value);
+        }
+        try (FileWriter writer = new FileWriter(mutableConfigPath)) {
+            props.store(writer, "Auto save");
+        }
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private static boolean isAliasesMatch(PatternMatcher matcher, String[] aliases) {
         if (matcher == null) {
             return true;
@@ -382,4 +454,12 @@ public class ConfigBase {
 
         return configs;
     }
+<<<<<<< HEAD
+=======
+
+    @VisibleForTesting
+    public static void setIsPersisted(boolean isPersisted) {
+        ConfigBase.isPersisted = isPersisted;
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

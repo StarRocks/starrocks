@@ -172,6 +172,13 @@ public class StructType extends Type {
         return fieldMap.get(StringUtils.lowerCase(fieldName));
     }
 
+<<<<<<< HEAD
+=======
+    public boolean containsField(String fieldName) {
+        return fieldMap.containsKey(StringUtils.lowerCase(fieldName));
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public int getFieldPos(String fieldName) {
         return fieldMap.get(StringUtils.lowerCase(fieldName)).getPosition();
     }
@@ -180,6 +187,29 @@ public class StructType extends Type {
         return fields.get(pos);
     }
 
+<<<<<<< HEAD
+=======
+    public void updateFields(List<StructField> structFields) {
+        Preconditions.checkNotNull(structFields);
+        Preconditions.checkArgument(structFields.size() > 0);
+        fields.clear();
+        fieldMap.clear();
+        for (StructField field : structFields) {
+            String lowerFieldName = field.getName().toLowerCase();
+            if (fieldMap.containsKey(lowerFieldName)) {
+                throw new SemanticException("struct contains duplicate subfield name: " + lowerFieldName);
+            } else {
+                field.setPosition(fields.size());
+                fields.add(field);
+                // Store lowercase field name in fieldMap
+                fieldMap.put(lowerFieldName, field);
+            }
+        }
+        selectedFields = new Boolean[fields.size()];
+        Arrays.fill(selectedFields, false);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public void setSelectedField(ComplexTypeAccessPath accessPath, boolean needSetChildren) {
         if (accessPath.getAccessPathType() == ComplexTypeAccessPathType.ALL_SUBFIELDS) {
@@ -326,5 +356,29 @@ public class StructType extends Type {
     public String toMysqlColumnTypeString() {
         return toSql();
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    protected String toTypeString(int depth) {
+        if (depth >= MAX_NESTING_DEPTH) {
+            return "struct<...>";
+        }
+        ArrayList<String> fieldsSql = Lists.newArrayList();
+        for (StructField f : fields) {
+            fieldsSql.add(f.toTypeString(depth + 1));
+        }
+        return String.format("struct<%s>", Joiner.on(", ").join(fieldsSql));
+    }
+
+    @Override
+    public int getMaxUniqueId() {
+        int maxUniqueId = -1;
+        for (StructField f : fields) {
+            maxUniqueId = Math.max(maxUniqueId, f.getMaxUniqueId());
+        }
+        return maxUniqueId;
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 

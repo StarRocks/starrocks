@@ -13,6 +13,10 @@ sidebar_position: 0.9
   - [窗口函数建表示例](#窗口函数建表示例)
   - [使用 AVG() 窗口函数](#使用-avg-窗口函数)
   - [使用 COUNT() 窗口函数](#使用-count-窗口函数)
+<<<<<<< HEAD
+=======
+  - [使用 CUME\_DIST() 窗口函数](#使用-cume_dist-窗口函数)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
   - [使用 DENSE\_RANK() 窗口函数](#使用-dense_rank-窗口函数)
   - [使用 FIRST\_VALUE() 窗口函数](#使用-first_value-窗口函数)
   - [使用 LAST\_VALUE() 窗口函数](#使用-last_value-窗口函数)
@@ -21,6 +25,10 @@ sidebar_position: 0.9
   - [使用 MAX() 窗口函数](#使用-max-窗口函数)
   - [使用 MIN() 窗口函数](#使用-min-窗口函数)
   - [使用 NTILE() 窗口函数](#使用-ntile-窗口函数)
+<<<<<<< HEAD
+=======
+  - [使用 PERCENT\_RANK() 函数](#使用-percent_rank-函数)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
   - [使用 RANK() 窗口函数](#使用-rank-窗口函数)
   - [使用 ROW\_NUMBER() 窗口函数](#使用-row_number-窗口函数)
   - [使用 QUALIFY 窗口函数](#使用-qualify-窗口函数)
@@ -1119,7 +1127,11 @@ VARIANCE() 窗口函数用于统计表达式的总体方差。VAR_POP 和 VARIAN
 **语法**：
 
 ```SQL
+<<<<<<< HEAD
 VARIANCE(expr) [OVER (partition_by_clause)]
+=======
+VARIANCE(expr) OVER([partition_by_clause] [order_by_clause] [order_by_clause window_clause])
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ```
 
 :::tip
@@ -1161,7 +1173,11 @@ VAR_SAMP() 窗口函数用于统计表达式的样本方差。
 **语法**：
 
 ```sql
+<<<<<<< HEAD
 VAR_SAMP(expr) [OVER (partition_by_clause)]
+=======
+VAR_SAMP(expr) OVER([partition_by_clause] [order_by_clause] [order_by_clause window_clause])
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ```
 
 :::tip
@@ -1182,6 +1198,10 @@ select *,
        over (partition by subject
             order by score) as VAR_SAMP
 from scores where subject in ('math');
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 +------+-------+---------+-------+--------------------+
 | id   | name  | subject | score | VAR_SAMP           |
 +------+-------+---------+-------+--------------------+
@@ -1201,7 +1221,11 @@ STD() 窗口函数用于统计表达式的总体标准差。
 **语法**：
 
 ```sql
+<<<<<<< HEAD
 STD(expr) [OVER (partition_by_clause)]
+=======
+STD(expr) OVER([partition_by_clause] [order_by_clause] [order_by_clause window_clause])
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ```
 
 :::tip
@@ -1241,7 +1265,11 @@ STDDEV_SAMP() 窗口函数用于统计表达式的样本标准差。
 **语法**：
 
 ```sql
+<<<<<<< HEAD
 STDDEV_SAMP(expr) [OVER (partition_by_clause)]
+=======
+STDDEV_SAMP(expr) OVER([partition_by_clause] [order_by_clause] [order_by_clause window_clause])
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ```
 
 :::tip
@@ -1299,7 +1327,11 @@ COVAR_SAMP() 窗口函数用于统计表达式的样本协方差。
 **语法**：
 
 ```sql
+<<<<<<< HEAD
 COVAR_SAMP(expr1, expr2) [OVER (partition_by_clause)]
+=======
+COVAR_SAMP(expr1, expr2) OVER([partition_by_clause] [order_by_clause] [order_by_clause window_clause])
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ```
 
 :::tip
@@ -1356,7 +1388,11 @@ COVAR_POP() 窗口函数用于统计表达式的总体协方差。
 **语法**：
 
 ```sql
+<<<<<<< HEAD
 COVAR_POP(expr1, expr2) [OVER (partition_by_clause)]
+=======
+COVAR_POP(expr1, expr2) OVER([partition_by_clause] [order_by_clause] [order_by_clause window_clause])
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ```
 
 :::tip
@@ -1396,7 +1432,11 @@ CORR() 窗口函数用于统计表达式的相关系数。
 **语法**：
 
 ```sql
+<<<<<<< HEAD
 CORR(expr1, expr2) [OVER (partition_by_clause)]
+=======
+CORR(expr1, expr2) OVER([partition_by_clause] [order_by_clause] [order_by_clause window_clause])
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ```
 
 :::tip

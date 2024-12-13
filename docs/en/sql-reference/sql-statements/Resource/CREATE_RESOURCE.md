@@ -6,19 +6,40 @@ displayed_sidebar: docs
 
 ## Description
 
+<<<<<<< HEAD
 This statement is used to create resources. Only user root or admin can create resources. Currently, only Spark and Hive resources are supported. Other external resources may be added to StarRocks in the future, such as Spark/GPU for query, HDFS/S3 for external storage, and MapReduce for ETL.
 
 Syntax:
+=======
+Creates resources. The following types of resources can be created: Apache Spark™, Apache Hive™, Apache Iceberg, Apache Hudi, and JDBC. Spark resources are used in Spark Load to manage loading information, such as YARN configurations, storage path of intermediate data, and Broker configurations. Hive, Iceberg, Hudi, and JDBC resources are used for managing data source access information involved in querying [External tables](../../../data_source/External_table.md).
+
+:::tip
+
+- Only users with the SYSTEM-level CREATE RESOURCE privilege can perform this operation.
+- You can create JDBC resources only in StarRocks v2.3 and later.
+
+:::
+
+## Syntax
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ```sql
 CREATE [EXTERNAL] RESOURCE "resource_name"
 PROPERTIES ("key"="value", ...)
 ```
 
+<<<<<<< HEAD
 Note:  
 
 1. PROPERTIES specifies the resource type. Currently, only Spark and Hive are supported.
 2. The PROPERTIES vary depending on the resource type. See examples for details.
+=======
+## Parameters
+
+- `resource_name`: the name of the resource to create. For the naming conventions, see [System limits](../../System_limit.md).
+
+- `PROPERTIES`: specifies the properties of the resource type. The PROPERTIES vary depending on the resource type. See Examples for details.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ## Examples
 

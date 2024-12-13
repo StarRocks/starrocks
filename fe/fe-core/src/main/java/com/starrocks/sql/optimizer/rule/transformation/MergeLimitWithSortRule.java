@@ -15,7 +15,10 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
+<<<<<<< HEAD
 import com.google.common.base.Preconditions;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -33,20 +36,39 @@ public class MergeLimitWithSortRule extends TransformationRule {
                 .addChildren(Pattern.create(OperatorType.LOGICAL_TOPN, OperatorType.PATTERN_LEAF)));
     }
 
+<<<<<<< HEAD
+=======
+    public boolean check(final OptExpression input, OptimizerContext context) {
+        LogicalTopNOperator topN = (LogicalTopNOperator) input.getInputs().get(0).getOp();
+        LogicalLimitOperator limit = ((LogicalLimitOperator) input.getOp());
+
+        // Merge Init-Limit/Local-limit and Sort
+        // Local-limit may be generate at MergeLimitWithLimitRule
+        return limit.isInit() || limit.isLocal();
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         // will transform to topN
         LogicalLimitOperator limit = (LogicalLimitOperator) input.getOp();
         LogicalTopNOperator sort = (LogicalTopNOperator) input.getInputs().get(0).getOp();
 
+<<<<<<< HEAD
         Preconditions.checkState(!(limit.isGlobal() && limit.hasOffset() && sort.hasOffset()),
                 "unsupported a global limit with offset above a topN node with offset");
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         long minLimit = limit.getLimit();
         if (sort.hasLimit()) {
             minLimit = Math.min(minLimit, sort.getLimit());
         }
         OptExpression result = new OptExpression(
+<<<<<<< HEAD
                 new LogicalTopNOperator(sort.getOrderByElements(), minLimit, limit.getOffset()));
+=======
+                new LogicalTopNOperator(sort.getOrderByElements(), limit.getLimit(), limit.getOffset()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         result.getInputs().addAll(input.getInputs().get(0).getInputs());
         return Lists.newArrayList(result);
     }

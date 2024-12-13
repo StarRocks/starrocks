@@ -40,7 +40,11 @@ After StarRocks is integrating with Apache Ranger, you can achieve the following
 
 ## Prerequisites
 
+<<<<<<< HEAD
 - Apache Ranger 2.0.0 or later has been installed. For the instructions on how to install Apache Ranger, see [Ranger quick start](https://ranger.apache.org/quick_start_guide.html).
+=======
+- Apache Ranger 2.1.0 or later has been installed. For the instructions on how to install Apache Ranger, see [Ranger quick start](https://ranger.apache.org/quick_start_guide.html).
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 - All StarRocks FE machines have access to Apache Ranger. You can check this by running the following command on each FE machine:
 
    ```SQL
@@ -134,7 +138,11 @@ This step configures the StarRocks Service on Ranger so that users can perform a
    ![added service](../../_assets/ranger_added_service.png)
 
 5. Click **Test connection** to test the connectivity, and save it after the connection is successful. If you didn't install ranger-starrocks-plugin, then you can skip test connection and create directly.
+<<<<<<< HEAD
 6. On each FE machine of the StarRocks cluster, create [`ranger-starrocks-security.xml`](https://github.com/StarRocks/ranger/blob/master/plugin-starrocks/conf/ranger-starrocks-security.xml) in the `fe/conf` folder and copy the content. You must modify the following two parameters and save the modifications:
+=======
+6. On each FE machine of the StarRocks cluster, create [ranger-starrocks-security.xml](https://github.com/StarRocks/ranger/blob/master/plugin-starrocks/conf/ranger-starrocks-security.xml) in the `fe/conf` folder and copy the content. You must modify the following two parameters and save the modifications:
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
    - `ranger.plugin.starrocks.service.name`: Change to the name of the StarRocks Service you created in Step 4.
    - `ranger.plugin.starrocks.policy.rest the url`: Change to the address of the Ranger Admin.

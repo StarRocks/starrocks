@@ -60,6 +60,16 @@ public class MapTypeTest extends PlanTestBase {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testMapEquals() throws Exception {
+        String sql = "select c1 != NULL from test_map;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "<slot 4> : NULL");
+    }
+
+    @Test
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void testInsertErrorType() throws Exception {
         String sql = "insert into test_map values (1, map{1: map{1:2}}, map{1:1});";
         try {
@@ -70,4 +80,17 @@ public class MapTypeTest extends PlanTestBase {
                     "MAP<TINYINT,MAP<TINYINT,TINYINT>> to MAP<INT,VARCHAR(65533)>.");
         }
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testComplexAnyValue() throws Exception {
+        String sql = "select any_value(c2) from test_map limit 1";
+        String plan = getFragmentPlan(sql);
+        assertContains("1:AGGREGATE (update finalize)\n" +
+                "  |  output: any_value(3: c2)\n" +
+                "  |  group by: \n" +
+                "  |  limit: 1");
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

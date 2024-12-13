@@ -44,7 +44,11 @@ namespace starrocks {
 
 class MasterServerClient {
 public:
+<<<<<<< HEAD
     explicit MasterServerClient(FrontendServiceClientCache* client_cache);
+=======
+    explicit MasterServerClient() = default;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     virtual ~MasterServerClient() = default;
 
     // Reprot finished task to the master server
@@ -67,9 +71,12 @@ public:
 
     MasterServerClient(const MasterServerClient&) = delete;
     const MasterServerClient& operator=(const MasterServerClient&) = delete;
+<<<<<<< HEAD
 
 private:
     FrontendServiceClientCache* _client_cache;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 } // namespace starrocks

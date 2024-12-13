@@ -35,6 +35,10 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
+<<<<<<< HEAD
+=======
+import com.google.common.collect.ImmutableList;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
@@ -42,12 +46,16 @@ import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.catalog.system.sys.SysDb;
 import com.starrocks.cluster.ClusterNamespace;
+<<<<<<< HEAD
 import com.starrocks.common.Config;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -55,6 +63,16 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.QueryableReentrantReadWriteLock;
 import com.starrocks.common.util.Util;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.io.Text;
+import com.starrocks.common.io.Writable;
+import com.starrocks.common.util.DebugUtil;
+import com.starrocks.common.util.concurrent.LockUtils.SlowLockLogStats;
+import com.starrocks.common.util.concurrent.QueryableReentrantReadWriteLock;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.persist.DropInfo;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -63,7 +81,10 @@ import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+<<<<<<< HEAD
 import java.io.DataInput;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.io.DataOutput;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -73,11 +94,17 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Objects;
+<<<<<<< HEAD
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.TimeUnit;
+=======
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.stream.Collectors;
 import java.util.zip.Adler32;
 
@@ -118,12 +145,20 @@ public class Database extends MetaObject implements Writable {
     // catalogName is set if the database comes from an external catalog
     private String catalogName;
 
+<<<<<<< HEAD
     private QueryableReentrantReadWriteLock rwLock;
 
     private long lastSlowLockLogTime = 0;
 
     // This param is used to make sure db not dropped when leader node writes wal,
     // so this param does not need to be persistent,
+=======
+    private final QueryableReentrantReadWriteLock rwLock;
+    private SlowLockLogStats slowLockLogStats = new SlowLockLogStats();
+
+    // This param is used to make sure db not dropped when leader node writes wal,
+    // so this param does not need to be persisted,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // and this param maybe not right when the db is dropped and the catalog has done a checkpoint,
     // but that's ok to meet our needs.
     private volatile boolean exist = true;
@@ -153,6 +188,7 @@ public class Database extends MetaObject implements Writable {
         this.location = location;
     }
 
+<<<<<<< HEAD
     private String getOwnerInfo(Thread owner) {
         if (owner == null) {
             return "";
@@ -316,6 +352,19 @@ public class Database extends MetaObject implements Writable {
 
     public QueryableReentrantReadWriteLock getLock() {
         return this.rwLock;
+=======
+    /**
+     * Database rwLock will be deleted later, please do not use this interface directly.
+     * Use Locker.lockDatabase to obtain db lock
+     */
+    @Deprecated
+    public QueryableReentrantReadWriteLock getRwLock() {
+        return rwLock;
+    }
+
+    public SlowLockLogStats getSlowLockLogStats() {
+        return slowLockLogStats;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public long getId() {
@@ -355,6 +404,7 @@ public class Database extends MetaObject implements Writable {
         return this;
     }
 
+<<<<<<< HEAD
     public void setNameWithLock(String newName) {
         writeLock();
         try {
@@ -384,6 +434,18 @@ public class Database extends MetaObject implements Writable {
         } finally {
             writeUnlock();
         }
+=======
+    public void setDataQuota(long newQuota) {
+        Preconditions.checkArgument(newQuota >= 0L);
+        LOG.info("database[{}] set quota from {} to {}", fullQualifiedName, dataQuotaBytes, newQuota);
+        this.dataQuotaBytes = newQuota;
+    }
+
+    public void setReplicaQuota(long newQuota) {
+        Preconditions.checkArgument(newQuota >= 0L);
+        LOG.info("database[{}] set replica quota from {} to {}", fullQualifiedName, replicaQuotaSize, newQuota);
+        this.replicaQuotaSize = newQuota;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public long getDataQuota() {
@@ -396,7 +458,12 @@ public class Database extends MetaObject implements Writable {
 
     public long getUsedDataQuotaWithLock() {
         long usedDataQuota = 0;
+<<<<<<< HEAD
         readLock();
+=======
+        Locker locker = new Locker();
+        locker.lockDatabase(id, LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         try {
             for (Table table : this.idToTable.values()) {
                 if (!table.isOlapTableOrMaterializedView()) {
@@ -408,6 +475,7 @@ public class Database extends MetaObject implements Writable {
             }
             return usedDataQuota;
         } finally {
+<<<<<<< HEAD
             readUnlock();
         }
     }
@@ -429,6 +497,9 @@ public class Database extends MetaObject implements Writable {
             return Math.max(leftReplicaQuota, 0L);
         } finally {
             readUnlock();
+=======
+            locker.unLockDatabase(id, LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -446,18 +517,46 @@ public class Database extends MetaObject implements Writable {
         LOG.info("database[{}] data quota: left bytes: {} / total: {}",
                 fullQualifiedName, readableLeftQuota, readableQuota);
 
+<<<<<<< HEAD
         if (leftDataQuota <= 0L) {
+=======
+        if (leftDataQuota == 0L) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             throw new DdlException("Database[" + fullQualifiedName
                     + "] data size exceeds quota[" + readableQuota + "]");
         }
     }
 
     public void checkReplicaQuota() throws DdlException {
+<<<<<<< HEAD
         long leftReplicaQuota = getReplicaQuotaLeftWithLock();
         LOG.info("database[{}] replica quota: left number: {} / total: {}",
                 fullQualifiedName, leftReplicaQuota, replicaQuotaSize);
 
         if (leftReplicaQuota <= 0L) {
+=======
+        long usedReplicaQuota = 0;
+        Locker locker = new Locker();
+        locker.lockDatabase(id, LockType.READ);
+        try {
+            for (Table table : this.idToTable.values()) {
+                if (!table.isOlapTableOrMaterializedView()) {
+                    continue;
+                }
+
+                OlapTable olapTable = (OlapTable) table;
+                usedReplicaQuota = usedReplicaQuota + olapTable.getReplicaCount();
+            }
+        } finally {
+            locker.unLockDatabase(id, LockType.READ);
+        }
+
+        long leftReplicaQuota = Math.max(replicaQuotaSize - usedReplicaQuota, 0L);
+        LOG.info("database[{}] replica quota: left number: {} / total: {}",
+                fullQualifiedName, leftReplicaQuota, replicaQuotaSize);
+
+        if (leftReplicaQuota == 0L) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             throw new DdlException("Database[" + fullQualifiedName
                     + "] replica number exceeds quota[" + replicaQuotaSize + "]");
         }
@@ -472,6 +571,7 @@ public class Database extends MetaObject implements Writable {
         if (table == null) {
             return false;
         }
+<<<<<<< HEAD
         String tableName = table.getName();
         if (nameToTable.containsKey(tableName)) {
             return false;
@@ -480,6 +580,23 @@ public class Database extends MetaObject implements Writable {
             nameToTable.put(table.getName(), table);
             return true;
         }
+=======
+        if (table.isTemporaryTable()) {
+            long tableId = table.getId();
+            if (idToTable.containsKey(tableId)) {
+                return false;
+            }
+            idToTable.put(tableId, table);
+        } else {
+            String tableName = table.getName();
+            if (nameToTable.containsKey(tableName)) {
+                return false;
+            }
+            idToTable.put(table.getId(), table);
+            nameToTable.put(table.getName(), table);
+        }
+        return true;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public void unRegisterTableUnlocked(Table table) {
@@ -488,14 +605,27 @@ public class Database extends MetaObject implements Writable {
         }
 
         idToTable.remove(table.getId());
+<<<<<<< HEAD
         nameToTable.remove(table.getName());
+=======
+        if (!table.isTemporaryTable()) {
+            nameToTable.remove(table.getName());
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public void dropTable(String tableName, boolean isSetIfExists, boolean isForce) throws DdlException {
         Table table;
+<<<<<<< HEAD
         writeLock();
         try {
             table = getTable(tableName);
+=======
+        Locker locker = new Locker();
+        locker.lockDatabase(id, LockType.WRITE);
+        try {
+            table = nameToTable.get(tableName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (table == null && isSetIfExists) {
                 return;
             }
@@ -503,7 +633,12 @@ public class Database extends MetaObject implements Writable {
                 ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
                 return;
             }
+<<<<<<< HEAD
             if (!isForce && GlobalStateMgr.getCurrentGlobalTransactionMgr().existCommittedTxns(id, table.getId(), null)) {
+=======
+            if (!isForce &&
+                    GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().existCommittedTxns(id, table.getId(), null)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 throw new DdlException("There are still some transactions in the COMMITTED state waiting to be completed. " +
                         "The table [" + table.getName() +
                         "] cannot be dropped. If you want to forcibly drop(cannot be recovered)," +
@@ -513,7 +648,11 @@ public class Database extends MetaObject implements Writable {
             DropInfo info = new DropInfo(id, table.getId(), -1L, isForce);
             GlobalStateMgr.getCurrentState().getEditLog().logDropTable(info);
         } finally {
+<<<<<<< HEAD
             writeUnlock();
+=======
+            locker.unLockDatabase(id, LockType.WRITE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         if (isForce) {
@@ -524,6 +663,30 @@ public class Database extends MetaObject implements Writable {
                 tableName, fullQualifiedName, table.getId(), table.getType(), isForce);
     }
 
+<<<<<<< HEAD
+=======
+    public void dropTemporaryTable(long tableId, String tableName, boolean isSetIfExists, boolean isForce) throws DdlException {
+        Table table;
+        Locker locker = new Locker();
+        locker.lockDatabase(id, LockType.WRITE);
+        try {
+            table = idToTable.get(tableId);
+            if (table == null) {
+                if (isSetIfExists) {
+                    return;
+                }
+                ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
+            }
+            unprotectDropTemporaryTable(tableId, isForce, false);
+            DropInfo info = new DropInfo(id, table.getId(), -1L, isForce);
+            GlobalStateMgr.getCurrentState().getEditLog().logDropTable(info);
+        } finally {
+            locker.unLockDatabase(id, LockType.WRITE);
+        }
+    }
+
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     /**
      * Drop a table from this database.
      *
@@ -549,6 +712,19 @@ public class Database extends MetaObject implements Writable {
         return table;
     }
 
+<<<<<<< HEAD
+=======
+    public Table unprotectDropTemporaryTable(long tableId, boolean isForceDrop, boolean isReplay) {
+        Table table = dropTemporaryTable(tableId);
+        if (table != null) {
+            table.onDrop(this, isForceDrop, isReplay);
+            LOG.info("Finished drop temporary table '{}' from database '{}', tableId: {}, sessionId: {}",
+                    table.getName(), getOriginName(), tableId, ((OlapTable) table).getSessionId());
+        }
+        return table;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public Table dropTable(long tableId) {
         Table table = this.idToTable.get(tableId);
         if (table != null) {
@@ -567,14 +743,35 @@ public class Database extends MetaObject implements Writable {
         return table;
     }
 
+<<<<<<< HEAD
     public List<Table> getTables() {
         return new ArrayList<Table>(idToTable.values());
+=======
+    public Table dropTemporaryTable(long tableId) {
+        Table table = this.idToTable.get(tableId);
+        if (table != null) {
+            Preconditions.checkArgument(table.isTemporaryTable(), "table should be temporary table");
+            this.idToTable.remove(tableId);
+        }
+        return table;
+    }
+
+    public List<Table> getTables() {
+        return new ArrayList<>(idToTable.values());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public int getTableNumber() {
         return idToTable.size();
     }
 
+<<<<<<< HEAD
+=======
+    public List<Table> getTemporaryTables() {
+        return idToTable.values().stream().filter(t -> t.isTemporaryTable()).collect(Collectors.toList());
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public List<Table> getViews() {
         List<Table> views = new ArrayList<>();
         for (Table table : idToTable.values()) {
@@ -593,6 +790,7 @@ public class Database extends MetaObject implements Writable {
     }
 
     public Set<String> getTableNamesViewWithLock() {
+<<<<<<< HEAD
         readLock();
         try {
             return Collections.unmodifiableSet(this.nameToTable.keySet());
@@ -607,6 +805,22 @@ public class Database extends MetaObject implements Writable {
 
     public Optional<Table> tryGetTable(long tableId) {
         return Optional.ofNullable(idToTable.get(tableId));
+=======
+        Locker locker = new Locker();
+        locker.lockDatabase(id, LockType.READ);
+        try {
+            return Collections.unmodifiableSet(this.nameToTable.keySet());
+        } finally {
+            locker.unLockDatabase(id, LockType.READ);
+        }
+    }
+
+    /**
+     * This is a thread-safe method when idToTable is a concurrent hash map
+     */
+    public Table getTable(long tableId) {
+        return idToTable.get(tableId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public Table getTable(String tableName) {
@@ -632,6 +846,7 @@ public class Database extends MetaObject implements Writable {
         return null;
     }
 
+<<<<<<< HEAD
     /**
      * This is a thread-safe method when idToTable is a concurrent hash map
      *
@@ -652,6 +867,8 @@ public class Database extends MetaObject implements Writable {
         return db;
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public int getSignature(int signatureVersion) {
         Adler32 adler32 = new Adler32();
@@ -660,6 +877,13 @@ public class Database extends MetaObject implements Writable {
         return Math.abs((int) adler32.getValue());
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isExist() {
+        return exist;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public void write(DataOutput out) throws IOException {
         super.write(out);
@@ -698,6 +922,7 @@ public class Database extends MetaObject implements Writable {
         out.writeLong(replicaQuotaSize);
     }
 
+<<<<<<< HEAD
     public void readFields(DataInput in) throws IOException {
         super.readFields(in);
 
@@ -735,6 +960,8 @@ public class Database extends MetaObject implements Writable {
         replicaQuotaSize = in.readLong();
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public int hashCode() {
         return Long.hashCode(id);
@@ -781,28 +1008,48 @@ public class Database extends MetaObject implements Writable {
         return catalogName;
     }
 
+<<<<<<< HEAD
     public synchronized void addFunction(Function function) throws UserException {
         addFunctionImpl(function, false);
+=======
+    public synchronized void addFunction(Function function) throws StarRocksException {
+        addFunction(function, false, false);
+    }
+
+    public synchronized void addFunction(Function function, boolean allowExists, boolean createIfNotExists) throws
+            StarRocksException {
+        addFunctionImpl(function, false, allowExists, createIfNotExists);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         GlobalStateMgr.getCurrentState().getEditLog().logAddFunction(function);
     }
 
     public synchronized void replayAddFunction(Function function) {
         try {
+<<<<<<< HEAD
             addFunctionImpl(function, true);
         } catch (UserException e) {
+=======
+            addFunctionImpl(function, true, false, false);
+        } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             Preconditions.checkArgument(false);
         }
     }
 
     public static void replayCreateFunctionLog(Function function) {
         String dbName = function.getFunctionName().getDb();
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (db == null) {
             throw new Error("unknown database when replay log, db=" + dbName);
         }
         db.replayAddFunction(function);
     }
 
+<<<<<<< HEAD
     // return true if add success, false
     private void addFunctionImpl(Function function, boolean isReplay) throws UserException {
         String functionName = function.getFunctionName().getFunction();
@@ -839,13 +1086,62 @@ public class Database extends MetaObject implements Writable {
         try {
             dropFunctionImpl(functionSearchDesc);
         } catch (UserException e) {
+=======
+    private void addFunctionImpl(Function function, boolean isReplay, boolean allowExists, boolean createIfNotExists)
+            throws StarRocksException {
+        String functionName = function.getFunctionName().getFunction();
+        List<Function> existFuncs = name2Function.getOrDefault(functionName, ImmutableList.of());
+        if (allowExists && createIfNotExists) {
+            // In most DB system (like MySQL, Oracle, Snowflake etc.), these two conditions are now allowed to use together
+            throw new StarRocksException(
+                    "\"IF NOT EXISTS\" and \"OR REPLACE\" cannot be used together in the same CREATE statement");
+        }
+        if (!isReplay) {
+            for (Function existFunc : existFuncs) {
+                if (function.compare(existFunc, Function.CompareMode.IS_IDENTICAL)) {
+                    if (createIfNotExists) {
+                        LOG.info("create function [{}] which already exists", functionName);
+                        return;
+                    } else if (!allowExists) {
+                        throw new StarRocksException("function already exists");
+                    }
+                }
+            }
+            GlobalFunctionMgr.assignIdToUserDefinedFunction(function);
+        }
+        name2Function.put(functionName, GlobalFunctionMgr.addOrReplaceFunction(function, existFuncs));
+    }
+
+    public synchronized void dropFunction(FunctionSearchDesc function, boolean dropIfExists) throws StarRocksException {
+        dropFunctionImpl(function, dropIfExists);
+        GlobalStateMgr.getCurrentState().getEditLog().logDropFunction(function);
+    }
+
+    public synchronized void dropFunctionForRestore(Function function) {
+        FunctionSearchDesc fnDesc = new FunctionSearchDesc(function.getFunctionName(), function.getArgs(),
+                                                           function.hasVarArgs());
+        try {
+            dropFunctionImpl(fnDesc, true);
+        } catch (StarRocksException ignore) {
+        }
+    }
+
+    public synchronized void replayDropFunction(FunctionSearchDesc functionSearchDesc) {
+        try {
+            dropFunctionImpl(functionSearchDesc, false);
+        } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             Preconditions.checkArgument(false);
         }
     }
 
     public static void replayDropFunctionLog(FunctionSearchDesc functionSearchDesc) {
         String dbName = functionSearchDesc.getName().getDb();
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (db == null) {
             throw new Error("unknown database when replay log, db=" + dbName);
         }
@@ -868,11 +1164,23 @@ public class Database extends MetaObject implements Writable {
         return func;
     }
 
+<<<<<<< HEAD
     private void dropFunctionImpl(FunctionSearchDesc function) throws UserException {
         String functionName = function.getName().getFunction();
         List<Function> existFuncs = name2Function.get(functionName);
         if (existFuncs == null) {
             throw new UserException("Unknown function, function=" + function.toString());
+=======
+    private void dropFunctionImpl(FunctionSearchDesc function, boolean dropIfExists) throws StarRocksException {
+        String functionName = function.getName().getFunction();
+        List<Function> existFuncs = name2Function.get(functionName);
+        if (existFuncs == null) {
+            if (dropIfExists) {
+                LOG.info("drop function [{}] which does not exist", functionName);
+                return;
+            }
+            throw new StarRocksException("Unknown function, function=" + function.toString());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         boolean isFound = false;
         List<Function> newFunctions = new ArrayList<>();
@@ -884,7 +1192,15 @@ public class Database extends MetaObject implements Writable {
             }
         }
         if (!isFound) {
+<<<<<<< HEAD
             throw new UserException("Unknown function, function=" + function.toString());
+=======
+            if (dropIfExists) {
+                LOG.info("drop function [{}] which does not exist", functionName);
+                return;
+            }
+            throw new StarRocksException("Unknown function, function=" + function.toString());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         if (newFunctions.isEmpty()) {
             name2Function.remove(functionName);
@@ -909,6 +1225,17 @@ public class Database extends MetaObject implements Writable {
         return functions;
     }
 
+<<<<<<< HEAD
+=======
+    public synchronized Map<String, List<Function>> getNameToFunction() {
+        return Maps.newHashMap(name2Function);
+    }
+
+    public synchronized List<Function> getFunctionsByName(String functionName) {
+        return name2Function.getOrDefault(functionName, ImmutableList.of());
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public boolean isSystemDatabase() {
         return fullQualifiedName.equalsIgnoreCase(InfoSchemaDb.DATABASE_NAME) ||
                 fullQualifiedName.equalsIgnoreCase(SysDb.DATABASE_NAME);
@@ -923,11 +1250,19 @@ public class Database extends MetaObject implements Writable {
         this.exist = exist;
     }
 
+<<<<<<< HEAD
     public boolean isExist() {
         return exist;
     }
 
     public List<Partition> getPartitionSamples() {
+=======
+    public boolean getExist() {
+        return exist;
+    }
+
+    public List<PhysicalPartition> getPartitionSamples() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return this.idToTable.values()
                 .stream()
                 .filter(table -> table instanceof OlapTable)

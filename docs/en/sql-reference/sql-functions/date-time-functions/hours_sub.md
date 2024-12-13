@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # hours_sub
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Reduces the specified date and time by a specified number of hours.
 

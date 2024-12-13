@@ -1,0 +1,94 @@
+-- name: test_mv_with_list_partitions_olap
+CREATE TABLE `t1` (
+   `id` varchar(36),
+   `location_id` varchar(36),
+   `location_id_hash` int,
+   `source_id` varchar(36),
+   `person_id` varchar(36)
+) ENGINE=OLAP
+PRIMARY KEY(`id`,`location_id`,`location_id_hash`)
+PARTITION BY (`location_id_hash`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 3
+PROPERTIES (
+   "replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO t1 VALUES (1, 'beijing', 20, 'a', 'a1'), (2, 'guangdong', 30, 'b', 'b1'), (3, 'guangdong', 20, 'c', 'c1');
+-- result:
+-- !result
+create materialized view test_mv1
+PARTITION BY `location_id_hash`
+DISTRIBUTED BY HASH(`id`) BUCKETS 3
+PROPERTIES (
+    "replication_num" = "1"
+) 
+as select `id`, `location_id`, `location_id_hash` from `t1`;
+-- result:
+-- !result
+refresh materialized view  test_mv1 with sync mode;
+select * from test_mv1 order by 1, 2, 3;
+-- result:
+1	beijing	20
+2	guangdong	30
+3	guangdong	20
+-- !result
+function: print_hit_materialized_view("select `id`, `location_id`, `location_id_hash` from `t1`", "test_mv1")
+-- result:
+True
+-- !result
+function: print_hit_materialized_view("select `id`, `location_id`, `location_id_hash` from `t1` where location_id='guangdong'", "test_mv1")
+-- result:
+True
+-- !result
+function: print_hit_materialized_view("select `id`, `location_id`, `location_id_hash` from `t1` where location_id='beijing'", "test_mv1")
+-- result:
+True
+-- !result
+select `id`, `location_id`, `location_id_hash` from `t1` order by 1, 2, 3;
+-- result:
+1	beijing	20
+2	guangdong	30
+3	guangdong	20
+-- !result
+select `id`, `location_id`, `location_id_hash` from `t1` where location_id='guangdong' order by 1, 2, 3;
+-- result:
+2	guangdong	30
+3	guangdong	20
+-- !result
+select `id`, `location_id`, `location_id_hash` from `t1` where location_id='beijing' order by 1, 2, 3;
+-- result:
+1	beijing	20
+-- !result
+INSERT INTO t1 VALUES (3, 'guangdong', 30, 'c', 'c1');
+-- result:
+-- !result
+function: print_hit_materialized_view("select `id`, `location_id`, `location_id_hash` from `t1`", "test_mv1")
+-- result:
+True
+-- !result
+function: print_hit_materialized_view("select `id`, `location_id`, `location_id_hash` from `t1` where location_id='guangdong'", "test_mv1")
+-- result:
+True
+-- !result
+function: print_hit_materialized_view("select `id`, `location_id`, `location_id_hash` from `t1` where location_id='beijing'", "test_mv1")
+-- result:
+True
+-- !result
+select `id`, `location_id`, `location_id_hash` from `t1` order by 1, 2, 3;
+-- result:
+1	beijing	20
+2	guangdong	30
+3	guangdong	20
+3	guangdong	30
+-- !result
+select `id`, `location_id`, `location_id_hash` from `t1` where location_id='guangdong' order by 1, 2, 3;
+-- result:
+2	guangdong	30
+3	guangdong	20
+3	guangdong	30
+-- !result
+select `id`, `location_id`, `location_id_hash` from `t1` where location_id='beijing' order by 1, 2, 3;
+-- result:
+1	beijing	20
+-- !result

@@ -19,6 +19,16 @@ import org.junit.Test;
 
 public class QuantilesTest {
     @Test
+<<<<<<< HEAD
+=======
+    public void testBasic() {
+        Quantiles q1 = new Quantiles(1.0, 2.0, 3.0);
+        Quantiles q2 = new Quantiles(q1);
+        Assert.assertTrue(q1.compareTo(q2) == 0);
+    }
+
+    @Test
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void testCompare() {
         // avg
         {

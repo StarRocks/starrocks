@@ -36,6 +36,7 @@ package com.starrocks.http;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+<<<<<<< HEAD
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.privilege.AccessDeniedException;
@@ -46,11 +47,25 @@ import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
+=======
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.AuthorizationMgr;
+import com.starrocks.authorization.PrivilegeBuiltinConstants;
+import com.starrocks.authorization.PrivilegeException;
+import com.starrocks.common.DdlException;
+import com.starrocks.common.util.DebugUtil;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.UserIdentity;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
+<<<<<<< HEAD
+=======
+import io.netty.channel.ChannelHandlerContext;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import io.netty.channel.ChannelProgressiveFuture;
 import io.netty.channel.ChannelProgressiveFutureListener;
 import io.netty.channel.DefaultFileRegion;
@@ -101,7 +116,11 @@ public abstract class BaseAction implements IAction {
     }
 
     @Override
+<<<<<<< HEAD
     public void handleRequest(BaseRequest request) throws Exception {
+=======
+    public void handleRequest(BaseRequest request) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         BaseResponse response = new BaseResponse();
         try {
             execute(request, response);
@@ -113,10 +132,19 @@ public abstract class BaseAction implements IAction {
             } else {
                 writeResponse(request, response, HttpResponseStatus.NOT_FOUND);
             }
+<<<<<<< HEAD
         }
     }
 
     public abstract void execute(BaseRequest request, BaseResponse response) throws DdlException;
+=======
+        } finally {
+            ConnectContext.remove();
+        }
+    }
+
+    public abstract void execute(BaseRequest request, BaseResponse response) throws DdlException, AccessDeniedException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     protected void writeResponse(BaseRequest request, BaseResponse response, HttpResponseStatus status) {
         // if (HttpHeaders.is100ContinueExpected(request.getRequest())) {
@@ -271,6 +299,12 @@ public abstract class BaseAction implements IAction {
         }
     }
 
+<<<<<<< HEAD
+=======
+    protected void handleChannelInactive(ChannelHandlerContext ctx) {
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static class ActionAuthorizationInfo {
         public String fullUserName;
         public String remoteIp;
@@ -293,6 +327,7 @@ public abstract class BaseAction implements IAction {
         }
     }
 
+<<<<<<< HEAD
     // For new RBAC privilege framework
     protected void checkActionOnSystem(UserIdentity currentUser, PrivilegeType... systemActions) {
         for (PrivilegeType systemAction : systemActions) {
@@ -300,6 +335,8 @@ public abstract class BaseAction implements IAction {
         }
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // We check whether user owns db_admin and user_admin role in new RBAC privilege framework for
     // operation which checks `PrivPredicate.ADMIN` in global table in old Auth framework.
     protected void checkUserOwnsAdminRole(UserIdentity currentUser) throws AccessDeniedException {
@@ -309,6 +346,7 @@ public abstract class BaseAction implements IAction {
                     userOwnedRoles.contains(PrivilegeBuiltinConstants.ROOT_ROLE_ID) ||
                     (userOwnedRoles.contains(PrivilegeBuiltinConstants.DB_ADMIN_ROLE_ID) &&
                             userOwnedRoles.contains(PrivilegeBuiltinConstants.USER_ADMIN_ROLE_ID)))) {
+<<<<<<< HEAD
                 throw new AccessDeniedException(
                         "Access denied; you need own root role or own db_admin and user_admin roles for this " +
                                 "operation");
@@ -323,6 +361,15 @@ public abstract class BaseAction implements IAction {
         Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), db, tbl, privType);
     }
 
+=======
+                throw new AccessDeniedException();
+            }
+        } catch (PrivilegeException e) {
+            throw new AccessDeniedException();
+        }
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // return currentUserIdentity from StarRocks auth
     public static UserIdentity checkPassword(ActionAuthorizationInfo authInfo)
             throws AccessDeniedException {

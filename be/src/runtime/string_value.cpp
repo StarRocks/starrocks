@@ -39,11 +39,19 @@
 namespace starrocks {
 
 std::string StringValue::debug_string() const {
+<<<<<<< HEAD
     return std::string(ptr, len);
 }
 
 std::string StringValue::to_string() const {
     return std::string(ptr, len);
+=======
+    return {ptr, len};
+}
+
+std::string StringValue::to_string() const {
+    return {ptr, len};
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 std::ostream& operator<<(std::ostream& os, const StringValue& string_value) {

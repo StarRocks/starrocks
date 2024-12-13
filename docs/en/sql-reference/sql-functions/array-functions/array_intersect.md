@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # array_intersect
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Returns an array of the elements in the intersection of one or more arrays.
 

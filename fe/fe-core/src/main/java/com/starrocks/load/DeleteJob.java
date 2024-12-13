@@ -34,11 +34,19 @@
 
 package com.starrocks.load;
 
+<<<<<<< HEAD
+=======
+import com.starrocks.analysis.Predicate;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.QueryStateException;
 import com.starrocks.server.GlobalStateMgr;
@@ -71,6 +79,10 @@ public abstract class DeleteJob extends AbstractTxnStateChangeCallback {
     protected String label;
     protected DeleteState state;
     protected MultiDeleteInfo deleteInfo;
+<<<<<<< HEAD
+=======
+    List<Predicate> deleteConditions;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public DeleteJob(long id, long transactionId, String label, MultiDeleteInfo deleteInfo) {
         this.id = id;
@@ -105,6 +117,17 @@ public abstract class DeleteJob extends AbstractTxnStateChangeCallback {
         return deleteInfo;
     }
 
+<<<<<<< HEAD
+=======
+    public List<Predicate> getDeleteConditions() {
+        return deleteConditions;
+    }
+
+    public void setDeleteConditions(List<Predicate> deleteConditions) {
+        this.deleteConditions = deleteConditions;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public void afterVisible(TransactionState txnState, boolean txnOperated) {
         if (!txnOperated) {
@@ -112,14 +135,22 @@ public abstract class DeleteJob extends AbstractTxnStateChangeCallback {
         }
         setState(DeleteState.FINISHED);
         GlobalStateMgr.getCurrentState().getDeleteMgr().recordFinishedJob(this);
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().removeCallback(getId());
+=======
+        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().removeCallback(getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         GlobalStateMgr.getCurrentState().getEditLog().logFinishMultiDelete(deleteInfo);
     }
 
     @Override
     public void afterAborted(TransactionState txnState, boolean txnOperated, String txnStatusChangeReason) {
         // just to clean the callback
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().removeCallback(getId());
+=======
+        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().removeCallback(getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public abstract void run(DeleteStmt stmt, Database db, Table table, List<Partition> partitions)
@@ -133,7 +164,11 @@ public abstract class DeleteJob extends AbstractTxnStateChangeCallback {
         LOG.info("start to cancel delete job, transactionId: {}, cancelType: {}", getTransactionId(),
                 cancelType.name());
 
+<<<<<<< HEAD
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
+=======
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         try {
             globalTransactionMgr.abortTransaction(getDeleteInfo().getDbId(), getTransactionId(), reason,
                     getTabletCommitInfos(), getTabletFailInfos(), null);
@@ -151,7 +186,11 @@ public abstract class DeleteJob extends AbstractTxnStateChangeCallback {
      * return false when successfully commit but publish unfinished.
      * A UserException thrown if both commit and publish failed.
      */
+<<<<<<< HEAD
     public abstract boolean commitImpl(Database db, long timeoutMs) throws UserException;
+=======
+    public abstract boolean commitImpl(Database db, long timeoutMs) throws StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     protected abstract List<TabletCommitInfo> getTabletCommitInfos();
 
@@ -165,9 +204,15 @@ public abstract class DeleteJob extends AbstractTxnStateChangeCallback {
                         .updateTableDeleteInfo(GlobalStateMgr.getCurrentState(), db.getId(),
                                 getDeleteInfo().getTableId());
             }
+<<<<<<< HEAD
             status = GlobalStateMgr.getCurrentGlobalTransactionMgr().
                     getTransactionState(db.getId(), getTransactionId()).getTransactionStatus();
         } catch (UserException e) {
+=======
+            status = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().
+                    getTransactionState(db.getId(), getTransactionId()).getTransactionStatus();
+        } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (cancel(DeleteMgr.CancelType.COMMIT_FAIL, e.getMessage())) {
                 throw new DdlException(e.getMessage(), e);
             } else {

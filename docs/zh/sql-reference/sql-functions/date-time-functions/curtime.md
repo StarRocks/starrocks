@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # curtime,current_time
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 获取当前的时间，以 TIME 类型返回。
 

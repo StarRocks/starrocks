@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 package com.starrocks.planner;
 
 import com.google.common.collect.Lists;
@@ -53,7 +56,11 @@ public class DecodeNode extends PlanNode {
                       Map<Integer, Integer> dictIdToStringIds,
                       Map<SlotId, Expr> stringFunctions,
                       Map<SlotRef, SlotRef> slotRefMap
+<<<<<<< HEAD
                       ) {
+=======
+    ) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         super(id, tupleDescriptor.getId().asList(), "Decode");
         addChild(child);
         this.dictIdToStringIds = dictIdToStringIds;
@@ -62,11 +69,14 @@ public class DecodeNode extends PlanNode {
     }
 
     @Override
+<<<<<<< HEAD
     public boolean canUsePipeLine() {
         return getChildren().stream().allMatch(PlanNode::canUsePipeLine);
     }
 
     @Override
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public boolean canUseRuntimeAdaptiveDop() {
         return getChildren().stream().allMatch(PlanNode::canUseRuntimeAdaptiveDop);
     }
@@ -118,9 +128,17 @@ public class DecodeNode extends PlanNode {
     }
 
     @Override
+<<<<<<< HEAD
     public boolean pushDownRuntimeFilters(DescriptorTable descTbl, RuntimeFilterDescription description,
                                           Expr probeExpr,
                                           List<Expr> partitionByExprs) {
+=======
+    public boolean pushDownRuntimeFilters(RuntimeFilterPushDownContext context,
+                                          Expr probeExpr,
+                                          List<Expr> partitionByExprs) {
+        RuntimeFilterDescription description = context.getDescription();
+        DescriptorTable descTbl = context.getDescTbl();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (!canPushDownRuntimeFilter()) {
             return false;
         }
@@ -129,7 +147,12 @@ public class DecodeNode extends PlanNode {
             return false;
         }
 
+<<<<<<< HEAD
         return pushdownRuntimeFilterForChildOrAccept(descTbl, description, probeExpr, candidatesOfSlotExpr(probeExpr, couldBound(description, descTbl)),
+=======
+        return pushdownRuntimeFilterForChildOrAccept(context, probeExpr,
+                candidatesOfSlotExpr(probeExpr, couldBound(description, descTbl)),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 partitionByExprs, candidatesOfSlotExprs(partitionByExprs, couldBoundForPartitionExpr()), 0, true);
     }
 
@@ -154,4 +177,11 @@ public class DecodeNode extends PlanNode {
         planNode.setDecode_node(decodeNode);
         normalizeConjuncts(normalizer, planNode, conjuncts);
     }
+<<<<<<< HEAD
+=======
+
+    public Map<Integer, Integer> getDictIdToStringIds() {
+        return dictIdToStringIds;
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

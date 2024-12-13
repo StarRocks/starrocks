@@ -17,6 +17,7 @@
 
 package com.starrocks.sql.ast;
 
+<<<<<<< HEAD
 import com.google.common.base.Strings;
 import com.starrocks.alter.AlterOpType;
 import com.starrocks.analysis.Analyzer;
@@ -30,6 +31,15 @@ import java.util.Map;
 public class RollupRenameClause extends AlterTableClause {
     private String rollupName;
     private String newRollupName;
+=======
+import com.starrocks.alter.AlterOpType;
+import com.starrocks.sql.parser.NodePosition;
+
+// rename table
+public class RollupRenameClause extends AlterTableClause {
+    private final String rollupName;
+    private final String newRollupName;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public RollupRenameClause(String rollupName, String newRollupName) {
         this(rollupName, newRollupName, NodePosition.ZERO);
@@ -39,7 +49,10 @@ public class RollupRenameClause extends AlterTableClause {
         super(AlterOpType.RENAME, pos);
         this.rollupName = rollupName;
         this.newRollupName = newRollupName;
+<<<<<<< HEAD
         this.needTableStable = false;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public String getRollupName() {
@@ -51,6 +64,7 @@ public class RollupRenameClause extends AlterTableClause {
     }
 
     @Override
+<<<<<<< HEAD
     public void analyze(Analyzer analyzer) throws AnalysisException {
         if (Strings.isNullOrEmpty(rollupName)) {
             throw new AnalysisException("Rollup name is not set");
@@ -69,6 +83,8 @@ public class RollupRenameClause extends AlterTableClause {
     }
 
     @Override
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public String toSql() {
         return "RENAME ROLLUP " + rollupName + " " + newRollupName;
     }

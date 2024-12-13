@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.ast;
 
+<<<<<<< HEAD
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
@@ -53,6 +54,19 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+=======
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSortedMap;
+import com.starrocks.analysis.FunctionName;
+import com.starrocks.analysis.RedirectStatus;
+import com.starrocks.analysis.TypeDef;
+import com.starrocks.catalog.Function;
+import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.sql.parser.NodePosition;
+
+import java.util.HashMap;
+import java.util.Map;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 // create a user define function
 public class CreateFunctionStmt extends DdlStmt {
@@ -60,7 +74,13 @@ public class CreateFunctionStmt extends DdlStmt {
     public static final String SYMBOL_KEY = "symbol";
     public static final String MD5_CHECKSUM = "md5";
     public static final String TYPE_KEY = "type";
+<<<<<<< HEAD
     public static final String TYPE_STARROCKS_JAR = "StarrocksJar";
+=======
+    public static final String ISOLATION_KEY = "isolation";
+    public static final String TYPE_STARROCKS_JAR = "StarrocksJar";
+    public static final String TYPE_STARROCKS_PYTHON = "Python";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static final String EVAL_METHOD_NAME = "evaluate";
     public static final String CREATE_METHOD_NAME = "create";
     public static final String DESTROY_METHOD_NAME = "destroy";
@@ -74,12 +94,17 @@ public class CreateFunctionStmt extends DdlStmt {
     public static final String WINDOW_UPDATE_METHOD_NAME = "windowUpdate";
     public static final String IS_ANALYTIC_NAME = "analytic";
     public static final String PROCESS_METHOD_NAME = "process";
+<<<<<<< HEAD
+=======
+    public static final String INPUT_TYPE = "input";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     private final FunctionName functionName;
     private final boolean isAggregate;
     private final boolean isTable;
     private final FunctionArgsDef argsDef;
     private final TypeDef returnType;
+<<<<<<< HEAD
     private TypeDef intermediateType;
     private final Map<String, String> properties;
     private boolean isStarrocksJar = false;
@@ -92,6 +117,18 @@ public class CreateFunctionStmt extends DdlStmt {
 
     private static final ImmutableMap<PrimitiveType, Class> PRIMITIVE_TYPE_TO_JAVA_CLASS_TYPE =
             new ImmutableMap.Builder<PrimitiveType, Class>()
+=======
+    private final Map<String, String> properties;
+    private final String content;
+    private final boolean shouldReplaceIfExists;
+    private final boolean createIfNotExists;
+
+    // needed item set after analyzed
+    private Function function;
+
+    private static final ImmutableMap<PrimitiveType, Class<?>> PRIMITIVE_TYPE_TO_JAVA_CLASS_TYPE =
+            new ImmutableMap.Builder<PrimitiveType, Class<?>>()
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     .put(PrimitiveType.BOOLEAN, Boolean.class)
                     .put(PrimitiveType.TINYINT, Byte.class)
                     .put(PrimitiveType.SMALLINT, Short.class)
@@ -103,6 +140,7 @@ public class CreateFunctionStmt extends DdlStmt {
                     .put(PrimitiveType.VARCHAR, String.class)
                     .build();
 
+<<<<<<< HEAD
     private static class UDFInternalClass {
         public Class clazz = null;
         public Map<String, Method> methods = null;
@@ -221,13 +259,44 @@ public class CreateFunctionStmt extends DdlStmt {
     public CreateFunctionStmt(String functionType, FunctionName functionName, FunctionArgsDef argsDef,
                               TypeDef returnType, TypeDef intermediateType, Map<String, String> properties,
                               NodePosition pos) {
+=======
+    public CreateFunctionStmt(String functionType,
+                              FunctionName functionName,
+                              FunctionArgsDef argsDef,
+                              TypeDef returnType,
+                              Map<String, String> properties,
+                              String content,
+                              boolean shouldReplaceIfExists,
+                              boolean createIfNotExists) {
+        this(functionType,
+                functionName,
+                argsDef,
+                returnType,
+                properties,
+                content,
+                shouldReplaceIfExists,
+                createIfNotExists,
+                NodePosition.ZERO
+        );
+    }
+
+    public CreateFunctionStmt(String functionType, FunctionName functionName, FunctionArgsDef argsDef,
+                              TypeDef returnType, Map<String, String> properties, String content,
+                              boolean shouldReplaceIfExists, boolean createIfNotExists, NodePosition pos) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         super(pos);
         this.functionName = functionName;
         this.isAggregate = functionType.equalsIgnoreCase("AGGREGATE");
         this.isTable = functionType.equalsIgnoreCase("TABLE");
         this.argsDef = argsDef;
         this.returnType = returnType;
+<<<<<<< HEAD
         this.intermediateType = intermediateType;
+=======
+        this.content = content;
+        this.shouldReplaceIfExists = shouldReplaceIfExists;
+        this.createIfNotExists = createIfNotExists;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (properties == null) {
             this.properties = ImmutableSortedMap.of();
         } else {
@@ -238,10 +307,13 @@ public class CreateFunctionStmt extends DdlStmt {
 
             this.properties = ImmutableSortedMap.copyOf(lowerCaseProperties, String.CASE_INSENSITIVE_ORDER);
         }
+<<<<<<< HEAD
         this.mainClass = new UDFInternalClass();
         if (isAggregate) {
             this.udafStateClass = new UDFInternalClass();
         }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public FunctionName getFunctionName() {
@@ -252,10 +324,46 @@ public class CreateFunctionStmt extends DdlStmt {
         return function;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isScalar() {
+        return !isTable() && !isAggregate();
+    }
+
+    public boolean isTable() {
+        return isTable;
+    }
+
+    public boolean isAggregate() {
+        return isAggregate;
+    }
+
+    public FunctionArgsDef getArgsDef() {
+        return argsDef;
+    }
+
+    public TypeDef getReturnType() {
+        return returnType;
+    }
+
+    public Map<String, String> getProperties() {
+        return properties;
+    }
+
+    public String getLangType() {
+        return properties.get(TYPE_KEY);
+    }
+
+    public String getContent() {
+        return content;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void setFunction(Function function) {
         this.function = function;
     }
 
+<<<<<<< HEAD
     public void analyze(ConnectContext context) throws AnalysisException {
         if (!Config.enable_udf) {
             throw new AnalysisException(
@@ -498,11 +606,24 @@ public class CreateFunctionStmt extends DdlStmt {
         function.setChecksum(checksum);
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public RedirectStatus getRedirectStatus() {
         return RedirectStatus.FORWARD_WITH_SYNC;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean shouldReplaceIfExists() {
+        return shouldReplaceIfExists;
+    }
+
+    public boolean createIfNotExists() {
+        return createIfNotExists;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitCreateFunctionStatement(this, context);

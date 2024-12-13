@@ -72,6 +72,15 @@ TypeDescriptor::TypeDescriptor(const std::vector<TTypeNode>& types, int* idx) {
         for (const auto& struct_field : node.struct_fields) {
             field_names.push_back(struct_field.name);
             children.push_back(TypeDescriptor(types, idx));
+<<<<<<< HEAD
+=======
+            if (struct_field.__isset.id && struct_field.id != -1) {
+                field_ids.emplace_back(struct_field.id);
+            }
+            if (struct_field.__isset.physical_name && !struct_field.physical_name.empty()) {
+                field_physical_names.emplace_back(struct_field.physical_name);
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         DCHECK_EQ(field_names.size(), children.size());
         break;
@@ -123,9 +132,13 @@ void TypeDescriptor::to_thrift(TTypeDesc* thrift_type) const {
         curr_node.__set_scalar_type(TScalarType());
         TScalarType& scalar_type = curr_node.scalar_type;
         scalar_type.__set_type(starrocks::to_thrift(type));
+<<<<<<< HEAD
         if (len != -1) {
             scalar_type.__set_len(len);
         }
+=======
+        scalar_type.__set_len(len);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (scale != -1) {
             scalar_type.__set_scale(scale);
         }
@@ -149,8 +162,13 @@ void TypeDescriptor::to_protobuf(PTypeDesc* proto_type) const {
     } else if (type == TYPE_STRUCT) {
         node->set_type(TTypeNodeType::STRUCT);
         DCHECK_EQ(field_names.size(), children.size());
+<<<<<<< HEAD
         for (size_t i = 0; i < field_names.size(); i++) {
             node->add_struct_fields()->set_name(field_names[i]);
+=======
+        for (const auto& field_name : field_names) {
+            node->add_struct_fields()->set_name(field_name);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         for (const TypeDescriptor& child : children) {
             child.to_protobuf(proto_type);
@@ -159,9 +177,13 @@ void TypeDescriptor::to_protobuf(PTypeDesc* proto_type) const {
         node->set_type(TTypeNodeType::SCALAR);
         PScalarType* scalar_type = node->mutable_scalar_type();
         scalar_type->set_type(starrocks::to_thrift(type));
+<<<<<<< HEAD
         if (len != -1) {
             scalar_type->set_len(len);
         }
+=======
+        scalar_type->set_len(len);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (scale != -1) {
             scalar_type->set_scale(scale);
         }
@@ -381,6 +403,24 @@ int TypeDescriptor::get_slot_size() const {
     return -1;
 }
 
+<<<<<<< HEAD
+=======
+size_t TypeDescriptor::get_flat_size() const {
+    if (is_unknown_type()) {
+        return 0;
+    }
+    if (!is_complex_type()) {
+        return 1;
+    } else {
+        int size = 0;
+        for (const auto& type : children) {
+            size += type.get_flat_size();
+        }
+        return size;
+    }
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 size_t TypeDescriptor::get_array_depth_limit() const {
     int depth = 1;
     const TypeDescriptor* type = this;
@@ -391,4 +431,44 @@ size_t TypeDescriptor::get_array_depth_limit() const {
     return depth;
 }
 
+<<<<<<< HEAD
+=======
+TypeDescriptor TypeDescriptor::promote_types(const TypeDescriptor& type1, const TypeDescriptor& type2) {
+    DCHECK(type1 != type2);
+    if (type1.is_integer_type() && type2.is_integer_type()) {
+        // promote integer type. Larger enum values mean larger value ranges.
+        auto tp = type1.type > type2.type ? type1.type : type2.type;
+        return TypeDescriptor::from_logical_type(tp);
+    } else if (type1.is_float_type() && type2.is_float_type()) {
+        // promote all float to double.
+        return TypeDescriptor::from_logical_type(TYPE_DOUBLE);
+    } else if ((type1.is_float_type() && type2.is_integer_type()) ||
+               (type1.is_integer_type() && type2.is_float_type())) {
+        // if one is float and other is integer, promote to double
+        return TypeDescriptor::from_logical_type(TYPE_DOUBLE);
+    } else if (type1.is_decimal_type() && type2.is_decimal_type()) {
+        // decimal v3 only
+        auto tp = type1.type > type2.type ? type1.type : type2.type;
+        if (tp > TYPE_DECIMAL128) tp = TYPE_DECIMAL128;
+        if (tp < TYPE_DECIMAL32) tp = TYPE_DECIMAL32;
+        auto precision = type1.precision > type2.precision ? type1.precision : type2.precision;
+        if (precision > MAX_PRECISION) precision = MAX_PRECISION;
+        auto scale = type1.scale > type2.scale ? type1.scale : type2.scale;
+        if (scale > MAX_SCALE) scale = MAX_SCALE;
+        return TypeDescriptor::create_decimalv3_type(tp, precision, scale);
+    } else if (type1.type == TYPE_VARCHAR && type2.type == TYPE_VARCHAR) {
+        auto len = type1.len > type2.len ? type1.len : type2.len;
+        return TypeDescriptor::create_varchar_type(len);
+    } else if (type1.type == TYPE_CHAR && type2.type == TYPE_CHAR) {
+        auto len = type1.len > type2.len ? type1.len : type2.len;
+        return TypeDescriptor::create_char_type(len);
+    } else if (type1.type == TYPE_VARBINARY && type2.type == TYPE_VARBINARY) {
+        auto len = type1.len > type2.len ? type1.len : type2.len;
+        return TypeDescriptor::create_varbinary_type(len);
+    }
+    // treat other conflicted types as varchar.
+    return TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // namespace starrocks

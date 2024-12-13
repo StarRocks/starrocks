@@ -16,6 +16,7 @@
 package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
+<<<<<<< HEAD
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
@@ -23,13 +24,22 @@ import com.starrocks.privilege.ObjectTypeDeprecate;
 import com.starrocks.privilege.PrivilegeEntry;
 import com.starrocks.privilege.UserPrivilegeCollection;
 import com.starrocks.privilege.UserPrivilegeCollectionV2;
+=======
+import com.starrocks.authorization.UserPrivilegeCollectionV2;
+import com.starrocks.common.io.Text;
+import com.starrocks.common.io.Writable;
+import com.starrocks.persist.gson.GsonUtils;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.UserIdentity;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+<<<<<<< HEAD
 import java.util.List;
 import java.util.Map;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 public class UserPrivilegeCollectionInfo implements Writable {
 
@@ -77,6 +87,7 @@ public class UserPrivilegeCollectionInfo implements Writable {
 
     public static UserPrivilegeCollectionInfo read(DataInput in) throws IOException {
         String json = Text.readString(in);
+<<<<<<< HEAD
         try {
             return GsonUtils.GSON.fromJson(json, UserPrivilegeCollectionInfo.class);
         } catch (Exception e) {
@@ -104,5 +115,8 @@ public class UserPrivilegeCollectionInfo implements Writable {
             return new UserPrivilegeCollectionInfo(deprecated.getUserIdentity(), collection,
                     deprecated.pluginId, deprecated.pluginVersion);
         }
+=======
+        return GsonUtils.GSON.fromJson(json, UserPrivilegeCollectionInfo.class);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }

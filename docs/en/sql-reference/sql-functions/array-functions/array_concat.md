@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # array_concat
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Concatenates multiple arrays into one array that contains all the elements in the arrays.
 

@@ -51,7 +51,10 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.catalog.FunctionSet;
+<<<<<<< HEAD
 import com.starrocks.catalog.HashDistributionInfo;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.ListPartitionInfo;
@@ -59,18 +62,34 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.PhysicalPartition;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.SparkResource;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.LoadPriority;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.LoadPriority;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.BrokerFileGroupAggInfo.FileGroupAggKey;
 import com.starrocks.load.FailMsg;
 import com.starrocks.load.Load;
+<<<<<<< HEAD
+=======
+import com.starrocks.load.PartitionUtils;
+import com.starrocks.load.PartitionUtils.RangePartitionBoundary;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.load.loadv2.etl.EtlJobConfig;
 import com.starrocks.load.loadv2.etl.EtlJobConfig.EtlColumn;
 import com.starrocks.load.loadv2.etl.EtlJobConfig.EtlColumnMapping;
@@ -85,8 +104,12 @@ import com.starrocks.load.loadv2.etl.EtlJobConfig.SourceType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ImportColumnDesc;
+<<<<<<< HEAD
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
+=======
+import com.starrocks.sql.common.MetaUtils;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.transaction.TransactionState;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -95,6 +118,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+<<<<<<< HEAD
+=======
+import java.util.stream.Collectors;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 // 1. create etl job config and write it into jobconfig.json file
 // 2. submit spark etl job
@@ -153,13 +180,22 @@ public class SparkLoadPendingTask extends LoadTask {
     }
 
     private void createEtlJobConf() throws LoadException {
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (db == null) {
             throw new LoadException("db does not exist. id: " + dbId);
         }
 
         Map<Long, EtlTable> tables = Maps.newHashMap();
+<<<<<<< HEAD
         db.readLock();
+=======
+        Locker locker = new Locker();
+        locker.lockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         try {
             Map<Long, Set<Long>> tableIdToPartitionIds = Maps.newHashMap();
             Set<Long> allPartitionsTableIds = Sets.newHashSet();
@@ -169,7 +205,11 @@ public class SparkLoadPendingTask extends LoadTask {
                 FileGroupAggKey aggKey = entry.getKey();
                 long tableId = aggKey.getTableId();
 
+<<<<<<< HEAD
                 OlapTable table = (OlapTable) db.getTable(tableId);
+=======
+                OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (table == null) {
                     throw new LoadException("table does not exist. id: " + tableId);
                 }
@@ -187,7 +227,11 @@ public class SparkLoadPendingTask extends LoadTask {
                     tables.put(tableId, etlTable);
 
                     // add table indexes to transaction state
+<<<<<<< HEAD
                     TransactionState txnState = GlobalStateMgr.getCurrentGlobalTransactionMgr()
+=======
+                    TransactionState txnState = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                             .getTransactionState(dbId, transactionId);
                     if (txnState == null) {
                         throw new LoadException("txn does not exist. id: " + transactionId);
@@ -201,7 +245,11 @@ public class SparkLoadPendingTask extends LoadTask {
                 }
             }
         } finally {
+<<<<<<< HEAD
             db.readUnlock();
+=======
+            locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         String outputFilePattern = EtlJobConfig.getOutputFilePattern(loadLabel, FilePatternVersion.V1);
@@ -220,7 +268,11 @@ public class SparkLoadPendingTask extends LoadTask {
                 continue;
             }
 
+<<<<<<< HEAD
             OlapTable table = (OlapTable) db.getTable(tableId);
+=======
+            OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (table == null) {
                 throw new LoadException("table does not exist. id: " + tableId);
             }
@@ -364,12 +416,19 @@ public class SparkLoadPendingTask extends LoadTask {
         }
 
         // distribution column refs
+<<<<<<< HEAD
         List<String> distributionColumnRefs = Lists.newArrayList();
         DistributionInfo distributionInfo = table.getDefaultDistributionInfo();
         Preconditions.checkState(distributionInfo.getType() == DistributionInfoType.HASH);
         for (Column column : ((HashDistributionInfo) distributionInfo).getDistributionColumns()) {
             distributionColumnRefs.add(column.getName());
         }
+=======
+        DistributionInfo distributionInfo = table.getDefaultDistributionInfo();
+        Preconditions.checkState(distributionInfo.getType() == DistributionInfoType.HASH);
+        List<String> distributionColumnRefs = MetaUtils.getColumnNamesByColumnIds(
+                table.getIdToColumn(), distributionInfo.getDistributionColumns());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         return new EtlPartitionInfo(type.typeString, partitionColumnRefs, distributionColumnRefs, etlPartitions);
     }
@@ -377,12 +436,20 @@ public class SparkLoadPendingTask extends LoadTask {
     private List<EtlPartition> initEtlListPartition(
             List<String> partitionColumnRefs, OlapTable table, Set<Long> partitionIds) throws LoadException {
         ListPartitionInfo listPartitionInfo = (ListPartitionInfo) table.getPartitionInfo();
+<<<<<<< HEAD
         for (Column column : listPartitionInfo.getPartitionColumns()) {
             partitionColumnRefs.add(column.getName());
         }
         List<EtlPartition> etlPartitions = Lists.newArrayList();
         Map<Long, List<List<LiteralExpr>>> multiLiteralExprValues = listPartitionInfo.getMultiLiteralExprValues();
         Map<Long, List<LiteralExpr>>  literalExprValues = listPartitionInfo.getLiteralExprValues();
+=======
+        partitionColumnRefs.addAll(table.getPartitionInfo().getPartitionColumns(table.getIdToColumn()).
+                stream().map(Column::getName).collect(Collectors.toList()));
+        List<EtlPartition> etlPartitions = Lists.newArrayList();
+        Map<Long, List<List<LiteralExpr>>> multiLiteralExprValues = listPartitionInfo.getMultiLiteralExprValues();
+        Map<Long, List<LiteralExpr>> literalExprValues = listPartitionInfo.getLiteralExprValues();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         for (Long partitionId : partitionIds) {
             Partition partition = table.getPartition(partitionId);
             if (partition == null) {
@@ -404,7 +471,15 @@ public class SparkLoadPendingTask extends LoadTask {
                     inKeys.add(initItemOfInKeys(Lists.newArrayList(literalExpr)));
                 }
             }
+<<<<<<< HEAD
             etlPartitions.add(new EtlPartition(partitionId, inKeys, bucketNum));
+=======
+
+            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                long physicalPartitionId = physicalPartition.getId();
+                etlPartitions.add(new EtlPartition(physicalPartitionId, inKeys, bucketNum));
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return etlPartitions;
     }
@@ -414,7 +489,11 @@ public class SparkLoadPendingTask extends LoadTask {
         for (LiteralExpr literalExpr : list) {
             Object keyValue;
             if (literalExpr instanceof DateLiteral) {
+<<<<<<< HEAD
                 keyValue = convertDateLiteralToNumber((DateLiteral) literalExpr);
+=======
+                keyValue = PartitionUtils.convertDateLiteralToNumber((DateLiteral) literalExpr);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             } else {
                 keyValue = literalExpr.getRealObjectValue();
             }
@@ -427,9 +506,14 @@ public class SparkLoadPendingTask extends LoadTask {
             List<String> partitionColumnRefs, OlapTable table, Set<Long> partitionIds) throws LoadException {
         RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) table.getPartitionInfo();
         List<EtlPartition> etlPartitions = Lists.newArrayList();
+<<<<<<< HEAD
         for (Column column : rangePartitionInfo.getPartitionColumns()) {
             partitionColumnRefs.add(column.getName());
         }
+=======
+        partitionColumnRefs.addAll(table.getPartitionInfo().getPartitionColumns(table.getIdToColumn())
+                .stream().map(Column::getName).collect(Collectors.toList()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         List<Map.Entry<Long, Range<PartitionKey>>> sortedRanges = null;
         try {
@@ -447,6 +531,7 @@ public class SparkLoadPendingTask extends LoadTask {
             // bucket num
             int bucketNum = partition.getDistributionInfo().getBucketNum();
 
+<<<<<<< HEAD
             // is min|max partition
             Range<PartitionKey> range = entry.getValue();
             boolean isMaxPartition = range.upperEndpoint().isMaxValue();
@@ -490,6 +575,21 @@ public class SparkLoadPendingTask extends LoadTask {
             }
 
             etlPartitions.add(new EtlPartition(partitionId, startKeys, endKeys, isMinPartition, isMaxPartition, bucketNum));
+=======
+            RangePartitionBoundary boundary = PartitionUtils.calRangePartitionBoundary(entry.getValue());
+
+            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                long physicalPartitionId = physicalPartition.getId();
+
+                etlPartitions.add(new EtlPartition(
+                        physicalPartitionId,
+                        boundary.getStartKeys(),
+                        boundary.getEndKeys(),
+                        boundary.isMinPartition(),
+                        boundary.isMaxPartition(),
+                        bucketNum));
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return etlPartitions;
     }
@@ -509,8 +609,16 @@ public class SparkLoadPendingTask extends LoadTask {
             // bucket num
             int bucketNum = partition.getDistributionInfo().getBucketNum();
 
+<<<<<<< HEAD
             etlPartitions.add(new EtlPartition(partitionId, Lists.newArrayList(), Lists.newArrayList(),
                     true, true, bucketNum));
+=======
+            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                long physicalPartitionId = physicalPartition.getId();
+                etlPartitions.add(new EtlPartition(physicalPartitionId, Lists.newArrayList(), Lists.newArrayList(),
+                        true, true, bucketNum));
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return etlPartitions;
     }
@@ -528,7 +636,11 @@ public class SparkLoadPendingTask extends LoadTask {
         // check columns
         try {
             Load.initColumns(table, copiedColumnExprList, fileGroup.getColumnToHadoopFunction());
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             throw new LoadException(e.getMessage());
         }
         // add generated column mapping
@@ -540,7 +652,11 @@ public class SparkLoadPendingTask extends LoadTask {
                 for (ImportColumnDesc columnDesc : copiedColumnExprList) {
                     if (!columnDesc.isColumn() && slot.getColumnName().equals(columnDesc.getColumnName())) {
                         throw new LoadException("generated column can not refenece the column which is the " +
+<<<<<<< HEAD
                                                 "result of the expression in spark load");
+=======
+                                "result of the expression in spark load");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     }
                 }
             }
@@ -594,6 +710,17 @@ public class SparkLoadPendingTask extends LoadTask {
             partitionIds = Lists.newArrayList(tablePartitionIds);
         }
 
+<<<<<<< HEAD
+=======
+        List<Long> physicalPartitionIds = Lists.newArrayList();
+        for (Long partitionId : partitionIds) {
+            Partition partition = table.getPartition(partitionId);
+            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                physicalPartitionIds.add(physicalPartition.getId());
+            }
+        }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // where
         // TODO: check
         String where = "";
@@ -606,12 +733,21 @@ public class SparkLoadPendingTask extends LoadTask {
         Map<String, String> hiveTableProperties = Maps.newHashMap();
         if (fileGroup.isLoadFromTable()) {
             long srcTableId = fileGroup.getSrcTableId();
+<<<<<<< HEAD
             HiveTable srcHiveTable = (HiveTable) db.getTable(srcTableId);
+=======
+            HiveTable srcHiveTable = (HiveTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .getTable(db.getId(), srcTableId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (srcHiveTable == null) {
                 throw new LoadException("table does not exist. id: " + srcTableId);
             }
             hiveDbTableName = srcHiveTable.getHiveDbTable();
+<<<<<<< HEAD
             hiveTableProperties.putAll(srcHiveTable.getHiveProperties());
+=======
+            hiveTableProperties.putAll(srcHiveTable.getProperties());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         // check hll and bitmap func
@@ -631,13 +767,21 @@ public class SparkLoadPendingTask extends LoadTask {
         EtlFileGroup etlFileGroup = null;
         if (fileGroup.isLoadFromTable()) {
             etlFileGroup = new EtlFileGroup(SourceType.HIVE, fileFieldNames, hiveDbTableName, hiveTableProperties,
+<<<<<<< HEAD
                     fileGroup.isNegative(), columnMappings, where, partitionIds);
+=======
+                    fileGroup.isNegative(), columnMappings, where, physicalPartitionIds);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } else {
             etlFileGroup = new EtlFileGroup(SourceType.FILE, fileGroup.getFilePaths(), fileFieldNames,
                     fileGroup.getColumnsFromPath(), fileGroup.getColumnSeparator(),
                     fileGroup.getRowDelimiter(), fileGroup.isNegative(),
                     fileGroup.getFileFormat(), columnMappings,
+<<<<<<< HEAD
                     where, partitionIds);
+=======
+                    where, physicalPartitionIds);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         return etlFileGroup;
@@ -686,6 +830,7 @@ public class SparkLoadPendingTask extends LoadTask {
         }
     }
 
+<<<<<<< HEAD
     // This is to be compatible with Spark Load Job formats for Date type.
     // Because the historical version is serialized and deserialized with a special hash number for DateLiteral,
     // special processing is also done here for DateLiteral to keep the historical version compatible.
@@ -701,4 +846,6 @@ public class SparkLoadPendingTask extends LoadTask {
             throw new StarRocksPlannerException("Invalid date type: " + dateLiteral.getType(), ErrorType.INTERNAL_ERROR);
         }
     }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

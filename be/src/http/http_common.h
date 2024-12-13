@@ -75,5 +75,17 @@ static const std::string HTTP_PARTIAL_UPDATE_MODE = "partial_update_mode";
 
 static const std::string HTTP_100_CONTINUE = "100-continue";
 static const std::string HTTP_CHANNEL_ID = "channel_id";
+<<<<<<< HEAD
+=======
+static const std::string HTTP_COMPRESSION = "compression";
+
+// Headers for batch write ==========================
+static const std::string HTTP_ENABLE_MERGE_COMMIT = "enable_merge_commit";
+static const std::string HTTP_MERGE_COMMIT_ASYNC = "merge_commit_async";
+static const std::string HTTP_MERGE_COMMIT_INTERVAL_MS = "merge_commit_interval_ms";
+static const std::string HTTP_MERGE_COMMIT_PARALLEL = "merge_commit_parallel";
+
+static const std::string HTTP_WAREHOUSE = "warehouse";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 } // namespace starrocks

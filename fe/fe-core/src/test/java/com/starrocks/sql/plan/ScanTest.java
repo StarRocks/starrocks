@@ -14,12 +14,24 @@
 
 package com.starrocks.sql.plan;
 
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.LocalTablet;
+import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.Tablet;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.FeConstants;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.SchemaScanNode;
 import org.junit.Assert;
 import org.junit.Test;
 
+<<<<<<< HEAD
+=======
+import java.util.Collection;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.List;
 
 public class ScanTest extends PlanTestBase {
@@ -168,8 +180,12 @@ public class ScanTest extends PlanTestBase {
                 "     tabletRatio=0/0\n" +
                 "     tabletList=\n" +
                 "     cardinality=1\n" +
+<<<<<<< HEAD
                 "     avgRowSize=3.0\n" +
                 "     numNodes=0");
+=======
+                "     avgRowSize=3.0\n");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         connectContext.getSessionVariable().setSingleNodeExecPlan(false);
     }
 
@@ -320,22 +336,39 @@ public class ScanTest extends PlanTestBase {
 
     @Test
     public void testMergeTwoFilters() throws Exception {
+<<<<<<< HEAD
         String sql = "select v1 from t0 where v2 < null group by v1 HAVING NULL IS NULL;";
         String planFragment = getFragmentPlan(sql);
         assertContains(planFragment, "  1:AGGREGATE (update finalize)\n"
                 + "  |  group by: 1: v1");
 
         Assert.assertTrue(planFragment.contains("  0:EMPTYSET\n"));
+=======
+        String sql = "select v1 from t0 where v2 < 3 group by v1 HAVING v1 IS NULL;";
+        String planFragment = getFragmentPlan(sql);
+        assertContains(planFragment, "  2:AGGREGATE (update finalize)\n" +
+                "  |  group by: 1: v1");
+
+        Assert.assertTrue(planFragment.contains("1: v1 IS NULL, 2: v2 < 3"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
     public void testScalarReuseIsNull() throws Exception {
         String plan =
+<<<<<<< HEAD
                 getFragmentPlan("SELECT (abs(1) IS NULL) = true AND ((abs(1) IS NULL) IS NOT NULL) as count FROM t1;");
         Assert.assertTrue(plan, plan.contains("1:Project\n" +
                 "  |  <slot 4> : (6: expr) AND (6: expr IS NOT NULL)\n" +
                 "  |  common expressions:\n" +
                 "  |  <slot 5> : abs(1)\n" +
+=======
+                getFragmentPlan("SELECT (abs(v4) IS NULL) = true AND ((abs(v4) IS NULL) IS NOT NULL) as count FROM t1;");
+        Assert.assertTrue(plan, plan.contains("1:Project\n" +
+                "  |  <slot 4> : (6: expr) AND (6: expr IS NOT NULL)\n" +
+                "  |  common expressions:\n" +
+                "  |  <slot 5> : abs(1: v4)\n" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "  |  <slot 6> : 5: abs IS NULL"));
     }
 
@@ -414,13 +447,22 @@ public class ScanTest extends PlanTestBase {
     public void testMetaScanWithCount() throws Exception {
         String sql = "select count(*),count(),count(t1a),count(t1b),count(t1c) from test_all_type[_META_]";
         String plan = getFragmentPlan(sql);
+<<<<<<< HEAD
         assertContains(plan, "  1:AGGREGATE (update serialize)\n" +
                 "  |  output: sum(count_t1a), sum(count_t1a), sum(count_t1a), sum(count_t1a)\n" +
+=======
+        assertContains(plan, "1:AGGREGATE (update serialize)\n" +
+                "  |  output: sum(rows_t1a), sum(count_t1a), sum(count_t1b), sum(count_t1c)\n" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "  |  group by: \n" +
                 "  |  \n" +
                 "  0:MetaScan\n" +
                 "     Table: test_all_type\n" +
+<<<<<<< HEAD
                 "     <id 16> : count_t1a");
+=======
+                "     <id 16> : rows_t1a");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // compatibility test
         // we should keep nullable attribute of columns consistent with previous version,
         // see more detail in the description of https://github.com/StarRocks/starrocks/pull/17619
@@ -428,12 +470,19 @@ public class ScanTest extends PlanTestBase {
         sql = "select min(t1a),max(t1a),dict_merge(t1a) from test_all_type_not_null[_META_]";
         plan = getVerboseExplain(sql);
         assertContains(plan, "aggregate: " +
+<<<<<<< HEAD
                 "min[([min_t1a, VARCHAR, false]); args: VARCHAR; result: VARCHAR; " +
                 "args nullable: false; result nullable: true], " +
                 "max[([max_t1a, VARCHAR, false]); args: VARCHAR; result: VARCHAR; " +
                 "args nullable: false; result nullable: true], " +
                 "dict_merge[([dict_merge_t1a, VARCHAR, false]); args: INVALID_TYPE; " +
                 "result: VARCHAR; args nullable: false; result nullable: true]");
+=======
+                "min[([min_t1a, VARCHAR, true]); args: VARCHAR; result: VARCHAR; args nullable: true; result nullable: true], " +
+                "max[([max_t1a, VARCHAR, true]); args: VARCHAR; result: VARCHAR; args nullable: true; result nullable: true], " +
+                "dict_merge[([dict_merge_t1a, ARRAY<VARCHAR>, true]); args: INVALID_TYPE; " +
+                "result: VARCHAR; args nullable: true; result nullable: true]");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // with count, all columns should be nullable
         sql = "select min(t1a),max(t1a),dict_merge(t1a),count() from test_all_type_not_null[_META_]";
@@ -442,9 +491,15 @@ public class ScanTest extends PlanTestBase {
                 "args nullable: true; result nullable: true], " +
                 "max[([max_t1a, VARCHAR, true]); args: VARCHAR; result: VARCHAR; " +
                 "args nullable: true; result nullable: true], " +
+<<<<<<< HEAD
                 "dict_merge[([dict_merge_t1a, VARCHAR, true]); args: INVALID_TYPE; result: VARCHAR; " +
                 "args nullable: true; result nullable: true], " +
                 "sum[([count_t1a, BIGINT, true]); args: BIGINT; result: BIGINT; " +
+=======
+                "dict_merge[([dict_merge_t1a, ARRAY<VARCHAR>, true]); args: INVALID_TYPE; result: VARCHAR; " +
+                "args nullable: true; result nullable: true], " +
+                "sum[([rows_t1a, BIGINT, true]); args: BIGINT; result: BIGINT; " +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "args nullable: true; result nullable: true]");
     }
 
@@ -457,6 +512,28 @@ public class ScanTest extends PlanTestBase {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testHint() throws Exception {
+        OlapTable tb = getOlapTable("t0");
+        Long replicaId = null;
+        Collection<Partition> partitions = tb.getPartitions();
+        acquireReplica:
+        for (Partition partition : partitions) {
+            MaterializedIndex index = partition.getDefaultPhysicalPartition().getIndex(tb.getBaseIndexId());
+            for (Tablet tablet : index.getTablets()) {
+                replicaId = ((LocalTablet) tablet).getImmutableReplicas().get(0).getId();
+                break acquireReplica;
+            }
+        }
+        String sql = "select count(distinct v1||v2) from t0 replica(" + replicaId + ")";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  0:OlapScanNode\n" +
+                "     TABLE: t0");
+    }
+
+    @Test
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void testPruneColumnTest() throws Exception {
         connectContext.getSessionVariable().setEnableCountStarOptimization(true);
         String[] sqlString = {
@@ -505,4 +582,29 @@ public class ScanTest extends PlanTestBase {
             Assert.assertEquals(expexted, scanNodeList.get(0).getScanOptimzeOption().getCanUseMinMaxCountOpt());
         }
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testMetaScanPartition() throws Exception {
+        String sql = "select max(L_LINESTATUS) from lineitem_partition partitions(p1993)[_META_]";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "0:MetaScan\n" +
+                "     Table: lineitem_partition\n" +
+                "     <id 19> : max_L_LINESTATUS\n" +
+                "     Partitions: [p1993]");
+    }
+
+    @Test
+    public void testMetaAggregate() throws Exception {
+        String sql = "select max(v1), min(v2), count(v3), count(*) from t0 [_META_];";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "0:MetaScan\n" +
+                "     Table: t0\n" +
+                "     <id 8> : max_v1\n" +
+                "     <id 9> : min_v2\n" +
+                "     <id 10> : count_v3\n" +
+                "     <id 11> : rows_v1");
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

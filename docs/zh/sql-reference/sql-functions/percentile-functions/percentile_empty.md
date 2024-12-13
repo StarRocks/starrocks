@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # percentile_empty
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 构造一个 `percentile` 类型的数值，主要用于 INSERT 或 Stream Load 导入时填充默认值。
 

@@ -40,7 +40,11 @@ public:
     void close() override;
 
 private:
+<<<<<<< HEAD
     Status _next_orc_batch(ChunkPtr* result);
+=======
+    StatusOr<ChunkPtr> _next_orc_batch();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     StatusOr<ChunkPtr> _next_orc_chunk();
 

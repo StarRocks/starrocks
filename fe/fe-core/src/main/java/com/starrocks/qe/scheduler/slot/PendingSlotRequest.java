@@ -18,6 +18,10 @@ import com.starrocks.qe.scheduler.RecoverableException;
 import com.starrocks.thrift.TNetworkAddress;
 
 import java.util.concurrent.CompletableFuture;
+<<<<<<< HEAD
+=======
+import java.util.concurrent.Future;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 public class PendingSlotRequest {
     private final LogicalSlot slot;
@@ -37,7 +41,11 @@ public class PendingSlotRequest {
         return leaderEndpoint;
     }
 
+<<<<<<< HEAD
     public CompletableFuture<LogicalSlot> getSlotFuture() {
+=======
+    public Future<LogicalSlot> getSlotFuture() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return slotFuture;
     }
 

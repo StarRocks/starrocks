@@ -35,11 +35,17 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Strings;
+<<<<<<< HEAD
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
+=======
+import com.google.gson.annotations.SerializedName;
+import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
+import com.starrocks.common.DdlException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TMySQLTable;
 import com.starrocks.thrift.TTableDescriptor;
@@ -47,16 +53,23 @@ import com.starrocks.thrift.TTableType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+<<<<<<< HEAD
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.zip.Adler32;
 
 public class MysqlTable extends Table {
+<<<<<<< HEAD
     private static final Logger LOG = LogManager.getLogger(OlapTable.class);
+=======
+    private static final Logger LOG = LogManager.getLogger(MysqlTable.class);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     private static final String ODBC_CATALOG_RESOURCE = "odbc_catalog_resource";
     private static final String MYSQL_HOST = "host";
@@ -189,11 +202,21 @@ public class MysqlTable extends Table {
         return getPropertyFromResource(MYSQL_PASSWORD);
     }
 
+<<<<<<< HEAD
     public String getMysqlDatabaseName() {
         return mysqlDatabaseName;
     }
 
     public String getMysqlTableName() {
+=======
+    @Override
+    public String getCatalogDBName() {
+        return mysqlDatabaseName;
+    }
+
+    @Override
+    public String getCatalogTableName() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return mysqlTableName;
     }
 
@@ -232,6 +255,7 @@ public class MysqlTable extends Table {
     }
 
     @Override
+<<<<<<< HEAD
     public void write(DataOutput out) throws IOException {
         super.write(out);
 
@@ -275,6 +299,8 @@ public class MysqlTable extends Table {
     }
 
     @Override
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public boolean isSupported() {
         return true;
     }
@@ -283,4 +309,12 @@ public class MysqlTable extends Table {
     public boolean supportInsert() {
         return true;
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    public boolean isTemporal() {
+        return true;
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

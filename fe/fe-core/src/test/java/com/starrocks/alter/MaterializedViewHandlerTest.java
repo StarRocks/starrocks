@@ -42,7 +42,11 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
+<<<<<<< HEAD
 import com.starrocks.catalog.Partition;
+=======
+import com.starrocks.catalog.PhysicalPartition;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.Type;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
@@ -133,7 +137,11 @@ public class MaterializedViewHandlerTest {
     public void testRollupReplica(@Injectable CreateMaterializedViewStmt createMaterializedViewStmt,
                                   @Injectable Database db,
                                   @Injectable OlapTable olapTable,
+<<<<<<< HEAD
                                   @Injectable Partition partition,
+=======
+                                  @Injectable PhysicalPartition partition,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                   @Injectable MaterializedIndex materializedIndex) {
         final String baseIndexName = "t1";
         final Long baseIndexId = new Long(1);
@@ -147,10 +155,19 @@ public class MaterializedViewHandlerTest {
                 result = OlapTable.OlapTableState.NORMAL;
                 olapTable.getIndexIdByName(baseIndexName);
                 result = baseIndexId;
+<<<<<<< HEAD
                 olapTable.getPartitions();
                 result = Lists.newArrayList(partition);
                 partition.getIndex(baseIndexId);
                 result = materializedIndex;
+=======
+                olapTable.getPhysicalPartitions();
+                result = Lists.newArrayList(partition);
+
+                partition.getIndex(baseIndexId);
+                result = materializedIndex;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 materializedIndex.getState();
                 result = MaterializedIndex.IndexState.SHADOW;
             }
@@ -192,7 +209,11 @@ public class MaterializedViewHandlerTest {
                                          @Injectable OlapTable olapTable, @Injectable Database db) {
         final String mvName = "mv1";
         final String mvColumName = "mv_sum_k1";
+<<<<<<< HEAD
         MVColumnItem mvColumnItem = new MVColumnItem(mvColumName, Type.BIGINT, AggregateType.SUM, false, null, true,
+=======
+        MVColumnItem mvColumnItem = new MVColumnItem(mvColumName, Type.BIGINT, AggregateType.SUM, null, false, null, true,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 Sets.newHashSet());
         mvColumnItem.setIsKey(true);
         mvColumnItem.setAggregationType(null, false);
@@ -248,8 +269,13 @@ public class MaterializedViewHandlerTest {
         final String mvName = "mv1";
         final String columnName1 = "k1";
         Column baseColumn1 = new Column(columnName1, Type.VARCHAR, false, AggregateType.NONE, "", "");
+<<<<<<< HEAD
         MVColumnItem mvColumnItem = new MVColumnItem(columnName1, Type.VARCHAR, AggregateType.NONE, false, null, true,
                 Sets.newHashSet());
+=======
+        MVColumnItem mvColumnItem = new MVColumnItem(columnName1, Type.VARCHAR, AggregateType.NONE, null,
+                false, null, true, Sets.newHashSet());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         mvColumnItem.setIsKey(true);
         mvColumnItem.setAggregationType(null, false);
@@ -289,7 +315,12 @@ public class MaterializedViewHandlerTest {
                                            @Injectable OlapTable olapTable, @Injectable Database db) {
         final String mvName = "mv1";
         final String columnName1 = "k1";
+<<<<<<< HEAD
         MVColumnItem mvColumnItem = new MVColumnItem(columnName1, Type.BIGINT, null, false, null, true, Sets.newHashSet());
+=======
+        MVColumnItem mvColumnItem = new MVColumnItem(columnName1, Type.BIGINT, null, null,
+                false, null, true, Sets.newHashSet());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         mvColumnItem.setIsKey(false);
         mvColumnItem.setAggregationType(AggregateType.SUM, false);
         List<String> partitionColumnNames = Lists.newArrayList();
@@ -319,7 +350,11 @@ public class MaterializedViewHandlerTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testCheckDropMaterializedView(@Injectable OlapTable olapTable, @Injectable Partition partition,
+=======
+    public void testCheckDropMaterializedView(@Injectable OlapTable olapTable, @Injectable PhysicalPartition partition,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                               @Injectable MaterializedIndex materializedIndex,
                                               @Injectable Database db) {
         String mvName = "mv_1";
@@ -335,8 +370,15 @@ public class MaterializedViewHandlerTest {
                 result = 1L;
                 olapTable.getSchemaHashByIndexId(1L);
                 result = 1;
+<<<<<<< HEAD
                 olapTable.getPartitions();
                 result = Lists.newArrayList(partition);
+=======
+
+                olapTable.getPhysicalPartitions();
+                result = Lists.newArrayList(partition);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 partition.getIndex(1L);
                 result = materializedIndex;
             }

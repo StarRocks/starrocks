@@ -17,7 +17,11 @@ sudo apt-get update
 ```
 
 ```bash
+<<<<<<< HEAD
 sudo apt-get install automake binutils-dev bison byacc ccache flex libiberty-dev libtool maven zip python3 python-is-python3 -y
+=======
+sudo apt-get install automake binutils-dev bison byacc ccache flex libiberty-dev libtool maven zip python3 python-is-python3 bzip2 -y
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ```
 
 ### 安装编译器

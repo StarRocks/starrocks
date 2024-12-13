@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # floor, dfloor
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 返回不大于 `x` 的最大整数值。
 

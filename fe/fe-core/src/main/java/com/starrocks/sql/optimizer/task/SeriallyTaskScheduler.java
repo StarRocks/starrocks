@@ -14,15 +14,23 @@
 
 package com.starrocks.sql.optimizer.task;
 
+<<<<<<< HEAD
 import com.google.common.base.Stopwatch;
 import com.starrocks.sql.PlannerProfile;
+=======
+import com.starrocks.common.profile.Timer;
+import com.starrocks.common.profile.Tracers;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.Group;
 import com.starrocks.sql.optimizer.Memo;
 
 import java.util.Stack;
+<<<<<<< HEAD
 import java.util.concurrent.TimeUnit;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 public class SeriallyTaskScheduler implements TaskScheduler {
     private final Stack<OptimizerTask> tasks;
@@ -38,10 +46,16 @@ public class SeriallyTaskScheduler implements TaskScheduler {
     @Override
     public void executeTasks(TaskContext context) {
         long timeout = context.getOptimizerContext().getSessionVariable().getOptimizerExecuteTimeout();
+<<<<<<< HEAD
         Stopwatch watch = context.getOptimizerContext().getTraceInfo().getStopwatch();
         while (!tasks.empty()) {
            
             if (timeout > 0 && watch.elapsed(TimeUnit.MILLISECONDS) > timeout) {
+=======
+        while (!tasks.empty()) {
+            long watch = context.getOptimizerContext().optimizerElapsedMs();
+            if (timeout > 0 && watch > timeout) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 // Should have at least one valid plan
                 // group will be null when in rewrite phase
                 // memo may be null for rule-based optimizer
@@ -63,9 +77,13 @@ public class SeriallyTaskScheduler implements TaskScheduler {
             }
             OptimizerTask task = tasks.pop();
             context.getOptimizerContext().setTaskContext(context);
+<<<<<<< HEAD
             if (context.getOptimizerContext().getTraceInfo().isTraceOptimizer()) {
                 executeWithRecord(task);
             } else {
+=======
+            try (Timer ignore = Tracers.watchScope(Tracers.Module.OPTIMIZER, task.getClass().getSimpleName())) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 task.execute();
             }
         }
@@ -75,6 +93,7 @@ public class SeriallyTaskScheduler implements TaskScheduler {
     public void pushTask(OptimizerTask task) {
         tasks.push(task);
     }
+<<<<<<< HEAD
 
 
     private void executeWithRecord(OptimizerTask task) {
@@ -88,4 +107,6 @@ public class SeriallyTaskScheduler implements TaskScheduler {
             task.execute();
         }
     }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

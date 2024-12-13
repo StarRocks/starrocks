@@ -19,6 +19,10 @@ import com.starrocks.proto.AbortCompactionRequest;
 import com.starrocks.proto.AbortCompactionResponse;
 import com.starrocks.proto.CompactRequest;
 import com.starrocks.proto.CompactResponse;
+<<<<<<< HEAD
+=======
+import com.starrocks.proto.CompactStat;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.rpc.LakeService;
 import com.starrocks.transaction.TabletCommitInfo;
 import org.apache.commons.collections.CollectionUtils;
@@ -43,10 +47,31 @@ public class CompactionTask {
     private final CompactRequest request;
     private Future<CompactResponse> responseFuture;
 
+<<<<<<< HEAD
+=======
+    // FOR TEST
+    public CompactionTask(long nodeId) {
+        this.nodeId = nodeId;
+        this.rpcChannel = null;
+        this.request = null;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public CompactionTask(long nodeId, LakeService rpcChannel, CompactRequest request) {
         this.nodeId = nodeId;
         this.rpcChannel = Objects.requireNonNull(rpcChannel, "rpcChannel is null");
         this.request = Objects.requireNonNull(request, "request is null");
+<<<<<<< HEAD
+=======
+        this.responseFuture = null;
+    }
+
+    enum TaskResult {
+      NOT_FINISHED,
+      NONE_SUCCESS,
+      PARTIAL_SUCCESS,
+      ALL_SUCCESS
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public long getNodeId() {
@@ -57,6 +82,7 @@ public class CompactionTask {
         return responseFuture != null && responseFuture.isDone();
     }
 
+<<<<<<< HEAD
     /**
      * Checks if compaction was completed successfully for all tablets in the task.
      *
@@ -85,6 +111,26 @@ public class CompactionTask {
         } catch (InterruptedException ignored) {
             Thread.currentThread().interrupt();
             return true;
+=======
+    public TaskResult getResult() {
+        if (!isDone()) {
+            return TaskResult.NOT_FINISHED;
+        }
+        try {
+            CompactResponse response = responseFuture.get();
+            if (CollectionUtils.isEmpty(response.failedTablets)) {
+                return TaskResult.ALL_SUCCESS;
+            } else if (response.failedTablets.size() == request.tabletIds.size()) {
+                return TaskResult.NONE_SUCCESS;
+            } else {
+                return TaskResult.PARTIAL_SUCCESS;
+            }
+        } catch (ExecutionException e) {
+            return TaskResult.NONE_SUCCESS;
+        } catch (InterruptedException ignored) {
+            Thread.currentThread().interrupt();
+            return TaskResult.NONE_SUCCESS;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -111,7 +157,12 @@ public class CompactionTask {
     }
 
     public void abort() {
+<<<<<<< HEAD
         if (!isCompleted()) {
+=======
+        TaskResult taskResult = getResult();
+        if (taskResult == TaskResult.NOT_FINISHED || taskResult == TaskResult.NONE_SUCCESS) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             AbortCompactionRequest abortRequest = new AbortCompactionRequest();
             abortRequest.txnId = request.txnId;
             try {
@@ -131,4 +182,19 @@ public class CompactionTask {
     public int tabletCount() {
         return request.tabletIds.size();
     }
+<<<<<<< HEAD
+=======
+
+    public List<CompactStat> getCompactStats() {
+        if (!isDone()) {
+            return null;
+        }
+        try {
+            CompactResponse response = responseFuture.get();
+            return response.compactStats;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

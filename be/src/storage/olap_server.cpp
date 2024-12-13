@@ -98,6 +98,12 @@ Status StorageEngine::start_bg_threads() {
     _disk_stat_monitor_thread = std::thread([this] { _disk_stat_monitor_thread_callback(nullptr); });
     Thread::set_thread_name(_disk_stat_monitor_thread, "disk_monitor");
 
+<<<<<<< HEAD
+=======
+    _pk_index_major_compaction_thread = std::thread([this] { _pk_index_major_compaction_thread_callback(nullptr); });
+    Thread::set_thread_name(_pk_index_major_compaction_thread, "pk_index_compaction_scheduler");
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     _pk_dump_thread = std::thread([this] { _pk_dump_thread_callback(nullptr); });
     Thread::set_thread_name(_pk_dump_thread, "pk_dump");
 
@@ -111,6 +117,7 @@ Status StorageEngine::start_bg_threads() {
     _finish_publish_version_thread = std::thread([this] { _finish_publish_version_thread_callback(nullptr); });
     Thread::set_thread_name(_finish_publish_version_thread, "finish_publish_version");
 
+<<<<<<< HEAD
     _pk_index_major_compaction_thread = std::thread([this] { _pk_index_major_compaction_thread_callback(nullptr); });
     Thread::set_thread_name(_pk_index_major_compaction_thread, "pk_index_compaction_scheduler");
 
@@ -118,6 +125,12 @@ Status StorageEngine::start_bg_threads() {
     std::vector<DataDir*> data_dirs;
     for (auto& tmp_store : _store_map) {
         data_dirs.push_back(tmp_store.second);
+=======
+    // convert store map to vector
+    std::vector<DataDir*> data_dirs;
+    for (auto& tmp_store : _store_map) {
+        data_dirs.push_back(tmp_store.second.get());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     const auto data_dir_num = static_cast<int32_t>(data_dirs.size());
 
@@ -136,7 +149,11 @@ Status StorageEngine::start_bg_threads() {
             max_compaction_concurrency > base_compaction_num_threads + cumulative_compaction_num_threads) {
             max_compaction_concurrency = base_compaction_num_threads + cumulative_compaction_num_threads;
         }
+<<<<<<< HEAD
         Compaction::init(max_compaction_concurrency);
+=======
+        (void)Compaction::init(max_compaction_concurrency);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         _base_compaction_threads.reserve(base_compaction_num_threads);
         // The config::tablet_map_shard_size is preferably a multiple of `base_compaction_num_threads_per_disk`,
@@ -180,6 +197,7 @@ Status StorageEngine::start_bg_threads() {
             }
         }
     } else {
+<<<<<<< HEAD
         int32_t max_task_num = 0;
         // new compaction framework
         if (config::base_compaction_num_threads_per_disk >= 0 &&
@@ -197,6 +215,12 @@ Status StorageEngine::start_bg_threads() {
         }
 
         Compaction::init(max_task_num);
+=======
+        _compaction_manager->set_max_compaction_concurrency(config::max_compaction_concurrency);
+        int32_t max_task_num = _compaction_manager->compute_max_compaction_task_num();
+
+        (void)Compaction::init(max_task_num);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // compaction_manager must init_max_task_num() before any comapction_scheduler starts
         _compaction_manager->init_max_task_num(max_task_num);
@@ -254,10 +278,23 @@ Status StorageEngine::start_bg_threads() {
         Thread::set_thread_name(_adjust_cache_thread, "adjust_cache");
     }
 
+<<<<<<< HEAD
+=======
+    start_schedule_apply_thread();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     LOG(INFO) << "All backgroud threads of storage engine have started.";
     return Status::OK();
 }
 
+<<<<<<< HEAD
+=======
+void StorageEngine::start_schedule_apply_thread() {
+    _schedule_apply_thread = std::thread([this] { _schedule_apply_thread_callback(nullptr); });
+    Thread::set_thread_name(_schedule_apply_thread, "schedule_apply");
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 void evict_pagecache(StoragePageCache* cache, int64_t bytes_to_dec, std::atomic<bool>& stoped) {
     if (bytes_to_dec > 0) {
         int64_t bytes = bytes_to_dec;
@@ -411,6 +448,15 @@ void* StorageEngine::_pk_index_major_compaction_thread_callback(void* arg) {
             _update_manager->get_pindex_compaction_mgr()->schedule([&]() {
                 return StorageEngine::instance()->tablet_manager()->pick_tablets_to_do_pk_index_major_compaction();
             });
+<<<<<<< HEAD
+=======
+#ifdef USE_STAROS
+            auto update_manager = ExecEnv::GetInstance()->lake_update_manager();
+            _local_pk_index_manager->schedule([&]() {
+                return _local_pk_index_manager->pick_tablets_to_do_pk_index_major_compaction(update_manager);
+            });
+#endif
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -907,4 +953,43 @@ void* StorageEngine::_tablet_checkpoint_callback(void* arg) {
     return nullptr;
 }
 
+<<<<<<< HEAD
+=======
+void* StorageEngine::_schedule_apply_thread_callback(void* arg) {
+#ifdef GOOGLE_PROFILER
+    ProfilerRegisterThread();
+#endif
+    while (!_bg_worker_stopped.load(std::memory_order_consume)) {
+        {
+            auto wait_timeout = std::chrono::seconds(1);
+            std::unique_lock<std::mutex> ul(_schedule_apply_mutex);
+            while (_schedule_apply_tasks.empty() && !_bg_worker_stopped.load(std::memory_order_consume)) {
+                _apply_tablet_changed_cv.wait_for(ul, wait_timeout);
+            }
+
+            if (_bg_worker_stopped.load(std::memory_order_consume)) {
+                break;
+            }
+
+            auto time_point = std::chrono::steady_clock::now();
+            while (!_bg_worker_stopped.load(std::memory_order_consume) && !_schedule_apply_tasks.empty() &&
+                   _schedule_apply_tasks.top().first <= time_point) {
+                auto tablet_id = _schedule_apply_tasks.top().second;
+                _schedule_apply_tasks.pop();
+                auto tablet = _tablet_manager->get_tablet(tablet_id);
+                if (tablet == nullptr || tablet->updates() == nullptr) {
+                    continue;
+                }
+                tablet->updates()->check_for_apply();
+            }
+
+            if (!_bg_worker_stopped.load(std::memory_order_consume) && !_schedule_apply_tasks.empty()) {
+                _apply_tablet_changed_cv.wait_until(ul, _schedule_apply_tasks.top().first);
+            }
+        }
+    }
+    return nullptr;
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // namespace starrocks

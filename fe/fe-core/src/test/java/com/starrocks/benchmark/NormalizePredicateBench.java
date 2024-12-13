@@ -25,6 +25,10 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import org.apache.commons.lang3.NotImplementedException;
 import org.apache.commons.lang3.RandomStringUtils;
@@ -65,7 +69,11 @@ import static com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOpera
 @Measurement(time = 1, timeUnit = TimeUnit.SECONDS)
 public class NormalizePredicateBench {
 
+<<<<<<< HEAD
     @Param({"10", "20", "40", "80", "160"})
+=======
+    @Param({"10", "20", "40", "80", "160", "2000"})
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private int predicateSize;
 
     private ScalarOperator randomPredicate;
@@ -158,6 +166,15 @@ public class NormalizePredicateBench {
         ScalarOperator res = MvUtils.canonizePredicateForRewrite(null, randomPredicate);
     }
 
+<<<<<<< HEAD
+=======
+    @Benchmark
+    public void bench_NormalizePredicate_Random_Non_MV() {
+        ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();
+        ScalarOperator res = scalarRewriter.rewrite(randomPredicate, ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     /**
      * (a = 1 and b = 2 and c = 3)
      * OR (a = 2 and b = 3 and c = 4)
@@ -169,4 +186,13 @@ public class NormalizePredicateBench {
         ScalarOperator res =
                 MvUtils.canonizePredicateForRewrite(null, disjunctive);
     }
+<<<<<<< HEAD
+=======
+
+    @Benchmark
+    public void bench_NormalizePredicate_Disjunctive_Non_MV() {
+        ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();
+        ScalarOperator res = scalarRewriter.rewrite(disjunctive, ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

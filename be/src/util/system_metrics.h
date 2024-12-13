@@ -30,7 +30,13 @@ class NetMetrics;
 class FileDescriptorMetrics;
 class SnmpMetrics;
 class QueryCacheMetrics;
+<<<<<<< HEAD
 class RuntimeFilterMetrics;
+=======
+class VectorIndexCacheMetrics;
+class RuntimeFilterMetrics;
+class VectorIndexCacheMetrics;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 class MemoryMetrics {
 public:
@@ -60,6 +66,7 @@ public:
     METRIC_DEFINE_INT_GAUGE(short_key_index_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(compaction_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(schema_change_mem_bytes, MetricUnit::BYTES);
+<<<<<<< HEAD
     METRIC_DEFINE_INT_GAUGE(column_pool_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(storage_page_cache_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(update_mem_bytes, MetricUnit::BYTES);
@@ -84,6 +91,16 @@ public:
     METRIC_DEFINE_INT_GAUGE(column_pool_decimal_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(column_pool_date_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(column_pool_datetime_bytes, MetricUnit::BYTES);
+=======
+    METRIC_DEFINE_INT_GAUGE(storage_page_cache_mem_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(jit_cache_mem_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(update_mem_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(chunk_allocator_mem_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(passthrough_mem_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(clone_mem_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(consistency_mem_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(datacache_mem_bytes, MetricUnit::BYTES);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 class SystemMetrics {
@@ -138,6 +155,13 @@ private:
 
     void _update_runtime_filter_metrics();
 
+<<<<<<< HEAD
+=======
+    void _install_vector_index_cache_metrics(MetricRegistry* registry);
+
+    void _update_vector_index_cache_metrics();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 private:
     static const char* const _s_hook_name;
 
@@ -147,6 +171,10 @@ private:
     std::map<std::string, NetMetrics*> _net_metrics;
     std::unique_ptr<FileDescriptorMetrics> _fd_metrics;
     std::unique_ptr<QueryCacheMetrics> _query_cache_metrics;
+<<<<<<< HEAD
+=======
+    std::unique_ptr<VectorIndexCacheMetrics> _vector_index_cache_metrics;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::map<std::string, RuntimeFilterMetrics*> _runtime_filter_metrics;
     int _proc_net_dev_version = 0;
     std::unique_ptr<SnmpMetrics> _snmp_metrics;

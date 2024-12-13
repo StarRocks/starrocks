@@ -76,7 +76,11 @@ Status SmallFileMgr::_load_local_files() {
         }
         auto st = _load_single_file(_local_path, std::string(file));
         if (!st.ok()) {
+<<<<<<< HEAD
             LOG(WARNING) << "load small file failed: " << st.get_error_msg();
+=======
+            LOG(WARNING) << "load small file failed: " << st.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return true;
     };

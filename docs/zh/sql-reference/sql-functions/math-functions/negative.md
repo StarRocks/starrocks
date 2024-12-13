@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # negative
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 对参数 `x` 取其负数作为结果输出。
 

@@ -102,7 +102,13 @@ public:
         COMPACTION,
         SCHEMA_CHANGE_TASK,
         RESOURCE_GROUP,
+<<<<<<< HEAD
         RESOURCE_GROUP_BIG_QUERY
+=======
+        RESOURCE_GROUP_BIG_QUERY,
+        JEMALLOC,
+        PASSTHROUGH,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     };
 
     /// 'byte_limit' < 0 means no limit
@@ -298,6 +304,20 @@ public:
 
     bool limit_exceeded_by_ratio(int64_t ratio) const { return _limit >= 0 && (_limit * ratio / 100) < consumption(); }
 
+<<<<<<< HEAD
+=======
+    bool limit_exceeded_precheck(int64_t consume) const { return _limit >= 0 && _limit < consumption() + consume; }
+
+    bool any_limit_exceeded_precheck(int64_t consume) const {
+        for (auto& _limit_tracker : _limit_trackers) {
+            if (_limit_tracker->limit_exceeded_precheck(consume)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     void set_limit(int64_t limit) { _limit = limit; }
 
     int64_t limit() const { return _limit; }
@@ -360,6 +380,13 @@ public:
 
     Type type() const { return _type; }
 
+<<<<<<< HEAD
+=======
+    std::list<MemTracker*> _child_trackers;
+
+    std::list<MemTracker*> getChild() { return _child_trackers; }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 private:
     // Walks the MemTracker hierarchy and populates _all_trackers and _limit_trackers
     void Init();
@@ -404,7 +431,10 @@ private:
     // All the child trackers of this tracker. Used for error reporting only.
     // i.e., Updating a parent tracker does not update the children.
     mutable std::mutex _child_trackers_lock;
+<<<<<<< HEAD
     std::list<MemTracker*> _child_trackers;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // Iterator into _parent->_child_trackers for this object. Stored to have O(1)
     // remove.
     std::list<MemTracker*>::iterator _child_tracker_it;

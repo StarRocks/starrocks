@@ -129,7 +129,11 @@ public class MVEpoch implements Writable {
                 state.equals(EpochState.COMMITTED) ||
                 state.equals(EpochState.FAILED));
         this.state = EpochState.INIT;
+<<<<<<< HEAD
         this.commitInfos.clear();;
+=======
+        this.commitInfos.clear();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.failedInfos.clear();
         numEpochFinished.set(0);
     }

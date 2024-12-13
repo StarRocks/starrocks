@@ -141,6 +141,20 @@ SELECT /*+ SET_VAR
   */ * FROM TABLE;
 ```
 
+<<<<<<< HEAD
+=======
+### 设置变量为用户属性
+
+您可以通过 [ALTER USER](../sql-reference/sql-statements/account-management/ALTER_USER.md) 将 Session 变量设置为用户属性该功能自 v3.3.3 起支持。
+
+示例：
+
+```SQL
+-- 设置用户 jack 的 Session 变量 `query_timeout` 为 `600`。
+ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
+```
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ## 支持的变量
 
 本节以字母顺序对变量进行解释。带 `global` 标记的变量为全局变量，仅支持全局生效。其余变量既可以设置全局生效，也可设置会话级别生效。
@@ -180,6 +194,16 @@ SELECT /*+ SET_VAR
 * 类型：String
 * 引入版本：v3.1
 
+<<<<<<< HEAD
+=======
+### catalog（3.2.4 及以后）
+
+* 描述：用于指定当前会话所在的 Catalog。
+* 默认值：default_catalog
+* 类型：String
+* 引入版本：v3.2.4
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ### cbo_decimal_cast_string_strict
 
 * 描述：用于优化器控制 DECIMAL 类型转为 STRING 类型的行为。取值为 `true` 时，使用 v2.5.x及之后版本的处理逻辑，执行严格转换（按 Scale 截断补 `0`）；取值为 `false`时，保留 v2.5.x 之前版本的处理逻辑（按有效数字处理）。默认值是 `true`。
@@ -204,12 +228,30 @@ SELECT /*+ SET_VAR
 * 类型：Int
 * 引入版本：v3.1.9, v3.2.5
 
+<<<<<<< HEAD
+=======
+### cbo_prune_subfield
+
+* 描述：是否开启 JSON 子列裁剪。需要配合 BE 动态参数 `enable_json_flat` 一起使用，单独使用可能会导致 JSON 性能变慢。
+* 默认值：false
+* 引入版本：v3.3.0
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ### enable_sync_materialized_view_rewrite
 
 * 描述：是否启用基于同步物化视图的查询改写。
 * 默认值：true
 * 引入版本：v3.1.11，v3.2.5
 
+<<<<<<< HEAD
+=======
+### enable_datacache_async_populate_mode
+
+* 描述：是否使用异步方式进行 Data Cache 填充。系统默认使用同步方式进行填充，即在查询数据时同步填充进行缓存填充。
+* 默认值：false
+* 引入版本：v3.2.7
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ### query_including_mv_names
 
 * 描述：指定需要在查询执行过程中包含的异步物化视图的名称。您可以使用此变量来限制候选物化视图的数量，并提高优化器中的查询改写性能。此项优先于 `query_excluding_mv_names` 生效。
@@ -231,6 +273,33 @@ SELECT /*+ SET_VAR
 * 单位：毫秒
 * 类型：Long
 
+<<<<<<< HEAD
+=======
+### enable_materialized_view_agg_pushdown_rewrite
+
+* 描述：是否为物化视图查询改写启用聚合函数下推。如果设置为 `true`，聚合函数将在查询执行期间下推至 Scan Operator，并在执行 Join Operator 之前被物化视图改写。此举可以缓解 Join 操作导致的数据膨胀，从而提高查询性能。有关此功能的具体场景和限制的详细信息，请参见 [聚合函数下推](../using_starrocks/async_mv/use_cases/query_rewrite_with_materialized_views.md#聚合下推)。
+* 默认值：false
+* 引入版本：v3.3.0
+
+### enable_materialized_view_text_match_rewrite
+
+* 描述：是否启用基于文本的物化视图改写。当此项设置为 `true` 时，优化器将查询与现有的物化视图进行比较。如果物化视图定义的抽象语法树与查询或其子查询的抽象语法树匹配，则会对查询进行改写。
+* 默认值：true
+* 引入版本：v3.2.5，v3.3.0
+
+### materialized_view_subuqery_text_match_max_count
+
+* 描述：指定系统比对查询的子查询是否与物化视图定义匹配的最大次数。
+* 默认值：4
+* 引入版本：v3.2.5，v3.3.0
+
+### enable_force_rule_based_mv_rewrite
+
+* 描述：在优化器的 RBO（rule-based optimization）阶段是否针对多表查询启用查询改写。启用此功能将提高查询改写的鲁棒性。但如果查询未命中物化视图，则会增加优化耗时。
+* 默认值：true
+* 引入版本：v3.3
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ### enable_view_based_mv_rewrite
 
 * 描述：是否为基于逻辑视图创建的物化视图启用查询改写。如果此项设置为 `true`，则逻辑视图被用作统一节点进行查询改写，从而获得更好的性能。如果此项设置为 `false`，则系统将针对逻辑视图的查询展开变为针对物理表或物化视图的查询，然后进行改写。
@@ -274,6 +343,24 @@ SELECT /*+ SET_VAR
 * 类型：Int
 * 引入版本：v2.5
 
+<<<<<<< HEAD
+=======
+### connector_sink_compression_codec
+
+* 描述：用于指定写入 Hive 表或 Iceberg 表时以及使用 Files() 导出数据时的压缩算法。有效值：`uncompressed`、`snappy`、`lz4`、`zstd`、`gzip`。
+* 默认值：uncompressed
+* 类型：String
+* 引入版本：v3.2.3
+
+### connector_sink_target_max_file_size
+
+* 描述: 指定将数据写入 Hive 表或 Iceberg 表或使用 Files() 导出数据时目标文件的最大大小。该限制并不一定精确，只作为尽可能的保证。
+* 单位：Bytes
+* 默认值: 1073741824
+* 类型: Long
+* 引入版本: v3.3.0
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ### count_distinct_column_buckets
 
 * 描述：group-by-count-distinct 查询中为 count distinct 列设置的分桶数。该变量只有在 `enable_distinct_column_bucketization` 设置为 `true` 时才会生效。
@@ -329,12 +416,51 @@ SELECT /*+ SET_VAR
 * 默认值：false，表示不开启。
 * 引入版本：v2.5
 
+<<<<<<< HEAD
+=======
+### enable_gin_filter
+
+* 描述：查询时是否使用[全文倒排索引](../table_design/indexes/inverted_index.md)。
+* 默认值：true
+* 引入版本：v3.3.0
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ### enable_group_level_query_queue (global)
 
 * 描述：是否开启资源组粒度的[查询队列](../administration/management/resource_management/query_queues.md)。
 * 默认值：false，表示不开启。
 * 引入版本：v3.1.4
 
+<<<<<<< HEAD
+=======
+### enable_iceberg_metadata_cache
+
+* 描述：是否缓存 Iceberg 表指针和分区名相关的数据。在 3.2.1 到 3.2.3 版本，该参数默认值统一为 `true`。自 3.2.4 版本起，如果 Iceberg 集群的元数据服务为 AWS Glue，该参数默认值仍为 `true`，如果 Iceberg 集群的元数据服务为 Hive Metastore（简称 HMS）或其他，则该参数默认值变更为 `false`。
+* 引入版本：v3.2.1
+
+### enable_metadata_profile
+
+* 描述：是否为 Iceberg Catalog 的元数据收集查询开启 Profile。
+* 默认值：true
+* 引入版本：v3.3.3
+
+### plan_mode
+
+* 描述：Iceberg Catalog 元数据获取方案模式。详细信息，参考 [Iceberg Catalog 元数据获取方案](../data_source/catalog/iceberg_catalog.md#附录元数据周期性后台刷新方案)。有效值：
+  * `auto`：系统自动选择方案。
+  * `local`：使用本地缓存方案。
+  * `distributed`：使用分布式方案。
+* 默认值：auto
+* 引入版本：v3.3.3
+
+### metadata_collect_query_timeout
+
+* 描述：Iceberg Catalog 元数据收集阶段的超时时间。
+* 单位： 秒
+* 默认值：60
+* 引入版本：v3.3.3
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ### enable_insert_strict
 
 * 描述：用于设置通过 INSERT 语句进行数据导入时，是否开启严格模式 (Strict Mode)。
@@ -353,12 +479,30 @@ SELECT /*+ SET_VAR
 * 默认值：true
 * 引入版本：v2.5
 
+<<<<<<< HEAD
+=======
+### enable_short_circuit
+
+* 描述：是否启用短路径查询。默认值：`false`。如果将其设置为 `true`，当[查询满足条件](../table_design/hybrid_table.md#查询数据)（用于评估是否为点查）：WHERE 子句的条件列必须包含所有主键列，并且运算符为 `=` 或者 `IN`，则该查询才会走短路径。
+* 默认值：false
+* 引入版本：v3.2.3
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ### enable_spill
 
 * 描述：是否启用中间结果落盘。默认值：`false`。如果将其设置为 `true`，StarRocks 会将中间结果落盘，以减少在查询中处理聚合、排序或连接算子时的内存使用量。
 * 默认值：false
 * 引入版本：v3.0
 
+<<<<<<< HEAD
+=======
+### enable_spill_to_remote_storage
+
+* 描述：是否启用将中间结果落盘至对象存储。如果设置为 `true`，当本地磁盘的用量达到上限后，StarRocks 将中间结果落盘至 `spill_storage_volume` 中指定的存储卷中。有关更多信息，请参阅 [将中间结果落盘至对象存储](../administration/management/resource_management/spill_to_disk.md#preview-将中间结果落盘至对象存储)。
+* 默认值：false
+* 引入版本：v3.3.0
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ### enable_strict_order_by
 
 * 描述：是否校验 ORDER BY 引用列是否有歧义。设置为默认值 `TRUE` 时，如果查询中的输出列存在不同的表达式使用重复别名的情况，且按照该别名进行排序，查询会报错，例如 `select distinct t1.* from tbl1 t1 order by t1.k1;`。该行为和 2.3 及之前版本的逻辑一致。如果取值为 `FALSE`，采用宽松的去重机制，把这类查询作为有效 SQL 处理。
@@ -420,12 +564,35 @@ SELECT /*+ SET_VAR
 * 默认值：false
 * 引入版本：v2.5
 
+<<<<<<< HEAD
 ### enable_populate_datacache
 
 * 描述：StarRocks 从外部存储系统读取数据时，是否将数据进行缓存。默认值为 `true`。如果只想读取，不进行缓存，可以将该参数设置为 `false`。在 3.2 之前各版本中，对应变量为 `enable_populate_block_cache`。
 * 默认值：true
 * 引入版本：v2.5
 >>>>>>> d7322a1a38 ([Doc] format system variables (backport #44546) (#44579))
+=======
+### populate_datacache_mode
+
+* 描述：StarRocks 从外部存储系统读取数据时，控制数据缓存填充行为。有效值包括：
+  * `auto`（默认）：系统自动根据查询的特点，选择性进行缓存。
+  * `always`：总是缓存数据。 
+  * `never` 永不缓存数据。
+* 默认值：auto
+* 引入版本：v3.3.2
+
+### enable_datacache_io_adaptor
+
+* 描述：是否开启 Data Cache I/O 自适应开关。`true` 表示开启。开启后，系统会根据当前磁盘 I/O 负载自动将一部分缓存请求路由到远端存储来减少磁盘压力。
+* 默认值：true
+* 引入版本：v3.3.0
+
+### enable_file_metacache
+
+* 描述：是否启用远端文件元数据缓存（Footer Cache）。`true` 表示开启。Footer Cache 通过将解析后生成 Footer 对象直接缓存在内存中，在后续访问相同文件 Footer 时，可以直接从缓存中获得该对象句柄进行使用，避免进行重复解析。该功能依赖 Data Cache 的内存缓存，因此需要保证 BE 参数 `datacache_enable` 为 `true` 且为 `datacache_mem_size` 配置一个合理值后才会生效。
+* 默认值：true
+* 引入版本：v3.3.0
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ### enable_tablet_internal_parallel
 
@@ -477,6 +644,15 @@ SELECT /*+ SET_VAR
 * 默认值：false
 * 引入版本：v3.1
 
+<<<<<<< HEAD
+=======
+### enable_write_hive_external_table
+
+* 描述：是否开启往 Hive 的 External Table 写数据的功能。
+* 默认值：false
+* 引入版本：v3.2
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ### event_scheduler
 
 * 描述：用于兼容 MySQL 客户端。无实际作用。
@@ -547,6 +723,19 @@ SELECT /*+ SET_VAR
 * 类型：Int
 * 引入版本：v2.5
 
+<<<<<<< HEAD
+=======
+### jit_level
+
+* 描述：表达式 JIT 编译的启用级别。有效值：
+  * `1`：系统为可编译表达式自适应启用 JIT 编译。
+  * `-1`：对所有可编译的非常量表达式启用 JIT 编译。
+  * `0`：禁用 JIT 编译。如果该功能返回任何错误，您可以手动禁用。
+* 默认值：1
+* 数据类型：Int
+* 引入版本：-
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ### language (global)
 
 用于兼容 MySQL 客户端。无实际作用。
@@ -579,6 +768,19 @@ SELECT /*+ SET_VAR
 
 用于兼容 MySQL 客户端，无实际作用。StarRocks 中的表名是大小写敏感的。
 
+<<<<<<< HEAD
+=======
+### materialized_view_rewrite_mode（3.2 及以后）
+
+指定异步物化视图的查询改写模式。有效值：
+
+* `disable`：禁用异步物化视图的自动查询改写。
+* `default`（默认值）：启用异步物化视图的自动查询改写，并允许优化器根据 Cost 决定是否可以使用物化视图改写查询。如果查询无法改写，则直接查询基表中的数据。
+* `default_or_error`：启用异步物化视图的自动查询改写，并允许优化器根据 Cost 决定是否可以使用物化视图改写查询。如果查询无法改写，将返回错误。
+* `force`：启用异步物化视图的自动查询改写，并且优化器优先使用物化视图改写查询。如果查询无法改写，则直接查询基表中的数据。
+* `force_or_error`：启用异步物化视图的自动查询改写，并且优化器优先使用物化视图改写查询。如果查询无法改写，将返回错误。
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ### max_allowed_packet
 
 * 描述：用于兼容 JDBC 连接池 C3P0。该变量值决定了服务端发送给客户端或客户端发送给服务端的最大 packet 大小。当客户端报 `PacketTooBigException` 异常时，可以考虑调大该值。
@@ -636,7 +838,11 @@ SELECT /*+ SET_VAR
 
 在一个分布式的查询执行计划中，上层节点通常有一个或多个 exchange node 用于接收来自下层节点在不同 BE 上的执行实例的数据。通常 exchange node 数量等于下层节点执行实例数量。
 
+<<<<<<< HEAD
 在一些聚合查询场景下，如果底层需要扫描的数据量较大，但聚合之后的数据量很小，则可以尝试修改此变量为一个较小的值，可以降低此类查询的资源开销。如在 DUPLICATE KEY 明细模型上进行聚合查询的场景。
+=======
+在一些聚合查询场景下，如果底层需要扫描的数据量较大，但聚合之后的数据量很小，则可以尝试修改此变量为一个较小的值，可以降低此类查询的资源开销。如在 DUPLICATE KEY 明细表上进行聚合查询的场景。
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ### parallel_fragment_exec_instance_num
 
@@ -715,6 +921,7 @@ SELECT /*+ SET_VAR
 
 ### query_mem_limit
 
+<<<<<<< HEAD
 * 描述：用于设置每个 BE 节点上单个查询的内存限制。该项仅在启用 Pipeline Engine 后生效。
 * 单位：字节
 * 默认值：`0`，表示没有限制。
@@ -722,24 +929,45 @@ SELECT /*+ SET_VAR
 ### query_queue_concurrency_limit (global)
 
 * 描述：单个 BE 节点中并发查询上限。仅在设置为大于 `0` 后生效。
+=======
+* 描述：用于设置每个 BE 节点上单个查询的内存限制。该项仅在启用 Pipeline Engine 后生效。设置为 `0` 表示没有限制。
+* 单位：字节
+* 默认值：`0`
+
+### query_queue_concurrency_limit (global)
+
+* 描述：单个 BE 节点中并发查询上限。仅在设置为大于 `0` 后生效。设置为 `0` 表示没有限制。
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 * 默认值：`0`
 * 单位：-
 * 类型：Int
 
 ### query_queue_cpu_used_permille_limit (global)
 
+<<<<<<< HEAD
 * 描述：单个 BE 节点中内存使用千分比上限（即 CPU 使用率）。仅在设置为大于 `0` 后生效。
+=======
+* 描述：单个 BE 节点中内存使用千分比上限（即 CPU 使用率）。仅在设置为大于 `0` 后生效。设置为 `0` 表示没有限制。
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 * 默认值：0。
 * 取值范围：[0, 1000]
 
 ### query_queue_max_queued_queries (global)
 
+<<<<<<< HEAD
 * 描述：队列中查询数量的上限。当达到此阈值时，新增查询将被拒绝执行。仅在设置为大于 `0` 后生效。
+=======
+* 描述：队列中查询数量的上限。当达到此阈值时，新增查询将被拒绝执行。仅在设置为大于 `0` 后生效。设置为 `0` 表示没有限制。
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 * 默认值：1024。
 
 ### query_queue_mem_used_pct_limit (global)
 
+<<<<<<< HEAD
 * 描述：单个 BE 节点中内存使用百分比上限。仅在设置为大于 `0` 后生效。
+=======
+* 描述：单个 BE 节点中内存使用百分比上限。仅在设置为大于 `0` 后生效。设置为 `0` 表示没有限制。
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 * 默认值：`0`
 * 取值范围：[0, 1]
 
@@ -769,7 +997,11 @@ SELECT /*+ SET_VAR
 
 ### rewrite_count_distinct_to_bitmap_hll (已弃用)
 
+<<<<<<< HEAD
 是否将 Bitmap 和 HLL 类型的 count distinct 查询重写为 bitmap_union_count 和 hll_union_agg。
+=======
+是否将 Bitmap 和 HLL 类型的 count distinct 查询改写为 bitmap_union_count 和 hll_union_agg。
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ### runtime_filter_on_exchange_node
 
@@ -801,6 +1033,15 @@ SELECT /*+ SET_VAR
 
 此变量仅在变量 `enable_spill` 设置为 `true` 时生效。
 
+<<<<<<< HEAD
+=======
+### spill_storage_volume
+
+* 描述：用于存储触发落盘的查询的中间结果的存储卷。有关更多信息，请参阅 [将中间结果落盘至对象存储](../administration/management/resource_management/spill_to_disk.md#preview-将中间结果落盘至对象存储)。
+* 默认值：空字符串
+* 引入版本：v3.3.0
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ### SQL_AUTO_IS_NULL
 
 用于兼容 JDBC 连接池 C3P0，无实际作用。默认值：false。
@@ -847,7 +1088,13 @@ set sql_mode = 'PIPES_AS_CONCAT,ERROR_IF_OVERFLOW,GROUP_CONCAT_LEGACY';
 
 ### sql_select_limit
 
+<<<<<<< HEAD
 用于兼容 MySQL 客户端。无实际作用。
+=======
+* 描述：用于限制查询返回的结果集的最大行数，可以防止因查询返回过多的数据而导致内存不足或网络拥堵等问题。
+* 默认值：无限制
+* 类型：Long
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ### statistic_collect_parallel
 
@@ -884,6 +1131,21 @@ set sql_mode = 'PIPES_AS_CONCAT,ERROR_IF_OVERFLOW,GROUP_CONCAT_LEGACY';
 
 用于设置当前会话的时区。时区会对某些时间函数的结果产生影响。
 
+<<<<<<< HEAD
+=======
+### trace_log_mode
+
+* 描述：用于控制 Query Trace Profile 的 Logs 的输出位置。有效值包括：
+  * `command`：在执行 TRACE LOGS 后作为 **Explain String** 返回。
+  * `file`：在 FE 日志文件 **fe.log** 中以 `FileLogTracer` 为类名返回。
+
+  有关 Query Trace Profile 的更多信息，请参阅 [Query Trace Profile](../developers/trace-tools/query_trace_profile.md)。
+
+* 默认值：`command`
+* 类型：String
+* 引入版本：v3.2.0
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ### transaction_read_only
 
 * 描述：用于兼容 MySQL 5.8 以上客户端，无实际作用。别名 `tx_read_only`。该变量用于指定事务访问模式。取值 `ON` 表示只读。取值 `OFF` 表示可读可写。

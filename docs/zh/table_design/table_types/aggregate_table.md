@@ -4,9 +4,17 @@ sidebar_position: 40
 keywords: ['juhe']
 ---
 
+<<<<<<< HEAD
 # 聚合模型
 
 建表时，支持定义排序键和指标列，并为指标列指定聚合函数。当多条数据具有相同的排序键时，指标列会进行聚合。在分析统计和汇总数据时，聚合模型能够减少查询时所需要处理的数据，提升查询效率。
+=======
+# 聚合表
+
+建表时可以定义聚合键并且为 value 列指定聚合函数。当多条数据具有相同的聚合键时，value 列会进行聚合。并且支持单独定义排序键，如果查询的过滤条件包含排序键，则 StarRocks 能够快速地过滤数据，提高查询效率。
+
+在分析统计和汇总数据时，聚合表能够减少查询时所需要处理的数据，提升查询效率。
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ## 适用场景
 
@@ -28,6 +36,7 @@ keywords: ['juhe']
 
 ## 原理
 
+<<<<<<< HEAD
 从数据导入至数据查询阶段，聚合模型内部同一排序键的数据会多次聚合，聚合的具体时机和机制如下：
 
 1. 数据导入阶段：数据按批次导入至聚合模型时，每一个批次的数据形成一个版本。在一个版本中，同一排序键的数据会进行一次聚合。
@@ -39,6 +48,19 @@ keywords: ['juhe']
 因此，聚合模型中数据多次聚合，能够减少查询时所需要的处理的数据量，进而提升查询的效率。
 
 例如，导入如下数据至聚合模型中，排序键为 Date、Country：
+=======
+从数据导入至数据查询阶段，聚合表内部同一聚合键的数据会多次聚合，聚合的具体时机和机制如下：
+
+1. 数据导入阶段：数据按批次导入至聚合表时，每一个批次的数据形成一个版本。在一个版本中，同一聚合键的数据会进行一次聚合。
+
+2. 后台文件合并阶段 (Compaction) ：数据分批次多次导入至聚合表中，会生成多个版本的文件，多个版本的文件定期合并成一个大版本文件时，同一聚合键的数据会进行一次聚合。
+
+3. 查询阶段：所有版本中同一聚合键的数据进行聚合，然后返回查询结果。
+
+因此，聚合表中数据多次聚合，能够减少查询时所需要的处理的数据量，进而提升查询的效率。
+
+例如，导入如下数据至聚合表中，聚合键为 Date、Country：
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 | Date       | Country | PV   |
 | ---------- | ------- | ---- |
@@ -47,7 +69,11 @@ keywords: ['juhe']
 | 2020.05.01 | USA     | 3    |
 | 2020.05.01 | USA     | 4    |
 
+<<<<<<< HEAD
 在聚合模型中，以上四条数据会聚合为两条数据。这样在后续查询处理的时候，处理的数据量就会显著降低。
+=======
+在聚合表中，以上四条数据会聚合为两条数据。这样在后续查询处理的时候，处理的数据量就会显著降低。
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 | Date       | Country | PV   |
 | ---------- | ------- | ---- |
@@ -56,22 +82,34 @@ keywords: ['juhe']
 
 ## 创建表
 
+<<<<<<< HEAD
 例如需要分析某一段时间内，来自不同城市的用户，访问不同网页的总次数。则可以将网页地址 `site_id`、日期 `date` 和城市代码 `city_code` 作为排序键，将访问次数 `pv` 作为指标列，并为指标列 `pv` 指定聚合函数为 SUM。
+=======
+例如需要分析某一段时间内，来自不同城市的用户，访问不同网页的总次数。则可以将网页地址 `site_id`、日期 `date` 和城市代码 `city_code` 作为聚合键，将访问次数 `pv` 作为 value 列，并为 value 列 `pv` 指定聚合函数为 SUM。
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 在该业务场景下，建表语句如下：
 
 ```SQL
+<<<<<<< HEAD
 CREATE TABLE IF NOT EXISTS example_db.aggregate_tbl (
+=======
+CREATE TABLE aggregate_tbl (
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     site_id LARGEINT NOT NULL COMMENT "id of site",
     date DATE NOT NULL COMMENT "time of event",
     city_code VARCHAR(20) COMMENT "city_code of user",
     pv BIGINT SUM DEFAULT "0" COMMENT "total page views"
 )
 AGGREGATE KEY(site_id, date, city_code)
+<<<<<<< HEAD
 DISTRIBUTED BY HASH(site_id)
 PROPERTIES (
 "replication_num" = "3"
 );
+=======
+DISTRIBUTED BY HASH(site_id);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ```
 
 > **注意**
@@ -81,6 +119,7 @@ PROPERTIES (
 
 ## 使用说明
 
+<<<<<<< HEAD
 - 排序键的相关说明：
   - 在建表语句中，**排序键必须定义在其他列之前**。
   - 排序键可以通过 `AGGREGATE KEY` 显式定义。
@@ -101,5 +140,28 @@ PROPERTIES (
 ## 下一步
 
 建表完成后，您可以创建多种导入作业，导入数据至表中。具体导入方式，请参见[导入概览](../../loading/Loading_intro.md)。
+=======
+- **聚合键**：
+  - 在建表语句中，聚合键必须定义在其他列之前。
+  - 聚合键可以通过 `AGGREGATE KEY` 显式定义。并且 `AGGREGATE KEY` 必须包含除 value 列之外的所有列，则建表会失败。
+
+    如果不通过 `AGGREGATE KEY` 显示定义聚合键，则默认除 value 列之外的列均为聚合键。
+  - 聚合键具有唯一性约束。
+
+- **value 列**：通过在列名后指定聚合函数，定义该列为 value 列。一般为需要汇总统计的数据。
+
+- **聚合函数**：value 列使用的聚合函数。聚合表支持的聚合函数，请参见 [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md)。
+
+- **排序键**：
+  - 自 v3.3.0 起，聚合表解耦了排序键和聚合键。聚合表支持使用 `ORDER BY` 指定排序键和使用 `AGGREGATE KEY` 指定聚合键。排序键和聚合键中的列需要保持一致，但是列的顺序不需要保持一致。
+
+  - 查询时，排序键在多版聚合之前就能进行过滤，而 value 列的过滤在多版本聚合之后。因此建议将频繁使用的过滤字段作为排序键，在聚合前就能过滤数据，从而提升查询性能。
+
+- 建表时，仅支持为 key 列创建 Bitmap 索引、Bloom filter 索引。
+
+## 下一步
+
+建表完成后，您可以创建多种导入作业，导入数据至表中。具体导入方式，请参见[导入方案](../../loading/Loading_intro.md)。
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 > 导入时，仅支持全字段导入，即导入任务需要涵盖表的所有列，例如示例中的 `site_id`、`date`、`city_code` 和 `pv` 四个列。

@@ -15,9 +15,17 @@
 
 package com.starrocks.authentication;
 
+<<<<<<< HEAD
 import com.starrocks.common.Config;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.mysql.privilege.Password;
+=======
+import com.google.common.base.Strings;
+import com.starrocks.common.Config;
+import com.starrocks.mysql.MysqlPassword;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.UserAuthOption;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.UserIdentity;
 
 import java.nio.charset.StandardCharsets;
@@ -30,7 +38,11 @@ public class PlainPasswordAuthenticationProvider implements AuthenticationProvid
      * <p>
      * The rules are hard-coded for temporary, will change to a plugin config later
      **/
+<<<<<<< HEAD
     protected void validatePassword(String password) throws AuthenticationException {
+=======
+    protected void validatePassword(UserIdentity userIdentity, String password) throws AuthenticationException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (!Config.enable_validate_password) {
             return;
         }
@@ -58,6 +70,7 @@ public class PlainPasswordAuthenticationProvider implements AuthenticationProvid
             throw new AuthenticationException(
                     "password should contains at least one digit, one lowercase letter and one uppercase letter!");
         }
+<<<<<<< HEAD
     }
 
     @Override
@@ -69,6 +82,34 @@ public class PlainPasswordAuthenticationProvider implements AuthenticationProvid
         UserAuthenticationInfo info = new UserAuthenticationInfo();
         info.setPassword(password.getBytes(StandardCharsets.UTF_8));
         info.setTextForAuthPlugin(textForAuthPlugin);
+=======
+
+        if (!Config.enable_password_reuse) {
+            GlobalStateMgr.getCurrentState().getAuthenticationMgr().checkPlainPassword(
+                    userIdentity.getUser(), userIdentity.getHost(), password);
+        }
+    }
+
+    @Override
+    public UserAuthenticationInfo analyzeAuthOption(UserIdentity userIdentity, UserAuthOption userAuthOption)
+            throws AuthenticationException {
+        byte[] passwordScrambled = MysqlPassword.EMPTY_PASSWORD;
+        if (userAuthOption != null) {
+            boolean isPasswordPlain = userAuthOption.isPasswordPlain();
+            String password = userAuthOption.getAuthPlugin() == null ?
+                    userAuthOption.getPassword() : userAuthOption.getAuthString();
+            if (isPasswordPlain) {
+                validatePassword(userIdentity, password);
+            }
+            passwordScrambled = scramblePassword(password, isPasswordPlain);
+        }
+
+        UserAuthenticationInfo info = new UserAuthenticationInfo();
+        info.setAuthPlugin(PLUGIN_NAME);
+        info.setPassword(passwordScrambled);
+        info.setOrigUserHost(userIdentity.getUser(), userIdentity.getHost());
+        info.setTextForAuthPlugin(userAuthOption == null ? null : userAuthOption.getAuthString());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return info;
     }
 
@@ -101,6 +142,7 @@ public class PlainPasswordAuthenticationProvider implements AuthenticationProvid
         }
     }
 
+<<<<<<< HEAD
     @Override
     public UserAuthenticationInfo upgradedFromPassword(UserIdentity userIdentity, Password password)
             throws AuthenticationException {
@@ -110,5 +152,19 @@ public class PlainPasswordAuthenticationProvider implements AuthenticationProvid
         ret.setOrigUserHost(userIdentity.getUser(), userIdentity.getHost());
         ret.setTextForAuthPlugin(password.getUserForAuthPlugin());
         return ret;
+=======
+    /**
+     * Get scrambled password from plain password
+     */
+    private byte[] scramblePassword(String originalPassword, boolean isPasswordPlain) {
+        if (Strings.isNullOrEmpty(originalPassword)) {
+            return MysqlPassword.EMPTY_PASSWORD;
+        }
+        if (isPasswordPlain) {
+            return MysqlPassword.makeScrambledPassword(originalPassword);
+        } else {
+            return MysqlPassword.checkPassword(originalPassword);
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }

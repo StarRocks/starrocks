@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
@@ -49,8 +52,13 @@ public class SplitLimitRule extends TransformationRule {
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalLimitOperator limit = (LogicalLimitOperator) input.getOp();
 
+<<<<<<< HEAD
         LogicalLimitOperator global = LogicalLimitOperator.global(limit.getLimit());
         LogicalLimitOperator local = LogicalLimitOperator.local(limit.getLimit());
+=======
+        LogicalLimitOperator global = LogicalLimitOperator.global(limit.getLimit(), limit.getOffset());
+        LogicalLimitOperator local = LogicalLimitOperator.local(limit.getLimit() + limit.getOffset());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         return Lists.newArrayList(OptExpression.create(global, OptExpression.create(local, input.getInputs())));
     }

@@ -59,10 +59,20 @@ Status Compaction::do_compaction_impl() {
     OlapStopWatch watch;
 
     int64_t segments_num = 0;
+<<<<<<< HEAD
+=======
+    int64_t max_gtid = 0;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     for (auto& rowset : _input_rowsets) {
         _input_rowsets_size += rowset->data_disk_size();
         _input_row_num += rowset->num_rows();
         segments_num += rowset->num_segments();
+<<<<<<< HEAD
+=======
+        if (rowset->rowset_meta()->gtid() > max_gtid) {
+            max_gtid = rowset->rowset_meta()->gtid();
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     TRACE_COUNTER_INCREMENT("input_rowsets_data_size", _input_rowsets_size);
@@ -78,11 +88,21 @@ Status Compaction::do_compaction_impl() {
                      << ", err=" << iterator_num_res.status().to_string();
         return iterator_num_res.status();
     }
+<<<<<<< HEAD
     size_t segment_iterator_num = iterator_num_res.value();
     CompactionAlgorithm algorithm = CompactionUtils::choose_compaction_algorithm(
             _tablet->num_columns(), config::vertical_compaction_max_columns_per_group, segment_iterator_num);
     if (algorithm == VERTICAL_COMPACTION) {
         CompactionUtils::split_column_into_groups(_tablet->num_columns(), _tablet->tablet_schema().sort_key_idxes(),
+=======
+
+    auto cur_tablet_schema = CompactionUtils::rowset_with_max_schema_version(_input_rowsets)->schema();
+    size_t segment_iterator_num = iterator_num_res.value();
+    CompactionAlgorithm algorithm = CompactionUtils::choose_compaction_algorithm(
+            cur_tablet_schema->num_columns(), config::vertical_compaction_max_columns_per_group, segment_iterator_num);
+    if (algorithm == VERTICAL_COMPACTION) {
+        CompactionUtils::split_column_into_groups(cur_tablet_schema->num_columns(), cur_tablet_schema->sort_key_idxes(),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                                   config::vertical_compaction_max_columns_per_group, &_column_groups);
     }
 
@@ -97,15 +117,26 @@ Status Compaction::do_compaction_impl() {
               << ", columns per group=" << config::vertical_compaction_max_columns_per_group;
 
     RETURN_IF_ERROR(CompactionUtils::construct_output_rowset_writer(_tablet.get(), max_rows_per_segment, algorithm,
+<<<<<<< HEAD
                                                                     _output_version, &_output_rs_writer));
+=======
+                                                                    _output_version, max_gtid, &_output_rs_writer,
+                                                                    cur_tablet_schema));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     TRACE("prepare finished");
 
     Statistics stats;
     Status st;
     if (algorithm == VERTICAL_COMPACTION) {
+<<<<<<< HEAD
         st = _merge_rowsets_vertically(segment_iterator_num, &stats);
     } else {
         st = _merge_rowsets_horizontally(segment_iterator_num, &stats);
+=======
+        st = _merge_rowsets_vertically(segment_iterator_num, &stats, cur_tablet_schema);
+    } else {
+        st = _merge_rowsets_horizontally(segment_iterator_num, &stats, cur_tablet_schema);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     if (!st.ok()) {
         LOG(WARNING) << "fail to do " << compaction_name() << ". res=" << st << ", tablet=" << _tablet->tablet_id()
@@ -152,6 +183,7 @@ Status Compaction::do_compaction_impl() {
     return Status::OK();
 }
 
+<<<<<<< HEAD
 Status Compaction::_merge_rowsets_horizontally(size_t segment_iterator_num, Statistics* stats_output) {
     TRACE_COUNTER_SCOPE_LATENCY_US("merge_rowsets_latency_us");
     Schema schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
@@ -159,6 +191,17 @@ Status Compaction::_merge_rowsets_horizontally(size_t segment_iterator_num, Stat
     TabletReaderParams reader_params;
     reader_params.reader_type = compaction_type();
     reader_params.profile = _runtime_profile.create_child("merge_rowsets");
+=======
+Status Compaction::_merge_rowsets_horizontally(size_t segment_iterator_num, Statistics* stats_output,
+                                               const TabletSchemaCSPtr& tablet_schema) {
+    TRACE_COUNTER_SCOPE_LATENCY_US("merge_rowsets_latency_us");
+    Schema schema = ChunkHelper::convert_schema(tablet_schema);
+    TabletReader reader(_tablet, _output_rs_writer->version(), tablet_schema, schema);
+    TabletReaderParams reader_params;
+    reader_params.reader_type = compaction_type();
+    reader_params.profile = _runtime_profile.create_child("merge_rowsets");
+    reader_params.column_access_paths = &_column_access_paths;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     int64_t total_num_rows = 0;
     int64_t total_mem_footprint = 0;
@@ -169,7 +212,11 @@ Status Compaction::_merge_rowsets_horizontally(size_t segment_iterator_num, Stat
     int32_t chunk_size =
             CompactionUtils::get_read_chunk_size(config::compaction_memory_limit_per_worker, config::vector_chunk_size,
                                                  total_num_rows, total_mem_footprint, segment_iterator_num);
+<<<<<<< HEAD
     VLOG(1) << "tablet=" << _tablet->tablet_id() << ", reader chunk size=" << chunk_size;
+=======
+    VLOG(2) << "tablet=" << _tablet->tablet_id() << ", reader chunk size=" << chunk_size;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     reader_params.chunk_size = chunk_size;
     RETURN_IF_ERROR(reader.prepare());
     RETURN_IF_ERROR(reader.open(reader_params));
@@ -200,7 +247,11 @@ Status Compaction::_merge_rowsets_horizontally(size_t segment_iterator_num, Stat
             }
         }
 
+<<<<<<< HEAD
         ChunkHelper::padding_char_columns(char_field_indexes, schema, _tablet->tablet_schema(), chunk.get());
+=======
+        ChunkHelper::padding_char_columns(char_field_indexes, schema, tablet_schema, chunk.get());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         if (auto st = _output_rs_writer->add_chunk(*chunk); !st.ok()) {
             LOG(WARNING) << "writer add_chunk error: " << st;
@@ -227,7 +278,12 @@ Status Compaction::_merge_rowsets_horizontally(size_t segment_iterator_num, Stat
     return Status::OK();
 }
 
+<<<<<<< HEAD
 Status Compaction::_merge_rowsets_vertically(size_t segment_iterator_num, Statistics* stats_output) {
+=======
+Status Compaction::_merge_rowsets_vertically(size_t segment_iterator_num, Statistics* stats_output,
+                                             const TabletSchemaCSPtr& tablet_schema) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     TRACE_COUNTER_SCOPE_LATENCY_US("merge_rowsets_latency_us");
     auto mask_buffer = std::make_unique<RowSourceMaskBuffer>(_tablet->tablet_id(), _tablet->data_dir()->path());
     auto source_masks = std::make_unique<std::vector<RowSourceMask>>();
@@ -235,15 +291,26 @@ Status Compaction::_merge_rowsets_vertically(size_t segment_iterator_num, Statis
         bool is_key = (i == 0);
         if (!is_key) {
             // read mask buffer from the beginning
+<<<<<<< HEAD
             mask_buffer->flip_to_read();
         }
 
         Schema schema = ChunkHelper::convert_schema(_tablet->tablet_schema(), _column_groups[i]);
+=======
+            RETURN_IF_ERROR(mask_buffer->flip_to_read());
+        }
+
+        Schema schema = ChunkHelper::convert_schema(tablet_schema, _column_groups[i]);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         TabletReader reader(_tablet, _output_rs_writer->version(), schema, is_key, mask_buffer.get());
         RETURN_IF_ERROR(reader.prepare());
         TabletReaderParams reader_params;
         reader_params.reader_type = compaction_type();
         reader_params.profile = _runtime_profile.create_child("merge_rowsets");
+<<<<<<< HEAD
+=======
+        reader_params.column_access_paths = &_column_access_paths;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         int64_t total_num_rows = 0;
         int64_t total_mem_footprint = 0;
@@ -251,7 +318,12 @@ Status Compaction::_merge_rowsets_vertically(size_t segment_iterator_num, Statis
             total_num_rows += rowset->num_rows();
             for (auto& segment : rowset->segments()) {
                 for (uint32_t column_index : _column_groups[i]) {
+<<<<<<< HEAD
                     const auto* column_reader = segment->column(column_index);
+=======
+                    auto uid = tablet_schema->column(column_index).unique_id();
+                    const auto* column_reader = segment->column_with_uid(uid);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     if (column_reader == nullptr) {
                         continue;
                     }
@@ -262,7 +334,11 @@ Status Compaction::_merge_rowsets_vertically(size_t segment_iterator_num, Statis
         int32_t chunk_size = CompactionUtils::get_read_chunk_size(config::compaction_memory_limit_per_worker,
                                                                   config::vector_chunk_size, total_num_rows,
                                                                   total_mem_footprint, segment_iterator_num);
+<<<<<<< HEAD
         VLOG(1) << "tablet=" << _tablet->tablet_id() << ", column group=" << i << ", reader chunk size=" << chunk_size;
+=======
+        VLOG(2) << "tablet=" << _tablet->tablet_id() << ", column group=" << i << ", reader chunk size=" << chunk_size;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         reader_params.chunk_size = chunk_size;
         RETURN_IF_ERROR(reader.open(reader_params));
 
@@ -292,7 +368,11 @@ Status Compaction::_merge_rowsets_vertically(size_t segment_iterator_num, Statis
                 }
             }
 
+<<<<<<< HEAD
             ChunkHelper::padding_char_columns(char_field_indexes, schema, _tablet->tablet_schema(), chunk.get());
+=======
+            ChunkHelper::padding_char_columns(char_field_indexes, schema, tablet_schema, chunk.get());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
             if (auto st = _output_rs_writer->add_columns(*chunk, _column_groups[i], is_key); !st.ok()) {
                 LOG(WARNING) << "writer add chunk by columns error. tablet=" << _tablet->tablet_id() << ", err=" << st;
@@ -347,7 +427,11 @@ Status Compaction::modify_rowsets() {
 
     std::vector<RowsetSharedPtr> to_replace;
     std::unique_lock wrlock(_tablet->get_header_lock());
+<<<<<<< HEAD
     _tablet->modify_rowsets({_output_rowset}, _input_rowsets, &to_replace);
+=======
+    _tablet->modify_rowsets_without_lock({_output_rowset}, _input_rowsets, &to_replace);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     _tablet->save_meta();
     Rowset::close_rowsets(_input_rowsets);
     for (auto& rs : to_replace) {

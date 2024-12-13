@@ -69,6 +69,13 @@ public class LogicalHiveScanOperator extends LogicalScanOperator {
         this.hasUnknownColumn = hasUnknownColumn;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isEmptyOutputRows() {
+        return !table.isUnPartitioned() && predicates.getSelectedPartitionIds().isEmpty();
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
         return visitor.visitLogicalHiveScan(this, context);

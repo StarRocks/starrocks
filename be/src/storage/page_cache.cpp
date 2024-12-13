@@ -51,6 +51,7 @@ METRIC_DEFINE_UINT_GAUGE(page_cache_capacity, MetricUnit::BYTES);
 
 StoragePageCache* StoragePageCache::_s_instance = nullptr;
 
+<<<<<<< HEAD
 void StoragePageCache::create_global_cache(MemTracker* mem_tracker, size_t capacity) {
     if (_s_instance == nullptr) {
         _s_instance = new StoragePageCache(mem_tracker, capacity);
@@ -64,6 +65,8 @@ void StoragePageCache::release_global_cache() {
     }
 }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 static void init_metrics() {
     StarRocksMetrics::instance()->metrics()->register_metric("page_cache_lookup_count", &page_cache_lookup_count);
     StarRocksMetrics::instance()->metrics()->register_hook("page_cache_lookup_count", []() {
@@ -81,11 +84,35 @@ static void init_metrics() {
     });
 }
 
+<<<<<<< HEAD
 StoragePageCache::StoragePageCache(MemTracker* mem_tracker, size_t capacity)
         : _mem_tracker(mem_tracker), _cache(new_lru_cache(capacity, ChargeMode::MEMSIZE)) {
     init_metrics();
 }
 
+=======
+void StoragePageCache::create_global_cache(MemTracker* mem_tracker, size_t capacity) {
+    if (_s_instance == nullptr) {
+        _s_instance = new StoragePageCache(mem_tracker, capacity);
+        init_metrics();
+    }
+}
+
+void StoragePageCache::release_global_cache() {
+    if (_s_instance != nullptr) {
+        delete _s_instance;
+        _s_instance = nullptr;
+    }
+}
+
+void StoragePageCache::prune() {
+    _cache->prune();
+}
+
+StoragePageCache::StoragePageCache(MemTracker* mem_tracker, size_t capacity)
+        : _mem_tracker(mem_tracker), _cache(new_lru_cache(capacity, ChargeMode::MEMSIZE)) {}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 StoragePageCache::~StoragePageCache() = default;
 
 void StoragePageCache::set_capacity(size_t capacity) {

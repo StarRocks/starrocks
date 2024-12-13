@@ -6,7 +6,11 @@ displayed_sidebar: docs
 
 ## Description
 
+<<<<<<< HEAD
 This statement is used to create indexes.
+=======
+This statement is used to create indexes. You can use this statement to create only Bitmap indexes. For usage notes and scenarios of Bitmap indexes, see [Bitmap index](../../../table_design/indexes/Bitmap_index.md).
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 :::tip
 

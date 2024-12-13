@@ -74,7 +74,11 @@ public:
             }
         }
 
+<<<<<<< HEAD
         std::vector<uint8_t> null_flags;
+=======
+        NullData null_flags;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         raw::make_room(&null_flags, num_rows);
 
         // Construct null flags.

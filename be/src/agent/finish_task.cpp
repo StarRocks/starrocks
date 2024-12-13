@@ -18,6 +18,10 @@
 #include "agent/utils.h"
 #include "common/logging.h"
 #include "runtime/exec_env.h"
+<<<<<<< HEAD
+=======
+#include "testutil/sync_point.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "util/starrocks_metrics.h"
 
 namespace starrocks {
@@ -26,13 +30,22 @@ const uint32_t TASK_FINISH_MAX_RETRY = 3;
 const uint32_t ALTER_FINISH_TASK_MAX_RETRY = 10;
 
 void finish_task(const TFinishTaskRequest& finish_task_request) {
+<<<<<<< HEAD
+=======
+    TEST_SYNC_POINT_CALLBACK("FinishAgentTask::input",
+                             const_cast<void*>(static_cast<const void*>(&finish_task_request)));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // Return result to FE
     TMasterResult result;
     uint32_t try_time = 0;
     int32_t sleep_seconds = 1;
     int32_t max_retry_times = TASK_FINISH_MAX_RETRY;
 
+<<<<<<< HEAD
     MasterServerClient client(ExecEnv::GetInstance()->frontend_client_cache());
+=======
+    MasterServerClient client;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     while (try_time < max_retry_times) {
         StarRocksMetrics::instance()->finish_task_requests_total.increment(1);

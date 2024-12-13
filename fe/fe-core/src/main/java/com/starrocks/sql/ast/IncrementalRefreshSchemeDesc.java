@@ -17,7 +17,11 @@ package com.starrocks.sql.ast;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.sql.parser.NodePosition;
 
+<<<<<<< HEAD
 public class IncrementalRefreshSchemeDesc extends RefreshSchemeDesc {
+=======
+public class IncrementalRefreshSchemeDesc extends RefreshSchemeClause {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public IncrementalRefreshSchemeDesc(MaterializedView.RefreshMoment moment, NodePosition pos) {
         super(MaterializedView.RefreshType.INCREMENTAL, pos, moment);

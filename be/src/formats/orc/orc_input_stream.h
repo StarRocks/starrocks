@@ -14,6 +14,7 @@
 
 #pragma once
 
+<<<<<<< HEAD
 #include <boost/algorithm/string.hpp>
 #include <orc/OrcFile.hh>
 
@@ -26,6 +27,12 @@
 #include "io/shared_buffered_input_stream.h"
 #include "runtime/descriptors.h"
 #include "runtime/types.h"
+=======
+#include <orc/OrcFile.hh>
+
+#include "exec/hdfs_scanner.h"
+#include "io/shared_buffered_input_stream.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 namespace starrocks {
 
 class RandomAccessFile;
@@ -63,11 +70,15 @@ public:
 
     uint64_t getNaturalReadSizeAfterSeek() const override { return config::orc_natural_read_size / 4; }
 
+<<<<<<< HEAD
     void prepareCache(PrepareCacheScope scope, uint64_t offset, uint64_t length) override;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     void read(void* buf, uint64_t length, uint64_t offset) override;
 
     const std::string& getName() const override;
 
+<<<<<<< HEAD
     bool isIORangesEnabled() const override { return config::orc_coalesce_read_enable; }
     void clearIORanges() override;
     void setIORanges(std::vector<IORange>& io_ranges) override;
@@ -87,5 +98,26 @@ private:
     bool _tiny_stripe_read = false;
     uint64_t _last_stripe_index = 0;
     std::vector<StripeInformation> _stripes;
+=======
+    void set_lazy_column_coalesce_counter(std::atomic<int32_t>* lazy_column_coalesce_counter) {
+        _lazy_column_coalesce_counter = lazy_column_coalesce_counter;
+    }
+    void set_app_stats(HdfsScanStats* stats) { _app_stats = stats; }
+    bool isIOCoalesceEnabled() const override { return config::orc_coalesce_read_enable; }
+    bool isIOAdaptiveCoalesceEnabled() const override { return config::io_coalesce_adaptive_lazy_active; }
+    bool isAlreadyCollectedInSharedBuffer(const int64_t offset, const int64_t length) const override;
+    void releaseToOffset(const int64_t offset) override;
+    void setIORanges(std::vector<IORange>& io_ranges) override;
+    Status setIORanges(const std::vector<io::SharedBufferedInputStream::IORange>& io_ranges,
+                       const bool coalesce_active_lazy_column = true);
+    std::atomic<int32_t>* get_lazy_column_coalesce_counter() override;
+
+private:
+    RandomAccessFile* _file;
+    uint64_t _length;
+    io::SharedBufferedInputStream* _sb_stream;
+    std::atomic<int32_t>* _lazy_column_coalesce_counter = nullptr;
+    HdfsScanStats* _app_stats = nullptr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 } // namespace starrocks

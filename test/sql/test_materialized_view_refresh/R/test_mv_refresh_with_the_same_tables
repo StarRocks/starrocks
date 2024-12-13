@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 -- name: test_mv_refresh_with_the_same_tables
+=======
+-- name: test_mv_refresh_with_the_same_tables @slow
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 CREATE TABLE `t1` (
   `k1` int(11) NULL COMMENT "",
   `k2` decimal(38, 8) NULL COMMENT "",
@@ -28,7 +32,11 @@ DISTRIBUTED BY HASH(`k1`) BUCKETS 1
 PROPERTIES (
 "replication_num" = "1",
 "partition_refresh_number"="-1"
+<<<<<<< HEAD
 ) REFRESH deferred MANUAL as
+=======
+) REFRESH MANUAL as
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 select t1.k1, t1.k3 t1k3, t4.k3 k4k3, t1.k3-t4.k3 as upyear, t1.dt dt 
 from t1 left outer join test_mv1 t4 
 on t1.k1=t4.k1 and t4.dt=substr(date_sub(t1.dt,interval dayofyear(t1.dt) day),1,10);
@@ -64,7 +72,11 @@ select * from test_mv1 order by 1, 2, 3;
 4	70901.20810000	2023-12-31
 4	709018.20810000	2024-05-16
 -- !result
+<<<<<<< HEAD
 select * from test_mv2 order by 1, 2, 3, 4;
+=======
+select * from test_mv2 order by 1, 2, 3;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- result:
 1	4232.27340000	70901.20810000	-66668.93470000	2024-05-16
 1	4232.27340000	11316330.95000000	-11312098.67660000	2024-05-16
@@ -78,19 +90,26 @@ select * from test_mv2 order by 1, 2, 3, 4;
 4	70901.20810000	None	None	2023-12-31
 4	709018.20810000	70901.20810000	638117.00000000	2024-05-16
 -- !result
+<<<<<<< HEAD
 select /*+ set_var(enable_materialized_view_rewrite=false) */t1.k1, t1.k3 t1k3, t4.k3 k4k3, t1.k3-t4.k3 as upyear, t1.dt dt  from t1 left outer join test_mv1 t4  on t1.k1=t4.k1 and t4.dt=substr(date_sub(t1.dt,interval dayofyear(t1.dt) day),1,10) order by 1, 2, 3, 4;
+=======
+select t1.k1, t1.k3 t1k3, t4.k3 k4k3, t1.k3-t4.k3 as upyear, t1.dt dt  from t1 left outer join test_mv1 t4  on t1.k1=t4.k1 and t4.dt=substr(date_sub(t1.dt,interval dayofyear(t1.dt) day),1,10) order by 1, 2, 3 limit 5;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- result:
 1	4232.27340000	70901.20810000	-66668.93470000	2024-05-16
 1	4232.27340000	11316330.95000000	-11312098.67660000	2024-05-16
 1	70901.20810000	None	None	2023-12-31
 1	11316330.95000000	None	None	2023-12-31
 2	-4232.27340000	-1232.27340000	-3000.00000000	2024-05-16
+<<<<<<< HEAD
 2	-1232.27340000	None	None	2023-12-31
 2	-332.27340000	-1232.27340000	900.00000000	2024-05-16
 3	11316330.95000000	None	None	2023-12-31
 3	113163302.95000000	11316330.95000000	101846972.00000000	2024-05-16
 4	70901.20810000	None	None	2023-12-31
 4	709018.20810000	70901.20810000	638117.00000000	2024-05-16
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result
 insert into `t1` values (1,4212332.27340000,4232.27340000,"2024-05-17"),(2,421111132.27340000,-4232.27340000,"2024-05-17"),(3,123222.27340000,113163302.95000000,"2024-05-17"),(4,22312.27340000,709018.20810000,"2024-05-17");
 -- result:
@@ -122,6 +141,7 @@ select * from test_mv1 order by 1, 2, 3;
 4	709018.20810000	2024-05-16
 4	709018.20810000	2024-05-17
 -- !result
+<<<<<<< HEAD
 select * from test_mv2 order by 1, 2, 3, 4;
 -- result:
 1	4232.27340000	70901.20810000	-66668.93470000	2024-05-16
@@ -142,12 +162,35 @@ select * from test_mv2 order by 1, 2, 3, 4;
 4	709018.20810000	70901.20810000	638117.00000000	2024-05-17
 -- !result
 select /*+ set_var(enable_materialized_view_rewrite=false) */t1.k1, t1.k3 t1k3, t4.k3 k4k3, t1.k3-t4.k3 as upyear, t1.dt dt  from t1 left outer join test_mv1 t4  on t1.k1=t4.k1 and t4.dt=substr(date_sub(t1.dt,interval dayofyear(t1.dt) day),1,10) order by 1, 2, 3, 4;
+=======
+select * from test_mv2 order by 1, 2, 3;
+-- result:
+1	4232.27340000	70901.20810000	-66668.93470000	2024-05-17
+1	4232.27340000	70901.20810000	-66668.93470000	2024-05-16
+1	4232.27340000	11316330.95000000	-11312098.67660000	2024-05-17
+1	4232.27340000	11316330.95000000	-11312098.67660000	2024-05-16
+1	70901.20810000	None	None	2023-12-31
+1	11316330.95000000	None	None	2023-12-31
+2	-4232.27340000	-1232.27340000	-3000.00000000	2024-05-17
+2	-4232.27340000	-1232.27340000	-3000.00000000	2024-05-16
+2	-1232.27340000	None	None	2023-12-31
+2	-332.27340000	-1232.27340000	900.00000000	2024-05-16
+3	11316330.95000000	None	None	2023-12-31
+3	113163302.95000000	11316330.95000000	101846972.00000000	2024-05-17
+3	113163302.95000000	11316330.95000000	101846972.00000000	2024-05-16
+4	70901.20810000	None	None	2023-12-31
+4	709018.20810000	70901.20810000	638117.00000000	2024-05-17
+4	709018.20810000	70901.20810000	638117.00000000	2024-05-16
+-- !result
+select t1.k1, t1.k3 t1k3, t4.k3 k4k3, t1.k3-t4.k3 as upyear, t1.dt dt  from t1 left outer join test_mv1 t4  on t1.k1=t4.k1 and t4.dt=substr(date_sub(t1.dt,interval dayofyear(t1.dt) day),1,10) order by 1, 2, 3 limit 5;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- result:
 1	4232.27340000	70901.20810000	-66668.93470000	2024-05-16
 1	4232.27340000	70901.20810000	-66668.93470000	2024-05-17
 1	4232.27340000	11316330.95000000	-11312098.67660000	2024-05-16
 1	4232.27340000	11316330.95000000	-11312098.67660000	2024-05-17
 1	70901.20810000	None	None	2023-12-31
+<<<<<<< HEAD
 1	11316330.95000000	None	None	2023-12-31
 2	-4232.27340000	-1232.27340000	-3000.00000000	2024-05-17
 2	-4232.27340000	-1232.27340000	-3000.00000000	2024-05-16
@@ -159,4 +202,15 @@ select /*+ set_var(enable_materialized_view_rewrite=false) */t1.k1, t1.k3 t1k3, 
 4	70901.20810000	None	None	2023-12-31
 4	709018.20810000	70901.20810000	638117.00000000	2024-05-17
 4	709018.20810000	70901.20810000	638117.00000000	2024-05-16
+=======
+-- !result
+drop materialized view test_mv2;
+-- result:
+-- !result
+drop materialized view test_mv1;
+-- result:
+-- !result
+drop table t1;
+-- result:
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result

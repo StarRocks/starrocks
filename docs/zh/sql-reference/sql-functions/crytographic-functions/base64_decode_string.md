@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # base64_decode_string
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 同 [from_base64()](../crytographic-functions/from_base64.md) 函数，用于解码某个 Base64 编码的字符串，是 [to_base64()](../crytographic-functions/to_base64.md) 函数的反向函数。
 

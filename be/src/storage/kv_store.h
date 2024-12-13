@@ -71,11 +71,20 @@ public:
     Status remove(ColumnFamilyIndex column_family_index, const std::string& key);
 
     Status iterate(ColumnFamilyIndex column_family_index, const std::string& prefix,
+<<<<<<< HEAD
                    std::function<bool(std::string_view, std::string_view)> const& func, int64_t timeout_sec = -1);
 
     Status iterate_range(ColumnFamilyIndex column_family_index, const std::string& lower_bound,
                          const std::string& upper_bound,
                          std::function<bool(std::string_view, std::string_view)> const& func);
+=======
+                   std::function<StatusOr<bool>(std::string_view, std::string_view)> const& func,
+                   int64_t timeout_sec = -1);
+
+    Status iterate_range(ColumnFamilyIndex column_family_index, const std::string& lower_bound,
+                         const std::string& upper_bound,
+                         std::function<StatusOr<bool>(std::string_view, std::string_view)> const& func);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     const std::string& root_path() const { return _root_path; }
 

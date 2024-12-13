@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # hll_empty
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 生成空 HLL 列，用于 INSERT 或导入数据时补充默认值。
 

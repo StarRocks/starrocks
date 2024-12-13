@@ -20,9 +20,12 @@ public class ImageHeader {
     @SerializedName("beid")
     private long batchEndId;
 
+<<<<<<< HEAD
     @SerializedName("dcc")
     private boolean isDefaultClusterCreated;
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public long getBatchEndId() {
         return batchEndId;
     }
@@ -30,6 +33,7 @@ public class ImageHeader {
     public void setBatchEndId(long batchEndId) {
         this.batchEndId = batchEndId;
     }
+<<<<<<< HEAD
 
     public boolean isDefaultClusterCreated() {
         return isDefaultClusterCreated;
@@ -38,4 +42,6 @@ public class ImageHeader {
     public void setDefaultClusterCreated(boolean defaultClusterCreated) {
         isDefaultClusterCreated = defaultClusterCreated;
     }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

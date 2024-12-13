@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # lpad
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 根据指定的长度在字符串前面（左侧）追加字符。
 

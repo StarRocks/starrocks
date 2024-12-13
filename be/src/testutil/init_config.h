@@ -40,7 +40,11 @@ namespace starrocks {
          << "enable_metric_calculator = false\n"
          << "mem_limit = 5G\n";
     conf.close();
+<<<<<<< HEAD
     RETURN_IF(!starrocks::config::init("test.conf"), false);
+=======
+    RETURN_IF(!starrocks::config::init("test.conf"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::filesystem::remove_all("test_dir");
     RETURN_IF(!std::filesystem::create_directories(config::local_library_dir), false);
     RETURN_IF(!std::filesystem::create_directories(config::storage_root_path), false);

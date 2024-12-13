@@ -16,7 +16,10 @@ package com.starrocks.metric;
 
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
+<<<<<<< HEAD
 import com.google.common.annotations.VisibleForTesting;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.MvId;
 import com.starrocks.common.Config;
@@ -66,11 +69,14 @@ public class MaterializedViewMetricsRegistry {
         }
     }
 
+<<<<<<< HEAD
     @VisibleForTesting
     public void clear() {
         idToMVMetrics.clear();
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private static void doCollectMetrics(MvId mvId, MaterializedViewMetricsEntity entity,
                                        MetricVisitor visitor, boolean minifyMetrics) {
         if (!entity.initDbAndTableName()) {

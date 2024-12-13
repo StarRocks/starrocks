@@ -29,7 +29,11 @@ public:
     static Status report_audit_statistics(const TReportAuditStatisticsParams& params, ExecEnv* exec_env,
                                           const TNetworkAddress& fe_addr);
 
+<<<<<<< HEAD
     [[nodiscard]] Status submit(std::function<void()>&& report_task);
+=======
+    Status submit(std::function<void()>&& report_task);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 private:
     std::unique_ptr<ThreadPool> _thread_pool;

@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     ps_partkey,
@@ -26,6 +27,8 @@ group by
     )
 order by
     value desc ;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 [result]
 TOP-N (order by [[18: sum DESC NULLS LAST]])
     TOP-N (order by [[18: sum DESC NULLS LAST]])

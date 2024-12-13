@@ -36,10 +36,23 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.starrocks.persist.gson.GsonUtils;
+<<<<<<< HEAD
+=======
+import com.starrocks.proto.PScalarType;
+import com.starrocks.proto.PStructField;
+import com.starrocks.proto.PTypeDesc;
+import com.starrocks.proto.PTypeNode;
+import com.starrocks.thrift.TPrimitiveType;
+import com.starrocks.thrift.TTypeNodeType;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.junit.Assert;
 import org.junit.Test;
 
 import java.util.ArrayList;
+<<<<<<< HEAD
+=======
+import java.util.List;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 public class TypeTest {
     @Test
@@ -237,14 +250,22 @@ public class TypeTest {
         // map<int,struct<c1:int,cc1:string>>
         StructType c1 = new StructType(Lists.newArrayList(
                 new StructField("c1", ScalarType.createType(PrimitiveType.INT)),
+<<<<<<< HEAD
                 new StructField("cc1", ScalarType.createDefaultExternalTableString())
+=======
+                new StructField("cc1", ScalarType.createDefaultCatalogString())
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ));
         MapType mapType =
                 new MapType(ScalarType.createType(PrimitiveType.INT), c1);
         String json = GsonUtils.GSON.toJson(mapType);
         Type deType = GsonUtils.GSON.fromJson(json, Type.class);
         Assert.assertTrue(deType.isMapType());
+<<<<<<< HEAD
         Assert.assertEquals("MAP<INT,struct<c1 int(11), cc1 varchar(1048576)>>", deType.toString());
+=======
+        Assert.assertEquals("MAP<INT,struct<c1 int(11), cc1 varchar(1073741824)>>", deType.toString());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // Make sure select fields are false when initialized
         Assert.assertFalse(deType.selectedFields[0]);
         Assert.assertFalse(deType.selectedFields[1]);
@@ -255,7 +276,11 @@ public class TypeTest {
         // "struct<struct_test:int,c1:struct<c1:int,cc1:string>>"
         StructType c1 = new StructType(Lists.newArrayList(
                 new StructField("c1", ScalarType.createType(PrimitiveType.INT)),
+<<<<<<< HEAD
                 new StructField("cc1", ScalarType.createDefaultExternalTableString())
+=======
+                new StructField("cc1", ScalarType.createDefaultCatalogString())
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ));
         StructType root = new StructType(Lists.newArrayList(
                 new StructField("struct_test", ScalarType.createType(PrimitiveType.INT), "comment test"),
@@ -264,12 +289,130 @@ public class TypeTest {
         String json = GsonUtils.GSON.toJson(root);
         Type deType = GsonUtils.GSON.fromJson(json, Type.class);
         Assert.assertTrue(deType.isStructType());
+<<<<<<< HEAD
         Assert.assertEquals("struct<struct_test int(11) COMMENT 'comment test', c1 struct<c1 int(11), cc1 varchar(1048576)>>",
+=======
+        Assert.assertEquals("struct<struct_test int(11) COMMENT 'comment test', c1 struct<c1 int(11), cc1 varchar(1073741824)>>",
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 deType.toString());
         // test initialed fieldMap by ctor in deserializer.
         Assert.assertEquals(1, ((StructType) deType).getFieldPos("c1"));
     }
 
+<<<<<<< HEAD
+=======
+    private PTypeDesc buildScalarType(TPrimitiveType tPrimitiveType) {
+        PTypeNode tn = new PTypeNode();
+        tn.type = TTypeNodeType.SCALAR.getValue();
+        tn.scalarType = new PScalarType();
+        tn.scalarType.type = tPrimitiveType.getValue();
+
+        PTypeDesc td = new PTypeDesc();
+        td.types = new ArrayList<>();
+        td.types.add(tn);
+        return td;
+    }
+
+    private PTypeDesc buildArrayType(TPrimitiveType tPrimitiveType) {
+        // BIGINT
+        PTypeDesc td = new PTypeDesc();
+        td.types = new ArrayList<>();
+
+        // 1st: ARRAY
+        PTypeNode tn = new PTypeNode();
+        tn.type = TTypeNodeType.ARRAY.getValue();
+        td.types.add(tn);
+
+        // 2nd: BIGINT
+        tn = new PTypeNode();
+        tn.type = TTypeNodeType.SCALAR.getValue();
+        tn.scalarType = new PScalarType();
+        tn.scalarType.type = tPrimitiveType.getValue();
+        td.types.add(tn);
+        return td;
+    }
+
+    private PTypeDesc buildMapType(TPrimitiveType keyType, TPrimitiveType valueType) {
+        PTypeDesc td = new PTypeDesc();
+        td.types = new ArrayList<>();
+
+        // 1st: ARRAY
+        PTypeNode tn = new PTypeNode();
+        tn.type = TTypeNodeType.MAP.getValue();
+        td.types.add(tn);
+
+        // 2nd: key
+        tn = new PTypeNode();
+        tn.type = TTypeNodeType.SCALAR.getValue();
+        tn.scalarType = new PScalarType();
+        tn.scalarType.type = keyType.getValue();
+        td.types.add(tn);
+
+        // 3nd: value
+        tn = new PTypeNode();
+        tn.type = TTypeNodeType.SCALAR.getValue();
+        tn.scalarType = new PScalarType();
+        tn.scalarType.type = valueType.getValue();
+        td.types.add(tn);
+        return td;
+    }
+
+    private PTypeDesc buildStructType(List<String> fieldNames, List<TPrimitiveType> fieldTypes) {
+        PTypeDesc td = new PTypeDesc();
+        td.types = new ArrayList<>();
+
+        // STRUCT node
+        PTypeNode tn = new PTypeNode();
+        tn.type = TTypeNodeType.STRUCT.getValue();
+        tn.structFields = new ArrayList<>();
+
+        for (String fieldName : fieldNames) {
+            PStructField field = new PStructField();
+            field.name = fieldName;
+            tn.structFields.add(field);
+        }
+        td.types.add(tn);
+
+        // field node
+        for (TPrimitiveType field : fieldTypes) {
+            tn = new PTypeNode();
+            tn.type = TTypeNodeType.SCALAR.getValue();
+            tn.scalarType = new PScalarType();
+            tn.scalarType.type = field.getValue();
+            td.types.add(tn);
+        }
+        return td;
+    }
+
+    @Test
+    public void testPTypeDescFromProtobuf() {
+        PTypeDesc pTypeDesc = buildScalarType(TPrimitiveType.BIGINT);
+        Type tp = Type.fromProtobuf(pTypeDesc);
+        Assert.assertTrue(tp.isBigint());
+
+        pTypeDesc = buildArrayType(TPrimitiveType.BIGINT);
+        tp = Type.fromProtobuf(pTypeDesc);
+        Assert.assertTrue(tp.isArrayType());
+
+        pTypeDesc = buildMapType(TPrimitiveType.BIGINT, TPrimitiveType.BOOLEAN);
+        tp = Type.fromProtobuf(pTypeDesc);
+        Assert.assertTrue(tp.isMapType());
+
+        ArrayList<String> fieldNames = new ArrayList<>();
+        ArrayList<TPrimitiveType> fieldTypes = new ArrayList<>();
+
+        fieldNames.add("field_bigint");
+        fieldTypes.add(TPrimitiveType.BIGINT);
+
+        fieldNames.add("field_double");
+        fieldTypes.add(TPrimitiveType.DOUBLE);
+
+        pTypeDesc = buildStructType(fieldNames, fieldTypes);
+        tp = Type.fromProtobuf(pTypeDesc);
+        Assert.assertTrue(tp.isStructType());
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Test
     public void testExtendedPrecision() {
         ScalarType type = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 10, 4);

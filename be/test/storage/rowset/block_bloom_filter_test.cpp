@@ -37,6 +37,10 @@
 #include <memory>
 
 #include "storage/rowset/bloom_filter.h"
+<<<<<<< HEAD
+=======
+#include "util/slice.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 namespace starrocks {
 

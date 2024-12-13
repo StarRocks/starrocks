@@ -24,6 +24,10 @@ import com.starrocks.connector.CachingRemoteFileConf;
 import com.starrocks.connector.CachingRemoteFileIO;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
+<<<<<<< HEAD
+=======
+import com.starrocks.connector.MetastoreType;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.hadoop.conf.Configuration;
@@ -56,7 +60,11 @@ public class HiveConnectorTest {
         executorForPullFiles = Executors.newFixedThreadPool(5);
 
         client = new HiveMetastoreTest.MockedHiveMetaClient();
+<<<<<<< HEAD
         metastore = new HiveMetastore(client, "hive_catalog");
+=======
+        metastore = new HiveMetastore(client, "hive_catalog", MetastoreType.HMS);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         cachingHiveMetastore = CachingHiveMetastore.createCatalogLevelInstance(
                 metastore, executorForHmsRefresh, 100, 10, 1000, false);
         hiveRemoteFileIO = new HiveRemoteFileIO(new Configuration());
@@ -102,11 +110,18 @@ public class HiveConnectorTest {
         HiveConnector hiveConnector = new HiveConnector(new ConnectorContext("hive_catalog", "hive", properties));
         ConnectorMetadata metadata = hiveConnector.getMetadata();
         Assert.assertTrue(metadata instanceof HiveMetadata);
+<<<<<<< HEAD
         HiveMetadata hiveMetadata = (HiveMetadata) metadata;
         com.starrocks.catalog.Table table = hiveMetadata.getTable("db1", "tbl1");
         HiveTable hiveTable = (HiveTable) table;
         Assert.assertEquals("db1", hiveTable.getDbName());
         Assert.assertEquals("tbl1", hiveTable.getTableName());
+=======
+        com.starrocks.catalog.Table table = metadata.getTable("db1", "tbl1");
+        HiveTable hiveTable = (HiveTable) table;
+        Assert.assertEquals("db1", hiveTable.getCatalogDBName());
+        Assert.assertEquals("tbl1", hiveTable.getCatalogTableName());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals(Lists.newArrayList("col1"), hiveTable.getPartitionColumnNames());
         Assert.assertEquals(Lists.newArrayList("col2"), hiveTable.getDataColumnNames());
         Assert.assertEquals("hdfs://127.0.0.1:10000/hive", hiveTable.getTableLocation());

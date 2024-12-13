@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # base64_decode_string
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 This function is the same as [from_base64](from_base64.md).
 Decodes a Base64-encoded string. and an inverse of [to_base64](to_base64.md).

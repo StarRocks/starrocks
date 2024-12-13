@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     s_name,
@@ -36,6 +37,8 @@ where
   and n_name = 'ARGENTINA'
 order by
     s_name ;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 [fragment statistics]
 PLAN FRAGMENT 0(F12)
 Output Exprs:2: S_NAME | 3: S_ADDRESS
@@ -159,18 +162,31 @@ OutPut Exchange Id: 18
 |  9 <-> [9: N_NATIONKEY, INT, false]
 |  cardinality: 1
 |  column statistics:
+<<<<<<< HEAD
 |  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
+=======
+|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] MCV: [[22:1][23:1][24:1][10:1][11:1]] ESTIMATE
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 |
 16:OlapScanNode
 table: nation, rollup: nation
 preAggregation: on
 Predicates: [10: N_NAME, CHAR, false] = 'ARGENTINA'
 partitionsRatio=1/1, tabletsRatio=1/1
+<<<<<<< HEAD
 actualRows=0, avgRowSize=29.0
 cardinality: 1
 column statistics:
 * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
 * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
+=======
+tabletList=10258
+actualRows=0, avgRowSize=29.0
+cardinality: 1
+column statistics:
+* N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] MCV: [[22:1][23:1][24:1][10:1][11:1]] ESTIMATE
+* N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] MCV: [[CANADA:1][UNITED STATES:1][VIETNAM:1][MOROCCO:1][ARGENTINA:1]] ESTIMATE
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 PLAN FRAGMENT 4(F01)
 
@@ -193,7 +209,11 @@ OutPut Exchange Id: 14
 |  build runtime filters:
 |  - filter_id = 1, build_expr = (14: PS_PARTKEY), remote = true
 |  - filter_id = 2, build_expr = (15: PS_SUPPKEY), remote = false
+<<<<<<< HEAD
 |  output columns: 15, 16, 48
+=======
+|  output columns: 15
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 |  cardinality: 40862130
 |  column statistics:
 |  * PS_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 5000000.0] ESTIMATE
@@ -323,7 +343,11 @@ OutPut Exchange Id: 03
 |  column statistics:
 |  * L_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
 |  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
+<<<<<<< HEAD
 |  * L_QUANTITY-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
+=======
+|  * L_QUANTITY-->[1.0, 50.0, 0.0, 8.0, 50.0] MCV: [[35.00:12075300][25.00:12063500][32.00:12063000][23.00:12059300][16.00:12051800]] ESTIMATE
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 |
 0:OlapScanNode
 table: lineitem, rollup: lineitem
@@ -338,6 +362,11 @@ probe runtime filters:
 column statistics:
 * L_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
 * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
+<<<<<<< HEAD
 * L_QUANTITY-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
 * L_SHIPDATE-->[7.258176E8, 7.573536E8, 0.0, 4.0, 2526.0] ESTIMATE
+=======
+* L_QUANTITY-->[1.0, 50.0, 0.0, 8.0, 50.0] MCV: [[35.00:12075300][25.00:12063500][32.00:12063000][23.00:12059300][16.00:12051800]] ESTIMATE
+* L_SHIPDATE-->[7.258176E8, 7.573536E8, 0.0, 4.0, 2526.0] MCV: [[1993-08-04:264600][1993-08-17:263300][1993-10-28:262500][1993-04-22:261400][1993-07-07:260900]] ESTIMATE
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 [end]

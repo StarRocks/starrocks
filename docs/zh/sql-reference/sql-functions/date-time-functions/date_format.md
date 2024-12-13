@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # date_format
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 将日期类型按照 `format` 的类型转化为字符串。
 

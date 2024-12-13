@@ -18,12 +18,19 @@
 #include "common/object_pool.h"
 #include "exec/aggregator.h"
 #include "exec/pipeline/operator.h"
+<<<<<<< HEAD
+=======
+#include "exec/pipeline/spill_process_channel.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "exec/sorted_streaming_aggregator.h"
 #include "runtime/runtime_state.h"
 #include "util/race_detect.h"
 
 namespace starrocks::pipeline {
+<<<<<<< HEAD
 // TODO: implements reset_state
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 class SpillableAggregateBlockingSinkOperator : public AggregateBlockingSinkOperator {
 public:
     template <class... Args>
@@ -43,6 +50,10 @@ public:
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
     bool spillable() const override { return true; }
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     void set_execute_mode(int performance_level) override {
         _spill_strategy = spill::SpillStrategy::SPILL_ALL;
         TRACE_SPILL_LOG << "AggregateBlockingSink, mark spill " << (void*)this;
@@ -58,6 +69,14 @@ public:
         return 0;
     }
 
+<<<<<<< HEAD
+=======
+    Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) override;
+
+    // only the prepare/open phase calls are valid.
+    SpillProcessChannelPtr spill_channel() { return _aggregator->spill_channel(); }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 private:
     bool spilled() const { return _aggregator->spiller()->spilled(); }
 
@@ -71,6 +90,11 @@ private:
     void _add_streaming_chunk(ChunkPtr chunk);
 
     std::function<StatusOr<ChunkPtr>()> _build_spill_task(RuntimeState* state, bool should_spill_hash_table = true);
+<<<<<<< HEAD
+=======
+
+    DECLARE_ONCE_DETECTOR(_set_finishing_once);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     spill::SpillStrategy _spill_strategy = spill::SpillStrategy::NO_SPILL;
 
     std::queue<ChunkPtr> _streaming_chunks;
@@ -80,7 +104,10 @@ private:
     int32_t _continuous_low_reduction_chunk_num = 0;
 
     bool _is_finished = false;
+<<<<<<< HEAD
     DECLARE_ONCE_DETECTOR(_set_finishing_once);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     RuntimeProfile::Counter* _hash_table_spill_times = nullptr;
 

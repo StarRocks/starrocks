@@ -31,7 +31,11 @@ public interface BasicTable {
 
     Table.TableType getType();
 
+<<<<<<< HEAD
     boolean isView();
+=======
+    boolean isOlapView();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     boolean isMaterializedView();
 

@@ -1,0 +1,236 @@
+-- name: test_create_temporary_table
+create temporary table `t0` (
+    `c1` int,
+    `c2` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1");
+
+create temporary table if not exists `t0` (
+    `c1` int,
+    `c2` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1");
+
+create temporary table `t0` (
+    `c1` int,
+    `c2` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1");
+
+
+show create table `t0`;
+desc `t0`;
+show tables;
+show temporary tables;
+insert into `t0` values (1,1),(2,2),(3,3);
+select * from `t0` order by `c1`,`c2`;
+
+update `t0` set `c2`=`c2`+1 where `c1`=1;
+select * from `t0` order by `c1`,`c2`;
+
+delete from `t0` where `c1` = 1;
+select * from `t0` order by `c1`, `c2`;
+
+drop temporary table `t0`;
+
+-- name: test_create_temporary_table_like
+create table `t0` (
+    `c1` int,
+    `c2` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1", "colocate_with"="${uuid0}");
+insert into `t0` values (1,1),(2,2),(3,3);
+
+create temporary table `t1` like `t0`;
+create temporary table `t1` like `t0`;
+create temporary table if not exists `t1` like `t0`;
+show create table `t1`;
+show tables;
+show temporary tables;
+select * from `t1`;
+
+insert into `t1` values (1,1),(2,2);
+select * from `t1` order by `c1`,`c2`;
+
+
+-- name: test_create_table_as_select
+create table `t0` (
+    `c1` int,
+    `c2` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1", "colocate_with"="${uuid0}");
+insert into `t0` values (1,1),(2,2),(3,3);
+
+create temporary table `t1` as select * from `t0`;
+create temporary table `t1` as select * from `t0`;
+create temporary table if not exists `t1` as select * from `t0`;
+create temporary table `t2` as select /*+ SET_VAR(query_mem_limit=1)*/ * from `t0`;
+show create table `t1`;
+show tables;
+show temporary tables;
+select * from `t1` order by `c1`,`c2`;
+
+insert into `t1` values (4,4),(5,5);
+select * from `t1` order by `c1`,`c2`;
+
+-- name: test_truncate_table 
+create temporary table `t0` (
+    `c1` int,
+    `c2` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1");
+
+insert into `t0` values (1,1),(2,2),(3,3);
+select * from `t0` order by `c1`,`c2`;
+truncate table `t0`;
+select * from `t0` order by `c1`,`c2`;
+
+
+-- name: test_name_conflict
+create table `t` (
+    `c1` int,
+    `c2` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1");
+
+insert into `t` values (1,1),(2,2),(3,3);
+
+create temporary table `t` (
+    `c1` int,
+    `c2` int,
+    `c3` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1");
+
+select * from `t`;
+insert into `t` values (1,1,1),(2,2,2);
+select * from `t` order by `c1`,`c2`,`c3`;
+drop temporary table `t`;
+select * from `t` order by `c1`,`c2`;
+
+-- name: test_ddl_on_temporary_table
+create temporary table `t` (
+    `c1` int,
+    `c2` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1");
+alter table `t` add column `c3` int default null;
+
+-- name: test_submit_task_on_temporary_table
+create temporary table `t` (
+    `c1` int,
+    `c2` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1");
+submit task as insert into `t` select * from `t`;
+submit task as create table `t0` as select * from `t`;
+
+-- name: test_select_out_file
+create temporary table `t` (
+    `c1` int,
+    `c2` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1");
+select * from `t` into outfile "oss://${oss_bucket}/test_temporary_table/${uuid0}/" properties("aws.s3.access_key"="${oss_ak}","aws.s3.secret_key"="${oss_sk}","aws.s3.endpoint"="${oss_endpoint}");
+
+-- name: test_abnormal_drop
+drop temporary table `a`.`b`.`c`;
+drop temporary table `b`.`c`;
+drop temporary table `c`;
+
+-- name: test_drop_rename_db
+create database temp_table_test_${uuid0};
+use temp_table_test_${uuid0};
+create temporary table `t` (
+    `c1` int,
+    `c2` int,
+    `c3` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1");
+insert into `t` values (1,1,1),(2,2,2);
+select * from `t` order by 1,2,3;
+alter database temp_table_test_${uuid0} rename temp_table_test_${uuid0}_new;
+
+select * from temp_table_test_${uuid0}.t order by 1,2,3;
+select * from temp_table_test_${uuid0}_new.t order by 1,2,3;
+drop database temp_table_test_${uuid0}_new;
+drop database temp_table_test_${uuid0}_new force;
+
+-- name: test_create_view
+create temporary table `t` (
+    `c1` int,
+    `c2` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1");
+create view `v1` as select * from `t`;
+create materialized view `mv1` as select * from `t`;
+create materialized view `m1` refresh immediate manual as select * from `t`;
+create table `t1` (
+    `c1` int,
+    `c2` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1");
+create view `v1` as select * from `t1`;
+alter view `v1` as select * from `t`;
+
+-- name: test_export
+create temporary table `t` (
+    `c1` int,
+    `c2` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1");
+export table `t`
+TO "oss://${oss_bucket}/test_temporary_table/${uuid0}/"
+WITH BROKER
+(
+    "fs.oss.accessKeyId" = "${oss_ak}",
+    "fs.oss.accessKeySecret" = "${oss_sk}",
+    "fs.oss.endpoint" = "${oss_endpoint}"
+);
+
+-- name: test_sys_temp_tables
+create temporary table `t` (
+    `c1` int,
+    `c2` int,
+    `c3` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1");
+
+desc information_schema.temp_tables;
+
+select TABLE_CATALOG,TABLE_NAME,TABLE_TYPE,ENGINE,TABLE_ROWS,AVG_ROW_LENGTH,DATA_LENGTH,MAX_DATA_LENGTH,INDEX_LENGTH,DATA_FREE,AUTO_INCREMENT,TABLE_COMMENT from information_schema.temp_tables where `session`=(select session_id());
+
+drop temporary table `t`;
+
+select TABLE_CATALOG,TABLE_NAME,TABLE_TYPE,ENGINE,TABLE_ROWS,AVG_ROW_LENGTH,DATA_LENGTH,MAX_DATA_LENGTH,INDEX_LENGTH,DATA_FREE,AUTO_INCREMENT,TABLE_COMMENT from information_schema.temp_tables where `session`=(select session_id());
+
+
+-- name: test_create_analyze
+create temporary table `t` (
+    `c1` int,
+    `c2` int,
+    `c3` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1");
+create analyze table t;
+
+-- name: test_dynamic_temp_table_config @sequential
+create table `t` (
+    `c1` int,
+    `c2` int,
+    `c3` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1");
+admin set frontend config("enable_experimental_temporary_table"="false");
+create temporary table `tbl1` (
+    `c1` int,
+    `c2` int,
+    `c3` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1");
+create temporary table `tbl2` like `t`;
+create temporary table `tbl3` as select * from `t`;
+admin set frontend config("enable_experimental_temporary_table"="true");
+create temporary table `tbl1` (
+    `c1` int,
+    `c2` int,
+    `c3` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1");
+create temporary table `tbl2` like `t`;
+create temporary table `tbl3` as select * from `t`;
+
+-- name: test_drop_table
+create table `t` (
+    `c1` int,
+    `c2` int,
+    `c3` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1");
+create temporary table `t1` like `t`;
+show temporary tables;
+drop table `t1`;
+show temporary tables;
+create temporary table `t1` like `t`;
+show temporary tables;
+drop temporary table `t1`;
+show temporary tables;

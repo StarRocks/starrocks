@@ -28,14 +28,21 @@ skip_res_cmd = [
     "select connection_id()",
     "select connection_id();",
     ".*explain costs select.*",
+<<<<<<< HEAD
     "EXPLAIN SELECT.*",
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     "rand()",
     "show stats meta",
     "SHOW RESOURCES",
     "show alter table column",
     "select db_id, table_id, column_name,.* from _statistics_.column_statistics.*",
     "SELECT \\* FROM .* LIMIT 1.*",
+<<<<<<< HEAD
     "explain .*",
+=======
+    "explain(?! select).*",
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     "select \\* from t2 where c1 = \\(select c1 from t2 limit 1\\).*",
     "SHOW ALTER TABLE COLUMN ORDER BY CreateTime DESC LIMIT 1.*",
     "show load.*",

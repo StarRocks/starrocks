@@ -16,6 +16,10 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.LiteralExpr;
+<<<<<<< HEAD
+=======
+import com.starrocks.analysis.NullLiteral;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
@@ -27,6 +31,12 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 
 public class PartitionValue implements ParseNode {
+<<<<<<< HEAD
+=======
+    // default partition value for `NULL` value
+    public static final String STARROCKS_DEFAULT_PARTITION_VALUE = "__STARROCKS_DEFAULT_PARTITION__";
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static final PartitionValue MAX_VALUE = new PartitionValue();
 
     private final NodePosition pos;
@@ -54,7 +64,19 @@ public class PartitionValue implements ParseNode {
         return ofDateTime(LocalDateTime.of(date, LocalTime.MIN));
     }
 
+<<<<<<< HEAD
     public LiteralExpr getValue(Type type) throws AnalysisException {
+=======
+    /**
+     * Convert to string value to literal expr which needs to handle null value
+     * @param type partition column type
+     */
+    public LiteralExpr getValue(Type type) throws AnalysisException {
+        if (value != null && value.equalsIgnoreCase(STARROCKS_DEFAULT_PARTITION_VALUE)) {
+            return NullLiteral.create(type);
+        }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (isMax()) {
             return LiteralExpr.createInfinity(type, true);
         } else {

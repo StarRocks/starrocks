@@ -244,8 +244,18 @@ public:
 
     static void may_add_chunk_accumulate_operator(OpFactories& ops, pipeline::PipelineBuilderContext* context, int id);
 
+<<<<<<< HEAD
     const std::vector<ExecNode*>& children() const { return _children; }
 
+=======
+    void set_children(std::vector<ExecNode*>&& children) { _children = std::move(children); }
+
+    const std::vector<ExecNode*>& children() const { return _children; }
+
+    static Status create_vectorized_node(RuntimeState* state, ObjectPool* pool, const TPlanNode& tnode,
+                                         const DescriptorTbl& descs, ExecNode** node);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 protected:
     friend class DataSink;
 
@@ -296,9 +306,12 @@ protected:
     /// Valid to call in or after Prepare().
     bool is_in_subplan() const { return false; }
 
+<<<<<<< HEAD
     static Status create_vectorized_node(RuntimeState* state, ObjectPool* pool, const TPlanNode& tnode,
                                          const DescriptorTbl& descs, ExecNode** node);
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     static Status create_tree_helper(RuntimeState* state, ObjectPool* pool, const std::vector<TPlanNode>& tnodes,
                                      const DescriptorTbl& descs, ExecNode* parent, int* node_idx, ExecNode** root);
 

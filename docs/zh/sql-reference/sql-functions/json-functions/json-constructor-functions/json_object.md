@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # json_object
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 接收键值集合，并返回一个包含这些键值对的 JSON 类型的对象（以下简称JSON对象），并按照键的字典序排列。
 

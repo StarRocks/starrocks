@@ -36,5 +36,9 @@ struct CacheParam {
     bool can_use_multiversion;
     TKeysType::type keys_type;
     std::unordered_set<int32_t> cached_plan_node_ids;
+<<<<<<< HEAD
+=======
+    bool is_lake = false;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 } // namespace starrocks::query_cache

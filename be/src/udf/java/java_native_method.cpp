@@ -59,7 +59,11 @@ private:
 };
 
 jlong JavaNativeMethods::resizeStringData(JNIEnv* env, jclass clazz, jlong columnAddr, jint byteSize) {
+<<<<<<< HEAD
     auto* column = reinterpret_cast<Column*>(columnAddr);
+=======
+    auto* column = reinterpret_cast<Column*>(columnAddr); // NOLINT
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     BinaryColumn* binary_column = nullptr;
     if (column->is_nullable()) {
         binary_column = ColumnHelper::cast_to_raw<TYPE_VARCHAR>(down_cast<NullableColumn*>(column)->data_column());
@@ -79,13 +83,25 @@ jlong JavaNativeMethods::resizeStringData(JNIEnv* env, jclass clazz, jlong colum
 }
 
 jlongArray JavaNativeMethods::getAddrs(JNIEnv* env, jclass clazz, jlong columnAddr) {
+<<<<<<< HEAD
     auto* column = reinterpret_cast<Column*>(columnAddr);
+=======
+    auto* column = reinterpret_cast<Column*>(columnAddr); // NOLINT
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // return fixed array size
     int array_size = 3;
     auto jarr = env->NewLongArray(array_size);
     jlong array[array_size];
     GetColumnAddrVistor vistor(array);
+<<<<<<< HEAD
     column->accept(&vistor);
+=======
+    if (!column->accept(&vistor).ok()) {
+        env->ThrowNew(env->FindClass("java/lang/IllegalArgumentException"),
+                      fmt::format("GetColumnAddr in java native function error").c_str());
+        return jarr;
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     env->SetLongArrayRegion(jarr, 0, array_size, array);
     return jarr;
 }
@@ -98,7 +114,11 @@ jlong JavaNativeMethods::memory_malloc(JNIEnv* env, jclass clazz, jlong bytes) {
 
 void JavaNativeMethods::memory_free(JNIEnv* env, jclass clazz, jlong address) {
     VLOG_ROW << "Freed memory address " << address << ".";
+<<<<<<< HEAD
     free(reinterpret_cast<void*>(address));
+=======
+    free(reinterpret_cast<void*>(address)); // NOLINT
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 } // namespace starrocks

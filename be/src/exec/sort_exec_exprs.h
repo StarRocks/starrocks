@@ -74,6 +74,11 @@ public:
     // Can only be used after calling open()
     const std::vector<ExprContext*>& rhs_ordering_expr_ctxs() const { return _rhs_ordering_expr_ctxs; }
 
+<<<<<<< HEAD
+=======
+    bool is_constant_lhs_ordering() const;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 private:
     ObjectPool* _pool = nullptr;
     // Create two ExprContexts for evaluating over the TupleRows.

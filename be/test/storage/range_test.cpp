@@ -29,7 +29,11 @@ inline std::string to_bitmap_string(const uint8_t* bitmap, size_t n) {
 }
 
 TEST(SparseRangeTest, range_union) {
+<<<<<<< HEAD
     SparseRange range;
+=======
+    SparseRange<> range;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ASSERT_TRUE(range.empty());
     EXPECT_EQ(0, range.span_size());
 
@@ -79,11 +83,19 @@ TEST(SparseRangeTest, range_union) {
 }
 
 TEST(SparseRangeTest, range_intersection) {
+<<<<<<< HEAD
     SparseRange r1({{1, 10}, {20, 40}, {50, 70}});
     SparseRange r2{{0, 100}};
     SparseRange r3{};
     SparseRange r4{{2, 30}};
     SparseRange r5{{1, 20}, {25, 26}, {30, 65}};
+=======
+    SparseRange<> r1({{1, 10}, {20, 40}, {50, 70}});
+    SparseRange<> r2{{0, 100}};
+    SparseRange<> r3{};
+    SparseRange<> r4{{2, 30}};
+    SparseRange<> r5{{1, 20}, {25, 26}, {30, 65}};
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     auto r = r1.intersection(r1);
     EXPECT_EQ(r1, r);
@@ -102,8 +114,13 @@ TEST(SparseRangeTest, range_intersection) {
 }
 
 TEST(SparseRangeIteratorTest, covered_ranges) {
+<<<<<<< HEAD
     SparseRange r1({{0, 10}, {20, 40}, {50, 70}});
     SparseRangeIterator iter = r1.new_iterator();
+=======
+    SparseRange<> r1({{0, 10}, {20, 40}, {50, 70}});
+    SparseRangeIterator<> iter = r1.new_iterator();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     EXPECT_EQ(0, iter.covered_ranges(0));
     for (int i = 1; i <= 20; i++) {
         EXPECT_EQ(1u, iter.covered_ranges(i)) << "i=" << i;
@@ -139,7 +156,11 @@ TEST(SparseRangeIteratorTest, covered_ranges) {
     }
 }
 
+<<<<<<< HEAD
 std::string dump_range_iter(const SparseRangeIterator& iter) {
+=======
+std::string dump_range_iter(const SparseRangeIterator<>& iter) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::stringstream ss;
     if (!iter.has_more()) {
         ss << "[]";
@@ -167,43 +188,76 @@ std::string dump_range_iter(const SparseRangeIterator& iter) {
 TEST(SparseRangeIteratorTest, intersect_test) {
     // test intersection
     {
+<<<<<<< HEAD
         SparseRange r1(0, 4096);
         SparseRangeIterator iter = r1.new_iterator();
         iter.skip(1000);
         SparseRange r2({{0, 10}, {20, 40}, {50, 70}});
         SparseRange r3;
+=======
+        SparseRange<> r1(0, 4096);
+        SparseRangeIterator<> iter = r1.new_iterator();
+        iter.skip(1000);
+        SparseRange<> r2({{0, 10}, {20, 40}, {50, 70}});
+        SparseRange<> r3;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         auto iter2 = iter.intersection(r2, &r3);
         EXPECT_STREQ(dump_range_iter(iter2).data(), "[]");
     }
     {
+<<<<<<< HEAD
         SparseRange r1(0, 4096);
         SparseRangeIterator iter = r1.new_iterator();
         iter.skip(30);
         SparseRange r2({{0, 10}, {20, 40}, {50, 7000}});
         SparseRange r3;
+=======
+        SparseRange<> r1(0, 4096);
+        SparseRangeIterator<> iter = r1.new_iterator();
+        iter.skip(30);
+        SparseRange<> r2({{0, 10}, {20, 40}, {50, 7000}});
+        SparseRange<> r3;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         auto iter2 = iter.intersection(r2, &r3);
         EXPECT_STREQ(dump_range_iter(iter2).data(), "[30,40],[50,4096]");
     }
     {
+<<<<<<< HEAD
         SparseRange r1(0, 4096);
         SparseRangeIterator iter = r1.new_iterator();
         iter.skip(30);
         SparseRange r2({{1000, 1500}, {2000, 25000}, {3000, 7000}});
         SparseRange r3;
+=======
+        SparseRange<> r1(0, 4096);
+        SparseRangeIterator<> iter = r1.new_iterator();
+        iter.skip(30);
+        SparseRange<> r2({{1000, 1500}, {2000, 25000}, {3000, 7000}});
+        SparseRange<> r3;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         auto iter2 = iter.intersection(r2, &r3);
         EXPECT_STREQ(dump_range_iter(iter2).data(), "[1000,1500],[2000,4096]");
     }
     {
+<<<<<<< HEAD
         SparseRange r1(0, 100);
         SparseRangeIterator iter = r1.new_iterator();
         iter.skip(30);
         SparseRange r2({{10, 200}, {2000, 25000}, {3000, 7000}});
         SparseRange r3;
+=======
+        SparseRange<> r1(0, 100);
+        SparseRangeIterator<> iter = r1.new_iterator();
+        iter.skip(30);
+        SparseRange<> r2({{10, 200}, {2000, 25000}, {3000, 7000}});
+        SparseRange<> r3;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         auto iter2 = iter.intersection(r2, &r3);
         EXPECT_STREQ(dump_range_iter(iter2).data(), "[30,100]");
     }
 }
 
+<<<<<<< HEAD
 TEST(SparseRangeIteratorTest, convert_to_bitmap) {
     std::vector<uint8_t> bitmap(100, 0);
     SparseRange r1({{1, 11}, {20, 22}, {24, 25}});
@@ -245,4 +299,6 @@ TEST(SparseRangeIteratorTest, convert_to_bitmap) {
     ASSERT_EQ("111111111100000000011001", to_bitmap_string(bitmap.data(), 24));
 }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // namespace starrocks

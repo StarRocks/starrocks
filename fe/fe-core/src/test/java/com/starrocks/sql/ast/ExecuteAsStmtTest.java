@@ -16,6 +16,7 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.authentication.AuthenticationMgr;
+<<<<<<< HEAD
 import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.qe.ConnectContext;
@@ -23,6 +24,21 @@ import com.starrocks.qe.ExecuteAsExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import mockit.Expectations;
+=======
+import com.starrocks.authentication.UserProperty;
+import com.starrocks.authorization.AuthorizationMgr;
+import com.starrocks.authorization.PrivilegeException;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ExecuteAsExecutor;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.parser.AstBuilder;
+import com.starrocks.sql.parser.SqlParser;
+import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
@@ -49,10 +65,13 @@ public class ExecuteAsStmtTest {
                 minTimes = 0;
                 result = auth;
 
+<<<<<<< HEAD
                 globalStateMgr.isUsingNewPrivilege();
                 minTimes = 0;
                 result = false;
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 GlobalStateMgr.getCurrentState().getAuthorizationMgr().getDefaultRoleIdsByUser((UserIdentity) any);
                 minTimes = 0;
                 result = new HashSet<>();
@@ -66,6 +85,23 @@ public class ExecuteAsStmtTest {
                 result = globalStateMgr;
             }
         };
+<<<<<<< HEAD
+=======
+
+        SqlParser sqlParser = new SqlParser(AstBuilder.getInstance());
+        Analyzer analyzer = new Analyzer(Analyzer.AnalyzerVisitor.getInstance());
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public SqlParser getSqlParser() {
+                return sqlParser;
+            }
+
+            @Mock
+            public Analyzer getAnalyzer() {
+                return analyzer;
+            }
+        };
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -76,6 +112,20 @@ public class ExecuteAsStmtTest {
                 auth.doesUserExist((UserIdentity) any);
                 minTimes = 0;
                 result = true;
+<<<<<<< HEAD
+=======
+
+                auth.getUserProperty(anyString);
+                minTimes = 0;
+                result = new UserProperty();
+            }
+        };
+
+        new Expectations(ctx) {
+            {
+                ctx.updateByUserProperty((UserProperty) any);
+                minTimes = 0;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         };
 

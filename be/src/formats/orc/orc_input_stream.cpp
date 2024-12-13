@@ -14,19 +14,26 @@
 
 #include "formats/orc/orc_input_stream.h"
 
+<<<<<<< HEAD
 #include <set>
 
 #include "cctz/civil_time.h"
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "exprs/cast_expr.h"
 #include "formats/orc/orc_mapping.h"
 #include "fs/fs.h"
 #include "gutil/strings/substitute.h"
+<<<<<<< HEAD
 #include "simd/simd.h"
 #include "util/timezone_utils.h"
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 namespace starrocks {
 
 ORCHdfsFileStream::ORCHdfsFileStream(RandomAccessFile* file, uint64_t length, io::SharedBufferedInputStream* sb_stream)
+<<<<<<< HEAD
         : _file(file), _length(length), _cache_buffer(0), _cache_offset(0), _sb_stream(sb_stream) {}
 
 void ORCHdfsFileStream::prepareCache(PrepareCacheScope scope, uint64_t offset, uint64_t length) {
@@ -81,6 +88,11 @@ const std::string& ORCHdfsFileStream::getName() const {
 }
 
 void ORCHdfsFileStream::doRead(void* buf, uint64_t length, uint64_t offset) {
+=======
+        : _file(file), _length(length), _sb_stream(sb_stream) {}
+
+void ORCHdfsFileStream::read(void* buf, uint64_t length, uint64_t offset) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     if (buf == nullptr) {
         throw orc::ParseError("Buffer is null");
     }
@@ -91,25 +103,73 @@ void ORCHdfsFileStream::doRead(void* buf, uint64_t length, uint64_t offset) {
     }
 }
 
+<<<<<<< HEAD
 void ORCHdfsFileStream::clearIORanges() {
     if (!_sb_stream) return;
     _sb_stream->release();
+=======
+const std::string& ORCHdfsFileStream::getName() const {
+    return _file->filename();
+}
+
+void ORCHdfsFileStream::releaseToOffset(const int64_t offset) {
+    if (!_sb_stream) return;
+    _sb_stream->release_to_offset(offset);
+}
+
+Status ORCHdfsFileStream::setIORanges(const std::vector<io::SharedBufferedInputStream::IORange>& io_ranges,
+                                      const bool coalesce_active_lazy_column) {
+    if (!_sb_stream) {
+        return Status::OK();
+    }
+    return _sb_stream->set_io_ranges(io_ranges, coalesce_active_lazy_column);
+}
+
+bool ORCHdfsFileStream::isAlreadyCollectedInSharedBuffer(const int64_t offset, const int64_t length) const {
+    if (!_sb_stream) {
+        return false;
+    }
+
+    return _sb_stream->find_shared_buffer(offset, length).status().ok();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 void ORCHdfsFileStream::setIORanges(std::vector<IORange>& io_ranges) {
     if (!_sb_stream) return;
+<<<<<<< HEAD
     std::vector<io::SharedBufferedInputStream::IORange> bs_io_ranges;
     bs_io_ranges.reserve(io_ranges.size());
     for (const auto& r : io_ranges) {
         bs_io_ranges.emplace_back(static_cast<int64_t>(r.offset), static_cast<int64_t>(r.size));
     }
     Status st = _sb_stream->set_io_ranges(bs_io_ranges);
+=======
+
+    std::vector<io::SharedBufferedInputStream::IORange> bs_io_ranges;
+    bs_io_ranges.reserve(io_ranges.size());
+    for (const auto& r : io_ranges) {
+        bs_io_ranges.emplace_back(static_cast<int64_t>(r.offset), static_cast<int64_t>(r.size), r.is_active);
+    }
+
+    // default we will coalesce active and lazy column into one io range
+    bool active_lazy_column_coalesce = true;
+    if (isIOAdaptiveCoalesceEnabled() && _lazy_column_coalesce_counter->load(std::memory_order_relaxed) < 0) {
+        active_lazy_column_coalesce = false;
+        _app_stats->orc_stripe_active_lazy_coalesce_seperately++;
+    } else {
+        _app_stats->orc_stripe_active_lazy_coalesce_together++;
+    }
+
+    const Status st = setIORanges(bs_io_ranges, active_lazy_column_coalesce);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     if (!st.ok()) {
         auto msg = strings::Substitute("Failed to setIORanges $0: $1", _file->filename(), st.to_string());
         throw orc::ParseError(msg);
     }
 }
 
+<<<<<<< HEAD
 uint64_t ORCHdfsFileStream::computeCacheFullStripeSize(uint64_t offset, uint64_t length) {
     uint64_t from = _last_stripe_index;
     while (from < _stripes.size()) {
@@ -145,6 +205,10 @@ void ORCHdfsFileStream::setStripes(std::vector<StripeInformation>&& stripes) {
             break;
         }
     }
+=======
+std::atomic<int32_t>* ORCHdfsFileStream::get_lazy_column_coalesce_counter() {
+    return _lazy_column_coalesce_counter;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 } // namespace starrocks

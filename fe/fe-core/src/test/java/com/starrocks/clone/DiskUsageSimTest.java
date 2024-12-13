@@ -59,7 +59,11 @@ public class DiskUsageSimTest {
     @Test
     public void test1SetInitialDiskCapacity() throws InterruptedException {
         PseudoCluster cluster = PseudoCluster.getInstance();
+<<<<<<< HEAD
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
+=======
+        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // test default value
         Assert.assertEquals(PseudoBackend.DEFAULT_TOTA_CAP_B,
                 systemInfoService.getBackend(10001).getTotalCapacityB());
@@ -86,7 +90,11 @@ public class DiskUsageSimTest {
         be.setInitialCapacity(10 * bytesOneGB, 8 * bytesOneGB, 2 * bytesOneGB);
         cluster.runSql("test", "insert into test values (1,\"1\", 1), (2,\"2\",2), (3,\"3\",3);");
         Thread.sleep(PseudoBackend.reportIntervalMs + 1000);
+<<<<<<< HEAD
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
+=======
+        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals(2 * bytesOneGB + PseudoBackend.DEFAULT_SIZE_ON_DISK_PER_ROWSET_B,
                 systemInfoService.getBackend(10001).getDataUsedCapacityB());
         Assert.assertEquals(8 * bytesOneGB - PseudoBackend.DEFAULT_SIZE_ON_DISK_PER_ROWSET_B + 1,
@@ -99,7 +107,11 @@ public class DiskUsageSimTest {
         // this will commit 2 transactions
         PseudoClusterUtils.triggerIncrementalCloneOnce(cluster, 10001);
         Thread.sleep(PseudoBackend.reportIntervalMs + 1000);
+<<<<<<< HEAD
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
+=======
+        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         System.out.println(systemInfoService.getBackend(10001).getDataUsedCapacityB());
         Assert.assertEquals(2 * bytesOneGB + PseudoBackend.DEFAULT_SIZE_ON_DISK_PER_ROWSET_B * 3,
                 systemInfoService.getBackend(10001).getDataUsedCapacityB());
@@ -147,7 +159,11 @@ public class DiskUsageSimTest {
         }
         // check disk usage after clone
         Thread.sleep(PseudoBackend.reportIntervalMs + 1000);
+<<<<<<< HEAD
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
+=======
+        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals(2 * bytesOneGB + PseudoBackend.DEFAULT_SIZE_ON_DISK_PER_ROWSET_B * 6,
                 systemInfoService.getBackend(10001).getDataUsedCapacityB());
         Assert.assertEquals(8 * bytesOneGB - PseudoBackend.DEFAULT_SIZE_ON_DISK_PER_ROWSET_B * 6 + 1,
@@ -157,7 +173,11 @@ public class DiskUsageSimTest {
     @Test
     public void test5DiskUsageAfterTabletDropped() throws SQLException, InterruptedException {
         PseudoCluster cluster = PseudoCluster.getInstance();
+<<<<<<< HEAD
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
+=======
+        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         cluster.runSql("test", "drop table test force");
         Thread.sleep(PseudoBackend.reportIntervalMs + 1000);
         // The disk usage should return to initial state after the only table dropped.

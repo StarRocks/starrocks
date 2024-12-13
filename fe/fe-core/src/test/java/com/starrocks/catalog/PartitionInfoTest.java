@@ -46,7 +46,11 @@ public class PartitionInfoTest {
         { // ListPartitionInfo
             ListPartitionInfo info =
                     new ListPartitionInfo(PartitionType.LIST, Lists.newArrayList(new Column("c0", Type.BIGINT)));
+<<<<<<< HEAD
             info.addPartition(partitionId, dataProperty, replicationNum, inMemory, dataCacheInfo, null, null);
+=======
+            info.addPartition(null, partitionId, dataProperty, replicationNum, inMemory, dataCacheInfo, null, null);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             validatePartitionInfo(info, partitionId);
         }
         { // SinglePartitionInfo

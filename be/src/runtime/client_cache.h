@@ -176,6 +176,12 @@ public:
         }
     }
 
+<<<<<<< HEAD
+=======
+    // Test only
+    ClientConnection() : _client(nullptr) {}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ClientConnection(const ClientConnection&) = delete;
     void operator=(const ClientConnection&) = delete;
 

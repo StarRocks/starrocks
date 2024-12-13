@@ -44,6 +44,10 @@ public:
     void close(RuntimeState* state) override;
 
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
+<<<<<<< HEAD
+=======
+    Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 private:
     StatusOr<ChunkPtr> _pull_spilled_chunk(RuntimeState* state);

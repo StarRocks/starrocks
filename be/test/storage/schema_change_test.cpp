@@ -135,7 +135,11 @@ void SchemaChangeTest::add_value_column_with_index(TCreateTabletReq* request, st
     } else {
         col = SchemaTestHelper::gen_value_column_for_agg_table(column_name, type);
     }
+<<<<<<< HEAD
     col.__set_is_bloom_filter_column(true);
+=======
+    col.__set_has_bitmap_index(true);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     request->tablet_schema.columns.push_back(col);
 }
 
@@ -165,7 +169,11 @@ void SchemaChangeTest::create_dest_tablet_with_index(TTabletId base_tablet_id, T
 
 void SchemaChangeTest::write_data_to_base_tablet(TTabletId tablet_id, Version version) {
     auto tablet = _tablet_mgr->get_tablet(tablet_id);
+<<<<<<< HEAD
     Schema base_schema = *tablet->tablet_schema().schema();
+=======
+    Schema base_schema = *tablet->tablet_schema()->schema();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ChunkPtr base_chunk = ChunkHelper::new_chunk(base_schema, config::vector_chunk_size);
     for (size_t i = 0; i < 4; ++i) {
         ColumnPtr& base_col = base_chunk->get_column_by_index(i);
@@ -220,6 +228,40 @@ void SchemaChangeTest::test_convert_from_varchar(LogicalType type, int type_size
     EXPECT_EQ(expect_val, dst_datum.get<T>());
 }
 
+<<<<<<< HEAD
+=======
+TEST_F(SchemaChangeTest, column_with_row) {
+    int64_t base_tablet_id = 1415001;
+    int64_t new_tablet_id = 1415002;
+
+    create_base_tablet(base_tablet_id, TKeysType::PRIMARY_KEYS, TStorageType::COLUMN_WITH_ROW);
+
+    {
+        auto create_tablet_req = TabletTestHelper::gen_create_tablet_req(new_tablet_id, TKeysType::PRIMARY_KEYS,
+                                                                         TStorageType::COLUMN_WITH_ROW);
+        create_tablet_req.__set_base_tablet_id(base_tablet_id);
+        add_key_column(&create_tablet_req, "k1", TPrimitiveType::INT);
+        add_key_column(&create_tablet_req, "k2", TPrimitiveType::INT);
+        add_value_column(&create_tablet_req, "v0", TPrimitiveType::INT);
+        add_value_column(&create_tablet_req, "v1", TPrimitiveType::INT);
+        add_value_column(&create_tablet_req, "v2", TPrimitiveType::INT);
+        add_value_column(&create_tablet_req, "v3", TPrimitiveType::INT);
+        Status res = _storage_engine->create_tablet(create_tablet_req);
+        ASSERT_TRUE(res.ok()) << res.to_string();
+    }
+
+    TabletSharedPtr base_tablet = _tablet_mgr->get_tablet(base_tablet_id);
+    ASSERT_TRUE(base_tablet != nullptr);
+    ASSERT_EQ(base_tablet->tablet_schema()->columns().back().name(), Schema::FULL_ROW_COLUMN);
+    ASSERT_EQ(base_tablet->tablet_schema()->columns().back().unique_id(), 4);
+
+    TabletSharedPtr new_tablet = _tablet_mgr->get_tablet(new_tablet_id);
+    ASSERT_TRUE(new_tablet != nullptr);
+    ASSERT_EQ(new_tablet->tablet_schema()->columns().back().name(), Schema::FULL_ROW_COLUMN);
+    ASSERT_EQ(new_tablet->tablet_schema()->columns().back().unique_id(), 6);
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 TEST_F(SchemaChangeTest, convert_tinyint_to_varchar) {
     test_convert_to_varchar<int8_t>(TYPE_TINYINT, 1, 127, "127");
 }
@@ -315,7 +357,11 @@ TEST_F(SchemaChangeTest, convert_datetime_to_date) {
     ASSERT_TRUE(st.ok());
 
     int dst_value = (time_tm.tm_year + 1900) * 16 * 32 + (time_tm.tm_mon + 1) * 32 + time_tm.tm_mday;
+<<<<<<< HEAD
     ASSERT_EQ(dst_value, dst_datum.get_uint24());
+=======
+    EXPECT_EQ(dst_value, (int)dst_datum.get_uint24());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 TEST_F(SchemaChangeTest, convert_date_to_datetime) {
@@ -381,15 +427,24 @@ TEST_F(SchemaChangeTest, convert_int_to_date) {
     ASSERT_TRUE(st.ok());
 
     int dst_value = (time_tm.tm_year + 1900) * 16 * 32 + (time_tm.tm_mon + 1) * 32 + time_tm.tm_mday;
+<<<<<<< HEAD
     EXPECT_EQ(dst_value, dst_datum.get_uint24());
+=======
+    EXPECT_EQ(dst_value, (int)dst_datum.get_uint24());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 TEST_F(SchemaChangeTest, convert_int_to_bitmap) {
     auto src_tablet_schema = gen_tablet_schema("c1", "INT", "REPLACE", 4);
     auto dst_tablet_schema = gen_tablet_schema("c2", "OBJECT", "BITMAP_UNION", 8);
 
+<<<<<<< HEAD
     ChunkPtr src_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema(*src_tablet_schema), 4096);
     ChunkPtr dst_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema(*dst_tablet_schema), 4096);
+=======
+    ChunkPtr src_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema(src_tablet_schema), 4096);
+    ChunkPtr dst_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema(dst_tablet_schema), 4096);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ColumnPtr& src_col = src_chunk->get_column_by_index(0);
     ColumnPtr& dst_col = dst_chunk->get_column_by_index(0);
     Field f1 = ChunkHelper::convert_field(0, src_tablet_schema->column(0));
@@ -412,8 +467,13 @@ TEST_F(SchemaChangeTest, convert_varchar_to_hll) {
     auto src_tablet_schema = gen_tablet_schema("c1", "VARCHAR", "REPLACE", 255);
     auto dst_tablet_schema = gen_tablet_schema("c2", "HLL", "HLL_UNION", 8);
 
+<<<<<<< HEAD
     ChunkPtr src_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema(*src_tablet_schema), 4096);
     ChunkPtr dst_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema(*dst_tablet_schema), 4096);
+=======
+    ChunkPtr src_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema(src_tablet_schema), 4096);
+    ChunkPtr dst_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema(dst_tablet_schema), 4096);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ColumnPtr& src_col = src_chunk->get_column_by_index(0);
     ColumnPtr& dst_col = dst_chunk->get_column_by_index(0);
     Field f1 = ChunkHelper::convert_field(0, src_tablet_schema->column(0));
@@ -438,8 +498,13 @@ TEST_F(SchemaChangeTest, convert_int_to_count) {
     auto src_tablet_schema = gen_tablet_schema("c1", "INT", "REPLACE", 4);
     auto dst_tablet_schema = gen_tablet_schema("c2", "BIGINT", "SUM", 8);
 
+<<<<<<< HEAD
     ChunkPtr src_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema(*src_tablet_schema), 4096);
     ChunkPtr dst_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema(*dst_tablet_schema), 4096);
+=======
+    ChunkPtr src_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema(src_tablet_schema), 4096);
+    ChunkPtr dst_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema(dst_tablet_schema), 4096);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ColumnPtr& src_col = src_chunk->get_column_by_index(0);
     ColumnPtr& dst_col = dst_chunk->get_column_by_index(0);
     Field f1 = ChunkHelper::convert_field(0, src_tablet_schema->column(0));
@@ -478,10 +543,17 @@ TEST_F(SchemaChangeTest, schema_change_with_directing_v2) {
 
     TabletSharedPtr base_tablet = _tablet_mgr->get_tablet(base_tablet_id);
     TabletSharedPtr new_tablet = _tablet_mgr->get_tablet(new_tablet_id);
+<<<<<<< HEAD
     const auto& base_tablet_schema = base_tablet->tablet_schema();
     const auto& new_tablet_schema = new_tablet->tablet_schema();
 
     ChunkChanger chunk_changer(base_tablet_schema, new_tablet_schema);
+=======
+    auto base_tablet_schema = base_tablet->tablet_schema();
+    auto new_tablet_schema = new_tablet->tablet_schema();
+
+    ChunkChanger chunk_changer(new_tablet_schema);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     for (size_t i = 0; i < 4; ++i) {
         ColumnMapping* column_mapping = chunk_changer.get_mutable_column_mapping(i);
         column_mapping->ref_column = i;
@@ -524,10 +596,17 @@ TEST_F(SchemaChangeTest, schema_change_with_sorting_v2) {
 
     TabletSharedPtr base_tablet = _tablet_mgr->get_tablet(base_tablet_id);
     TabletSharedPtr new_tablet = _tablet_mgr->get_tablet(new_tablet_id);
+<<<<<<< HEAD
     const auto& base_tablet_schema = base_tablet->tablet_schema();
     const auto& new_tablet_schema = new_tablet->tablet_schema();
 
     ChunkChanger chunk_changer(base_tablet_schema, new_tablet_schema);
+=======
+    auto base_tablet_schema = base_tablet->tablet_schema();
+    auto new_tablet_schema = new_tablet->tablet_schema();
+
+    ChunkChanger chunk_changer(new_tablet_schema);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ColumnMapping* column_mapping = chunk_changer.get_mutable_column_mapping(0);
     column_mapping->ref_column = 1;
     column_mapping = chunk_changer.get_mutable_column_mapping(1);
@@ -571,10 +650,17 @@ TEST_F(SchemaChangeTest, schema_change_with_agg_key_reorder) {
 
     TabletSharedPtr base_tablet = _tablet_mgr->get_tablet(base_tablet_id);
     TabletSharedPtr new_tablet = _tablet_mgr->get_tablet(new_tablet_id);
+<<<<<<< HEAD
     const auto& base_tablet_schema = base_tablet->tablet_schema();
     const auto& new_tablet_schema = new_tablet->tablet_schema();
 
     ChunkChanger chunk_changer(base_tablet_schema, new_tablet_schema);
+=======
+    auto base_tablet_schema = base_tablet->tablet_schema();
+    auto new_tablet_schema = new_tablet->tablet_schema();
+
+    ChunkChanger chunk_changer(new_tablet_schema);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ColumnMapping* column_mapping = chunk_changer.get_mutable_column_mapping(0);
     column_mapping->ref_column = 1;
     column_mapping = chunk_changer.get_mutable_column_mapping(1);
@@ -650,10 +736,17 @@ TEST_F(SchemaChangeTest, schema_change_with_materialized_column_old_style) {
 
     TabletSharedPtr base_tablet = _tablet_mgr->get_tablet(base_tablet_id);
     TabletSharedPtr new_tablet = _tablet_mgr->get_tablet(new_tablet_id);
+<<<<<<< HEAD
     const auto& base_tablet_schema = base_tablet->tablet_schema();
     const auto& new_tablet_schema = new_tablet->tablet_schema();
 
     ChunkChanger chunk_changer(base_tablet_schema, new_tablet_schema);
+=======
+    auto base_tablet_schema = base_tablet->tablet_schema();
+    auto new_tablet_schema = new_tablet->tablet_schema();
+
+    ChunkChanger chunk_changer(new_tablet_schema);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     for (size_t i = 0; i < 4; ++i) {
         ColumnMapping* column_mapping = chunk_changer.get_mutable_column_mapping(i);
         column_mapping->ref_column = i;
@@ -682,11 +775,19 @@ TEST_F(SchemaChangeTest, schema_change_with_materialized_column_old_style) {
 
     Status st =
             Expr::create_expr_tree(chunk_changer.get_object_pool(), t_expr, &ctx, chunk_changer.get_runtime_state());
+<<<<<<< HEAD
     DCHECK(st.ok()) << st.get_error_msg();
     st = ctx->prepare(chunk_changer.get_runtime_state());
     DCHECK(st.ok()) << st.get_error_msg();
     st = ctx->open(chunk_changer.get_runtime_state());
     DCHECK(st.ok()) << st.get_error_msg();
+=======
+    DCHECK(st.ok()) << st.message();
+    st = ctx->prepare(chunk_changer.get_runtime_state());
+    DCHECK(st.ok()) << st.message();
+    st = ctx->open(chunk_changer.get_runtime_state());
+    DCHECK(st.ok()) << st.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     chunk_changer.get_gc_exprs()->insert({3, ctx});
 
@@ -800,7 +901,11 @@ TEST_F(SchemaChangeTest, overlapping_direct_schema_change) {
 
         std::vector<uint32_t> idxs{0, 1, 2, 3};
         ASSERT_OK(delta_writer->write(chunk, idxs.data(), 0, 4));
+<<<<<<< HEAD
         ASSERT_OK(delta_writer->_flush_memtable_async(false));
+=======
+        ASSERT_OK(delta_writer->flush_memtable_async(false));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ASSERT_OK(delta_writer->write(chunk, idxs.data(), 0, 4));
         ASSERT_OK(delta_writer->close());
         ASSERT_OK(delta_writer->commit());
@@ -829,6 +934,10 @@ TEST_F(SchemaChangeTest, overlapping_direct_schema_change) {
     ASSERT_OK(handler.process_alter_tablet(req));
 
     auto new_tablet = _tablet_mgr->get_tablet(new_tablet_id);
+<<<<<<< HEAD
+=======
+    auto new_tablet_schema = new_tablet->tablet_schema();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     auto new_rowset = new_tablet->get_rowset_by_version(version);
     ASSERT_TRUE(new_rowset != nullptr);

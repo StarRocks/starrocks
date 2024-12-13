@@ -95,6 +95,15 @@ public:
         Status status = page_decoder.init();
         ASSERT_TRUE(status.ok());
 
+<<<<<<< HEAD
+=======
+        for (int i = 0; i < size; i++) {
+            CppType index_value;
+            page_decoder.at_index(i, &index_value);
+            ASSERT_EQ(src[i], index_value);
+        }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ASSERT_EQ(0, page_decoder.current_index());
 
         auto column = ChunkHelper::column_from_field_type(Type, false);
@@ -108,6 +117,7 @@ public:
         }
 
         auto column1 = ChunkHelper::column_from_field_type(Type, false);
+<<<<<<< HEAD
         page_decoder.seek_to_position_in_page(0);
         ASSERT_EQ(0, page_decoder.current_index());
 
@@ -115,15 +125,31 @@ public:
         read_range.add(Range(0, size / 3));
         read_range.add(Range(size / 2, (size * 2 / 3)));
         read_range.add(Range((size * 3 / 4), size));
+=======
+        ASSERT_TRUE(page_decoder.seek_to_position_in_page(0).ok());
+        ASSERT_EQ(0, page_decoder.current_index());
+
+        SparseRange<> read_range;
+        read_range.add(Range<>(0, size / 3));
+        read_range.add(Range<>(size / 2, (size * 2 / 3)));
+        read_range.add(Range<>((size * 3 / 4), size));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         size_t read_num = read_range.span_size();
         status = page_decoder.next_batch(read_range, column1.get());
         ASSERT_TRUE(status.ok());
 
         const auto* decoded_data = reinterpret_cast<const CppType*>(column1->raw_data());
+<<<<<<< HEAD
         SparseRangeIterator read_iter = read_range.new_iterator();
         size_t offset = 0;
         while (read_iter.has_more()) {
             Range r = read_iter.next(read_num);
+=======
+        SparseRangeIterator<> read_iter = read_range.new_iterator();
+        size_t offset = 0;
+        while (read_iter.has_more()) {
+            Range<> r = read_iter.next(read_num);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             for (uint i = 0; i < r.span_size(); ++i) {
                 if (src[r.begin() + i] != decoded_data[i + offset]) {
                     FAIL() << "Fail at index " << i + offset << " inserted=" << src[r.begin() + i]
@@ -136,7 +162,11 @@ public:
         // Test Seek within block by ordinal
         for (int i = 0; i < 100; i++) {
             uint32_t seek_off = random() % size;
+<<<<<<< HEAD
             page_decoder.seek_to_position_in_page(seek_off);
+=======
+            ASSERT_TRUE(page_decoder.seek_to_position_in_page(seek_off).ok());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             EXPECT_EQ((int32_t)(seek_off), page_decoder.current_index());
             CppType ret;
             copy_one<Type, PageDecoderType>(&page_decoder, &ret);

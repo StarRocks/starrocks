@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # str_to_map
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 将给定的字符串分割成键值对 (Key-Value pair)，返回包含这些键值对的 Map。
 

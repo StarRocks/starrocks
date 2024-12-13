@@ -50,7 +50,11 @@ public class ExtractCommonPredicateRule extends TopDownScalarOperatorRewriteRule
         List<List<ScalarOperator>> orAndPredicates = Lists.newArrayList();
 
         for (ScalarOperator or : orLists) {
+<<<<<<< HEAD
             orAndPredicates.add(Lists.newArrayList(Utils.extractConjuncts(or)));
+=======
+            orAndPredicates.add(Utils.extractConjuncts(or));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         // extract common predicate

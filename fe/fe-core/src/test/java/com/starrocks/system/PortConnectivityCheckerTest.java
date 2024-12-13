@@ -17,6 +17,10 @@ package com.starrocks.system;
 import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.NetUtils;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.utframe.UtFrameUtils;
@@ -57,7 +61,12 @@ public class PortConnectivityCheckerTest {
                     // Accept incoming connections
                     Socket clientSocket = serverSocket.accept();
                     System.out.println("Accepted connection from " +
+<<<<<<< HEAD
                             clientSocket.getInetAddress() + ":" + clientSocket.getPort());
+=======
+                                    NetUtils.getHostPortInAccessibleFormat(clientSocket.getInetAddress().toString(), 
+                                            clientSocket.getPort()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
                 System.out.println("Stopped listening on port " + port);
             } catch (IOException e) {

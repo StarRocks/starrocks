@@ -14,17 +14,30 @@
 //
 syntax="proto2";
 
+<<<<<<< HEAD
 package starrocks.lake;
 option java_package = "com.starrocks.proto";
 
 import "types.proto";
+=======
+package starrocks;
+option java_package = "com.starrocks.proto";
+
+import "types.proto";
+import "lake_types.proto";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import "status.proto";
 
 option cc_generic_services = true;
 
 message PublishVersionRequest {
     repeated int64 tablet_ids = 1;
+<<<<<<< HEAD
     repeated int64 txn_ids = 2;
+=======
+    // This field is deprecated now, use |txn_infos| instead.
+    repeated int64 txn_ids = 2; // deprecated
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // |base_version| would be |new_version - txn_ids_size()| now, define
     // it explicitly for more clarity and better forward compatibility.
     optional int64 base_version = 3;
@@ -32,8 +45,14 @@ message PublishVersionRequest {
     // Commit time of the transaction to be published.
     // If the size of txn_ids is greater than 1, commit_time should be the commit time of the last transaction.
     // Meansured as the number of seconds since the Epoch, 1970-01-01 00:00:00 +0000 (UTC)
+<<<<<<< HEAD
     optional int64 commit_time = 5;
     optional int64 timeout_ms = 6;
+=======
+    optional int64 commit_time = 5; // deprecated
+    optional int64 timeout_ms = 6;
+    repeated TxnInfoPB txn_infos = 7;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 message PublishVersionResponse {
@@ -45,11 +64,20 @@ message PublishVersionResponse {
 
 message AbortTxnRequest {
     repeated int64 tablet_ids = 1;
+<<<<<<< HEAD
     repeated int64 txn_ids = 2;
     // Whether need to clean up the txn logs
     optional bool skip_cleanup = 3;
     // Should have the save size with txn_ids or 0
     repeated TxnTypePB txn_types = 4;
+=======
+    repeated int64 txn_ids = 2; // deprecated
+    // Whether need to clean up the txn logs
+    optional bool skip_cleanup = 3;
+    // Should have the save size with txn_ids or 0
+    repeated TxnTypePB txn_types = 4; // deprecated
+    repeated TxnInfoPB txn_infos = 5;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 message AbortTxnResponse {
@@ -66,11 +94,48 @@ message DeleteTabletResponse {
     optional StatusPB status = 2;
 }
 
+<<<<<<< HEAD
+=======
+message DeleteTxnLogRequest {
+    repeated int64 tablet_ids = 1;
+    repeated int64 txn_ids = 2; // deprecated 
+    repeated TxnInfoPB txn_infos = 3;
+}
+
+message DeleteTxnLogResponse {
+    optional StatusPB status = 1;
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 message CompactRequest {
     repeated int64 tablet_ids = 1;
     optional int64 txn_id = 2;
     optional int64 version = 3;
     optional int64 timeout_ms = 4;
+<<<<<<< HEAD
+=======
+    optional bool allow_partial_success = 5;
+    optional bytes encryption_meta = 6;
+    optional bool force_base_compaction = 7;
+}
+
+message CompactStat {
+    // basic
+    optional int64 tablet_id = 1;
+
+    // read
+    optional int64 read_time_remote = 11; // ns
+    optional int64 read_bytes_remote = 12;
+    optional int64 read_time_local = 13; // ns
+    optional int64 read_bytes_local = 14;
+
+    // write
+    // TODO
+
+    // other
+    optional int32 sub_task_count = 51; // tablet count in this compaction request
+    optional int32 in_queue_time_sec = 52;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 message CompactResponse {
@@ -81,6 +146,10 @@ message CompactResponse {
     // optional int64 num_output_bytes = 5;
     // optional int64 num_output_rows = 6;
     optional StatusPB status = 7;
+<<<<<<< HEAD
+=======
+    repeated CompactStat compact_stats = 8;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 message DropTableRequest {
@@ -128,8 +197,21 @@ message TabletStatResponse {
 // Rename file txn_{tablet_id}_{txn_id} to vtxn_{tablet_id}_{version}
 message PublishLogVersionRequest {
     repeated int64 tablet_ids = 1;
+<<<<<<< HEAD
     optional int64 txn_id = 2;
     optional int64 version = 3;
+=======
+    optional int64 txn_id = 2; // deprecated
+    optional int64 version = 3;
+    optional TxnInfoPB txn_info = 4;
+}
+
+message PublishLogVersionBatchRequest {
+    repeated int64 tablet_ids = 1;
+    repeated int64 txn_ids = 2; // deprecated
+    repeated int64 versions = 3;
+    repeated TxnInfoPB txn_infos = 4;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 message PublishLogVersionResponse {
@@ -243,6 +325,11 @@ message VacuumFullResponse {
 service LakeService {
     rpc publish_version(PublishVersionRequest) returns (PublishVersionResponse);
     rpc publish_log_version(PublishLogVersionRequest) returns (PublishLogVersionResponse);
+<<<<<<< HEAD
+=======
+    rpc publish_log_version_batch(PublishLogVersionBatchRequest) returns (PublishLogVersionResponse);
+    rpc delete_txn_log(DeleteTxnLogRequest) returns (DeleteTxnLogResponse);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     rpc abort_txn(AbortTxnRequest) returns (AbortTxnResponse);
     rpc compact(CompactRequest) returns (CompactResponse);
     rpc delete_tablet(DeleteTabletRequest) returns (DeleteTabletResponse);

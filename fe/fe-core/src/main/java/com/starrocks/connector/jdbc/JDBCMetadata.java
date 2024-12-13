@@ -16,6 +16,7 @@ package com.starrocks.connector.jdbc;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+<<<<<<< HEAD
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.JDBCResource;
@@ -25,6 +26,23 @@ import com.starrocks.common.DdlException;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.PartitionInfo;
+=======
+import com.starrocks.analysis.DateLiteral;
+import com.starrocks.analysis.IntLiteral;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.JDBCResource;
+import com.starrocks.catalog.JDBCTable;
+import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Type;
+import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
+import com.starrocks.connector.ConnectorMetadatRequestContext;
+import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.ConnectorTableId;
+import com.starrocks.connector.PartitionInfo;
+import com.starrocks.connector.PartitionUtil;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
@@ -44,8 +62,18 @@ public class JDBCMetadata implements ConnectorMetadata {
     private static Logger LOG = LogManager.getLogger(JDBCMetadata.class);
 
     private Map<String, String> properties;
+<<<<<<< HEAD
     private String catalogName;
     private JDBCSchemaResolver schemaResolver;
+=======
+    JDBCSchemaResolver schemaResolver;
+    private String catalogName;
+
+    private JDBCMetaCache<JDBCTableName, List<String>> partitionNamesCache;
+    private JDBCMetaCache<JDBCTableName, Integer> tableIdCache;
+    private JDBCMetaCache<JDBCTableName, Table> tableInstanceCache;
+    private JDBCMetaCache<JDBCTableName, List<Partition>> partitionInfoCache;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     private HikariDataSource dataSource;
 
@@ -57,15 +85,33 @@ public class JDBCMetadata implements ConnectorMetadata {
         this.properties = properties;
         this.catalogName = catalogName;
         try {
+<<<<<<< HEAD
             Class.forName(properties.get(JDBCResource.DRIVER_CLASS));
         } catch (ClassNotFoundException e) {
             LOG.warn(e.getMessage());
+=======
+            String driverName = getDriverName();
+            Class.forName(driverName);
+        } catch (ClassNotFoundException e) {
+            LOG.warn(e.getMessage(), e);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             throw new StarRocksConnectorException("doesn't find class: " + e.getMessage());
         }
         if (properties.get(JDBCResource.DRIVER_CLASS).toLowerCase().contains("mysql")) {
             schemaResolver = new MysqlSchemaResolver();
         } else if (properties.get(JDBCResource.DRIVER_CLASS).toLowerCase().contains("postgresql")) {
             schemaResolver = new PostgresSchemaResolver();
+<<<<<<< HEAD
+=======
+        } else if (properties.get(JDBCResource.DRIVER_CLASS).toLowerCase().contains("mariadb")) {
+            schemaResolver = new MysqlSchemaResolver();
+        } else if (properties.get(JDBCResource.DRIVER_CLASS).toLowerCase().contains("clickhouse")) {
+            schemaResolver = new ClickhouseSchemaResolver(properties);
+        } else if (properties.get(JDBCResource.DRIVER_CLASS).toLowerCase().contains("oracle")) {
+            schemaResolver = new OracleSchemaResolver();
+        } else if (properties.get(JDBCResource.DRIVER_CLASS).toLowerCase().contains("sqlserver")) {
+            schemaResolver = new SqlServerSchemaResolver();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } else {
             LOG.warn("{} not support yet", properties.get(JDBCResource.DRIVER_CLASS));
             throw new StarRocksConnectorException(properties.get(JDBCResource.DRIVER_CLASS) + " not support yet");
@@ -75,14 +121,59 @@ public class JDBCMetadata implements ConnectorMetadata {
         }
         this.dataSource = dataSource;
         checkAndSetSupportPartitionInformation();
+<<<<<<< HEAD
+=======
+        createMetaAsyncCacheInstances(properties);
+    }
+
+    private String getDriverName() {
+        String driverName = properties.get(JDBCResource.DRIVER_CLASS);
+        // use org.mariadb.jdbc.Driver for mysql because of gpl protocol
+        if (driverName.contains("mysql")) {
+            driverName = "org.mariadb.jdbc.Driver";
+        }
+        return driverName;
+    }
+
+    String getJdbcUrl() {
+        String jdbcUrl = properties.get(JDBCResource.URI);
+        // use org.mariadb.jdbc.Driver for mysql because of gpl protocol
+        if (jdbcUrl.startsWith("jdbc:mysql")) {
+            jdbcUrl = jdbcUrl.replaceFirst("jdbc:mysql", "jdbc:mariadb");
+        }
+        return jdbcUrl;
+    }
+
+    private void createMetaAsyncCacheInstances(Map<String, String> properties) {
+        partitionNamesCache = new JDBCMetaCache<>(properties, false);
+        tableIdCache = new JDBCMetaCache<>(properties, true);
+        tableInstanceCache = new JDBCMetaCache<>(properties, false);
+        partitionInfoCache = new JDBCMetaCache<>(properties, false);
+    }
+
+    public void checkAndSetSupportPartitionInformation() {
+        try (Connection connection = getConnection()) {
+            schemaResolver.checkAndSetSupportPartitionInformation(connection);
+        } catch (SQLException e) {
+            throw new StarRocksConnectorException(
+                    "check and set support partition information for JDBC catalog fail!", e);
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     private HikariDataSource createHikariDataSource() {
         HikariConfig config = new HikariConfig();
+<<<<<<< HEAD
         config.setJdbcUrl(properties.get(JDBCResource.URI));
         config.setUsername(properties.get(JDBCResource.USER));
         config.setPassword(properties.get(JDBCResource.PASSWORD));
         config.setDriverClassName(properties.get(JDBCResource.DRIVER_CLASS));
+=======
+        config.setJdbcUrl(getJdbcUrl());
+        config.setUsername(properties.get(JDBCResource.USER));
+        config.setPassword(properties.get(JDBCResource.PASSWORD));
+        config.setDriverClassName(getDriverName());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         config.setMaximumPoolSize(Config.jdbc_connection_pool_size);
         config.setMinimumIdle(Config.jdbc_minimum_idle_connections);
         config.setIdleTimeout(Config.jdbc_connection_idle_timeout_ms);
@@ -93,6 +184,7 @@ public class JDBCMetadata implements ConnectorMetadata {
         return dataSource.getConnection();
     }
 
+<<<<<<< HEAD
     public void checkAndSetSupportPartitionInformation() {
         try (Connection connection = getConnection()) {
             schemaResolver.checkAndSetSupportPartitionInformation(connection);
@@ -101,6 +193,8 @@ public class JDBCMetadata implements ConnectorMetadata {
         }
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public Table.TableType getTableType() {
         return Table.TableType.JDBC;
@@ -111,7 +205,11 @@ public class JDBCMetadata implements ConnectorMetadata {
         try (Connection connection = getConnection()) {
             return Lists.newArrayList(schemaResolver.listSchemas(connection));
         } catch (SQLException e) {
+<<<<<<< HEAD
             throw new StarRocksConnectorException(e.getMessage());
+=======
+            throw new StarRocksConnectorException("list db names for JDBC catalog fail!", e);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -140,12 +238,17 @@ public class JDBCMetadata implements ConnectorMetadata {
                 return list.build();
             }
         } catch (SQLException e) {
+<<<<<<< HEAD
             throw new StarRocksConnectorException(e.getMessage());
+=======
+            throw new StarRocksConnectorException("list table names for JDBC catalog fail!", e);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
     @Override
     public Table getTable(String dbName, String tblName) {
+<<<<<<< HEAD
         try (Connection connection = getConnection()) {
             ResultSet columnSet = schemaResolver.getColumns(connection, dbName, tblName);
             List<Column> fullSchema = schemaResolver.convertToSRTable(columnSet);
@@ -178,6 +281,44 @@ public class JDBCMetadata implements ConnectorMetadata {
         } catch (SQLException e) {
             throw new StarRocksConnectorException(e.getMessage());
         }
+=======
+        JDBCTableName jdbcTable = new JDBCTableName(null, dbName, tblName);
+        return tableInstanceCache.get(jdbcTable,
+                k -> {
+                    try (Connection connection = getConnection()) {
+                        ResultSet columnSet = schemaResolver.getColumns(connection, dbName, tblName);
+                        List<Column> fullSchema = schemaResolver.convertToSRTable(columnSet);
+                        List<Column> partitionColumns = Lists.newArrayList();
+                        if (schemaResolver.isSupportPartitionInformation()) {
+                            partitionColumns = listPartitionColumns(dbName, tblName, fullSchema);
+                        }
+                        if (fullSchema.isEmpty()) {
+                            return null;
+                        }
+
+                        Integer tableId = tableIdCache.getPersistentCache(jdbcTable,
+                                j -> ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt());
+                        return schemaResolver.getTable(tableId, tblName, fullSchema,
+                                partitionColumns, dbName, catalogName, properties);
+                    } catch (SQLException | DdlException e) {
+                        LOG.warn("get table for JDBC catalog fail!", e);
+                        return null;
+                    }
+                });
+    }
+
+    @Override
+    public List<String> listPartitionNames(String databaseName, String tableName, ConnectorMetadatRequestContext requestContext) {
+        return partitionNamesCache.get(new JDBCTableName(null, databaseName, tableName),
+                k -> {
+                    try (Connection connection = getConnection()) {
+                        return schemaResolver.listPartitionNames(connection, databaseName, tableName);
+                    } catch (SQLException e) {
+                        throw new StarRocksConnectorException("list partition names for JDBC catalog fail!",
+                                e);
+                    }
+                });
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public List<Column> listPartitionColumns(String databaseName, String tableName, List<Column> fullSchema) {
@@ -185,19 +326,29 @@ public class JDBCMetadata implements ConnectorMetadata {
             Set<String> partitionColumnNames = schemaResolver.listPartitionColumns(connection, databaseName, tableName)
                     .stream().map(String::toLowerCase).collect(Collectors.toSet());
             if (!partitionColumnNames.isEmpty()) {
+<<<<<<< HEAD
                 return fullSchema.stream().filter(column -> partitionColumnNames.contains(column.getName().toLowerCase()))
+=======
+                return fullSchema.stream()
+                        .filter(column -> partitionColumnNames.contains(column.getName().toLowerCase()))
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         .collect(Collectors.toList());
             } else {
                 return Lists.newArrayList();
             }
         } catch (SQLException | StarRocksConnectorException e) {
+<<<<<<< HEAD
             LOG.warn(e.getMessage());
+=======
+            LOG.warn("list partition columns for JDBC catalog fail!", e);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return Lists.newArrayList();
         }
     }
 
     @Override
     public List<PartitionInfo> getPartitions(Table table, List<String> partitionNames) {
+<<<<<<< HEAD
         try (Connection connection = getConnection()) {
             List<Partition> partitions = schemaResolver.getPartitions(connection, table);
             ImmutableList.Builder<PartitionInfo> list = ImmutableList.builder();
@@ -216,4 +367,58 @@ public class JDBCMetadata implements ConnectorMetadata {
         }
     }
 
+=======
+        JDBCTable jdbcTable = (JDBCTable) table;
+        List<Partition> partitions = partitionInfoCache.get(
+                new JDBCTableName(null, jdbcTable.getCatalogDBName(), jdbcTable.getName()),
+                k -> {
+                    try (Connection connection = getConnection()) {
+                        List<Partition> partitionsForCache = schemaResolver.getPartitions(connection, table);
+                        if (!partitionsForCache.isEmpty()) {
+                            return partitionsForCache;
+                        }
+                        return Lists.newArrayList();
+                    } catch (SQLException e) {
+                        throw new StarRocksConnectorException("get partitions for JDBC catalog fail!", e);
+                    }
+                });
+
+        String maxInt = IntLiteral.createMaxValue(Type.INT).getStringValue();
+        String maxDate = DateLiteral.createMaxValue(Type.DATE).getStringValue();
+
+        ImmutableList.Builder<PartitionInfo> list = ImmutableList.builder();
+        if (partitions.isEmpty()) {
+            return Lists.newArrayList();
+        }
+        for (Partition partition : partitions) {
+            String partitionName = partition.getPartitionName();
+            if (partitionNames != null && partitionNames.contains(partitionName)) {
+                list.add(partition);
+            }
+            // Determine boundary value
+            if (partitionName.equalsIgnoreCase(PartitionUtil.MYSQL_PARTITION_MAXVALUE)) {
+                if (partitionNames != null && (partitionNames.contains(maxInt)
+                        || partitionNames.contains(maxDate))) {
+                    list.add(partition);
+                }
+            }
+        }
+        return list.build();
+    }
+
+    @Override
+    public void refreshTable(String srDbName, Table table, List<String> partitionNames, boolean onlyCachedPartitions) {
+        JDBCTable jdbcTable = (JDBCTable) table;
+        JDBCTableName jdbcTableName = new JDBCTableName(null, jdbcTable.getCatalogDBName(), jdbcTable.getName());
+        if (!onlyCachedPartitions) {
+            tableInstanceCache.invalidate(jdbcTableName);
+        }
+        partitionNamesCache.invalidate(jdbcTableName);
+        partitionInfoCache.invalidate(jdbcTableName);
+    }
+
+    public void refreshCache(Map<String, String> properties) {
+        createMetaAsyncCacheInstances(properties);
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

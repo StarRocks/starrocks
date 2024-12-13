@@ -14,17 +14,25 @@
 
 package com.starrocks.http;
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.DdlException;
 import com.starrocks.http.rest.TransactionLoadAction;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.system.ComputeNode;
+<<<<<<< HEAD
+=======
+import com.starrocks.thrift.TNetworkAddress;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import mockit.Mock;
 import mockit.MockUp;
+<<<<<<< HEAD
 import okhttp3.MediaType;
 import okhttp3.Request;
 import okhttp3.RequestBody;
@@ -40,13 +48,25 @@ import org.junit.Test;
 import java.io.IOException;
 
 public class TransactionLoadActionOnSharedDataClusterTest extends StarRocksHttpTestCase {
+=======
+import org.junit.AfterClass;
+import org.junit.BeforeClass;
+
+import static org.junit.Assert.assertTrue;
+
+public class TransactionLoadActionOnSharedDataClusterTest extends TransactionLoadActionTest {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     private static HttpServer beServer;
     private static int TEST_HTTP_PORT = 0;
 
     @Override
+<<<<<<< HEAD
     @Before
     public void setUp() {
+=======
+    protected void doSetUp() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         new MockUp<RunMode>() {
             @Mock
             public RunMode getCurrentRunMode() {
@@ -54,19 +74,27 @@ public class TransactionLoadActionOnSharedDataClusterTest extends StarRocksHttpT
             }
         };
 
+<<<<<<< HEAD
 
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ComputeNode computeNode = new ComputeNode(1234, "localhost", 8040);
         computeNode.setBePort(9300);
         computeNode.setAlive(true);
         computeNode.setHttpPort(TEST_HTTP_PORT);
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentSystemInfo().addComputeNode(computeNode);
+=======
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addComputeNode(computeNode);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         new MockUp<GlobalStateMgr>() {
             @Mock
             boolean isLeader() {
                 return true;
             }
         };
+<<<<<<< HEAD
     }
 
     @After
@@ -76,17 +104,56 @@ public class TransactionLoadActionOnSharedDataClusterTest extends StarRocksHttpT
 
     @BeforeClass
     public static void initBeServer() throws IllegalArgException, InterruptedException {
+=======
+
+        new MockUp<TransactionLoadAction>() {
+
+            @Mock
+            public void redirectTo(BaseRequest request,
+                                   BaseResponse response,
+                                   TNetworkAddress addr) throws DdlException {
+                TransactionResult result = new TransactionResult();
+                result.setOKMsg("mock redirect to BE");
+                response.setContentType(JSON.toString());
+                response.appendContent(result.toJson());
+                writeResponse(request, response);
+            }
+
+        };
+    }
+
+    /**
+     * we need close be server after junit test
+     */
+    @AfterClass
+    public static void close() {
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                .dropComputeNode(new ComputeNode(1234, "localhost", HTTP_PORT));
+        beServer.shutDown();
+    }
+
+    @BeforeClass
+    public static void initBeServer() throws Exception {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         TEST_HTTP_PORT = detectUsableSocketPort();
         beServer = new HttpServer(TEST_HTTP_PORT);
         BaseAction ac = new BaseAction(beServer.getController()) {
 
             @Override
+<<<<<<< HEAD
             public void execute(BaseRequest request, BaseResponse response) throws DdlException {
+=======
+            public void execute(BaseRequest request, BaseResponse response) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 TransactionResult resp = new TransactionResult();
                 response.appendContent(resp.toJson());
                 writeResponse(request, response, HttpResponseStatus.OK);
             }
         };
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         beServer.getController().registerHandler(HttpMethod.POST, "/api/transaction/begin", ac);
         beServer.getController().registerHandler(HttpMethod.POST, "/api/transaction/prepare", ac);
         beServer.getController().registerHandler(HttpMethod.POST, "/api/transaction/commit", ac);
@@ -96,6 +163,7 @@ public class TransactionLoadActionOnSharedDataClusterTest extends StarRocksHttpT
         while (!beServer.isStarted()) {
             Thread.sleep(500);
         }
+<<<<<<< HEAD
     }
 
     @Test
@@ -354,4 +422,8 @@ public class TransactionLoadActionOnSharedDataClusterTest extends StarRocksHttpT
         Assert.assertEquals(false, res.contains("OK"));
     }
 
+=======
+        assertTrue(beServer.isStarted());
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

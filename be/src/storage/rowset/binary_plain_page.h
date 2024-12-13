@@ -214,7 +214,11 @@ public:
 
     Status next_batch(size_t* count, Column* dst) override;
 
+<<<<<<< HEAD
     Status next_batch(const SparseRange& range, Column* dst) override;
+=======
+    Status next_batch(const SparseRange<>& range, Column* dst) override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     bool append_range(uint32_t idx, uint32_t end, Column* dst) const;
 

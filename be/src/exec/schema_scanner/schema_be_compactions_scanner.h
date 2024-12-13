@@ -21,7 +21,11 @@
 
 namespace starrocks {
 
+<<<<<<< HEAD
 struct CompactionInfo {
+=======
+struct CompactionInformation {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     int64_t candidates_num = 0;
     int64_t base_compaction_concurrency = 0;
     int64_t cumulative_compaction_concurrency = 0;
@@ -43,7 +47,11 @@ private:
     Status fill_chunk(ChunkPtr* chunk);
 
     int64_t _be_id{0};
+<<<<<<< HEAD
     std::vector<CompactionInfo> _infos;
+=======
+    std::vector<CompactionInformation> _infos;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     size_t _cur_idx{0};
     static SchemaScanner::ColumnDesc _s_columns[];
 };

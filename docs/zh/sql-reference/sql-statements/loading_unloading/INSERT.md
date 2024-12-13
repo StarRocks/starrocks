@@ -6,12 +6,17 @@ displayed_sidebar: docs
 
 ## 功能
 
+<<<<<<< HEAD
 向 StarRocks 表中插入或覆盖写入数据。关于该导入数据方式适用的场景请参考 [INSERT INTO 导入](../../../loading/InsertInto.md)。
+=======
+向 StarRocks 表中插入或覆盖写入数据。关于该种导入数据方式适用的场景请参考 [INSERT INTO 导入](../../../loading/InsertInto.md)。
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 您可以通过 [SUBMIT TASK](ETL/SUBMIT_TASK.md) 创建异步 INSERT 任务。
 
 ## 语法
 
+<<<<<<< HEAD
 ```SQL
 INSERT { INTO | OVERWRITE } [db_name.]<table_name>
 [ PARTITION (<partition_name> [, ...) ]
@@ -21,6 +26,26 @@ INSERT { INTO | OVERWRITE } [db_name.]<table_name>
 { VALUES ( { <expression> | DEFAULT }[, ...] )
   | <query> }
 ```
+=======
+- **导入**:
+
+  ```sql
+  INSERT { INTO | OVERWRITE } [db_name.]<table_name>
+  [ PARTITION (<partition_name> [, ...] ) ]
+  [ TEMPORARY PARTITION (<temporary_partition_name> [, ...] ) ]
+  [ WITH LABEL <label>]
+  [ (<column_name>[, ...]) ]
+  { VALUES ( { <expression> | DEFAULT } [, ...] ) | <query> }
+  ```
+
+- **导出**:
+
+  ```sql
+  INSERT INTO FILES()
+  [ WITH LABEL <label> ]
+  { VALUES ( { <expression> | DEFAULT } [, ...] ) | <query> }
+  ```
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ## 参数说明
 
@@ -31,11 +56,20 @@ INSERT { INTO | OVERWRITE } [db_name.]<table_name>
 | table_name  | 导入数据的目标表。可以为 `db_name.table_name` 形式。         |
 | PARTITION  | 导入的目标分区。此参数必须是目标表中存在的分区，多个分区名称用逗号（,）分隔。如果指定该参数，数据只会被导入相应分区内。如果未指定，则默认将数据导入至目标表的所有分区。 |
 | TEMPORARY PARTITION | 指定要把数据导入哪些[临时分区](../../../table_design/data_distribution/Temporary_partition.md)。|
+<<<<<<< HEAD
 | label       | 导入作业的标识，数据库内唯一。如果未指定，StarRocks 会自动为作业生成一个 Label。建议您指定 Label。否则，如果当前导入作业因网络错误无法返回结果，您将无法得知该导入操作是否成功。如果指定了 Label，可以通过 SQL 命令 `SHOW LOAD WHERE label="label";` 查看任务结果。关于 Label 命名限制，参考[系统限制](../../System_limit.md)。 |
 | column_name | 导入的目标列，必须是目标表中存在的列。该参数的对应关系与列名无关，但与其顺序一一对应。如果不指定目标列，默认为目标表中的所有列。如果源表中的某个列在目标列不存在，则写入默认值。如果当前列没有默认值，导入作业会失败。如果查询语句的结果列类型与目标列的类型不一致，会进行隐式转化，如果不能进行转化，那么 INSERT INTO 语句会报语法解析错误。 |
 | expression  | 表达式，用以为对应列赋值。                                   |
 | DEFAULT     | 为对应列赋予默认值。                                         |
 | query       | 查询语句，查询的结果会导入至目标表中。查询语句支持任意 StarRocks 支持的 SQL 查询语法。 |
+=======
+| label       | 导入作业的标识，数据库内唯一。如果未指定，StarRocks 会自动为作业生成一个 Label。建议您指定 Label。否则，如果当前导入作业因网络错误无法返回结果，您将无法得知该导入操作是否成功。如果指定了 Label，可以通过 SQL 命令 `SHOW LOAD WHERE label="label";` 查看任务结果。关于 Label 命名要求，参见[系统限制](../../System_limit.md)。 |
+| column_name | 导入的目标列，必须是目标表中存在的列。该参数的对应关系与列名无关，但与其顺序一一对应。如果不指定目标列，默认为目标表中的所有列。如果源表中的某个列在目标列不存在，则写入默认值。如果当前列没有默认值，导入作业会失败。如果查询语句的结果列类型与目标列的类型不一致，会进行隐式转化，如果不能进行转化，那么 INSERT INTO 语句会报语法解析错误。<br />**说明**<br />自 v3.3.1 起，INSERT INTO 导入主键表时指定 Column List 会执行部分列更新（而在先前版本中，指定 Column List 仍然导致 Full Upsert）。如不指定 Column List，系统执行 Full Upsert。 |
+| expression  | 表达式，用以为对应列赋值。                                   |
+| DEFAULT     | 为对应列赋予默认值。                                         |
+| query       | 查询语句，查询的结果会导入至目标表中。查询语句支持任意 StarRocks 支持的 SQL 查询语法。 |
+| FILES()       | 表函数 [FILES()](../../sql-functions/table-functions/files.md)。您可以通过该函数将数据导出至远端存储。更多信息，请参考 [使用 INSERT INTO FILES() 导出数据](../../../unloading/unload_using_insert_into_files.md). |
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ## 注意事项
 

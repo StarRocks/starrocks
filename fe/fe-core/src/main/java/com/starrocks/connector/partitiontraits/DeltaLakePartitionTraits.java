@@ -16,7 +16,10 @@ package com.starrocks.connector.partitiontraits;
 
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.DeltaLakePartitionKey;
+<<<<<<< HEAD
 import com.starrocks.catalog.DeltaLakeTable;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionKey;
 
@@ -31,11 +34,14 @@ public class DeltaLakePartitionTraits extends DefaultTraits {
     }
 
     @Override
+<<<<<<< HEAD
     public String getDbName() {
         return ((DeltaLakeTable) table).getDbName();
     }
 
     @Override
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public boolean isSupportPCTRefresh() {
         return false;
     }

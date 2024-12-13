@@ -12,21 +12,41 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 #include "exprs/math_functions.h"
+=======
+#ifdef __AVX2__
+#include <immintrin.h>
+#endif
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 #include <runtime/decimalv3.h>
 #include <types/logical_type.h>
 #include <util/decimal_types.h>
 
 #include <cmath>
+<<<<<<< HEAD
+=======
+#include <random>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 #include "column/array_column.h"
 #include "column/column_helper.h"
 #include "exprs/expr.h"
+<<<<<<< HEAD
+=======
+#include "exprs/math_functions.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "util/time.h"
 
 namespace starrocks {
 
+<<<<<<< HEAD
+=======
+static std::uniform_real_distribution<double> distribution(0.0, 1.0);
+static thread_local std::mt19937_64 generator{std::random_device{}()};
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 // ==== basic check rules =========
 DEFINE_UNARY_FN_WITH_IMPL(NegativeCheck, value) {
     return value < 0;
@@ -231,7 +251,11 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(binImpl, v) {
     do {
         result[--index] = '0' + (n & 1);
     } while (n >>= 1);
+<<<<<<< HEAD
     return std::string(result + index, max_bits - index);
+=======
+    return {result + index, max_bits - index};
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 StatusOr<ColumnPtr> MathFunctions::bin(FunctionContext* context, const Columns& columns) {
@@ -289,6 +313,10 @@ DEFINE_MATH_UNARY_WITH_OUTPUT_INF_NAN_CHECK_FN_WITH_IMPL(exp, TYPE_DOUBLE, TYPE_
 DEFINE_MATH_UNARY_WITH_NON_POSITIVE_CHECK_FN_WITH_IMPL(ln, TYPE_DOUBLE, TYPE_DOUBLE, std::log);
 DEFINE_MATH_UNARY_WITH_NON_POSITIVE_CHECK_FN_WITH_IMPL(log10, TYPE_DOUBLE, TYPE_DOUBLE, std::log10);
 DEFINE_MATH_UNARY_WITH_NEGATIVE_CHECK_FN_WITH_IMPL(sqrt, TYPE_DOUBLE, TYPE_DOUBLE, std::sqrt);
+<<<<<<< HEAD
+=======
+DEFINE_MATH_UNARY_WITH_OUTPUT_NAN_CHECK_FN_WITH_IMPL(cbrt, TYPE_DOUBLE, TYPE_DOUBLE, std::cbrt);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 DEFINE_BINARY_FUNCTION_WITH_IMPL(truncateImpl, l, r) {
     return MathFunctions::double_round(l, r, false, true);
@@ -413,7 +441,11 @@ std::string MathFunctions::decimal_to_base(int64_t src_num, int8_t dest_base) {
     // Max number of digits of any base (base 2 gives max digits), plus sign.
     const size_t max_digits = sizeof(uint64_t) * 8 + 1;
     char buf[max_digits];
+<<<<<<< HEAD
     int32_t result_len = 0;
+=======
+    size_t result_len = 0;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     int32_t buf_index = max_digits - 1;
     uint64_t temp_num;
     if (dest_base < 0) {
@@ -436,7 +468,11 @@ std::string MathFunctions::decimal_to_base(int64_t src_num, int8_t dest_base) {
         buf[buf_index] = '-';
         ++result_len;
     }
+<<<<<<< HEAD
     return std::string(buf + max_digits - result_len, result_len);
+=======
+    return {buf + max_digits - result_len, result_len};
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 template <DecimalRoundRule rule, bool keep_scale>
@@ -694,6 +730,7 @@ StatusOr<ColumnPtr> MathFunctions::conv_string(FunctionContext* context, const C
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
+<<<<<<< HEAD
 static uint32_t generate_randoms(ColumnBuilder<TYPE_DOUBLE>* result, int32_t num_rows, uint32_t seed) {
     for (int i = 0; i < num_rows; ++i) {
         seed = ::rand_r(&seed);
@@ -706,6 +743,10 @@ static uint32_t generate_randoms(ColumnBuilder<TYPE_DOUBLE>* result, int32_t num
 Status MathFunctions::rand_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope == FunctionContext::THREAD_LOCAL) {
         int64_t seed = 0;
+=======
+Status MathFunctions::rand_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope == FunctionContext::THREAD_LOCAL) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (context->get_num_args() == 1) {
             // This is a call to RandSeed, initialize the seed
             // TODO: should we support non-constant seed?
@@ -722,11 +763,16 @@ Status MathFunctions::rand_prepare(FunctionContext* context, FunctionContext::Fu
             }
 
             int64_t seed_value = ColumnHelper::get_const_value<TYPE_BIGINT>(seed_column);
+<<<<<<< HEAD
             seed = seed_value;
         } else {
             seed = GetCurrentTimeNanos();
         }
         context->set_function_state(scope, reinterpret_cast<void*>(seed));
+=======
+            generator.seed(seed_value);
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     return Status::OK();
 }
@@ -737,12 +783,19 @@ Status MathFunctions::rand_close(FunctionContext* context, FunctionContext::Func
 
 StatusOr<ColumnPtr> MathFunctions::rand(FunctionContext* context, const Columns& columns) {
     int32_t num_rows = ColumnHelper::get_const_value<TYPE_INT>(columns[columns.size() - 1]);
+<<<<<<< HEAD
     void* state = context->get_function_state(FunctionContext::THREAD_LOCAL);
 
     ColumnBuilder<TYPE_DOUBLE> result(num_rows);
     int64_t res = generate_randoms(&result, num_rows, reinterpret_cast<int64_t>(state));
     state = reinterpret_cast<void*>(res);
     context->set_function_state(FunctionContext::THREAD_LOCAL, state);
+=======
+    ColumnBuilder<TYPE_DOUBLE> result(num_rows);
+    for (int i = 0; i < num_rows; ++i) {
+        result.append(distribution(generator));
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     return result.build(false);
 }
@@ -757,6 +810,20 @@ StatusOr<ColumnPtr> MathFunctions::rand_seed(FunctionContext* context, const Col
     return rand(context, columns);
 }
 
+<<<<<<< HEAD
+=======
+#ifdef __AVX2__
+static float sum_m256(__m256 v) {
+    __m256 hadd = _mm256_hadd_ps(v, v);
+    __m256 hadd2 = _mm256_hadd_ps(hadd, hadd);
+    __m128 vlow = _mm256_castps256_ps128(hadd2);
+    __m128 vhigh = _mm256_extractf128_ps(hadd2, 1);
+    __m128 result = _mm_add_ss(vlow, vhigh);
+    return _mm_cvtss_f32(result);
+}
+#endif
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 template <LogicalType TYPE, bool isNorm>
 StatusOr<ColumnPtr> MathFunctions::cosine_similarity(FunctionContext* context, const Columns& columns) {
     DCHECK_EQ(columns.size(), 2);
@@ -848,7 +915,38 @@ StatusOr<ColumnPtr> MathFunctions::cosine_similarity(FunctionContext* context, c
         CppType target_sum = 0;
         size_t dim_size = target_offset[i + 1] - target_offset[i];
         CppType result_value = 0;
+<<<<<<< HEAD
         for (size_t j = 0; j < dim_size; j++) {
+=======
+        size_t j = 0;
+#ifdef __AVX2__
+        if (std::is_same_v<CppType, float>) {
+            __m256 sum_vec = _mm256_setzero_ps();
+            __m256 base_sum_vec = _mm256_setzero_ps();
+            __m256 target_sum_vec = _mm256_setzero_ps();
+            for (; j + 7 < dim_size; j += 8) {
+                __m256 base_data_vec = _mm256_loadu_ps(base_data + j);
+                __m256 target_data_vec = _mm256_loadu_ps(target_data + j);
+
+                __m256 mul_vec = _mm256_mul_ps(base_data_vec, target_data_vec);
+                sum_vec = _mm256_add_ps(sum_vec, mul_vec);
+
+                if constexpr (!isNorm) {
+                    __m256 base_mul_vec = _mm256_mul_ps(base_data_vec, base_data_vec);
+                    base_sum_vec = _mm256_add_ps(base_sum_vec, base_mul_vec);
+                    __m256 target_mul_vec = _mm256_mul_ps(target_data_vec, target_data_vec);
+                    target_sum_vec = _mm256_add_ps(target_sum_vec, target_mul_vec);
+                }
+            }
+            sum += sum_m256(sum_vec);
+            if constexpr (!isNorm) {
+                base_sum += sum_m256(base_sum_vec);
+                target_sum += sum_m256(target_sum_vec);
+            }
+        }
+#endif
+        for (; j < dim_size; j++) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             sum += base_data[j] * target_data[j];
             if constexpr (!isNorm) {
                 base_sum += base_data[j] * base_data[j];
@@ -867,10 +965,120 @@ StatusOr<ColumnPtr> MathFunctions::cosine_similarity(FunctionContext* context, c
     return result;
 }
 
+<<<<<<< HEAD
 // explicitly instaniate template function.
+=======
+// explicitly instantiate template function.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 template StatusOr<ColumnPtr> MathFunctions::cosine_similarity<TYPE_FLOAT, true>(FunctionContext* context,
                                                                                 const Columns& columns);
 template StatusOr<ColumnPtr> MathFunctions::cosine_similarity<TYPE_FLOAT, false>(FunctionContext* context,
                                                                                  const Columns& columns);
 
+<<<<<<< HEAD
+=======
+template <LogicalType TYPE>
+StatusOr<ColumnPtr> MathFunctions::l2_distance(FunctionContext* context, const Columns& columns) {
+    DCHECK_EQ(columns.size(), 2);
+
+    const Column* base = columns[0].get();
+    const Column* target = columns[1].get();
+    size_t target_size = target->size();
+    if (base->size() != target_size) {
+        return Status::InvalidArgument(fmt::format(
+                "l2_distance requires equal length arrays. base array size is {} and target array size is {}.",
+                base->size(), target->size()));
+    }
+    if (base->has_null() || target->has_null()) {
+        return Status::InvalidArgument(fmt::format("l2_distance does not support null values. {} array has null value.",
+                                                   base->has_null() ? "base" : "target"));
+    }
+    if (base->is_constant()) {
+        auto* const_column = down_cast<const ConstColumn*>(base);
+        const_column->data_column()->assign(base->size(), 0);
+        base = const_column->data_column().get();
+    }
+    if (target->is_constant()) {
+        auto* const_column = down_cast<const ConstColumn*>(target);
+        const_column->data_column()->assign(target->size(), 0);
+        target = const_column->data_column().get();
+    }
+    if (base->is_nullable()) {
+        base = down_cast<const NullableColumn*>(base)->data_column().get();
+    }
+    if (target->is_nullable()) {
+        target = down_cast<const NullableColumn*>(target)->data_column().get();
+    }
+
+    // check dimension equality.
+    const Column* base_flat = down_cast<const ArrayColumn*>(base)->elements_column().get();
+    const uint32_t* base_offset = down_cast<const ArrayColumn*>(base)->offsets().get_data().data();
+    size_t base_flat_size = base_flat->size();
+
+    const Column* target_flat = down_cast<const ArrayColumn*>(target)->elements_column().get();
+    size_t target_flat_size = target_flat->size();
+    const uint32_t* target_offset = down_cast<const ArrayColumn*>(target)->offsets().get_data().data();
+
+    if (base_flat_size != target_flat_size) {
+        return Status::InvalidArgument("l2_distance requires equal length arrays");
+    }
+
+    if (base_flat->has_null() || target_flat->has_null()) {
+        return Status::InvalidArgument("l2_distance does not support null values");
+    }
+    if (base_flat->is_nullable()) {
+        base_flat = down_cast<const NullableColumn*>(base_flat)->data_column().get();
+    }
+    if (target_flat->is_nullable()) {
+        target_flat = down_cast<const NullableColumn*>(target_flat)->data_column().get();
+    }
+
+    using CppType = RunTimeCppType<TYPE>;
+    using ColumnType = RunTimeColumnType<TYPE>;
+
+    const CppType* base_data_head = down_cast<const ColumnType*>(base_flat)->get_data().data();
+    const CppType* target_data_head = down_cast<const ColumnType*>(target_flat)->get_data().data();
+
+    // prepare result with nullable value.
+    ColumnPtr result = ColumnHelper::create_column(TypeDescriptor{TYPE}, false, false, target_size);
+    ColumnType* data_result = down_cast<ColumnType*>(result.get());
+    CppType* result_data = data_result->get_data().data();
+
+    for (size_t i = 0; i < target_size; i++) {
+        size_t t_dim_size = target_offset[i + 1] - target_offset[i];
+        size_t b_dim_size = base_offset[i + 1] - base_offset[i];
+        if (t_dim_size != b_dim_size) {
+            return Status::InvalidArgument(
+                    fmt::format("l2_distance requires equal length arrays in each row. base array dimension size "
+                                "is {}, target array dimension size is {}.",
+                                b_dim_size, t_dim_size));
+        }
+        if (t_dim_size == 0) {
+            return Status::InvalidArgument("l2_distance requires non-empty arrays in each row");
+        }
+    }
+
+    const CppType* target_data = target_data_head;
+    const CppType* base_data = base_data_head;
+
+    for (size_t i = 0; i < target_size; i++) {
+        CppType sum = 0;
+        size_t dim_size = target_offset[i + 1] - target_offset[i];
+        for (size_t j = 0; j < dim_size; j++) {
+            CppType distance;
+            distance = (base_data[j] - target_data[j]) * (base_data[j] - target_data[j]);
+            sum += distance;
+        }
+        result_data[i] = sum;
+        target_data += dim_size;
+        base_data += dim_size;
+    }
+
+    return result;
+}
+
+// explicitly instantiate template function.
+template StatusOr<ColumnPtr> MathFunctions::l2_distance<TYPE_FLOAT>(FunctionContext* context, const Columns& columns);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // namespace starrocks

@@ -34,15 +34,24 @@
 
 package com.starrocks.http;
 
+<<<<<<< HEAD
+=======
+import com.starrocks.rpc.ConfigurableSerDesFactory;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.TQueryPlanInfo;
 import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
 import org.apache.thrift.TDeserializer;
+<<<<<<< HEAD
 import org.apache.thrift.TException;
 import org.json.JSONObject;
 import org.junit.Assert;
 import org.junit.Before;
+=======
+import org.json.JSONObject;
+import org.junit.Assert;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.junit.Test;
 
 import java.io.IOException;
@@ -55,22 +64,34 @@ public class TableQueryPlanActionTest extends StarRocksHttpTestCase {
     protected static String ES_TABLE_URL;
 
     @Override
+<<<<<<< HEAD
     @Before
     public void setUp() {
         super.setUp();
+=======
+    protected void doSetUp() throws Exception {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ES_TABLE_URL = "http://localhost:" + HTTP_PORT + "/api/" + DB_NAME + "/es_table";
     }
 
     @Test
+<<<<<<< HEAD
     public void testQueryPlanAction() throws IOException, TException {
         super.setUpWithCatalog();
         RequestBody body =
                 RequestBody.create(JSON, "{ \"sql\" :  \" select k1 alias_1, k2 from " + DB_NAME + "." + TABLE_NAME + " \" }");
+=======
+    public void testQueryPlanAction() throws Exception {
+        super.setUpWithCatalog();
+        RequestBody body =
+                RequestBody.create(JSON, "{ \"sql\" :  \" select k1 as alias_1,k2 from " + DB_NAME + "." + TABLE_NAME + " \" }");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Request request = new Request.Builder()
                 .post(body)
                 .addHeader("Authorization", rootAuth)
                 .url(URI + PATH_URI)
                 .build();
+<<<<<<< HEAD
         Response response = networkClient.newCall(request).execute();
         String respStr = Objects.requireNonNull(response.body()).string();
         JSONObject jsonObject = new JSONObject(respStr);
@@ -95,6 +116,33 @@ public class TableQueryPlanActionTest extends StarRocksHttpTestCase {
         deserializer.deserialize(tQueryPlanInfo, binaryPlanInfo);
         Assert.assertEquals("alias_1", tQueryPlanInfo.output_names.get(0));
         expectThrowsNoException(() -> deserializer.deserialize(tQueryPlanInfo, binaryPlanInfo));
+=======
+        try (Response response = networkClient.newCall(request).execute()) {
+            String respStr = Objects.requireNonNull(response.body()).string();
+            JSONObject jsonObject = new JSONObject(respStr);
+            System.out.println(respStr);
+            Assert.assertEquals(200, jsonObject.getInt("status"));
+
+            JSONObject partitionsObject = jsonObject.getJSONObject("partitions");
+            Assert.assertNotNull(partitionsObject);
+            for (String tabletKey : partitionsObject.keySet()) {
+                JSONObject tabletObject = partitionsObject.getJSONObject(tabletKey);
+                Assert.assertNotNull(tabletObject.getJSONArray("routings"));
+                Assert.assertEquals(3, tabletObject.getJSONArray("routings").length());
+                Assert.assertEquals(testStartVersion, tabletObject.getLong("version"));
+                Assert.assertEquals(testSchemaHash, tabletObject.getLong("schemaHash"));
+
+            }
+            String queryPlan = jsonObject.getString("opaqued_query_plan");
+            Assert.assertNotNull(queryPlan);
+            byte[] binaryPlanInfo = Base64.getDecoder().decode(queryPlan);
+            TDeserializer deserializer = ConfigurableSerDesFactory.getTDeserializer();
+            TQueryPlanInfo tQueryPlanInfo = new TQueryPlanInfo();
+            deserializer.deserialize(tQueryPlanInfo, binaryPlanInfo);
+            Assert.assertEquals("alias_1", tQueryPlanInfo.output_names.get(0));
+            expectThrowsNoException(() -> deserializer.deserialize(tQueryPlanInfo, binaryPlanInfo));
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -106,6 +154,7 @@ public class TableQueryPlanActionTest extends StarRocksHttpTestCase {
                 .addHeader("Authorization", rootAuth)
                 .url(URI + PATH_URI)
                 .build();
+<<<<<<< HEAD
         Response response = networkClient.newCall(request).execute();
         String respStr = Objects.requireNonNull(response.body()).string();
         System.out.println(respStr);
@@ -116,6 +165,19 @@ public class TableQueryPlanActionTest extends StarRocksHttpTestCase {
         String exception = jsonObject.getString("exception");
         Assert.assertNotNull(exception);
         Assert.assertEquals("POST body must contains [sql] root object", exception);
+=======
+        try (Response response = networkClient.newCall(request).execute()) {
+            String respStr = Objects.requireNonNull(response.body()).string();
+            System.out.println(respStr);
+            Assert.assertNotNull(respStr);
+            expectThrowsNoException(() -> new JSONObject(respStr));
+            JSONObject jsonObject = new JSONObject(respStr);
+            Assert.assertEquals(400, jsonObject.getInt("status"));
+            String exception = jsonObject.getString("exception");
+            Assert.assertNotNull(exception);
+            Assert.assertEquals("POST body must contains [sql] root object", exception);
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -127,6 +189,7 @@ public class TableQueryPlanActionTest extends StarRocksHttpTestCase {
                 .addHeader("Authorization", rootAuth)
                 .url(ES_TABLE_URL + PATH_URI)
                 .build();
+<<<<<<< HEAD
         Response response = networkClient.newCall(request).execute();
         String respStr = Objects.requireNonNull(response.body()).string();
         Assert.assertNotNull(respStr);
@@ -136,6 +199,18 @@ public class TableQueryPlanActionTest extends StarRocksHttpTestCase {
         String exception = jsonObject.getString("exception");
         Assert.assertNotNull(exception);
         Assert.assertTrue(exception.startsWith("malformed json"));
+=======
+        try (Response response = networkClient.newCall(request).execute()) {
+            String respStr = Objects.requireNonNull(response.body()).string();
+            Assert.assertNotNull(respStr);
+            expectThrowsNoException(() -> new JSONObject(respStr));
+            JSONObject jsonObject = new JSONObject(respStr);
+            Assert.assertEquals(400, jsonObject.getInt("status"));
+            String exception = jsonObject.getString("exception");
+            Assert.assertNotNull(exception);
+            Assert.assertTrue(exception.startsWith("malformed json"));
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -147,6 +222,7 @@ public class TableQueryPlanActionTest extends StarRocksHttpTestCase {
                 .addHeader("Authorization", rootAuth)
                 .url(ES_TABLE_URL + PATH_URI)
                 .build();
+<<<<<<< HEAD
         Response response = networkClient.newCall(request).execute();
         String respStr = Objects.requireNonNull(response.body()).string();
         Assert.assertNotNull(respStr);
@@ -157,5 +233,41 @@ public class TableQueryPlanActionTest extends StarRocksHttpTestCase {
         Assert.assertNotNull(exception);
         Assert.assertTrue(
                 exception.startsWith("Only support OlapTable, CloudNativeTable and MaterializedView currently"));
+=======
+        try (Response response = networkClient.newCall(request).execute()) {
+            String respStr = Objects.requireNonNull(response.body()).string();
+            Assert.assertNotNull(respStr);
+            expectThrowsNoException(() -> new JSONObject(respStr));
+            JSONObject jsonObject = new JSONObject(respStr);
+            Assert.assertEquals(403, jsonObject.getInt("status"));
+            String exception = jsonObject.getString("exception");
+            Assert.assertNotNull(exception);
+            Assert.assertTrue(
+                    exception.startsWith("Only support OlapTable, CloudNativeTable and MaterializedView currently"));
+        }
+    }
+
+    @Test
+    public void testQueryPlanActionPruneEmpty() throws Exception {
+        super.setUpWithCatalog();
+
+
+        String tableName = "test_empty_table";
+
+        RequestBody body =
+                RequestBody.create(JSON, "{ \"sql\" :  \" select k1,k2,k3 from " + DB_NAME + "." + tableName +
+                        " where k3  > '2023-10-01 11:11:11' and k3 < '2023-10-02 11:11:11'" + " \" }");
+        String uri = "http://localhost:" + HTTP_PORT + "/api/" + DB_NAME + "/test_empty_table";
+
+        Request request = new Request.Builder()
+                .post(body)
+                .addHeader("Authorization", rootAuth)
+                .url(uri + PATH_URI)
+                .build();
+        try (Response response = networkClient.newCall(request).execute()) {
+            String respStr = Objects.requireNonNull(response.body()).string();
+            Assert.assertEquals("{\"partitions\":{},\"opaqued_query_plan\":\"\",\"status\":200}", respStr);
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }

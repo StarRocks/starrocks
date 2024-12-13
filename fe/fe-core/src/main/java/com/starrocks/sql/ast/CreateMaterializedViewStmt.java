@@ -43,6 +43,10 @@ import com.starrocks.analysis.CaseExpr;
 import com.starrocks.analysis.CaseWhenClause;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
+<<<<<<< HEAD
+=======
+import com.starrocks.analysis.FunctionParams;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.OrderByElement;
@@ -58,6 +62,11 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.catalog.View;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.combinator.AggStateDesc;
+import com.starrocks.catalog.combinator.AggStateUnionCombinator;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
@@ -68,11 +77,19 @@ import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.Field;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.analyzer.FunctionAnalyzer;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SelectAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.analyzer.UnsupportedMVException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.analyzer.mvpattern.MVColumnBitmapAggPattern;
 import com.starrocks.sql.analyzer.mvpattern.MVColumnBitmapUnionPattern;
 import com.starrocks.sql.analyzer.mvpattern.MVColumnHLLUnionPattern;
@@ -126,7 +143,11 @@ public class CreateMaterializedViewStmt extends DdlStmt {
         FN_NAME_TO_PATTERN.put(FunctionSet.PERCENTILE_UNION, new MVColumnPercentileUnionPattern());
     }
 
+<<<<<<< HEAD
     private final String mvName;
+=======
+    private final TableName mvTableName;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private final Map<String, String> properties;
 
     private final QueryStatement queryStatement;
@@ -151,9 +172,15 @@ public class CreateMaterializedViewStmt extends DdlStmt {
 
     public static String WHERE_PREDICATE_COLUMN_NAME = "__WHERE_PREDICATION";
 
+<<<<<<< HEAD
     public CreateMaterializedViewStmt(String mvName, QueryStatement queryStatement, Map<String, String> properties) {
         super(NodePosition.ZERO);
         this.mvName = mvName;
+=======
+    public CreateMaterializedViewStmt(TableName mvTableName, QueryStatement queryStatement, Map<String, String> properties) {
+        super(NodePosition.ZERO);
+        this.mvTableName = mvTableName;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.queryStatement = queryStatement;
         this.properties = properties;
     }
@@ -171,7 +198,11 @@ public class CreateMaterializedViewStmt extends DdlStmt {
     }
 
     public String getMVName() {
+<<<<<<< HEAD
         return mvName;
+=======
+        return mvTableName.getTbl();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public List<MVColumnItem> getMVColumnItemList() {
@@ -249,7 +280,11 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                     case FunctionSet.HLL_UNION:
                     case FunctionSet.PERCENTILE_UNION:
                     case FunctionSet.COUNT: {
+<<<<<<< HEAD
                         MVColumnItem item = buildAggColumnItem(selectListItem, slots);
+=======
+                        MVColumnItem item = buildAggColumnItem(new ConnectContext(), selectListItem, slots);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         expr = item.getDefineExpr();
                         name = item.getName();
                         break;
@@ -292,6 +327,14 @@ public class CreateMaterializedViewStmt extends DdlStmt {
             context.getSessionVariable().setSqlSelectLimit(originSelectLimit);
         }
 
+<<<<<<< HEAD
+=======
+        boolean hasTemporaryTable = AnalyzerUtils.hasTemporaryTables(queryStatement);
+        if (hasTemporaryTable) {
+            throw new SemanticException(("Materialized view can't base on temporary table"));
+        }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // forbid explain query
         if (queryStatement.isExplain()) {
             throw new IllegalArgumentException("Creating materialized view does not support explain query");
@@ -300,27 +343,58 @@ public class CreateMaterializedViewStmt extends DdlStmt {
         if (!(queryStatement.getQueryRelation() instanceof SelectRelation)) {
             throw new SemanticException("Materialized view query statement only supports a single query blocks");
         }
+<<<<<<< HEAD
         Map<TableName, Table> tables = AnalyzerUtils.collectAllTableAndViewWithAlias(queryStatement);
         if (tables.size() != 1) {
             throw new SemanticException("The materialized view only support one table in from clause.");
         }
         Map.Entry<TableName, Table> entry = tables.entrySet().iterator().next();
         Table table = entry.getValue();
+=======
+
+        Map<TableName, Table> tables = AnalyzerUtils.collectAllTableAndViewWithAlias(queryStatement);
+        if (tables.size() != 1) {
+            throw new UnsupportedMVException("The materialized view only supports one table in from clause.");
+        }
+        Map.Entry<TableName, Table> entry = tables.entrySet().iterator().next();
+        Table table = entry.getValue();
+
+        // SyncMV doesn't support mv's database is different from table's db.
+        if (mvTableName != null && !Strings.isNullOrEmpty(mvTableName.getDb()) &&
+                !mvTableName.getDb().equalsIgnoreCase(entry.getKey().getDb())) {
+            throw new UnsupportedMVException(
+                    String.format("Creating materialized view does not support: MV's db %s is different " +
+                            "from table's db %s", mvTableName.getDb(), entry.getKey().getDb()));
+        }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (table instanceof View) {
             // Only in order to make the error message keep compatibility
             throw new SemanticException("Do not support alter non-OLAP table[" + table.getName() + "]");
         } else if (!(table instanceof OlapTable)) {
+<<<<<<< HEAD
             throw new SemanticException("The materialized view only support olap table.");
         }
+=======
+            throw new UnsupportedMVException("The materialized view only support olap table.");
+        }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         TableName tableName = entry.getKey();
         setBaseIndexName(table.getName());
         setDBName(tableName.getDb());
 
         SelectRelation selectRelation = ((SelectRelation) queryStatement.getQueryRelation());
         if (!(selectRelation.getRelation() instanceof TableRelation)) {
+<<<<<<< HEAD
             throw new SemanticException("Materialized view query statement only support direct query from table.");
         }
         int beginIndexOfAggregation = genColumnAndSetIntoStmt(table, selectRelation);
+=======
+            throw new UnsupportedMVException("Materialized view query statement only support direct query from table.");
+        }
+        int beginIndexOfAggregation = genColumnAndSetIntoStmt(context, table, selectRelation);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (selectRelation.isDistinct() || selectRelation.hasAggregation()) {
             setMvKeysType(KeysType.AGG_KEYS);
         }
@@ -328,24 +402,41 @@ public class CreateMaterializedViewStmt extends DdlStmt {
             whereClause = selectRelation.getWhereClause();
         }
         if (selectRelation.hasHavingClause()) {
+<<<<<<< HEAD
             throw new SemanticException("The having clause is not supported in add materialized view clause, expr:"
+=======
+            throw new UnsupportedMVException("The having clause is not supported in add materialized view clause, expr:"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     + selectRelation.getHavingClause().toSql());
         }
         analyzeOrderByClause(selectRelation, beginIndexOfAggregation);
         if (selectRelation.hasLimit()) {
+<<<<<<< HEAD
             throw new SemanticException("The limit clause is not supported in add materialized view clause, expr:"
+=======
+            throw new UnsupportedMVException("The limit clause is not supported in add materialized view clause, expr:"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     + " limit " + selectRelation.getLimit());
         }
         final String countPrefix = MATERIALIZED_VIEW_NAME_PREFIX + FunctionSet.COUNT + "_";
         for (MVColumnItem mvColumnItem : getMVColumnItemList()) {
             if (!isReplay && mvColumnItem.isKey() && !mvColumnItem.getType().canBeMVKey()) {
+<<<<<<< HEAD
                 throw new SemanticException(
+=======
+                throw new UnsupportedMVException(
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         String.format("Invalid data type of materialized key column '%s': '%s'",
                                 mvColumnItem.getName(), mvColumnItem.getType()));
             }
             if (mvColumnItem.getName().startsWith(countPrefix)
                     && ((OlapTable) table).getKeysType().isAggregationFamily()) {
+<<<<<<< HEAD
                 throw new SemanticException("Aggregate type table do not support count function in materialized view");
+=======
+                throw new UnsupportedMVException(
+                        "Aggregate type table do not support count function in materialized view");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
         // analyze table if it has alias
@@ -391,7 +482,11 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                                 .collect(Collectors.toList()))), context);
     }
 
+<<<<<<< HEAD
     private int genColumnAndSetIntoStmt(Table table, SelectRelation selectRelation) {
+=======
+    private int genColumnAndSetIntoStmt(ConnectContext context, Table table, SelectRelation selectRelation) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<MVColumnItem> mvColumnItemList = Lists.newArrayList();
 
         boolean meetAggregate = false;
@@ -407,14 +502,23 @@ public class CreateMaterializedViewStmt extends DdlStmt {
         for (int i = 0; i < selectListItems.size(); ++i) {
             SelectListItem selectListItem = selectListItems.get(i);
             if (selectListItem.isStar()) {
+<<<<<<< HEAD
                 throw new SemanticException("The materialized view currently does not support * in select statement");
+=======
+                throw new UnsupportedMVException(
+                        "The materialized view currently does not support * in select statement");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
             Expr selectListItemExpr = selectListItem.getExpr();
             List<SlotRef> slots = Lists.newArrayList();
             selectListItemExpr.collect(SlotRef.class, slots);
             if (!isReplay) {
                 if (slots.size() == 0) {
+<<<<<<< HEAD
                     throw new SemanticException(String.format("The materialized view currently does not support " +
+=======
+                    throw new UnsupportedMVException(String.format("The materialized view currently does not support " +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                             "const expr in select " + "statement: {}", selectListItemExpr.toMySql()));
                 }
             }
@@ -423,6 +527,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                     && ((FunctionCallExpr) selectListItemExpr).isAggregateFunction()) {
                 // Aggregate Function must match pattern.
                 FunctionCallExpr functionCallExpr = (FunctionCallExpr) selectListItemExpr;
+<<<<<<< HEAD
                 String functionName = functionCallExpr.getFnName().getFunction();
 
                 MVColumnPattern mvColumnPattern =
@@ -440,25 +545,59 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                 if (!mvColumnPattern.match(functionCallExpr)) {
                     throw new SemanticException(
                             "The function " + functionName + " must match pattern:" + mvColumnPattern);
+=======
+                String functionName = functionCallExpr.getFnName().getFunction().toLowerCase();
+                // current version not support count(distinct) function in creating materialized view
+                if (!isReplay && functionCallExpr.isDistinct()) {
+                    throw new UnsupportedMVException(
+                            "Materialized view does not support distinct function " + functionCallExpr.toSqlImpl());
+                }
+                if (!FN_NAME_TO_PATTERN.containsKey(functionName)) {
+                    // eg: avg_union(avg_state(xxx))
+                } else {
+                    MVColumnPattern mvColumnPattern = FN_NAME_TO_PATTERN.get(functionName);
+                    if (mvColumnPattern == null) {
+
+                        throw new UnsupportedMVException(
+                                "Materialized view does not support function:%s, supported functions are: %s",
+                                functionCallExpr.toSqlImpl(), FN_NAME_TO_PATTERN.keySet());
+                    }
+                    if (!mvColumnPattern.match(functionCallExpr)) {
+                        throw new UnsupportedMVException(
+                                "The function " + functionName + " must match pattern:" + mvColumnPattern);
+                    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
                 if (beginIndexOfAggregation == -1) {
                     beginIndexOfAggregation = i;
                 }
                 meetAggregate = true;
 
+<<<<<<< HEAD
                 mvColumnItem = buildAggColumnItem(selectListItem, slots);
+=======
+                mvColumnItem = buildAggColumnItem(context, selectListItem, slots);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (!mvColumnNameSet.add(mvColumnItem.getName())) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_DUP_FIELDNAME, mvColumnItem.getName());
                 }
                 mvColumnItemList.add(mvColumnItem);
             } else {
                 if (meetAggregate) {
+<<<<<<< HEAD
                     throw new SemanticException("Any single column should be before agg column. " +
+=======
+                    throw new UnsupportedMVException("Any single column should be before agg column. " +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                             "Column %s at wrong location", selectListItemExpr.toMySql());
                 }
                 // NOTE: If `selectListItemExpr` contains aggregate function, we can not support it.
                 if (selectListItemExpr.containsAggregate()) {
+<<<<<<< HEAD
                     throw new SemanticException("Aggregate function with function expr is not supported yet",
+=======
+                    throw new UnsupportedMVException("Aggregate function with function expr is not supported yet",
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                             selectListItemExpr.toMySql());
                 }
 
@@ -475,14 +614,26 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                 Expr existedDefinedExpr = table.getColumn(mvColumnItem.getName()).getDefineExpr();
                 if (existedDefinedExpr != null && !existedDefinedExpr.toSqlWithoutTbl()
                         .equalsIgnoreCase(mvColumnItem.getDefineExpr().toSqlWithoutTbl())) {
+<<<<<<< HEAD
                     throw new SemanticException(String.format("The mv column %s has already existed in the table's full " +
                                     "schema, old expr: %s, new expr: %s", selectListItem.getAlias(),
                             existedDefinedExpr.toSqlWithoutTbl(), mvColumnItem.getDefineExpr().toSqlWithoutTbl()));
+=======
+                    throw new UnsupportedMVException(
+                            String.format("The mv column %s has already existed in the table's full " +
+                                            "schema, old expr: %s, new expr: %s", selectListItem.getAlias(),
+                                    existedDefinedExpr.toSqlWithoutTbl(),
+                                    mvColumnItem.getDefineExpr().toSqlWithoutTbl()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
             }
         }
         if (beginIndexOfAggregation == 0) {
+<<<<<<< HEAD
             throw new SemanticException("Only %s found in the select list. " +
+=======
+            throw new UnsupportedMVException("Only %s found in the select list. " +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     "Please add group by clause and at least one group by column in the select list", joiner);
         }
         setMvColumnItemList(mvColumnItemList);
@@ -506,17 +657,81 @@ public class CreateMaterializedViewStmt extends DdlStmt {
             type = AnalyzerUtils.transformTableColumnType(type, false);
         }
         Set<String> baseColumnNames = baseSlotRefs.stream().map(slot -> slot.getColumnName())
+<<<<<<< HEAD
                         .collect(Collectors.toSet());
         return new MVColumnItem(columnName, type, null, false, defineExpr,
+=======
+                .collect(Collectors.toSet());
+        return new MVColumnItem(columnName, type, null, null, false, defineExpr,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 defineExpr.isNullable(),  baseColumnNames);
     }
 
     // Convert the aggregate function to MVColumn.
+<<<<<<< HEAD
     private MVColumnItem buildAggColumnItem(SelectListItem selectListItem,
                                             List<SlotRef> baseSlotRefs) {
         FunctionCallExpr functionCallExpr = (FunctionCallExpr) selectListItem.getExpr();
         String functionName = functionCallExpr.getFnName().getFunction();
         Preconditions.checkState(functionCallExpr.getChildren().size() == 1, "Aggregate function only support one child");
+=======
+    private MVColumnItem buildAggColumnItem(ConnectContext context,
+                                            SelectListItem selectListItem,
+                                            List<SlotRef> baseSlotRefs) {
+        FunctionCallExpr node = (FunctionCallExpr) selectListItem.getExpr();
+        String functionName = node.getFnName().getFunction();
+        Preconditions.checkState(node.getChildren().size() == 1, "Aggregate function only support one child");
+
+        if (!FN_NAME_TO_PATTERN.containsKey(functionName)) {
+            if (Strings.isNullOrEmpty(selectListItem.getAlias())) {
+                throw new SemanticException("Create materialized view non-slot ref expression should have an alias:" +
+                        selectListItem.getExpr());
+            }
+
+            Expr defineExpr = node.getChild(0);
+            List<Type> argTypes = node.getChildren().stream().map(Expr::getType).collect(Collectors.toList());
+            Type arg0Type = argTypes.get(0);
+            if (arg0Type.getAggStateDesc() == null) {
+                throw new UnsupportedMVException("Unsupported function:" + functionName + ", cannot find agg state desc from " +
+                        "arg0");
+            }
+            FunctionParams params = new FunctionParams(false, Lists.newArrayList());
+            Type[] argumentTypes = argTypes.toArray(Type[]::new);
+            Boolean[] isArgumentConstants = argTypes.stream().map(x -> false).toArray(Boolean[]::new);
+            Function function = FunctionAnalyzer.getAnalyzedAggregateFunction(context, functionName,
+                    params, argumentTypes, isArgumentConstants, NodePosition.ZERO);
+            if (function == null || !(function instanceof AggStateUnionCombinator)) {
+                throw new UnsupportedMVException("Unsupported function:" + functionName);
+            }
+            AggStateUnionCombinator aggFunction = (AggStateUnionCombinator) function;
+            String mvColumnName = MVUtils.getMVColumnName(selectListItem.getAlias());
+            AggStateDesc aggStateDesc = aggFunction.getAggStateDesc();
+            Type type = aggFunction.getIntermediateTypeOrReturnType();
+            if (type.isWildcardDecimal()) {
+                throw new UnsupportedMVException("Unsupported wildcard decimal type in materialized view:" + type + ", " +
+                        "function:" + node);
+            }
+            if (aggStateDesc.getArgTypes().stream().anyMatch(t -> t.isWildcardDecimal())) {
+                throw new UnsupportedMVException("Unsupported wildcard decimal type in materialized view:" + type + ", " +
+                        "function:" + node);
+            }
+            Set<String> baseColumnNames = baseSlotRefs.stream().map(slot -> slot.getColumnName())
+                    .collect(Collectors.toSet());
+            AggregateType mvAggregateType = AggregateType.AGG_STATE_UNION;
+            Type finalType = AnalyzerUtils.transformTableColumnType(type, false);
+            return new MVColumnItem(mvColumnName, finalType, mvAggregateType, aggStateDesc, false,
+                    defineExpr, aggStateDesc.getResultNullable(), baseColumnNames);
+        } else {
+            return buildAggColumnItemWithPattern(selectListItem, baseSlotRefs);
+        }
+    }
+
+    // Convert the aggregate function to MVColumn.
+    private MVColumnItem buildAggColumnItemWithPattern(SelectListItem selectListItem,
+                                                       List<SlotRef> baseSlotRefs) {
+        FunctionCallExpr functionCallExpr = (FunctionCallExpr) selectListItem.getExpr();
+        String functionName = functionCallExpr.getFnName().getFunction();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Expr defineExpr = functionCallExpr.getChild(0);
         AggregateType mvAggregateType = null;
         Type baseType = defineExpr.getType();
@@ -607,7 +822,11 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                 type = Type.BIGINT;
                 break;
             default:
+<<<<<<< HEAD
                 throw new SemanticException("Unsupported function:" + functionName);
+=======
+                throw new UnsupportedMVException("Unsupported function:" + functionName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         if (mvAggregateType == null) {
             mvAggregateType = AggregateType.valueOf(functionName.toUpperCase());
@@ -619,8 +838,13 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                     String.format("Invalid aggregate function '%s' for '%s'", mvAggregateType, type));
         }
         Set<String> baseColumnNames = baseSlotRefs.stream().map(slot -> slot.getColumnName())
+<<<<<<< HEAD
                         .collect(Collectors.toSet());
         return new MVColumnItem(mvColumnName, type, mvAggregateType, false,
+=======
+                .collect(Collectors.toSet());
+        return new MVColumnItem(mvColumnName, type, mvAggregateType, null, false,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 defineExpr, functionCallExpr.isNullable(), baseColumnNames);
     }
 
@@ -636,22 +860,41 @@ public class CreateMaterializedViewStmt extends DdlStmt {
         List<MVColumnItem> mvColumnItemList = getMVColumnItemList();
 
         if (orderByElements.size() > mvColumnItemList.size()) {
+<<<<<<< HEAD
             throw new SemanticException("The number of columns in order clause must be less then " + "the number of "
                     + "columns in select clause");
         }
         if (beginIndexOfAggregation != -1 && (orderByElements.size() != (beginIndexOfAggregation))) {
             throw new SemanticException("The order-by columns must be identical to the group-by columns");
+=======
+            throw new UnsupportedMVException(
+                    "The number of columns in order clause must be less then " + "the number of "
+                            + "columns in select clause");
+        }
+        if (beginIndexOfAggregation != -1 && (orderByElements.size() != (beginIndexOfAggregation))) {
+            throw new UnsupportedMVException("The order-by columns must be identical to the group-by columns");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         for (int i = 0; i < orderByElements.size(); i++) {
             Expr orderByElement = orderByElements.get(i).getExpr();
             if (!(orderByElement instanceof SlotRef)) {
+<<<<<<< HEAD
                 throw new SemanticException("The column in order clause must be original column without calculation. "
                         + "Error column: " + orderByElement.toSql());
+=======
+                throw new UnsupportedMVException(
+                        "The column in order clause must be original column without calculation. "
+                                + "Error column: " + orderByElement.toSql());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
             MVColumnItem mvColumnItem = mvColumnItemList.get(i);
             SlotRef slotRef = (SlotRef) orderByElement;
             if (!mvColumnItem.getName().equalsIgnoreCase(slotRef.getColumnName())) {
+<<<<<<< HEAD
                 throw new SemanticException("The order of columns in order by clause must be same as "
+=======
+                throw new UnsupportedMVException("The order of columns in order by clause must be same as "
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         + "the order of columns in select list");
             }
             Preconditions.checkState(mvColumnItem.getAggregationType() == null);
@@ -666,6 +909,10 @@ public class CreateMaterializedViewStmt extends DdlStmt {
             if (mvColumnItem.getAggregationType() != null) {
                 break;
             }
+<<<<<<< HEAD
+=======
+            // NOTE: Change aggregate type of the column to none rather than null
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             mvColumnItem.setAggregationType(AggregateType.NONE, true);
         }
     }
@@ -735,6 +982,10 @@ public class CreateMaterializedViewStmt extends DdlStmt {
             // supply value
             for (; theBeginIndexOfValue < mvColumnItemList.size(); theBeginIndexOfValue++) {
                 MVColumnItem mvColumnItem = mvColumnItemList.get(theBeginIndexOfValue);
+<<<<<<< HEAD
+=======
+                // NOTE: Change aggregate type of the column to none rather than null
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 mvColumnItem.setAggregationType(AggregateType.NONE, true);
             }
         }

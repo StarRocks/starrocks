@@ -344,7 +344,11 @@ TEST_F(EnvBrokerTest, test_write_file) {
     auto f = *_fs.new_writable_file(path);
     ASSERT_OK(f->append("first line\n"));
     ASSERT_OK(f->append("second line\n"));
+<<<<<<< HEAD
     f->close();
+=======
+    ASSERT_OK(f->close());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::string content;
     ASSERT_OK(_fs_mem->read_file(path, &content));
     ASSERT_EQ("first line\nsecond line\n", content);

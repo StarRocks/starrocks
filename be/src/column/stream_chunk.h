@@ -108,7 +108,11 @@ struct EpochInfo {
  */
 class StreamChunkConverter {
 public:
+<<<<<<< HEAD
     static StreamChunkPtr make_stream_chunk(ChunkPtr chunk, Int8ColumnPtr ops);
+=======
+    static StreamChunkPtr make_stream_chunk(ChunkPtr chunk, const Int8ColumnPtr& ops);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     static bool has_ops_column(const StreamChunk& chunk);
     static bool has_ops_column(const StreamChunkPtr& chunk_ptr);

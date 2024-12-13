@@ -88,7 +88,10 @@
         "delete",
         "drop",
         "insert",
+<<<<<<< HEAD
         "select",
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         "alter",
         "export",
         "update"
@@ -141,7 +144,10 @@
       "label": "StarRocks View",
       "description": "StarRocks View",
       "accessTypeRestrictions": [
+<<<<<<< HEAD
         "select",
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         "drop",
         "alter"
       ]
@@ -168,7 +174,10 @@
       "label": "StarRocks Materialized View",
       "description": "StarRocks Materialized View",
       "accessTypeRestrictions": [
+<<<<<<< HEAD
         "select",
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         "refresh",
         "drop",
         "alter"

@@ -16,7 +16,10 @@ package com.starrocks.sql.ast;
 
 import com.google.common.base.Strings;
 import com.starrocks.common.util.PrintableMap;
+<<<<<<< HEAD
 import com.starrocks.credential.CloudConfigurationConstants;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -103,6 +106,7 @@ public class CreateStorageVolumeStmt extends DdlStmt {
         }
         return sb.toString();
     }
+<<<<<<< HEAD
 
     @Override
     public boolean needAuditEncryption() {
@@ -114,4 +118,6 @@ public class CreateStorageVolumeStmt extends DdlStmt {
         }
         return false;
     }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

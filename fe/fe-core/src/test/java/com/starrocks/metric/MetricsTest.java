@@ -140,4 +140,29 @@ public class MetricsTest {
         Assert.assertEquals(m.getLabels().get(0).getValue(), "v1");
         Assert.assertEquals(m.getLabels().get(1).getValue(), "v2");
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testPrometheusHistogramMetrics() {
+        PrometheusMetricVisitor prometheusMetricVisitor = new PrometheusMetricVisitor("sr");
+        HistogramMetric histogramMetric = new HistogramMetric("duration");
+        histogramMetric.addLabel(new MetricLabel("k1", "v1"));
+        histogramMetric.addLabel(new MetricLabel("k2", "v2"));
+        prometheusMetricVisitor.visitHistogram(histogramMetric);
+        String output = prometheusMetricVisitor.build();
+        List<String> metricNames = Arrays.asList(
+                "sr_duration{quantile=\"0.75\", k1=\"v1\", k2=\"v2\"}",
+                "sr_duration{quantile=\"0.95\", k1=\"v1\", k2=\"v2\"}",
+                "sr_duration{quantile=\"0.98\", k1=\"v1\", k2=\"v2\"}",
+                "sr_duration{quantile=\"0.99\", k1=\"v1\", k2=\"v2\"}",
+                "sr_duration{quantile=\"0.999\", k1=\"v1\", k2=\"v2\"}",
+                "sr_duration_sum",
+                "sr_duration_count"
+        );
+        for (String metricName : metricNames) {
+            Assert.assertTrue(output.contains(metricName));
+        }
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

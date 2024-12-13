@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # bitmap_union_count
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Returns the union of a set of bitmap values and returns the cardinality of the union. This function is supported from v2.3.
 

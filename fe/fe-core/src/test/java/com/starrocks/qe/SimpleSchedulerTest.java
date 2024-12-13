@@ -71,7 +71,11 @@ public class SimpleSchedulerTest {
     @Before
     public void setUp() {
         // disable updateBlackListThread
+<<<<<<< HEAD
         SimpleScheduler.disableUpdateBlacklistThread();
+=======
+        SimpleScheduler.disableUpdateBlocklistThread();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     // Comment out these code temporatily.
@@ -244,12 +248,21 @@ public class SimpleSchedulerTest {
         threeBackends.put((long) 102, backendC);
         ImmutableMap<Long, ComputeNode> immutableThreeBackends = ImmutableMap.copyOf(threeBackends);
 
+<<<<<<< HEAD
         SimpleScheduler.addToBlacklist(Long.valueOf(100));
         SimpleScheduler.addToBlacklist(Long.valueOf(101));
         address = SimpleScheduler.getBackendHost(immutableThreeBackends, ref);
         // only backendc can work
         Assert.assertEquals(address.hostname, "addressC");
         SimpleScheduler.addToBlacklist(Long.valueOf(102));
+=======
+        SimpleScheduler.addToBlocklist(Long.valueOf(100));
+        SimpleScheduler.addToBlocklist(Long.valueOf(101));
+        address = SimpleScheduler.getBackendHost(immutableThreeBackends, ref);
+        // only backendc can work
+        Assert.assertEquals(address.hostname, "addressC");
+        SimpleScheduler.addToBlocklist(Long.valueOf(102));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // no backend can work
         address = SimpleScheduler.getBackendHost(immutableThreeBackends, ref);
         Assert.assertNull(address);
@@ -267,18 +280,29 @@ public class SimpleSchedulerTest {
         backends.put((long) 100, backendA);
         ImmutableMap<Long, ComputeNode> immutableBackends = ImmutableMap.copyOf(backends);
 
+<<<<<<< HEAD
         SimpleScheduler.addToBlacklist(Long.valueOf(100));
+=======
+        SimpleScheduler.addToBlocklist(Long.valueOf(100));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         address = SimpleScheduler.getBackendHost(immutableBackends, ref);
         Assert.assertNull(address);
 
         String host = backendA.getHost();
         List<Integer> ports = new ArrayList<Integer>();
         Collections.addAll(ports, backendA.getBePort(), backendA.getBrpcPort(), backendA.getHttpPort());
+<<<<<<< HEAD
 
         boolean accessible = NetUtils.checkAccessibleForAllPorts(host, ports);
         Assert.assertFalse(accessible);
 
         SimpleScheduler.removeFromBlacklist(Long.valueOf(100));
+=======
+        boolean accessible = NetUtils.checkAccessibleForAllPorts(host, ports);
+        Assert.assertFalse(accessible);
+
+        SimpleScheduler.removeFromBlocklist(Long.valueOf(100));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         address = SimpleScheduler.getBackendHost(immutableBackends, ref);
         Assert.assertEquals(address.hostname, "addressA");
     }
@@ -311,12 +335,21 @@ public class SimpleSchedulerTest {
                                     @Mocked NetUtils utils) {
         Config.heartbeat_timeout_second = 1;
 
+<<<<<<< HEAD
         SimpleScheduler.addToBlacklist(10001L);
         SimpleScheduler.addToBlacklist(10002L);
         SimpleScheduler.addToBlacklist(10003L);
         new Expectations() {
             {
                 globalStateMgr.getCurrentSystemInfo();
+=======
+        SimpleScheduler.addToBlocklist(10001L);
+        SimpleScheduler.addToBlocklist(10002L);
+        SimpleScheduler.addToBlocklist(10003L);
+        new Expectations() {
+            {
+                globalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 result = systemInfoService;
                 times = 2;
 
@@ -344,7 +377,11 @@ public class SimpleSchedulerTest {
                 times = 1;
 
                 // backend 10003, which is not available, will not be be removed
+<<<<<<< HEAD
                 ComputeNode computeNode1 = new Backend();
+=======
+                ComputeNode computeNode1 = new ComputeNode();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 computeNode1.setAlive(false);
                 computeNode1.setHost("host10003");
                 computeNode1.setBrpcPort(10003);
@@ -358,6 +395,7 @@ public class SimpleSchedulerTest {
                 times = 2;
             }
         };
+<<<<<<< HEAD
         SimpleScheduler.updateBlacklist();
 
         Assert.assertFalse(SimpleScheduler.isInBlacklist(10001L));
@@ -367,6 +405,17 @@ public class SimpleSchedulerTest {
         //Having retried for Config.heartbeat_timeout_second + 1 times, backend 10003 will be removed.
         SimpleScheduler.updateBlacklist();
         Assert.assertFalse(SimpleScheduler.isInBlacklist(10003L));
+=======
+        SimpleScheduler.getHostBlacklist().refresh();
+
+        Assert.assertFalse(SimpleScheduler.isInBlocklist(10001L));
+        Assert.assertFalse(SimpleScheduler.isInBlocklist(10002L));
+        Assert.assertTrue(SimpleScheduler.isInBlocklist(10003L));
+
+        //Having retried for Config.heartbeat_timeout_second + 1 times, backend 10003 will be removed.
+        SimpleScheduler.getHostBlacklist().refresh();
+        Assert.assertTrue(SimpleScheduler.isInBlocklist(10003L));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -458,4 +507,99 @@ public class SimpleSchedulerTest {
             t.join();
         }
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testTimeUpdate(@Mocked GlobalStateMgr globalStateMgr,
+                               @Mocked SystemInfoService systemInfoService,
+                               @Mocked NetUtils utils) throws InterruptedException {
+        Config.black_host_history_sec = 5; // 5s
+        HostBlacklist blacklist = new HostBlacklist();
+        new Expectations() {
+            {
+                globalStateMgr.getNodeMgr().getClusterInfo();
+                result = systemInfoService;
+
+                // backend 10001 will be removed
+                systemInfoService.getBackendOrComputeNode(10001L);
+                result = null;
+
+                // backend 10002 will be removed
+                ComputeNode backend2 = new ComputeNode();
+                backend2.setAlive(true);
+                backend2.setHost("host10002");
+                backend2.setBrpcPort(10002);
+                backend2.setHttpPort(10012);
+                systemInfoService.getBackendOrComputeNode(10002L);
+                result = backend2;
+
+                systemInfoService.checkNodeAvailable(backend2);
+                result = true;
+
+                NetUtils.checkAccessibleForAllPorts((String) any, (List<Integer>) any);
+                result = true;
+
+                // backend 10003, which is not available
+                ComputeNode backend3 = new ComputeNode();
+                backend3.setAlive(true);
+                backend3.setHost("host10003");
+                backend3.setBrpcPort(10003);
+                backend3.setHttpPort(10013);
+                systemInfoService.getBackendOrComputeNode(10003L);
+                result = backend3;
+
+                systemInfoService.checkNodeAvailable(backend3);
+                result = true;
+            }
+        };
+
+        blacklist.add(10001L);
+        blacklist.add(10002L);
+        blacklist.add(10003L);
+        for (int i = 0; i < 7; i++) {
+            blacklist.add(10003L);
+            Thread.sleep(1000);
+            Assert.assertTrue(blacklist.contains(10003L));
+        }
+
+        Thread.sleep(2000);
+        blacklist.refresh();
+        Assert.assertFalse(blacklist.contains(10003L));
+    }
+
+    @Test
+    public void testManualAdd(@Mocked GlobalStateMgr globalStateMgr,
+                              @Mocked SystemInfoService systemInfoService,
+                              @Mocked NetUtils utils) throws InterruptedException {
+        Config.black_host_history_sec = 5; // 5s
+        HostBlacklist blacklist = new HostBlacklist();
+        new Expectations() {
+            {
+                globalStateMgr.getNodeMgr().getClusterInfo();
+                result = systemInfoService;
+
+                // backend 10003, which is not available
+                ComputeNode backend3 = new ComputeNode();
+                backend3.setAlive(true);
+                backend3.setHost("host10003");
+                backend3.setBrpcPort(10003);
+                backend3.setHttpPort(10013);
+                systemInfoService.getBackendOrComputeNode(10003L);
+                result = backend3;
+
+                systemInfoService.checkNodeAvailable(backend3);
+                result = true;
+            }
+        };
+
+        blacklist.addByManual(10003L);
+        Thread.sleep(7000);
+        Assert.assertTrue(blacklist.contains(10003L));
+
+        Thread.sleep(2000);
+        blacklist.refresh();
+        Assert.assertTrue(blacklist.contains(10003L));
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

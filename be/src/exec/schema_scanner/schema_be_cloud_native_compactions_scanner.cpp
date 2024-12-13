@@ -25,12 +25,16 @@
 #include "storage/lake/tablet_manager.h"
 #include "storage/storage_engine.h"
 #include "types/logical_type.h"
+<<<<<<< HEAD
 #include "util/metrics.h"
 #include "util/starrocks_metrics.h"
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaBeCloudNativeCompactionsScanner::_s_columns[] = {
+<<<<<<< HEAD
         {"BE_ID", TYPE_BIGINT, sizeof(int64_t), false},
         {"TXN_ID", TYPE_BIGINT, sizeof(int64_t), false},
         {"TABLET_ID", TYPE_BIGINT, sizeof(int64_t), false},
@@ -41,6 +45,19 @@ SchemaScanner::ColumnDesc SchemaBeCloudNativeCompactionsScanner::_s_columns[] = 
         {"FINISH_TIME", TYPE_DATETIME, sizeof(DateTimeValue), true},
         {"PROGRESS", TYPE_INT, sizeof(int32_t), false},
         {"STATUS", TYPE_VARCHAR, sizeof(StringValue), false}};
+=======
+        {"BE_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"TXN_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"TABLET_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"VERSION", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"SKIPPED", TypeDescriptor::from_logical_type(TYPE_BOOLEAN), sizeof(bool), false},
+        {"RUNS", TypeDescriptor::from_logical_type(TYPE_INT), sizeof(int), false},
+        {"START_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
+        {"FINISH_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
+        {"PROGRESS", TypeDescriptor::from_logical_type(TYPE_INT), sizeof(int32_t), false},
+        {"STATUS", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"PROFILE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false}};
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 SchemaBeCloudNativeCompactionsScanner::SchemaBeCloudNativeCompactionsScanner()
         : SchemaScanner(_s_columns, sizeof(_s_columns) / sizeof(SchemaScanner::ColumnDesc)) {}
@@ -70,37 +87,69 @@ Status SchemaBeCloudNativeCompactionsScanner::fill_chunk(ChunkPtr* chunk) {
     for (; _cur_idx < end; _cur_idx++) {
         auto& info = _infos[_cur_idx];
         for (const auto& [slot_id, index] : slot_id_to_index_map) {
+<<<<<<< HEAD
             if (slot_id < 1 || slot_id > 10) {
+=======
+            if (slot_id < 1 || slot_id > 11) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 return Status::InternalError(strings::Substitute("invalid slot id:$0", slot_id));
             }
             ColumnPtr column = (*chunk)->get_column_by_slot_id(slot_id);
             switch (slot_id) {
             case 1: {
+<<<<<<< HEAD
                 // be id
+=======
+                // BE_ID
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&_be_id);
                 break;
             }
             case 2: {
+<<<<<<< HEAD
+=======
+                // TXN_ID
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.txn_id);
                 break;
             }
             case 3: {
+<<<<<<< HEAD
+=======
+                // TABLET_ID
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.tablet_id);
                 break;
             }
             case 4: {
+<<<<<<< HEAD
+=======
+                // VERSION
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.version);
                 break;
             }
             case 5: {
+<<<<<<< HEAD
+=======
+                // SKIPPED
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 fill_column_with_slot<TYPE_BOOLEAN>(column.get(), (void*)&info.skipped);
                 break;
             }
             case 6: {
+<<<<<<< HEAD
+=======
+                // RUNS
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 fill_column_with_slot<TYPE_INT>(column.get(), (void*)&info.runs);
                 break;
             }
             case 7: {
+<<<<<<< HEAD
+=======
+                // START_TIME
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (info.start_time > 0) {
                     DateTimeValue ts;
                     ts.from_unixtime(info.start_time, _ctz);
@@ -111,6 +160,10 @@ Status SchemaBeCloudNativeCompactionsScanner::fill_chunk(ChunkPtr* chunk) {
                 break;
             }
             case 8: {
+<<<<<<< HEAD
+=======
+                // FINISH_TIME
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (info.finish_time > 0) {
                     DateTimeValue ts;
                     ts.from_unixtime(info.finish_time, _ctz);
@@ -121,12 +174,28 @@ Status SchemaBeCloudNativeCompactionsScanner::fill_chunk(ChunkPtr* chunk) {
                 break;
             }
             case 9: {
+<<<<<<< HEAD
+=======
+                // PROGRESS
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 fill_column_with_slot<TYPE_INT>(column.get(), (void*)&info.progress);
                 break;
             }
             case 10: {
+<<<<<<< HEAD
                 auto s = info.status.message();
                 Slice v(s);
+=======
+                // STATUS
+                auto s = info.status.message();
+                Slice v(s.data(), s.size());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&v);
+                break;
+            }
+            case 11: {
+                // PROFILE
+                Slice v(info.profile.data(), info.profile.size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&v);
                 break;
             }

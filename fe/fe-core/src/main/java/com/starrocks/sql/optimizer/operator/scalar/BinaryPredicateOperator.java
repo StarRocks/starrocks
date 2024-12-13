@@ -45,7 +45,11 @@ public class BinaryPredicateOperator extends PredicateOperator {
                     .put(BinaryType.GT, BinaryType.LE)
                     .build();
 
+<<<<<<< HEAD
     private final BinaryType type;
+=======
+    private BinaryType type;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public BinaryPredicateOperator(BinaryType type, ScalarOperator... arguments) {
         super(OperatorType.BINARY, arguments);
@@ -59,6 +63,13 @@ public class BinaryPredicateOperator extends PredicateOperator {
         Preconditions.checkState(arguments.size() == 2);
     }
 
+<<<<<<< HEAD
+=======
+    public void setBinaryType(BinaryType type) {
+        this.type = type;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public BinaryType getBinaryType() {
         return type;
     }
@@ -89,6 +100,28 @@ public class BinaryPredicateOperator extends PredicateOperator {
         }
     }
 
+<<<<<<< HEAD
+=======
+    /**
+     * For Non-Strict Monotonic function, we need to convert
+     * 1. > to >=, and < to <=
+     * 2. !=, not supported
+     */
+    public BinaryPredicateOperator normalizeNonStrictMonotonic() {
+        if (getBinaryType() == BinaryType.NE) {
+            return null;
+        }
+        BinaryPredicateOperator result = (BinaryPredicateOperator) clone();
+        if (getBinaryType() == BinaryType.LT) {
+            result.setBinaryType(BinaryType.LE);
+        }
+        if (getBinaryType() == BinaryType.GT) {
+            result.setBinaryType(BinaryType.GE);
+        }
+        return result;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public String toString() {
         return getChild(0).toString() + " " + type.toString() + " " + getChild(1).toString();

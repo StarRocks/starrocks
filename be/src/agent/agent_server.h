@@ -38,6 +38,10 @@
 #include <string>
 #include <vector>
 
+<<<<<<< HEAD
+=======
+#include "agent/agent_common.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "gutil/macros.h"
 
 namespace starrocks {
@@ -77,6 +81,11 @@ public:
     // Returns nullptr if `type` is not a valid value of `TTaskType::type`.
     ThreadPool* get_thread_pool(int type) const;
 
+<<<<<<< HEAD
+=======
+    void stop_task_worker_pool(TaskWorkerType type) const;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     DISALLOW_COPY_AND_MOVE(AgentServer);
 
 private:

@@ -75,7 +75,11 @@ Status VectorizedInConstPredicateBuilder::create() {
     return _st;
 }
 
+<<<<<<< HEAD
 Status VectorizedInConstPredicateBuilder::add_values(const ColumnPtr& column, size_t column_offset) {
+=======
+void VectorizedInConstPredicateBuilder::add_values(const ColumnPtr& column, size_t column_offset) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     LogicalType type = _expr->type().type;
     Expr* expr = _in_pred_ctx->root();
     DCHECK(column != nullptr);
@@ -137,7 +141,10 @@ Status VectorizedInConstPredicateBuilder::add_values(const ColumnPtr& column, si
         default:;
         }
     }
+<<<<<<< HEAD
     return Status::OK();
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 } // namespace starrocks

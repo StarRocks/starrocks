@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # grouping
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 判断一个列是否为聚合列，如果是聚合列则返回 0，否则返回 1。
 

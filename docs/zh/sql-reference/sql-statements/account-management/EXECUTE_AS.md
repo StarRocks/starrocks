@@ -33,7 +33,11 @@ EXECUTE AS test2 WITH NO REVERT;
 
 语句执行成功后，可以通过 `select current_user()` 命令获取当前用户。
 
+<<<<<<< HEAD
 ```undefined
+=======
+```plain
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 select current_user();
 +-----------------------------+
 | CURRENT_USER()              |

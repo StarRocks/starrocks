@@ -31,6 +31,10 @@
 #include "exec/pipeline/scan/scan_operator.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/workgroup/work_group_fwd.h"
+<<<<<<< HEAD
+=======
+#include "exprs/runtime_filter_bank.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "fmt/printf.h"
 #include "runtime/mem_tracker.h"
 #include "util/phmap/phmap.h"
@@ -48,8 +52,13 @@ namespace pipeline {
 class PipelineDriver;
 using DriverPtr = std::shared_ptr<PipelineDriver>;
 using Drivers = std::vector<DriverPtr>;
+<<<<<<< HEAD
 using IterateImmutableDriverFunc = std::function<void(DriverConstRawPtr)>;
 using ImmutableDriverPredicateFunc = std::function<bool(DriverConstRawPtr)>;
+=======
+using ConstDriverConsumer = std::function<void(DriverConstRawPtr)>;
+using ConstDriverPredicator = std::function<bool(DriverConstRawPtr)>;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 class DriverQueue;
 
 enum DriverState : uint32_t {
@@ -215,7 +224,11 @@ public:
                              driver._driver_id) {}
 
     virtual ~PipelineDriver() noexcept;
+<<<<<<< HEAD
     void check_operator_close_states(std::string func_name);
+=======
+    void check_operator_close_states(const std::string& func_name);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     QueryContext* query_ctx() { return _query_ctx; }
     const QueryContext* query_ctx() const { return _query_ctx; }
@@ -297,7 +310,12 @@ public:
 
     // drivers in PRECONDITION_BLOCK state must be marked READY after its dependent runtime-filters or hash tables
     // are finished.
+<<<<<<< HEAD
     void mark_precondition_ready(RuntimeState* runtime_state);
+=======
+    void mark_precondition_ready();
+    bool precondition_prepared() const { return _precondition_prepared; }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     void start_timers();
     void stop_timers();
     int64_t get_active_time() const { return _active_timer->value(); }
@@ -318,6 +336,7 @@ public:
     bool pending_finish() { return _state == DriverState::PENDING_FINISH; }
     bool is_still_pending_finish() { return source_operator()->pending_finish() || sink_operator()->pending_finish(); }
     // return false if all the dependencies are ready, otherwise return true.
+<<<<<<< HEAD
     bool dependencies_block() {
         if (_all_dependencies_ready) {
             return false;
@@ -326,6 +345,9 @@ public:
                 std::all_of(_dependencies.begin(), _dependencies.end(), [](auto& dep) { return dep->is_ready(); });
         return !_all_dependencies_ready;
     }
+=======
+    bool dependencies_block();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // return false if all the local runtime filters are ready, otherwise return false.
     bool local_rf_block() {
@@ -345,7 +367,11 @@ public:
         _all_global_rf_ready_or_timeout =
                 _precondition_block_timer_sw->elapsed_time() >= _global_rf_wait_timeout_ns || // Timeout,
                 std::all_of(_global_rf_descriptors.begin(), _global_rf_descriptors.end(), [](auto* rf_desc) {
+<<<<<<< HEAD
                     return rf_desc->is_local() || rf_desc->runtime_filter() != nullptr;
+=======
+                    return rf_desc->is_local() || rf_desc->runtime_filter(-1) != nullptr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }); // or all the remote RFs are ready.
 
         return !_all_global_rf_ready_or_timeout;
@@ -371,7 +397,25 @@ public:
         }
     }
 
+<<<<<<< HEAD
     bool is_not_blocked() {
+=======
+    bool has_precondition() const {
+        return !_local_rf_holders.empty() || !_dependencies.empty() || !_global_rf_descriptors.empty();
+    }
+
+    std::string get_preconditions_block_reasons() {
+        if (_state == DriverState::PRECONDITION_BLOCK) {
+            return std::string(dependencies_block() ? "(dependencies," : "(") +
+                   std::string(global_rf_block() ? "global runtime filter," : "") +
+                   std::string(local_rf_block() ? "local runtime filter)" : ")");
+        } else {
+            return "";
+        }
+    }
+
+    StatusOr<bool> is_not_blocked() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // If the sink operator is finished, the rest operators of this driver needn't be executed anymore.
         if (sink_operator()->is_finished()) {
             return true;
@@ -388,9 +432,15 @@ public:
 
             // TODO(trueeyu): This writing is to ensure that MemTracker will not be destructed before the thread ends.
             //  This writing method is a bit tricky, and when there is a better way, replace it
+<<<<<<< HEAD
             mark_precondition_ready(_runtime_state);
 
             check_short_circuit();
+=======
+            mark_precondition_ready();
+
+            RETURN_IF_ERROR(check_short_circuit());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (_state == DriverState::PENDING_FINISH) {
                 return false;
             }
@@ -414,7 +464,11 @@ public:
     }
 
     // Check whether an operator can be short-circuited, when is_precondition_block() becomes false from true.
+<<<<<<< HEAD
     void check_short_circuit();
+=======
+    Status check_short_circuit();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     bool need_report_exec_state();
     void report_exec_state_if_necessary();
@@ -473,6 +527,10 @@ protected:
     void _close_operators(RuntimeState* runtime_state);
 
     void _adjust_memory_usage(RuntimeState* state, MemTracker* tracker, OperatorPtr& op, const ChunkPtr& chunk);
+<<<<<<< HEAD
+=======
+    void _try_to_release_buffer(RuntimeState* state, OperatorPtr& op);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // Update metrics when the driver yields.
     void _update_driver_acct(size_t total_chunks_moved, size_t total_rows_moved, size_t time_spent);
@@ -484,6 +542,10 @@ protected:
     Operators _operators;
     DriverDependencies _dependencies;
     bool _all_dependencies_ready = false;
+<<<<<<< HEAD
+=======
+    bool _precondition_prepared = false;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     mutable std::vector<RuntimeFilterHolder*> _local_rf_holders;
     bool _all_local_rf_ready = false;
@@ -508,7 +570,11 @@ protected:
     DriverState _state{DriverState::NOT_READY};
     std::shared_ptr<RuntimeProfile> _runtime_profile = nullptr;
 
+<<<<<<< HEAD
     phmap::flat_hash_map<int32_t, OperatorStage> _operator_stages;
+=======
+    phmap::flat_hash_map<int32_t, OperatorStage, StdHash<int32_t>> _operator_stages;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     workgroup::WorkGroupPtr _workgroup = nullptr;
     DriverQueue* _in_queue = nullptr;
@@ -516,6 +582,11 @@ protected:
     size_t _driver_queue_level = 0;
     std::atomic<bool> _in_ready_queue{false};
 
+<<<<<<< HEAD
+=======
+    std::atomic<bool> _has_log_cancelled{false};
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // metrics
     RuntimeProfile::Counter* _total_timer = nullptr;
     RuntimeProfile::Counter* _active_timer = nullptr;

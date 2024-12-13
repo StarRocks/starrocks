@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # current_version
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Returns the current version of StarRocks. Two syntaxes are provided for compatibility with different clients.
 

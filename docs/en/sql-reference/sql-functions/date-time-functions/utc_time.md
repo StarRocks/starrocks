@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # utc_time
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Returns the current UTC time as a value in 'HH:MM:SS'.
 
@@ -25,6 +29,10 @@ MySQL > select utc_time();
 +----------------+
 ```
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ## keyword
 
 UTC_TIME,UTC,TIME

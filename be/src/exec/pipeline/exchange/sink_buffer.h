@@ -19,6 +19,10 @@
 #include <algorithm>
 #include <future>
 #include <list>
+<<<<<<< HEAD
+=======
+#include <memory>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include <mutex>
 #include <queue>
 #include <unordered_set>
@@ -33,6 +37,10 @@
 #include "util/brpc_stub_cache.h"
 #include "util/defer_op.h"
 #include "util/disposable_closure.h"
+<<<<<<< HEAD
+=======
+#include "util/internal_service_recoverable_stub.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "util/phmap/phmap.h"
 
 namespace starrocks::pipeline {
@@ -49,7 +57,11 @@ struct TransmitChunkInfo {
     // a same exchange source fragment instance, so we should use fragment_instance_id
     // of the destination as the key of destination instead of channel_id.
     TUniqueId fragment_instance_id;
+<<<<<<< HEAD
     doris::PBackendService_Stub* brpc_stub;
+=======
+    std::shared_ptr<PInternalService_RecoverableStub> brpc_stub;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     PTransmitChunkParamsPtr params;
     butil::IOBuf attachment;
     int64_t attachment_physical_bytes;
@@ -133,6 +145,7 @@ private:
     /// use int64_t as key, which is the field type of TUniqueId::lo
     /// because TUniqueId::hi is exactly the same in one query
 
+<<<<<<< HEAD
     // num eos per instance
     phmap::flat_hash_map<int64_t, int64_t> _num_sinkers;
     phmap::flat_hash_map<int64_t, int64_t> _request_seqs;
@@ -144,10 +157,42 @@ private:
     //      c. receive response-2, _max_continuous_acked_seqs[x]->3, _discontinuous_acked_seqs[x]->()
     phmap::flat_hash_map<int64_t, int64_t> _max_continuous_acked_seqs;
     phmap::flat_hash_map<int64_t, std::unordered_set<int64_t>> _discontinuous_acked_seqs;
+=======
+    struct SinkContext {
+        // num eos per instance
+        int64_t num_sinker;
+        int64_t request_seq;
+        // Considering the following situation
+        // Sending request 1, 2, 3 in order with one possible order of response 1, 3, 2,
+        // and field transformation are as following
+        //      a. receive response-1, _max_continuous_acked_seqs[x]->1, _discontinuous_acked_seqs[x]->()
+        //      b. receive response-3, _max_continuous_acked_seqs[x]->1, _discontinuous_acked_seqs[x]->(3)
+        //      c. receive response-2, _max_continuous_acked_seqs[x]->3, _discontinuous_acked_seqs[x]->()
+        int64_t max_continuous_acked_seqs;
+        std::unordered_set<int64_t> discontinuous_acked_seqs;
+        // The request needs the reference to the allocated finst id,
+        // so cache finst id for each dest fragment instance.
+        PUniqueId finst_id;
+        std::queue<TransmitChunkInfo, std::list<TransmitChunkInfo>> buffer;
+        Mutex request_mutex;
+
+        std::atomic_size_t num_finished_rpcs;
+        std::atomic_size_t num_in_flight_rpcs;
+        TimeTrace network_time;
+
+        Mutex mutex;
+
+        TNetworkAddress dest_addrs;
+    };
+    phmap::flat_hash_map<int64_t, std::unique_ptr<SinkContext>, StdHash<int64_t>> _sink_ctxs;
+    SinkContext& sink_ctx(int64_t instance_id) { return *_sink_ctxs[instance_id]; }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::atomic<int32_t> _total_in_flight_rpc = 0;
     std::atomic<int32_t> _num_uncancelled_sinkers = 0;
     std::atomic<int32_t> _num_remaining_eos = 0;
 
+<<<<<<< HEAD
     // The request needs the reference to the allocated finst id,
     // so cache finst id for each dest fragment instance.
     phmap::flat_hash_map<int64_t, PUniqueId> _instance_id2finst_id;
@@ -158,6 +203,8 @@ private:
     phmap::flat_hash_map<int64_t, std::unique_ptr<Mutex>> _mutexes;
     phmap::flat_hash_map<int64_t, TNetworkAddress> _dest_addrs;
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // True means that SinkBuffer needn't input chunk and send chunk anymore,
     // but there may be still in-flight RPC running.
     // It becomes true, when all sinkers have sent EOS, or been set_finished/cancelled, or RPC has returned error.

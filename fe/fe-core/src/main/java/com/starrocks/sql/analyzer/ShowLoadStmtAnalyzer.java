@@ -42,7 +42,11 @@ public class ShowLoadStmtAnalyzer {
         new ShowLoadStmtAnalyzerVisitor().visit(statement, context);
     }
 
+<<<<<<< HEAD
     static class ShowLoadStmtAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+=======
+    static class ShowLoadStmtAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         private boolean isAccurateMatch;
         private String labelValue;

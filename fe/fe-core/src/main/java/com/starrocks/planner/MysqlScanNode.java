@@ -45,7 +45,11 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MysqlTable;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TMySQLScanNode;
 import com.starrocks.thrift.TPlanNode;
@@ -69,7 +73,11 @@ public class MysqlScanNode extends ScanNode {
      */
     public MysqlScanNode(PlanNodeId id, TupleDescriptor desc, MysqlTable tbl) {
         super(id, desc, "SCAN MYSQL");
+<<<<<<< HEAD
         tblName = "`" + tbl.getMysqlTableName() + "`";
+=======
+        tblName = "`" + tbl.getCatalogTableName() + "`";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public void setTemporalClause(String temporalClause) {
@@ -87,7 +95,11 @@ public class MysqlScanNode extends ScanNode {
     }
 
     @Override
+<<<<<<< HEAD
     public void finalizeStats(Analyzer analyzer) throws UserException {
+=======
+    public void finalizeStats(Analyzer analyzer) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         computeColumnsAndFilters();
     }
 
@@ -175,16 +187,22 @@ public class MysqlScanNode extends ScanNode {
         return null;
     }
 
+<<<<<<< HEAD
     @Override
     public int getNumInstances() {
         return 1;
     }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     @Override
     public void computeStats(Analyzer analyzer) {
         super.computeStats(analyzer);
+<<<<<<< HEAD
         // even if current node scan has no data,at least on backend will be assigned when the fragment actually execute
         numNodes = numNodes <= 0 ? 1 : numNodes;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // this is just to avoid mysql scan node's cardinality being -1. So that we can calculate the join cost
         // normally.
         // We assume that the data volume of all mysql tables is very small, so set cardinality directly to 1.
@@ -192,11 +210,14 @@ public class MysqlScanNode extends ScanNode {
     }
 
     @Override
+<<<<<<< HEAD
     public boolean canUsePipeLine() {
         return true;
     }
 
     @Override
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public boolean canUseRuntimeAdaptiveDop() {
         return true;
     }

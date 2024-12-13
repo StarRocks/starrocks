@@ -14,6 +14,11 @@
 
 package com.starrocks.lake.compaction;
 
+<<<<<<< HEAD
+=======
+import com.google.common.base.Strings;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.Objects;
 import java.util.Optional;
 
@@ -24,6 +29,10 @@ public class CompactionRecord {
     private final long finishTs;
     private final String partitionName;
     private final String errorMessage;
+<<<<<<< HEAD
+=======
+    private final String executionProfile;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     private CompactionRecord(CompactionJob context, String errorMessage) {
         Objects.requireNonNull(context.getFullPartitionName());
@@ -33,6 +42,10 @@ public class CompactionRecord {
         this.finishTs = context.getFinishTs();
         this.partitionName = context.getFullPartitionName();
         this.errorMessage = errorMessage;
+<<<<<<< HEAD
+=======
+        this.executionProfile = context.getExecutionProfile();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     static CompactionRecord build(CompactionJob context) {
@@ -66,4 +79,11 @@ public class CompactionRecord {
     public Optional<String> getErrorMessage() {
         return errorMessage != null ? Optional.of(errorMessage) : Optional.empty();
     }
+<<<<<<< HEAD
+=======
+
+    public Optional<String> getExecutionProfile() {
+        return Strings.isNullOrEmpty(executionProfile) ? Optional.empty() : Optional.of(executionProfile);
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

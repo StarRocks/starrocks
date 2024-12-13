@@ -25,10 +25,13 @@ public class UserAuthOption implements ParseNode {
 
     private final NodePosition pos;
 
+<<<<<<< HEAD
     public UserAuthOption(String password, String authPlugin, String authString, boolean passwordPlain) {
         this(password, authPlugin, authString, passwordPlain, NodePosition.ZERO);
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public UserAuthOption(String password, String authPlugin, String authString, boolean passwordPlain,
                           NodePosition pos) {
         this.pos = pos;

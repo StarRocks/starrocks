@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # str2date
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 按照 `format` 指定的格式将 `str` 转换为 DATE 类型的值。如果转换结果不对，返回 NULL。
 

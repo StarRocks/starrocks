@@ -221,73 +221,121 @@ The data is successfully loaded when the above result is returned.
 **Default value**:<br/>
 **Description**: One or more topics to subscribe to, where each topic corresponds to a StarRocks table. By default, StarRocks assumes that the topic name matches the name of the StarRocks table. So StarRocks determines the target StarRocks table by using the topic name. Please choose either to fill in `topics` or `topics.regex` (below), but not both. However, if the StarRocks table name is not the same as the topic name, then use the optional `starrocks.topic2table.map` parameter (below) to specify the mapping from topic name to table name.
 
+<<<<<<< HEAD
 ### topics.regex                        
+=======
+### topics.regex
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 **Required**:<br/>
 **Default value**:
 **Description**: Regular expression to match the one or more topics to subscribe to. For more description, see `topics`. Please choose either to fill in `topics.regex` or `topics` (above), but not both. <br/>
 
+<<<<<<< HEAD
 ### starrocks.topic2table.map           
+=======
+### starrocks.topic2table.map
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 **Required**: NO<br/>
 **Default value**:<br/>
 **Description**: The mapping of the StarRocks table name and the topic name when the topic name is different from the StarRocks table name. The format is `<topic-1>:<table-1>,<topic-2>:<table-2>,...`.
 
+<<<<<<< HEAD
 ### starrocks.http.url                  
+=======
+### starrocks.http.url
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 **Required**: YES<br/>
 **Default value**:<br/>
 **Description**: The HTTP URL of the FE in your StarRocks cluster. The format is `<fe_host1>:<fe_http_port1>,<fe_host2>:<fe_http_port2>,...`. Multiple addresses are separated by commas (,). For example, `192.168.xxx.xxx:8030,192.168.xxx.xxx:8030`.
 
+<<<<<<< HEAD
 ### starrocks.database.name             
+=======
+### starrocks.database.name
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 **Required**: YES<br/>
 **Default value**:<br/>
 **Description**: The name of StarRocks database.
 
+<<<<<<< HEAD
 ### starrocks.username                  
+=======
+### starrocks.username
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 **Required**: YES<br/>
 **Default value**:<br/>
 **Description**: The username of your StarRocks cluster account. The user needs the [INSERT](../sql-reference/sql-statements/account-management/GRANT.md) privilege on the StarRocks table.
 
+<<<<<<< HEAD
 ### starrocks.password                  
+=======
+### starrocks.password
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 **Required**: YES<br/>
 **Default value**:<br/>
 **Description**: The password of your StarRocks cluster account.
 
+<<<<<<< HEAD
 ### key.converter                       
+=======
+### key.converter
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 **Required**: NO<br/>
 **Default value**: Key converter used by Kafka Connect cluster<br/>
 **Description**: This parameter specifies the key converter for the sink connector (Kafka-connector-starrocks), which is used to deserialize the keys of Kafka data. The default key converter is the one used by Kafka Connect cluster.
 
+<<<<<<< HEAD
 ### value.converter                     
+=======
+### value.converter
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 **Required**: NO<br/>
 **Default value**: Value converter used by Kafka Connect cluster<br/>
 **Description**: This parameter specifies the value converter for the sink connector (Kafka-connector-starrocks), which is used to deserialize the values of Kafka data. The default value converter is the one used by Kafka Connect cluster.
 
+<<<<<<< HEAD
 ### key.converter.schema.registry.url   
+=======
+### key.converter.schema.registry.url
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 **Required**: NO<br/>
 **Default value**:<br/>
 **Description**: Schema registry URL for the key converter.
 
+<<<<<<< HEAD
 ### value.converter.schema.registry.url 
+=======
+### value.converter.schema.registry.url
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 **Required**: NO<br/>
 **Default value**:<br/>
 **Description**: Schema registry URL for the value converter.
 
+<<<<<<< HEAD
 ### tasks.max                           
+=======
+### tasks.max
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 **Required**: NO<br/>
 **Default value**: 1<br/>
 **Description**: The upper limit for the number of task threads that the Kafka connector can create, which is usually the same as the number of CPU cores on the worker nodes in the Kafka Connect cluster. You can tune this parameter to control load performance.
 
+<<<<<<< HEAD
 ### bufferflush.maxbytes                
+=======
+### bufferflush.maxbytes
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 **Required**: NO<br/>
 **Default value**: 94371840(90M)<br/>
@@ -296,7 +344,11 @@ The data is successfully loaded when the above result is returned.
 ### bufferflush.intervalms
 
 **Required**: NO<br/>
+<<<<<<< HEAD
 **Default value**: 300000<br/>
+=======
+**Default value**: 1000<br/>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 **Description**: Interval for sending a batch of data which controls the load latency. Range: [1000, 3600000].
 
 ### connect.timeoutms

@@ -19,6 +19,10 @@
 
 #include "column/column_helper.h"
 #include "exec/connector_scan_node.h"
+<<<<<<< HEAD
+=======
+#include "exec/pipeline/fragment_context.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "runtime/descriptor_helper.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
@@ -140,18 +144,30 @@ void HdfsScanNodeTest::_create_runtime_state() {
     TUniqueId id;
     _mem_tracker = std::make_shared<MemTracker>(-1, "olap scanner test");
     _runtime_state->init_mem_trackers(id);
+<<<<<<< HEAD
+=======
+    pipeline::FragmentContext* fragment_context = _runtime_state->obj_pool()->add(new pipeline::FragmentContext());
+    fragment_context->set_pred_tree_params({true, true});
+    _runtime_state->set_fragment_ctx(fragment_context);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 std::shared_ptr<TPlanNode> HdfsScanNodeTest::_create_tplan_node() {
     std::vector<::starrocks::TTupleId> tuple_ids{0};
+<<<<<<< HEAD
     std::vector<bool> nullable_tuples{true};
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     auto tnode = std::make_shared<TPlanNode>();
 
     tnode->__set_node_id(1);
     tnode->__set_node_type(TPlanNodeType::HDFS_SCAN_NODE);
     tnode->__set_row_tuples(tuple_ids);
+<<<<<<< HEAD
     tnode->__set_nullable_tuples(nullable_tuples);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     tnode->__set_limit(-1);
 
     TConnectorScanNode connector_scan_node;
@@ -163,14 +179,20 @@ std::shared_ptr<TPlanNode> HdfsScanNodeTest::_create_tplan_node() {
 
 std::shared_ptr<TPlanNode> HdfsScanNodeTest::_create_tplan_node_for_filter_partition() {
     std::vector<::starrocks::TTupleId> tuple_ids{0};
+<<<<<<< HEAD
     std::vector<bool> nullable_tuples{true};
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     auto tnode = std::make_shared<TPlanNode>();
 
     tnode->__set_node_id(1);
     tnode->__set_node_type(TPlanNodeType::HDFS_SCAN_NODE);
     tnode->__set_row_tuples(tuple_ids);
+<<<<<<< HEAD
     tnode->__set_nullable_tuples(nullable_tuples);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     tnode->__set_limit(-1);
 
     // partition_conjuncts
@@ -235,7 +257,13 @@ DescriptorTbl* HdfsScanNodeTest::_create_table_desc() {
     tuple_desc_builder.add_slot(slot4);
     tuple_desc_builder.build(&table_desc_builder);
     DescriptorTbl* tbl = nullptr;
+<<<<<<< HEAD
     DescriptorTbl::create(_runtime_state.get(), _pool, table_desc_builder.desc_tbl(), &tbl, config::vector_chunk_size);
+=======
+    CHECK(DescriptorTbl::create(_runtime_state.get(), _pool, table_desc_builder.desc_tbl(), &tbl,
+                                config::vector_chunk_size)
+                  .ok());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     THdfsPartition partition;
     std::map<int64_t, THdfsPartition> p_map;
@@ -267,7 +295,13 @@ DescriptorTbl* HdfsScanNodeTest::_create_table_desc_for_filter_partition() {
     tuple_desc_builder.add_slot(slot4);
     tuple_desc_builder.build(&table_desc_builder);
     DescriptorTbl* tbl = nullptr;
+<<<<<<< HEAD
     DescriptorTbl::create(_runtime_state.get(), _pool, table_desc_builder.desc_tbl(), &tbl, config::vector_chunk_size);
+=======
+    CHECK(DescriptorTbl::create(_runtime_state.get(), _pool, table_desc_builder.desc_tbl(), &tbl,
+                                config::vector_chunk_size)
+                  .ok());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // hdfs table
     THdfsTable t_hdfs_table;
@@ -336,7 +370,11 @@ DescriptorTbl* HdfsScanNodeTest::_create_table_desc_for_filter_partition() {
     TTableDescriptor tdesc;
     tdesc.__set_hdfsTable(t_hdfs_table);
     _table_desc = _pool->add(new HdfsTableDescriptor(tdesc, _pool));
+<<<<<<< HEAD
     _table_desc->create_key_exprs(_runtime_state.get(), _pool, _runtime_state->chunk_size());
+=======
+    _table_desc->create_key_exprs(_runtime_state.get(), _pool);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     tbl->get_tuple_descriptor(0)->set_table_desc(_table_desc);
 
     return tbl;

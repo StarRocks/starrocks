@@ -33,6 +33,10 @@ public:
 private:
     template <class AggFactory, class SourceFactory, class SinkFactory>
     pipeline::OpFactories _decompose_to_pipeline(pipeline::OpFactories& ops_with_sink,
+<<<<<<< HEAD
                                                  pipeline::PipelineBuilderContext* context);
+=======
+                                                 pipeline::PipelineBuilderContext* context, bool per_bucket_optimize);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 } // namespace starrocks

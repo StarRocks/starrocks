@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # exp, dexp
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 返回 e 的 `x` 次幂，也被称为自然指数函数。
 

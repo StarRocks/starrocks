@@ -103,7 +103,11 @@ public class HiveMetaClientTest {
         try {
             client.getAllDatabaseNames();
         } catch (Exception e) {
+<<<<<<< HEAD
             Assert.assertTrue(e.getMessage().contains("Unable to instantiate"));
+=======
+            Assert.assertTrue(e.getMessage().contains("Invalid port 90303"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -156,10 +160,17 @@ public class HiveMetaClientTest {
     public void testGetTextFileFormatDesc() {
         // Check is using default delimiter
         TextFileFormatDesc emptyDesc = HiveMetastoreApiConverter.toTextFileFormatDesc(new HashMap<>());
+<<<<<<< HEAD
         Assert.assertEquals("\001", emptyDesc.getFieldDelim());
         Assert.assertEquals("\n", emptyDesc.getLineDelim());
         Assert.assertEquals("\002", emptyDesc.getCollectionDelim());
         Assert.assertEquals("\003", emptyDesc.getMapkeyDelim());
+=======
+        Assert.assertNull(emptyDesc.getFieldDelim());
+        Assert.assertNull(emptyDesc.getLineDelim());
+        Assert.assertNull(emptyDesc.getCollectionDelim());
+        Assert.assertNull(emptyDesc.getMapkeyDelim());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // Check blank delimiter
         Map<String, String> blankParameters = new HashMap<>();
@@ -168,19 +179,33 @@ public class HiveMetaClientTest {
         blankParameters.put("collection.delim", "");
         blankParameters.put("mapkey.delim", "");
         TextFileFormatDesc blankDesc = HiveMetastoreApiConverter.toTextFileFormatDesc(blankParameters);
+<<<<<<< HEAD
         Assert.assertEquals("\001", blankDesc.getFieldDelim());
         Assert.assertEquals("\n", blankDesc.getLineDelim());
         Assert.assertEquals("\002", blankDesc.getCollectionDelim());
         Assert.assertEquals("\003", blankDesc.getMapkeyDelim());
+=======
+        Assert.assertNull(blankDesc.getFieldDelim());
+        Assert.assertNull(blankDesc.getLineDelim());
+        Assert.assertNull(blankDesc.getCollectionDelim());
+        Assert.assertNull(blankDesc.getMapkeyDelim());
+        Assert.assertEquals(0, blankDesc.getSkipHeaderLineCount());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // Check is using OpenCSVSerde
         Map<String, String> openCSVParameters = new HashMap<>();
         openCSVParameters.put("separatorChar", ",");
         TextFileFormatDesc openCSVDesc = HiveMetastoreApiConverter.toTextFileFormatDesc(openCSVParameters);
         Assert.assertEquals(",", openCSVDesc.getFieldDelim());
+<<<<<<< HEAD
         Assert.assertEquals("\n", openCSVDesc.getLineDelim());
         Assert.assertEquals("\002", openCSVDesc.getCollectionDelim());
         Assert.assertEquals("\003", openCSVDesc.getMapkeyDelim());
+=======
+        Assert.assertNull(openCSVDesc.getLineDelim());
+        Assert.assertNull(openCSVDesc.getCollectionDelim());
+        Assert.assertNull(openCSVDesc.getMapkeyDelim());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // Check is using custom delimiter
         Map<String, String> parameters = new HashMap<>();
@@ -188,11 +213,51 @@ public class HiveMetaClientTest {
         parameters.put("line.delim", "\004");
         parameters.put("collection.delim", "\006");
         parameters.put("mapkey.delim", ":");
+<<<<<<< HEAD
+=======
+        parameters.put("skip.header.line.count", "2");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         TextFileFormatDesc customDesc = HiveMetastoreApiConverter.toTextFileFormatDesc(parameters);
         Assert.assertEquals(",", customDesc.getFieldDelim());
         Assert.assertEquals("\004", customDesc.getLineDelim());
         Assert.assertEquals("\006", customDesc.getCollectionDelim());
         Assert.assertEquals(":", customDesc.getMapkeyDelim());
+<<<<<<< HEAD
+=======
+        Assert.assertEquals(2, customDesc.getSkipHeaderLineCount());
+        parameters.put("skip.header.line.count", "-10");
+        customDesc = HiveMetastoreApiConverter.toTextFileFormatDesc(parameters);
+        Assert.assertEquals(0, customDesc.getSkipHeaderLineCount());
+    }
+
+    @Test
+    public void testDropTable(@Mocked HiveMetaStoreClient metaStoreClient) throws TException {
+        new Expectations() {
+            {
+                metaStoreClient.dropTable("hive_db", "hive_table", anyBoolean, anyBoolean);
+                result = any;
+            }
+        };
+
+        HiveConf hiveConf = new HiveConf();
+        hiveConf.set(MetastoreConf.ConfVars.THRIFT_URIS.getHiveName(), "thrift://127.0.0.1:90300");
+        HiveMetaClient client = new HiveMetaClient(hiveConf);
+        client.dropTable("hive_db", "hive_table");
+    }
+
+    @Test
+    public void testTableExists(@Mocked HiveMetaStoreClient metaStoreClient) throws TException {
+        new Expectations() {
+            {
+                metaStoreClient.tableExists("hive_db", "hive_table");
+                result = true;
+            }
+        };
+        HiveConf hiveConf = new HiveConf();
+        hiveConf.set(MetastoreConf.ConfVars.THRIFT_URIS.getHiveName(), "thrift://127.0.0.1:90300");
+        HiveMetaClient client = new HiveMetaClient(hiveConf);
+        Assert.assertTrue(client.tableExists("hive_db", "hive_table"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -203,6 +268,15 @@ public class HiveMetaClientTest {
 
         new Expectations() {
             {
+<<<<<<< HEAD
+=======
+                metaStoreClient.alter_table(dbName, tblName, null);
+                result = any;
+
+                metaStoreClient.alter_partition(dbName, tblName, partition);
+                result = any;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 metaStoreClient.listPartitionNames(dbName, tblName, (short) -1);
                 result = any;
 
@@ -228,6 +302,11 @@ public class HiveMetaClientTest {
         HiveConf hiveConf = new HiveConf();
         hiveConf.set(MetastoreConf.ConfVars.THRIFT_URIS.getHiveName(), "thrift://127.0.0.1:90300");
         HiveMetaClient client = new HiveMetaClient(hiveConf);
+<<<<<<< HEAD
+=======
+        client.alterTable(dbName, tblName, null);
+        client.alterPartition("hive_db", "hive_table", partition);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         client.getPartitionKeys(dbName, tblName);
         client.getPartitionKeysByValue(dbName, tblName, new ArrayList<String>());
 
@@ -236,9 +315,17 @@ public class HiveMetaClientTest {
         Assert.assertThrows(StarRocksConnectorException.class,
                 () -> client.getPartitionsByNames(dbName, tblName, Arrays.asList("retry")));
 
+<<<<<<< HEAD
         client.getTableColumnStats(dbName, tblName, new ArrayList<>());
         client.getPartitionColumnStats(dbName, tblName, new ArrayList<>(), new ArrayList<>());
         client.getNextNotification(0, 0, null);
+=======
+        Assert.assertThrows(StarRocksConnectorException.class,
+                () -> client.getPartitionColumnStats(dbName, tblName, new ArrayList<>(), Arrays.asList()));
+        client.getTableColumnStats(dbName, tblName, new ArrayList<>());
+        client.getNextNotification(0, 0, null);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }
 

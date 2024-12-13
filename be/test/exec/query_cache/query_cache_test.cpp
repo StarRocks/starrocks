@@ -22,6 +22,11 @@
 
 #include "column/fixed_length_column.h"
 #include "column/vectorized_fwd.h"
+<<<<<<< HEAD
+=======
+#include "exec/pipeline/group_execution/execution_group_builder.h"
+#include "exec/pipeline/group_execution/execution_group_fwd.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_driver.h"
 #include "exec/query_cache/cache_manager.h"
@@ -128,7 +133,11 @@ TEST_F(QueryCacheTest, testCacheManager) {
     ASSERT_EQ(cache_mgr->memory_usage(), 960);
 
     for (auto i = 20; i < 30; ++i) {
+<<<<<<< HEAD
         auto status = cache_mgr->populate(strings::Substitute("key_$0", i), create_cache_value(100));
+=======
+        cache_mgr->populate(strings::Substitute("key_$0", i), create_cache_value(100));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     ASSERT_LE(cache_mgr->memory_usage(), cache_mgr->capacity());
 
@@ -235,7 +244,11 @@ Tasks create_test_pipelines(const query_cache::CacheParam& cache_param, size_t d
     Tasks tasks;
     tasks.resize(dop);
     for (auto i = 0; i < dop; ++i) {
+<<<<<<< HEAD
         pipeline::Pipeline pipeline(0, opFactories);
+=======
+        pipeline::Pipeline pipeline(0, opFactories, nullptr);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         auto upstream_operators = pipeline.create_operators(dop, i);
         auto downstream_operator = reduce_source->create(dop, i);
         tasks[i].upstream = std::move(upstream_operators);
@@ -263,10 +276,17 @@ Tasks create_test_pipelines(const query_cache::CacheParam& cache_param, size_t d
         tasks[k].cache_operator->set_multilane_operators(std::move(multilane_operators));
 
         for (auto& i : upstream) {
+<<<<<<< HEAD
             i->prepare(state);
         }
 
         tasks[k].downstream->prepare(state);
+=======
+            (void)i->prepare(state);
+        }
+
+        (void)tasks[k].downstream->prepare(state);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     return tasks;
 }
@@ -279,7 +299,11 @@ bool exec_test_pipeline(Task& task, RuntimeState* state, const ChunkPtr& input_c
     int num_steps = 0;
     int first_unfinished_idx = 0;
     if (set_first_op_finished) {
+<<<<<<< HEAD
         first_op->set_finishing(state);
+=======
+        CHECK(first_op->set_finishing(state).ok());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     for (; first_unfinished_idx < upstream.size() && upstream[first_unfinished_idx]->is_finished();
          ++first_unfinished_idx) {
@@ -289,7 +313,11 @@ bool exec_test_pipeline(Task& task, RuntimeState* state, const ChunkPtr& input_c
     }
 
     if (first_unfinished_idx > 0) {
+<<<<<<< HEAD
         upstream[first_unfinished_idx]->set_finishing(state);
+=======
+        CHECK(upstream[first_unfinished_idx]->set_finishing(state).ok());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     while (true) {
@@ -298,7 +326,11 @@ bool exec_test_pipeline(Task& task, RuntimeState* state, const ChunkPtr& input_c
                                                 first_op->get_name(), input_chunk->num_rows(),
                                                 input_chunk->owner_info().owner_id(),
                                                 input_chunk->owner_info().is_last_chunk());
+<<<<<<< HEAD
             first_op->push_chunk(state, input_chunk);
+=======
+            CHECK(first_op->push_chunk(state, input_chunk).ok());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             pushed = true;
         }
         bool movable = false;
@@ -306,7 +338,11 @@ bool exec_test_pipeline(Task& task, RuntimeState* state, const ChunkPtr& input_c
             auto curr_op = upstream[i - 1];
             auto next_op = upstream[i];
             if (curr_op->is_finished()) {
+<<<<<<< HEAD
                 next_op->set_finishing(state);
+=======
+                CHECK(next_op->set_finishing(state).ok());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 movable = true;
                 first_unfinished_idx = i;
                 continue;
@@ -323,11 +359,19 @@ bool exec_test_pipeline(Task& task, RuntimeState* state, const ChunkPtr& input_c
                         "[EXEC] Transfer chunk: from_op=$0, to_op=$1, num_rows=$2, tablet_id=$3, eof=$4",
                         curr_op->get_name(), next_op->get_name(), chunk->num_rows(), chunk->owner_info().owner_id(),
                         chunk->owner_info().is_last_chunk());
+<<<<<<< HEAD
                 next_op->push_chunk(state, chunk);
                 num_steps += pushed;
                 if (curr_op->is_finished()) {
                     first_unfinished_idx = i;
                     next_op->set_finishing(state);
+=======
+                CHECK(next_op->push_chunk(state, chunk).ok());
+                num_steps += pushed;
+                if (curr_op->is_finished()) {
+                    first_unfinished_idx = i;
+                    CHECK(next_op->set_finishing(state).ok());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
             }
         }
@@ -451,7 +495,11 @@ void take_action(Task& task, const Action& action, RuntimeState* state) {
     if (ac_result == query_cache::AcquireResult::AR_PROBE) {
         auto probe_result = task.cache_operator->probe_cache(action.owner_id, action.version);
         ASSERT_EQ(probe_result, action.expect_probe_result);
+<<<<<<< HEAD
         task.cache_operator->reset_lane(state, action.owner_id);
+=======
+        ASSERT_TRUE(task.cache_operator->reset_lane(state, action.owner_id).ok());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (!probe_result) {
             exec_action(task, action, state);
             return;

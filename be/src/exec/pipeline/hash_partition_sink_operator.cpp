@@ -17,7 +17,11 @@
 namespace starrocks::pipeline {
 
 Status HashPartitionSinkOperator::prepare(RuntimeState* state) {
+<<<<<<< HEAD
     Operator::prepare(state);
+=======
+    RETURN_IF_ERROR(Operator::prepare(state));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     _partition_num = ADD_COUNTER(_unique_metrics, "PartitionNumber", TUnit::UNIT);
     return _hash_partition_ctx->prepare(state, _unique_metrics.get());
 }

@@ -38,11 +38,27 @@ Status DictDecodeOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk
     Columns decode_columns(_encode_column_cids.size());
     for (size_t i = 0; i < _encode_column_cids.size(); i++) {
         const ColumnPtr& encode_column = chunk->get_column_by_slot_id(_encode_column_cids[i]);
+<<<<<<< HEAD
         TypeDescriptor desc;
         desc.type = TYPE_VARCHAR;
 
         decode_columns[i] = ColumnHelper::create_column(desc, encode_column->is_nullable());
         RETURN_IF_ERROR(_decoders[i]->decode(encode_column.get(), decode_columns[i].get()));
+=======
+        TypeDescriptor* desc = _decode_column_types[i];
+        decode_columns[i] = ColumnHelper::create_column(*desc, encode_column->is_nullable());
+        if (encode_column->only_null()) {
+            bool res = decode_columns[i]->append_nulls(encode_column->size());
+            DCHECK(res);
+            continue;
+        }
+
+        if (desc->is_array_type()) {
+            RETURN_IF_ERROR(_decoders[i]->decode_array(encode_column.get(), decode_columns[i].get()));
+        } else {
+            RETURN_IF_ERROR(_decoders[i]->decode_string(encode_column.get(), decode_columns[i].get()));
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     _cur_chunk = std::make_shared<Chunk>();
@@ -86,20 +102,32 @@ Status DictDecodeOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Expr::open(_expr_ctxs, state));
 
     const auto& global_dict = state->get_query_global_dict_map();
+<<<<<<< HEAD
     _dict_optimize_parser.set_mutable_dict_maps(state, state->mutable_query_global_dict_map());
+=======
+    auto dict_optimize_parser = state->mutable_dict_optimize_parser();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     for (auto& [slot_id, v] : _string_functions) {
         auto dict_iter = global_dict.find(slot_id);
         auto dict_not_contains_cid = dict_iter == global_dict.end();
         if (dict_not_contains_cid) {
             auto& [expr_ctx, dict_ctx] = v;
+<<<<<<< HEAD
             _dict_optimize_parser.check_could_apply_dict_optimize(expr_ctx, &dict_ctx);
+=======
+            dict_optimize_parser->check_could_apply_dict_optimize(expr_ctx, &dict_ctx);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (!dict_ctx.could_apply_dict_optimize) {
                 return Status::InternalError(fmt::format(
                         "Not found dict for function-called cid:{} it may cause by unsupported function", slot_id));
             }
 
+<<<<<<< HEAD
             RETURN_IF_ERROR(_dict_optimize_parser.eval_expression(expr_ctx, &dict_ctx, slot_id));
+=======
+            RETURN_IF_ERROR(dict_optimize_parser->eval_expression(expr_ctx, &dict_ctx, slot_id));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             auto dict_iter = global_dict.find(slot_id);
             DCHECK(dict_iter != global_dict.end());
             if (dict_iter == global_dict.end()) {
@@ -116,6 +144,16 @@ Status DictDecodeOperatorFactory::prepare(RuntimeState* state) {
         auto dict_not_contains_cid = dict_iter == global_dict.end();
 
         if (dict_not_contains_cid) {
+<<<<<<< HEAD
+=======
+            if (dict_optimize_parser->eval_dict_expr(need_encode_cid).ok()) {
+                dict_iter = global_dict.find(need_encode_cid);
+                dict_not_contains_cid = dict_iter == global_dict.end();
+            }
+        }
+
+        if (dict_not_contains_cid) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return Status::InternalError(fmt::format("Not found dict for cid:{}", need_encode_cid));
         }
         // TODO : avoid copy dict

@@ -18,12 +18,22 @@
 
 #include <atomic>
 
+<<<<<<< HEAD
 #include "exec/hash_joiner.h"
 #include "exec/pipeline/hashjoin/hash_joiner_factory.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exprs/expr.h"
 #include "runtime/descriptors.h"
+=======
+#include "exec/pipeline/hashjoin/hash_joiner_fwd.h"
+#include "exec/pipeline/operator.h"
+#include "exec/pipeline/pipeline_fwd.h"
+#include "exec/pipeline/spill_process_channel.h"
+#include "exprs/expr.h"
+#include "runtime/descriptors.h"
+#include "util/race_detect.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 namespace starrocks::pipeline {
 
@@ -48,7 +58,11 @@ public:
     bool need_input() const override { return !is_finished(); }
 
     Status set_finishing(RuntimeState* state) override;
+<<<<<<< HEAD
     bool is_finished() const override { return _is_finished || _join_builder->is_finished(); }
+=======
+    bool is_finished() const override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
@@ -58,11 +72,19 @@ public:
     }
 
     size_t output_amplification_factor() const override;
+<<<<<<< HEAD
+=======
+    void update_exec_stats(RuntimeState* state) override {}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 protected:
     HashJoinerPtr _join_builder;
     PartialRuntimeFilterMerger* _partial_rf_merger;
+<<<<<<< HEAD
     mutable size_t _avg_keys_perf_bucket = 0;
+=======
+    mutable size_t _avg_keys_per_bucket = 0;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::atomic<bool> _is_finished = false;
     DECLARE_ONCE_DETECTOR(_set_finishing_once);
 

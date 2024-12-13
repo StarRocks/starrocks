@@ -38,6 +38,10 @@
 #include "glog/logging.h"
 #include "util/alignment.h"
 #include "util/bit_packing.inline.h"
+<<<<<<< HEAD
+=======
+#include "util/bit_packing_adapter.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "util/bit_stream_utils.h"
 
 using starrocks::BitUtil;
@@ -205,6 +209,7 @@ inline bool BitReader::GetAligned(int num_bytes, T* v) {
     return true;
 }
 
+<<<<<<< HEAD
 inline bool BitReader::GetVlqInt(uint32_t* v) {
     *v = 0;
     int shift = 0;
@@ -217,6 +222,26 @@ inline bool BitReader::GetVlqInt(uint32_t* v) {
         DCHECK_LE(++num_bytes, MAX_VLQ_BYTE_LEN);
     } while ((byte & 0x80) != 0);
     return true;
+=======
+// Copy the same logic from arrow, we need to return false instead of DCHECK(false) when facing corrupted files
+inline bool BitReader::GetVlqInt(uint32_t* v) {
+    uint32_t tmp = 0;
+
+    for (int i = 0; i < MAX_VLQ_BYTE_LEN; i++) {
+        uint8_t byte = 0;
+        if (PREDICT_FALSE(!GetAligned<uint8_t>(1, &byte))) {
+            return false;
+        }
+        tmp |= static_cast<uint32_t>(byte & 0x7F) << (7 * i);
+
+        if ((byte & 0x80) == 0) {
+            *v = tmp;
+            return true;
+        }
+    }
+
+    return false;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 template <typename UINT_T>
@@ -253,10 +278,26 @@ inline bool BatchedBitReader::get_bytes(int num_bytes, T* v) {
     return true;
 }
 
+<<<<<<< HEAD
 template <typename T>
 inline int BatchedBitReader::unpack_batch(int bit_width, int num_values, T* v) {
     int64_t num_read;
     std::tie(_buffer_pos, num_read) = BitPacking::UnpackValues(bit_width, _buffer_pos, _bytes_left(), num_values, v);
+=======
+inline bool BatchedBitReader::skip_bytes(int num_bytes) {
+    if (UNLIKELY(_buffer_pos + num_bytes > _buffer_end)) {
+        return false;
+    }
+    _buffer_pos += num_bytes;
+    return true;
+}
+
+template <typename T>
+inline int BatchedBitReader::unpack_batch(int bit_width, int num_values, T* v) {
+    int64_t num_read;
+    std::tie(_buffer_pos, num_read) =
+            BitPackingAdapter::UnpackValues(bit_width, _buffer_pos, _bytes_left(), num_values, v);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     return static_cast<int>(num_read);
 }
 

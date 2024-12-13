@@ -116,6 +116,11 @@ public:
 
     bool adjust_capacity(int64_t delta, size_t min_capacity = 0);
 
+<<<<<<< HEAD
+=======
+    void prune();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 private:
     static StoragePageCache* _s_instance;
 

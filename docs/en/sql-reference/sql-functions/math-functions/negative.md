@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # negative
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Returns the negative of input `arg`.
 

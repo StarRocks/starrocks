@@ -22,7 +22,11 @@ import com.starrocks.journal.bdbje.BDBJEJournal;
 public class JournalFactory {
     public enum JournalType {
         BDB
+<<<<<<< HEAD
     };
+=======
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public static Journal create(String nodeName) throws JournalException, InterruptedException {
         JournalType type = JournalType.valueOf(Config.edit_log_type.toUpperCase());

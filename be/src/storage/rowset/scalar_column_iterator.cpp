@@ -34,9 +34,18 @@
 
 #include "storage/rowset/scalar_column_iterator.h"
 
+<<<<<<< HEAD
 #include "storage/column_predicate.h"
 #include "storage/rowset/binary_dict_page.h"
 #include "storage/rowset/column_reader.h"
+=======
+#include "common/status.h"
+#include "storage/column_predicate.h"
+#include "storage/rowset/binary_dict_page.h"
+#include "storage/rowset/bitshuffle_page.h"
+#include "storage/rowset/column_reader.h"
+#include "storage/rowset/dict_page.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "storage/rowset/encoding_info.h"
 #include "util/bitmap.h"
 
@@ -50,9 +59,16 @@ Status ScalarColumnIterator::init(const ColumnIteratorOptions& opts) {
     _opts = opts;
 
     IndexReadOptions index_opts;
+<<<<<<< HEAD
     index_opts.use_page_cache = !opts.temporary_data && !config::disable_storage_page_cache;
     index_opts.kept_in_memory = false;
     index_opts.skip_fill_data_cache = _skip_fill_data_cache();
+=======
+    index_opts.use_page_cache = !opts.temporary_data && opts.use_page_cache &&
+                                (config::enable_ordinal_index_memory_page_cache || !config::disable_storage_page_cache);
+    index_opts.kept_in_memory = !opts.temporary_data && config::enable_ordinal_index_memory_page_cache;
+    index_opts.lake_io_opts = opts.lake_io_opts;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     index_opts.read_file = _opts.read_file;
     index_opts.stats = _opts.stats;
     RETURN_IF_ERROR(_reader->load_ordinal_index(index_opts));
@@ -61,6 +77,7 @@ Status ScalarColumnIterator::init(const ColumnIteratorOptions& opts) {
     if (_reader->encoding_info()->encoding() != DICT_ENCODING) {
         return Status::OK();
     }
+<<<<<<< HEAD
 
     if (_reader->column_type() == TYPE_CHAR) {
         _init_dict_decoder_func = &ScalarColumnIterator::_do_init_dict_decoder<TYPE_CHAR>;
@@ -70,12 +87,68 @@ Status ScalarColumnIterator::init(const ColumnIteratorOptions& opts) {
         return Status::NotSupported("dict encoding with unsupported field type");
     }
 
+=======
+    LogicalType column_type = delegate_type(_reader->column_type());
+    DCHECK(supports_dict_encoding(column_type))
+            << strings::Substitute("dict encoding with unsupported $0 field type", column_type);
+    switch (column_type) {
+    case TYPE_CHAR:
+        _init_dict_decoder_func = &ScalarColumnIterator::_do_init_dict_decoder<TYPE_CHAR>;
+        break;
+    case TYPE_VARCHAR:
+        _init_dict_decoder_func = &ScalarColumnIterator::_do_init_dict_decoder<TYPE_VARCHAR>;
+        break;
+    case TYPE_SMALLINT:
+        _init_dict_decoder_func = &ScalarColumnIterator::_do_init_dict_decoder<TYPE_SMALLINT>;
+        break;
+    case TYPE_INT:
+        _init_dict_decoder_func = &ScalarColumnIterator::_do_init_dict_decoder<TYPE_INT>;
+        break;
+    case TYPE_BIGINT:
+        _init_dict_decoder_func = &ScalarColumnIterator::_do_init_dict_decoder<TYPE_BIGINT>;
+        break;
+    case TYPE_LARGEINT:
+        _init_dict_decoder_func = &ScalarColumnIterator::_do_init_dict_decoder<TYPE_LARGEINT>;
+        break;
+    case TYPE_FLOAT:
+        _init_dict_decoder_func = &ScalarColumnIterator::_do_init_dict_decoder<TYPE_FLOAT>;
+        break;
+    case TYPE_DOUBLE:
+        _init_dict_decoder_func = &ScalarColumnIterator::_do_init_dict_decoder<TYPE_DOUBLE>;
+        break;
+    case TYPE_DATE:
+        _init_dict_decoder_func = &ScalarColumnIterator::_do_init_dict_decoder<TYPE_DATE>;
+        break;
+    case TYPE_DATETIME:
+        _init_dict_decoder_func = &ScalarColumnIterator::_do_init_dict_decoder<TYPE_DATETIME>;
+        break;
+    case TYPE_DECIMALV2:
+        _init_dict_decoder_func = &ScalarColumnIterator::_do_init_dict_decoder<TYPE_DECIMALV2>;
+        break;
+    default:
+        return Status::NotSupported(strings::Substitute("dict encoding with unsupported $0 field type", column_type));
+    }
+
+    // TODO: The following logic is primarily used for optimizing queries for VARCHAR/CHAR types during
+    // dictionary encoding. Can we also optimize queries for non-TYPE_VARCHAR types?
+    if (column_type != TYPE_VARCHAR && column_type != TYPE_CHAR) {
+        return Status::OK();
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     if (opts.check_dict_encoding) {
         if (_reader->has_all_dict_encoded()) {
             _all_dict_encoded = _reader->all_dict_encoded();
             // if _all_dict_encoded is true, load dictionary page into memory for `dict_lookup`.
             RETURN_IF(!_all_dict_encoded, Status::OK());
+<<<<<<< HEAD
             RETURN_IF_ERROR(_load_dict_page());
+=======
+            if (column_type == TYPE_VARCHAR) {
+                RETURN_IF_ERROR(_load_dict_page<TYPE_VARCHAR>());
+            } else {
+                RETURN_IF_ERROR(_load_dict_page<TYPE_CHAR>());
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } else if (_reader->num_rows() > 0) {
             // old version segment file dost not have `all_dict_encoded`, in order to check
             // whether all data pages are using dict encoding, must load the last data page
@@ -86,13 +159,21 @@ Status ScalarColumnIterator::init(const ColumnIteratorOptions& opts) {
         }
     }
 
+<<<<<<< HEAD
     if (_all_dict_encoded && _reader->column_type() == TYPE_CHAR) {
+=======
+    if (_all_dict_encoded && column_type == TYPE_CHAR) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         _decode_dict_codes_func = &ScalarColumnIterator::_do_decode_dict_codes<TYPE_CHAR>;
         _dict_lookup_func = &ScalarColumnIterator::_do_dict_lookup<TYPE_CHAR>;
         _next_dict_codes_func = &ScalarColumnIterator::_do_next_dict_codes<TYPE_CHAR>;
         _next_batch_dict_codes_func = &ScalarColumnIterator::_do_next_batch_dict_codes<TYPE_CHAR>;
         _fetch_all_dict_words_func = &ScalarColumnIterator::_fetch_all_dict_words<TYPE_CHAR>;
+<<<<<<< HEAD
     } else if (_all_dict_encoded && _reader->column_type() == TYPE_VARCHAR) {
+=======
+    } else if (_all_dict_encoded && column_type == TYPE_VARCHAR) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         _decode_dict_codes_func = &ScalarColumnIterator::_do_decode_dict_codes<TYPE_VARCHAR>;
         _dict_lookup_func = &ScalarColumnIterator::_do_dict_lookup<TYPE_VARCHAR>;
         _next_dict_codes_func = &ScalarColumnIterator::_do_next_dict_codes<TYPE_VARCHAR>;
@@ -110,7 +191,11 @@ Status ScalarColumnIterator::seek_to_first() {
     RETURN_IF_ERROR(_reader->seek_to_first(&_page_iter));
     RETURN_IF_ERROR(_read_data_page(_page_iter));
 
+<<<<<<< HEAD
     _seek_to_pos_in_page(_page.get(), 0);
+=======
+    RETURN_IF_ERROR(_seek_to_pos_in_page(_page.get(), 0));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     _current_ordinal = 0;
     return Status::OK();
 }
@@ -121,7 +206,11 @@ Status ScalarColumnIterator::seek_to_ordinal(ordinal_t ord) {
         RETURN_IF_ERROR(_reader->seek_at_or_before(ord, &_page_iter));
         RETURN_IF_ERROR(_read_data_page(_page_iter));
     }
+<<<<<<< HEAD
     _seek_to_pos_in_page(_page.get(), ord - _page->first_ordinal());
+=======
+    RETURN_IF_ERROR(_seek_to_pos_in_page(_page.get(), ord - _page->first_ordinal()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     _current_ordinal = ord;
     return Status::OK();
 }
@@ -135,7 +224,11 @@ Status ScalarColumnIterator::seek_to_ordinal_and_calc_element_ordinal(ordinal_t 
     _array_size.resize(0);
     _element_ordinal = static_cast<int64_t>(_page->corresponding_element_ordinal());
     _current_ordinal = _page->first_ordinal();
+<<<<<<< HEAD
     _seek_to_pos_in_page(_page.get(), 0);
+=======
+    RETURN_IF_ERROR(_seek_to_pos_in_page(_page.get(), 0));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     size_t size_to_read = ord - _current_ordinal;
     RETURN_IF_ERROR(_page->read(&_array_size, &size_to_read));
     _current_ordinal += size_to_read;
@@ -146,12 +239,21 @@ Status ScalarColumnIterator::seek_to_ordinal_and_calc_element_ordinal(ordinal_t 
     return Status::OK();
 }
 
+<<<<<<< HEAD
 void ScalarColumnIterator::_seek_to_pos_in_page(ParsedPage* page, ordinal_t offset_in_page) {
     if (page->offset() == offset_in_page) {
         // fast path, do nothing
         return;
     }
     page->seek(offset_in_page);
+=======
+Status ScalarColumnIterator::_seek_to_pos_in_page(ParsedPage* page, ordinal_t offset_in_page) {
+    if (page->offset() == offset_in_page) {
+        // fast path, do nothing
+        return Status::OK();
+    }
+    return page->seek(offset_in_page);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 Status ScalarColumnIterator::next_batch(size_t* n, Column* dst) {
@@ -163,6 +265,16 @@ Status ScalarColumnIterator::next_batch(size_t* n, Column* dst) {
             bool eos = false;
             RETURN_IF_ERROR(_load_next_page(&eos));
             if (eos) {
+<<<<<<< HEAD
+=======
+                // release shareBufferStream
+                if (config::io_coalesce_lake_read_enable && _opts.is_io_coalesce) {
+                    auto shared_buffer_stream = dynamic_cast<io::SharedBufferedInputStream*>(_opts.read_file);
+                    if (shared_buffer_stream != nullptr) {
+                        shared_buffer_stream->release();
+                    }
+                }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 break;
             }
         }
@@ -180,12 +292,46 @@ Status ScalarColumnIterator::next_batch(size_t* n, Column* dst) {
     return Status::OK();
 }
 
+<<<<<<< HEAD
 Status ScalarColumnIterator::next_batch(const SparseRange& range, Column* dst) {
     size_t prev_bytes = dst->byte_size();
     SparseRangeIterator iter = range.new_iterator();
     size_t end_ord = _page->first_ordinal() + _page->num_rows();
     bool contain_deleted_row = (dst->delete_state() != DEL_NOT_SATISFIED);
     SparseRange read_range;
+=======
+Status ScalarColumnIterator::null_count(size_t* count) {
+    if (!_reader->is_nullable()) {
+        *count = 0;
+        return Status::OK();
+    }
+    bool eos = false;
+    while (!eos) {
+        *count += _page->read_null_count();
+        _current_ordinal += _page->num_rows();
+        RETURN_IF_ERROR(_load_next_page(&eos));
+        if (eos) {
+            // release shareBufferStream
+            if (config::io_coalesce_lake_read_enable && _opts.is_io_coalesce) {
+                auto shared_buffer_stream = dynamic_cast<io::SharedBufferedInputStream*>(_opts.read_file);
+                if (shared_buffer_stream != nullptr) {
+                    shared_buffer_stream->release();
+                }
+            }
+            break;
+        }
+    }
+    _opts.stats->bytes_read += static_cast<int64_t>(*count);
+    return Status::OK();
+}
+
+Status ScalarColumnIterator::next_batch(const SparseRange<>& range, Column* dst) {
+    size_t prev_bytes = dst->byte_size();
+    SparseRangeIterator<> iter = range.new_iterator();
+    size_t end_ord = _page->first_ordinal() + _page->num_rows();
+    bool contain_deleted_row = (dst->delete_state() != DEL_NOT_SATISFIED);
+    SparseRange<> read_range;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // range is empty should only occur when array column is nullable
     DCHECK(range.empty() || (range.begin() == _current_ordinal));
 
@@ -200,6 +346,16 @@ Status ScalarColumnIterator::next_batch(const SparseRange& range, Column* dst) {
             bool eos = false;
             RETURN_IF_ERROR(_load_next_page(&eos));
             if (eos) {
+<<<<<<< HEAD
+=======
+                // release shareBufferStream
+                if (config::io_coalesce_lake_read_enable && _opts.is_io_coalesce) {
+                    auto shared_buffer_stream = dynamic_cast<io::SharedBufferedInputStream*>(_opts.read_file);
+                    if (shared_buffer_stream != nullptr) {
+                        shared_buffer_stream->release();
+                    }
+                }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 break;
             }
             end_ord = _page->first_ordinal() + _page->num_rows();
@@ -215,8 +371,13 @@ Status ScalarColumnIterator::next_batch(const SparseRange& range, Column* dst) {
         if (end_ord > _current_ordinal) {
             // the data of current_range is in current page
             // add current_range into read_range
+<<<<<<< HEAD
             Range r = iter.next(end_ord - _current_ordinal);
             read_range.add(Range(r.begin() - _page->first_ordinal(), r.end() - _page->first_ordinal()));
+=======
+            Range<> r = iter.next(end_ord - _current_ordinal);
+            read_range.add(Range<>(r.begin() - _page->first_ordinal(), r.end() - _page->first_ordinal()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             _current_ordinal += r.span_size();
         }
 
@@ -250,11 +411,19 @@ Status ScalarColumnIterator::_load_next_page(bool* eos) {
     }
 
     RETURN_IF_ERROR(_read_data_page(_page_iter));
+<<<<<<< HEAD
     _seek_to_pos_in_page(_page.get(), 0);
+=======
+    RETURN_IF_ERROR(_seek_to_pos_in_page(_page.get(), 0));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     *eos = false;
     return Status::OK();
 }
 
+<<<<<<< HEAD
+=======
+template <LogicalType Type>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 Status ScalarColumnIterator::_load_dict_page() {
     DCHECK(_dict_decoder == nullptr);
     // read dictionary page
@@ -264,16 +433,24 @@ Status ScalarColumnIterator::_load_dict_page() {
             _reader->read_page(_opts, _reader->get_dict_page_pointer(), &_dict_page_handle, &dict_data, &dict_footer));
     // ignore dict_footer.dict_page_footer().encoding() due to only
     // PLAIN_ENCODING is supported for dict page right now
+<<<<<<< HEAD
     if (_reader->column_type() == TYPE_CHAR) {
         _dict_decoder = std::make_unique<BinaryPlainPageDecoder<TYPE_CHAR>>(dict_data);
     } else {
         _dict_decoder = std::make_unique<BinaryPlainPageDecoder<TYPE_VARCHAR>>(dict_data);
+=======
+    if constexpr (Type == TYPE_CHAR || Type == TYPE_VARCHAR) {
+        _dict_decoder = std::make_unique<BinaryPlainPageDecoder<Type>>(dict_data);
+    } else {
+        _dict_decoder = std::make_unique<BitShufflePageDecoder<Type>>(dict_data);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     return _dict_decoder->init();
 }
 
 template <LogicalType Type>
 Status ScalarColumnIterator::_do_init_dict_decoder() {
+<<<<<<< HEAD
     static_assert(Type == TYPE_CHAR || Type == TYPE_VARCHAR);
     auto dict_page_decoder = down_cast<BinaryDictPageDecoder<Type>*>(_page->data_decoder());
     if (dict_page_decoder->encoding_type() == DICT_ENCODING) {
@@ -281,6 +458,24 @@ Status ScalarColumnIterator::_do_init_dict_decoder() {
             RETURN_IF_ERROR(_load_dict_page());
         }
         dict_page_decoder->set_dict_decoder(_dict_decoder.get());
+=======
+    if constexpr (Type == TYPE_CHAR || Type == TYPE_VARCHAR) {
+        auto dict_page_decoder = down_cast<BinaryDictPageDecoder<Type>*>(_page->data_decoder());
+        if (dict_page_decoder->encoding_type() == DICT_ENCODING) {
+            if (_dict_decoder == nullptr) {
+                RETURN_IF_ERROR(_load_dict_page<Type>());
+            }
+            dict_page_decoder->set_dict_decoder(_dict_decoder.get());
+        }
+    } else {
+        auto dict_page_decoder = down_cast<DictPageDecoder<Type>*>(_page->data_decoder());
+        if (dict_page_decoder->encoding_type() == DICT_ENCODING) {
+            if (_dict_decoder == nullptr) {
+                RETURN_IF_ERROR(_load_dict_page<Type>());
+            }
+            dict_page_decoder->set_dict_decoder(_dict_decoder.get());
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     return Status::OK();
 }
@@ -305,6 +500,7 @@ Status ScalarColumnIterator::_read_data_page(const OrdinalPageIndexIterator& ite
 }
 
 Status ScalarColumnIterator::get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
+<<<<<<< HEAD
                                                         const ColumnPredicate* del_predicate, SparseRange* row_ranges) {
     DCHECK(row_ranges->empty());
     if (_reader->has_zone_map()) {
@@ -316,12 +512,32 @@ Status ScalarColumnIterator::get_row_ranges_by_zone_map(const std::vector<const 
         opts.stats = _opts.stats;
         RETURN_IF_ERROR(_reader->zone_map_filter(predicates, del_predicate, &_delete_partial_satisfied_pages,
                                                  row_ranges, opts));
+=======
+                                                        const ColumnPredicate* del_predicate, SparseRange<>* row_ranges,
+                                                        CompoundNodeType pred_relation) {
+    DCHECK(row_ranges->empty());
+    if (_reader->has_zone_map()) {
+        if (!_delete_partial_satisfied_pages.has_value()) {
+            _delete_partial_satisfied_pages.emplace();
+        }
+
+        IndexReadOptions opts;
+        opts.use_page_cache = !_opts.temporary_data && _opts.use_page_cache &&
+                              (config::enable_zonemap_index_memory_page_cache || !config::disable_storage_page_cache);
+        opts.kept_in_memory = !_opts.temporary_data && config::enable_zonemap_index_memory_page_cache;
+        opts.lake_io_opts = _opts.lake_io_opts;
+        opts.read_file = _opts.read_file;
+        opts.stats = _opts.stats;
+        RETURN_IF_ERROR(_reader->zone_map_filter(predicates, del_predicate, &_delete_partial_satisfied_pages.value(),
+                                                 row_ranges, opts, pred_relation));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     } else {
         row_ranges->add({0, static_cast<rowid_t>(_reader->num_rows())});
     }
     return Status::OK();
 }
 
+<<<<<<< HEAD
 Status ScalarColumnIterator::get_row_ranges_by_bloom_filter(const std::vector<const ColumnPredicate*>& predicates,
                                                             SparseRange* row_ranges) {
     RETURN_IF(!_reader->has_bloom_filter_index(), Status::OK());
@@ -338,6 +554,47 @@ Status ScalarColumnIterator::get_row_ranges_by_bloom_filter(const std::vector<co
     opts.read_file = _opts.read_file;
     opts.stats = _opts.stats;
     RETURN_IF_ERROR(_reader->bloom_filter(predicates, row_ranges, opts));
+=======
+bool ScalarColumnIterator::has_original_bloom_filter_index() const {
+    return _reader->has_original_bloom_filter_index();
+}
+
+bool ScalarColumnIterator::has_ngram_bloom_filter_index() const {
+    return _reader->has_ngram_bloom_filter_index();
+}
+
+Status ScalarColumnIterator::get_row_ranges_by_bloom_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                                            SparseRange<>* row_ranges) {
+    RETURN_IF(!_reader->has_bloom_filter_index(), Status::OK());
+
+    bool support_original_bloom_filter = false;
+    bool support_ngram_bloom_filter = false;
+    // bloom filter index can only be either original bloom filter or ngram bloom filter
+    if (_reader->has_original_bloom_filter_index()) {
+        support_original_bloom_filter =
+                std::ranges::any_of(predicates, [](const auto* pred) { return pred->support_original_bloom_filter(); });
+    } else if (_reader->has_ngram_bloom_filter_index()) {
+        support_ngram_bloom_filter =
+                std::ranges::any_of(predicates, [](const auto* pred) { return pred->support_ngram_bloom_filter(); });
+    }
+
+    if (!support_original_bloom_filter && !support_ngram_bloom_filter) {
+        return Status::OK();
+    }
+
+    IndexReadOptions opts;
+    opts.use_page_cache = !_opts.temporary_data && !config::disable_storage_page_cache && _opts.use_page_cache;
+    opts.kept_in_memory = false;
+    opts.lake_io_opts = _opts.lake_io_opts;
+    opts.read_file = _opts.read_file;
+    opts.stats = _opts.stats;
+    // filter data using bloom filter or ngram bloom filter
+    if (support_original_bloom_filter) {
+        RETURN_IF_ERROR(_reader->original_bloom_filter(predicates, row_ranges, opts));
+    } else {
+        RETURN_IF_ERROR(_reader->ngram_bloom_filter(predicates, row_ranges, opts));
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     return Status::OK();
 }
 
@@ -351,7 +608,11 @@ Status ScalarColumnIterator::next_dict_codes(size_t* n, Column* dst) {
     return (this->*_next_dict_codes_func)(n, dst);
 }
 
+<<<<<<< HEAD
 Status ScalarColumnIterator::next_dict_codes(const SparseRange& range, Column* dst) {
+=======
+Status ScalarColumnIterator::next_dict_codes(const SparseRange<>& range, Column* dst) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     DCHECK(all_page_dict_encoded());
     return (this->*_next_batch_dict_codes_func)(range, dst);
 }
@@ -417,6 +678,7 @@ Status ScalarColumnIterator::_do_next_dict_codes(size_t* n, Column* dst) {
 }
 
 template <LogicalType Type>
+<<<<<<< HEAD
 Status ScalarColumnIterator::_do_next_batch_dict_codes(const SparseRange& range, Column* dst) {
     bool contain_deleted_row = false;
     SparseRangeIterator iter = range.new_iterator();
@@ -424,6 +686,15 @@ Status ScalarColumnIterator::_do_next_batch_dict_codes(const SparseRange& range,
     SparseRange read_range;
 
     DCHECK_EQ(range.begin(), _current_ordinal);
+=======
+Status ScalarColumnIterator::_do_next_batch_dict_codes(const SparseRange<>& range, Column* dst) {
+    bool contain_deleted_row = false;
+    SparseRangeIterator<> iter = range.new_iterator();
+    size_t end_ord = _page->first_ordinal() + _page->num_rows();
+    SparseRange<> read_range;
+
+    DCHECK(range.empty() || range.begin() == _current_ordinal);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // similar to ScalarColumnIterator::next_batch
     while (iter.has_more()) {
         if (_page->remaining() == 0 && iter.begin() == end_ord) {
@@ -442,8 +713,13 @@ Status ScalarColumnIterator::_do_next_batch_dict_codes(const SparseRange& range,
 
         _current_ordinal = iter.begin();
         if (end_ord > _current_ordinal) {
+<<<<<<< HEAD
             Range r = iter.next(end_ord - _current_ordinal);
             read_range.add(Range(r.begin() - _page->first_ordinal(), r.end() - _page->first_ordinal()));
+=======
+            Range<> r = iter.next(end_ord - _current_ordinal);
+            read_range.add(Range<>(r.begin() - _page->first_ordinal(), r.end() - _page->first_ordinal()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             _current_ordinal += r.span_size();
         }
 
@@ -505,7 +781,11 @@ Status ScalarColumnIterator::_fetch_by_rowid(const rowid_t* rowids, size_t size,
             DCHECK_EQ(_current_ordinal, _page->first_ordinal() + _page->offset());
             rowid_t curr = *rowids;
             _current_ordinal = implicit_cast<ordinal_t>(curr);
+<<<<<<< HEAD
             _page->seek(curr - _page->first_ordinal());
+=======
+            RETURN_IF_ERROR(_page->seek(curr - _page->first_ordinal()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             const rowid_t* p = rowids + 1;
             while ((next_page_rowid != p) && (*p == curr + 1)) {
                 curr = *p++;
@@ -546,8 +826,13 @@ int ScalarColumnIterator::dict_size() {
 }
 
 bool ScalarColumnIterator::_contains_deleted_row(uint32_t page_index) const {
+<<<<<<< HEAD
     if (_reader->has_zone_map()) {
         return _delete_partial_satisfied_pages.count(page_index) > 0;
+=======
+    if (_reader->has_zone_map() && _delete_partial_satisfied_pages.has_value()) {
+        return _delete_partial_satisfied_pages->contains(page_index);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     // if there is no zone map should be treated as DEL_PARTIAL_SATISFIED
     return true;

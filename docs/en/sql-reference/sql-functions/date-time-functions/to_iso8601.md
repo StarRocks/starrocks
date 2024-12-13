@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # to_iso8601
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Converts the specified date into a string in ISO 8601 format.
 

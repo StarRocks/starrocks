@@ -24,6 +24,10 @@ import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.PhysicalPartition;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.ExpressionContext;
@@ -84,6 +88,10 @@ import com.starrocks.sql.optimizer.operator.scalar.ExistsPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.operator.scalar.MatchExprOperator;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamAggOperator;
@@ -179,6 +187,14 @@ public class Explain {
         }
 
         @Override
+<<<<<<< HEAD
+=======
+        public OperatorStr visitPhysicalProject(OptExpression optExpression, OperatorPrinter.ExplainContext context) {
+            return visit(optExpression.getInputs().get(0), context);
+        }
+
+        @Override
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         public OperatorStr visitPhysicalOlapScan(OptExpression optExpression, OperatorPrinter.ExplainContext context) {
             PhysicalOlapScanOperator scan = (PhysicalOlapScanOperator) optExpression.getOp();
 
@@ -198,18 +214,35 @@ public class Explain {
             int totalTabletsNum = 0;
             for (Long partitionId : scan.getSelectedPartitionId()) {
                 final Partition partition = ((OlapTable) scan.getTable()).getPartition(partitionId);
+<<<<<<< HEAD
                 final MaterializedIndex selectedTable = partition.getIndex(scan.getSelectedIndexId());
                 totalTabletsNum += selectedTable.getTablets().size();
+=======
+                for (PhysicalPartition subPartition : partition.getSubPartitions()) {
+                    final MaterializedIndex selectedTable = subPartition.getIndex(scan.getSelectedIndexId());
+                    totalTabletsNum += selectedTable.getTablets().size();
+                }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
             String partitionAndBucketInfo = "partitionRatio: " +
                     scan.getSelectedPartitionId().size() +
                     "/" +
+<<<<<<< HEAD
                     ((OlapTable) scan.getTable()).getPartitions().size() +
+=======
+                    ((OlapTable) scan.getTable()).getVisiblePartitionNames().size() +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     ", tabletRatio: " +
                     scan.getSelectedTabletId().size() +
                     "/" +
                     totalTabletsNum;
             buildOperatorProperty(sb, partitionAndBucketInfo, context.step);
+<<<<<<< HEAD
+=======
+            if (scan.getGtid() > 0) {
+                buildOperatorProperty(sb, "gtid: " + scan.getGtid(), context.step);
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             buildCommonProperty(sb, scan, context.step);
             return new OperatorStr(sb.toString(), context.step, Collections.emptyList());
         }
@@ -219,7 +252,11 @@ public class Explain {
             PhysicalHiveScanOperator scan = (PhysicalHiveScanOperator) optExpression.getOp();
 
             StringBuilder sb = new StringBuilder("- HIVE-SCAN [")
+<<<<<<< HEAD
                     .append(((HiveTable) scan.getTable()).getTableName())
+=======
+                    .append(((HiveTable) scan.getTable()).getCatalogTableName())
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     .append("]")
                     .append(buildOutputColumns(scan,
                             "[" + scan.getOutputColumns().stream().map(new ExpressionPrinter()::print)
@@ -236,7 +273,11 @@ public class Explain {
             PhysicalIcebergScanOperator scan = (PhysicalIcebergScanOperator) optExpression.getOp();
 
             StringBuilder sb = new StringBuilder("- ICEBERG-SCAN [")
+<<<<<<< HEAD
                     .append(((IcebergTable) scan.getTable()).getRemoteTableName())
+=======
+                    .append(((IcebergTable) scan.getTable()).getCatalogTableName())
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     .append("]")
                     .append(buildOutputColumns(scan,
                             "[" + scan.getOutputColumns().stream().map(new ExpressionPrinter()::print)
@@ -251,7 +292,11 @@ public class Explain {
             PhysicalHudiScanOperator scan = (PhysicalHudiScanOperator) optExpression.getOp();
 
             StringBuilder sb = new StringBuilder("- Hudi-SCAN [")
+<<<<<<< HEAD
                     .append(((HudiTable) scan.getTable()).getTableName())
+=======
+                    .append(((HudiTable) scan.getTable()).getCatalogTableName())
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     .append("]")
                     .append(buildOutputColumns(scan,
                             "[" + scan.getOutputColumns().stream().map(new ExpressionPrinter()::print)
@@ -600,11 +645,19 @@ public class Explain {
 
             StringBuilder sb = new StringBuilder("- DECODE ")
                     .append(buildOutputColumns(decode,
+<<<<<<< HEAD
                             "[" + decode.getDictToStrings().keySet().stream().map(Object::toString)
                                     .collect(Collectors.joining(", ")) + "]"))
                     .append("\n");
 
             for (Map.Entry<Integer, Integer> kv : decode.getDictToStrings().entrySet()) {
+=======
+                            "[" + decode.getDictIdToStringsId().keySet().stream().map(Object::toString)
+                                    .collect(Collectors.joining(", ")) + "]"))
+                    .append("\n");
+
+            for (Map.Entry<Integer, Integer> kv : decode.getDictIdToStringsId().entrySet()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 buildOperatorProperty(sb, kv.getValue().toString() + " := " + kv.getKey().toString(), context.step);
             }
 
@@ -752,7 +805,11 @@ public class Explain {
 
         @Override
         public String visit(ScalarOperator scalarOperator, Void context) {
+<<<<<<< HEAD
             return scalarOperator.accept(this, null);
+=======
+            return scalarOperator.toString();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         @Override
@@ -912,6 +969,14 @@ public class Explain {
         }
 
         @Override
+<<<<<<< HEAD
+=======
+        public String visitMatchExprOperator(MatchExprOperator predicate, Void context) {
+            return print(predicate.getChild(0)) + " MATCH " + print(predicate.getChild(1));
+        }
+
+        @Override
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         public String visitCastOperator(CastOperator operator, Void context) {
             return "cast(" + print(operator.getChild(0)) + " as " + operator.getType().toSql() + ")";
         }

@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
+<<<<<<< HEAD
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Database;
@@ -25,6 +26,24 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+=======
+import com.google.common.collect.Range;
+import com.starrocks.analysis.BinaryType;
+import com.starrocks.analysis.DateLiteral;
+import com.starrocks.analysis.JoinOperator;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Type;
+import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.operator.Operator;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
@@ -41,6 +60,12 @@ import org.junit.Test;
 
 import java.util.Set;
 
+<<<<<<< HEAD
+=======
+import static com.starrocks.sql.optimizer.operator.OpRuleBit.OP_PARTITION_PRUNED;
+import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvPartitionCompensator.convertToDateRange;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public class MvUtilsTest {
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
@@ -93,14 +118,23 @@ public class MvUtilsTest {
         BinaryPredicateOperator binaryPredicate = new BinaryPredicateOperator(
                 BinaryType.EQ, columnRef1, columnRef2);
 
+<<<<<<< HEAD
         Database db = starRocksAssert.getCtx().getGlobalStateMgr().getDb("test");
         Table table1 = db.getTable("t0");
+=======
+        Database db = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore().getDb("test");
+        Table table1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t0");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         LogicalScanOperator scanOperator1 = new LogicalOlapScanOperator(table1);
         BinaryPredicateOperator binaryPredicate2 = new BinaryPredicateOperator(
                 BinaryType.GE, columnRef1, ConstantOperator.createInt(1));
         scanOperator1.setPredicate(binaryPredicate2);
         OptExpression scanExpr = OptExpression.create(scanOperator1);
+<<<<<<< HEAD
         Table table2 = db.getTable("t1");
+=======
+        Table table2 = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t1");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         LogicalScanOperator scanOperator2 = new LogicalOlapScanOperator(table2);
         BinaryPredicateOperator binaryPredicate3 = new BinaryPredicateOperator(
                 BinaryType.GE, columnRef2, ConstantOperator.createInt(1));
@@ -146,4 +180,73 @@ public class MvUtilsTest {
         Assert.assertEquals(null, MvUtils.getCompensationPredicateForDisjunctive(compound, alwaysFalse));
         Assert.assertEquals(alwaysTrue, MvUtils.getCompensationPredicateForDisjunctive(compound, compound));
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testConvertToDateRange() throws AnalysisException {
+        {
+            PartitionKey upper = PartitionKey.ofString("20231010");
+            Range<PartitionKey> upRange = Range.atMost(upper);
+            Range<PartitionKey> upResult = convertToDateRange(upRange);
+            Assert.assertTrue(upResult.hasUpperBound());
+            Assert.assertTrue(upResult.upperEndpoint().getTypes().get(0).isDateType());
+            Assert.assertTrue(upResult.upperEndpoint().getKeys().get(0) instanceof DateLiteral);
+            DateLiteral date = (DateLiteral) upResult.upperEndpoint().getKeys().get(0);
+            Assert.assertEquals(2023, date.getYear());
+            Assert.assertEquals(10, date.getMonth());
+            Assert.assertEquals(10, date.getDay());
+            Assert.assertEquals(0, date.getHour());
+        }
+        {
+            PartitionKey lower = PartitionKey.ofString("20231010");
+            Range<PartitionKey> lowRange = Range.atLeast(lower);
+            Range<PartitionKey> lowResult = convertToDateRange(lowRange);
+            Assert.assertTrue(lowResult.hasLowerBound());
+            Assert.assertTrue(lowResult.lowerEndpoint().getTypes().get(0).isDateType());
+            Assert.assertTrue(lowResult.lowerEndpoint().getKeys().get(0) instanceof DateLiteral);
+            DateLiteral date = (DateLiteral) lowResult.lowerEndpoint().getKeys().get(0);
+            Assert.assertEquals(2023, date.getYear());
+            Assert.assertEquals(10, date.getMonth());
+            Assert.assertEquals(10, date.getDay());
+            Assert.assertEquals(0, date.getHour());
+        }
+        {
+            PartitionKey lower = PartitionKey.ofString("20231010");
+            Range<PartitionKey> range = Range.atLeast(lower);
+            range = range.intersection(Range.atMost(PartitionKey.ofString("20231020")));
+            Range<PartitionKey> result = convertToDateRange(range);
+            Assert.assertTrue(result.hasLowerBound());
+            Assert.assertTrue(result.lowerEndpoint().getTypes().get(0).isDateType());
+            Assert.assertTrue(result.lowerEndpoint().getKeys().get(0) instanceof DateLiteral);
+            DateLiteral date = (DateLiteral) result.lowerEndpoint().getKeys().get(0);
+            Assert.assertEquals(2023, date.getYear());
+            Assert.assertEquals(10, date.getMonth());
+            Assert.assertEquals(10, date.getDay());
+            Assert.assertEquals(0, date.getHour());
+
+            Assert.assertTrue(result.hasUpperBound());
+            Assert.assertTrue(result.upperEndpoint().getTypes().get(0).isDateType());
+            Assert.assertTrue(result.upperEndpoint().getKeys().get(0) instanceof DateLiteral);
+            DateLiteral upperDate = (DateLiteral) result.upperEndpoint().getKeys().get(0);
+            Assert.assertEquals(2023, upperDate.getYear());
+            Assert.assertEquals(10, upperDate.getMonth());
+            Assert.assertEquals(20, upperDate.getDay());
+            Assert.assertEquals(0, upperDate.getHour());
+        }
+    }
+
+    @Test
+    public void testResetOpAppliedRule() {
+        LogicalScanOperator.Builder builder = new LogicalOlapScanOperator.Builder();
+        Operator op = builder.build();
+        Assert.assertFalse(op.isOpRuleBitSet(OP_PARTITION_PRUNED));
+        // set
+        op.setOpRuleBit(OP_PARTITION_PRUNED);
+        Assert.assertTrue(op.isOpRuleBitSet(OP_PARTITION_PRUNED));
+        // reset
+        op.resetOpRuleBit(OP_PARTITION_PRUNED);
+        Assert.assertFalse(op.isOpRuleBitSet(OP_PARTITION_PRUNED));
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

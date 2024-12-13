@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # lcase
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 该函数与 `lower` 一致，将字符串转换为小写形式。
 

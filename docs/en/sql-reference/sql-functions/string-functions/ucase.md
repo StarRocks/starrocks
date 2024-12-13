@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # ucase
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 This function converts a string to upper-case. It is analogous to the function upper.
 

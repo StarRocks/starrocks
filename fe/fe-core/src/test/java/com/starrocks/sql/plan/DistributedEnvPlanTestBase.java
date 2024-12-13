@@ -28,6 +28,10 @@ public class DistributedEnvPlanTestBase extends PlanTestBase {
         PlanTestBase.beforeClass();
         UtFrameUtils.addMockBackend(10002);
         UtFrameUtils.addMockBackend(10003);
+<<<<<<< HEAD
+=======
+        UtFrameUtils.addMockComputeNode(10004);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         starRocksAssert.withTable("CREATE TABLE `lineorder_new_l` (\n" +
                 "  `LO_ORDERKEY` int(11) NOT NULL COMMENT \"\",\n" +
@@ -103,7 +107,10 @@ public class DistributedEnvPlanTestBase extends PlanTestBase {
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\"\n" +
                 ");");
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         starRocksAssert.withTable("create table `skew_table` (id int, name varchar(20)) ENGINE=OLAP  " +
                 "DUPLICATE KEY(id)" +
                 "distributed by hash(id) buckets 10 properties('replication_num' = '1')");
@@ -111,6 +118,7 @@ public class DistributedEnvPlanTestBase extends PlanTestBase {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         int scale = 100;
         connectContext.getGlobalStateMgr().setStatisticStorage(new MockTpchStatisticStorage(connectContext, scale));
+<<<<<<< HEAD
         OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("region");
         setTableStatistics(t0, 5);
 
@@ -151,6 +159,51 @@ public class DistributedEnvPlanTestBase extends PlanTestBase {
         OlapTable skewTable =
                 (OlapTable) globalStateMgr.getDb("test").getTable("skew_table");
         setTableStatistics(skewTable, 10000000);
+=======
+        OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("region");
+        setTableStatistics(t0, 5);
+
+        OlapTable t5 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("nation");
+        setTableStatistics(t5, 25);
+
+        OlapTable t1 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("supplier");
+        setTableStatistics(t1, 10000 * scale);
+
+        OlapTable t4 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("customer");
+        setTableStatistics(t4, 150000 * scale);
+
+        OlapTable t6 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("part");
+        setTableStatistics(t6, 200000 * scale);
+
+        OlapTable t2 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("partsupp");
+        setTableStatistics(t2, 800000 * scale);
+
+        OlapTable t3 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("orders");
+        setTableStatistics(t3, 1500000 * scale);
+
+        OlapTable t7 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("lineitem");
+        setTableStatistics(t7, 6000000 * scale);
+
+        OlapTable t8 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("lineitem_partition");
+        setTableStatistics(t8, 6000000 * scale);
+
+        OlapTable testAllType = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("test_all_type");
+        setTableStatistics(testAllType, 6000000);
+
+        OlapTable lineorderNewL =
+                (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("lineorder_new_l");
+        setTableStatistics(lineorderNewL, 1200018434);
+
+        OlapTable datesN = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("dates_n");
+        setTableStatistics(datesN, 2556);
+
+        OlapTable skewTable =
+                (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("skew_table");
+        setTableStatistics(skewTable, 10000000);
+
+        UtFrameUtils.addMockBackend(10002);
+        UtFrameUtils.addMockBackend(10003);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @AfterClass

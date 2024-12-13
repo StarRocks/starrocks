@@ -92,14 +92,38 @@ private:
     bool _wait_for_data = false;
 };
 
+<<<<<<< HEAD
 // TODO(murphy) refactor it with MergeCursorsCascade
 // Merge sorted chunks in cascade style
 class CascadeChunkMerger {
+=======
+class ChunkMerger {
+public:
+    ChunkMerger(RuntimeState* state) : _state(state) {}
+    virtual ~ChunkMerger() = default;
+
+    virtual Status init(const std::vector<ChunkProvider>& has_suppliers, const std::vector<ExprContext*>* sort_exprs,
+                        const SortDescs& _sort_desc) = 0;
+    virtual Status init(const std::vector<ChunkProvider>& has_suppliers, const std::vector<ExprContext*>* sort_exprs,
+                        const std::vector<bool>* sort_orders, const std::vector<bool>* null_firsts) = 0;
+
+    virtual bool is_data_ready() = 0;
+    virtual Status get_next(ChunkUniquePtr* chunk, std::atomic<bool>* eos, bool* should_exit) = 0;
+
+protected:
+    RuntimeState* _state;
+};
+
+// TODO(murphy) refactor it with MergeCursorsCascade
+// Merge sorted chunks in cascade style
+class CascadeChunkMerger : public ChunkMerger {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public:
     CascadeChunkMerger(RuntimeState* state);
     ~CascadeChunkMerger() = default;
 
     Status init(const std::vector<ChunkProvider>& has_suppliers, const std::vector<ExprContext*>* sort_exprs,
+<<<<<<< HEAD
                 const SortDescs& _sort_desc);
     Status init(const std::vector<ChunkProvider>& has_suppliers, const std::vector<ExprContext*>* sort_exprs,
                 const std::vector<bool>* sort_orders, const std::vector<bool>* null_firsts);
@@ -110,6 +134,16 @@ public:
 private:
     RuntimeState* _state;
 
+=======
+                const SortDescs& _sort_desc) override;
+    Status init(const std::vector<ChunkProvider>& has_suppliers, const std::vector<ExprContext*>* sort_exprs,
+                const std::vector<bool>* sort_orders, const std::vector<bool>* null_firsts) override;
+
+    bool is_data_ready() override;
+    Status get_next(ChunkUniquePtr* chunk, std::atomic<bool>* eos, bool* should_exit) override;
+
+private:
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     const std::vector<ExprContext*>* _sort_exprs;
     SortDescs _sort_desc;
     std::vector<std::unique_ptr<SimpleChunkSortCursor>> _cursors;
@@ -118,4 +152,24 @@ private:
     ChunkSlice _current_chunk;
 };
 
+<<<<<<< HEAD
+=======
+class ConstChunkMerger : public ChunkMerger {
+public:
+    ConstChunkMerger(RuntimeState* state);
+    ~ConstChunkMerger() = default;
+
+    Status init(const std::vector<ChunkProvider>& has_suppliers, const std::vector<ExprContext*>* sort_exprs,
+                const SortDescs& _sort_desc) override;
+    Status init(const std::vector<ChunkProvider>& has_suppliers, const std::vector<ExprContext*>* sort_exprs,
+                const std::vector<bool>* sort_orders, const std::vector<bool>* null_firsts) override;
+
+    bool is_data_ready() override;
+    Status get_next(ChunkUniquePtr* chunk, std::atomic<bool>* eos, bool* should_exit) override;
+
+private:
+    std::vector<ChunkProvider> _providers;
+};
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // namespace starrocks

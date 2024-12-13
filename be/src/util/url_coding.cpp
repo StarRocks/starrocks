@@ -17,7 +17,12 @@
 
 #include "util/url_coding.h"
 
+<<<<<<< HEAD
 #include <cmath>
+=======
+#include <curl/curl.h>
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include <exception>
 #include <memory>
 
@@ -153,4 +158,15 @@ bool base64_decode(const std::string& in, std::string* out) {
     return true;
 }
 
+<<<<<<< HEAD
+=======
+// refers to https://stackoverflow.com/questions/154536/encode-decode-urls-in-c
+std::string url_encode(const std::string& decoded) {
+    const auto encoded_value = curl_easy_escape(nullptr, decoded.c_str(), static_cast<int>(decoded.length()));
+    std::string result(encoded_value);
+    curl_free(encoded_value);
+    return result;
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // namespace starrocks

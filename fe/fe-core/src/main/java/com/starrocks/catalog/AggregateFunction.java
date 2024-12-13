@@ -139,9 +139,15 @@ public class AggregateFunction extends Function {
         this.intermediateType =
                 (intermediateType != null && intermediateType.equals(retType)) ? null : intermediateType;
         this.isAnalyticFn = isAnalyticFn;
+<<<<<<< HEAD
         ignoresDistinct = false;
         isAggregateFn = true;
         returnsNonNullOnEmpty = false;
+=======
+        this.ignoresDistinct = false;
+        this.isAggregateFn = true;
+        this.returnsNonNullOnEmpty = false;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public static AggregateFunction createBuiltin(String name,
@@ -213,6 +219,26 @@ public class AggregateFunction extends Function {
         isDistinct = other.isDistinct;
     }
 
+<<<<<<< HEAD
+=======
+    /**
+     * Returns a new instance of this aggregate function with new argument types and return type which is used for
+     * original function's argument types are psedo types.
+     */
+    public AggregateFunction withNewTypes(List<Type> newArgTypes, Type newRetType) {
+        AggregateFunction newFn = new AggregateFunction(this.getFunctionName(), newArgTypes, newRetType,
+                this.getIntermediateType(), this.hasVarArgs());
+        newFn.setFunctionId(this.getFunctionId());
+        newFn.setChecksum(this.getChecksum());
+        newFn.setBinaryType(this.getBinaryType());
+        newFn.setHasVarArgs(this.hasVarArgs());
+        newFn.setId(this.getId());
+        newFn.setUserVisible(this.isUserVisible());
+        newFn.setAggStateDesc(this.getAggStateDesc());
+        return newFn;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public String getSymbolName() {
         return symbolName == null ? Strings.EMPTY : symbolName;
     }
@@ -291,6 +317,13 @@ public class AggregateFunction extends Function {
         }
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isAggregateFn() {
+        return isAggregateFn;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public boolean isAnalyticFn() {
         return isAnalyticFn;
     }
@@ -315,6 +348,13 @@ public class AggregateFunction extends Function {
         intermediateType = t;
     }
 
+<<<<<<< HEAD
+=======
+    public Type getIntermediateTypeOrReturnType() {
+        return intermediateType == null ? getReturnType() : intermediateType;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public String toSql(boolean ifNotExists) {
         StringBuilder sb = new StringBuilder("CREATE AGGREGATE FUNCTION ");

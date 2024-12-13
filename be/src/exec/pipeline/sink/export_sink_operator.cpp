@@ -38,8 +38,11 @@ public:
 
     ~ExportSinkIOBuffer() override = default;
 
+<<<<<<< HEAD
     Status prepare(RuntimeState* state, RuntimeProfile* parent_profile) override;
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     void close(RuntimeState* state) override;
 
 private:
@@ -55,6 +58,7 @@ private:
     FragmentContext* _fragment_ctx;
 };
 
+<<<<<<< HEAD
 Status ExportSinkIOBuffer::prepare(RuntimeState* state, RuntimeProfile* parent_profile) {
     bool expected = false;
     if (!_is_prepared.compare_exchange_strong(expected, true)) {
@@ -75,6 +79,8 @@ Status ExportSinkIOBuffer::prepare(RuntimeState* state, RuntimeProfile* parent_p
     return Status::OK();
 }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 void ExportSinkIOBuffer::close(RuntimeState* state) {
     if (_file_builder != nullptr) {
         set_io_status(_file_builder->finish());
@@ -171,7 +177,12 @@ bool ExportSinkOperator::is_finished() const {
 
 Status ExportSinkOperator::set_finishing(RuntimeState* state) {
     if (_num_sinkers.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+<<<<<<< HEAD
         state->exec_env()->wg_driver_executor()->report_audit_statistics(state->query_ctx(), state->fragment_ctx());
+=======
+        state->fragment_ctx()->workgroup()->executors()->driver_executor()->report_audit_statistics(
+                state->query_ctx(), state->fragment_ctx());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     return _export_sink_buffer->set_finishing();
 }

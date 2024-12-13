@@ -15,11 +15,18 @@
 package com.starrocks.analysis;
 
 import com.starrocks.catalog.MaterializedView;
+<<<<<<< HEAD
 import com.starrocks.common.FeConstants;
+=======
+import com.starrocks.common.AnalysisException;
+import com.starrocks.common.FeConstants;
+import com.starrocks.common.util.PropertyAnalyzer;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.ShowResultSet;
+<<<<<<< HEAD
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
@@ -29,11 +36,35 @@ import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+=======
+import com.starrocks.scheduler.Constants;
+import com.starrocks.scheduler.Task;
+import com.starrocks.scheduler.TaskBuilder;
+import com.starrocks.scheduler.TaskManager;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+import com.starrocks.sql.analyzer.TaskAnalyzer;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.SubmitTaskStmt;
+import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.parser.ParsingException;
+import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.warehouse.DefaultWarehouse;
+import com.starrocks.warehouse.Warehouse;
+import mockit.Mock;
+import mockit.MockUp;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.util.Map;
+<<<<<<< HEAD
+=======
+import java.util.concurrent.TimeUnit;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThrows;
@@ -143,6 +174,45 @@ public class SubmitTaskStmtTest {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testSubmitWithWarehouse() throws Exception {
+        TaskManager tm = GlobalStateMgr.getCurrentState().getTaskManager();
+
+        // not supported
+        Exception e = assertThrows(AnalysisException.class, () ->
+                starRocksAssert.ddl("submit task t_warehouse properties('warehouse'='w1') as " +
+                        "insert into tbl1 select * from tbl1")
+        );
+        Assert.assertEquals("Getting analyzing error. Detail message: Invalid parameter warehouse.", e.getMessage());
+
+        // mock the warehouse
+        new MockUp<TaskAnalyzer>() {
+            @Mock
+            public void analyzeTaskProperties(Map<String, String> properties) {
+            }
+        };
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public Warehouse getWarehouse(String name) {
+                return new DefaultWarehouse(123, name);
+            }
+            @Mock
+            public Warehouse getWarehouse(long id) {
+                return new DefaultWarehouse(123, "w1");
+            }
+        };
+
+        starRocksAssert.ddl("submit task t_warehouse properties('warehouse'='w1') as " +
+                "insert into tbl1 select * from tbl1");
+        Task task = tm.getTask("t_warehouse");
+        Assert.assertTrue(task.getProperties().toString(),
+                task.getProperties().containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE));
+        Assert.assertEquals("('warehouse'='w1')", task.getPropertiesString());
+    }
+
+    @Test
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void testDropTaskForce() throws Exception {
         String name = "mv_force";
         starRocksAssert.withMaterializedView("create materialized view " + name +
@@ -179,4 +249,113 @@ public class SubmitTaskStmtTest {
         starRocksAssert.getCtx().setCurrentRoleIds(starRocksAssert.getCtx().getGlobalStateMgr()
                 .getAuthorizationMgr().getRoleIdsByUser(UserIdentity.ROOT));
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testPeriodicalTask() throws Exception {
+        TaskManager tm = GlobalStateMgr.getCurrentState().getTaskManager();
+
+        {
+            connectContext.executeSql("submit task t1 " +
+                    "schedule every(interval 1 minute) " +
+                    "as insert overwrite tbl1 select * from tbl1");
+            Task task = tm.getTask("t1");
+            Assert.assertNotNull(task);
+            Assert.assertEquals(TimeUnit.MINUTES, task.getSchedule().getTimeUnit());
+            Assert.assertEquals(1, task.getSchedule().getPeriod());
+            Assert.assertEquals(Constants.TaskSource.INSERT, task.getSource());
+            Assert.assertEquals(Constants.TaskType.PERIODICAL, task.getType());
+            connectContext.executeSql("drop task t1");
+        }
+
+        {
+            connectContext.executeSql("submit task t2 " +
+                    "schedule start('1997-01-01 00:00:00') every(interval 1 minute) " +
+                    "as insert overwrite tbl1 select * from tbl1");
+            Task task = tm.getTask("t2");
+            Assert.assertNotNull(task);
+            Assert.assertEquals(" START(1997-01-01T00:00) EVERY(1 MINUTES)", task.getSchedule().toString());
+            Assert.assertEquals(Constants.TaskSource.INSERT, task.getSource());
+            Assert.assertEquals(Constants.TaskType.PERIODICAL, task.getType());
+            connectContext.executeSql("drop task t2");
+        }
+        {
+            // timezone not supported
+            Exception e =
+                    Assert.assertThrows(ParsingException.class, () -> connectContext.executeSql("submit task t3 " +
+                            "schedule start('1997-01-01 00:00:00 PST') every(interval 1 minute) " +
+                            "as insert overwrite tbl1 select * from tbl1"));
+            Assert.assertEquals("Getting syntax error from line 1, column 15 to line 1, column 80. " +
+                            "Detail message: Invalid date literal 1997-01-01 00:00:00 PST.",
+                    e.getMessage());
+        }
+        {
+            // multiple clauses
+            connectContext.executeSql("submit task t4 " +
+                    "properties('session.query_timeout'='1') " +
+                    "schedule start('1997-01-01 00:00:00') every(interval 1 minute) " +
+                    "as insert overwrite tbl1 select * from tbl1");
+            Task task = tm.getTask("t4");
+            Assert.assertNotNull(task);
+            Assert.assertEquals(" START(1997-01-01T00:00) EVERY(1 MINUTES)", task.getSchedule().toString());
+            Assert.assertEquals(Constants.TaskSource.INSERT, task.getSource());
+            Assert.assertEquals(Constants.TaskType.PERIODICAL, task.getType());
+            connectContext.executeSql("drop task t4");
+        }
+        {
+            // multiple clauses
+            connectContext.executeSql("submit task t4 " +
+                    "schedule start('1997-01-01 00:00:00') every(interval 1 minute) " +
+                    "properties('session.query_timeout'='1') " +
+                    "as insert overwrite tbl1 select * from tbl1");
+            Task task = tm.getTask("t4");
+            Assert.assertNotNull(task);
+            Assert.assertEquals(" START(1997-01-01T00:00) EVERY(1 MINUTES)", task.getSchedule().toString());
+            Assert.assertEquals(Constants.TaskSource.INSERT, task.getSource());
+            Assert.assertEquals(Constants.TaskType.PERIODICAL, task.getType());
+            connectContext.executeSql("drop task t4");
+        }
+
+        {
+            // illegal
+            connectContext.executeSql("submit task t_illegal " +
+                    "schedule every(interval 1 second) " +
+                    "as insert overwrite tbl1 select * from tbl1");
+            Assert.assertEquals("Getting analyzing error. Detail message: schedule interval is too small, " +
+                            "the minimum value is 10 SECONDS.",
+                    connectContext.getState().getErrorMessage());
+
+            // year
+            Exception e = Assert.assertThrows(ParsingException.class, () ->
+                    connectContext.executeSql("submit task t_illegal " +
+                            "schedule every(interval 1 year) " +
+                            "as insert overwrite tbl1 select * from tbl1"));
+            Assert.assertEquals("Getting syntax error at line 1, column 48. " +
+                            "Detail message: Unexpected input 'year', " +
+                            "the most similar input is {'DAY', 'HOUR', 'SECOND', 'MINUTE'}.",
+                    e.getMessage());
+
+            // week
+            e = Assert.assertThrows(ParsingException.class, () ->
+                    connectContext.executeSql("submit task t_illegal " +
+                            "schedule every(interval 1 week) " +
+                            "as insert overwrite tbl1 select * from tbl1"));
+            Assert.assertEquals("Getting syntax error at line 1, column 48. " +
+                            "Detail message: Unexpected input 'week', " +
+                            "the most similar input is {'SECOND', 'DAY', 'HOUR', 'MINUTE'}.",
+                    e.getMessage());
+
+            // syntax error
+            e = Assert.assertThrows(ParsingException.class, () ->
+                    connectContext.executeSql("submit task t_illegal " +
+                            "schedule every(interval 1) " +
+                            "as insert overwrite tbl1 select * from tbl1"));
+            Assert.assertEquals("Getting syntax error at line 1, column 47. " +
+                            "Detail message: Unexpected input ')', " +
+                            "the most similar input is {'DAY', 'HOUR', 'MINUTE', 'SECOND'}.",
+                    e.getMessage());
+        }
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

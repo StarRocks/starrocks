@@ -47,7 +47,10 @@ import com.sleepycat.je.EnvironmentConfig;
 import com.sleepycat.je.LockMode;
 import com.sleepycat.je.OperationStatus;
 import com.starrocks.journal.JournalEntity;
+<<<<<<< HEAD
 import com.starrocks.meta.MetaContext;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.json.JSONArray;
@@ -80,8 +83,14 @@ public class BDBTool {
         try {
             env = new Environment(new File(metaPath), envConfig);
         } catch (DatabaseException e) {
+<<<<<<< HEAD
             LOG.warn(e);
             System.err.println("Failed to open BDBJE env: " + metaPath + ". exit");
+=======
+            String msg = "Failed to open BDBJE env: " + metaPath + ". exit";
+            LOG.warn(msg, e);
+            System.err.println(msg);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return false;
         }
         Preconditions.checkNotNull(env);
@@ -136,11 +145,14 @@ public class BDBTool {
                             return false;
                         }
 
+<<<<<<< HEAD
                         // meta version
                         MetaContext metaContext = new MetaContext();
                         metaContext.setStarRocksMetaVersion(options.getStarRocksMetaVersion());
                         metaContext.setThreadLocalInfo();
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         for (long key = fromKey; key <= endKey; key++) {
                             getValueByKey(db, key);
                         }
@@ -148,8 +160,14 @@ public class BDBTool {
                 }
             }
         } catch (Exception e) {
+<<<<<<< HEAD
             LOG.warn(e);
             System.err.println("Failed to run bdb tools");
+=======
+            String msg = "Failed to run bdb tools";
+            LOG.warn(msg, e);
+            System.err.println(msg);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return false;
         }
         return true;
@@ -170,8 +188,14 @@ public class BDBTool {
             try {
                 entity.readFields(in);
             } catch (Exception e) {
+<<<<<<< HEAD
                 LOG.warn(e);
                 System.err.println("Fail to read journal entity for key: " + key + ". reason: " + e.getMessage());
+=======
+                String msg = "Fail to read journal entity for key: " + key + ". reason: " + e.getMessage();
+                LOG.warn(msg, e);
+                System.err.println(msg);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 System.exit(-1);
             }
             System.out.println("key: " + key);

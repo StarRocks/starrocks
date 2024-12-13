@@ -46,6 +46,10 @@ public class ConsistencyCheckerTest {
         long tabletId = 5L;
         long replicaId = 6L;
         long backendId = 7L;
+<<<<<<< HEAD
+=======
+        long physicalPartitionId = 8L;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         TStorageMedium medium = TStorageMedium.HDD;
 
         MaterializedIndex materializedIndex = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
@@ -59,8 +63,13 @@ public class ConsistencyCheckerTest {
         DataProperty dataProperty = new DataProperty(medium);
         partitionInfo.addPartition(partitionId, dataProperty, (short) 3, false);
         DistributionInfo distributionInfo = new HashDistributionInfo(1, Lists.newArrayList());
+<<<<<<< HEAD
         Partition partition = new Partition(partitionId, "partition", materializedIndex, distributionInfo);
         partition.setVisibleVersion(2L, System.currentTimeMillis());
+=======
+        Partition partition = new Partition(partitionId, physicalPartitionId, "partition", materializedIndex, distributionInfo);
+        partition.getDefaultPhysicalPartition().setVisibleVersion(2L, System.currentTimeMillis());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         OlapTable table = new OlapTable(tableId, "table", Lists.newArrayList(), KeysType.AGG_KEYS, partitionInfo,
                 distributionInfo);
         table.addPartition(partition);
@@ -73,6 +82,7 @@ public class ConsistencyCheckerTest {
                 result = globalStateMgr;
                 minTimes = 0;
 
+<<<<<<< HEAD
                 globalStateMgr.getDbIds();
                 result = Lists.newArrayList(dbId);
                 minTimes = 0;
@@ -80,6 +90,19 @@ public class ConsistencyCheckerTest {
                 globalStateMgr.getDb(dbId);
                 result = database;
                 minTimes = 0;
+=======
+                globalStateMgr.getLocalMetastore().getDbIds();
+                result = Lists.newArrayList(dbId);
+                minTimes = 0;
+
+                globalStateMgr.getLocalMetastore().getDb(dbId);
+                result = database;
+                minTimes = 0;
+
+                globalStateMgr.getLocalMetastore().getTables(dbId);
+                result = database.getTables();
+                minTimes = 0;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         };
 

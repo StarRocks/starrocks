@@ -12,15 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
 package com.starrocks.connector;
 
 import java.util.Objects;
 import java.util.Optional;
+=======
+package com.starrocks.connector;
+
+import java.util.Objects;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 public class RemotePathKey {
     private final String path;
     private final boolean isRecursive;
+<<<<<<< HEAD
 
     // The table location must exist in HudiTable
     private final Optional<String> hudiTableLocation;
@@ -37,11 +44,29 @@ public class RemotePathKey {
         this.path = path;
         this.isRecursive = isRecursive;
         this.hudiTableLocation = hudiTableLocation;
+=======
+    private RemoteFileScanContext scanContext;
+    private String tableLocation;
+
+    public static RemotePathKey of(String path, boolean isRecursive) {
+        return new RemotePathKey(path, isRecursive);
+    }
+
+    public RemotePathKey(String path, boolean isRecursive) {
+        this.path = path;
+        this.isRecursive = isRecursive;
+        this.scanContext = null;
+        this.tableLocation = null;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public boolean approximateMatchPath(String basePath, boolean isRecursive) {
         String pathWithSlash = path.endsWith("/") ? path : path + "/";
+<<<<<<< HEAD
         String basePathWithSlash =  basePath.endsWith("/") ? basePath : basePath + "/";
+=======
+        String basePathWithSlash = basePath.endsWith("/") ? basePath : basePath + "/";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return pathWithSlash.startsWith(basePathWithSlash) && (this.isRecursive == isRecursive);
     }
 
@@ -49,12 +74,21 @@ public class RemotePathKey {
         return path;
     }
 
+<<<<<<< HEAD
     public boolean isRecursive() {
         return isRecursive;
     }
 
     public Optional<String> getHudiTableLocation() {
         return hudiTableLocation;
+=======
+    public String getTableLocation() {
+        return tableLocation;
+    }
+
+    public boolean isRecursive() {
+        return isRecursive;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -67,13 +101,21 @@ public class RemotePathKey {
         }
         RemotePathKey pathKey = (RemotePathKey) o;
         return isRecursive == pathKey.isRecursive &&
+<<<<<<< HEAD
                 Objects.equals(path, pathKey.path) &&
                 Objects.equals(hudiTableLocation, pathKey.hudiTableLocation);
+=======
+                Objects.equals(path, pathKey.path);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
     public int hashCode() {
+<<<<<<< HEAD
         return Objects.hash(path, isRecursive, hudiTableLocation);
+=======
+        return Objects.hash(path, isRecursive);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -81,10 +123,25 @@ public class RemotePathKey {
         final StringBuilder sb = new StringBuilder("RemotePathKey{");
         sb.append("path='").append(path).append('\'');
         sb.append(", isRecursive=").append(isRecursive);
+<<<<<<< HEAD
         if (hudiTableLocation.isPresent()) {
             sb.append(", hudiTableLocation=").append(hudiTableLocation);
         }
         sb.append('}');
         return sb.toString();
     }
+=======
+        sb.append('}');
+        return sb.toString();
+    }
+
+    public void setScanContext(RemoteFileScanContext ctx) {
+        scanContext = ctx;
+        tableLocation = ctx.tableLocation;
+    }
+
+    public RemoteFileScanContext getScanContext() {
+        return scanContext;
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # convert_tz
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 将给定的时间转化为另一个时区的时间。
 

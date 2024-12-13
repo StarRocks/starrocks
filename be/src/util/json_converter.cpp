@@ -26,6 +26,10 @@ namespace so = simdjson::ondemand;
 using SimdJsonArray = so::array;
 using SimdJsonNumber = so::number;
 using SimdJsonNumberType = so::number_type;
+<<<<<<< HEAD
+=======
+static size_t MAX_VALUE_LENGTH_FOR_ERRMSG = 1024;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 // Convert SIMD-JSON object to a JsonValue
 class SimdJsonConverter {
@@ -37,8 +41,21 @@ public:
             return JsonValue(builder.slice());
         } catch (simdjson::simdjson_error& e) {
             std::string_view view(value.get_raw_json_string().raw());
+<<<<<<< HEAD
             auto err_msg = strings::Substitute("Failed to convert simdjson value, json=$0, error=$1", view.data(),
                                                simdjson::error_message(e.error()));
+=======
+            // truncate the raw json string if it is too large
+            bool too_large = view.size() > MAX_VALUE_LENGTH_FOR_ERRMSG;
+            size_t size = too_large ? MAX_VALUE_LENGTH_FOR_ERRMSG : view.size();
+            std::stringstream msg;
+            if (too_large) {
+                msg << "Failed to convert simdjson value, json=$0 <truncated>, error=$1";
+            } else {
+                msg << "Failed to convert simdjson value, json=$0, error=$1";
+            }
+            auto err_msg = strings::Substitute(msg.str(), view.substr(0, size), simdjson::error_message(e.error()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return Status::DataQualityError(err_msg);
         }
     }
@@ -60,6 +77,7 @@ private:
     static Status convert(SimdJsonValue value, std::string_view field_name, bool is_object, vpack::Builder* builder) {
         switch (value.type()) {
         case so::json_type::array: {
+<<<<<<< HEAD
             convert(value.get_array().value(), field_name, is_object, builder);
             break;
         }
@@ -81,6 +99,29 @@ private:
         }
         case so::json_type::null: {
             convert_null(field_name, is_object, builder);
+=======
+            RETURN_IF_ERROR(convert(value.get_array().value(), field_name, is_object, builder));
+            break;
+        }
+        case so::json_type::object: {
+            RETURN_IF_ERROR(convert(value.get_object().value(), field_name, is_object, builder));
+            break;
+        }
+        case so::json_type::number: {
+            RETURN_IF_ERROR(convert_number(value, field_name, is_object, builder));
+            break;
+        }
+        case so::json_type::string: {
+            RETURN_IF_ERROR(convert(value.get_string().value(), field_name, is_object, builder));
+            break;
+        }
+        case so::json_type::boolean: {
+            RETURN_IF_ERROR(convert(value.get_bool().value(), field_name, is_object, builder));
+            break;
+        }
+        case so::json_type::null: {
+            RETURN_IF_ERROR(convert_null(field_name, is_object, builder));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             break;
         }
         }
@@ -109,16 +150,30 @@ private:
             builder->add(vpack::Value(vpack::ValueType::Array));
         }
         for (auto element : arr) {
+<<<<<<< HEAD
             convert(element.value(), {}, false, builder);
+=======
+            RETURN_IF_ERROR(convert(element.value(), {}, false, builder));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         builder->close();
         return Status::OK();
     }
 
+<<<<<<< HEAD
     static inline Status convert(SimdJsonNumber num, std::string_view field_name, bool is_object,
                                  vpack::Builder* builder) {
         switch (num.get_number_type()) {
         case SimdJsonNumberType::floating_point_number: {
+=======
+    static inline Status convert_number(SimdJsonValue value, std::string_view field_name, bool is_object,
+                                        vpack::Builder* builder) {
+        DCHECK(value.type() == so::json_type::number);
+        // can't use value.get_number().get_number_type() because it will throw exception if it's a big integer
+        switch (value.get_number_type()) {
+        case SimdJsonNumberType::floating_point_number: {
+            SimdJsonNumber num = value.get_number().value();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (is_object) {
                 builder->add(toStringRef(field_name), vpack::Value((num.get_double())));
             } else {
@@ -127,6 +182,10 @@ private:
             break;
         }
         case SimdJsonNumberType::signed_integer: {
+<<<<<<< HEAD
+=======
+            SimdJsonNumber num = value.get_number().value();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (is_object) {
                 builder->add(toStringRef(field_name), vpack::Value((num.get_int64())));
             } else {
@@ -135,6 +194,10 @@ private:
             break;
         }
         case SimdJsonNumberType::unsigned_integer: {
+<<<<<<< HEAD
+=======
+            SimdJsonNumber num = value.get_number().value();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (is_object) {
                 builder->add(toStringRef(field_name), vpack::Value((num.get_uint64())));
             } else {
@@ -142,9 +205,33 @@ private:
             }
             break;
         }
+<<<<<<< HEAD
         default:
             return Status::InternalError(
                     fmt::format("unsupported json number: {}", static_cast<int>(num.get_number_type())));
+=======
+        case SimdJsonNumberType::big_integer: {
+            // try to convert big integer to double which is same as that of velocypack,
+            // see https://github.com/arangodb/velocypack/blob/XYZ1.0/include/velocypack/Parser.h#L43
+            auto s = value.raw_json_token();
+            StringParser::ParseResult r;
+            auto val = StringParser::string_to_float<double>(s.data(), s.size(), &r);
+            if (r != StringParser::PARSE_SUCCESS) {
+                auto err_msg = strings::Substitute("Fail to convert big integer to double. field_name=$0, value=$1",
+                                                   field_name, s);
+                return Status::InvalidArgument(err_msg);
+            }
+            if (is_object) {
+                builder->add(toStringRef(field_name), vpack::Value(val));
+            } else {
+                builder->add(vpack::Value(val));
+            }
+            break;
+        }
+        default:
+            return Status::InternalError(
+                    fmt::format("unsupported json number: {}", static_cast<int>(value.get_number_type().value())));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return Status::OK();
     }

@@ -25,6 +25,16 @@ add_library(Geo STATIC
     ${GENSRC_DIR}/geo/wkt_yacc.y.cpp
 )
 
+<<<<<<< HEAD
+=======
+if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "15.0.0")
+        # ignore warning from geo
+        target_compile_options(Geo PUBLIC "-Wno-unused-but-set-variable")
+    endif ()
+endif()
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 add_custom_command(
     OUTPUT ${GENSRC_DIR}/geo/wkt_lex.l.cpp ${GENSRC_DIR}/geo/wkt_lex.l.h
     COMMAND mkdir -p ${GENSRC_DIR}/geo

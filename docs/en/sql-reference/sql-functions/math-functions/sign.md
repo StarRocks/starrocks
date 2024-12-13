@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # sign
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Returns the sign of `x`. A negative number, 0, or a positive number as input corresponds to `-1`, `0`, or `1` as output, respectively.
 

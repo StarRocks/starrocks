@@ -869,7 +869,11 @@ std::string BitmapValue::to_string() const {
 }
 
 // Append values to array
+<<<<<<< HEAD
 void BitmapValue::to_array(std::vector<int64_t>* array) const {
+=======
+void BitmapValue::to_array(Buffer<int64_t>* array) const {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     switch (_type) {
     case EMPTY:
         break;
@@ -961,10 +965,17 @@ std::vector<BitmapValue> BitmapValue::split_bitmap(size_t batch_size) const {
 
     switch (_type) {
     case EMPTY:
+<<<<<<< HEAD
         results.emplace_back(BitmapValue());
         break;
     case SINGLE:
         results.emplace_back(BitmapValue(*this));
+=======
+        results.emplace_back();
+        break;
+    case SINGLE:
+        results.emplace_back(*this);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         break;
     case SET: {
         std::vector values(_set->begin(), _set->end());

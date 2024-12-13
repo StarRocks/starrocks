@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # current_version
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 获取当前 StarRocks 的版本，当前为了兼容不同的客户端，提供两种语法。
 

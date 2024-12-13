@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # murmur_hash3_32
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Returns the 32-bit murmur3 hash value of the input string.
 

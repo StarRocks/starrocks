@@ -47,7 +47,11 @@ class RowsetFactory {
 public:
     // return OK on success and set inited rowset in `*rowset`.
     // return error if failed to create or init rowset.
+<<<<<<< HEAD
     static Status create_rowset(const TabletSchema* schema, const std::string& rowset_path,
+=======
+    static Status create_rowset(const TabletSchemaCSPtr& schema, const std::string& rowset_path,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                 const RowsetMetaSharedPtr& rowset_meta, RowsetSharedPtr* rowset);
 
     // create and init rowset writer.

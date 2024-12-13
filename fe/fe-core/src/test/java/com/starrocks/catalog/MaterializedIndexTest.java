@@ -42,11 +42,14 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+<<<<<<< HEAD
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.LinkedList;
 import java.util.List;
 
@@ -82,6 +85,7 @@ public class MaterializedIndexTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testSerialization() throws Exception {
         // 1. Write objects to file
         File file = new File("./index");
@@ -104,19 +108,31 @@ public class MaterializedIndexTest {
     }
 
     @Test
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void testVisibleForTransaction() throws Exception {
         index = new MaterializedIndex(10);
         Assert.assertEquals(IndexState.NORMAL, index.getState());
         Assert.assertTrue(index.visibleForTransaction(0));
         Assert.assertTrue(index.visibleForTransaction(10));
 
+<<<<<<< HEAD
         index = new MaterializedIndex(10, IndexState.NORMAL, 10);
+=======
+        index = new MaterializedIndex(10, IndexState.NORMAL, 10,
+                PhysicalPartition.INVALID_SHARD_GROUP_ID);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertTrue(index.visibleForTransaction(0));
         Assert.assertTrue(index.visibleForTransaction(9));
         Assert.assertTrue(index.visibleForTransaction(10));
         Assert.assertTrue(index.visibleForTransaction(11));
 
+<<<<<<< HEAD
         index = new MaterializedIndex(10, IndexState.SHADOW, 10);
+=======
+        index = new MaterializedIndex(10, IndexState.SHADOW, 10,
+                PhysicalPartition.INVALID_SHARD_GROUP_ID);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertFalse(index.visibleForTransaction(0));
         Assert.assertFalse(index.visibleForTransaction(9));
         Assert.assertTrue(index.visibleForTransaction(10));

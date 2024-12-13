@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # days_add
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 向日期时间或日期加上指定的天数。
 

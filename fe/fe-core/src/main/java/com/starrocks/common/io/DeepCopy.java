@@ -34,23 +34,30 @@
 
 package com.starrocks.common.io;
 
+<<<<<<< HEAD
 import com.starrocks.common.FeConstants;
 import com.starrocks.meta.MetaContext;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.persist.gson.GsonUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+<<<<<<< HEAD
 import java.io.DataInput;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.lang.reflect.Method;
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 /*
  * This class is for deep copying a writable instance.
  */
 public class DeepCopy {
     private static final Logger LOG = LogManager.getLogger(DeepCopy.class);
 
+<<<<<<< HEAD
     public static final String READ_METHOD_NAME = "readFields";
 
     // deep copy orig to dest.
@@ -95,12 +102,16 @@ public class DeepCopy {
         MetaContext metaContext = new MetaContext();
         metaContext.setStarRocksMetaVersion(FeConstants.STARROCKS_META_VERSION);
         metaContext.setThreadLocalInfo();
+=======
+    public static <T> T copyWithGson(Object orig, Class<T> c) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         try {
             String origJsonStr = GsonUtils.GSON.toJson(orig);
             return GsonUtils.GSON.fromJson(origJsonStr, c);
         } catch (Exception e) {
             LOG.warn("failed to copy object.", e);
             return null;
+<<<<<<< HEAD
         } finally {
             // Restore the old MetaContext.
             if (oldContext != null) {
@@ -108,6 +119,8 @@ public class DeepCopy {
             } else {
                 MetaContext.remove();
             }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 }

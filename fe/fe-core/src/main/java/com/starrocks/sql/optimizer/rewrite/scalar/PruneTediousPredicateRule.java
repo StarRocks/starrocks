@@ -70,6 +70,11 @@ public class PruneTediousPredicateRule extends OnlyOnceScalarOperatorRewriteRule
                     && (call.getChild(2).equals(ConstantOperator.NULL) ||
                     call.getChild(2).equals(ConstantOperator.FALSE))) {
                 return Optional.of(call.getChild(0));
+<<<<<<< HEAD
+=======
+            } else if (call.getFnName().equals(FunctionSet.COALESCE)) {
+                return Optional.of(SimplifiedPredicateRule.simplifiedCoalesce(call, true));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             } else {
                 return Optional.empty();
             }

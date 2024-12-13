@@ -178,7 +178,11 @@ public:
         _bit_width = (Type == TYPE_BOOLEAN) ? 1 : SIZE_OF_TYPE * 8;
         _rle_decoder = RleDecoder<CppType>((uint8_t*)_data.data + RLE_PAGE_HEADER_SIZE,
                                            _data.size - RLE_PAGE_HEADER_SIZE, _bit_width);
+<<<<<<< HEAD
         seek_to_position_in_page(0);
+=======
+        RETURN_IF_ERROR(seek_to_position_in_page(0));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return Status::OK();
     }
 
@@ -206,15 +210,25 @@ public:
     }
 
     Status next_batch(size_t* n, Column* dst) override {
+<<<<<<< HEAD
         SparseRange read_range;
         uint32_t begin = current_index();
         read_range.add(Range(begin, begin + *n));
+=======
+        SparseRange<> read_range;
+        uint32_t begin = current_index();
+        read_range.add(Range<>(begin, begin + *n));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         RETURN_IF_ERROR(next_batch(read_range, dst));
         *n = current_index() - begin;
         return Status::OK();
     }
 
+<<<<<<< HEAD
     Status next_batch(const SparseRange& range, Column* dst) override {
+=======
+    Status next_batch(const SparseRange<>& range, Column* dst) override {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         DCHECK(_parsed);
         if (PREDICT_FALSE(_cur_index >= _num_elements)) {
             return Status::OK();
@@ -223,10 +237,17 @@ public:
 
         size_t to_read =
                 std::min(static_cast<size_t>(range.span_size()), static_cast<size_t>(_num_elements - _cur_index));
+<<<<<<< HEAD
         SparseRangeIterator iter = range.new_iterator();
         while (to_read > 0) {
             seek_to_position_in_page(iter.begin());
             Range r = iter.next(to_read);
+=======
+        SparseRangeIterator<> iter = range.new_iterator();
+        while (to_read > 0) {
+            RETURN_IF_ERROR(seek_to_position_in_page(iter.begin()));
+            Range<> r = iter.next(to_read);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             for (size_t i = 0; i < r.span_size(); ++i) {
                 if (PREDICT_FALSE(!_rle_decoder.Get(&value))) {
                     return Status::Corruption("RLE decode failed");

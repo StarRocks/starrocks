@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # get_json_int
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 This function analyzes and gets the integer value from a specified path in json string.
 
@@ -21,7 +25,11 @@ If the format of json_string or json_path is wrong, this function will return NU
 ## Syntax
 
 ```Haskell
+<<<<<<< HEAD
 INT get_json_int(VARCHAR json_str, VARCHAR json_path)
+=======
+BIGINT get_json_int(VARCHAR json_str, VARCHAR json_path)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ```
 
 ## Examples

@@ -22,9 +22,17 @@ import com.starrocks.thrift.TSchemaTableType;
 import static com.starrocks.catalog.system.SystemTable.builder;
 
 public class GlobalVariablesSystemTable {
+<<<<<<< HEAD
     public static SystemTable create() {
         return new SystemTable(SystemId.GLOBAL_VARIABLES_ID,
                 "global_variables",
+=======
+    private static final String NAME = "global_variables";
+
+    public static SystemTable create() {
+        return new SystemTable(SystemId.GLOBAL_VARIABLES_ID,
+                NAME,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 Table.TableType.SCHEMA,
                 builder()
                         .column("VARIABLE_NAME", ScalarType.createVarchar(64))

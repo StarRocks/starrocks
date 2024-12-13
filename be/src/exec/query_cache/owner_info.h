@@ -47,6 +47,11 @@ public:
     }
     bool is_passthrough() const { return (_owner_id & PASSTHROUGH_BIT) == PASSTHROUGH_BIT; }
 
+<<<<<<< HEAD
+=======
+    bool operator!=(const owner_info& other) const { return _owner_id != other._owner_id; }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 private:
     int64_t _owner_id = 0;
 };

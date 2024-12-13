@@ -21,6 +21,13 @@ import com.staros.proto.FileStoreInfo;
 import com.staros.proto.FileStoreType;
 import com.starrocks.credential.CloudCredential;
 import org.apache.hadoop.conf.Configuration;
+<<<<<<< HEAD
+=======
+import org.apache.hadoop.fs.adl.AdlConfKeys;
+import org.apache.hadoop.fs.azurebfs.constants.ConfigurationKeys;
+import org.apache.hadoop.fs.azurebfs.oauth2.ClientCredsTokenProvider;
+import org.apache.hadoop.fs.azurebfs.oauth2.MsiTokenProvider;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -152,6 +159,7 @@ class AzureADLS1CloudCredential extends AzureStorageCloudCredential {
     @Override
     void tryGenerateConfigurationMap() {
         if (useManagedServiceIdentity) {
+<<<<<<< HEAD
             generatedConfigurationMap.put("fs.adl.oauth2.access.token.provider.type", "Msi");
         } else if (!oauth2ClientId.isEmpty() && !oauth2Credential.isEmpty() &&
                 !oauth2Endpoint.isEmpty()) {
@@ -159,6 +167,15 @@ class AzureADLS1CloudCredential extends AzureStorageCloudCredential {
             generatedConfigurationMap.put("fs.adl.oauth2.client.id", oauth2ClientId);
             generatedConfigurationMap.put("fs.adl.oauth2.credential", oauth2Credential);
             generatedConfigurationMap.put("fs.adl.oauth2.refresh.url", oauth2Endpoint);
+=======
+            generatedConfigurationMap.put(AdlConfKeys.AZURE_AD_TOKEN_PROVIDER_TYPE_KEY, "Msi");
+        } else if (!oauth2ClientId.isEmpty() && !oauth2Credential.isEmpty() &&
+                !oauth2Endpoint.isEmpty()) {
+            generatedConfigurationMap.put(AdlConfKeys.AZURE_AD_TOKEN_PROVIDER_TYPE_KEY, "ClientCredential");
+            generatedConfigurationMap.put(AdlConfKeys.AZURE_AD_CLIENT_ID_KEY, oauth2ClientId);
+            generatedConfigurationMap.put(AdlConfKeys.AZURE_AD_CLIENT_SECRET_KEY, oauth2Credential);
+            generatedConfigurationMap.put(AdlConfKeys.AZURE_AD_REFRESH_URL_KEY, oauth2Endpoint);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -211,11 +228,23 @@ class AzureADLS2CloudCredential extends AzureStorageCloudCredential {
     @Override
     void tryGenerateConfigurationMap() {
         if (oauth2ManagedIdentity && !oauth2TenantId.isEmpty() && !oauth2ClientId.isEmpty()) {
+<<<<<<< HEAD
             generatedConfigurationMap.put(createConfigKey("fs.azure.account.auth.type"), "OAuth");
             generatedConfigurationMap.put(createConfigKey("fs.azure.account.oauth.provider.type"),
                     "org.apache.hadoop.fs.azurebfs.oauth2.MsiTokenProvider");
             generatedConfigurationMap.put(createConfigKey("fs.azure.account.oauth2.msi.tenant"), oauth2TenantId);
             generatedConfigurationMap.put(createConfigKey("fs.azure.account.oauth2.client.id"), oauth2ClientId);
+=======
+            generatedConfigurationMap.put(createConfigKey(ConfigurationKeys.FS_AZURE_ACCOUNT_AUTH_TYPE_PROPERTY_NAME),
+                    "OAuth");
+            generatedConfigurationMap.put(
+                    createConfigKey(ConfigurationKeys.FS_AZURE_ACCOUNT_TOKEN_PROVIDER_TYPE_PROPERTY_NAME),
+                    MsiTokenProvider.class.getName());
+            generatedConfigurationMap.put(createConfigKey(ConfigurationKeys.FS_AZURE_ACCOUNT_OAUTH_MSI_TENANT),
+                    oauth2TenantId);
+            generatedConfigurationMap.put(createConfigKey(ConfigurationKeys.FS_AZURE_ACCOUNT_OAUTH_CLIENT_ID),
+                    oauth2ClientId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } else if (!storageAccount.isEmpty() && !sharedKey.isEmpty()) {
             // Shared Key is always used by specific storage account, so we don't need to invoke createConfigKey()
             generatedConfigurationMap.put(
@@ -226,12 +255,26 @@ class AzureADLS2CloudCredential extends AzureStorageCloudCredential {
                     sharedKey);
         } else if (!oauth2ClientId.isEmpty() && !oauth2ClientSecret.isEmpty() &&
                 !oauth2ClientEndpoint.isEmpty()) {
+<<<<<<< HEAD
             generatedConfigurationMap.put(createConfigKey("fs.azure.account.auth.type"), "OAuth");
             generatedConfigurationMap.put(createConfigKey("fs.azure.account.oauth.provider.type"),
                     "org.apache.hadoop.fs.azurebfs.oauth2.ClientCredsTokenProvider");
             generatedConfigurationMap.put(createConfigKey("fs.azure.account.oauth2.client.id"), oauth2ClientId);
             generatedConfigurationMap.put(createConfigKey("fs.azure.account.oauth2.client.secret"), oauth2ClientSecret);
             generatedConfigurationMap.put(createConfigKey("fs.azure.account.oauth2.client.endpoint"), oauth2ClientEndpoint);
+=======
+            generatedConfigurationMap.put(createConfigKey(ConfigurationKeys.FS_AZURE_ACCOUNT_AUTH_TYPE_PROPERTY_NAME),
+                    "OAuth");
+            generatedConfigurationMap.put(
+                    createConfigKey(ConfigurationKeys.FS_AZURE_ACCOUNT_TOKEN_PROVIDER_TYPE_PROPERTY_NAME),
+                    ClientCredsTokenProvider.class.getName());
+            generatedConfigurationMap.put(createConfigKey(ConfigurationKeys.FS_AZURE_ACCOUNT_OAUTH_CLIENT_ID),
+                    oauth2ClientId);
+            generatedConfigurationMap.put(createConfigKey(ConfigurationKeys.FS_AZURE_ACCOUNT_OAUTH_CLIENT_SECRET),
+                    oauth2ClientSecret);
+            generatedConfigurationMap.put(createConfigKey(ConfigurationKeys.FS_AZURE_ACCOUNT_OAUTH_CLIENT_ENDPOINT),
+                    oauth2ClientEndpoint);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 

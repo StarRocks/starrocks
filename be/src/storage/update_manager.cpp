@@ -27,6 +27,10 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/tablet_meta_manager.h"
+<<<<<<< HEAD
+=======
+#include "util/failpoint/fail_point.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "util/pretty_printer.h"
 #include "util/starrocks_metrics.h"
 #include "util/time.h"
@@ -123,6 +127,17 @@ void UpdateManager::stop() {
     }
 }
 
+<<<<<<< HEAD
+=======
+int64_t UpdateManager::get_index_cache_expire_ms(const Tablet& tablet) const {
+    const int32_t tablet_index_cache_expire_sec = tablet.tablet_meta()->get_primary_index_cache_expire_sec();
+    if (tablet_index_cache_expire_sec > 0) {
+        return tablet_index_cache_expire_sec * 1000;
+    }
+    return _cache_expire_ms;
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 Status UpdateManager::get_del_vec_in_meta(KVStore* meta, const TabletSegmentId& tsid, int64_t version,
                                           DelVector* delvec, int64_t* latest_version) {
     return TabletMetaManager::get_del_vector(meta, tsid.tablet_id, tsid.segment_id, version, delvec, latest_version);
@@ -268,8 +283,12 @@ StatusOr<size_t> UpdateManager::clear_delta_column_group_before_version(KVStore*
         auto st = TabletMetaManager::delete_delta_column_group(meta, &wb, dcg.first, dcg.second);
         if (!st.ok()) {
             // continue if error
+<<<<<<< HEAD
             LOG(WARNING) << "clear delta column group failed, tablet_id: " << tablet_id
                          << " st: " << st.get_error_msg();
+=======
+            LOG(WARNING) << "clear delta column group failed, tablet_id: " << tablet_id << " st: " << st.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
     RETURN_IF_ERROR(meta->write_batch(&wb));
@@ -469,7 +488,11 @@ Status UpdateManager::get_latest_del_vec(KVStore* meta, const TabletSegmentId& t
 }
 
 Status UpdateManager::set_cached_del_vec(const TabletSegmentId& tsid, const DelVectorPtr& delvec) {
+<<<<<<< HEAD
     VLOG(1) << "set_cached_del_vec tablet:" << tsid.tablet_id << " rss:" << tsid.segment_id
+=======
+    VLOG(2) << "set_cached_del_vec tablet:" << tsid.tablet_id << " rss:" << tsid.segment_id
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             << " version:" << delvec->version() << " #del:" << delvec->cardinality();
     std::lock_guard<std::mutex> lg(_del_vec_cache_lock);
     auto itr = _del_vec_cache.find(tsid);
@@ -491,14 +514,25 @@ Status UpdateManager::set_cached_del_vec(const TabletSegmentId& tsid, const DelV
     return Status::OK();
 }
 
+<<<<<<< HEAD
 Status UpdateManager::on_rowset_finished(Tablet* tablet, Rowset* rowset) {
+=======
+DEFINE_FAIL_POINT(on_rowset_finished_failed_due_to_mem);
+Status UpdateManager::on_rowset_finished(Tablet* tablet, Rowset* rowset) {
+    SCOPED_THREAD_LOCAL_MEM_SETTER(GlobalEnv::GetInstance()->process_mem_tracker(), true);
+    SCOPED_THREAD_LOCAL_SINGLETON_CHECK_MEM_TRACKER_SETTER(config::enable_pk_strict_memcheck ? mem_tracker() : nullptr);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     if (!rowset->has_data_files() || tablet->tablet_state() == TABLET_NOTREADY) {
         // if rowset is empty or tablet is in schemachange, we can skip preparing updatestates and pre-loading primary index
         return Status::OK();
     }
 
     string rowset_unique_id = rowset->rowset_id().to_string();
+<<<<<<< HEAD
     VLOG(1) << "UpdateManager::on_rowset_finished start tablet:" << tablet->tablet_id()
+=======
+    VLOG(2) << "UpdateManager::on_rowset_finished start tablet:" << tablet->tablet_id()
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             << " rowset:" << rowset_unique_id;
     // Prepare apply required resources, load updatestate, primary index into cache,
     // so apply can run faster. Since those resources are in cache, they can get evicted
@@ -536,7 +570,11 @@ Status UpdateManager::on_rowset_finished(Tablet* tablet, Rowset* rowset) {
     if (st.ok()) {
         auto index_entry = _index_cache.get_or_create(tablet->tablet_id());
         st = index_entry->value().load(tablet);
+<<<<<<< HEAD
         index_entry->update_expire_time(MonotonicMillis() + _cache_expire_ms);
+=======
+        index_entry->update_expire_time(MonotonicMillis() + get_index_cache_expire_ms(*tablet));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         _index_cache.update_object_size(index_entry, index_entry->value().memory_usage());
         if (st.ok()) {
             _index_cache.release(index_entry);
@@ -555,14 +593,31 @@ Status UpdateManager::on_rowset_finished(Tablet* tablet, Rowset* rowset) {
         }
     }
 
+<<<<<<< HEAD
     VLOG(1) << "UpdateManager::on_rowset_finished finish tablet:" << tablet->tablet_id()
             << " rowset:" << rowset_unique_id;
+=======
+    VLOG(2) << "UpdateManager::on_rowset_finished finish tablet:" << tablet->tablet_id()
+            << " rowset:" << rowset_unique_id;
+
+    FAIL_POINT_TRIGGER_EXECUTE(on_rowset_finished_failed_due_to_mem,
+                               { st = Status::MemoryLimitExceeded("on_rowset_finished failed"); });
+    // if failed due to memory limit which is not a critical issue. we don't need to abort the ingestion
+    // and we can still commit the txn.
+    if (st.is_mem_limit_exceeded()) {
+        return Status::OK();
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     return st;
 }
 
 void UpdateManager::on_rowset_cancel(Tablet* tablet, Rowset* rowset) {
     string rowset_unique_id = rowset->rowset_id().to_string();
+<<<<<<< HEAD
     VLOG(1) << "UpdateManager::on_rowset_error remove state tablet:" << tablet->tablet_id()
+=======
+    VLOG(2) << "UpdateManager::on_rowset_error remove state tablet:" << tablet->tablet_id()
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             << " rowset:" << rowset_unique_id;
     if (rowset->is_column_mode_partial_update()) {
         auto column_state_entry =

@@ -66,10 +66,13 @@ public class CreateResourceStmt extends DdlStmt {
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitCreateResourceStatement(this, context);
     }
+<<<<<<< HEAD
 
     @Override
     public boolean needAuditEncryption() {
         return true;
     }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 

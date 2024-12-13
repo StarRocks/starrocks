@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     s_suppkey,
@@ -36,6 +37,8 @@ where
 )
 order by
     s_suppkey;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 [result]
 TOP-N (order by [[1: s_suppkey ASC NULLS FIRST]])
     TOP-N (order by [[1: s_suppkey ASC NULLS FIRST]])

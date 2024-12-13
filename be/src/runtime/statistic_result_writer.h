@@ -14,8 +14,12 @@
 
 #pragma once
 
+<<<<<<< HEAD
 #include "runtime/result_writer.h"
 #include "runtime/runtime_state.h"
+=======
+#include "runtime/buffer_control_result_writer.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 namespace starrocks {
 
@@ -24,7 +28,11 @@ class MysqlRowBuffer;
 class BufferControlBlock;
 class RuntimeProfile;
 
+<<<<<<< HEAD
 class StatisticResultWriter final : public ResultWriter {
+=======
+class StatisticResultWriter final : public BufferControlResultWriter {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public:
     StatisticResultWriter(BufferControlBlock* sinker, const std::vector<ExprContext*>& output_expr_ctxs,
                           RuntimeProfile* parent_profile);
@@ -35,6 +43,7 @@ public:
 
     Status append_chunk(Chunk* chunk) override;
 
+<<<<<<< HEAD
     Status close() override;
 
     StatusOr<TFetchDataResultPtrs> process_chunk(Chunk* chunk) override;
@@ -43,6 +52,12 @@ public:
 
 private:
     void _init_profile();
+=======
+    StatusOr<TFetchDataResultPtrs> process_chunk(Chunk* chunk) override;
+
+private:
+    void _init_profile() override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     StatusOr<TFetchDataResultPtr> _process_chunk(Chunk* chunk);
 
@@ -53,6 +68,11 @@ private:
 
     Status _fill_table_statistic_data(int version, const Columns& columns, const Chunk* chunk,
                                       TFetchDataResult* result);
+<<<<<<< HEAD
+=======
+    Status _fill_partition_statistic_data(int version, const Columns& columns, const Chunk* chunk,
+                                          TFetchDataResult* result);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     Status _fill_full_statistic_data_v4(int version, const Columns& columns, const Chunk* chunk,
                                         TFetchDataResult* result);
@@ -60,6 +80,7 @@ private:
     Status _fill_full_statistic_data_external(int version, const Columns& columns, const Chunk* chunk,
                                               TFetchDataResult* result);
 
+<<<<<<< HEAD
 private:
     BufferControlBlock* _sinker;
     const std::vector<ExprContext*>& _output_expr_ctxs;
@@ -72,6 +93,20 @@ private:
     RuntimeProfile::Counter* _serialize_timer = nullptr;
     // number of sent rows
     RuntimeProfile::Counter* _sent_rows_counter = nullptr;
+=======
+    Status _fill_full_statistic_query_external(int version, const Columns& columns, const Chunk* chunk,
+                                               TFetchDataResult* result);
+
+    Status _fill_full_statistic_query_external_v2(int version, const Columns& columns, const Chunk* chunk,
+                                                  TFetchDataResult* result);
+
+    Status _fill_statistic_histogram_external(int version, const Columns& columns, const Chunk* chunk,
+                                              TFetchDataResult* result);
+
+private:
+    const std::vector<ExprContext*>& _output_expr_ctxs;
+    RuntimeProfile::Counter* _serialize_timer = nullptr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 } // namespace starrocks

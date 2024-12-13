@@ -46,6 +46,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.backup.Status.ErrCode;
+<<<<<<< HEAD
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.catalog.LocalTablet;
@@ -65,6 +66,35 @@ import com.starrocks.fs.HdfsUtil;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.WarehouseMetricMgr;
 import com.starrocks.server.GlobalStateMgr;
+=======
+import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.FsBroker;
+import com.starrocks.catalog.Function;
+import com.starrocks.catalog.LocalTablet;
+import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndex.IndexExtState;
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.Replica;
+import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.View;
+import com.starrocks.common.Config;
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.io.DeepCopy;
+import com.starrocks.common.io.Text;
+import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.fs.HdfsUtil;
+import com.starrocks.metric.MetricRepo;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -95,6 +125,11 @@ import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+<<<<<<< HEAD
+=======
+import static com.starrocks.scheduler.MVActiveChecker.MV_BACKUP_INACTIVE_REASON;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public class BackupJob extends AbstractJob {
     private static final Logger LOG = LogManager.getLogger(BackupJob.class);
 
@@ -147,6 +182,14 @@ public class BackupJob extends AbstractJob {
 
     private boolean testPrimaryKey = false;
 
+<<<<<<< HEAD
+=======
+    @SerializedName(value = "backupFunctions")
+    private List<Function> backupFunctions = Lists.newArrayList();
+    @SerializedName(value = "backupCatalogs")
+    private List<Catalog> backupCatalogs = Lists.newArrayList();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public BackupJob() {
         super(JobType.BACKUP);
     }
@@ -162,6 +205,13 @@ public class BackupJob extends AbstractJob {
         testPrimaryKey = true;
     }
 
+<<<<<<< HEAD
+=======
+    public Path getLocalJobDirPath() {
+        return localJobDirPath;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public BackupJobState getState() {
         return state;
     }
@@ -186,6 +236,17 @@ public class BackupJob extends AbstractJob {
         return tableRefs;
     }
 
+<<<<<<< HEAD
+=======
+    public void setBackupFunctions(List<Function> functions) {
+        this.backupFunctions = functions;
+    }
+
+    public void setBackupCatalogs(List<Catalog> backupCatalogs) {
+        this.backupCatalogs = backupCatalogs;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public synchronized boolean finishTabletSnapshotTask(SnapshotTask task, TFinishTaskRequest request) {
         Preconditions.checkState(task.getJobId() == jobId);
 
@@ -369,7 +430,10 @@ public class BackupJob extends AbstractJob {
         status = new Status(ErrCode.COMMON_ERROR, "user cancelled");
         cancelInternal();
         MetricRepo.COUNTER_UNFINISHED_BACKUP_JOB.increase(-1L);
+<<<<<<< HEAD
         WarehouseMetricMgr.increaseUnfinishedBackupJobs(getCurrentWarehouse(), -1L);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return Status.OK;
     }
 
@@ -384,17 +448,34 @@ public class BackupJob extends AbstractJob {
     protected void checkBackupTables(Database db) {
         for (TableRef tableRef : tableRefs) {
             String tblName = tableRef.getName().getTbl();
+<<<<<<< HEAD
             Table tbl = db.getTable(tblName);
+=======
+            Table tbl = globalStateMgr.getLocalMetastore().getTable(db.getFullName(), tblName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (tbl == null) {
                 status = new Status(ErrCode.NOT_FOUND, "table " + tblName + " does not exist");
                 return;
             }
+<<<<<<< HEAD
             if (!tbl.isOlapTable()) {
                 status = new Status(ErrCode.COMMON_ERROR, "table " + tblName
                         + " is not OLAP table");
                 return;
             }
 
+=======
+            if (!tbl.isSupportBackupRestore()) {
+                status = new Status(ErrCode.UNSUPPORTED,
+                                    "Table: " + tblName + " can not support backup restore, type: " + tbl.getType());
+                return;
+            }
+
+            if (tbl.isOlapView()) {
+                continue;
+            }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             OlapTable olapTbl = (OlapTable) tbl;
             if (tableRef.getPartitionNames() != null) {
                 for (String partName : tableRef.getPartitionNames().getPartitionNames()) {
@@ -409,7 +490,11 @@ public class BackupJob extends AbstractJob {
         }
     }
 
+<<<<<<< HEAD
     protected void prepareSnapshotTask(Partition partition, Table tbl, Tablet tablet, MaterializedIndex index,
+=======
+    protected void prepareSnapshotTask(PhysicalPartition partition, Table tbl, Tablet tablet, MaterializedIndex index,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                        long visibleVersion, int schemaHash) {
         Replica replica = chooseReplica((LocalTablet) tablet, visibleVersion);
         if (replica == null) {
@@ -440,8 +525,20 @@ public class BackupJob extends AbstractJob {
 
     private void prepareAndSendSnapshotTask() {
         MetricRepo.COUNTER_UNFINISHED_BACKUP_JOB.increase(1L);
+<<<<<<< HEAD
         WarehouseMetricMgr.increaseUnfinishedBackupJobs(getCurrentWarehouse(), 1L);
         Database db = globalStateMgr.getDb(dbId);
+=======
+        if (!backupCatalogs.isEmpty()) {
+            // short cut for external catalogs backup
+            backupMeta = new BackupMeta(Lists.newArrayList());
+            backupMeta.setCatalogs(backupCatalogs);
+            state = BackupJobState.SAVE_META;
+
+            return;
+        }
+        Database db = globalStateMgr.getLocalMetastore().getDb(dbId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (db == null) {
             status = new Status(ErrCode.NOT_FOUND, "database " + dbId + " does not exist");
             return;
@@ -450,7 +547,12 @@ public class BackupJob extends AbstractJob {
         // generate job id
         jobId = globalStateMgr.getNextId();
         batchTask = new AgentBatchTask();
+<<<<<<< HEAD
         db.readLock();
+=======
+        Locker locker = new Locker();
+        locker.lockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         try {
             // check all backup tables again
             checkBackupTables(db);
@@ -464,6 +566,7 @@ public class BackupJob extends AbstractJob {
             // create snapshot tasks
             for (TableRef tblRef : tableRefs) {
                 String tblName = tblRef.getName().getTbl();
+<<<<<<< HEAD
                 OlapTable tbl = (OlapTable) db.getTable(tblName);
                 List<Partition> partitions = Lists.newArrayList();
                 if (tblRef.getPartitionNames() == null) {
@@ -471,12 +574,26 @@ public class BackupJob extends AbstractJob {
                 } else {
                     for (String partName : tblRef.getPartitionNames().getPartitionNames()) {
                         Partition partition = tbl.getPartition(partName);
+=======
+                Table tbl = globalStateMgr.getLocalMetastore().getTable(db.getFullName(), tblName);
+                if (tbl.isOlapView()) {
+                    continue;
+                }
+                OlapTable olapTbl = (OlapTable) tbl;
+                List<Partition> partitions = Lists.newArrayList();
+                if (tblRef.getPartitionNames() == null) {
+                    partitions.addAll(olapTbl.getPartitions());
+                } else {
+                    for (String partName : tblRef.getPartitionNames().getPartitionNames()) {
+                        Partition partition = olapTbl.getPartition(partName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         partitions.add(partition);
                     }
                 }
 
                 // snapshot partitions
                 for (Partition partition : partitions) {
+<<<<<<< HEAD
                     long visibleVersion = partition.getVisibleVersion();
                     List<MaterializedIndex> indexes = partition.getMaterializedIndices(IndexExtState.VISIBLE);
                     for (MaterializedIndex index : indexes) {
@@ -491,6 +608,23 @@ public class BackupJob extends AbstractJob {
 
                     LOG.info("snapshot for partition {}, version: {}",
                             partition.getId(), visibleVersion);
+=======
+                    for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                        long visibleVersion = physicalPartition.getVisibleVersion();
+                        List<MaterializedIndex> indexes = physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE);
+                        for (MaterializedIndex index : indexes) {
+                            int schemaHash = olapTbl.getSchemaHashByIndexId(index.getId());
+                            for (Tablet tablet : index.getTablets()) {
+                                prepareSnapshotTask(physicalPartition, olapTbl, tablet, index, visibleVersion, schemaHash);
+                                if (status != Status.OK) {
+                                    return;
+                                }
+                            }
+                        }
+
+                        LOG.info("snapshot for partition {}, version: {}", partition.getId(), visibleVersion);
+                    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
             }
 
@@ -498,20 +632,48 @@ public class BackupJob extends AbstractJob {
             List<Table> copiedTables = Lists.newArrayList();
             for (TableRef tableRef : tableRefs) {
                 String tblName = tableRef.getName().getTbl();
+<<<<<<< HEAD
                 OlapTable tbl = (OlapTable) db.getTable(tblName);
                 // only copy visible indexes
                 List<String> reservedPartitions = tableRef.getPartitionNames() == null ? null
                         : tableRef.getPartitionNames().getPartitionNames();
                 OlapTable copiedTbl = tbl.selectiveCopy(reservedPartitions, true, IndexExtState.VISIBLE);
+=======
+                Table tbl = globalStateMgr.getLocalMetastore().getTable(db.getFullName(), tblName);
+                if (tbl.isOlapView()) {
+                    View view = (View) tbl;
+                    copiedTables.add((Table) DeepCopy.copyWithGson(view, View.class));
+                    continue;
+                }
+                OlapTable olapTbl = (OlapTable) tbl;
+                // only copy visible indexes
+                List<String> reservedPartitions = tableRef.getPartitionNames() == null ? null
+                        : tableRef.getPartitionNames().getPartitionNames();
+                OlapTable copiedTbl = olapTbl.selectiveCopy(reservedPartitions, true, IndexExtState.VISIBLE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (copiedTbl == null) {
                     status = new Status(ErrCode.COMMON_ERROR, "faild to copy table: " + tblName);
                     return;
                 }
+<<<<<<< HEAD
                 copiedTables.add(copiedTbl);
             }
             backupMeta = new BackupMeta(copiedTables);
         } finally {
             db.readUnlock();
+=======
+                if (copiedTbl.isMaterializedView()) {
+                    MaterializedView copiedMv = (MaterializedView) copiedTbl;
+                    copiedMv.setInactiveAndReason(String.format("Set the materialized view %s inactive in backup " +
+                            "because %s", copiedMv.getName(), MV_BACKUP_INACTIVE_REASON));
+                }
+                copiedTables.add(copiedTbl);
+            }
+            backupMeta = new BackupMeta(copiedTables);
+            backupMeta.setFunctions(backupFunctions);
+        } finally {
+            locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         // send tasks
@@ -605,7 +767,11 @@ public class BackupJob extends AbstractJob {
                 BrokerDesc brokerDesc = new BrokerDesc(repo.getStorage().getProperties());
                 try {
                     HdfsUtil.getTProperties(repo.getLocation(), brokerDesc, hdfsProperties);
+<<<<<<< HEAD
                 } catch (UserException e) {
+=======
+                } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     status = new Status(ErrCode.COMMON_ERROR, "Get properties from " + repo.getLocation() + " error.");
                     return;
                 }
@@ -744,7 +910,10 @@ public class BackupJob extends AbstractJob {
         LOG.info("job is finished. {}", this);
 
         MetricRepo.COUNTER_UNFINISHED_BACKUP_JOB.increase(-1L);
+<<<<<<< HEAD
         WarehouseMetricMgr.increaseUnfinishedBackupJobs(getCurrentWarehouse(), -1L);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     private boolean uploadFile(String localFilePath, String remoteFilePath) {
@@ -759,7 +928,11 @@ public class BackupJob extends AbstractJob {
         return true;
     }
 
+<<<<<<< HEAD
     private boolean validateLocalFile(String filePath) {
+=======
+    protected boolean validateLocalFile(String filePath) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         File file = new File(filePath);
         if (!file.exists() || !file.canRead()) {
             status = new Status(ErrCode.COMMON_ERROR, "file is invalid: " + filePath);
@@ -845,12 +1018,25 @@ public class BackupJob extends AbstractJob {
         info.add(TimeUtils.longToTimeString(snapshotFinishedTime));
         info.add(TimeUtils.longToTimeString(snapshotUploadFinishedTime));
         info.add(TimeUtils.longToTimeString(finishedTime));
+<<<<<<< HEAD
         info.add(Joiner.on(", ").join(unfinishedTaskIds.entrySet()));
         info.add(Joiner.on(", ").join(taskProgress.entrySet().stream().map(
                 e -> "[" + e.getKey() + ": " + e.getValue().first + "/" + e.getValue().second + "]").collect(
                 Collectors.toList())));
         info.add(Joiner.on(", ").join(taskErrMsg.entrySet().stream().map(n -> "[" + n.getKey() + ": " + n.getValue()
                 + "]").collect(Collectors.toList())));
+=======
+        try {
+            info.add(Joiner.on(", ").join(unfinishedTaskIds.entrySet()));
+            info.add(Joiner.on(", ").join(taskProgress.entrySet().stream().map(
+                    e -> "[" + e.getKey() + ": " + e.getValue().first + "/" + e.getValue().second + "]").collect(
+                    Collectors.toList())));
+            info.add(Joiner.on(", ").join(taskErrMsg.entrySet().stream().map(n -> "[" + n.getKey() + ": " + n.getValue()
+                    + "]").collect(Collectors.toList())));
+        } catch (Exception e) {
+            throw new SemanticException("meta data may has been updated during this period, please try again");
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         info.add(status.toString());
         info.add(String.valueOf(timeoutMs / 1000));
         return info;

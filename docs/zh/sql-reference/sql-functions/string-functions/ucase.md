@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # ucase
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 该函数与 `upper` 一致，将字符串转换为大写形式。
 

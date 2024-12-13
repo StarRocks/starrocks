@@ -40,6 +40,10 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.validate.ValidateException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
@@ -111,7 +115,11 @@ public class IntLiteral extends LiteralExpr {
         }
 
         if (!valid) {
+<<<<<<< HEAD
             throw new ArithmeticException("Number out of range[" + value + "]. type: " + type);
+=======
+            throw new ArithmeticException("Number out of range[" + longValue + "]. type: " + type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         this.value = longValue;
@@ -399,4 +407,27 @@ public class IntLiteral extends LiteralExpr {
     public boolean equals(Object obj) {
         return super.equals(obj);
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    public void parseMysqlParam(ByteBuffer data) {
+        switch (type.getPrimitiveType()) {
+            case TINYINT:
+                value = data.get();
+                break;
+            case SMALLINT:
+                value = data.getChar();
+                break;
+            case INT:
+                value = data.getInt();
+                break;
+            case BIGINT:
+                value = data.getLong();
+                break;
+            default:
+                throw new ValidateException("unknown binary data for type:" + type.getPrimitiveType(), ErrorType.INTERNAL_ERROR);
+        }
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

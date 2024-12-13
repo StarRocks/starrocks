@@ -108,7 +108,11 @@ static void parse_log(GrepLogEntry& entry, GrepLogContext* context) {
 
 static int scan_by_line_handler(unsigned int id, unsigned long long from, unsigned long long to, unsigned int flags,
                                 void* ctx) {
+<<<<<<< HEAD
     GrepLogContext* context = (GrepLogContext*)ctx;
+=======
+    auto* context = (GrepLogContext*)ctx;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     auto& new_log = context->entries->emplace_back();
     new_log.log.assign(context->line_start, context->line_len);
     parse_log(new_log, context);

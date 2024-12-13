@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # map_from_arrays
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Creates a MAP value from the given pair of key item array and value item array.
 

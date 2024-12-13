@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # sqrt, dsqrt
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Calculates the square root of a value. dsqrt is same as sqrt.
 

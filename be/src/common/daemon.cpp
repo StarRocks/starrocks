@@ -38,18 +38,32 @@
 
 #include "block_cache/block_cache.h"
 #include "column/column_helper.h"
+<<<<<<< HEAD
 #include "column/column_pool.h"
 #include "common/config.h"
 #include "common/minidump.h"
+=======
+#include "common/config.h"
+#include "common/minidump.h"
+#include "common/process_exit.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "exec/workgroup/work_group.h"
 #ifdef USE_STAROS
 #include "fslib/star_cache_handler.h"
 #endif
+<<<<<<< HEAD
+=======
+#include "fs/encrypt_file.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "gutil/cpu.h"
 #include "jemalloc/jemalloc.h"
 #include "runtime/memory/mem_chunk_allocator.h"
 #include "runtime/time_types.h"
 #include "runtime/user_function_cache.h"
+<<<<<<< HEAD
+=======
+#include "service/backend_options.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "storage/options.h"
 #include "storage/storage_engine.h"
 #include "util/cpu_info.h"
@@ -70,6 +84,7 @@
 namespace starrocks {
 DEFINE_bool(cn, false, "start as compute node");
 
+<<<<<<< HEAD
 // NOTE: when BE receiving SIGTERM, this flag will be set to true. Then BE will reject
 // all ExecPlanFragments call by returning a fail status(brpc::EINTERNAL).
 // After all existing fragments executed, BE will exit.
@@ -113,6 +128,8 @@ void gc_memory(void* arg_this) {
     }
 }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 /*
  * This thread will calculate some metrics at a fix interval(15 sec)
  * 1. push bytes per second
@@ -187,7 +204,13 @@ void calculate_metrics(void* arg_this) {
                 datacache_mem_bytes = datacache_metrics.mem_used_bytes + datacache_metrics.meta_used_bytes;
             }
 #ifdef USE_STAROS
+<<<<<<< HEAD
             datacache_mem_bytes += staros::starlet::fslib::star_cache_get_memory_usage();
+=======
+            if (!config::datacache_unified_instance_enable) {
+                datacache_mem_bytes += staros::starlet::fslib::star_cache_get_memory_usage();
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #endif
             datacache_mem_tracker->set(datacache_mem_bytes);
         }
@@ -196,6 +219,7 @@ void calculate_metrics(void* arg_this) {
 
         LOG(INFO) << fmt::format(
                 "Current memory statistics: process({}), query_pool({}), load({}), "
+<<<<<<< HEAD
                 "metadata({}), compaction({}), schema_change({}), column_pool({}), "
                 "page_cache({}), update({}), chunk_allocator({}), clone({}), consistency({}), "
                 "datacache({})",
@@ -205,11 +229,110 @@ void calculate_metrics(void* arg_this) {
                 mem_metrics->column_pool_mem_bytes.value(), mem_metrics->storage_page_cache_mem_bytes.value(),
                 mem_metrics->update_mem_bytes.value(), mem_metrics->chunk_allocator_mem_bytes.value(),
                 mem_metrics->clone_mem_bytes.value(), mem_metrics->consistency_mem_bytes.value(), datacache_mem_bytes);
+=======
+                "metadata({}), compaction({}), schema_change({}), "
+                "page_cache({}), update({}), chunk_allocator({}), passthrough({}), clone({}), consistency({}), "
+                "datacache({}), jit({})",
+                mem_metrics->process_mem_bytes.value(), mem_metrics->query_mem_bytes.value(),
+                mem_metrics->load_mem_bytes.value(), mem_metrics->metadata_mem_bytes.value(),
+                mem_metrics->compaction_mem_bytes.value(), mem_metrics->schema_change_mem_bytes.value(),
+                mem_metrics->storage_page_cache_mem_bytes.value(), mem_metrics->update_mem_bytes.value(),
+                mem_metrics->chunk_allocator_mem_bytes.value(), mem_metrics->passthrough_mem_bytes.value(),
+                mem_metrics->clone_mem_bytes.value(), mem_metrics->consistency_mem_bytes.value(), datacache_mem_bytes,
+                mem_metrics->jit_cache_mem_bytes.value());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         nap_sleep(15, [daemon] { return daemon->stopped(); });
     }
 }
 
+<<<<<<< HEAD
+=======
+struct JemallocStats {
+    int64_t allocated = 0;
+    int64_t active = 0;
+    int64_t metadata = 0;
+    int64_t resident = 0;
+    int64_t mapped = 0;
+    int64_t retained = 0;
+};
+
+static void retrieve_jemalloc_stats(JemallocStats* stats) {
+    uint64_t epoch = 1;
+    size_t sz = sizeof(epoch);
+    je_mallctl("epoch", &epoch, &sz, &epoch, sz);
+
+    int64_t value = 0;
+    sz = sizeof(value);
+    if (je_mallctl("stats.allocated", &value, &sz, nullptr, 0) == 0) {
+        stats->allocated = value;
+    }
+    if (je_mallctl("stats.active", &value, &sz, nullptr, 0) == 0) {
+        stats->active = value;
+    }
+    if (je_mallctl("stats.metadata", &value, &sz, nullptr, 0) == 0) {
+        stats->metadata = value;
+    }
+    if (je_mallctl("stats.resident", &value, &sz, nullptr, 0) == 0) {
+        stats->resident = value;
+    }
+    if (je_mallctl("stats.mapped", &value, &sz, nullptr, 0) == 0) {
+        stats->mapped = value;
+    }
+    if (je_mallctl("stats.retained", &value, &sz, nullptr, 0) == 0) {
+        stats->retained = value;
+    }
+}
+
+// Tracker the memory usage of jemalloc
+void jemalloc_tracker_daemon(void* arg_this) {
+    auto* daemon = static_cast<Daemon*>(arg_this);
+    double smoothed_fragmentation = 0;
+    while (!daemon->stopped()) {
+        JemallocStats stats;
+        retrieve_jemalloc_stats(&stats);
+
+        // Jemalloc metadata
+        if (GlobalEnv::GetInstance()->jemalloc_metadata_traker() && stats.metadata > 0) {
+            auto tracker = GlobalEnv::GetInstance()->jemalloc_metadata_traker();
+            int64_t delta = stats.metadata - tracker->consumption();
+            tracker->consume(delta);
+        }
+
+        // Fragmentation and dirty memory:
+        // Jemalloc retains some dirty memory and gradually returns it to the OS, which cannot be reused by the application.
+        // Failing to account for this memory in the MemoryTracker may lead to memory allocation failures or even process
+        // termination by the OS; however, retaining excessive memory in the tracker is also wasteful.
+        // To address this, we employ a smoothing formula to track fragmentation and dirty memory, which also mitigates
+        // the impact of sudden memory releases, such as those occurring when a large query is executed:
+        // S_t = \exp\left(\alpha \cdot \log(1 + x_t) + (1 - \alpha) \cdot \log(1 + S_{t-1})\right) - 1
+        if (GlobalEnv::GetInstance()->jemalloc_fragmentation_traker()) {
+            if (stats.resident > 0 && stats.allocated > 0 && stats.metadata > 0) {
+                double fragmentation = stats.resident - stats.allocated - stats.metadata;
+                if (fragmentation < 0) fragmentation = 0;
+
+                // log transformation
+                double alpha = std::clamp(config::jemalloc_fragmentation_ratio, 0.1, 0.9);
+                fragmentation = std::log1p(fragmentation);
+                // smoothing
+                fragmentation = alpha * fragmentation + smoothed_fragmentation * (1 - alpha);
+                // restore the log value
+                smoothed_fragmentation = fragmentation;
+                fragmentation = std::expm1(fragmentation);
+
+                if (fragmentation >= 0) {
+                    auto tracker = GlobalEnv::GetInstance()->jemalloc_fragmentation_traker();
+                    int64_t delta = fragmentation - tracker->consumption();
+                    tracker->consume(delta);
+                }
+            }
+        }
+
+        nap_sleep(1, [daemon] { return daemon->stopped(); });
+    }
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 static void init_starrocks_metrics(const std::vector<StorePath>& store_paths) {
     bool init_system_metrics = config::enable_system_metrics;
     std::set<std::string> disk_devices;
@@ -222,12 +345,21 @@ static void init_starrocks_metrics(const std::vector<StorePath>& store_paths) {
     if (init_system_metrics) {
         auto st = DiskInfo::get_disk_devices(paths, &disk_devices);
         if (!st.ok()) {
+<<<<<<< HEAD
             LOG(WARNING) << "get disk devices failed, status=" << st.get_error_msg();
             return;
         }
         st = get_inet_interfaces(&network_interfaces);
         if (!st.ok()) {
             LOG(WARNING) << "get inet interfaces failed, status=" << st.get_error_msg();
+=======
+            LOG(WARNING) << "get disk devices failed, status=" << st.message();
+            return;
+        }
+        st = get_inet_interfaces(&network_interfaces, BackendOptions::is_bind_ipv6());
+        if (!st.ok()) {
+            LOG(WARNING) << "get inet interfaces failed, status=" << st.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return;
         }
     }
@@ -240,7 +372,11 @@ void sigterm_handler(int signo, siginfo_t* info, void* context) {
     } else {
         LOG(ERROR) << "got signal: " << strsignal(signo) << " from pid: " << info->si_pid << ", is going to exit";
     }
+<<<<<<< HEAD
     k_starrocks_exit.store(true);
+=======
+    set_process_exit();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 int install_signal(int signo, void (*handler)(int sig, siginfo_t* info, void* context)) {
@@ -296,17 +432,34 @@ void Daemon::init(bool as_cn, const std::vector<StorePath>& paths) {
     LOG(INFO) << DiskInfo::debug_string();
     LOG(INFO) << MemInfo::debug_string();
     LOG(INFO) << base::CPU::instance()->debug_string();
+<<<<<<< HEAD
 
     UserFunctionCache::instance()->init(config::user_function_dir);
+=======
+    LOG(INFO) << "openssl aesni support: " << openssl_supports_aesni();
+    auto unsupported_flags = CpuInfo::unsupported_cpu_flags_from_current_env();
+    if (!unsupported_flags.empty()) {
+        LOG(FATAL) << fmt::format(
+                "CPU flags check failed! The following instruction sets are enabled during compiling but not supported "
+                "in current running env: {}!",
+                fmt::join(unsupported_flags, ","));
+        std::abort();
+    }
+
+    CHECK(UserFunctionCache::instance()->init(config::user_function_dir).ok());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     date::init_date_cache();
 
     TimezoneUtils::init_time_zones();
 
+<<<<<<< HEAD
     std::thread gc_thread(gc_memory, this);
     Thread::set_thread_name(gc_thread, "gc_daemon");
     _daemon_threads.emplace_back(std::move(gc_thread));
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     init_starrocks_metrics(paths);
 
     if (config::enable_metric_calculator) {
@@ -315,6 +468,15 @@ void Daemon::init(bool as_cn, const std::vector<StorePath>& paths) {
         _daemon_threads.emplace_back(std::move(calculate_metrics_thread));
     }
 
+<<<<<<< HEAD
+=======
+    if (config::enable_jemalloc_memory_tracker) {
+        std::thread jemalloc_tracker_thread(jemalloc_tracker_daemon, this);
+        Thread::set_thread_name(jemalloc_tracker_thread, "jemalloc_tracker_daemon");
+        _daemon_threads.emplace_back(std::move(jemalloc_tracker_thread));
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     init_signals();
     init_minidump();
 }

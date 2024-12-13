@@ -24,6 +24,7 @@ import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.RangeUtils;
+<<<<<<< HEAD
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.persist.gson.GsonUtils;
@@ -33,18 +34,34 @@ import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.PartitionExprAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.parser.SqlParser;
+=======
+import com.starrocks.persist.ColumnIdExpr;
+import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.persist.gson.GsonPreProcessable;
+import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.server.RunMode;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.PartitionExprAnalyzer;
+import com.starrocks.sql.common.MetaUtils;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
+<<<<<<< HEAD
 import java.io.DataOutput;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+<<<<<<< HEAD
 import static java.util.stream.Collectors.toList;
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 /**
  * ExprRangePartitionInfo is an enhanced version of ExpressionRangePartitionInfo
  * because ExpressionRangePartitionInfo is not easily scalable
@@ -57,7 +74,11 @@ public class ExpressionRangePartitionInfoV2 extends RangePartitionInfo
 
     private static final Logger LOG = LogManager.getLogger(ExpressionRangePartitionInfoV2.class);
 
+<<<<<<< HEAD
     private List<Expr> partitionExprs;
+=======
+    private List<ColumnIdExpr> partitionExprs;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     @SerializedName("serializedPartitionExprs")
     private List<String> serializedPartitionExprs;
@@ -68,7 +89,15 @@ public class ExpressionRangePartitionInfoV2 extends RangePartitionInfo
     @SerializedName(value = "sourcePartitionTypes")
     private List<Type> sourcePartitionTypes;
 
+<<<<<<< HEAD
     public ExpressionRangePartitionInfoV2(List<Expr> partitionExprs, List<Column> columns) {
+=======
+    public ExpressionRangePartitionInfoV2() {
+        this.type = PartitionType.EXPR_RANGE_V2;
+    }
+
+    public ExpressionRangePartitionInfoV2(List<ColumnIdExpr> partitionExprs, List<Column> columns) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         super(columns);
         this.type = PartitionType.EXPR_RANGE_V2;
         this.partitionExprs = partitionExprs;
@@ -76,16 +105,24 @@ public class ExpressionRangePartitionInfoV2 extends RangePartitionInfo
 
     public static PartitionInfo read(DataInput in) throws IOException {
         String json = Text.readString(in);
+<<<<<<< HEAD
         ExpressionRangePartitionInfoV2 expressionRangePartitionInfoV2 = GsonUtils.GSON.fromJson(json,
                 ExpressionRangePartitionInfoV2.class);
         return expressionRangePartitionInfoV2;
+=======
+        return GsonUtils.GSON.fromJson(json, ExpressionRangePartitionInfoV2.class);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
     public void gsonPreProcess() throws IOException {
         super.gsonPreProcess();
         this.serializedPartitionExprs = new ArrayList<>();
+<<<<<<< HEAD
         for (Expr partitionExpr : partitionExprs) {
+=======
+        for (ColumnIdExpr partitionExpr : partitionExprs) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             serializedPartitionExprs.add(partitionExpr.toSql());
         }
     }
@@ -95,12 +132,21 @@ public class ExpressionRangePartitionInfoV2 extends RangePartitionInfo
         super.gsonPostProcess();
         partitionExprs = Lists.newArrayList();
         for (String expressionSql : serializedPartitionExprs) {
+<<<<<<< HEAD
             Expr expr = SqlParser.parseSqlToExpr(expressionSql, SqlModeHelper.MODE_DEFAULT);
             partitionExprs.add(expr);
         }
         // Analyze partition expr
         SlotRef slotRef;
         for (Expr expr : partitionExprs) {
+=======
+            partitionExprs.add(ColumnIdExpr.fromSql(expressionSql));
+        }
+        // Analyze partition expr
+        SlotRef slotRef;
+        for (ColumnIdExpr columnIdExpr : partitionExprs) {
+            Expr expr = columnIdExpr.getExpr();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (expr instanceof FunctionCallExpr) {
                 slotRef = AnalyzerUtils.getSlotRefFromFunctionCall(expr);
             } else if (expr instanceof CastExpr) {
@@ -113,28 +159,45 @@ public class ExpressionRangePartitionInfoV2 extends RangePartitionInfo
             }
 
             try {
+<<<<<<< HEAD
                 PartitionExprAnalyzer.analyzePartitionExpr(expr, slotRef);
             } catch (SemanticException ex) {
                 LOG.warn("Failed to analyze partition expr: {}", expr.toSql(), ex);
             }
             // The current expression partition only supports 1 column
             slotRef.setType(sourcePartitionTypes.get(0));
+=======
+                // The current expression partition only supports 1 column
+                slotRef.setType(sourcePartitionTypes.get(0));
+                PartitionExprAnalyzer.analyzePartitionExpr(expr, slotRef);
+            } catch (Throwable ex) {
+                LOG.warn("Failed to analyze partition expr: {}", expr.toSql(), ex);
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         serializedPartitionExprs = null;
     }
 
     @Override
+<<<<<<< HEAD
     public void write(DataOutput out) throws IOException {
         Text.writeString(out, GsonUtils.GSON.toJson(this));
     }
 
     @Override
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public String toSql(OlapTable table, List<Long> partitionId) {
         StringBuilder sb = new StringBuilder();
         sb.append("PARTITION BY ");
         if (table instanceof MaterializedView) {
             sb.append("(");
+<<<<<<< HEAD
             for (Expr expr : partitionExprs) {
+=======
+            for (ColumnIdExpr columnIdExpr : partitionExprs) {
+                Expr expr = columnIdExpr.convertToColumnNameExpr(table.getIdToColumn());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (expr instanceof SlotRef) {
                     SlotRef slotRef = (SlotRef) expr.clone();
                     sb.append("`").append(slotRef.getColumnName()).append("`").append(",");
@@ -158,7 +221,20 @@ public class ExpressionRangePartitionInfoV2 extends RangePartitionInfo
         if (!automaticPartition) {
             sb.append("RANGE(");
         }
+<<<<<<< HEAD
         sb.append(Joiner.on(", ").join(partitionExprs.stream().map(Expr::toSql).collect(toList())));
+=======
+        List<String> partitionExprDesc = Lists.newArrayList();
+        for (ColumnIdExpr columnIdExpr : partitionExprs) {
+            Expr partitionExpr = columnIdExpr.convertToColumnNameExpr(table.getIdToColumn());
+            if (partitionExpr instanceof CastExpr && isTimestampFunction(partitionExpr)) {
+                partitionExprDesc.add(partitionExpr.getChild(0).toSql());
+            } else {
+                partitionExprDesc.add(partitionExpr.toSql());
+            }
+        }
+        sb.append(Joiner.on(", ").join(partitionExprDesc));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (!automaticPartition) {
             sb.append(")\n(");
             // sort range
@@ -204,6 +280,7 @@ public class ExpressionRangePartitionInfoV2 extends RangePartitionInfo
         return sb.toString();
     }
 
+<<<<<<< HEAD
     public List<Expr> getPartitionExprs() {
         return partitionExprs;
     }
@@ -218,6 +295,71 @@ public class ExpressionRangePartitionInfoV2 extends RangePartitionInfo
 
     public void setSerializedPartitionExprs(List<String> serializedPartitionExprs) {
         this.serializedPartitionExprs = serializedPartitionExprs;
+=======
+    public static boolean isTimestampFunction(Expr partitionExpr) {
+        if (partitionExpr instanceof CastExpr) {
+            CastExpr castExpr = (CastExpr) partitionExpr;
+            if (!castExpr.getChildren().isEmpty()) {
+                Expr subExpr = castExpr.getChild(0);
+                if (subExpr instanceof FunctionCallExpr) {
+                    FunctionCallExpr functionCallExpr = (FunctionCallExpr) subExpr;
+                    String functionName = functionCallExpr.getFnName().getFunction();
+                    return FunctionSet.FROM_UNIXTIME.equals(functionName)
+                            || FunctionSet.FROM_UNIXTIME_MS.equals(functionName);
+                }
+            }
+        }
+        return false;
+    }
+
+    public static boolean supportedDynamicPartition(Expr expr) {
+        if (isTimestampFunction(expr)) {
+            return true;
+        }
+        if (expr instanceof FunctionCallExpr) {
+            FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
+            String functionName = functionCallExpr.getFnName().getFunction();
+            return FunctionSet.STR2DATE.equals(functionName);
+        }
+        return false;
+    }
+
+    public List<Expr> getPartitionExprs(Map<ColumnId, Column> idToColumn) {
+        List<Expr> result = new ArrayList<>(partitionExprs.size());
+        for (ColumnIdExpr columnIdExpr : partitionExprs) {
+            result.add(columnIdExpr.convertToColumnNameExpr(idToColumn));
+        }
+        return result;
+    }
+
+    public int getPartitionExprsSize() {
+        return partitionExprs.size();
+    }
+
+    public void setPartitionExprs(List<ColumnIdExpr> partitionExprs) {
+        this.partitionExprs = partitionExprs;
+    }
+
+    @Override
+    public List<Column> getPartitionColumns(Map<ColumnId, Column> idToColumn) {
+        List<Column> columns = MetaUtils.getColumnsByColumnIds(idToColumn, partitionColumnIds);
+        for (int i = 0; i < columns.size(); i++) {
+            Expr expr = partitionExprs.get(i).convertToColumnNameExpr(idToColumn);
+            Column column = columns.get(i);
+            if (expr.getType().getPrimitiveType() != PrimitiveType.INVALID_TYPE
+                    && expr.getType().getPrimitiveType() != column.getType().getPrimitiveType()) {
+                Column newColumn = new Column(column);
+                newColumn.setType(expr.getType());
+                columns.set(i, newColumn);
+            }
+        }
+        return columns;
+    }
+
+    @Override
+    public int getPartitionColumnsSize() {
+        return partitionColumnIds.size();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -225,6 +367,7 @@ public class ExpressionRangePartitionInfoV2 extends RangePartitionInfo
         return automaticPartition;
     }
 
+<<<<<<< HEAD
     public void setAutomaticPartition(Boolean automaticPartition) {
         this.automaticPartition = automaticPartition;
     }
@@ -233,6 +376,8 @@ public class ExpressionRangePartitionInfoV2 extends RangePartitionInfo
         return sourcePartitionTypes;
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void setSourcePartitionTypes(List<Type> sourcePartitionTypes) {
         this.sourcePartitionTypes = sourcePartitionTypes;
     }

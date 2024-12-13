@@ -34,6 +34,36 @@ class Schema;
 class Column;
 class PrimaryKeyDump;
 
+<<<<<<< HEAD
+=======
+class TabletLoader {
+public:
+    virtual ~TabletLoader() = default;
+    virtual starrocks::Schema generate_pkey_schema() = 0;
+    virtual DataDir* data_dir() = 0;
+    virtual TTabletId tablet_id() = 0;
+    // return latest applied (publish in cloud native) version
+    virtual StatusOr<EditVersion> applied_version() = 0;
+    // Do some special setting if need
+    virtual void setting() = 0;
+    // iterator all rowset and get their iterator and basic stat
+    virtual Status rowset_iterator(
+            const Schema& pkey_schema,
+            const std::function<Status(const std::vector<ChunkIteratorPtr>&, uint32_t)>& handler) = 0;
+
+    virtual void set_write_amp_score(double score) = 0;
+
+    size_t total_data_size() const { return _total_data_size; }
+    size_t total_segments() const { return _total_segments; }
+    size_t rowset_num() const { return _rowset_num; };
+
+protected:
+    size_t _total_data_size = 0;
+    size_t _total_segments = 0;
+    size_t _rowset_num = 0;
+};
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 namespace lake {
 class LakeLocalPersistentIndex;
 }
@@ -90,6 +120,11 @@ struct IndexValue {
     explicit IndexValue(const uint64_t val) { UNALIGNED_STORE64(v, val); }
 
     uint64_t get_value() const { return UNALIGNED_LOAD64(v); }
+<<<<<<< HEAD
+=======
+    uint32_t get_rssid() const { return (uint32_t)(get_value() >> 32); }
+    uint32_t get_rowid() const { return (uint32_t)(get_value() & 0xFFFFFFFF); }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     bool operator==(const IndexValue& rhs) const { return memcmp(v, rhs.v, 8) == 0; }
     void operator=(uint64_t rhs) { return UNALIGNED_STORE64(v, rhs); }
 };
@@ -267,7 +302,11 @@ public:
 
     ~ShardByLengthMutableIndex() {
         if (_index_file) {
+<<<<<<< HEAD
             _index_file->close();
+=======
+            WARN_IF_ERROR(_index_file->close(), "Failed to close index file:" + _index_file->filename());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -418,7 +457,11 @@ public:
     uint64_t file_size() {
         if (_file != nullptr) {
             auto res = _file->get_size();
+<<<<<<< HEAD
             CHECK(res.ok()) << res.status(); // FIXME: no abort
+=======
+            DCHECK(res.ok()) << res.status(); // FIXME: no abort
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return *res;
         } else {
             return 0;
@@ -433,7 +476,12 @@ public:
 
     void destroy() {
         if (_file != nullptr) {
+<<<<<<< HEAD
             FileSystem::Default()->delete_file(_file->filename());
+=======
+            WARN_IF_ERROR(FileSystem::Default()->delete_file(_file->filename()),
+                          "Failed to delete file" + _file->filename());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             _file.reset();
         }
     }
@@ -588,6 +636,7 @@ public:
     size_t file_size() { return _total_kv_bytes + _total_bf_bytes; }
 
     bool bf_flushed() { return _bf_flushed; }
+<<<<<<< HEAD
     /*
     void swap_bf_vec(std::vector<std::unique_ptr<BloomFilter>>* bf_vec) {
         if (!_bf_flushed) {
@@ -595,6 +644,8 @@ public:
         }
     }
     */
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     size_t total_kv_num() { return _total; }
 
@@ -650,7 +701,11 @@ public:
 
     size_t size() const { return _size; }
     size_t usage() const { return _usage; }
+<<<<<<< HEAD
     size_t memory_usage() const { return _memory_usage.load(); }
+=======
+    virtual size_t memory_usage() const { return _memory_usage.load(); }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     EditVersion version() const { return _version; }
 
@@ -683,7 +738,11 @@ public:
     // |n|: size of key/value array
     // |keys|: key array as raw buffer
     // |values|: value array for return values
+<<<<<<< HEAD
     Status get(size_t n, const Slice* keys, IndexValue* values);
+=======
+    virtual Status get(size_t n, const Slice* keys, IndexValue* values);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     Status get_from_one_immutable_index(ImmutableIndex* immu_index, size_t n, const Slice* keys, IndexValue* values,
                                         std::map<size_t, KeysInfo>* keys_info_by_key_size, KeysInfo* found_keys_info);
@@ -694,8 +753,13 @@ public:
     // |values|: value array
     // |old_values|: return old values for updates, or set to NullValue for inserts
     // |stat|: used for collect statistic
+<<<<<<< HEAD
     Status upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
                   IOStat* stat = nullptr);
+=======
+    virtual Status upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
+                          IOStat* stat = nullptr);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // batch replace without return old values
     // |n|: size of key/value array
@@ -716,7 +780,11 @@ public:
     // |n|: size of key/value array
     // |keys|: key array as raw buffer
     // |old_values|: return old values if key exist, or set to NullValue if not
+<<<<<<< HEAD
     Status erase(size_t n, const Slice* keys, IndexValue* old_values);
+=======
+    virtual Status erase(size_t n, const Slice* keys, IndexValue* old_values);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // TODO(qzc): maybe unused, remove it or refactor it with the methods in use by template after a period of time
     // batch replace
@@ -734,8 +802,13 @@ public:
     // |values|: value array
     // |max_src_rssid|: maximum of rssid array
     // |failed|: return not match rowid
+<<<<<<< HEAD
     Status try_replace(size_t n, const Slice* keys, const IndexValue* values, const uint32_t max_src_rssid,
                        std::vector<uint32_t>* failed);
+=======
+    virtual Status try_replace(size_t n, const Slice* keys, const IndexValue* values, const uint32_t max_src_rssid,
+                               std::vector<uint32_t>* failed);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     Status flush_advance();
 
@@ -749,7 +822,11 @@ public:
     // just for unit test
     bool has_bf() { return _l1_vec.empty() ? false : _l1_vec[0]->has_bf(); }
 
+<<<<<<< HEAD
     Status major_compaction(DataDir* data_dir, int64_t tablet_id, std::timed_mutex* mutex);
+=======
+    Status major_compaction(DataDir* data_dir, int64_t tablet_id, std::shared_timed_mutex* mutex);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     Status TEST_major_compaction(PersistentIndexMetaPB& index_meta);
 
@@ -798,6 +875,11 @@ protected:
 
     uint64_t _l2_file_size() const;
 
+<<<<<<< HEAD
+=======
+    Status _load_by_loader(TabletLoader* loader);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 private:
     size_t _dump_bound();
 
@@ -827,11 +909,18 @@ private:
     Status _reload(const PersistentIndexMetaPB& index_meta);
 
     // commit index meta
+<<<<<<< HEAD
     Status _build_commit(Tablet* tablet, PersistentIndexMetaPB& index_meta);
 
     // insert rowset data into persistent index
     Status _insert_rowsets(Tablet* tablet, std::vector<RowsetSharedPtr>& rowsets, const Schema& pkey_schema,
                            int64_t apply_version, std::unique_ptr<Column> pk_column);
+=======
+    Status _build_commit(TabletLoader* loader, PersistentIndexMetaPB& index_meta);
+
+    // insert rowset data into persistent index
+    Status _insert_rowsets(TabletLoader* loader, const Schema& pkey_schema, std::unique_ptr<Column> pk_column);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     Status _get_from_immutable_index(size_t n, const Slice* keys, IndexValue* values,
                                      std::map<size_t, KeysInfo>& keys_info_by_key_size, IOStat* stat);
@@ -905,6 +994,11 @@ private:
     std::atomic<bool> _error{false};
     std::string _error_msg;
     std::vector<KeysInfo> _found_keys_info;
+<<<<<<< HEAD
+=======
+    // save bloom filter of l1 after merge compaction in order to skip read bloom filter file
+    // std::vector<std::unique_ptr<BloomFilter>> _bf_vec;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // set if major compaction is running
     std::atomic<bool> _major_compaction_running{false};
     // Latest major compaction time. In second.

@@ -126,6 +126,14 @@ public:
     int64_t finished_tasks() const { return _finished_tasks; }
     void inc_finished_tasks() { _finished_tasks++; }
 
+<<<<<<< HEAD
+=======
+    uint32_t num_bound_cpu_cores() const { return _num_bound_cpu_cores; }
+    void set_num_bound_cpu_cores(uint32_t val) { _num_bound_cpu_cores = val; }
+    uint32_t first_bound_cpuid() const { return _first_bound_cpuid; }
+    void set_first_bound_cpuid(uint32_t val) { _first_bound_cpuid = val; }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // The current thread of execution, or NULL if the current thread isn't a starrocks::Thread.
     // This call is signal-safe.
     static Thread* current_thread();
@@ -205,6 +213,11 @@ private:
 
     bool _idle{true};
     std::atomic<int64_t> _finished_tasks{0};
+<<<<<<< HEAD
+=======
+    std::atomic<uint32_t> _num_bound_cpu_cores{0};
+    uint32_t _first_bound_cpuid{0};
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // Thread local pointer to the current thread of execution. Will be NULL if the current
     // thread is not a Thread.

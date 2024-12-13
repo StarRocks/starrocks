@@ -37,10 +37,15 @@ public class AnalyzeLateralTest {
     public void testUnnest() {
         analyzeSuccess("select * from tarray cross join unnest(v3)");
         analyzeSuccess("select * from tarray cross join lateral unnest(v3)");
+<<<<<<< HEAD
         analyzeFail("select * from tarray left join unnest(v3) on true",
                 "Not support lateral join except inner or cross");
         analyzeFail("select * from tarray left join lateral unnest(v3) on true",
                 "Not support lateral join except inner or cross");
+=======
+        analyzeSuccess("select * from tarray left join unnest(v3) on true");
+        analyzeSuccess("select * from tarray left join lateral unnest(v3) on true");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         analyzeSuccess("select * from tarray,unnest(v3)");
         analyzeSuccess("select * from tarray,lateral unnest(v3)");
         analyzeSuccess("select v1,unnest from tarray,unnest(v3)");

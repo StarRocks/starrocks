@@ -18,7 +18,11 @@ package com.starrocks.connector.hive.events;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+<<<<<<< HEAD
 import com.starrocks.connector.hive.CacheUpdateProcessor;
+=======
+import com.starrocks.connector.hive.HiveCacheUpdateProcessor;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.connector.hive.HivePartitionName;
 import org.apache.hadoop.hive.metastore.api.NotificationEvent;
 import org.apache.hadoop.hive.metastore.api.Table;
@@ -38,7 +42,11 @@ public abstract class MetastoreTableEvent extends MetastoreEvent {
     // HivePartitionName of each event to process. for unpartition table, the partition values are empty.
     protected List<HivePartitionName> hivePartitionNames = Lists.newArrayList();
 
+<<<<<<< HEAD
     protected MetastoreTableEvent(NotificationEvent event, CacheUpdateProcessor cacheProcessor, String catalogName) {
+=======
+    protected MetastoreTableEvent(NotificationEvent event, HiveCacheUpdateProcessor cacheProcessor, String catalogName) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         super(event, cacheProcessor, catalogName);
         Preconditions.checkNotNull(dbName, "Database name cannot be null");
         tblName = Preconditions.checkNotNull(event.getTableName());

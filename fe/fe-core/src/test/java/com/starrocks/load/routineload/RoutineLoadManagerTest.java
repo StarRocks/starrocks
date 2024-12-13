@@ -46,6 +46,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.mysql.privilege.Auth;
@@ -53,6 +54,14 @@ import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.RoutineLoadOperation;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.persist.EditLog;
+import com.starrocks.persist.RoutineLoadOperation;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
@@ -64,7 +73,17 @@ import com.starrocks.sql.ast.ResumeRoutineLoadStmt;
 import com.starrocks.sql.ast.StopRoutineLoadStmt;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.system.SystemInfoService;
+<<<<<<< HEAD
 import com.starrocks.thrift.TResourceInfo;
+=======
+import com.starrocks.thrift.TKafkaRLTaskProgress;
+import com.starrocks.thrift.TLoadSourceType;
+import com.starrocks.thrift.TRLTaskTxnCommitAttachment;
+import com.starrocks.thrift.TResourceInfo;
+import com.starrocks.thrift.TUniqueId;
+import com.starrocks.transaction.InsertTxnCommitAttachment;
+import com.starrocks.transaction.TxnCommitAttachment;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Injectable;
@@ -79,12 +98,24 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.util.ArrayList;
+<<<<<<< HEAD
 import java.util.List;
 import java.util.Map;
+=======
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+<<<<<<< HEAD
+=======
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 public class RoutineLoadManagerTest {
 
@@ -104,10 +135,16 @@ public class RoutineLoadManagerTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testAddJobByStmt(@Injectable Auth auth,
                                  @Injectable TResourceInfo tResourceInfo,
                                  @Mocked ConnectContext connectContext,
                                  @Mocked GlobalStateMgr globalStateMgr) throws UserException {
+=======
+    public void testAddJobByStmt(@Injectable TResourceInfo tResourceInfo,
+                                 @Mocked ConnectContext connectContext,
+                                 @Mocked GlobalStateMgr globalStateMgr) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         String jobName = "job1";
         String dbName = "db1";
         LabelName labelName = new LabelName(dbName, jobName);
@@ -139,6 +176,7 @@ public class RoutineLoadManagerTest {
             }
         };
 
+<<<<<<< HEAD
         new Expectations() {
             {
                 globalStateMgr.getAuth();
@@ -149,6 +187,8 @@ public class RoutineLoadManagerTest {
                 result = true;
             }
         };
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
         routineLoadManager.createRoutineLoadJob(createRoutineLoadStmt);
 
@@ -173,8 +213,12 @@ public class RoutineLoadManagerTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testCreateJobAuthDeny(@Injectable Auth auth,
                                       @Injectable TResourceInfo tResourceInfo,
+=======
+    public void testCreateJobAuthDeny(@Injectable TResourceInfo tResourceInfo,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                       @Mocked ConnectContext connectContext,
                                       @Mocked GlobalStateMgr globalStateMgr) {
         String jobName = "job1";
@@ -198,6 +242,7 @@ public class RoutineLoadManagerTest {
                 typeName, customProperties);
         createRoutineLoadStmt.setOrigStmt(new OriginStatement("dummy", 0));
 
+<<<<<<< HEAD
         new Expectations() {
             {
                 globalStateMgr.getAuth();
@@ -208,6 +253,8 @@ public class RoutineLoadManagerTest {
                 result = false;
             }
         };
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
         try {
             routineLoadManager.createRoutineLoadJob(createRoutineLoadStmt);
@@ -216,7 +263,11 @@ public class RoutineLoadManagerTest {
             Assert.fail();
         } catch (AnalysisException e) {
             LOG.info("Access deny");
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             e.printStackTrace();
         }
     }
@@ -308,6 +359,7 @@ public class RoutineLoadManagerTest {
             }
         };
 
+<<<<<<< HEAD
         new MockUp<GlobalStateMgr>() {
             public SystemInfoService getCurrentSystemInfo() {
                 return systemInfoService;
@@ -317,6 +369,11 @@ public class RoutineLoadManagerTest {
         RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
         routineLoadManager.updateBeTaskSlot();
         routineLoadManager.takeBeTaskSlot();
+=======
+        RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
+        routineLoadManager.updateBeTaskSlot();
+        routineLoadManager.takeBeTaskSlot(WarehouseManager.DEFAULT_WAREHOUSE_ID, 1L);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         Assert.assertEquals(Config.max_routine_load_task_num_per_be * 2 - 1,
                 routineLoadManager.getClusterIdleSlotNum());
@@ -334,18 +391,26 @@ public class RoutineLoadManagerTest {
             }
         };
 
+<<<<<<< HEAD
         new MockUp<GlobalStateMgr>() {
             public SystemInfoService getCurrentSystemInfo() {
                 return systemInfoService;
             }
         };
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
         routineLoadManager.updateBeTaskSlot();
 
         // take tow slots
+<<<<<<< HEAD
         long beId1 = routineLoadManager.takeBeTaskSlot();
         long beId2 = routineLoadManager.takeBeTaskSlot();
+=======
+        long beId1 = routineLoadManager.takeBeTaskSlot(WarehouseManager.DEFAULT_WAREHOUSE_ID, 1L);
+        long beId2 = routineLoadManager.takeBeTaskSlot(WarehouseManager.DEFAULT_WAREHOUSE_ID, 2L);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertTrue(beId1 != beId2);
         Assert.assertTrue(beId1 != -1L);
         Assert.assertTrue(beId2 != -1L);
@@ -353,21 +418,36 @@ public class RoutineLoadManagerTest {
         // take all slots
         ExecutorService es = Executors.newCachedThreadPool();
         for (int i = 0; i < (2 * Config.max_routine_load_task_num_per_be) - 2; i++) {
+<<<<<<< HEAD
             es.submit(() -> Assert.assertTrue(routineLoadManager.takeBeTaskSlot() > 0));
+=======
+            es.submit(() -> Assert.assertTrue(routineLoadManager.takeBeTaskSlot(WarehouseManager.DEFAULT_WAREHOUSE_ID, 3L) > 0));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         es.shutdown();
         es.awaitTermination(1, TimeUnit.HOURS);
+<<<<<<< HEAD
         Assert.assertEquals(-1L, routineLoadManager.takeBeTaskSlot());
         Assert.assertEquals(-1L, routineLoadManager.takeBeTaskSlot(1L));
         Assert.assertEquals(-1L, routineLoadManager.takeBeTaskSlot(2L));
+=======
+        Assert.assertEquals(-1L, routineLoadManager.takeBeTaskSlot(WarehouseManager.DEFAULT_WAREHOUSE_ID, 4L));
+        Assert.assertEquals(-1L, routineLoadManager.takeBeTaskSlot(1L, 5L));
+        Assert.assertEquals(-1L, routineLoadManager.takeBeTaskSlot(2L, 6L));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // release all slots
         ExecutorService es2 = Executors.newCachedThreadPool();
         for (int i = 0; i < Config.max_routine_load_task_num_per_be; i++) {
             es2.submit(() -> {
+<<<<<<< HEAD
                 routineLoadManager.releaseBeTaskSlot(1L);
                 routineLoadManager.releaseBeTaskSlot(2L);
+=======
+                routineLoadManager.releaseBeTaskSlot(WarehouseManager.DEFAULT_WAREHOUSE_ID, 1L, 1L);
+                routineLoadManager.releaseBeTaskSlot(WarehouseManager.DEFAULT_WAREHOUSE_ID, 2L, 2L);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             });
         }
         es2.shutdown();
@@ -376,6 +456,52 @@ public class RoutineLoadManagerTest {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testTakeBeTaskSlotWithJobs() throws Exception {
+        Config.max_routine_load_task_num_per_be = 1000;
+        List<Long> beIds = Lists.newArrayList(1L, 2L, 3L, 4L, 5L);
+
+        new Expectations() {
+            {
+                systemInfoService.getBackendIds(true);
+                minTimes = 0;
+                result = beIds;
+            }
+        };
+
+        RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
+        routineLoadManager.updateBeTaskSlot();
+        
+        List<Integer> jobIDs = IntStream.rangeClosed(1, 100).boxed().collect(Collectors.toList());
+        
+        Collections.shuffle(jobIDs);
+        for (long jobID : jobIDs) {
+            for (long taskId = 0; taskId < 3; taskId++) {
+                long beId = routineLoadManager.takeBeTaskSlot(WarehouseManager.DEFAULT_WAREHOUSE_ID, jobID);
+            }
+        }
+
+        Map<Long, Set<Long>> nodeToJobs = routineLoadManager.getNodeToJobs(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        Assert.assertEquals(5, nodeToJobs.size());
+        for (long beId : nodeToJobs.keySet()) {
+            Assert.assertEquals(60, nodeToJobs.get(beId).size());
+            long total = 0;
+            for (long jobId : nodeToJobs.get(beId)) {
+                total += jobId;
+                routineLoadManager.takeNodeById(WarehouseManager.DEFAULT_WAREHOUSE_ID, jobId, beId);
+            }
+            LOG.warn("beId: {}, total: {}", beId, total);
+        }
+        for (long beId : nodeToJobs.keySet()) {
+            Assert.assertEquals(60, nodeToJobs.get(beId).size());
+            Assert.assertEquals(120, routineLoadManager.getNodeTasksNum().get(beId).intValue());
+        }
+        Config.max_routine_load_task_num_per_be = 16;
+    }
+
+    @Test
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void testGetJobByName(@Injectable RoutineLoadJob routineLoadJob1,
                                  @Injectable RoutineLoadJob routineLoadJob2,
                                  @Injectable RoutineLoadJob routineLoadJob3) {
@@ -418,10 +544,58 @@ public class RoutineLoadManagerTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testGetJob(@Injectable RoutineLoadJob routineLoadJob1,
                            @Injectable RoutineLoadJob routineLoadJob2,
                            @Injectable RoutineLoadJob routineLoadJob3) throws MetaNotFoundException {
 
+=======
+    public void testSetRoutineLoadJobOtherMsg() {
+        RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
+        KafkaRoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob(1L, "test", 1L, 1L, "host:port",
+                "topic");
+        Map<Long, Integer> beTasksNum = routineLoadManager.getNodeTasksNum();
+        beTasksNum.put(1L, 0);
+        try {
+            routineLoadManager.addRoutineLoadJob(routineLoadJob, "db");
+        } catch (DdlException e) {
+            throw new RuntimeException(e);
+        }
+
+        {
+            TxnCommitAttachment txnCommitAttachment = new InsertTxnCommitAttachment();
+            routineLoadManager.setRoutineLoadJobOtherMsg("foo", txnCommitAttachment);
+        }
+
+        {
+            RLTaskTxnCommitAttachment txnCommitAttachment = new RLTaskTxnCommitAttachment();
+            routineLoadManager.setRoutineLoadJobOtherMsg("foo", txnCommitAttachment);
+        }
+
+        {
+
+            TRLTaskTxnCommitAttachment rlTaskTxnCommitAttachment = new TRLTaskTxnCommitAttachment();
+            rlTaskTxnCommitAttachment.setId(new TUniqueId());
+            rlTaskTxnCommitAttachment.setLoadedRows(100);
+            rlTaskTxnCommitAttachment.setFilteredRows(1);
+            rlTaskTxnCommitAttachment.setJobId(Deencapsulation.getField(routineLoadJob, "id"));
+            rlTaskTxnCommitAttachment.setLoadSourceType(TLoadSourceType.KAFKA);
+            TKafkaRLTaskProgress tKafkaRLTaskProgress = new TKafkaRLTaskProgress();
+            Map<Integer, Long> kafkaProgress = Maps.newHashMap();
+            kafkaProgress.put(1, 100L); // start from 0, so rows number is 101, and consumed offset is 100
+            tKafkaRLTaskProgress.setPartitionCmtOffset(kafkaProgress);
+            rlTaskTxnCommitAttachment.setKafkaRLTaskProgress(tKafkaRLTaskProgress);
+            TxnCommitAttachment txnCommitAttachment = new RLTaskTxnCommitAttachment(rlTaskTxnCommitAttachment);
+            routineLoadManager.setRoutineLoadJobOtherMsg("foo abc", txnCommitAttachment);
+            Assert.assertEquals(true, routineLoadJob.getOtherMsg().contains("foo abc"));
+        }
+    }
+
+    @Test
+    public void testGetJob(@Injectable RoutineLoadJob routineLoadJob1,
+                           @Injectable RoutineLoadJob routineLoadJob2,
+                           @Injectable RoutineLoadJob routineLoadJob3) throws MetaNotFoundException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         new Expectations() {
             {
                 routineLoadJob1.isFinal();
@@ -451,6 +625,147 @@ public class RoutineLoadManagerTest {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testGetJobByJobName(@Injectable RoutineLoadJob routineLoadJob1,
+                                    @Injectable RoutineLoadJob routineLoadJob2,
+                                    @Injectable RoutineLoadJob routineLoadJob3) throws MetaNotFoundException {
+        new Expectations() {
+            {
+                routineLoadJob1.isFinal();
+                minTimes = 0;
+                result = true;
+                routineLoadJob1.getName();
+                minTimes = 0;
+                result = "aaa";
+                routineLoadJob2.isFinal();
+                minTimes = 0;
+                result = false;
+                routineLoadJob2.getName();
+                minTimes = 0;
+                result = "aaa";
+                routineLoadJob3.isFinal();
+                minTimes = 0;
+                result = true;
+                routineLoadJob3.getName();
+                minTimes = 0;
+                result = "bbb";
+            }
+        };
+
+        RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
+        Map<Long, RoutineLoadJob> idToRoutineLoadJob = Maps.newHashMap();
+        idToRoutineLoadJob.put(1L, routineLoadJob1);
+        idToRoutineLoadJob.put(2L, routineLoadJob2);
+        idToRoutineLoadJob.put(3L, routineLoadJob3);
+        Deencapsulation.setField(routineLoadManager, "idToRoutineLoadJob", idToRoutineLoadJob);
+        List<RoutineLoadJob> result = routineLoadManager.getJob(null, "aaa", false);
+
+        Assert.assertEquals(1, result.size());
+        Assert.assertEquals(routineLoadJob2, result.get(0));
+    }
+
+    @Test
+    public void testGetJobByDb(@Injectable RoutineLoadJob routineLoadJob1,
+                               @Injectable RoutineLoadJob routineLoadJob2,
+                               @Injectable RoutineLoadJob routineLoadJob3,
+                               @Mocked GlobalStateMgr globalStateMgr,
+                               @Mocked Database database) throws MetaNotFoundException {
+        new Expectations() {
+            {
+                routineLoadJob1.isFinal();
+                minTimes = 0;
+                result = true;
+                routineLoadJob1.getName();
+                minTimes = 0;
+                result = "aaa";
+                routineLoadJob2.isFinal();
+                minTimes = 0;
+                result = false;
+                routineLoadJob2.getName();
+                minTimes = 0;
+                result = "aaa";
+                routineLoadJob3.isFinal();
+                minTimes = 0;
+                result = true;
+                routineLoadJob3.getName();
+                minTimes = 0;
+                result = "bbb";
+                globalStateMgr.getLocalMetastore().getDb("db1");
+                minTimes = 0;
+                result = database;
+                database.getId();
+                minTimes = 0;
+                result = 1L;
+            }
+        };
+
+        RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
+        Map<Long, Map<String, List<RoutineLoadJob>>> dbToNameToRoutineLoadJob = Maps.newConcurrentMap();
+        Map<String, List<RoutineLoadJob>> nameToRoutineLoadJob = Maps.newConcurrentMap();
+        nameToRoutineLoadJob.put("aaa", Lists.newArrayList(routineLoadJob1, routineLoadJob2));
+        nameToRoutineLoadJob.put("bbb", Lists.newArrayList(routineLoadJob3));
+        dbToNameToRoutineLoadJob.put(1L, nameToRoutineLoadJob);
+        Deencapsulation.setField(routineLoadManager, "dbToNameToRoutineLoadJob", dbToNameToRoutineLoadJob);
+        List<RoutineLoadJob> result = routineLoadManager.getJob("db1", null, true);
+
+        Assert.assertEquals(3, result.size());
+        Assert.assertEquals(routineLoadJob2, result.get(0));
+        Assert.assertEquals(routineLoadJob1, result.get(1));
+        Assert.assertEquals(routineLoadJob3, result.get(2));
+    }
+
+    @Test
+    public void testGetJobByDbAndJobName(@Injectable RoutineLoadJob routineLoadJob1,
+                                         @Injectable RoutineLoadJob routineLoadJob2,
+                                         @Injectable RoutineLoadJob routineLoadJob3,
+                                         @Mocked GlobalStateMgr globalStateMgr,
+                                         @Mocked Database database) throws MetaNotFoundException {
+        new Expectations() {
+            {
+                routineLoadJob1.isFinal();
+                minTimes = 0;
+                result = true;
+                routineLoadJob1.getName();
+                minTimes = 0;
+                result = "aaa";
+                routineLoadJob2.isFinal();
+                minTimes = 0;
+                result = false;
+                routineLoadJob2.getName();
+                minTimes = 0;
+                result = "aaa";
+                routineLoadJob3.isFinal();
+                minTimes = 0;
+                result = true;
+                routineLoadJob3.getName();
+                minTimes = 0;
+                result = "bbb";
+                globalStateMgr.getLocalMetastore().getDb("db1");
+                minTimes = 0;
+                result = database;
+                database.getId();
+                minTimes = 0;
+                result = 1L;
+            }
+        };
+
+        RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
+        Map<Long, Map<String, List<RoutineLoadJob>>> dbToNameToRoutineLoadJob = Maps.newConcurrentMap();
+        Map<String, List<RoutineLoadJob>> nameToRoutineLoadJob = Maps.newConcurrentMap();
+        nameToRoutineLoadJob.put("aaa", Lists.newArrayList(routineLoadJob1, routineLoadJob2));
+        nameToRoutineLoadJob.put("bbb", Lists.newArrayList(routineLoadJob3));
+        dbToNameToRoutineLoadJob.put(1L, nameToRoutineLoadJob);
+        Deencapsulation.setField(routineLoadManager, "dbToNameToRoutineLoadJob", dbToNameToRoutineLoadJob);
+        List<RoutineLoadJob> result = routineLoadManager.getJob("db1", "aaa", true);
+
+        Assert.assertEquals(2, result.size());
+        Assert.assertEquals(routineLoadJob2, result.get(0));
+        Assert.assertEquals(routineLoadJob1, result.get(1));
+    }
+
+    @Test
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void testGetJobIncludeHistory(@Injectable RoutineLoadJob routineLoadJob1,
                                          @Injectable RoutineLoadJob routineLoadJob2,
                                          @Injectable RoutineLoadJob routineLoadJob3,
@@ -467,7 +782,11 @@ public class RoutineLoadManagerTest {
                 routineLoadJob3.isFinal();
                 minTimes = 0;
                 result = true;
+<<<<<<< HEAD
                 globalStateMgr.getDb(anyString);
+=======
+                globalStateMgr.getLocalMetastore().getDb(anyString);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 minTimes = 0;
                 result = database;
                 database.getId();
@@ -498,8 +817,12 @@ public class RoutineLoadManagerTest {
     public void testPauseRoutineLoadJob(@Injectable PauseRoutineLoadStmt pauseRoutineLoadStmt,
                                         @Mocked GlobalStateMgr globalStateMgr,
                                         @Mocked Database database,
+<<<<<<< HEAD
                                         @Mocked Auth auth,
                                         @Mocked ConnectContext connectContext) throws UserException {
+=======
+                                        @Mocked ConnectContext connectContext) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
         Map<Long, Map<String, List<RoutineLoadJob>>> dbToNameToRoutineLoadJob = Maps.newHashMap();
         Map<String, List<RoutineLoadJob>> nameToRoutineLoadJob = Maps.newHashMap();
@@ -522,18 +845,25 @@ public class RoutineLoadManagerTest {
                 pauseRoutineLoadStmt.getName();
                 minTimes = 0;
                 result = "";
+<<<<<<< HEAD
                 globalStateMgr.getDb("");
+=======
+                globalStateMgr.getLocalMetastore().getDb("");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 minTimes = 0;
                 result = database;
                 database.getId();
                 minTimes = 0;
                 result = 1L;
+<<<<<<< HEAD
                 globalStateMgr.getAuth();
                 minTimes = 0;
                 result = auth;
                 auth.checkTblPriv((ConnectContext) any, anyString, anyString, (PrivPredicate) any);
                 minTimes = 0;
                 result = true;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         };
 
@@ -560,8 +890,12 @@ public class RoutineLoadManagerTest {
     public void testResumeRoutineLoadJob(@Injectable ResumeRoutineLoadStmt resumeRoutineLoadStmt,
                                          @Mocked GlobalStateMgr globalStateMgr,
                                          @Mocked Database database,
+<<<<<<< HEAD
                                          @Mocked Auth auth,
                                          @Mocked ConnectContext connectContext) throws UserException {
+=======
+                                         @Mocked ConnectContext connectContext) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
         Map<Long, Map<String, List<RoutineLoadJob>>> dbToNameToRoutineLoadJob = Maps.newHashMap();
         Map<String, List<RoutineLoadJob>> nameToRoutineLoadJob = Maps.newHashMap();
@@ -580,18 +914,25 @@ public class RoutineLoadManagerTest {
                 resumeRoutineLoadStmt.getName();
                 minTimes = 0;
                 result = "";
+<<<<<<< HEAD
                 globalStateMgr.getDb("");
+=======
+                globalStateMgr.getLocalMetastore().getDb("");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 minTimes = 0;
                 result = database;
                 database.getId();
                 minTimes = 0;
                 result = 1L;
+<<<<<<< HEAD
                 globalStateMgr.getAuth();
                 minTimes = 0;
                 result = auth;
                 auth.checkTblPriv((ConnectContext) any, anyString, anyString, (PrivPredicate) any);
                 minTimes = 0;
                 result = true;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         };
 
@@ -604,8 +945,12 @@ public class RoutineLoadManagerTest {
     public void testStopRoutineLoadJob(@Injectable StopRoutineLoadStmt stopRoutineLoadStmt,
                                        @Mocked GlobalStateMgr globalStateMgr,
                                        @Mocked Database database,
+<<<<<<< HEAD
                                        @Mocked Auth auth,
                                        @Mocked ConnectContext connectContext) throws UserException {
+=======
+                                       @Mocked ConnectContext connectContext) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
         Map<Long, Map<String, List<RoutineLoadJob>>> dbToNameToRoutineLoadJob = Maps.newHashMap();
         Map<String, List<RoutineLoadJob>> nameToRoutineLoadJob = Maps.newHashMap();
@@ -624,18 +969,25 @@ public class RoutineLoadManagerTest {
                 stopRoutineLoadStmt.getName();
                 minTimes = 0;
                 result = "";
+<<<<<<< HEAD
                 globalStateMgr.getDb("");
+=======
+                globalStateMgr.getLocalMetastore().getDb("");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 minTimes = 0;
                 result = database;
                 database.getId();
                 minTimes = 0;
                 result = 1L;
+<<<<<<< HEAD
                 globalStateMgr.getAuth();
                 minTimes = 0;
                 result = auth;
                 auth.checkTblPriv((ConnectContext) any, anyString, anyString, (PrivPredicate) any);
                 minTimes = 0;
                 result = true;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         };
 
@@ -671,9 +1023,12 @@ public class RoutineLoadManagerTest {
                 routineLoadJob.getName();
                 minTimes = 0;
                 result = "";
+<<<<<<< HEAD
                 routineLoadJob.getCurrentWarehouse();
                 minTimes = 0;
                 result = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 globalStateMgr.getEditLog();
                 minTimes = 0;
                 result = editLog;
@@ -708,9 +1063,12 @@ public class RoutineLoadManagerTest {
                 routineLoadJob.getDbId();
                 minTimes = 0;
                 result = 1L;
+<<<<<<< HEAD
                 routineLoadJob.getCurrentWarehouse();
                 minTimes = 0;
                 result = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 operation.getId();
                 minTimes = 0;
                 result = 1L;
@@ -757,8 +1115,12 @@ public class RoutineLoadManagerTest {
     public void testAlterRoutineLoadJob(@Injectable StopRoutineLoadStmt stopRoutineLoadStmt,
                                         @Mocked GlobalStateMgr globalStateMgr,
                                         @Mocked Database database,
+<<<<<<< HEAD
                                         @Mocked Auth auth,
                                         @Mocked ConnectContext connectContext) throws UserException {
+=======
+                                        @Mocked ConnectContext connectContext) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
         Map<Long, Map<String, List<RoutineLoadJob>>> dbToNameToRoutineLoadJob = Maps.newHashMap();
         Map<String, List<RoutineLoadJob>> nameToRoutineLoadJob = Maps.newHashMap();
@@ -777,18 +1139,25 @@ public class RoutineLoadManagerTest {
                 stopRoutineLoadStmt.getName();
                 minTimes = 0;
                 result = "";
+<<<<<<< HEAD
                 globalStateMgr.getDb("");
+=======
+                globalStateMgr.getLocalMetastore().getDb("");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 minTimes = 0;
                 result = database;
                 database.getId();
                 minTimes = 0;
                 result = 1L;
+<<<<<<< HEAD
                 globalStateMgr.getAuth();
                 minTimes = 0;
                 result = auth;
                 auth.checkTblPriv((ConnectContext) any, anyString, anyString, (PrivPredicate) any);
                 minTimes = 0;
                 result = true;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         };
 
@@ -797,7 +1166,10 @@ public class RoutineLoadManagerTest {
         Assert.assertEquals(RoutineLoadJob.JobState.STOPPED, routineLoadJob.getState());
     }
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Test
     public void testLoadImageWithoutExpiredJob() throws Exception {
 
@@ -878,9 +1250,15 @@ public class RoutineLoadManagerTest {
         leaderLoadManager.addRoutineLoadJob(pulsarRoutineLoadJob, db);
 
         UtFrameUtils.PseudoImage pseudoImage = new UtFrameUtils.PseudoImage();
+<<<<<<< HEAD
         leaderLoadManager.saveRoutineLoadJobsV2(pseudoImage.getDataOutputStream());
         RoutineLoadMgr restartedRoutineLoadManager = new RoutineLoadMgr();
         SRMetaBlockReader reader = new SRMetaBlockReader(pseudoImage.getDataInputStream());
+=======
+        leaderLoadManager.saveRoutineLoadJobsV2(pseudoImage.getImageWriter());
+        RoutineLoadMgr restartedRoutineLoadManager = new RoutineLoadMgr();
+        SRMetaBlockReader reader = new SRMetaBlockReaderV2(pseudoImage.getJsonReader());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         restartedRoutineLoadManager.loadRoutineLoadJobsV2(reader);
         reader.close();
 

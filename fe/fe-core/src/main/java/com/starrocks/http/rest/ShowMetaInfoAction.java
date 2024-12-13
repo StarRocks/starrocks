@@ -35,12 +35,20 @@
 package com.starrocks.http.rest;
 
 import com.google.common.annotations.VisibleForTesting;
+<<<<<<< HEAD
+=======
+import com.google.common.base.Strings;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.google.gson.Gson;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
+<<<<<<< HEAD
 import com.starrocks.catalog.Partition;
+=======
+import com.starrocks.catalog.PhysicalPartition;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.ha.HAProtocol;
@@ -51,6 +59,10 @@ import com.starrocks.http.IllegalArgException;
 import com.starrocks.persist.Storage;
 import com.starrocks.server.GlobalStateMgr;
 import io.netty.handler.codec.http.HttpMethod;
+<<<<<<< HEAD
+=======
+import io.netty.handler.codec.http.HttpResponseStatus;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -93,6 +105,15 @@ public class ShowMetaInfoAction extends RestBaseAction {
     @Override
     public void execute(BaseRequest request, BaseResponse response) {
         String action = request.getSingleParameter("action");
+<<<<<<< HEAD
+=======
+        // check param empty
+        if (Strings.isNullOrEmpty(action)) {
+            response.appendContent("Missing parameter");
+            writeResponse(request, response, HttpResponseStatus.BAD_REQUEST);
+            return;
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Gson gson = new Gson();
         response.setContentType("application/json");
 
@@ -107,7 +128,15 @@ public class ShowMetaInfoAction extends RestBaseAction {
                 response.getContent().append(gson.toJson(getHaInfo()));
                 break;
             default:
+<<<<<<< HEAD
                 break;
+=======
+                // clear content type set above
+                response.setContentType(null);
+                response.appendContent("Invalid parameter");
+                writeResponse(request, response, HttpResponseStatus.BAD_REQUEST);
+                return;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         sendResult(request, response);
     }
@@ -130,7 +159,11 @@ public class ShowMetaInfoAction extends RestBaseAction {
             try {
                 master = haProtocol.getLeader();
             } catch (Exception e) {
+<<<<<<< HEAD
                 // this may happen when majority of FOLLOWERS are down and no MASTER right now.
+=======
+                // this may happen when the majority of FOLLOWERS are down and no MASTER right now.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 LOG.warn("failed to get leader: {}", e.getMessage());
             }
             if (master != null) {
@@ -166,13 +199,18 @@ public class ShowMetaInfoAction extends RestBaseAction {
             long lastCheckpointTime = storage.getCurrentImageFile().lastModified();
             feInfo.put("last_checkpoint_time", String.valueOf(lastCheckpointTime));
         } catch (IOException e) {
+<<<<<<< HEAD
             LOG.warn(e.getMessage());
+=======
+            LOG.warn(e.getMessage(), e);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return feInfo;
     }
 
     public Map<String, Long> getDataSize(boolean singleReplica) {
         Map<String, Long> result = new HashMap<String, Long>();
+<<<<<<< HEAD
         List<String> dbNames = GlobalStateMgr.getCurrentState().getDbNames();
 
         for (int i = 0; i < dbNames.size(); i++) {
@@ -181,13 +219,27 @@ public class ShowMetaInfoAction extends RestBaseAction {
 
             long totalSize = 0;
             List<Table> tables = db.getTables();
+=======
+        List<String> dbNames = GlobalStateMgr.getCurrentState().getLocalMetastore().listDbNames();
+
+        for (int i = 0; i < dbNames.size(); i++) {
+            String dbName = dbNames.get(i);
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+
+            long totalSize = 0;
+            List<Table> tables = GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             for (int j = 0; j < tables.size(); j++) {
                 Table table = tables.get(j);
                 if (table.isNativeTableOrMaterializedView()) {
                     // in implementation, cloud native table is a subtype of olap table
                     totalSize += calculateSizeForOlapTable((OlapTable) table, singleReplica);
                 }
+<<<<<<< HEAD
             } // end for tables
+=======
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             result.put(dbName, totalSize);
         } // end for dbs
         return result;
@@ -196,7 +248,11 @@ public class ShowMetaInfoAction extends RestBaseAction {
     @VisibleForTesting
     public long calculateSizeForOlapTable(OlapTable olapTable, boolean singleReplica) {
         long tableSize = 0;
+<<<<<<< HEAD
         for (Partition partition : olapTable.getAllPartitions()) {
+=======
+        for (PhysicalPartition partition : olapTable.getAllPhysicalPartitions()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             long partitionSize = 0;
             for (MaterializedIndex mIndex : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
                 partitionSize += mIndex.getDataSize(singleReplica);

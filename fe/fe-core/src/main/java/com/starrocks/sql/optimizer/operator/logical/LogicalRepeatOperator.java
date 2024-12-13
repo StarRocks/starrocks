@@ -33,6 +33,10 @@ public class LogicalRepeatOperator extends LogicalOperator {
     private List<ColumnRefOperator> outputGrouping;
     private List<List<ColumnRefOperator>> repeatColumnRefList;
     private List<List<Long>> groupingIds;
+<<<<<<< HEAD
+=======
+    private boolean hasPushDown;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public LogicalRepeatOperator(List<ColumnRefOperator> outputGrouping,
                                  List<List<ColumnRefOperator>> repeatColumnRefList,
@@ -41,6 +45,10 @@ public class LogicalRepeatOperator extends LogicalOperator {
         this.outputGrouping = outputGrouping;
         this.repeatColumnRefList = repeatColumnRefList;
         this.groupingIds = groupingIds;
+<<<<<<< HEAD
+=======
+        this.hasPushDown = false;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     private LogicalRepeatOperator() {
@@ -59,6 +67,13 @@ public class LogicalRepeatOperator extends LogicalOperator {
         return groupingIds;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean hasPushDown() {
+        return hasPushDown;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public ColumnRefSet getOutputColumns(ExpressionContext expressionContext) {
         ColumnRefSet outputColumns = new ColumnRefSet(outputGrouping);
@@ -72,7 +87,11 @@ public class LogicalRepeatOperator extends LogicalOperator {
     @Override
     public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
         List<ColumnOutputInfo> columnOutputInfoList = Lists.newArrayList();
+<<<<<<< HEAD
         outputGrouping.stream().forEach(e -> columnOutputInfoList.add(new ColumnOutputInfo(e, e)));
+=======
+        outputGrouping.forEach(e -> columnOutputInfoList.add(new ColumnOutputInfo(e, e)));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         for (ColumnOutputInfo columnOutputInfo : inputs.get(0).getRowOutputInfo().getColumnOutputInfo()) {
             columnOutputInfoList.add(new ColumnOutputInfo(columnOutputInfo.getColumnRef(), columnOutputInfo.getColumnRef()));
         }
@@ -102,14 +121,28 @@ public class LogicalRepeatOperator extends LogicalOperator {
         LogicalRepeatOperator that = (LogicalRepeatOperator) o;
         return Objects.equals(outputGrouping, that.outputGrouping) &&
                 Objects.equals(repeatColumnRefList, that.repeatColumnRefList) &&
+<<<<<<< HEAD
                 Objects.equals(groupingIds, that.groupingIds);
+=======
+                Objects.equals(groupingIds, that.groupingIds) &&
+                Objects.equals(hasPushDown, that.hasPushDown);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
     public int hashCode() {
+<<<<<<< HEAD
         return Objects.hash(super.hashCode(), outputGrouping, repeatColumnRefList);
     }
 
+=======
+        return Objects.hash(super.hashCode(), outputGrouping, repeatColumnRefList, hasPushDown);
+    }
+
+    public static Builder builder() {
+        return new Builder();
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static class Builder
             extends LogicalOperator.Builder<LogicalRepeatOperator, LogicalRepeatOperator.Builder> {
 
@@ -118,6 +151,29 @@ public class LogicalRepeatOperator extends LogicalOperator {
             return new LogicalRepeatOperator();
         }
 
+<<<<<<< HEAD
+=======
+        public LogicalRepeatOperator.Builder setHasPushDown(boolean hasPushDown) {
+            builder.hasPushDown = hasPushDown;
+            return this;
+        }
+
+        public LogicalRepeatOperator.Builder setOutputGrouping(List<ColumnRefOperator> outputGrouping) {
+            builder.outputGrouping = outputGrouping;
+            return this;
+        }
+
+        public LogicalRepeatOperator.Builder setGroupingIds(List<List<Long>> groupingIds) {
+            builder.groupingIds = groupingIds;
+            return this;
+        }
+
+        public LogicalRepeatOperator.Builder setRepeatColumnRefList(List<List<ColumnRefOperator>> repeatColumnRefList) {
+            builder.repeatColumnRefList = repeatColumnRefList;
+            return this;
+        }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         @Override
         public LogicalRepeatOperator.Builder withOperator(LogicalRepeatOperator operator) {
             super.withOperator(operator);

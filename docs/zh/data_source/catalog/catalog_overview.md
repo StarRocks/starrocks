@@ -29,6 +29,10 @@ StarRocks 自 2.3 版本起支持 Catalog（数据目录）功能，实现在一
   - [JDBC catalog](../catalog/jdbc_catalog.md)：用于查询 JDBC 数据源中的数据。
   - [Elasticsearch catalog](../catalog/elasticsearch_catalog.md)：用于查询 Elasticsearch 中的数据。该特性自 3.1 版本起支持。
   - [Paimon catalog](../catalog/paimon_catalog.md)：用于查询 Paimon 中的数据。该特性自 3.1 版本起支持。
+<<<<<<< HEAD
+=======
+  - [Unified catalog](../catalog/unified_catalog.md)：把 Hive、Iceberg、Hudi 和 Delta Lake 作为一个融合的数据源，从中查询数据。该特性自 3.2 版本起支持。
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
   使用 external catalog 查询数据时，StarRocks 会用到外部数据源的两个组件：
 

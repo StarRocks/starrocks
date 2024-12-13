@@ -157,12 +157,20 @@ import org.apache.thrift.TException;
 import org.apache.thrift.protocol.TBinaryProtocol;
 import org.apache.thrift.protocol.TCompactProtocol;
 import org.apache.thrift.protocol.TProtocol;
+<<<<<<< HEAD
 import org.apache.thrift.transport.TFramedTransport;
 import org.apache.thrift.transport.TSocket;
 import org.apache.thrift.transport.TTransport;
 import org.apache.thrift.transport.TTransportException;
 
 import javax.security.auth.login.LoginException;
+=======
+import org.apache.thrift.transport.TSocket;
+import org.apache.thrift.transport.TTransport;
+import org.apache.thrift.transport.TTransportException;
+import org.apache.thrift.transport.layered.TFramedTransport;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.io.IOException;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.InvocationTargetException;
@@ -175,12 +183,20 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+<<<<<<< HEAD
+=======
+import java.util.Iterator;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+<<<<<<< HEAD
+=======
+import javax.security.auth.login.LoginException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import static org.apache.hadoop.hive.metastore.utils.MetaStoreUtils.getDefaultCatalog;
 
@@ -361,7 +377,11 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
                         JavaUtils.getClassLoader());
                 return (URIResolverHook) ReflectionUtils.newInstance(uriResolverClass, null);
             } catch (Exception e) {
+<<<<<<< HEAD
                 LOG.error("Exception loading uri resolver hook" + e);
+=======
+                LOG.error("Exception loading uri resolver hook", e);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 return null;
             }
         }
@@ -570,7 +590,11 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
                                     + "Continuing without it.", e);
                         }
                     }
+<<<<<<< HEAD
                 } catch (MetaException e) {
+=======
+                } catch (MetaException | TTransportException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     LOG.error("Unable to connect to metastore with URI " + store
                             + " in attempt " + attempt, e);
                 }
@@ -1044,7 +1068,11 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
 
     @Override
     public boolean tableExists(String databaseName, String tableName)
+<<<<<<< HEAD
             throws MetaException, TException, UnknownDBException {
+=======
+        throws MetaException, TException, UnknownDBException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         try {
             Table table = getTable(databaseName, tableName);
             return table != null;
@@ -1058,7 +1086,11 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
 
     @Override
     public boolean tableExists(String catName, String dbName, String tableName)
+<<<<<<< HEAD
             throws MetaException, TException, UnknownDBException {
+=======
+        throws MetaException, TException, UnknownDBException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return tableExists(dbName, tableName);
     }
 
@@ -1134,10 +1166,22 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
         throw new TException("method not implemented");
     }
 
+<<<<<<< HEAD
     @Override
     public int add_partitions(List<Partition> partitions)
             throws InvalidObjectException, AlreadyExistsException, MetaException, TException {
         throw new TException("method not implemented");
+=======
+    public int add_partitions(List<Partition> new_parts) throws TException {
+        if (new_parts != null && !new_parts.isEmpty() && !((Partition)new_parts.get(0)).isSetCatName()) {
+            String defaultCat = MetaStoreUtils.getDefaultCatalog(this.conf);
+            new_parts.forEach((p) -> {
+                p.setCatName(defaultCat);
+            });
+        }
+
+        return this.client.add_partitions(new_parts);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -1406,6 +1450,7 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
                 name, deleteData, envContext);
     }
 
+<<<<<<< HEAD
     @Override
     public void alter_table(String databaseName, String tblName, Table table)
             throws InvalidOperationException, MetaException, TException {
@@ -1430,6 +1475,23 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
     public void alter_table(String defaultDatabaseName, String tblName, Table table, boolean cascade)
             throws InvalidOperationException, MetaException, TException {
         throw new TException("method not implemented");
+=======
+    public void alter_table(String dbname, String tbl_name, Table new_tbl) throws TException {
+        this.alter_table_with_environmentContext(dbname, tbl_name, new_tbl, (EnvironmentContext)null);
+    }
+
+    public void alter_table(String defaultDatabaseName, String tblName, Table table, boolean cascade) throws TException {
+        EnvironmentContext environmentContext = new EnvironmentContext();
+        if (cascade) {
+            environmentContext.putToProperties("CASCADE", "true");
+        }
+
+        this.alter_table_with_environmentContext(defaultDatabaseName, tblName, table, environmentContext);
+    }
+
+    public void alter_table(String catName, String dbName, String tblName, Table newTable, EnvironmentContext envContext) throws TException {
+        this.client.alter_table_with_environment_context(MetaStoreUtils.prependCatalogToDbName(catName, dbName, this.conf), tblName, newTable, envContext);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -1528,6 +1590,7 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
 
     }
 
+<<<<<<< HEAD
     @Override
     public boolean dropPartition(String db_name, String tbl_name, List<String> part_vals, boolean deleteData)
             throws NoSuchObjectException, MetaException, TException {
@@ -1550,6 +1613,69 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
     public boolean dropPartition(String catName, String db_name, String tbl_name, List<String> part_vals,
                                  PartitionDropOptions options) throws NoSuchObjectException, MetaException, TException {
         throw new TException("method not implemented");
+=======
+    public boolean dropPartition(String dbName, String tableName, String partName, boolean deleteData) throws TException {
+        return this.dropPartition(MetaStoreUtils.getDefaultCatalog(this.conf), dbName, tableName, partName, deleteData);
+    }
+
+    public boolean dropPartition(String catName, String db_name, String tbl_name, String name, boolean deleteData) throws TException {
+        return this.client.drop_partition_by_name_with_environment_context(MetaStoreUtils.prependCatalogToDbName(catName, db_name, this.conf), tbl_name, name, deleteData, (EnvironmentContext)null);
+    }
+
+    private static EnvironmentContext getEnvironmentContextWithIfPurgeSet() {
+        Map<String, String> warehouseOptions = new HashMap();
+        warehouseOptions.put("ifPurge", "TRUE");
+        return new EnvironmentContext(warehouseOptions);
+    }
+
+    /** @deprecated */
+    @Deprecated
+    public boolean dropPartition(String db_name, String tbl_name, List<String> part_vals, EnvironmentContext env_context) throws TException {
+        return this.client.drop_partition_with_environment_context(MetaStoreUtils.prependCatalogToDbName(db_name, this.conf), tbl_name, part_vals, true, env_context);
+    }
+
+    /** @deprecated */
+    @Deprecated
+    public boolean dropPartition(String dbName, String tableName, String partName, boolean dropData, EnvironmentContext ec) throws TException {
+        return this.client.drop_partition_by_name_with_environment_context(MetaStoreUtils.prependCatalogToDbName(dbName, this.conf), tableName, partName, dropData, ec);
+    }
+
+    /** @deprecated */
+    @Deprecated
+    public boolean dropPartition(String dbName, String tableName, List<String> partVals) throws TException {
+        return this.client.drop_partition(MetaStoreUtils.prependCatalogToDbName(dbName, this.conf), tableName, partVals, true);
+    }
+
+    public boolean dropPartition(String db_name, String tbl_name, List<String> part_vals, boolean deleteData) throws TException {
+        return this.dropPartition(MetaStoreUtils.getDefaultCatalog(this.conf), db_name, tbl_name, part_vals, PartitionDropOptions.instance().deleteData(deleteData));
+    }
+
+    public boolean dropPartition(String catName, String db_name, String tbl_name, List<String> part_vals, boolean deleteData) throws TException {
+        return this.dropPartition(catName, db_name, tbl_name, part_vals, PartitionDropOptions.instance().deleteData(deleteData));
+    }
+
+    public boolean dropPartition(String db_name, String tbl_name, List<String> part_vals, PartitionDropOptions options) throws TException {
+        return this.dropPartition(MetaStoreUtils.getDefaultCatalog(this.conf), db_name, tbl_name, part_vals, options);
+    }
+
+    public boolean dropPartition(String catName, String db_name, String tbl_name, List<String> part_vals, PartitionDropOptions options) throws TException {
+        if (options == null) {
+            options = PartitionDropOptions.instance();
+        }
+
+        if (part_vals != null) {
+            Iterator var6 = part_vals.iterator();
+
+            while(var6.hasNext()) {
+                String partVal = (String)var6.next();
+                if (partVal == null) {
+                    throw new MetaException("The partition value must not be null.");
+                }
+            }
+        }
+
+        return this.client.drop_partition_with_environment_context(MetaStoreUtils.prependCatalogToDbName(catName, db_name, this.conf), tbl_name, part_vals, options.deleteData, options.purgeData ? getEnvironmentContextWithIfPurgeSet() : null);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -1595,6 +1721,7 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
         throw new TException("method not implemented");
     }
 
+<<<<<<< HEAD
     @Override
     public boolean dropPartition(String db_name, String tbl_name, String name, boolean deleteData)
             throws NoSuchObjectException, MetaException, TException {
@@ -1636,6 +1763,19 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
 
     }
 
+=======
+    public void alter_partition(String dbName, String tblName, Partition newPart) throws InvalidOperationException, MetaException, TException {
+        this.alter_partition(MetaStoreUtils.getDefaultCatalog(this.conf), dbName, tblName, newPart, (EnvironmentContext)null);
+    }
+
+    public void alter_partition(String dbName, String tblName, Partition newPart, EnvironmentContext environmentContext) throws InvalidOperationException, MetaException, TException {
+        this.alter_partition(MetaStoreUtils.getDefaultCatalog(this.conf), dbName, tblName, newPart, environmentContext);
+    }
+
+    public void alter_partition(String catName, String dbName, String tblName, Partition newPart, EnvironmentContext environmentContext) throws TException {
+        this.client.alter_partition_with_environment_context(dbName, tblName, newPart, environmentContext);
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public void alter_partitions(String dbName, String tblName, List<Partition> newParts)
             throws InvalidOperationException, MetaException, TException {

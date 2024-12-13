@@ -11,6 +11,11 @@ permissions:
   pull-requests: write
   issues: write
   actions: write
+<<<<<<< HEAD
+=======
+env:
+  PR_NUMBER: ${{ github.event.number }}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 jobs:
   backport:
@@ -21,6 +26,7 @@ jobs:
       github.repository == 'StarRocks/starrocks' &&
       !contains(github.event.pull_request.title, 'cherry-pick') &&
       !contains(github.event.pull_request.title, 'backport') && (
+<<<<<<< HEAD
       contains(github.event.pull_request.labels.*.name, '3.1') ||
       contains(github.event.pull_request.labels.*.name, '3.0') ||
       contains(github.event.pull_request.labels.*.name, '2.5') ||
@@ -32,6 +38,58 @@ jobs:
       - name: backport branch-3.1
         if: contains(github.event.pull_request.labels.*.name, '3.1')
         uses: thollander/actions-comment-pull-request@v1
+=======
+      contains(github.event.pull_request.labels.*.name, '3.4') ||
+      contains(github.event.pull_request.labels.*.name, '3.3') ||
+      contains(github.event.pull_request.labels.*.name, '3.2') ||
+      contains(github.event.pull_request.labels.*.name, '3.1') ||
+      contains(github.event.pull_request.labels.*.name, '3.0') )
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+    steps:
+      - name: backport branch-3.4
+        if: contains(github.event.pull_request.labels.*.name, '3.4')
+        uses: thollander/actions-comment-pull-request@v2
+        with:
+          message: |
+            @Mergifyio backport branch-3.4
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions-ecosystem/action-remove-labels@v1
+        if: contains(github.event.pull_request.labels.*.name, '3.4')
+        with:
+          labels: '3.4'
+
+      - name: backport branch-3.3
+        if: contains(github.event.pull_request.labels.*.name, '3.3')
+        uses: thollander/actions-comment-pull-request@v2
+        with:
+          message: |
+            @Mergifyio backport branch-3.3
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions-ecosystem/action-remove-labels@v1
+        if: contains(github.event.pull_request.labels.*.name, '3.3')
+        with:
+          labels: '3.3'
+
+      - name: backport branch-3.2
+        if: contains(github.event.pull_request.labels.*.name, '3.2')
+        uses: thollander/actions-comment-pull-request@v2
+        with:
+          message: |
+            @Mergifyio backport branch-3.2
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions-ecosystem/action-remove-labels@v1
+        if: contains(github.event.pull_request.labels.*.name, '3.2')
+        with:
+          labels: '3.2'
+
+      - name: backport branch-3.1
+        if: contains(github.event.pull_request.labels.*.name, '3.1')
+        uses: thollander/actions-comment-pull-request@v2
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         with:
           message: |
             @Mergifyio backport branch-3.1
@@ -44,7 +102,11 @@ jobs:
 
       - name: backport branch-3.0
         if: contains(github.event.pull_request.labels.*.name, '3.0')
+<<<<<<< HEAD
         uses: thollander/actions-comment-pull-request@v1
+=======
+        uses: thollander/actions-comment-pull-request@v2
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         with:
           message: |
             @Mergifyio backport branch-3.0
@@ -55,6 +117,7 @@ jobs:
         with:
           labels: '3.0'
 
+<<<<<<< HEAD
       - name: backport branch-2.5
         if: contains(github.event.pull_request.labels.*.name, '2.5')
         uses: thollander/actions-comment-pull-request@v1
@@ -81,6 +144,8 @@ jobs:
         with:
           labels: '2.4'
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
   thirdparty-update-image:
     runs-on: [self-hosted, normal]
     name: Thirdparty Update Image
@@ -100,7 +165,11 @@ jobs:
           rm -rf ${{ github.workspace }}
           mkdir -p ${{ github.workspace }}
 
+<<<<<<< HEAD
       - uses: dorny/paths-filter@v2
+=======
+      - uses: dorny/paths-filter@v3
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         id: changes
         with:
           filters: |
@@ -179,6 +248,11 @@ jobs:
       github.base_ref != 'main' && github.event.pull_request.merged == true
     env:
       PR_NUMBER: ${{ github.event.number }}
+<<<<<<< HEAD
+=======
+    outputs:
+      VERSION_LABEL: ${{ steps.prepare_version_label.outputs.LABEL }}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     steps:
       - name: prepare merge label
         if: >
@@ -221,4 +295,62 @@ jobs:
           VERSION_LABEL: ${{ steps.prepare_version_label.outputs.LABEL }}
         run: |
           gh pr edit ${PR_NUMBER} -R ${GITHUB_REPOSITORY} --add-label "${VERSION_LABEL}"
+<<<<<<< HEAD
           
+=======
+
+  update_version_label_for_main_feature:
+    runs-on: [ self-hosted, quick ]
+    if: >
+      github.base_ref == 'main' && github.event.pull_request.merged == true &&
+      !contains(github.event.pull_request.labels.*.name, 'sync') &&
+      startsWith(github.event.pull_request.title, '[Feature]')
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+    outputs:
+      VERSION_LABEL: ${{ steps.prepare_version_label.outputs.LABEL }}
+    steps:
+      - name: prepare version label
+        id: prepare_version_label
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.PAT }}
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
+          version=$(./scripts/get_next_release_tag.sh)
+          version_label="version:${version}"
+          echo "LABEL=${version_label}" >> $GITHUB_OUTPUT
+          gh label create "${version_label}" -R ${GITHUB_REPOSITORY} -c 1d76db -f
+
+      - name: add version label
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION_LABEL: ${{ steps.prepare_version_label.outputs.LABEL }}
+        run: |
+          gh pr edit ${PR_NUMBER} -R ${GITHUB_REPOSITORY} --add-label "${VERSION_LABEL}"
+
+  update_feature_issue:
+    runs-on: [ self-hosted, quick ]
+    needs:
+      - update_backport_merged_msg
+      - update_version_label_for_main_feature
+    if: >
+      always() && !contains(github.event.pull_request.labels.*.name, 'sync') && startsWith(github.event.pull_request.title, '[Feature]')
+    env:
+      BRANCH_VERSION_LABEL: ${{ needs.update_backport_merged_msg.outputs.VERSION_LABEL }}
+      MAIN_VERSION_LABEL: ${{ needs.update_version_label_for_main_feature.outputs.VERSION_LABEL }}
+
+    steps:
+      - name: Update Issue Body & Label(main)
+        if: github.base_ref == 'main' && env.MAIN_VERSION_LABEL != ''
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
+          python3 scripts/get_pr_issue.py update_issue ${GITHUB_REPOSITORY} ${PR_NUMBER} ${MAIN_VERSION_LABEL}
+
+      - name: Update Issue Body & Label(branch)
+        if: always() && github.base_ref != 'main' && env.BRANCH_VERSION_LABEL != ''
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
+          python3 scripts/get_pr_issue.py update_issue ${GITHUB_REPOSITORY} ${PR_NUMBER} ${BRANCH_VERSION_LABEL}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

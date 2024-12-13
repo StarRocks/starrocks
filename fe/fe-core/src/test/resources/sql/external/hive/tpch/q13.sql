@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     c_count,
@@ -19,6 +20,8 @@ group by
 order by
     custdist desc,
     c_count desc ;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 [fragment statistics]
 PLAN FRAGMENT 0(F06)
 Output Exprs:18: count | 19: count
@@ -136,7 +139,11 @@ OutPut Exchange Id: 04
 TABLE: customer
 partitions=1/1
 avgRowSize=8.0
+<<<<<<< HEAD
 numNodes=0
+=======
+dataCacheOptions={populate: false}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 cardinality: 15000000
 column statistics:
 * c_custkey-->[1.0, 1.5E7, 0.0, 8.0, 1.5E7] ESTIMATE
@@ -161,7 +168,11 @@ TABLE: orders
 NON-PARTITION PREDICATES: NOT (17: o_comment LIKE '%unusual%deposits%')
 partitions=1/1
 avgRowSize=95.0
+<<<<<<< HEAD
 numNodes=0
+=======
+dataCacheOptions={populate: false}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 cardinality: 112500000
 probe runtime filters:
 - filter_id = 0, probe_expr = (10: o_custkey)

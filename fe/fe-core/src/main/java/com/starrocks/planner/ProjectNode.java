@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 package com.starrocks.planner;
 
 import com.google.common.base.Preconditions;
@@ -25,7 +28,11 @@ import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TNormalPlanNode;
 import com.starrocks.thrift.TNormalProjectNode;
@@ -72,18 +79,25 @@ public class ProjectNode extends PlanNode {
     }
 
     @Override
+<<<<<<< HEAD
     public void init(Analyzer analyzer) throws UserException {
+=======
+    public void init(Analyzer analyzer) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Preconditions.checkState(conjuncts.isEmpty());
         computeStats(analyzer);
         createDefaultSmap(analyzer);
     }
 
     @Override
+<<<<<<< HEAD
     public int getNumInstances() {
         return children.get(0).getNumInstances();
     }
 
     @Override
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     protected String getNodeExplainString(String prefix, TExplainLevel detailLevel) {
         StringBuilder output = new StringBuilder();
 
@@ -132,11 +146,14 @@ public class ProjectNode extends PlanNode {
     }
 
     @Override
+<<<<<<< HEAD
     public boolean canUsePipeLine() {
         return getChildren().stream().allMatch(PlanNode::canUsePipeLine);
     }
 
     @Override
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public boolean canUseRuntimeAdaptiveDop() {
         return getChildren().stream().allMatch(PlanNode::canUseRuntimeAdaptiveDop);
     }
@@ -152,7 +169,10 @@ public class ProjectNode extends PlanNode {
         return Optional.of(candidateOfPartitionByExprs(candidatesOfSlotExprs));
     }
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public Optional<List<Expr>> candidatesOfSlotExpr(Expr expr, Function<Expr, Boolean> couldBound) {
         if (!(expr instanceof SlotRef)) {
@@ -174,10 +194,20 @@ public class ProjectNode extends PlanNode {
         }
         return newExprs.size() > 0 ? Optional.of(newExprs) : Optional.empty();
     }
+<<<<<<< HEAD
     @Override
     public boolean pushDownRuntimeFilters(DescriptorTable descTbl, RuntimeFilterDescription description,
                                           Expr probeExpr,
                                           List<Expr> partitionByExprs) {
+=======
+
+    @Override
+    public boolean pushDownRuntimeFilters(RuntimeFilterPushDownContext context,
+                                          Expr probeExpr,
+                                          List<Expr> partitionByExprs) {
+        RuntimeFilterDescription description = context.getDescription();
+        DescriptorTable descTbl = context.getDescTbl();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (!canPushDownRuntimeFilter()) {
             return false;
         }
@@ -187,10 +217,17 @@ public class ProjectNode extends PlanNode {
         }
 
         Optional<List<Expr>> optProbeExprCandidates = candidatesOfSlotExpr(probeExpr, couldBound(description, descTbl));
+<<<<<<< HEAD
         optProbeExprCandidates.ifPresent(
                 exprs -> exprs.removeIf(probeExprCandidate -> probeExprCandidate.containsDictMappingExpr()));
 
         return pushdownRuntimeFilterForChildOrAccept(descTbl, description, probeExpr, optProbeExprCandidates,
+=======
+        optProbeExprCandidates.ifPresent(exprs -> exprs.removeIf(probeExprCandidate -> probeExprCandidate.containsDictMappingExpr()));
+
+        return pushdownRuntimeFilterForChildOrAccept(context, probeExpr,
+                optProbeExprCandidates,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 partitionByExprs, candidatesOfSlotExprs(partitionByExprs, couldBoundForPartitionExpr()), 0, true);
     }
 

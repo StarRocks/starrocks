@@ -15,7 +15,11 @@
 
 package com.starrocks.connector.hive.events;
 
+<<<<<<< HEAD
 import com.starrocks.connector.hive.CacheUpdateProcessor;
+=======
+import com.starrocks.connector.hive.HiveCacheUpdateProcessor;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.hadoop.hive.metastore.api.NotificationEvent;
 
 import java.util.List;
@@ -34,6 +38,10 @@ public interface EventFactory {
      * @throws MetastoreNotificationException If the hmsEvent information cannot be parsed.
      */
     List<MetastoreEvent> get(NotificationEvent hmsEvent,
+<<<<<<< HEAD
                              CacheUpdateProcessor cacheProcessor,
+=======
+                             HiveCacheUpdateProcessor cacheProcessor,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                              String catalogName) throws MetastoreNotificationException;
 }

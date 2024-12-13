@@ -59,7 +59,11 @@ public:
     void copy_one(PageDecoderType* decoder, typename TypeTraits<type>::CppType* ret) {
         auto column = ChunkHelper::column_from_field_type(type, true);
         size_t n = 1;
+<<<<<<< HEAD
         decoder->next_batch(&n, column.get());
+=======
+        ASSERT_TRUE(decoder->next_batch(&n, column.get()).ok());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ASSERT_EQ(1, n);
         *ret = *reinterpret_cast<const typename TypeTraits<type>::CppType*>(column->raw_data());
     }
@@ -99,7 +103,17 @@ public:
         Status status = page_decoder.init();
         ASSERT_TRUE(status.ok());
         ASSERT_EQ(0, page_decoder.current_index());
+<<<<<<< HEAD
 
+=======
+        for (uint i = 0; i < size; i++) {
+            CppType out;
+            page_decoder.at_index(i, &out);
+            if (src[i] != out) {
+                FAIL() << "Fail at index " << i << " inserted=" << src[i] << " got=" << out;
+            }
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         auto column = ChunkHelper::column_from_field_type(Type, false);
 
         status = page_decoder.next_batch(&size, column.get());
@@ -116,7 +130,11 @@ public:
         // Test Seek within block by ordinal
         for (int i = 0; i < 100; i++) {
             uint32_t seek_off = random() % size;
+<<<<<<< HEAD
             page_decoder.seek_to_position_in_page(seek_off);
+=======
+            ASSERT_TRUE(page_decoder.seek_to_position_in_page(seek_off).ok());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             EXPECT_EQ((int32_t)(seek_off), page_decoder.current_index());
             CppType ret;
             copy_one<Type, PageDecoderType>(&page_decoder, &ret);
@@ -159,6 +177,18 @@ public:
             Status status = page_decoder.init();
             ASSERT_TRUE(status.ok());
             ASSERT_EQ(0, page_decoder.current_index());
+<<<<<<< HEAD
+=======
+            CppType src_value = 0;
+            for (uint i = 0; i < count; i++) {
+                CppType out;
+                page_decoder.at_index(i, &out);
+                if (src_value != out) {
+                    FAIL() << "Fail at index " << i << " inserted=" << src_value << " got=" << out;
+                }
+                src_value++;
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
             auto dst = ChunkHelper::column_from_field_type(Type, false);
             dst->reserve(count);
@@ -203,10 +233,17 @@ public:
             ASSERT_EQ(0, page_decoder.current_index());
 
             auto dst = ChunkHelper::column_from_field_type(Type, false);
+<<<<<<< HEAD
             SparseRange read_range;
             read_range.add(Range(0, count / 3));
             read_range.add(Range(count / 2, (count * 2 / 3)));
             read_range.add(Range((count * 3 / 4), count));
+=======
+            SparseRange<> read_range;
+            read_range.add(Range<>(0, count / 3));
+            read_range.add(Range<>(count / 2, (count * 2 / 3)));
+            read_range.add(Range<>((count * 3 / 4), count));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             size_t read_num = read_range.span_size();
 
             dst->reserve(read_range.span_size());
@@ -216,9 +253,15 @@ public:
 
             TypeInfoPtr type_info = get_type_info(Type);
             size_t offset = 0;
+<<<<<<< HEAD
             SparseRangeIterator read_iter = read_range.new_iterator();
             while (read_iter.has_more()) {
                 Range r = read_iter.next(read_num);
+=======
+            SparseRangeIterator<> read_iter = read_range.new_iterator();
+            while (read_iter.has_more()) {
+                Range<> r = read_iter.next(read_num);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 for (int i = 0; i < r.span_size(); ++i) {
                     ASSERT_EQ(0, type_info->cmp(src->get(r.begin() + i), dst->get(i + offset)))
                             << " row " << i << ": " << datum_to_string(type_info.get(), src->get(r.begin() + i))

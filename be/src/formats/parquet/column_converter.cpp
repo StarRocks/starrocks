@@ -14,6 +14,7 @@
 
 #include "formats/parquet/column_converter.h"
 
+<<<<<<< HEAD
 #include <memory>
 #include <utility>
 
@@ -31,6 +32,40 @@
 #include "util/bit_util.h"
 #include "util/logging.h"
 #include "util/runtime_profile.h"
+=======
+#include <cctz/time_zone.h>
+#include <glog/logging.h>
+
+#include <chrono>
+#include <cstdint>
+#include <cstring>
+#include <memory>
+#include <sstream>
+#include <utility>
+#include <vector>
+
+#include "column/binary_column.h"
+#include "column/column.h"
+#include "column/column_helper.h"
+#include "column/fixed_length_column.h"
+#include "column/nullable_column.h"
+#include "column/type_traits.h"
+#include "column/vectorized_fwd.h"
+#include "formats/parquet/schema.h"
+#include "formats/parquet/types.h"
+#include "gutil/casts.h"
+#include "gutil/integral_types.h"
+#include "gutil/strings/substitute.h"
+#include "runtime/time_types.h"
+#include "runtime/types.h"
+#include "storage/olap_common.h"
+#include "types/date_value.h"
+#include "types/logical_type.h"
+#include "types/timestamp_value.h"
+#include "util/bit_util.h"
+#include "util/decimal_types.h"
+#include "util/int96.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "util/timezone_utils.h"
 
 namespace starrocks::parquet {
@@ -56,6 +91,17 @@ public:
     Status convert(const ColumnPtr& src, Column* dst) override;
 };
 
+<<<<<<< HEAD
+=======
+class Int64ToTimeConverter final : public ColumnConverter {
+public:
+    Int64ToTimeConverter() = default;
+    ~Int64ToTimeConverter() override = default;
+
+    Status convert(const ColumnPtr& src, Column* dst) override;
+};
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 class Int96ToDateTimeConverter final : public ColumnConverter {
 public:
     Int96ToDateTimeConverter() = default;
@@ -433,6 +479,14 @@ Status ColumnConverterFactory::create_converter(const ParquetField& field, const
             *converter = std::move(_converter);
             break;
         }
+<<<<<<< HEAD
+=======
+        case LogicalType::TYPE_TIME: {
+            auto _converter = std::make_unique<Int64ToTimeConverter>();
+            *converter = std::move(_converter);
+            break;
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         default:
             break;
         }
@@ -725,4 +779,34 @@ Status Int64ToDateTimeConverter::convert(const ColumnPtr& src, Column* dst) {
     return Status::OK();
 }
 
+<<<<<<< HEAD
+=======
+Status Int64ToTimeConverter::convert(const ColumnPtr& src, Column* dst) {
+    auto* src_nullable_column = ColumnHelper::as_raw_column<NullableColumn>(src);
+    // hive only support null column
+    // TODO: support not null
+    auto* dst_nullable_column = down_cast<NullableColumn*>(dst);
+    dst_nullable_column->resize_uninitialized(src_nullable_column->size());
+
+    auto* src_column = ColumnHelper::as_raw_column<FixedLengthColumn<int64_t>>(src_nullable_column->data_column());
+    auto* dst_column = ColumnHelper::as_raw_column<DoubleColumn>(dst_nullable_column->data_column());
+
+    auto& src_data = src_column->get_data();
+    auto& dst_data = dst_column->get_data();
+    auto& src_null_data = src_nullable_column->null_column()->get_data();
+    auto& dst_null_data = dst_nullable_column->null_column()->get_data();
+
+    size_t size = src_column->size();
+
+    for (size_t i = 0; i < size; i++) {
+        dst_null_data[i] = src_null_data[i];
+        if (!src_null_data[i]) {
+            dst_data.data()[i] = src_data.data()[i] / 1000000;
+        }
+    }
+    dst_nullable_column->set_has_null(src_nullable_column->has_null());
+    return Status::OK();
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // namespace starrocks::parquet

@@ -34,14 +34,25 @@
 
 package com.starrocks.clone;
 
+<<<<<<< HEAD
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.DiskInfo.DiskState;
 import com.starrocks.clone.BackendLoadStatistic.Classification;
 import com.starrocks.clone.BalanceStatus.ErrCode;
+=======
+import com.google.gson.JsonObject;
+import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.DiskInfo;
+import com.starrocks.catalog.DiskInfo.DiskState;
+import com.starrocks.clone.BackendLoadStatistic.Classification;
+import com.starrocks.clone.BackendsFitStatus.ErrCode;
+import com.starrocks.persist.gson.GsonUtils;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.TStorageMedium;
 
 public class RootPathLoadStatistic implements Comparable<RootPathLoadStatistic> {
 
+<<<<<<< HEAD
     private long beId;
     private String path;
     private Long pathHash;
@@ -49,6 +60,21 @@ public class RootPathLoadStatistic implements Comparable<RootPathLoadStatistic> 
     private long capacityB;
     private long usedCapacityB;
     private DiskState diskState;
+=======
+    @SerializedName(value = "beId")
+    private final long beId;
+    @SerializedName(value = "path")
+    private final String path;
+    @SerializedName(value = "pathHash")
+    private final Long pathHash;
+    @SerializedName(value = "storageMedium")
+    private final TStorageMedium storageMedium;
+    @SerializedName(value = "total")
+    private final long capacityB;
+    @SerializedName(value = "used")
+    private final long usedCapacityB;
+    private final DiskState diskState;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     private Classification clazz = Classification.INIT;
 
@@ -103,18 +129,32 @@ public class RootPathLoadStatistic implements Comparable<RootPathLoadStatistic> 
         return diskState;
     }
 
+<<<<<<< HEAD
     public BalanceStatus isFit(long tabletSize) {
         if (diskState != DiskState.ONLINE) {
             return new BalanceStatus(ErrCode.COMMON_ERROR,
+=======
+    public BackendsFitStatus isFit(long tabletSize) {
+        if (diskState != DiskState.ONLINE) {
+            return new BackendsFitStatus(ErrCode.COMMON_ERROR,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     toString() + " does not fit tablet with size: " + tabletSize + ", disk state: " + diskState);
         }
 
         if (DiskInfo.exceedLimit(capacityB - usedCapacityB - tabletSize, capacityB, false)) {
+<<<<<<< HEAD
             return new BalanceStatus(ErrCode.COMMON_ERROR,
                     toString() + " does not fit tablet with size: " + tabletSize);
         }
 
         return BalanceStatus.OK;
+=======
+            return new BackendsFitStatus(ErrCode.COMMON_ERROR,
+                    toString() + " does not fit tablet with size: " + tabletSize);
+        }
+
+        return BackendsFitStatus.OK;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     // path with lower usage percent rank ahead
@@ -133,4 +173,11 @@ public class RootPathLoadStatistic implements Comparable<RootPathLoadStatistic> 
         sb.append(", total: ").append(capacityB);
         return sb.toString();
     }
+<<<<<<< HEAD
+=======
+
+    public JsonObject toJson() {
+        return (JsonObject) GsonUtils.GSON.toJsonTree(this);
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

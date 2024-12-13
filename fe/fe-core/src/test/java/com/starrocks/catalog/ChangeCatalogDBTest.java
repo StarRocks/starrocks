@@ -17,7 +17,10 @@ package com.starrocks.catalog;
 import com.starrocks.common.DdlException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
+<<<<<<< HEAD
 import com.starrocks.server.GlobalStateMgr;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.utframe.UtFrameUtils;
@@ -53,20 +56,36 @@ public class ChangeCatalogDBTest {
             }
         };
 
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentState().changeCatalog(ctx, "default_catalog");
         Assertions.assertEquals("default_catalog", ctx.getCurrentCatalog());
         Assertions.assertEquals("", ctx.getDatabase());
 
         GlobalStateMgr.getCurrentState().changeCatalog(ctx, "hive_catalog");
+=======
+        ctx.changeCatalog("default_catalog");
+        Assertions.assertEquals("default_catalog", ctx.getCurrentCatalog());
+        Assertions.assertEquals("", ctx.getDatabase());
+
+        ctx.changeCatalog("hive_catalog");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assertions.assertEquals("hive_catalog", ctx.getCurrentCatalog());
         Assertions.assertEquals("", ctx.getDatabase());
 
         Assertions.assertThrows(DdlException.class, () -> {
+<<<<<<< HEAD
             GlobalStateMgr.getCurrentState().changeCatalog(ctx, "nonexistent_catalog");
         });
 
         Assertions.assertThrows(DdlException.class, () -> {
             GlobalStateMgr.getCurrentState().changeCatalog(ctx, "");
+=======
+            ctx.changeCatalog("nonexistent_catalog");
+        });
+
+        Assertions.assertThrows(DdlException.class, () -> {
+            ctx.changeCatalog("");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         });
     }
 
@@ -83,10 +102,17 @@ public class ChangeCatalogDBTest {
         };
 
         ctx.setCurrentCatalog("default_catalog");
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentState().changeCatalogDb(ctx, "db");
         Assertions.assertEquals("db", ctx.getDatabase());
         Assertions.assertThrows(DdlException.class, () -> {
             GlobalStateMgr.getCurrentState().changeCatalogDb(ctx, "nonexistent_db");
+=======
+        ctx.changeCatalogDb("db");
+        Assertions.assertEquals("db", ctx.getDatabase());
+        Assertions.assertThrows(DdlException.class, () -> {
+            ctx.changeCatalogDb("nonexistent_db");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         });
     }
 
@@ -98,8 +124,14 @@ public class ChangeCatalogDBTest {
                 result = true;
 
                 catalogMgr.catalogExists("hive_catalog");
+<<<<<<< HEAD
                 result = true;;
             }
+=======
+                result = true;
+            }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             {
                 metadataMgr.getDb("default_catalog", "db");
                 result = new Database(101, "db");
@@ -115,20 +147,36 @@ public class ChangeCatalogDBTest {
             }
         };
 
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentState().changeCatalogDb(ctx, "default_catalog.db");
         Assertions.assertEquals("default_catalog", ctx.getCurrentCatalog());
         Assertions.assertEquals("db", ctx.getDatabase());
 
         GlobalStateMgr.getCurrentState().changeCatalogDb(ctx, "hive_catalog.db");
+=======
+        ctx.changeCatalogDb("default_catalog.db");
+        Assertions.assertEquals("default_catalog", ctx.getCurrentCatalog());
+        Assertions.assertEquals("db", ctx.getDatabase());
+
+        ctx.changeCatalogDb("hive_catalog.db");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assertions.assertEquals("hive_catalog", ctx.getCurrentCatalog());
         Assertions.assertEquals("db", ctx.getDatabase());
 
         Assertions.assertThrows(DdlException.class, () -> {
+<<<<<<< HEAD
             GlobalStateMgr.getCurrentState().changeCatalogDb(ctx, "default_catalog.nonexistent_db");
         });
 
         Assertions.assertThrows(DdlException.class, () -> {
             GlobalStateMgr.getCurrentState().changeCatalogDb(ctx, "hive_catalog.nonexistent_db");
+=======
+            ctx.changeCatalogDb("default_catalog.nonexistent_db");
+        });
+
+        Assertions.assertThrows(DdlException.class, () -> {
+            ctx.changeCatalogDb("hive_catalog.nonexistent_db");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         });
     }
 }

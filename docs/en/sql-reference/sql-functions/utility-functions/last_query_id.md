@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # last_query_id
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Obtains the ID of the most recently executed query in the current session.
 

@@ -14,8 +14,13 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
+<<<<<<< HEAD
 import autovalue.shaded.com.google.common.common.base.Preconditions;
 import com.google.api.client.util.Sets;
+=======
+import com.google.api.client.util.Sets;
+import com.google.common.base.Preconditions;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.sql.optimizer.OptExpression;

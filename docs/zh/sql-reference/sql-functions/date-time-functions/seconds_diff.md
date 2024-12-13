@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # seconds_diff
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 计算开始时间和结束时间相差多少秒 (`expr1` − `expr2`)。
 

@@ -131,6 +131,18 @@ public class JvmStats {
                 garbageCollectors, bufferPoolsList, classes);
     }
 
+<<<<<<< HEAD
+=======
+    public static float getJvmHeapUsedPercent() {
+        MemoryUsage memUsage = MEMORY_MX_BEAN.getHeapMemoryUsage();
+        if (memUsage.getCommitted() <= 0) {
+            return 0.0f;
+        } else {
+            return memUsage.getUsed() / (float) memUsage.getCommitted();
+        }
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private final long timestamp;
     private final long uptime;
     private final Mem mem;
@@ -178,6 +190,7 @@ public class JvmStats {
         return classes;
     }
 
+<<<<<<< HEAD
     static final class Fields {
         static final String JVM = "jvm";
         static final String TIMESTAMP = "timestamp";
@@ -228,6 +241,8 @@ public class JvmStats {
         static final String TOTAL_UNLOADED_COUNT = "total_unloaded_count";
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static class GarbageCollectors implements Iterable<GarbageCollector> {
 
         private final GarbageCollector[] collectors;

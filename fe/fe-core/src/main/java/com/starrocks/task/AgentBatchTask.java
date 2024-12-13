@@ -35,11 +35,19 @@
 package com.starrocks.task;
 
 import com.google.common.collect.Lists;
+<<<<<<< HEAD
 import com.starrocks.common.ClientPool;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.BackendService;
+=======
+import com.starrocks.rpc.ThriftConnectionPool;
+import com.starrocks.rpc.ThriftRPCRequestExecutor;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
+import com.starrocks.system.ComputeNode;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.TAgentServiceVersion;
 import com.starrocks.thrift.TAgentTaskRequest;
 import com.starrocks.thrift.TAlterTabletReqV2;
@@ -47,6 +55,10 @@ import com.starrocks.thrift.TCheckConsistencyReq;
 import com.starrocks.thrift.TClearAlterTaskRequest;
 import com.starrocks.thrift.TClearTransactionTaskRequest;
 import com.starrocks.thrift.TCloneReq;
+<<<<<<< HEAD
+=======
+import com.starrocks.thrift.TCompactionControlReq;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.TCompactionReq;
 import com.starrocks.thrift.TCreateTabletReq;
 import com.starrocks.thrift.TDownloadReq;
@@ -62,6 +74,10 @@ import com.starrocks.thrift.TReplicateSnapshotRequest;
 import com.starrocks.thrift.TSnapshotRequest;
 import com.starrocks.thrift.TStorageMediumMigrateReq;
 import com.starrocks.thrift.TTaskType;
+<<<<<<< HEAD
+=======
+import com.starrocks.thrift.TUpdateSchemaReq;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.TUpdateTabletMetaInfoReq;
 import com.starrocks.thrift.TUploadReq;
 import org.apache.logging.log4j.LogManager;
@@ -170,6 +186,7 @@ public class AgentBatchTask implements Runnable {
     @Override
     public void run() {
         for (Long backendId : this.backendIdToTasks.keySet()) {
+<<<<<<< HEAD
             BackendService.Client client = null;
             TNetworkAddress address = null;
             boolean ok = false;
@@ -177,6 +194,12 @@ public class AgentBatchTask implements Runnable {
                 ComputeNode computeNode = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
                 if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA && computeNode == null) {
                     computeNode = GlobalStateMgr.getCurrentSystemInfo().getComputeNode(backendId);
+=======
+            try {
+                ComputeNode computeNode = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(backendId);
+                if (RunMode.isSharedDataMode() && computeNode == null) {
+                    computeNode = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNode(backendId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
 
                 if (computeNode == null || !computeNode.isAlive()) {
@@ -187,20 +210,33 @@ public class AgentBatchTask implements Runnable {
                 int port = computeNode.getBePort();
 
                 List<AgentTask> tasks = this.backendIdToTasks.get(backendId);
+<<<<<<< HEAD
                 // create AgentClient
                 address = new TNetworkAddress(host, port);
                 client = ClientPool.backendPool.borrowObject(address);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 List<TAgentTaskRequest> agentTaskRequests = new LinkedList<TAgentTaskRequest>();
                 for (AgentTask task : tasks) {
                     agentTaskRequests.add(toAgentTaskRequest(task));
                 }
+<<<<<<< HEAD
                 client.submit_tasks(agentTaskRequests);
+=======
+
+                ThriftRPCRequestExecutor.call(
+                        ThriftConnectionPool.backendPool,
+                        new TNetworkAddress(host, port),
+                        client -> client.submit_tasks(agentTaskRequests));
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (LOG.isDebugEnabled()) {
                     for (AgentTask task : tasks) {
                         LOG.debug("send task: type[{}], backend[{}], signature[{}]",
                                 task.getTaskType(), backendId, task.getSignature());
                     }
                 }
+<<<<<<< HEAD
                 ok = true;
             } catch (Exception e) {
                 LOG.warn("task exec error. backend[{}]", backendId, e);
@@ -211,11 +247,19 @@ public class AgentBatchTask implements Runnable {
                     // TODO: notify tasks rpc failed in trace
                     ClientPool.backendPool.invalidateObject(address, client);
                 }
+=======
+            } catch (Exception e) {
+                LOG.warn("task exec error. backend[{}]", backendId, e);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         } // end for compute node
     }
 
+<<<<<<< HEAD
     private TAgentTaskRequest toAgentTaskRequest(AgentTask task) {
+=======
+    public static TAgentTaskRequest toAgentTaskRequest(AgentTask task) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         TAgentTaskRequest tAgentTaskRequest = new TAgentTaskRequest();
         tAgentTaskRequest.setProtocol_version(TAgentServiceVersion.V1);
         tAgentTaskRequest.setSignature(task.getSignature());
@@ -354,8 +398,13 @@ public class AgentBatchTask implements Runnable {
                 return tAgentTaskRequest;
             }
             case UPDATE_TABLET_META_INFO: {
+<<<<<<< HEAD
                 UpdateTabletMetaInfoTask updateTabletMetaInfoTask = (UpdateTabletMetaInfoTask) task;
                 TUpdateTabletMetaInfoReq request = updateTabletMetaInfoTask.toThrift();
+=======
+                TabletMetadataUpdateAgentTask tabletMetadataUpdateAgentTask = (TabletMetadataUpdateAgentTask) task;
+                TUpdateTabletMetaInfoReq request = tabletMetadataUpdateAgentTask.toThrift();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (LOG.isDebugEnabled()) {
                     LOG.debug(request.toString());
                 }
@@ -388,6 +437,15 @@ public class AgentBatchTask implements Runnable {
                 tAgentTaskRequest.setCompaction_req(req);
                 return tAgentTaskRequest;
             }
+<<<<<<< HEAD
+=======
+            case COMPACTION_CONTROL: {
+                CompactionControlTask compactionControlTask = (CompactionControlTask) task;
+                TCompactionControlReq req = compactionControlTask.toThrift();
+                tAgentTaskRequest.setCompaction_control_req(req);
+                return tAgentTaskRequest;
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             case REMOTE_SNAPSHOT: {
                 RemoteSnapshotTask remoteSnapshotTask = (RemoteSnapshotTask) task;
                 TRemoteSnapshotRequest req = remoteSnapshotTask.toThrift();
@@ -400,6 +458,15 @@ public class AgentBatchTask implements Runnable {
                 tAgentTaskRequest.setReplicate_snapshot_req(req);
                 return tAgentTaskRequest;
             }
+<<<<<<< HEAD
+=======
+            case UPDATE_SCHEMA: {
+                UpdateSchemaTask updateSchemaTask = (UpdateSchemaTask) task;
+                TUpdateSchemaReq req = updateSchemaTask.toThrift();
+                tAgentTaskRequest.setUpdate_schema_req(req);
+                return tAgentTaskRequest;
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             default:
                 LOG.debug("could not find task type for task [{}]", task);
                 return null;

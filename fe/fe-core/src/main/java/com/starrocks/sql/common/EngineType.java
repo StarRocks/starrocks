@@ -27,6 +27,10 @@ public enum EngineType {
     ICEBERG,
     HUDI,
     JDBC,
+<<<<<<< HEAD
+=======
+    ODPS,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     FILE;
 
     public static Set<EngineType> SUPPORT_NOT_NULL_SET = ImmutableSet.of(

@@ -51,7 +51,11 @@ public:
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
 
+<<<<<<< HEAD
     SourceOperatorFactory::AdaptiveState adaptive_state() const override;
+=======
+    SourceOperatorFactory::AdaptiveState adaptive_initial_state() const override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     void adjust_dop() override;
 
 private:

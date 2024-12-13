@@ -35,9 +35,17 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
+<<<<<<< HEAD
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.NotImplementedException;
+=======
+import com.google.common.collect.ImmutableMap;
+import com.starrocks.catalog.Type;
+import com.starrocks.common.AnalysisException;
+import com.starrocks.common.NotImplementedException;
+import com.starrocks.mysql.MysqlProto;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -48,6 +56,10 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+<<<<<<< HEAD
+=======
+import java.util.Map;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 public abstract class LiteralExpr extends Expr implements Comparable<LiteralExpr> {
     public LiteralExpr() {
@@ -84,7 +96,11 @@ public abstract class LiteralExpr extends Expr implements Comparable<LiteralExpr
                 break;
             case FLOAT:
             case DOUBLE:
+<<<<<<< HEAD
                 literalExpr = new FloatLiteral(value);
+=======
+                literalExpr = new FloatLiteral(value, type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 break;
             case DECIMALV2:
             case DECIMAL32:
@@ -94,6 +110,11 @@ public abstract class LiteralExpr extends Expr implements Comparable<LiteralExpr
                 break;
             case CHAR:
             case VARCHAR:
+<<<<<<< HEAD
+=======
+            case BINARY:
+            case VARBINARY:
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             case HLL:
                 literalExpr = new StringLiteral(value);
                 break;
@@ -246,4 +267,84 @@ public abstract class LiteralExpr extends Expr implements Comparable<LiteralExpr
     public boolean isSelfMonotonic() {
         return true;
     }
+<<<<<<< HEAD
+=======
+
+    // Parse from binary data, the format follows mysql binary protocal
+    // see https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_binary_resultset.html.
+    public void parseMysqlParam(ByteBuffer data) {
+        throw new StarRocksPlannerException("Not implement parseMysqlParam in derived class. ", ErrorType.INTERNAL_ERROR);
+    }
+
+    public static LiteralExpr parseLiteral(int encode) throws AnalysisException {
+        if (MYSQL_LITERAL_TYPE_ENCODE_MAP == null) {
+            MYSQL_LITERAL_TYPE_ENCODE_MAP = new ImmutableMap.Builder<Integer, LiteralExpr>()
+                    .put(0, LiteralExpr.create("0", Type.DECIMAL32))    // MYSQL_TYPE_DECIMAL
+                    .put(1, LiteralExpr.create("0", Type.TINYINT))     // MYSQL_TYPE_TINY
+                    .put(2, LiteralExpr.create("0", Type.SMALLINT))     // MYSQL_TYPE_SHORT
+                    .put(3, LiteralExpr.create("0", Type.INT))          // MYSQL_TYPE_LONG
+                    .put(4, LiteralExpr.create("0", Type.FLOAT))        // MYSQL_TYPE_FLOAT
+                    .put(5, LiteralExpr.create("0", Type.DOUBLE))        // MYSQL_TYPE_DOUBLE
+                    .put(7, LiteralExpr.create("1970-01-01 00:00:00", Type.DATETIME)) // MYSQL_TYPE_TIMESTAMP2
+                    .put(8, LiteralExpr.create("0", Type.BIGINT))       // MYSQL_TYPE_LONGLONG
+                    .put(10, LiteralExpr.create("1970-01-01", Type.DATE))       // MYSQL_TYPE_DATE
+                    .put(12, LiteralExpr.create("1970-01-01 00:00:00", Type.DATETIME))      // MYSQL_TYPE_DATETIME
+                    .put(15, LiteralExpr.create("", Type.VARCHAR))      // MYSQL_TYPE_VARCHAR
+                    .put(17, LiteralExpr.create("1970-01-01 00:00:00", Type.DATETIME))      // MYSQL_TYPE_TIMESTAMP2
+                    .put(253, LiteralExpr.create("", Type.STRING))      // MYSQL_TYPE_STRING
+                    .put(254, LiteralExpr.create("", Type.STRING))      // MYSQL_TYPE_STRING
+                    .build();
+        }
+        LiteralExpr literalExpr = MYSQL_LITERAL_TYPE_ENCODE_MAP.get(encode);
+        if (null != literalExpr) {
+            return (LiteralExpr) literalExpr.clone();
+        } else {
+            throw new AnalysisException("unknown mysql type code " + encode);
+        }
+    }
+
+    private static Map<Integer, LiteralExpr> MYSQL_LITERAL_TYPE_ENCODE_MAP;
+
+
+    // Port from mysql get_param_length
+    public static int getParamLen(ByteBuffer data) {
+        int maxLen = data.remaining();
+        if (maxLen < 1) {
+            return 0;
+        }
+        // get and advance 1 byte
+        int len = MysqlProto.readInt1(data);
+        if (len == 252) {
+            if (maxLen < 3) {
+                return 0;
+            }
+            // get and advance 2 bytes
+            return MysqlProto.readInt2(data);
+        } else if (len == 253) {
+            if (maxLen < 4) {
+                return 0;
+            }
+            // get and advance 3 bytes
+            return MysqlProto.readInt3(data);
+        } else if (len == 254) {
+            /*
+            In our client-server protocol all numbers bigger than 2^24
+            stored as 8 bytes with uint8korr. Here we always know that
+            parameter length is less than 2^4 so we don't look at the second
+            4 bytes. But still we need to obey the protocol hence 9 in the
+            assignment below.
+            */
+            if (maxLen < 9) {
+                return 0;
+            }
+            len = MysqlProto.readInt4(data);
+            MysqlProto.readFixedString(data, 4);
+            return len;
+        } else if (len == 255) {
+            return 0;
+        } else {
+            return len;
+        }
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

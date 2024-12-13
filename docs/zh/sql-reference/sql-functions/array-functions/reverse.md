@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # reverse
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 将字符串或数组反转，返回的字符串或数组的顺序和源字符串或数组的顺序相反。
 

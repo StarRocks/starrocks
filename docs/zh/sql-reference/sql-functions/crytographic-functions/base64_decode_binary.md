@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # base64_decode_binary
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 解码某个 Base64 编码的字符串，并返回一个 VARBINARY 类型的值。
 

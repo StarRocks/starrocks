@@ -17,11 +17,18 @@ package com.starrocks.sql.analyzer;
 import com.starrocks.analysis.TableName;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.RecoverPartitionStmt;
+<<<<<<< HEAD
 import com.starrocks.sql.common.MetaUtils;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 public class RecoverPartitionAnalyzer {
     public static void analyze(RecoverPartitionStmt statement, ConnectContext context) {
         TableName tbl = statement.getDbTblName();
+<<<<<<< HEAD
         MetaUtils.normalizationTableName(context, tbl);
+=======
+        tbl.normalization(context);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }

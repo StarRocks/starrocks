@@ -16,6 +16,10 @@
 package com.starrocks.http.meta;
 
 import com.google.common.base.Strings;
+<<<<<<< HEAD
+=======
+import com.starrocks.authorization.AccessDeniedException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.DdlException;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
@@ -52,7 +56,11 @@ public class GlobalDictMetaService {
 
         @Override
         public void executeWithoutPassword(BaseRequest request, BaseResponse response)
+<<<<<<< HEAD
                 throws DdlException {
+=======
+                throws DdlException, AccessDeniedException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (redirectToLeader(request, response)) {
                 return;
             }
@@ -97,8 +105,13 @@ public class GlobalDictMetaService {
                     return;
                 }
                 boolean isEnable = Boolean.parseBoolean(enableParam.trim());
+<<<<<<< HEAD
                 GlobalStateMgr.getCurrentState()
                         .setHasForbitGlobalDict(dbName, tableName, isEnable);
+=======
+                GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .setHasForbiddenGlobalDict(dbName, tableName, isEnable);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 response.appendContent(new RestBaseResult("apply success").toJson());
             } else {
                 response.appendContent(new RestBaseResult("HTTP method is not allowed.").toJson());
@@ -108,4 +121,8 @@ public class GlobalDictMetaService {
             sendResult(request, response);
         }
     }
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

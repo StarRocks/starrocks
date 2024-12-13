@@ -6,7 +6,11 @@ displayed_sidebar: docs
 
 This topic describes how to back up and restore data in StarRocks, or migrate data to a new StarRocks cluster.
 
+<<<<<<< HEAD
 StarRocks supports backing up data as snapshots into a remote storage system, and restoring the data to any StarRocks clusters.
+=======
+StarRocks supports backing up data as snapshots into a remote storage system and restoring the data to any StarRocks clusters.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 StarRocks supports the following remote storage systems:
 
@@ -46,7 +50,11 @@ PROPERTIES(
 
   You can choose IAM user-based credential (Access Key and Secret Key), Instance Profile, or Assumed Role as the credential method for accessing AWS S3.
 
+<<<<<<< HEAD
   - The following example creates a repository named `test_repo` in the AWS S3 bucket `bucket_s3` using IAM user-based credential as the credential method.
+=======
+  - The following example creates a repository named `test_repo` in the AWS S3 bucket `bucket_s3` using IAM user-based credentials as the credential method.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
   ```SQL
   CREATE REPOSITORY test_repo
@@ -139,7 +147,11 @@ You can restore the data snapshot backed up in the remote storage system to the 
 
 ### (Optional) Create a repository in the new cluster
 
+<<<<<<< HEAD
 To migrate data to another StarRocks cluster, you need to create a repository with the same **repository name** and **location** in the new cluster, otherwise you will not be able to view the previously backed up data snapshots. See [Create a repository](#create-a-repository) for details.
+=======
+To migrate data to another StarRocks cluster, you need to create a repository with the same **repository name** and **location** in the new cluster, otherwise, you will not be able to view the previously backed-up data snapshots. See [Create a repository](#create-a-repository) for details.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ### Check the snapshot
 
@@ -195,18 +207,58 @@ You can optimize the performance of BACKUP or RESTORE jobs by modifying the foll
 | upload_worker_count     | The maximum number of threads for the upload tasks of BACKUP jobs on a BE node. Default: `0`. `0` indicates setting the value to the number of CPU cores on the machine where the BE resides. Increase the value of this configuration item to increase the concurrency of the upload task. |
 | download_worker_count   | The maximum number of threads for the download tasks of RESTORE jobs on a BE node. Default: `0`. `0` indicates setting the value to the number of CPU cores on the machine where the BE resides. Increase the value of this configuration item to increase the concurrency of the download task. |
 
+<<<<<<< HEAD
+=======
+## Materialized view BACKUP and RESTORE
+
+During a BACKUP or a RESTORE job of a table, StarRocks automatically backs up or restores its [Synchronous materialized view](../../using_starrocks/Materialized_view-single_table.md).
+
+From v3.2.3, StarRocks supports backing up and restoring [asynchronous materialized views](../../using_starrocks/async_mv/Materialized_view.md) when you back up and restore the database they reside in.
+
+During BACKUP and RESTORE of a database, StarRocks does as follows:
+
+- **BACKUP**
+
+1. Traverse the database to gather information on all tables and asynchronous materialized views.
+2. Adjust the order of tables in the BACKUP and RESTORE queue, ensuring that the base tables of materialized views are positioned before the materialized views:
+   - If the base table exists in the current database, StarRocks adds the table to the queue.
+   - If the base table does not exist in the current database, StarRocks prints a warning log and proceeds with the BACKUP operation without blocking the process.
+3. Execute the BACKUP task in the order of the queue.
+
+- **RESTORE**
+
+1. Restore the tables and materialized views in the order of the BACKUP and RESTORE queue.
+2. Re-build the dependency between materialized views and their base tables, and re-submit the refresh task schedule.
+
+Any error encountered throughout the RESTORE process will not block the process.
+
+After RESTORE, you can check the status of the materialized view using [SHOW MATERIALIZED VIEWS](../../sql-reference/sql-statements/materialized_view/SHOW_MATERIALIZED_VIEW.md).
+
+- If the materialized view is active, it can be used directly.
+- If the materialized view is inactive, it might be because its base tables are not restored. After all the base tables are restored, you can use [ALTER MATERIALIZED VIEW](../../sql-reference/sql-statements/materialized_view/ALTER_MATERIALIZED_VIEW.md) to re-activate the materialized view.
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ## Usage notes
 
 - Performing backup and restore operations on global, database, table, and partition levels requires different privileges. For detailed information, see [Customize roles based on scenarios](../user_privs/User_privilege.md#customize-roles-based-on-scenarios).
 - In each database, only one running BACKUP or RESTORE job is allowed each time. Otherwise, StarRocks returns an error.
 - Because BACKUP and RESTORE jobs occupy many resources of your StarRocks cluster, you can back up and restore your data while your StarRocks cluster is not heavily loaded.
+<<<<<<< HEAD
 - StarRocks does not support specifying data compression algorithm for data backup.
+=======
+- StarRocks does not support specifying data compression algorithms for data backup.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 - Because data is backed up as snapshots, the data loaded upon snapshot generation is not included in the snapshot. Therefore, if you load data into the old cluster after the snapshot is generated and before the RESTORE job is completed, you also need to load the data into the cluster that data is restored into. It is recommended that you load data into both clusters in parallel for a period of time after the data migration is complete, and then migrate your application to the new cluster after verifying the correctness of the data and services.
 - Before the RESTORE job is completed, you cannot operate the table to be restored.
 - Primary Key tables cannot be restored to a StarRocks cluster earlier than v2.5.
 - You do not need to create the table to be restored in the new cluster before restoring it. The RESTORE job automatically creates it.
 - If there is an existing table that has a duplicated name with the table to be restored, StarRocks first checks whether or not the schema of the existing table matches that of the table to be restored. If the schemas match, StarRocks overwrites the existing table with the data in the snapshot. If the schema does not match, the RESTORE job fails. You can either rename the table to be restored using the keyword `AS`, or delete the existing table before restoring data.
 - If the RESTORE job overwrites an existing database, table, or partition, the overwritten data cannot be restored after the job enters the COMMIT phase. If the RESTORE job fails or is canceled at this point, the data may be corrupted and inaccessible. In this case, you can only perform the RESTORE operation again and wait for the job to complete. Therefore, we recommend that you do not restore data by overwriting unless you are sure that the current data is no longer used. The overwrite operation first checks metadata consistency between the snapshot and the existing database, table, or partition. If an inconsistency is detected, the RESTORE operation cannot be performed.
+<<<<<<< HEAD
 - During a BACKUP or a RESTORE job, StarRocks automatically backs up or restores the [Synchronous materialized view](../../using_starrocks/Materialized_view-single_table.md), which can still accelerate or rewrite your queries after data restoration. Currently, StarRocks does not support backing up views and [Asynchronous materialized views](../../using_starrocks/async_mv/Materialized_view.md). You can only back up the physical table of the materialized view, which cannot be used for query acceleration or query rewriting.
 - Currently, StarRocks does not support backing up the configuration data related to user accounts, privileges, and resource groups.
+=======
+- Currently, StarRocks does not support backing up and restoring logical views.
+- Currently, StarRocks does not support backing up and restoring the configuration data related to user accounts, privileges, and resource groups.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 - Currently, StarRocks does not support backing up and restoring the Colocate Join relationship among tables.

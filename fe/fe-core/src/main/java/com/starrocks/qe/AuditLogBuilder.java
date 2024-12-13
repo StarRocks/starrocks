@@ -34,6 +34,10 @@
 
 package com.starrocks.qe;
 
+<<<<<<< HEAD
+=======
+import com.fasterxml.jackson.databind.ObjectMapper;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.AuditLog;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.DigitalVersion;
@@ -49,6 +53,12 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.lang.reflect.Field;
+<<<<<<< HEAD
+=======
+import java.util.HashMap;
+import java.util.Map;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 // A builtin Audit plugin, registered when FE start.
 // it will receive "AFTER_QUERY" AuditEventy and print it as a log in fe.audit.log
@@ -75,10 +85,18 @@ public class AuditLogBuilder extends Plugin implements AuditPlugin {
     @Override
     public void exec(AuditEvent event) {
         try {
+<<<<<<< HEAD
             StringBuilder sb = new StringBuilder();
             long queryTime = 0;
             // get each field with annotation "AuditField" in AuditEvent
             // and assemble them into a string.
+=======
+            Map<String, Object> logMap = new HashMap<>();
+            StringBuilder sb = new StringBuilder();
+            long queryTime = 0;
+
+            // get each field with annotation "AuditField" in AuditEvent
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             Field[] fields = event.getClass().getFields();
             for (Field f : fields) {
                 AuditField af = f.getAnnotation(AuditField.class);
@@ -121,6 +139,7 @@ public class AuditLogBuilder extends Plugin implements AuditPlugin {
                         continue;
                     }
                 }
+<<<<<<< HEAD
                 sb.append("|").append(af.value()).append("=").append(value);
             }
 
@@ -144,6 +163,56 @@ public class AuditLogBuilder extends Plugin implements AuditPlugin {
             }
         } catch (Exception e) {
             LOG.debug("failed to process audit event", e);
+=======
+
+                if (Config.audit_log_json_format) {
+                    logMap.put(af.value(), value);
+                } else {
+                    sb.append("|").append(af.value()).append("=").append(value);
+                }
+            }
+
+            ObjectMapper objectMapper = new ObjectMapper();
+
+            if (event.type == EventType.CONNECTION) {
+                if (Config.audit_log_json_format) {
+                    AuditLog.getConnectionAudit().log(objectMapper.writeValueAsString(logMap));
+                } else {
+                    AuditLog.getConnectionAudit().log(sb.toString());
+                }
+
+            } else {
+                if (isBigQuery(event)) {
+                    if (Config.audit_log_json_format) {
+                        logMap.put("bigQueryLogCPUSecondThreshold", event.bigQueryLogCPUSecondThreshold);
+                        logMap.put("bigQueryLogScanBytesThreshold", event.bigQueryLogScanBytesThreshold);
+                        logMap.put("bigQueryLogScanRowsThreshold", event.bigQueryLogScanRowsThreshold);
+                        AuditLog.getBigQueryAudit().log(objectMapper.writeValueAsString(logMap));
+                    } else {
+                        sb.append("|bigQueryLogCPUSecondThreshold=").append(event.bigQueryLogCPUSecondThreshold);
+                        sb.append("|bigQueryLogScanBytesThreshold=").append(event.bigQueryLogScanBytesThreshold);
+                        sb.append("|bigQueryLogScanRowsThreshold=").append(event.bigQueryLogScanRowsThreshold);
+                        AuditLog.getBigQueryAudit().log(sb.toString());
+                    }
+                }
+                if (Config.enable_qe_slow_log && queryTime > Config.qe_slow_log_ms) {
+                    if (Config.audit_log_json_format) {
+                        AuditLog.getSlowAudit().log(objectMapper.writeValueAsString(logMap));
+                    } else {
+                        AuditLog.getSlowAudit().log(sb.toString());
+                    }
+                }
+                if (Config.audit_log_json_format) {
+                    AuditLog.getQueryAudit().log(objectMapper.writeValueAsString(logMap));
+                } else {
+                    AuditLog.getQueryAudit().log(sb.toString());
+                }
+
+
+            }
+        } catch (Exception e) {
+            LOG.warn("failed to process audit event", e);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 

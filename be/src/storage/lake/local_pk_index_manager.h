@@ -19,6 +19,10 @@
 #include <unordered_map>
 
 #include "common/status.h"
+<<<<<<< HEAD
+=======
+#include "storage/persistent_index_compaction_manager.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 namespace starrocks {
 
@@ -29,8 +33,17 @@ namespace lake {
 class UpdateManager;
 
 #ifdef USE_STAROS
+<<<<<<< HEAD
 class LocalPkIndexManager {
 public:
+=======
+class LocalPkIndexManager : public PersistentIndexCompactionManager {
+public:
+    LocalPkIndexManager() = default;
+
+    ~LocalPkIndexManager();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     static void gc(UpdateManager* update_manager, DataDir* data_dir, std::set<std::string>& tablet_ids);
 
     static void evict(UpdateManager* update_manager, DataDir* data_dir, std::set<std::string>& tablet_ids);
@@ -38,6 +51,13 @@ public:
     // remove pk index meta first, and if success then remove dir.
     static Status clear_persistent_index(int64_t tablet_id);
 
+<<<<<<< HEAD
+=======
+    void schedule(const std::function<std::vector<TabletAndScore>()>& pick_algo) override;
+
+    std::vector<TabletAndScore> pick_tablets_to_do_pk_index_major_compaction(UpdateManager* update_magager);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 private:
     static bool need_evict_tablet(const std::string& tablet_pk_path);
 

@@ -134,14 +134,22 @@ public class Replica implements Writable {
     private boolean bad = false;
     private boolean setBadForce = false;
 
+<<<<<<< HEAD
     /*
+=======
+    /**
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
      * If set to true, which means this replica need to be repaired explicitly.
      * This can happen when this replica is created by a balance clone task, and
      * when task finished, the version of this replica is behind the partition's visible version.
      * So this replica need a further repair.
      * If we do not do this, this replica will be treated as version stale, and will be removed,
      * so that the balance task is failed, which is unexpected.
+<<<<<<< HEAD
      *
+=======
+     * <p>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
      * furtherRepairSetTime set alone with needFurtherRepair.
      * This is an insurance, in case that further repair task always fail. If 20 min passed
      * since we set needFurtherRepair to true, the 'needFurtherRepair' will be set to false.
@@ -182,6 +190,13 @@ public class Replica implements Writable {
 
     private boolean isErrorState = false;
 
+<<<<<<< HEAD
+=======
+    // This variable will be used in Primary Key table only. It is the max rowset creation time for
+    // the corresponding replica. This variable is in-memory only.
+    private long maxRowsetCreationTime = -1L;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public Replica() {
     }
 
@@ -286,6 +301,13 @@ public class Replica implements Writable {
         return lastSuccessVersion;
     }
 
+<<<<<<< HEAD
+=======
+    public long getMaxRowsetCreationTime() {
+        return maxRowsetCreationTime;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public long getPathHash() {
         return pathHash;
     }
@@ -331,6 +353,18 @@ public class Replica implements Writable {
         return true;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean setMaxRowsetCreationTime(long newCreationTime) {
+        if (newCreationTime < maxRowsetCreationTime) {
+            return false;
+        }
+
+        maxRowsetCreationTime = newCreationTime;
+        return true;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public boolean needFurtherRepair() {
         if (needFurtherRepair && System.currentTimeMillis() - this.furtherRepairSetTime < FURTHER_REPAIR_TIMEOUT_MS) {
             return true;

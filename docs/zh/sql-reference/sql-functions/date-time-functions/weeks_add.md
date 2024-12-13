@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # weeks_add
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 返回原始的日期加上指定周数后的日期。
 

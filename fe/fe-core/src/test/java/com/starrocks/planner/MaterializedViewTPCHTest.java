@@ -14,6 +14,7 @@
 
 package com.starrocks.planner;
 
+<<<<<<< HEAD
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.MockTpchStatisticStorage;
@@ -30,17 +31,47 @@ public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
     public static void setUp() throws Exception {
         PlanTestBase.beforeClass();
         MaterializedViewTestBase.setUp();
+=======
+import com.google.common.collect.Lists;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.common.QueryDebugOptions;
+import com.starrocks.sql.plan.MockTpchStatisticStorage;
+import com.starrocks.sql.plan.PlanTestBase;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.MethodOrderer;
+import org.junit.jupiter.api.TestMethodOrder;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
+
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Stream;
+
+@TestMethodOrder(MethodOrderer.MethodName.class)
+public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
+    @BeforeAll
+    public static void beforeClass() throws Exception {
+        PlanTestBase.beforeClass();
+        MaterializedViewTestBase.beforeClass();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
 
         executeSqlFile("sql/materialized-view/tpch/ddl_tpch.sql");
         executeSqlFile("sql/materialized-view/tpch/ddl_tpch_mv1.sql");
         executeSqlFile("sql/materialized-view/tpch/ddl_tpch_mv2.sql");
         executeSqlFile("sql/materialized-view/tpch/ddl_tpch_mv3.sql");
+<<<<<<< HEAD
        connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(false);
+=======
+        connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(false);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         int scale = 1;
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         connectContext.getGlobalStateMgr().setStatisticStorage(new MockTpchStatisticStorage(connectContext, scale));
+<<<<<<< HEAD
         OlapTable t4 = (OlapTable) globalStateMgr.getDb(MATERIALIZED_DB_NAME).getTable("customer");
         setTableStatistics(t4, 150000 * scale);
         OlapTable t7 = (OlapTable) globalStateMgr.getDb(MATERIALIZED_DB_NAME).getTable("lineitem");
@@ -158,5 +189,37 @@ public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
     @Test
     public void testQuery22() {
         runFileUnitTest("materialized-view/tpch/q22");
+=======
+        OlapTable t4 = (OlapTable) globalStateMgr.getLocalMetastore().getDb(MATERIALIZED_DB_NAME).getTable("customer");
+        setTableStatistics(t4, 150000 * scale);
+        OlapTable t7 = (OlapTable) globalStateMgr.getLocalMetastore().getDb(MATERIALIZED_DB_NAME).getTable("lineitem");
+        setTableStatistics(t7, 6000000 * scale);
+
+        // When force rule based rewrite is enabled, query will be transformed into scan in Rule Rewrite Phase.
+        // And OneTabletExecutorVisitor#visitLogicalTableScan will deduce `supportOneTabletOpt` because this test
+        // case has no tablets left after mv rewrite.
+        connectContext.getSessionVariable().setEnableForceRuleBasedMvRewrite(false);
+        QueryDebugOptions queryDebugOptions = new QueryDebugOptions();
+        queryDebugOptions.setEnableQueryTraceLog(true);
+        connectContext.getSessionVariable().setQueryDebugOptions(queryDebugOptions.toString());
+    }
+
+    @ParameterizedTest(name = "Tpch.{0}")
+    @MethodSource("tpchSource")
+    public void testTPCH(String name, String sql, String resultFile) {
+        runFileUnitTest(sql, resultFile);
+    }
+
+    private static Stream<Arguments> tpchSource() {
+        List<Arguments> cases = Lists.newArrayList();
+        for (Map.Entry<String, String> entry : TpchSQL.getAllSQL().entrySet()) {
+            if (!entry.getKey().equalsIgnoreCase("q1")) {
+                continue;
+
+            }
+            cases.add(Arguments.of(entry.getKey(), entry.getValue(), "materialized-view/tpch/" + entry.getKey()));
+        }
+        return cases.stream();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }

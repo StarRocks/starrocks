@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # datediff
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Calculates the difference between two date values (`expr1 - expr2`) and returns a result in days. `expr1` and `expr2` are valid DATE or DATETIME expressions.
 

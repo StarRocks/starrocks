@@ -31,6 +31,11 @@ static const std::string AWS_S3_ACCESS_KEY = "aws.s3.access_key";
 static const std::string AWS_S3_SECRET_KEY = "aws.s3.secret_key";
 static const std::string AWS_S3_SESSION_TOKEN = "aws.s3.session_token";
 static const std::string AWS_S3_IAM_ROLE_ARN = "aws.s3.iam_role_arn";
+<<<<<<< HEAD
+=======
+static const std::string AWS_S3_STS_REGION = "aws.s3.sts.region";
+static const std::string AWS_S3_STS_ENDPOINT = "aws.s3.sts.endpoint";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 static const std::string AWS_S3_EXTERNAL_ID = "aws.s3.external_id";
 static const std::string AWS_S3_REGION = "aws.s3.region";
 static const std::string AWS_S3_ENDPOINT = "aws.s3.endpoint";
@@ -59,8 +64,15 @@ public:
     static const AWSCloudConfiguration create_aws(const TCloudConfiguration& t_cloud_configuration) {
         DCHECK(t_cloud_configuration.__isset.cloud_type);
         DCHECK(t_cloud_configuration.cloud_type == TCloudType::AWS);
+<<<<<<< HEAD
         std::unordered_map<std::string, std::string> properties;
         _insert_properties(properties, t_cloud_configuration);
+=======
+        std::map<std::string, std::string> properties{};
+        if (t_cloud_configuration.__isset.cloud_properties) {
+            properties = t_cloud_configuration.cloud_properties;
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         AWSCloudConfiguration aws_cloud_configuration{};
         AWSCloudCredential aws_cloud_credential{};
@@ -78,6 +90,11 @@ public:
         aws_cloud_credential.secret_key = get_or_default(properties, AWS_S3_SECRET_KEY, std::string());
         aws_cloud_credential.session_token = get_or_default(properties, AWS_S3_SESSION_TOKEN, std::string());
         aws_cloud_credential.iam_role_arn = get_or_default(properties, AWS_S3_IAM_ROLE_ARN, std::string());
+<<<<<<< HEAD
+=======
+        aws_cloud_credential.sts_region = get_or_default(properties, AWS_S3_STS_REGION, std::string());
+        aws_cloud_credential.sts_endpoint = get_or_default(properties, AWS_S3_STS_ENDPOINT, std::string());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         aws_cloud_credential.external_id = get_or_default(properties, AWS_S3_EXTERNAL_ID, std::string());
         aws_cloud_credential.region = get_or_default(properties, AWS_S3_REGION, std::string());
         aws_cloud_credential.endpoint = get_or_default(properties, AWS_S3_ENDPOINT, std::string());
@@ -90,8 +107,15 @@ public:
     static const AliyunCloudConfiguration create_aliyun(const TCloudConfiguration& t_cloud_configuration) {
         DCHECK(t_cloud_configuration.__isset.cloud_type);
         DCHECK(t_cloud_configuration.cloud_type == TCloudType::ALIYUN);
+<<<<<<< HEAD
         std::unordered_map<std::string, std::string> properties;
         _insert_properties(properties, t_cloud_configuration);
+=======
+        std::map<std::string, std::string> properties{};
+        if (t_cloud_configuration.__isset.cloud_properties) {
+            properties = t_cloud_configuration.cloud_properties;
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         AliyunCloudConfiguration aliyun_cloud_configuration{};
         AliyunCloudCredential aliyun_cloud_credential{};
@@ -105,6 +129,7 @@ public:
     }
 
 private:
+<<<<<<< HEAD
     static void _insert_properties(std::unordered_map<std::string, std::string>& properties,
                                    const TCloudConfiguration& t_cloud_configuration) {
         if (t_cloud_configuration.__isset.cloud_properties) {
@@ -121,6 +146,11 @@ private:
     template <typename ReturnType>
     static ReturnType get_or_default(const std::unordered_map<std::string, std::string>& properties,
                                      const std::string& key, ReturnType default_value) {
+=======
+    template <typename ReturnType>
+    static ReturnType get_or_default(const std::map<std::string, std::string>& properties, const std::string& key,
+                                     ReturnType default_value) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         auto it = properties.find(key);
         if (it != properties.end()) {
             std::string value = it->second;

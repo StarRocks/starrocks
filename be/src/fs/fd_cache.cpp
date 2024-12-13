@@ -32,7 +32,11 @@ FdCache::~FdCache() {
 }
 
 FdCache::Handle* FdCache::insert(std::string_view path, int fd) {
+<<<<<<< HEAD
     void* value = reinterpret_cast<void*>(static_cast<uintptr_t>(fd));
+=======
+    void* value = reinterpret_cast<void*>(static_cast<uintptr_t>(fd)); // NOLINT
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     Cache::Handle* h = _cache->insert(CacheKey(path.data(), path.size()), value, 1, fd_deleter);
     return reinterpret_cast<FdCache::Handle*>(h);
 }

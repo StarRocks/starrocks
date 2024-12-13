@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # round, dround
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 将数字四舍五入到指定的位数。
 

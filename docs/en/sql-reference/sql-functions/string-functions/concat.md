@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # concat
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 This function combines multiple strings. If any of the parameter value is NULL, it will return NULL.
 

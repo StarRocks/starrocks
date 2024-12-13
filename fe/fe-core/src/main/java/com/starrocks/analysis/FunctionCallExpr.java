@@ -312,6 +312,7 @@ public class FunctionCallExpr extends Expr {
     }
 
     public boolean isDistinct() {
+<<<<<<< HEAD
         Preconditions.checkState(isAggregateFunction());
         return fnParams.isDistinct();
     }
@@ -333,15 +334,24 @@ public class FunctionCallExpr extends Expr {
         return false;
     }
 
+=======
+        return fnParams.isDistinct();
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     protected void toThrift(TExprNode msg) {
         // TODO: we never serialize this to thrift if it's an aggregate function
         // except in test cases that do it explicitly.
         if (isAggregate() || isAnalyticFnCall) {
             msg.node_type = TExprNodeType.AGG_EXPR;
+<<<<<<< HEAD
             if (!isAnalyticFnCall) {
                 msg.setAgg_expr(new TAggregateExpr(isMergeAggFn));
             }
+=======
+            msg.setAgg_expr(new TAggregateExpr(isMergeAggFn));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } else {
             msg.node_type = TExprNodeType.FUNCTION_CALL;
         }
@@ -505,5 +515,8 @@ public class FunctionCallExpr extends Expr {
             return this;
         }
     }
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

@@ -14,9 +14,12 @@
 
 package com.starrocks.connector.hive;
 
+<<<<<<< HEAD
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.common.util.Util;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
@@ -26,16 +29,24 @@ import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
 import com.starrocks.sql.analyzer.SemanticException;
 
 import java.util.List;
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.Map;
 import java.util.Optional;
 
 public class HiveConnector implements Connector {
     public static final String HIVE_METASTORE_URIS = "hive.metastore.uris";
     public static final String HIVE_METASTORE_TYPE = "hive.metastore.type";
+<<<<<<< HEAD
     public static final List<String> SUPPORTED_METASTORE_TYPE = Lists.newArrayList("hive", "glue", "dlf");
+=======
+    public static final String HIVE_METASTORE_TIMEOUT = "hive.metastore.timeout";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private final Map<String, String> properties;
     private final String catalogName;
     private final HiveConnectorInternalMgr internalMgr;
@@ -48,6 +59,7 @@ public class HiveConnector implements Connector {
         HdfsEnvironment hdfsEnvironment = new HdfsEnvironment(cloudConfiguration);
         this.internalMgr = new HiveConnectorInternalMgr(catalogName, properties, hdfsEnvironment);
         this.metadataFactory = createMetadataFactory(hdfsEnvironment);
+<<<<<<< HEAD
         validate();
         onCreate();
     }
@@ -65,6 +77,11 @@ public class HiveConnector implements Connector {
         }
     }
 
+=======
+        onCreate();
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public ConnectorMetadata getMetadata() {
         return metadataFactory.create();
@@ -73,7 +90,10 @@ public class HiveConnector implements Connector {
     private HiveMetadataFactory createMetadataFactory(HdfsEnvironment hdfsEnvironment) {
         IHiveMetastore metastore = internalMgr.createHiveMetastore();
         RemoteFileIO remoteFileIO = internalMgr.createRemoteFileIO();
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return new HiveMetadataFactory(
                 catalogName,
                 metastore,
@@ -81,14 +101,29 @@ public class HiveConnector implements Connector {
                 internalMgr.getHiveMetastoreConf(),
                 internalMgr.getRemoteFileConf(),
                 internalMgr.getPullRemoteFileExecutor(),
+<<<<<<< HEAD
                 internalMgr.isSearchRecursive(),
                 internalMgr.enableHmsEventsIncrementalSync(),
                 hdfsEnvironment
+=======
+                internalMgr.getupdateRemoteFilesExecutor(),
+                internalMgr.getUpdateStatisticsExecutor(),
+                internalMgr.getRefreshOthersFeExecutor(),
+                internalMgr.isSearchRecursive(),
+                internalMgr.enableHmsEventsIncrementalSync(),
+                hdfsEnvironment,
+                internalMgr.getMetastoreType(),
+                properties
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         );
     }
 
     public void onCreate() {
+<<<<<<< HEAD
         Optional<CacheUpdateProcessor> updateProcessor = metadataFactory.getCacheUpdateProcessor();
+=======
+        Optional<HiveCacheUpdateProcessor> updateProcessor = metadataFactory.getCacheUpdateProcessor();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (internalMgr.enableHmsEventsIncrementalSync()) {
             updateProcessor.ifPresent(processor -> GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor()
                     .registerCacheUpdateProcessor(catalogName, updateProcessor.get()));
@@ -105,7 +140,11 @@ public class HiveConnector implements Connector {
     @Override
     public void shutdown() {
         internalMgr.shutdown();
+<<<<<<< HEAD
         metadataFactory.getCacheUpdateProcessor().ifPresent(CacheUpdateProcessor::invalidateAll);
+=======
+        metadataFactory.getCacheUpdateProcessor().ifPresent(HiveCacheUpdateProcessor::invalidateAll);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor().unRegisterCacheUpdateProcessor(catalogName);
         GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor().unRegisterCacheUpdateProcessor(catalogName);
     }

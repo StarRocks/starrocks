@@ -29,6 +29,7 @@ public class SetTest extends PlanTestBase {
     public void testValuesNodePredicate() throws Exception {
         String queryStr = "SELECT 1 AS z, MIN(a.x) FROM (select 1 as x) a WHERE abs(1) = 2";
         String explainString = getFragmentPlan(queryStr);
+<<<<<<< HEAD
         Assert.assertTrue(explainString.contains("  3:Project\n" +
                 "  |  <slot 3> : 3: min\n" +
                 "  |  <slot 4> : 1\n" +
@@ -37,6 +38,19 @@ public class SetTest extends PlanTestBase {
                 "  |  output: min(1)\n" +
                 "  |  group by: \n" +
                 "  |  \n" +
+=======
+        Assert.assertTrue(explainString.contains("4:Project\n" +
+                "  |  <slot 4> : 4: min\n" +
+                "  |  <slot 5> : 1\n" +
+                "  |  \n" +
+                "  3:AGGREGATE (update finalize)\n" +
+                "  |  output: min(1)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  2:Project\n" +
+                "  |  <slot 7> : 1\n" +
+                "  |  \n" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "  1:SELECT\n" +
                 "  |  predicates: abs(1) = 2\n" +
                 "  |  \n" +
@@ -58,19 +72,33 @@ public class SetTest extends PlanTestBase {
         String sql = "select b from (select t1a as a, t1b as b, t1c as c, t1d as d from test_all_type " +
                 "union all select 1 as a, 2 as b, 3 as c, 4 as d) t1;";
         String plan = getThriftPlan(sql);
+<<<<<<< HEAD
         Assert.assertTrue(plan.contains(
                 "TExprNode(node_type:INT_LITERAL, type:TTypeDesc(types:[TTypeNode(type:SCALAR, " +
                         "scalar_type:TScalarType(type:TINYINT))]), num_children:0, int_literal:TIntLiteral(value:2)," +
                         " output_scale:-1, has_nullable_child:false, is_nullable:false, is_monotonic:true"));
+=======
+        assertContains(plan, "[TExprNode(node_type:INT_LITERAL, type:TTypeDesc(types:" +
+                "[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:SMALLINT))])," +
+                " num_children:0, int_literal:TIntLiteral(value:2), output_scale:-1, " +
+                "has_nullable_child:false, is_nullable:false, is_monotonic:true");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
     public void testUnionEmpty() throws Exception {
         String sql =
+<<<<<<< HEAD
                 "SELECT DISTINCT RPAD('kZcD', 1300605171, '') FROM t0 WHERE false UNION ALL SELECT DISTINCT RPAD"
                         + "('kZcD', 1300605171, '') FROM t0 WHERE false IS NULL;";
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("0:UNION"));
+=======
+                "SELECT DISTINCT RPAD('kZcD', 1300605171, '') FROM t0 UNION ALL SELECT DISTINCT RPAD"
+                        + "('kZcD', 1300605171, '') FROM t0 WHERE false IS NOT NULL;";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan, plan.contains("0:UNION"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -205,6 +233,7 @@ public class SetTest extends PlanTestBase {
 
         String sql10 = "select 499 union select 670 except select 499";
         String plan = getFragmentPlan(sql10);
+<<<<<<< HEAD
         Assert.assertTrue(plan.contains("  3:Project\n" +
                 "  |  <slot 2> : 499\n" +
                 "  |  \n" +
@@ -221,6 +250,12 @@ public class SetTest extends PlanTestBase {
                 "  |  <slot 7> : 499\n" +
                 "  |  \n" +
                 "  12:UNION\n" +
+=======
+        Assert.assertTrue(plan.contains("  5:Project\n" +
+                "  |  <slot 7> : 499\n" +
+                "  |  \n" +
+                "  4:UNION\n" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "     constant exprs: \n" +
                 "         NULL"));
         Assert.assertTrue(plan.contains("0:EXCEPT"));
@@ -285,40 +320,64 @@ public class SetTest extends PlanTestBase {
         String sql = "select count(*) from (select null as c1 union all select null as c1) t group by t.c1";
         String plan = getVerboseExplain(sql);
         assertContains(plan, "  0:UNION\n" +
+<<<<<<< HEAD
                 "  |  output exprs:\n" +
                 "  |      [5, BOOLEAN, true]\n" +
                 "  |  child exprs:\n" +
                 "  |      [2: expr, BOOLEAN, true]\n" +
                 "  |      [4: expr, BOOLEAN, true]");
+=======
+                "     constant exprs: \n" +
+                "         NULL\n" +
+                "         NULL\n");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         sql = "select count(*) from (select 1 as c1 union all select null as c1) t group by t.c1";
         plan = getVerboseExplain(sql);
         assertContains(plan, "  0:UNION\n" +
+<<<<<<< HEAD
                 "  |  output exprs:\n" +
                 "  |      [6, TINYINT, true]\n" +
                 "  |  child exprs:\n" +
                 "  |      [2: expr, TINYINT, false]\n" +
                 "  |      [5: cast, TINYINT, true]");
+=======
+                "     constant exprs: \n" +
+                "         1\n" +
+                "         NULL\n");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         sql = "select count(*) from (select cast('1.2' as decimal(10,2)) as c1 union all " +
                 "select cast('1.2' as decimal(10,0)) as c1) t group by t.c1";
         plan = getVerboseExplain(sql);
         assertContains(plan, "  0:UNION\n" +
+<<<<<<< HEAD
                 "  |  output exprs:\n" +
                 "  |      [7, DECIMAL64(12,2), true]\n" +
                 "  |  child exprs:\n" +
                 "  |      [3: cast, DECIMAL64(12,2), false]\n" +
                 "  |      [6: cast, DECIMAL64(12,2), false]\n");
+=======
+                "     constant exprs: \n" +
+                "         1.20\n" +
+                "         1\n");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         sql = "select count(*) from (select cast('1.2' as decimal(5,2)) as c1 union all " +
                 "select cast('1.2' as decimal(10,0)) as c1) t group by t.c1";
         plan = getVerboseExplain(sql);
         assertContains(plan, "  0:UNION\n" +
+<<<<<<< HEAD
                 "  |  output exprs:\n" +
                 "  |      [7, DECIMAL64(12,2), true]\n" +
                 "  |  child exprs:\n" +
                 "  |      [3: cast, DECIMAL64(12,2), false]\n" +
                 "  |      [6: cast, DECIMAL64(12,2), false]");
+=======
+                "     constant exprs: \n" +
+                "         1.20\n" +
+                "         1\n");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -506,6 +565,7 @@ public class SetTest extends PlanTestBase {
                 "      )\n" +
                 "  ) t;";
         String plan = getVerboseExplain(sql);
+<<<<<<< HEAD
         assertContains(plan, "7:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
                 "  |  group by: [9: day, TINYINT, true]\n" +
@@ -518,6 +578,9 @@ public class SetTest extends PlanTestBase {
                 "  |      [4: day, TINYINT, true]\n" +
                 "  |      [8: day, TINYINT, true]\n" +
                 "  |  pass-through-operands: all");
+=======
+        assertNotContains(plan, "UNION");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -592,8 +655,13 @@ public class SetTest extends PlanTestBase {
         // order by null literal with limit offset
         sql = "select v1+v2 as x from t0 union all select v4 as x from t1 order by null limit 10, 20";
         plan = getFragmentPlan(sql);
+<<<<<<< HEAD
         assertContains(plan, "\n" +
                 "  6:EXCHANGE\n" +
+=======
+        assertContains(plan, "  6:MERGING-EXCHANGE\n" +
+                "     offset: 10\n" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "     limit: 20");
 
 
@@ -635,4 +703,106 @@ public class SetTest extends PlanTestBase {
                 "WHERE NULL";
         getThriftPlan(sql);
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testCast() throws Exception {
+        String sql = "select * from t0 union all select 1, 1, 1 from t1";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  4:Project\n" +
+                "  |  <slot 10> : 1\n" +
+                "  |  <slot 11> : 1\n" +
+                "  |  <slot 12> : 1");
+    }
+
+    @Test
+    public void testUnionToValues() throws Exception {
+        String sql = "select 1 union all select 10 + 'a' union all select 3";
+        String plan = getVerboseExplain(sql);
+
+        assertContains(plan, "  0:UNION\n" +
+                "     constant exprs: \n" +
+                "         1.0\n" +
+                "         10.0 + CAST('a' AS DOUBLE)\n" +
+                "         3.0\n");
+
+        sql = "select 1  union all select 10 + 'a' union all select 3 union all select * from (values(6)) t;";
+        plan = getVerboseExplain(sql);
+
+        assertContains(plan, "  0:UNION\n" +
+                "  |  output exprs:\n" +
+                "  |      [11, DOUBLE, true]\n" +
+                "  |  child exprs:\n" +
+                "  |      [10: cast, DOUBLE, true]\n" +
+                "  |      [3: cast, DOUBLE, true]\n");
+
+        sql = "(select 1 limit 1) UNION ALL select 2;";
+        plan = getVerboseExplain(sql);
+
+        assertContains(plan, "  0:UNION\n" +
+                "  |  output exprs:\n" +
+                "  |      [5, TINYINT, false]\n" +
+                "  |  child exprs:\n" +
+                "  |      [2: expr, TINYINT, false]\n" +
+                "  |      [4: expr, TINYINT, false]\n");
+
+        sql = "select k1 from db1.tbl6 union all select 1 union" +
+                " all select 2 union all select * from (values (3)) t";
+        plan = getVerboseExplain(sql);
+
+        assertContains(plan, "  0:UNION\n" +
+                "  |  output exprs:\n" +
+                "  |      [13, VARCHAR(32), true]\n" +
+                "  |  child exprs:\n" +
+                "  |      [1: k1, VARCHAR, true]\n" +
+                "  |      [12: cast, VARCHAR(32), false]\n" +
+                "  |      [7: cast, VARCHAR(32), true]\n");
+
+        sql = "select k1 from db1.tbl6 union all select 1 union" +
+                " all select 2 union all select * from (values (3)) t";
+        plan = getVerboseExplain(sql);
+
+        assertContains(plan, "  0:UNION\n" +
+                "  |  output exprs:\n" +
+                "  |      [13, VARCHAR(32), true]\n" +
+                "  |  child exprs:\n" +
+                "  |      [1: k1, VARCHAR, true]\n" +
+                "  |      [12: cast, VARCHAR(32), false]\n" +
+                "  |      [7: cast, VARCHAR(32), true]\n");
+
+        sql = "select 1 union all select 2 union all select * from (values (1)) t;";
+        plan = getVerboseExplain(sql);
+
+        assertContains(plan, "  0:UNION\n" +
+                "     constant exprs: \n" +
+                "         1\n" +
+                "         2\n" +
+                "         1\n");
+
+        sql = "select 1 union select 2 union select * from (values (1));";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "  0:UNION\n" +
+                "     constant exprs: \n" +
+                "         1\n" +
+                "         2\n" +
+                "         1\n");
+
+        sql = "select 1  union all select 2 union all select * from (values (3)) t;";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "  0:UNION\n" +
+                "     constant exprs: \n" +
+                "         1\n" +
+                "         2\n" +
+                "         3\n");
+
+        sql = "select 1, 2 union all select 3, 4 union all select * from (values (5, 6)) t;";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "  0:UNION\n" +
+                "     constant exprs: \n" +
+                "         1 | 2\n" +
+                "         3 | 4\n" +
+                "         5 | 6\n");
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

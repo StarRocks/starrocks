@@ -35,13 +35,21 @@
 package com.starrocks.http.rest;
 
 import com.google.common.base.Strings;
+<<<<<<< HEAD
+=======
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.PrivilegeType;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.DdlException;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.load.Load;
+<<<<<<< HEAD
 import com.starrocks.privilege.PrivilegeType;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.Authorizer;
 import io.netty.handler.codec.http.HttpMethod;
@@ -60,7 +68,11 @@ public class GetLoadInfoAction extends RestBaseAction {
 
     @Override
     public void executeWithoutPassword(BaseRequest request, BaseResponse response)
+<<<<<<< HEAD
             throws DdlException {
+=======
+            throws DdlException, AccessDeniedException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Load.JobInfo info = new Load.JobInfo(request.getSingleParameter(DB_KEY),
                 request.getSingleParameter(LABEL_KEY));
         if (Strings.isNullOrEmpty(info.dbName)) {
@@ -79,7 +91,13 @@ public class GetLoadInfoAction extends RestBaseAction {
                     ConnectContext.get().getCurrentRoleIds(), info.dbName, PrivilegeType.INSERT);
         } else {
             for (String tblName : info.tblNames) {
+<<<<<<< HEAD
                 checkTableAction(ConnectContext.get(), info.dbName, tblName, PrivilegeType.INSERT);
+=======
+                Authorizer.checkTableAction(
+                        ConnectContext.get().getCurrentUserIdentity(), ConnectContext.get().getCurrentRoleIds(),
+                        info.dbName, tblName, PrivilegeType.INSERT);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
         globalStateMgr.getLoadMgr().getLoadJobInfo(info);

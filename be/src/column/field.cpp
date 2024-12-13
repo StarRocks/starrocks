@@ -44,4 +44,26 @@ ColumnPtr Field::create_column() const {
     return ChunkHelper::column_from_field(*this);
 }
 
+<<<<<<< HEAD
+=======
+FieldPtr Field::convert_to_dict_field(const Field& field) {
+    if (field.type()->type() == TYPE_VARCHAR) {
+        FieldPtr res = std::make_shared<Field>(field);
+        res->_type = get_type_info(TYPE_INT);
+        return res;
+    } else if (field.type()->type() == TYPE_ARRAY && field.sub_field(0).type()->type() == TYPE_VARCHAR) {
+        auto child = Field(field.sub_field(0));
+        child._type = get_type_info(TYPE_INT);
+
+        FieldPtr res = std::make_shared<Field>(field);
+        res->_sub_fields->clear();
+        res->_sub_fields->emplace_back(child);
+        return res;
+    } else {
+        DCHECK(false);
+    }
+    return nullptr;
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // namespace starrocks

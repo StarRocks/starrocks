@@ -159,6 +159,7 @@ public:
 
     bool can_vectorized() const override { return SpecColumnOperator::can_vectorized(); }
 
+<<<<<<< HEAD
     Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange* range) const override {
         return _predicate_operator.seek_bitmap_dictionary(iter, range);
     }
@@ -169,6 +170,20 @@ public:
         DCHECK(support_bloom_filter()) << "Not support bloom filter";
         if constexpr (SpecColumnOperator::support_bloom_filter()) {
             return _predicate_operator.bloom_filter(bf);
+=======
+    bool support_bitmap_filter() const override { return SpecColumnOperator::support_bitmap_filter(); }
+
+    Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
+        return _predicate_operator.seek_bitmap_dictionary(iter, range);
+    }
+
+    bool support_original_bloom_filter() const override { return SpecColumnOperator::support_original_bloom_filter(); }
+
+    bool original_bloom_filter(const BloomFilter* bf) const override {
+        DCHECK(support_original_bloom_filter()) << "Not support bloom filter";
+        if constexpr (SpecColumnOperator::support_original_bloom_filter()) {
+            return _predicate_operator.original_bloom_filter(bf);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return true;
     }

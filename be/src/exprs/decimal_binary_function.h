@@ -204,6 +204,25 @@ struct DecimalBinaryFunction {
             return result_column;
         }
     }
+<<<<<<< HEAD
+=======
+
+#ifdef STARROCKS_JIT_ENABLE
+    template <LogicalType LhsType, LogicalType RhsType, LogicalType ResultType>
+    static llvm::Value* generate_ir(llvm::IRBuilder<>& b, llvm::Module& module, llvm::Value* l, llvm::Value* r,
+                                    int l_scale, int r_scale) {
+        using ResultCppType = RunTimeCppType<ResultType>;
+
+        // TODO(Yueyang): handle scale.
+        auto [precision, scale, adjust_scale] = compute_decimal_result_type<ResultCppType, Op>(l_scale, r_scale);
+
+        using BinaryOperator = ArithmeticBinaryOperator<Op, ResultType>;
+
+        return nullptr;
+    }
+#endif
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     template <LogicalType LhsType, LogicalType RhsType, LogicalType ResultType>
     static inline ColumnPtr const_const(const ColumnPtr& lhs, const ColumnPtr& rhs) {
         return evaluate<true, true, LhsType, RhsType, ResultType>(lhs, rhs);

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # timestamp
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 将时间表达式 `expr` 转换为 DATETIME 值。
 

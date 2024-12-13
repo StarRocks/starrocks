@@ -53,7 +53,12 @@ The following procedures are performed on an FE instance.
 
       > **NOTE**
       >
+<<<<<<< HEAD
       > You can run `ifconfig` in your terminal to view the IP address(es) owned by the instance.
+=======
+      > - You can run `ifconfig` in your terminal to view the IP address(es) owned by the instance.
+      > - From v3.3.0, StarRocks supports deployment based on IPv6.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
    d. If you have multiple JDKs installed on the instance, and you want to use a specific JDK that is different from the one specified in the environment variable `JAVA_HOME`, you must specify the path where the chosen JDK is installed by adding the configuration item `JAVA_HOME` in the configuration file.
 
@@ -129,7 +134,12 @@ The following procedures are performed on the BE instances.
 
       > **NOTE**
       >
+<<<<<<< HEAD
       > You can run `ifconfig` in your terminal to view the IP address(es) owned by the instance.
+=======
+      > - You can run `ifconfig` in your terminal to view the IP address(es) owned by the instance.
+      > - From v3.3.0, StarRocks supports deployment based on IPv6.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
    d. If you have multiple JDKs installed on the instance, and you want to use a specific JDK that is different from the one specified in the environment variable `JAVA_HOME`, you must specify the path where the chosen JDK is installed by adding the configuration item `JAVA_HOME` in the configuration file.
 
@@ -164,6 +174,14 @@ The following procedures are performed on the BE instances.
 > **NOTE**
 >
 > A high-availability cluster of BEs is automatically formed when at least three BE nodes are deployed and added to a StarRocks cluster.
+<<<<<<< HEAD
+=======
+> If you want to deploy just one BE node, you must set `default_replication_num` to `1` in the FE configuration file **fe/conf/fe.conf**.
+
+      ```YAML
+      default_replication_num = 1
+      ```
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ## Step 3: (Optional) Start the CN service
 
@@ -174,7 +192,11 @@ A Compute Node (CN) is a stateless computing service that does not maintain data
    a. If any of the CN ports mentioned in the [Environment Configuration Checklist](../deployment/environment_configurations.md) are occupied, you must assign valid alternatives in the CN configuration file.
 
       ```YAML
+<<<<<<< HEAD
       be_port = vvvv                   # Default: 9060    (From v3.1 onwards, this configuration item is renamed from `thrift_port` to `be_port`.)
+=======
+      be_port = vvvv                   # Default: 9060
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
       be_http_port = xxxx              # Default: 8040
       heartbeat_service_port = yyyy    # Default: 9050
       brpc_port = zzzz                 # Default: 8060
@@ -188,7 +210,12 @@ A Compute Node (CN) is a stateless computing service that does not maintain data
 
       > **NOTE**
       >
+<<<<<<< HEAD
       > You can run `ifconfig` in your terminal to view the IP address(es) owned by the instance.
+=======
+      > - You can run `ifconfig` in your terminal to view the IP address(es) owned by the instance.
+      > - From v3.3.0, StarRocks supports deployment based on IPv6.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
    c. If you have multiple JDKs installed on the instance, and you want to use a specific JDK that is different from the one specified in the environment variable `JAVA_HOME`, you must specify the path where the chosen JDK is installed by adding the configuration item `JAVA_HOME` in the configuration file.
 

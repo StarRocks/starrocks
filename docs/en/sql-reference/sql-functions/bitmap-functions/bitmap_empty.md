@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # bitmap_empty
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Returns an empty bitmap. It is mainly used to fill in the default value during insert or stream load. For example:
 

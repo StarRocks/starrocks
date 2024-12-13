@@ -67,6 +67,16 @@ public class ScalarFunction extends Function {
     private String prepareFnSymbol;
     @SerializedName(value = "closeFnSymbol")
     private String closeFnSymbol;
+<<<<<<< HEAD
+=======
+    // isolated/shared
+    @SerializedName(value = "isolated")
+    private boolean isolationType = true;
+    @SerializedName(value = "inputType")
+    private String inputType;
+    @SerializedName(value = "content")
+    private String content;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // Only used for serialization
     protected ScalarFunction() {
@@ -101,6 +111,12 @@ public class ScalarFunction extends Function {
         symbolName = other.symbolName;
         prepareFnSymbol = other.prepareFnSymbol;
         closeFnSymbol = other.closeFnSymbol;
+<<<<<<< HEAD
+=======
+        isolationType = other.isolationType;
+        inputType = other.inputType;
+        content = other.content;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public static ScalarFunction createVectorizedBuiltin(long fid,
@@ -143,17 +159,55 @@ public class ScalarFunction extends Function {
             FunctionName name, Type[] args,
             Type returnType, boolean isVariadic,
             TFunctionBinaryType binaryType,
+<<<<<<< HEAD
             String objectFile, String symbol, String prepareFnSymbol, String closeFnSymbol) {
+=======
+            String objectFile, String symbol, String prepareFnSymbol, String closeFnSymbol, boolean isolationType) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ScalarFunction fn = new ScalarFunction(name, args, returnType, isVariadic);
         fn.setBinaryType(binaryType);
         fn.setUserVisible(true);
         fn.symbolName = symbol;
         fn.prepareFnSymbol = prepareFnSymbol;
         fn.closeFnSymbol = closeFnSymbol;
+<<<<<<< HEAD
+=======
+        fn.setIsolationType(isolationType);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         fn.setLocation(new HdfsURI(objectFile));
         return fn;
     }
 
+<<<<<<< HEAD
+=======
+    public static ScalarFunction createUdf(
+            FunctionName name, Type[] args,
+            Type returnType, boolean isVariadic,
+            TFunctionBinaryType binaryType,
+            String objectFile, String symbol, String prepareFnSymbol, String closeFnSymbol) {
+        return createUdf(name, args, returnType, isVariadic, binaryType, objectFile,
+                symbol, prepareFnSymbol, closeFnSymbol, true);
+    }
+
+    /**
+     * Returns a new instance of this aggregate function with new argument types and return type which is used for
+     * original function's argument types are psedo types.
+     */
+    public ScalarFunction withNewTypes(List<Type> newArgTypes, Type newRetType) {
+        ScalarFunction newFn = new ScalarFunction(this.getFunctionName(), newArgTypes, newRetType,
+                this.getLocation(), this.getSymbolName(), this.getPrepareFnSymbol(),
+                this.getCloseFnSymbol());
+        newFn.setFunctionId(this.getFunctionId());
+        newFn.setChecksum(this.getChecksum());
+        newFn.setBinaryType(this.getBinaryType());
+        newFn.setHasVarArgs(this.hasVarArgs());
+        newFn.setId(this.getId());
+        newFn.setUserVisible(this.isUserVisible());
+        newFn.setAggStateDesc(this.getAggStateDesc());
+        return newFn;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void setSymbolName(String s) {
         symbolName = s;
     }
@@ -178,6 +232,25 @@ public class ScalarFunction extends Function {
         return closeFnSymbol;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean getIsolationType() {
+        return isolationType;
+    }
+
+    public void setIsolationType(boolean isolationType) {
+        this.isolationType = isolationType;
+    }
+
+    public void setInputType(String inputType) {
+        this.inputType = inputType;
+    }
+
+    public void setContent(String content) {
+        this.content = content;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public String toSql(boolean ifNotExists) {
         StringBuilder sb = new StringBuilder("CREATE FUNCTION ");
@@ -203,6 +276,16 @@ public class ScalarFunction extends Function {
             scalarFunction.setClose_fn_symbol(closeFnSymbol);
         }
         fn.setScalar_fn(scalarFunction);
+<<<<<<< HEAD
+=======
+        fn.setIsolated(isolationType);
+        if (inputType != null) {
+            fn.setInput_type(inputType);
+        }
+        if (content != null) {
+            fn.setContent(content);
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return fn;
     }
 
@@ -244,4 +327,86 @@ public class ScalarFunction extends Function {
     public Function copy() {
         return new ScalarFunction(this);
     }
+<<<<<<< HEAD
+=======
+
+    public static class ScalarFunctionBuilder {
+        TFunctionBinaryType binaryType;
+        FunctionName name;
+        Type[] argTypes;
+        Type retType;
+        boolean hasVarArgs;
+        String objectFile;
+        String symbolName;
+        boolean isolation;
+        String inputType;
+        String content;
+
+        private ScalarFunctionBuilder(TFunctionBinaryType binaryType) {
+            this.binaryType = binaryType;
+        }
+
+        public static ScalarFunction.ScalarFunctionBuilder createUdfBuilder(TFunctionBinaryType binaryType) {
+            return new ScalarFunction.ScalarFunctionBuilder(binaryType);
+        }
+
+        public ScalarFunction.ScalarFunctionBuilder name(FunctionName name) {
+            this.name = name;
+            return this;
+        }
+
+        public ScalarFunction.ScalarFunctionBuilder argsType(Type[] argTypes) {
+            this.argTypes = argTypes;
+            return this;
+        }
+
+        public ScalarFunction.ScalarFunctionBuilder retType(Type type) {
+            this.retType = type;
+            return this;
+        }
+
+        public ScalarFunction.ScalarFunctionBuilder hasVarArgs(boolean hasVarArgs) {
+            this.hasVarArgs = hasVarArgs;
+            return this;
+        }
+
+        public ScalarFunction.ScalarFunctionBuilder objectFile(String objectFile) {
+            this.objectFile = objectFile;
+            return this;
+        }
+
+        public ScalarFunction.ScalarFunctionBuilder symbolName(String symbolName) {
+            this.symbolName = symbolName;
+            return this;
+        }
+
+        public ScalarFunction.ScalarFunctionBuilder isolation(boolean isolation) {
+            this.isolation = isolation;
+            return this;
+        }
+
+        public ScalarFunction.ScalarFunctionBuilder inputType(String inputType) {
+            this.inputType = inputType;
+            return this;
+        }
+
+        public ScalarFunction.ScalarFunctionBuilder content(String content) {
+            this.content = content;
+            return this;
+        }
+
+        public ScalarFunction build() {
+            ScalarFunction scalarFunction = new ScalarFunction(name, argTypes, retType, hasVarArgs);
+            scalarFunction.setBinaryType(binaryType);
+            scalarFunction.setSymbolName(symbolName);
+            scalarFunction.setIsolationType(isolation);
+            scalarFunction.setInputType(inputType);
+            scalarFunction.setContent(content);
+            if (objectFile != null) {
+                scalarFunction.setLocation(new HdfsURI(objectFile));
+            }
+            return scalarFunction;
+        }
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

@@ -38,7 +38,13 @@
 #include <rapidjson/rapidjson.h>
 
 #include <string>
+<<<<<<< HEAD
 
+=======
+#include <vector>
+
+#include "column/vectorized_fwd.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "common/status.h"
 #include "util/pretty_printer.h"
 #include "util/template_util.h"
@@ -76,4 +82,11 @@ ToJsonValue(const T& value, const TUnit::type unit, rapidjson::Document* documen
 }
 
 std::string to_json(const Status& status);
+<<<<<<< HEAD
+=======
+
+std::string to_json(const std::map<std::string, std::map<std::string, std::string>>& value);
+
+Status from_json(const std::string& json_value, std::map<std::string, std::map<std::string, std::string>>* map_result);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // namespace starrocks

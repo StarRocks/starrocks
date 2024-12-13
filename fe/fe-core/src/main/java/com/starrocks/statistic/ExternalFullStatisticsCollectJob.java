@@ -21,14 +21,28 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
+<<<<<<< HEAD
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+=======
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.IcebergTable;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.UUIDUtil;
+<<<<<<< HEAD
+=======
+import com.starrocks.connector.PartitionUtil;
+import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.hive.HiveMetaClient;
+import com.starrocks.connector.iceberg.IcebergApiConverter;
+import com.starrocks.connector.iceberg.IcebergPartitionTransform;
+import com.starrocks.connector.iceberg.IcebergPartitionUtils;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.QueryState;
@@ -41,6 +55,10 @@ import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.thrift.TStatisticData;
 import org.apache.commons.lang.StringEscapeUtils;
 import org.apache.commons.lang.StringUtils;
+<<<<<<< HEAD
+=======
+import org.apache.iceberg.PartitionField;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.velocity.VelocityContext;
@@ -61,6 +79,7 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
             ", cast($countNullFunction as BIGINT)" + // BIGINT
             ", $maxFunction" + // VARCHAR
             ", $minFunction " + // VARCHAR
+<<<<<<< HEAD
             " FROM `$catalogName`.`$dbName`.`$tableName`";
 
     private final String catalogName;
@@ -72,6 +91,31 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
                                     Map<String, String> properties) {
         super(db, table, columns, type, scheduleType, properties);
         this.catalogName = catalogName;
+=======
+            " FROM `$catalogName`.`$dbName`.`$tableName` where $partitionPredicate";
+
+    private final String catalogName;
+    protected List<String> partitionNames;
+    private final List<String> sqlBuffer = Lists.newArrayList();
+    private final List<List<Expr>> rowsBuffer = Lists.newArrayList();
+
+    public ExternalFullStatisticsCollectJob(String catalogName, Database db, Table table, List<String> partitionNames,
+                                            List<String> columnNames, List<Type> columnTypes,
+                                            StatsConstants.AnalyzeType type, StatsConstants.ScheduleType scheduleType,
+                                            Map<String, String> properties) {
+        super(db, table, columnNames, columnTypes, type, scheduleType, properties);
+        this.catalogName = catalogName;
+        this.partitionNames = partitionNames;
+    }
+
+    @Override
+    public String getCatalogName() {
+        return catalogName;
+    }
+
+    public List<String> getPartitionNames() {
+        return partitionNames;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -100,21 +144,36 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
             collectStatisticSync(sql, context);
             finishedSQLNum++;
             analyzeStatus.setProgress(finishedSQLNum * 100 / totalCollectSQL);
+<<<<<<< HEAD
             GlobalStateMgr.getCurrentAnalyzeMgr().replayAddAnalyzeStatus(analyzeStatus);
+=======
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().replayAddAnalyzeStatus(analyzeStatus);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         flushInsertStatisticsData(context, true);
     }
 
+<<<<<<< HEAD
     private List<List<String>> buildCollectSQLList(int parallelism) {
         List<String> totalQuerySQL = new ArrayList<>();
         for (String columnName : columns) {
             totalQuerySQL.add(buildBatchCollectFullStatisticSQL(table, columnName));
+=======
+    protected List<List<String>> buildCollectSQLList(int parallelism) {
+        List<String> totalQuerySQL = new ArrayList<>();
+        for (String partitionName : partitionNames) {
+            for (int i = 0; i < columnNames.size(); i++) {
+                totalQuerySQL.add(buildBatchCollectFullStatisticSQL(table, partitionName, columnNames.get(i),
+                        columnTypes.get(i)));
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         return Lists.partition(totalQuerySQL, parallelism);
     }
 
+<<<<<<< HEAD
     private String buildBatchCollectFullStatisticSQL(Table table, String columnName) {
         StringBuilder builder = new StringBuilder();
         VelocityContext context = new VelocityContext();
@@ -128,11 +187,38 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
         context.put("partitionNameStr", "All");
         context.put("columnNameStr", columnNameStr);
         context.put("dataSize", fullAnalyzeGetDataSize(column));
+=======
+    private String buildBatchCollectFullStatisticSQL(Table table, String partitionName, String columnName,
+                                                     Type columnType) {
+        StringBuilder builder = new StringBuilder();
+        VelocityContext context = new VelocityContext();
+
+        String columnNameStr = StringEscapeUtils.escapeSql(columnName);
+        String quoteColumnName = StatisticUtils.quoting(table, columnName);
+
+        String nullValue;
+        if (table.isIcebergTable()) {
+            nullValue = IcebergApiConverter.PARTITION_NULL_VALUE;
+        } else {
+            nullValue = HiveMetaClient.PARTITION_NULL_VALUE;
+        }
+
+        context.put("version", StatsConstants.STATISTIC_EXTERNAL_VERSION);
+        // all table now, partition later
+        context.put("partitionNameStr", PartitionUtil.normalizePartitionName(partitionName,
+                table.getPartitionColumnNames(), nullValue));
+        context.put("columnNameStr", columnNameStr);
+        context.put("dataSize", fullAnalyzeGetDataSize(quoteColumnName, columnType));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         context.put("dbName", db.getOriginName());
         context.put("tableName", table.getName());
         context.put("catalogName", this.catalogName);
 
+<<<<<<< HEAD
         if (!column.getType().canStatistic()) {
+=======
+        if (!columnType.canStatistic()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             context.put("hllFunction", "hex(hll_serialize(hll_empty()))");
             context.put("countNullFunction", "0");
             context.put("maxFunction", "''");
@@ -140,14 +226,74 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
         } else {
             context.put("hllFunction", "hex(hll_serialize(IFNULL(hll_raw(" + quoteColumnName + "), hll_empty())))");
             context.put("countNullFunction", "COUNT(1) - COUNT(" + quoteColumnName + ")");
+<<<<<<< HEAD
             context.put("maxFunction", getMinMaxFunction(column, quoteColumnName, true));
             context.put("minFunction", getMinMaxFunction(column, quoteColumnName, false));
+=======
+            context.put("maxFunction", getMinMaxFunction(columnType, quoteColumnName, true));
+            context.put("minFunction", getMinMaxFunction(columnType, quoteColumnName, false));
+        }
+
+        if (table.isUnPartitioned()) {
+            context.put("partitionPredicate", "1=1");
+        } else {
+            List<String> partitionColumnNames = table.getPartitionColumnNames();
+            List<String> partitionValues = PartitionUtil.toPartitionValues(partitionName);
+            List<String> partitionPredicate = Lists.newArrayList();
+            for (int i = 0; i < partitionColumnNames.size(); i++) {
+                String partitionColumnName = partitionColumnNames.get(i);
+                String partitionValue = partitionValues.get(i);
+                if (partitionValue.equals(nullValue)) {
+                    partitionPredicate.add(StatisticUtils.quoting(partitionColumnName) + " IS NULL");
+                } else if (isSupportedPartitionTransform(partitionColumnName)) {
+                    partitionPredicate.add(IcebergPartitionUtils.convertPartitionFieldToPredicate((IcebergTable) table,
+                            partitionColumnName, partitionValue));
+                } else {
+                    partitionPredicate.add(StatisticUtils.quoting(partitionColumnName) + " = '" + partitionValue + "'");
+                }
+            }
+            context.put("partitionPredicate", Joiner.on(" AND ").join(partitionPredicate));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         builder.append(build(context, BATCH_FULL_STATISTIC_TEMPLATE));
         return builder.toString();
     }
 
+<<<<<<< HEAD
+=======
+    // only iceberg table support partition transform
+    // now only support identity/year/month/day/hour transform
+    boolean isSupportedPartitionTransform(String partitionColumn) {
+        // only iceberg table support partition transform
+        if (!table.isIcebergTable()) {
+            return false;
+        }
+        IcebergTable icebergTable = (IcebergTable) table;
+        if (icebergTable.getNativeTable().specs().size() > 1) {
+            LOG.warn("Do not supported analyze iceberg table {} with partition evolution", table.getName());
+            throw new StarRocksConnectorException("Do not supported analyze iceberg table " + table.getName() +
+                    " with partition evolution");
+        }
+
+        PartitionField partitionField = icebergTable.getPartitionField(partitionColumn);
+        if (partitionField == null) {
+            LOG.warn("Partition column {} not found in table {}", partitionColumn, table.getName());
+            throw new StarRocksConnectorException("Partition column " + partitionColumn + " not found in table " +
+                    table.getName());
+        }
+
+        IcebergPartitionTransform transform = IcebergPartitionTransform.fromString(partitionField.transform().toString());
+        if (!IcebergPartitionUtils.isSupportedConvertPartitionTransform(transform)) {
+            LOG.warn("Partition transform {} not supported to analyze, table: {}", transform, table.getName());
+            throw new StarRocksConnectorException("Partition transform " + transform + " not supported to analyze, " +
+                    "table: " + table.getName());
+        }
+
+        return true;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public void collectStatisticSync(String sql, ConnectContext context) throws Exception {
         LOG.debug("statistics collect sql : " + sql);

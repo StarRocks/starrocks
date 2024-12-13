@@ -369,11 +369,15 @@ public class DecimalLiteralTest {
         };
         ScalarType decimal32p9s4 = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32, 9, 4);
         for (BigDecimal dec32 : decimal32Values) {
+<<<<<<< HEAD
             try {
                 DecimalLiteral.checkLiteralOverflowInDecimalStyle(dec32, decimal32p9s4);
                 Assert.fail("should throw exception");
             } catch (Exception ignored) {
             }
+=======
+            Assert.assertFalse(DecimalLiteral.checkLiteralOverflowInDecimalStyle(dec32, decimal32p9s4));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         BigDecimal decimal64Values[] = {
@@ -384,11 +388,15 @@ public class DecimalLiteralTest {
         };
         ScalarType decimal64p18s6 = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 6);
         for (BigDecimal dec64 : decimal64Values) {
+<<<<<<< HEAD
             try {
                 DecimalLiteral.checkLiteralOverflowInDecimalStyle(dec64, decimal64p18s6);
                 Assert.fail("should throw exception");
             } catch (Exception ignored) {
             }
+=======
+            Assert.assertFalse(DecimalLiteral.checkLiteralOverflowInDecimalStyle(dec64, decimal64p18s6));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         BigDecimal decimal128Values[] = {
@@ -399,11 +407,15 @@ public class DecimalLiteralTest {
         };
         ScalarType decimal128p38s11 = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 11);
         for (BigDecimal dec128 : decimal128Values) {
+<<<<<<< HEAD
             try {
                 DecimalLiteral.checkLiteralOverflowInDecimalStyle(dec128, decimal128p38s11);
                 Assert.fail("should throw exception");
             } catch (Exception ignored) {
             }
+=======
+            Assert.assertFalse(DecimalLiteral.checkLiteralOverflowInDecimalStyle(dec128, decimal128p38s11));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -422,11 +434,15 @@ public class DecimalLiteralTest {
         };
         ScalarType decimal32p9s4 = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32, 9, 4);
         for (BigDecimal dec32 : decimal32Values) {
+<<<<<<< HEAD
             try {
                 DecimalLiteral.checkLiteralOverflowInDecimalStyle(dec32, decimal32p9s4);
             } catch (Exception ignored) {
                 Assert.fail("should not throw exception");
             }
+=======
+            Assert.assertTrue(DecimalLiteral.checkLiteralOverflowInDecimalStyle(dec32, decimal32p9s4));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         BigDecimal decimal64Values[] = {
@@ -442,11 +458,15 @@ public class DecimalLiteralTest {
         };
         ScalarType decimal64p18s6 = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 6);
         for (BigDecimal dec64 : decimal64Values) {
+<<<<<<< HEAD
             try {
                 DecimalLiteral.checkLiteralOverflowInDecimalStyle(dec64, decimal64p18s6);
             } catch (Exception ignored) {
                 Assert.fail("should not throw exception");
             }
+=======
+            Assert.assertTrue(DecimalLiteral.checkLiteralOverflowInDecimalStyle(dec64, decimal64p18s6));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         BigDecimal decimal128Values[] = {
@@ -462,11 +482,15 @@ public class DecimalLiteralTest {
         };
         ScalarType decimal128p38s11 = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 11);
         for (BigDecimal dec128 : decimal128Values) {
+<<<<<<< HEAD
             try {
                 DecimalLiteral.checkLiteralOverflowInDecimalStyle(dec128, decimal128p38s11);
             } catch (Exception ignored) {
                 Assert.fail("should not throw exception");
             }
+=======
+            Assert.assertTrue(DecimalLiteral.checkLiteralOverflowInDecimalStyle(dec128, decimal128p38s11));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 

@@ -34,26 +34,44 @@
 
 package com.starrocks.catalog;
 
+<<<<<<< HEAD
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+=======
+import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableSet;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
+<<<<<<< HEAD
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.lake.LakeMaterializedView;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.persist.gson.GsonPostProcessable;
+=======
+import com.starrocks.catalog.constraint.ForeignKeyConstraint;
+import com.starrocks.catalog.constraint.UniqueConstraint;
+import com.starrocks.catalog.system.SystemTable;
+import com.starrocks.common.io.Text;
+import com.starrocks.common.io.Writable;
+import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.persist.gson.GsonUtils;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TTableDescriptor;
 import org.apache.commons.lang.NotImplementedException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+<<<<<<< HEAD
 import java.io.DataInput;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.io.DataOutput;
 import java.io.IOException;
 import java.time.Instant;
@@ -63,12 +81,20 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+<<<<<<< HEAD
+=======
+import java.util.concurrent.CopyOnWriteArrayList;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 /**
  * Internal representation of table-related metadata. A table contains several partitions.
  */
 public class Table extends MetaObject implements Writable, GsonPostProcessable, BasicTable {
+<<<<<<< HEAD
     protected static final Logger LOG = LogManager.getLogger(Table.class);
+=======
+    private static final Logger LOG = LogManager.getLogger(Table.class);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // 1. Native table:
     //   1.1 Local: OLAP, MATERIALIZED_VIEW
@@ -113,10 +139,27 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         CLOUD_NATIVE_MATERIALIZED_VIEW,
         @SerializedName("TABLE_FUNCTION")
         TABLE_FUNCTION,
+<<<<<<< HEAD
         @SerializedName("HIVE_VIEW")
         HIVE_VIEW,
         @SerializedName("PAIMON")
         PAIMON;
+=======
+        @SerializedName("PAIMON")
+        PAIMON,
+        @SerializedName("ODPS")
+        ODPS,
+        @SerializedName("BLACKHOLE")
+        BLACKHOLE,
+        @SerializedName("METADATA")
+        METADATA,
+        @SerializedName("KUDU")
+        KUDU,
+        @SerializedName("HIVE_VIEW")
+        HIVE_VIEW,
+        @SerializedName("ICEBERG_VIEW")
+        ICEBERG_VIEW;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         public static String serialize(TableType type) {
             if (type == CLOUD_NATIVE) {
@@ -139,6 +182,18 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         }
     }
 
+<<<<<<< HEAD
+=======
+    public static final ImmutableSet<TableType> IS_ANALYZABLE_EXTERNAL_TABLE =
+            new ImmutableSet.Builder<TableType>()
+                    .add(TableType.HIVE)
+                    .add(TableType.ICEBERG)
+                    .add(TableType.HUDI)
+                    .add(TableType.ODPS)
+                    .add(TableType.DELTALAKE)
+                    .build();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @SerializedName(value = "id")
     protected long id;
     @SerializedName(value = "name")
@@ -147,6 +202,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
     protected TableType type;
     @SerializedName(value = "createTime")
     protected long createTime;
+<<<<<<< HEAD
     /*
      *  fullSchema and nameToColumn should contain all columns, both visible and shadow.
      *  e.g. for OlapTable, when doing schema change, there will be some shadow columns which are not visible
@@ -157,6 +213,11 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
      *  NOTICE: the order of this fullSchema is meaningless to OlapTable
      */
     /**
+=======
+
+    /**
+     * For OlapTable:
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
      * The fullSchema of OlapTable includes the base columns and the SHADOW_NAME_PREFIX columns.
      * The properties of base columns in fullSchema are same as properties in baseIndex.
      * For example:
@@ -164,6 +225,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
      * Schema change (c3 to bigint)
      * When OlapTable is changing schema, the fullSchema is (c1 int, c2 int, c3 int, SHADOW_NAME_PREFIX_c3 bigint)
      * The fullSchema of OlapTable is mainly used by Scanner of Load job.
+<<<<<<< HEAD
      * <p>
      * If you want to get the mv columns, you should call getIndexToSchema in Subclass OlapTable.
      */
@@ -177,6 +239,30 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
 
     // DO NOT persist this variable.
     protected boolean isTypeRead = false;
+=======
+     * NOTICE: The columns of baseIndex is placed before the SHADOW_NAME_PREFIX columns
+     * <p>
+     * If you want to get all visible columns, you should call getBaseSchema() method, which is override in
+     * subclasses.
+     * If you want to get the mv columns, you should call getIndexToSchema in Subclass OlapTable.
+     * <p>
+     * If we are simultaneously executing multiple light schema change tasks, there may be occasional concurrent
+     * read-write operations between these tasks with a relatively low probability.
+     * Therefore, we choose to use a CopyOnWriteArrayList.
+     */
+    @SerializedName(value = "fullSchema")
+    protected List<Column> fullSchema = new CopyOnWriteArrayList<>();
+
+    /**
+     * nameToColumn and idToColumn are both indexes of fullSchema.
+     * nameToColumn is the index of column name, idToColumn is the index of column id,
+     * column names can change, but the column ID of a specific column will never change.
+     * Use case-insensitive tree map, because the column name is case-insensitive in the system.
+     */
+    protected Map<String, Column> nameToColumn;
+    protected Map<ColumnId, Column> idToColumn;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // table(view)'s comment
     @SerializedName(value = "comment")
     protected String comment = "";
@@ -193,6 +279,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
     // foreign key constraint for mv rewrite
     protected List<ForeignKeyConstraint> foreignKeyConstraints;
 
+<<<<<<< HEAD
     protected Map<PartitionKey, Long> partitionKeyToId;
 
     public Table(TableType type) {
@@ -201,6 +288,13 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         this.nameToColumn = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
         this.relatedMaterializedViews = Sets.newConcurrentHashSet();
         this.partitionKeyToId = Maps.newHashMap();
+=======
+    public Table(TableType type) {
+        this.type = type;
+        this.fullSchema = Lists.newArrayList();
+        updateSchemaIndex();
+        this.relatedMaterializedViews = Sets.newConcurrentHashSet();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public Table(long id, String tableName, TableType type, List<Column> fullSchema) {
@@ -211,6 +305,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         if (fullSchema != null) {
             this.fullSchema = Lists.newArrayList(fullSchema);
         }
+<<<<<<< HEAD
         this.nameToColumn = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
         if (this.fullSchema != null) {
             for (Column col : this.fullSchema) {
@@ -228,6 +323,11 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
 
     public void setTypeRead(boolean isTypeRead) {
         this.isTypeRead = isTypeRead;
+=======
+        updateSchemaIndex();
+        this.createTime = Instant.now().getEpochSecond();
+        this.relatedMaterializedViews = Sets.newConcurrentHashSet();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public long getId() {
@@ -255,6 +355,17 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         return InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
     }
 
+<<<<<<< HEAD
+=======
+    public String getResourceName() {
+        throw new NotImplementedException();
+    }
+
+    public String getCatalogDBName() {
+        throw new NotImplementedException();
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public String getName() {
         return name;
     }
@@ -263,10 +374,27 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         this.name = name;
     }
 
+<<<<<<< HEAD
+=======
+    // Table in catalog could be dropped and created
+    // Even they share the same name, they are different tables.
+    // So we use table identifier to diff them.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public String getTableIdentifier() {
         return name;
     }
 
+<<<<<<< HEAD
+=======
+    // Table name is the name written in native table.
+    // but catalog table name is name defined in catalog.
+    // If we use resource mapping, they are probably different.
+    // And if we use catalog, I think we should stick to this catalog table name.
+    public String getCatalogTableName() {
+        throw new NotImplementedException();
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void setType(TableType type) {
         this.type = type;
     }
@@ -295,8 +423,29 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         return type == TableType.HIVE_VIEW;
     }
 
+<<<<<<< HEAD
     public boolean isView() {
         return isOlapView() || isHiveView();
+=======
+    public boolean isIcebergView() {
+        return type == TableType.ICEBERG_VIEW;
+    }
+
+    public boolean isMetadataTable() {
+        return type == TableType.METADATA;
+    }
+
+    public boolean isAnalyzableExternalTable() {
+        return IS_ANALYZABLE_EXTERNAL_TABLE.contains(type);
+    }
+
+    public boolean isView() {
+        return isOlapView() || isConnectorView();
+    }
+
+    public boolean isConnectorView() {
+        return isHiveView() || isIcebergView();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public boolean isOlapTableOrMaterializedView() {
@@ -327,6 +476,13 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         return isOlapTable() || isCloudNativeTable();
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isExternalTableWithFileSystem() {
+        return isHiveTable() || isIcebergTable() || isHudiTable() || isDeltalakeTable() || isPaimonTable() || isKuduTable();
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public boolean isHiveTable() {
         return type == TableType.HIVE;
     }
@@ -347,15 +503,44 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         return type == TableType.PAIMON;
     }
 
+<<<<<<< HEAD
     // for create table
     public boolean isOlapOrCloudNativeTable() {
         return isOlapTable() || isCloudNativeTable();
+=======
+    public boolean isOdpsTable() {
+        return type == TableType.ODPS;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public boolean isJDBCTable() {
         return type == TableType.JDBC;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isTableFunctionTable() {
+        return type == TableType.TABLE_FUNCTION;
+    }
+
+    public boolean isBlackHoleTable() {
+        return type == TableType.BLACKHOLE;
+    }
+
+    public boolean isKuduTable() {
+        return type == TableType.KUDU;
+    }
+
+    public boolean isHMSTable() {
+        return type == TableType.HIVE || type == TableType.HUDI || type == TableType.ODPS;
+    }
+
+    // for create table
+    public boolean isOlapOrCloudNativeTable() {
+        return isOlapTable() || isCloudNativeTable();
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public boolean isExprPartitionTable() {
         if (this instanceof OlapTable) {
             OlapTable olapTable = (OlapTable) this;
@@ -367,6 +552,13 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         return false;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isTemporaryTable() {
+        return false;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public List<Column> getFullSchema() {
         return fullSchema;
     }
@@ -376,18 +568,46 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         return fullSchema;
     }
 
+<<<<<<< HEAD
     public void setNewFullSchema(List<Column> newSchema) {
         this.fullSchema = newSchema;
         this.nameToColumn.clear();
         for (Column col : fullSchema) {
             nameToColumn.put(col.getName(), col);
         }
+=======
+    public Map<ColumnId, Column> getIdToColumn() {
+        return idToColumn;
+    }
+
+    public void setNewFullSchema(List<Column> newSchema) {
+        this.fullSchema = newSchema;
+        updateSchemaIndex();
+    }
+
+    protected void updateSchemaIndex() {
+        Map<String, Column> newNameToColumn = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+        Map<ColumnId, Column> newIdToColumn = Maps.newTreeMap(ColumnId.CASE_INSENSITIVE_ORDER);
+        for (Column column : this.fullSchema) {
+            newNameToColumn.put(column.getName(), column);
+            newIdToColumn.put(column.getColumnId(), column);
+        }
+        this.nameToColumn = newNameToColumn;
+        this.idToColumn = newIdToColumn;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public Column getColumn(String name) {
         return nameToColumn.get(name);
     }
 
+<<<<<<< HEAD
+=======
+    public Column getColumn(ColumnId columnId) {
+        return nameToColumn.get(columnId.getId());
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public boolean containColumn(String columnName) {
         return nameToColumn.containsKey(columnName);
     }
@@ -396,19 +616,36 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         return new ArrayList<>(nameToColumn.values());
     }
 
+<<<<<<< HEAD
+=======
+    public void addColumn(Column column) {
+        fullSchema.add(column);
+        nameToColumn.put(column.getName(), column);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public long getCreateTime() {
         return createTime;
     }
 
     public String getTableLocation() {
+<<<<<<< HEAD
         String msg = "The getTableLocation() method needs to be implemented.";
         throw new NotImplementedException(msg);
+=======
+        throw new NotImplementedException();
+    }
+
+    public Map<String, Column> getNameToColumn() {
+        return nameToColumn;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public TTableDescriptor toThrift(List<ReferencedPartitionInfo> partitions) {
         return null;
     }
 
+<<<<<<< HEAD
     public static Table read(DataInput in) throws IOException {
         Table table;
         TableType type = TableType.deserialize(Text.readString(in));
@@ -502,13 +739,22 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
 
         // read create time
         this.createTime = in.readLong();
+=======
+    @Override
+    public void write(DataOutput out) throws IOException {
+        Text.writeString(out, GsonUtils.GSON.toJson(this));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
     public void gsonPostProcess() throws IOException {
+<<<<<<< HEAD
         for (Column column : fullSchema) {
             this.nameToColumn.put(column.getName(), column);
         }
+=======
+        updateSchemaIndex();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         relatedMaterializedViews = Sets.newConcurrentHashSet();
     }
 
@@ -548,6 +794,13 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         return Collections.emptyList();
     }
 
+<<<<<<< HEAD
+=======
+    public PhysicalPartition getPhysicalPartition(long partitionId) {
+        return null;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public Set<String> getDistributionColumnNames() {
         return Collections.emptySet();
     }
@@ -639,7 +892,11 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
             return false;
         }
 
+<<<<<<< HEAD
         ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentColocateIndex();
+=======
+        ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (colocateIndex.isColocateTable(getId())) {
             boolean isGroupUnstable = colocateIndex.isGroupUnstable(colocateIndex.getGroup(getId()));
             if (!isLocalBalance || isGroupUnstable) {
@@ -651,8 +908,12 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
             }
         }
 
+<<<<<<< HEAD
         OlapTable olapTable = (OlapTable) this;
         return !isLocalBalance || olapTable.getKeysType() != KeysType.PRIMARY_KEYS;
+=======
+        return true;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public boolean hasAutoIncrementColumn() {
@@ -698,7 +959,11 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
     /**
      * Delete this table permanently. Implementations can perform necessary cleanup work.
      *
+<<<<<<< HEAD
      * @param dbId ID of the database to which the table belongs
+=======
+     * @param dbId   ID of the database to which the table belongs
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
      * @param replay is this a log replay operation.
      * @return Returns true if the deletion task was performed successfully, false otherwise.
      */
@@ -708,6 +973,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
 
     /**
      * Delete thie table from {@link CatalogRecycleBin}
+<<<<<<< HEAD
+=======
+     *
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
      * @param replay is this a log relay operation.
      * @return Returns true if the deletion task was performed successfully, false otherwise.
      */
@@ -750,6 +1019,13 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         return true;
     }
 
+<<<<<<< HEAD
+=======
+    public List<String> getDataColumnNames() {
+        throw new NotImplementedException();
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public List<Column> getPartitionColumns() {
         throw new NotImplementedException();
     }
@@ -766,6 +1042,17 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         return false;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean supportPreCollectMetadata() {
+        return false;
+    }
+
+    public boolean isTemporal() {
+        return false;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public boolean hasUniqueConstraints() {
         List<UniqueConstraint> uniqueConstraint = getUniqueConstraints();
         return uniqueConstraint != null;
@@ -794,6 +1081,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         return this.foreignKeyConstraints != null && !this.foreignKeyConstraints.isEmpty();
     }
 
+<<<<<<< HEAD
     public synchronized List<Long> allocatePartitionIdByKey(List<PartitionKey> keys) {
         long size = partitionKeyToId.size();
         List<Long> ret = new ArrayList<>();
@@ -809,10 +1097,20 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         return ret;
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public boolean isTable() {
         return !type.equals(TableType.MATERIALIZED_VIEW) &&
                 !type.equals(TableType.CLOUD_NATIVE_MATERIALIZED_VIEW) &&
                 !type.equals(TableType.VIEW) &&
+<<<<<<< HEAD
                 !type.equals(TableType.HIVE_VIEW);
+=======
+                !isConnectorView();
+    }
+
+    public boolean isSupportBackupRestore() {
+        return isOlapTableOrMaterializedView() || isOlapView();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }

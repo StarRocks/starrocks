@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # bitmap_andnot
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Returns bitmap values that exist in `lhs` but do not exist in `rhs`, and returns the new bitmap.
 

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # array_generate
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Returns an array of distinct values within the range specified by `start` and `end`, with an increment of `step`.
 

@@ -12,10 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
 package com.starrocks.connector.hive;
 
 import com.starrocks.connector.hive.RemoteFileInputFormat;
+=======
+package com.starrocks.connector.hive;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.THdfsFileFormat;
 import org.junit.Assert;
 import org.junit.Test;

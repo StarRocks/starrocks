@@ -86,10 +86,17 @@ public:
 
     std::shared_ptr<LoadChannel> remove_load_channel(const UniqueId& load_id);
 
+<<<<<<< HEAD
     void close();
 
     void abort_txn(int64_t txn_id);
 
+=======
+    void abort_txn(int64_t txn_id);
+
+    void close();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 private:
     static void* load_channel_clean_bg_worker(void* arg);
 

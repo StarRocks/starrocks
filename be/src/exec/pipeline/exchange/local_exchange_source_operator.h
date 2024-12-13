@@ -23,6 +23,7 @@
 
 namespace starrocks::pipeline {
 
+<<<<<<< HEAD
 struct PartitionKey {
     PartitionKey() = default;
 
@@ -53,6 +54,8 @@ struct PartitionKeyComparator {
     }
 };
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 class LocalExchangeSourceOperator final : public SourceOperator {
     class PartitionChunk {
     public:
@@ -75,6 +78,7 @@ class LocalExchangeSourceOperator final : public SourceOperator {
         const size_t memory_usage;
     };
 
+<<<<<<< HEAD
     struct PendingPartitionChunks {
         PendingPartitionChunks(std::queue<PartitionChunk> partition_chunk_queue_, uint32_t index_, size_t memory_usage_)
                 : partition_chunk_queue(std::move(partition_chunk_queue_)),
@@ -84,22 +88,40 @@ class LocalExchangeSourceOperator final : public SourceOperator {
         std::queue<PartitionChunk> partition_chunk_queue;
         int64_t partition_row_nums;
         size_t memory_usage;
+=======
+    struct PartialChunks {
+        std::queue<std::unique_ptr<Chunk>> queue;
+        int64_t num_rows{0};
+        size_t memory_usage{0};
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     };
 
 public:
     LocalExchangeSourceOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                                 const std::shared_ptr<ChunkBufferMemoryManager>& memory_manager)
             : SourceOperator(factory, id, "local_exchange_source", plan_node_id, true, driver_sequence),
+<<<<<<< HEAD
               _memory_manager(memory_manager) {}
 
     Status add_chunk(ChunkPtr chunk);
+=======
+              _memory_manager(memory_manager) {
+        _local_memory_limit = _memory_manager->get_memory_limit_per_driver() * 0.8;
+    }
+
+    void add_chunk(ChunkPtr chunk);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     Status add_chunk(ChunkPtr chunk, const std::shared_ptr<std::vector<uint32_t>>& indexes, uint32_t from,
                      uint32_t size, size_t memory_bytes);
 
+<<<<<<< HEAD
     Status add_chunk(ChunkPtr chunk, const std::shared_ptr<std::vector<uint32_t>>& indexes, uint32_t from,
                      uint32_t size, Columns& partition_columns, const std::vector<ExprContext*>& _partition_expr_ctxs,
                      size_t memory_bytes);
+=======
+    Status add_chunk(const std::vector<std::string>& partition_key, std::unique_ptr<Chunk> chunk);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     bool has_output() const override;
 
@@ -128,6 +150,15 @@ public:
 
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
+<<<<<<< HEAD
+=======
+    bool releaseable() const override { return true; }
+
+    void enter_release_memory_mode() override;
+    void set_execute_mode(int performance_level) override;
+    void update_exec_stats(RuntimeState* state) override {}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 private:
     ChunkPtr _pull_passthrough_chunk(RuntimeState* state);
 
@@ -137,6 +168,7 @@ private:
 
     int64_t _key_partition_max_rows() const;
 
+<<<<<<< HEAD
     PendingPartitionChunks& _max_row_partition_chunks();
 
     bool _local_buffer_almost_full() const {
@@ -146,6 +178,15 @@ private:
     bool _key_partition_pending_chunk_empty() const {
         for (const auto& pending_chunks : _partitions) {
             if (!pending_chunks.second.partition_chunk_queue.empty()) {
+=======
+    PartialChunks& _max_row_partition_chunks();
+
+    bool _local_buffer_almost_full() const { return _local_memory_usage >= _local_memory_limit; }
+
+    bool _key_partition_pending_chunk_empty() const {
+        for (const auto& pending_chunks : _partition_key2partial_chunks) {
+            if (!pending_chunks.second.queue.empty()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 return false;
             }
         }
@@ -157,11 +198,19 @@ private:
     std::queue<PartitionChunk> _partition_chunk_queue;
     size_t _partition_rows_num = 0;
     size_t _local_memory_usage = 0;
+<<<<<<< HEAD
+=======
+    size_t _local_memory_limit = 0;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // TODO(KKS): make it lock free
     mutable std::mutex _chunk_lock;
     const std::shared_ptr<ChunkBufferMemoryManager>& _memory_manager;
+<<<<<<< HEAD
     std::map<PartitionKeyPtr, PendingPartitionChunks, PartitionKeyComparator> _partitions;
+=======
+    std::unordered_map<std::vector<std::string>, PartialChunks> _partition_key2partial_chunks;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // STREAM MV
     bool _is_epoch_finished = false;

@@ -24,9 +24,15 @@ public class MockIcebergTable extends IcebergTable {
     private final String tableIdentifier;
 
     public MockIcebergTable(long id, String srTableName, String catalogName, String resourceName, String remoteDbName,
+<<<<<<< HEAD
                             String remoteTableName, List<Column> schema, org.apache.iceberg.Table nativeTable,
                             Map<String, String> icebergProperties, String tableIdentifier) {
         super(id, srTableName, catalogName, resourceName, remoteDbName, remoteTableName, schema,
+=======
+                        String remoteTableName, List<Column> schema, org.apache.iceberg.Table nativeTable,
+                        Map<String, String> icebergProperties, String tableIdentifier, String comment) {
+        super(id, srTableName, catalogName, resourceName, remoteDbName, remoteTableName, comment, schema,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 nativeTable, icebergProperties);
         this.tableIdentifier = tableIdentifier;
     }

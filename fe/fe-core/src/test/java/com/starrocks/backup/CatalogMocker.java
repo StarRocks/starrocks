@@ -55,6 +55,10 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.PhysicalPartition;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.RangePartitionInfo;
@@ -63,15 +67,23 @@ import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.TabletMeta;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.View;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.Util;
 import com.starrocks.load.Load;
+<<<<<<< HEAD
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
+=======
+import com.starrocks.persist.EditLog;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.system.SystemInfoService;
@@ -105,6 +117,10 @@ public class CatalogMocker {
 
     public static final String TEST_SINGLE_PARTITION_NAME = TEST_TBL_NAME;
     public static final long TEST_SINGLE_PARTITION_ID = 40000;
+<<<<<<< HEAD
+=======
+    public static final long TEST_SINGLE_PHYSICAL_PARTITION_ID = 40011;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static final long TEST_TABLET0_ID = 60000;
     public static final long TEST_REPLICA0_ID = 70000;
     public static final long TEST_REPLICA1_ID = 70001;
@@ -128,10 +144,18 @@ public class CatalogMocker {
     public static final String TEST_TBL3_NAME = "test_tbl3";
     public static final long TEST_TBL3_ID = 30003;
 
+<<<<<<< HEAD
+=======
+    // partition olap table with multi physical partition
+    public static final String TEST_TBL4_NAME = "test_tbl4";
+    public static final long TEST_TBL4_ID = 30004;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // list partition olap table
     public static final String TEST_TBL5_NAME = "test_tbl5";
     public static final long TEST_TBL5_ID = 30005;
 
+<<<<<<< HEAD
     public static final String TEST_PARTITION1_NAME = "p1";
     public static final long TEST_PARTITION1_ID = 40001;
     public static final String TEST_PARTITION2_NAME = "p2";
@@ -140,6 +164,24 @@ public class CatalogMocker {
     public static final long TEST_PARTITION1_PK_ID = 40003;
     public static final String TEST_PARTITION2_NAME_PK = "p2_pk";
     public static final long TEST_PARTITION2_PK_ID = 40004;
+=======
+    // logical view
+    public static final String TEST_TBL6_NAME = "test_tbl6";
+    public static final long TEST_TBL6_ID = 30006;
+
+    public static final String TEST_PARTITION1_NAME = "p1";
+    public static final long TEST_PARTITION1_ID = 40001;
+    public static final long TEST_PH_PARTITION1_ID = 40011;
+    public static final String TEST_PARTITION2_NAME = "p2";
+    public static final long TEST_PARTITION2_ID = 40002;
+    public static final long TEST_PH_PARTITION2_ID = 40012;
+    public static final String TEST_PARTITION1_NAME_PK = "p1_pk";
+    public static final long TEST_PARTITION1_PK_ID = 40003;
+    public static final long TEST_PH_PARTITION1_PK_ID = 40013;
+    public static final String TEST_PARTITION2_NAME_PK = "p2_pk";
+    public static final long TEST_PARTITION2_PK_ID = 40004;
+    public static final long TEST_PH_PARTITION2_PK_ID = 40014;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public static final long TEST_BASE_TABLET_P1_ID = 60001;
     public static final long TEST_REPLICA3_ID = 70003;
@@ -240,6 +282,7 @@ public class CatalogMocker {
         ROLLUP_SCHEMA_HASH = Util.schemaHash(0, TEST_ROLLUP_SCHEMA, null, 0);
     }
 
+<<<<<<< HEAD
     private static Auth fetchAdminAccess() {
         Auth auth = new Auth();
         new Expectations(auth) {
@@ -260,6 +303,8 @@ public class CatalogMocker {
         return auth;
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static SystemInfoService fetchSystemInfoService() {
         SystemInfoService clusterInfo = new SystemInfoService();
         return clusterInfo;
@@ -273,7 +318,12 @@ public class CatalogMocker {
         MaterializedIndex baseIndex = new MaterializedIndex(TEST_TBL_ID, IndexState.NORMAL);
         DistributionInfo distributionInfo = new RandomDistributionInfo(32);
         Partition partition =
+<<<<<<< HEAD
                 new Partition(TEST_SINGLE_PARTITION_ID, TEST_SINGLE_PARTITION_NAME, baseIndex, distributionInfo);
+=======
+                new Partition(TEST_SINGLE_PARTITION_ID, TEST_SINGLE_PHYSICAL_PARTITION_ID,
+                        TEST_SINGLE_PARTITION_NAME, baseIndex, distributionInfo);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         PartitionInfo partitionInfo = new SinglePartitionInfo();
         partitionInfo.setReplicationNum(TEST_SINGLE_PARTITION_ID, (short) 3);
         partitionInfo.setIsInMemory(TEST_SINGLE_PARTITION_ID, false);
@@ -322,19 +372,33 @@ public class CatalogMocker {
         DistributionInfo distributionInfo2 =
                 new HashDistributionInfo(32, Lists.newArrayList(TEST_TBL_BASE_SCHEMA.get(1)));
         Partition partition1 =
+<<<<<<< HEAD
                 new Partition(TEST_PARTITION1_ID, TEST_PARTITION1_NAME, baseIndexP1, distributionInfo2);
         Partition partition2 =
                 new Partition(TEST_PARTITION2_ID, TEST_PARTITION2_NAME, baseIndexP2, distributionInfo2);
         RangePartitionInfo rangePartitionInfo = new RangePartitionInfo(Lists.newArrayList(TEST_TBL_BASE_SCHEMA.get(0)));
 
+=======
+                new Partition(TEST_PARTITION1_ID, TEST_PH_PARTITION1_ID, TEST_PARTITION1_NAME, baseIndexP1, distributionInfo2);
+        Partition partition2 =
+                new Partition(TEST_PARTITION2_ID, TEST_PH_PARTITION2_ID, TEST_PARTITION2_NAME, baseIndexP2, distributionInfo2);
+        RangePartitionInfo rangePartitionInfo = new RangePartitionInfo(Lists.newArrayList(TEST_TBL_BASE_SCHEMA.get(0)));
+        DataProperty dataPropertyP1 = new DataProperty(TStorageMedium.HDD);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         PartitionKey rangeP1Lower =
                 PartitionKey.createInfinityPartitionKey(Lists.newArrayList(TEST_TBL_BASE_SCHEMA.get(0)), false);
         PartitionKey rangeP1Upper =
                 PartitionKey.createPartitionKey(Lists.newArrayList(new PartitionValue("10")),
                         Lists.newArrayList(TEST_TBL_BASE_SCHEMA.get(0)));
         Range<PartitionKey> rangeP1 = Range.closedOpen(rangeP1Lower, rangeP1Upper);
+<<<<<<< HEAD
         rangePartitionInfo.setRange(TEST_PARTITION1_ID, false, rangeP1);
 
+=======
+        rangePartitionInfo.addPartition(TEST_PARTITION1_ID, false, rangeP1, dataPropertyP1, (short) 3, false);
+
+        DataProperty dataPropertyP2 = new DataProperty(TStorageMedium.HDD);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         PartitionKey rangeP2Lower =
                 PartitionKey.createPartitionKey(Lists.newArrayList(new PartitionValue("10")),
                         Lists.newArrayList(TEST_TBL_BASE_SCHEMA.get(0)));
@@ -342,6 +406,7 @@ public class CatalogMocker {
                 PartitionKey.createPartitionKey(Lists.newArrayList(new PartitionValue("20")),
                         Lists.newArrayList(TEST_TBL_BASE_SCHEMA.get(0)));
         Range<PartitionKey> rangeP2 = Range.closedOpen(rangeP2Lower, rangeP2Upper);
+<<<<<<< HEAD
         rangePartitionInfo.setRange(TEST_PARTITION2_ID, false, rangeP2);
 
         rangePartitionInfo.setReplicationNum(TEST_PARTITION1_ID, (short) 3);
@@ -350,6 +415,9 @@ public class CatalogMocker {
         DataProperty dataPropertyP2 = new DataProperty(TStorageMedium.HDD);
         rangePartitionInfo.setDataProperty(TEST_PARTITION1_ID, dataPropertyP1);
         rangePartitionInfo.setDataProperty(TEST_PARTITION2_ID, dataPropertyP2);
+=======
+        rangePartitionInfo.addPartition(TEST_PARTITION2_ID, false, rangeP2, dataPropertyP2, (short) 3, false);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         OlapTable olapTable2 = new OlapTable(TEST_TBL2_ID, TEST_TBL2_NAME, TEST_TBL_BASE_SCHEMA,
                 KeysType.AGG_KEYS, rangePartitionInfo, distributionInfo2);
@@ -399,7 +467,11 @@ public class CatalogMocker {
         rollupTabletP1.addReplica(replica10);
         rollupTabletP1.addReplica(replica11);
 
+<<<<<<< HEAD
         partition1.createRollupIndex(rollupIndexP1);
+=======
+        partition1.getDefaultPhysicalPartition().createRollupIndex(rollupIndexP1);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // rollup index p2
         MaterializedIndex rollupIndexP2 = new MaterializedIndex(TEST_ROLLUP_ID, IndexState.NORMAL);
@@ -415,7 +487,11 @@ public class CatalogMocker {
         rollupTabletP2.addReplica(replica13);
         rollupTabletP2.addReplica(replica14);
 
+<<<<<<< HEAD
         partition2.createRollupIndex(rollupIndexP2);
+=======
+        partition2.getDefaultPhysicalPartition().createRollupIndex(rollupIndexP2);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         olapTable2.setIndexMeta(TEST_ROLLUP_ID, TEST_ROLLUP_NAME, TEST_ROLLUP_SCHEMA, 0, ROLLUP_SCHEMA_HASH,
                 (short) 1, TStorageType.COLUMN, KeysType.AGG_KEYS);
@@ -427,9 +503,17 @@ public class CatalogMocker {
         DistributionInfo distributionInfo3 =
                 new HashDistributionInfo(32, Lists.newArrayList(TEST_TBL_BASE_SCHEMA.get(1)));
         Partition partition1Pk =
+<<<<<<< HEAD
                 new Partition(TEST_PARTITION1_PK_ID, TEST_PARTITION1_NAME_PK, baseIndexP1Pk, distributionInfo3);
         Partition partition2Pk =
                 new Partition(TEST_PARTITION2_PK_ID, TEST_PARTITION2_NAME_PK, baseIndexP2Pk, distributionInfo3);
+=======
+                new Partition(TEST_PARTITION1_PK_ID, TEST_PH_PARTITION1_ID,
+                        TEST_PARTITION1_NAME_PK, baseIndexP1Pk, distributionInfo3);
+        Partition partition2Pk =
+                new Partition(TEST_PARTITION2_PK_ID, TEST_PH_PARTITION2_ID,
+                        TEST_PARTITION2_NAME_PK, baseIndexP2Pk, distributionInfo3);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         RangePartitionInfo rangePartitionInfoPk = new RangePartitionInfo(Lists.newArrayList(TEST_TBL_BASE_SCHEMA.get(0)));
 
         PartitionKey rangeP1LowerPk =
@@ -490,12 +574,72 @@ public class CatalogMocker {
         olapTable3.addPartition(partition2Pk);
         db.registerTableUnlocked(olapTable3);
 
+<<<<<<< HEAD
         // 5. list partition olap table
+=======
+        // 5. range partition multi physical partition olap table
+        {
+            baseIndexP1 = new MaterializedIndex(TEST_TBL4_ID, IndexState.NORMAL);
+            baseIndexP2 = new MaterializedIndex(TEST_TBL4_ID, IndexState.NORMAL);
+            DistributionInfo distributionInfo4 = new RandomDistributionInfo(1);
+            partition1 =
+                    new Partition(TEST_PARTITION1_ID, TEST_PH_PARTITION1_ID,
+                            TEST_PARTITION1_NAME, baseIndexP1, distributionInfo4);
+
+            PhysicalPartition physicalPartition2 = new PhysicalPartition(
+                        TEST_PARTITION2_ID, "", TEST_PARTITION1_ID, baseIndexP2);
+            partition1.addSubPartition(physicalPartition2);
+
+            rangePartitionInfo = new RangePartitionInfo(Lists.newArrayList(TEST_TBL_BASE_SCHEMA.get(0)));
+            rangePartitionInfo.addPartition(TEST_PARTITION1_ID, false, rangeP1, dataPropertyP1, (short) 3, false);
+
+            baseTabletP1 = new LocalTablet(TEST_BASE_TABLET_P1_ID);
+            tabletMetaBaseTabletP1 = new TabletMeta(TEST_DB_ID, TEST_TBL4_ID, TEST_PARTITION1_ID,
+                    TEST_TBL4_ID, SCHEMA_HASH, TStorageMedium.HDD);
+            baseIndexP1.addTablet(baseTabletP1, tabletMetaBaseTabletP1);
+            replica3 = new Replica(TEST_REPLICA3_ID, BACKEND1_ID, 0, ReplicaState.NORMAL);
+            replica4 = new Replica(TEST_REPLICA4_ID, BACKEND2_ID, 0, ReplicaState.NORMAL);
+            replica5 = new Replica(TEST_REPLICA5_ID, BACKEND3_ID, 0, ReplicaState.NORMAL);
+
+            baseTabletP1.addReplica(replica3);
+            baseTabletP1.addReplica(replica4);
+            baseTabletP1.addReplica(replica5);
+
+            baseTabletP2 = new LocalTablet(TEST_BASE_TABLET_P2_ID);
+            tabletMetaBaseTabletP2 = new TabletMeta(TEST_DB_ID, TEST_TBL4_ID, TEST_PARTITION2_ID,
+                    TEST_TBL4_ID, SCHEMA_HASH, TStorageMedium.HDD);
+            baseIndexP2.addTablet(baseTabletP2, tabletMetaBaseTabletP2);
+            replica6 = new Replica(TEST_REPLICA6_ID, BACKEND1_ID, 0, ReplicaState.NORMAL);
+            replica7 = new Replica(TEST_REPLICA7_ID, BACKEND2_ID, 0, ReplicaState.NORMAL);
+            replica8 = new Replica(TEST_REPLICA8_ID, BACKEND3_ID, 0, ReplicaState.NORMAL);
+
+            baseTabletP2.addReplica(replica6);
+            baseTabletP2.addReplica(replica7);
+            baseTabletP2.addReplica(replica8);
+
+            OlapTable olapTable4 = new OlapTable(TEST_TBL4_ID, TEST_TBL4_NAME, TEST_TBL_BASE_SCHEMA,
+                    KeysType.DUP_KEYS, rangePartitionInfo, distributionInfo4);
+            Deencapsulation.setField(olapTable4, "baseIndexId", TEST_TBL4_ID);
+            olapTable4.setIndexMeta(TEST_TBL4_ID, TEST_TBL4_NAME, TEST_TBL_BASE_SCHEMA, 0, SCHEMA_HASH, (short) 1,
+                            TStorageType.COLUMN, KeysType.DUP_KEYS);
+
+            olapTable4.addPartition(partition1);
+
+            db.registerTableUnlocked(olapTable4);
+        }
+
+        // 6. list partition olap table
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         {
             baseIndexP1 = new MaterializedIndex(TEST_TBL5_ID, IndexState.NORMAL);
             baseIndexP2 = new MaterializedIndex(TEST_TBL5_ID, IndexState.NORMAL);
             DistributionInfo distributionInfo5 = new RandomDistributionInfo(1);
+<<<<<<< HEAD
             partition1 = new Partition(TEST_PARTITION1_ID, TEST_PARTITION1_NAME, baseIndexP1, distributionInfo5);
+=======
+            partition1 = new Partition(TEST_PARTITION1_ID, TEST_PH_PARTITION1_ID,
+                    TEST_PARTITION1_NAME, baseIndexP1, distributionInfo5);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
             ListPartitionInfo listPartitionInfo = new ListPartitionInfo(PartitionType.LIST,
                     Lists.newArrayList(TEST_TBL_BASE_SCHEMA.get(0)));
@@ -537,11 +681,18 @@ public class CatalogMocker {
             olapTable5.addPartition(partition1);
 
             db.registerTableUnlocked(olapTable5);
+<<<<<<< HEAD
+=======
+
+            View view = new View(TEST_TBL6_ID, TEST_TBL6_NAME, TEST_TBL_BASE_SCHEMA);
+            db.registerTableUnlocked(view);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return db;
     }
 
     public static GlobalStateMgr fetchAdminCatalog() {
+<<<<<<< HEAD
         try {
             FakeEditLog fakeEditLog = new FakeEditLog();
 
@@ -616,5 +767,45 @@ public class CatalogMocker {
             }
         };
         return auth;
+=======
+        FakeEditLog fakeEditLog = new FakeEditLog();
+
+        GlobalStateMgr globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
+
+        Database db = new Database();
+
+        new Expectations(globalStateMgr) {
+            {
+                globalStateMgr.getLocalMetastore().getDb(TEST_DB_NAME);
+                minTimes = 0;
+                result = db;
+
+                globalStateMgr.getLocalMetastore().getDb(WRONG_DB);
+                minTimes = 0;
+                result = null;
+
+                globalStateMgr.getLocalMetastore().getDb(TEST_DB_ID);
+                minTimes = 0;
+                result = db;
+
+                globalStateMgr.getLocalMetastore().getDb(anyString);
+                minTimes = 0;
+                result = new Database();
+
+                globalStateMgr.getLocalMetastore().listDbNames();
+                minTimes = 0;
+                result = Lists.newArrayList(TEST_DB_NAME);
+
+                globalStateMgr.getLoadInstance();
+                minTimes = 0;
+                result = new Load();
+
+                globalStateMgr.getEditLog();
+                minTimes = 0;
+                result = new EditLog(new ArrayBlockingQueue<>(100));
+            }
+        };
+        return globalStateMgr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }

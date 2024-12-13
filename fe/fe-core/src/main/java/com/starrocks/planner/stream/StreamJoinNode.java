@@ -49,11 +49,14 @@ public class StreamJoinNode extends JoinNode {
     }
 
     @Override
+<<<<<<< HEAD
     public boolean canUsePipeLine() {
         return getChildren().stream().allMatch(PlanNode::canUsePipeLine);
     }
 
     @Override
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     protected void toThrift(TPlanNode msg) {
         msg.node_type = TPlanNodeType.STREAM_JOIN_NODE;
         msg.stream_join_node = new TStreamJoinNode();

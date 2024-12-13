@@ -34,18 +34,33 @@
 
 #include "http/action/stream_load.h"
 
+<<<<<<< HEAD
+=======
+#include <event2/buffer.h>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include <event2/http.h>
 #include <event2/http_struct.h>
 #include <gtest/gtest.h>
 #include <rapidjson/document.h>
 
+<<<<<<< HEAD
+=======
+#include <cstring>
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/HeartbeatService_types.h"
 #include "http/http_channel.h"
 #include "http/http_request.h"
 #include "runtime/exec_env.h"
 #include "runtime/stream_load/load_stream_mgr.h"
+<<<<<<< HEAD
 #include "runtime/stream_load/stream_load_executor.h"
+=======
+#include "runtime/stream_load/stream_load_context.h"
+#include "runtime/stream_load/stream_load_executor.h"
+#include "testutil/sync_point.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "util/brpc_stub_cache.h"
 #include "util/concurrent_limiter.h"
 #include "util/cpu_info.h"
@@ -54,11 +69,19 @@ class mg_connection;
 
 namespace starrocks {
 
+<<<<<<< HEAD
 extern void (*s_injected_send_reply)(HttpRequest*, HttpStatus, const std::string&);
 
 namespace {
 static std::string k_response_str;
 static void inject_send_reply(HttpRequest* request, HttpStatus status, const std::string& content) {
+=======
+extern void (*s_injected_send_reply)(HttpRequest*, HttpStatus, std::string_view);
+
+namespace {
+static std::string k_response_str;
+static void inject_send_reply(HttpRequest* request, HttpStatus status, std::string_view content) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     k_response_str = content;
 }
 } // namespace
@@ -67,7 +90,10 @@ extern TLoadTxnBeginResult k_stream_load_begin_result;
 extern TLoadTxnCommitResult k_stream_load_commit_result;
 extern TLoadTxnRollbackResult k_stream_load_rollback_result;
 extern TStreamLoadPutResult k_stream_load_put_result;
+<<<<<<< HEAD
 extern Status k_stream_load_plan_status;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 class StreamLoadActionTest : public testing::Test {
 public:
@@ -81,7 +107,10 @@ public:
         k_stream_load_commit_result = TLoadTxnCommitResult();
         k_stream_load_rollback_result = TLoadTxnRollbackResult();
         k_stream_load_put_result = TStreamLoadPutResult();
+<<<<<<< HEAD
         k_stream_load_plan_status = Status::OK();
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         k_response_str = "";
         config::streaming_load_max_mb = 1;
 
@@ -217,6 +246,29 @@ TEST_F(StreamLoadActionTest, commit_fail) {
     ASSERT_STREQ("Fail", doc["Status"].GetString());
 }
 
+<<<<<<< HEAD
+=======
+TEST_F(StreamLoadActionTest, commit_try) {
+    StreamLoadAction action(&_env, _limiter.get());
+
+    HttpRequest request(_evhttp_req);
+    struct evhttp_request ev_req;
+    ev_req.remote_host = nullptr;
+    request._ev_req = &ev_req;
+    request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "16");
+    Status status = Status::ServiceUnavailable("service_unavailable");
+    status.to_thrift(&k_stream_load_commit_result.status);
+    request.set_handler(&action);
+    action.on_header(&request);
+    action.handle(&request);
+
+    rapidjson::Document doc;
+    doc.Parse(k_response_str.c_str());
+    ASSERT_STREQ("Fail", doc["Status"].GetString());
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 TEST_F(StreamLoadActionTest, begin_fail) {
     StreamLoadAction action(&_env, _limiter.get());
 
@@ -255,6 +307,13 @@ TEST_F(StreamLoadActionTest, receive_failed) {
 #endif
 
 TEST_F(StreamLoadActionTest, plan_fail) {
+<<<<<<< HEAD
+=======
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->SetCallBack("StreamLoadExecutor::execute_plan_fragment:1",
+                                          [](void* arg) { *((Status*)arg) = Status::InternalError("TestFail"); });
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     StreamLoadAction action(&_env, _limiter.get());
 
     HttpRequest request(_evhttp_req);
@@ -263,7 +322,11 @@ TEST_F(StreamLoadActionTest, plan_fail) {
     request._ev_req = &ev_req;
     request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
     request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "16");
+<<<<<<< HEAD
     k_stream_load_plan_status = Status::InternalError("TestFail");
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     request.set_handler(&action);
     action.on_header(&request);
     action.handle(&request);
@@ -271,6 +334,242 @@ TEST_F(StreamLoadActionTest, plan_fail) {
     rapidjson::Document doc;
     doc.Parse(k_response_str.c_str());
     ASSERT_STREQ("Fail", doc["Status"].GetString());
+<<<<<<< HEAD
+=======
+
+    SyncPoint::GetInstance()->ClearCallBack("StreamLoadExecutor::execute_plan_fragment:1");
+    SyncPoint::GetInstance()->DisableProcessing();
+}
+
+TEST_F(StreamLoadActionTest, huge_malloc) {
+    StreamLoadAction action(&_env, _limiter.get());
+    auto ctx = new StreamLoadContext(&_env);
+    ctx->ref();
+    ctx->body_sink = std::make_shared<StreamLoadPipe>();
+    HttpRequest request(_evhttp_req);
+    std::string content = "abc";
+
+    struct evhttp_request ev_req;
+    ev_req.remote_host = nullptr;
+    auto evb = evbuffer_new();
+    ev_req.input_buffer = evb;
+    request._ev_req = &ev_req;
+
+    request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "16");
+    request._headers.emplace(HTTP_DB_KEY, "db");
+    request._headers.emplace(HTTP_LABEL_KEY, "123");
+    request._headers.emplace(HTTP_COLUMN_SEPARATOR, "|");
+    request.set_handler(&action);
+    request.set_handler_ctx(ctx);
+
+    evbuffer_add(evb, content.data(), content.size());
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->SetCallBack("ByteBuffer::allocate_with_tracker",
+                                          [](void* arg) { *((Status*)arg) = Status::MemoryLimitExceeded("TestFail"); });
+    ctx->status = Status::OK();
+    action.on_chunk_data(&request);
+    ASSERT_TRUE(ctx->status.is_mem_limit_exceeded());
+    SyncPoint::GetInstance()->ClearCallBack("ByteBuffer::allocate_with_tracker");
+    SyncPoint::GetInstance()->DisableProcessing();
+    ctx->status = Status::OK();
+    action.on_chunk_data(&request);
+    ASSERT_TRUE(ctx->status.ok());
+
+    evbuffer_add(evb, content.data(), content.size());
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->SetCallBack("ByteBuffer::allocate_with_tracker",
+                                          [](void* arg) { *((Status*)arg) = Status::MemoryLimitExceeded("TestFail"); });
+    ctx->buffer = ByteBufferPtr(new ByteBuffer(1));
+    ctx->status = Status::OK();
+    action.on_chunk_data(&request);
+    ASSERT_TRUE(ctx->status.is_mem_limit_exceeded());
+    ctx->buffer = nullptr;
+    SyncPoint::GetInstance()->ClearCallBack("ByteBuffer::allocate_with_tracker");
+    SyncPoint::GetInstance()->DisableProcessing();
+    ctx->buffer = ByteBufferPtr(new ByteBuffer(1));
+    ctx->status = Status::OK();
+    action.on_chunk_data(&request);
+    ASSERT_TRUE(ctx->status.ok());
+    ctx->buffer = nullptr;
+
+    evbuffer_add(evb, content.data(), content.size());
+    auto old_format = ctx->format;
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->SetCallBack("ByteBuffer::allocate_with_tracker",
+                                          [](void* arg) { *((Status*)arg) = Status::MemoryLimitExceeded("TestFail"); });
+    ctx->format = TFileFormatType::FORMAT_JSON;
+    ctx->buffer = ByteBufferPtr(new ByteBuffer(1));
+    ctx->status = Status::OK();
+    action.on_chunk_data(&request);
+    ASSERT_TRUE(ctx->status.is_mem_limit_exceeded());
+    ctx->buffer = nullptr;
+    SyncPoint::GetInstance()->ClearCallBack("ByteBuffer::allocate_with_tracker");
+    SyncPoint::GetInstance()->DisableProcessing();
+    ctx->format = TFileFormatType::FORMAT_JSON;
+    ctx->buffer = ByteBufferPtr(new ByteBuffer(1));
+    ctx->status = Status::OK();
+    action.on_chunk_data(&request);
+    ASSERT_TRUE(ctx->status.ok());
+    ctx->buffer = nullptr;
+    ctx->format = old_format;
+
+    request.set_handler_ctx(nullptr);
+    request.set_handler(nullptr);
+    if (ctx->unref()) {
+        delete ctx;
+    }
+    evbuffer_free(evb);
+}
+
+TEST_F(StreamLoadActionTest, batch_write_csv) {
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("BatchWriteMgr::append_data::cb");
+        SyncPoint::GetInstance()->ClearCallBack("BatchWriteMgr::append_data::success");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    StreamLoadAction action(&_env, _limiter.get());
+    HttpRequest request(_evhttp_req);
+
+    request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    request._params.emplace(HTTP_DB_KEY, "db");
+    request._params.emplace(HTTP_TABLE_KEY, "tbl");
+    request._headers.emplace(HTTP_LABEL_KEY, "batch_write_csv");
+    request._headers.emplace(HTTP_ENABLE_MERGE_COMMIT, "true");
+    request._headers.emplace(HTTP_MERGE_COMMIT_INTERVAL_MS, "1000");
+    request._headers.emplace(HTTP_MERGE_COMMIT_ASYNC, "true");
+
+    std::string content = "a|b|c|d";
+    struct evhttp_request ev_req;
+    ev_req.remote_host = nullptr;
+    auto evb = evbuffer_new();
+    DeferOp defer_evb([&] { evbuffer_free(evb); });
+    ev_req.input_buffer = evb;
+    request._ev_req = &ev_req;
+    request._headers.emplace(HTTP_FORMAT_KEY, "csv");
+    request._headers.emplace(HTTP_COLUMN_SEPARATOR, "|");
+    request._headers.emplace(HttpHeaders::CONTENT_LENGTH, std::to_string(content.length()));
+    request.set_handler(&action);
+
+    ASSERT_EQ(0, action.on_header(&request));
+    StreamLoadContext* ctx = static_cast<StreamLoadContext*>(request._handler_ctx);
+    ASSERT_NE(nullptr, ctx);
+    ASSERT_TRUE(ctx->status.ok());
+    ASSERT_TRUE(ctx->enable_batch_write);
+    ASSERT_NE(nullptr, ctx->buffer);
+    ASSERT_EQ(content.length(), ctx->buffer->limit);
+
+    evbuffer_add(evb, content.data(), content.size());
+    ctx->status = Status::OK();
+    action.on_chunk_data(&request);
+    ASSERT_TRUE(ctx->status.ok());
+    ASSERT_EQ(content.length(), ctx->buffer->pos);
+
+    SyncPoint::GetInstance()->SetCallBack("BatchWriteMgr::append_data::cb",
+                                          [&](void* arg) { EXPECT_EQ(ctx, *(StreamLoadContext**)arg); });
+    SyncPoint::GetInstance()->SetCallBack("BatchWriteMgr::append_data::success",
+                                          [](void* arg) { *(Status*)arg = Status::OK(); });
+    action.handle(&request);
+    ASSERT_TRUE(ctx->status.ok());
+    std::map<std::string, std::string> load_params = {{HTTP_ENABLE_MERGE_COMMIT, "true"},
+                                                      {HTTP_MERGE_COMMIT_INTERVAL_MS, "1000"},
+                                                      {HTTP_MERGE_COMMIT_ASYNC, "true"},
+                                                      {HTTP_FORMAT_KEY, "csv"},
+                                                      {HTTP_COLUMN_SEPARATOR, "|"}};
+    ASSERT_EQ(load_params, ctx->load_parameters);
+    ASSERT_EQ(content, std::string(ctx->buffer->ptr, ctx->buffer->limit));
+
+    rapidjson::Document doc;
+    doc.Parse(k_response_str.c_str());
+    ASSERT_STREQ("Success", doc["Status"].GetString());
+}
+
+TEST_F(StreamLoadActionTest, batch_write_json) {
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("BatchWriteMgr::append_data::cb");
+        SyncPoint::GetInstance()->ClearCallBack("BatchWriteMgr::append_data::success");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    StreamLoadAction action(&_env, _limiter.get());
+    HttpRequest request(_evhttp_req);
+
+    request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    request._params.emplace(HTTP_DB_KEY, "db");
+    request._params.emplace(HTTP_TABLE_KEY, "tbl");
+    request._headers.emplace(HTTP_LABEL_KEY, "batch_write_csv");
+    request._headers.emplace(HTTP_ENABLE_MERGE_COMMIT, "true");
+    request._headers.emplace(HTTP_MERGE_COMMIT_INTERVAL_MS, "1000");
+    request._headers.emplace(HTTP_MERGE_COMMIT_ASYNC, "true");
+
+    std::string content = "{\"c0\":\"a\",\"c1\":\"b\"}";
+    struct evhttp_request ev_req;
+    ev_req.remote_host = nullptr;
+    auto evb = evbuffer_new();
+    DeferOp defer_evb([&] { evbuffer_free(evb); });
+    ev_req.input_buffer = evb;
+    request._ev_req = &ev_req;
+    request._headers.emplace(HTTP_FORMAT_KEY, "json");
+    request._headers.emplace(HttpHeaders::CONTENT_LENGTH, std::to_string(content.length()));
+    request.set_handler(&action);
+
+    ASSERT_EQ(0, action.on_header(&request));
+    StreamLoadContext* ctx = static_cast<StreamLoadContext*>(request._handler_ctx);
+    ASSERT_NE(nullptr, ctx);
+    ASSERT_TRUE(ctx->status.ok());
+    ASSERT_TRUE(ctx->enable_batch_write);
+    ASSERT_NE(nullptr, ctx->buffer);
+    ASSERT_EQ(content.length(), ctx->buffer->limit);
+
+    evbuffer_add(evb, content.data(), content.size());
+    ctx->status = Status::OK();
+    action.on_chunk_data(&request);
+    ASSERT_TRUE(ctx->status.ok());
+    ASSERT_EQ(content.length(), ctx->buffer->pos);
+
+    SyncPoint::GetInstance()->SetCallBack("BatchWriteMgr::append_data::cb",
+                                          [&](void* arg) { EXPECT_EQ(ctx, *(StreamLoadContext**)arg); });
+    SyncPoint::GetInstance()->SetCallBack("BatchWriteMgr::append_data::success",
+                                          [](void* arg) { *(Status*)arg = Status::OK(); });
+    action.handle(&request);
+    ASSERT_TRUE(ctx->status.ok());
+    std::map<std::string, std::string> load_params = {{HTTP_ENABLE_MERGE_COMMIT, "true"},
+                                                      {HTTP_MERGE_COMMIT_INTERVAL_MS, "1000"},
+                                                      {HTTP_MERGE_COMMIT_ASYNC, "true"},
+                                                      {HTTP_FORMAT_KEY, "json"}};
+    ASSERT_EQ(load_params, ctx->load_parameters);
+    ASSERT_EQ(content, std::string(ctx->buffer->ptr, ctx->buffer->limit));
+
+    rapidjson::Document doc;
+    doc.Parse(k_response_str.c_str());
+    ASSERT_STREQ("Success", doc["Status"].GetString());
+}
+
+TEST_F(StreamLoadActionTest, enable_batch_write_wrong_argument) {
+    StreamLoadAction action(&_env, _limiter.get());
+
+    HttpRequest request(_evhttp_req);
+
+    struct evhttp_request ev_req;
+    ev_req.remote_host = nullptr;
+    request._ev_req = &ev_req;
+
+    request._params.emplace(HTTP_DB_KEY, "db");
+    request._params.emplace(HTTP_TABLE_KEY, "tbl");
+    request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    request._headers.emplace(HTTP_ENABLE_MERGE_COMMIT, "abc");
+    request.set_handler(&action);
+    action.on_header(&request);
+    action.handle(&request);
+
+    rapidjson::Document doc;
+    doc.Parse(k_response_str.c_str());
+    ASSERT_STREQ("Fail", doc["Status"].GetString());
+    ASSERT_NE(nullptr, std::strstr(doc["Message"].GetString(), "Invalid parameter enable_merge_commit"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 } // namespace starrocks

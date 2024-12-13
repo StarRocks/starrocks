@@ -55,8 +55,13 @@ public class ComplexTypePrunePlanTest extends PlanTestBase {
     @Before
     public void setup() throws Exception {
         connectContext.getSessionVariable().setEnablePruneComplexTypes(true);
+<<<<<<< HEAD
         connectContext.getSessionVariable().setCboPruneSubfield(true);
         connectContext.getSessionVariable().setEnablePruneComplexTypesInUnnest(true);
+=======
+        connectContext.getSessionVariable().setEnablePruneComplexTypesInUnnest(true);
+        connectContext.getSessionVariable().setCboPruneSubfield(true);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -75,7 +80,11 @@ public class ComplexTypePrunePlanTest extends PlanTestBase {
         sql = "select index_struct[1].`index` from index_struct_nest";
         plan = getFragmentPlan(sql);
         assertContains(plan, "1:Project\n" +
+<<<<<<< HEAD
                 "  |  <slot 3> : 2: index_struct[1].index");
+=======
+                "  |  <slot 3> : 2: index_struct[1].index[true]");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -132,7 +141,11 @@ public class ComplexTypePrunePlanTest extends PlanTestBase {
     @Test
     public void testSelectPredicate() throws Exception {
         String sql = "select c0 from test where (c0+c2.a)>5";
+<<<<<<< HEAD
         assertVerbosePlanContains(sql, "[/c2/a]");
+=======
+        assertVerbosePlanContains(sql, "[struct<a int(11), b int(11)>]");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -172,7 +185,11 @@ public class ComplexTypePrunePlanTest extends PlanTestBase {
     public void testStructWithWindow() throws Exception {
         String sql = "select sum(c2.b) over(partition by c2.a order by c0) from test";
         assertPlanContains(sql, " 3:ANALYTIC\n" +
+<<<<<<< HEAD
                 "  |  functions: [, sum(7: c2.b), ]\n" +
+=======
+                "  |  functions: [, sum(7: c2.b[true]), ]\n" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "  |  partition by: 9: c2.a\n" +
                 "  |  order by: 1: c0 ASC\n" +
                 "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
@@ -186,7 +203,11 @@ public class ComplexTypePrunePlanTest extends PlanTestBase {
 
         sql = "select sum(c1.b[10].b) over(partition by c2.a order by c2.b) from test";
         assertPlanContains(sql, "3:ANALYTIC\n" +
+<<<<<<< HEAD
                 "  |  functions: [, sum(6: c1.b[10].b), ]\n" +
+=======
+                "  |  functions: [, sum(6: c1.b[true][10].b[true]), ]\n" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "  |  partition by: 9: c2.a\n" +
                 "  |  order by: 10: c2.b ASC\n" +
                 "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
@@ -217,7 +238,11 @@ public class ComplexTypePrunePlanTest extends PlanTestBase {
         sql = "select array_filter((x,y) -> x<y, c3.d, c3.d) from test";
         assertVerbosePlanContains(sql, "[/c3/d]");
         sql = "select map_values(col_map), map_keys(col_map) from (select map_from_arrays([],[]) as col_map)A";
+<<<<<<< HEAD
         assertPlanContains(sql, "map_from_arrays(5: cast, 5: cast)");
+=======
+        assertPlanContains(sql, "<slot 4> : map_keys(map_from_arrays(CAST([] AS ARRAY<BOOLEAN>), CAST([] AS ARRAY<BOOLEAN>)))");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -235,7 +260,11 @@ public class ComplexTypePrunePlanTest extends PlanTestBase {
         String plan = getVerboseExplain(sql);
         assertCContains(plan, "1:Project\n" +
                 "  |  output columns:\n" +
+<<<<<<< HEAD
                 "  |  5 <-> 2: c1.b[111]",
+=======
+                "  |  5 <-> 2: c1.b[true][111]",
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "Pruned type: 2 <-> [struct<a int(11), b array<struct<a int(11), b int(11)>>>]");
     }
 
@@ -313,9 +342,49 @@ public class ComplexTypePrunePlanTest extends PlanTestBase {
         FeConstants.runningUnitTest = false;
     }
 
+<<<<<<< HEAD
     //@Test
     //public void testUnnestJoin() throws Exception {
     //    FeConstants.runningUnitTest = true;
     //    String sql = "select c2_struct.c2_sub1 from array_struct_nest, unnest(c2) as t(c2_struct), "
     //}
+=======
+    @Test
+    public void testSubfieldNoCopy() throws Exception {
+        String sql = "select c3.c.a, c3.c.b, c3.a, c3.b, c3.d, c2.a, c1.a, c1.b[1].a from test";
+        assertVerbosePlanContains(sql, "c3.c.a[false]", "c3.c.b[false]", "c3.a[false]", "c3.b[false]",
+                "c3.d[false]", "c2.a[false]", "c1.a[false]");
+        // we don't support non-copy for this expr now
+        assertVerbosePlanContains(sql, "c1.b[true][1].a[true]");
+        // test common project expr
+        sql = "select c1.a, c1.a + 1 as c1a, c1.a + 2 as c2a from test";
+        assertVerbosePlanContains(sql, "c1.a[true]", "cast(2: c1.a[true] as BIGINT)");
+    }
+
+    @Test
+    public void testSubfieldNeedCopyForOverlap() throws Exception {
+        String sql = "select c3.c.a, c3.c from test";
+        assertVerbosePlanContains(sql, "c3.c.a[true]", "c3.c[true]");
+        sql = "select c1.b, c1.b[1] from test";
+        assertVerbosePlanContains(sql, "c1.b[true]", "c1.b[true][1]");
+        sql = "select c1.b[1].a, c1.b from test";
+        assertVerbosePlanContains(sql, "c1.b[true][1].a[true]", "c1.b[true]");
+    }
+
+    @Test
+    public void testSemiTypeCountDistinct() throws Exception {
+        String sql = "select count(distinct row(1, 2))";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: any_value(CAST(row(1, 2) IS NOT NULL AS BIGINT))");
+
+        sql = "select count(distinct [1,2,3])";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "output: any_value(CAST([1,2,3] IS NOT NULL AS BIGINT))");
+
+        sql = "select count(distinct map{'a': 1})";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "output: any_value(CAST(map{'a':1} IS NOT NULL AS BIGINT))");
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

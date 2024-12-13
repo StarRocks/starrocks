@@ -48,15 +48,27 @@ import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpVersion;
+<<<<<<< HEAD
+=======
+import io.netty.util.AttributeKey;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import io.netty.util.ReferenceCountUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 public class HttpServerHandler extends ChannelInboundHandlerAdapter {
     private static final Logger LOG = LogManager.getLogger(HttpServerHandler.class);
+<<<<<<< HEAD
 
     private ActionController controller = null;
     protected HttpRequest request = null;
+=======
+    // keep connectContext when channel is open
+    private static final AttributeKey<HttpConnectContext> HTTP_CONNECT_CONTEXT_ATTRIBUTE_KEY =
+            AttributeKey.valueOf("httpContextKey");
+    protected HttpRequest request = null;
+    private final ActionController controller;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private BaseAction action = null;
 
     public HttpServerHandler(ActionController controller) {
@@ -87,7 +99,14 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
                 writeResponse(ctx, HttpResponseStatus.BAD_REQUEST, "Bad Request. <br/> " + e.getMessage());
                 return;
             }
+<<<<<<< HEAD
             BaseRequest req = new BaseRequest(ctx, request);
+=======
+
+            // get HttpConnectContext from channel, HttpConnectContext's lifetime is same as channel
+            HttpConnectContext connectContext = ctx.channel().attr(HTTP_CONNECT_CONTEXT_ATTRIBUTE_KEY).get();
+            BaseRequest req = new BaseRequest(ctx, request, connectContext);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             action = getAction(req);
             if (action != null) {
                 if (LOG.isDebugEnabled()) {
@@ -118,12 +137,23 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
     @Override
     public void channelActive(ChannelHandlerContext ctx) throws Exception {
         HttpServerHandlerMetrics.getInstance().httpConnectionsNum.increase(1L);
+<<<<<<< HEAD
+=======
+        // create HttpConnectContext when channel is established, and store it in channel attr
+        ctx.channel().attr(HTTP_CONNECT_CONTEXT_ATTRIBUTE_KEY).setIfAbsent(new HttpConnectContext());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         super.channelActive(ctx);
     }
 
     @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
         HttpServerHandlerMetrics.getInstance().httpConnectionsNum.increase(-1L);
+<<<<<<< HEAD
+=======
+        if (action != null) {
+            action.handleChannelInactive(ctx);
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         super.channelInactive(ctx);
     }
 

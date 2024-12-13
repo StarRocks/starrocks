@@ -14,6 +14,7 @@
 
 package com.starrocks.planner;
 
+<<<<<<< HEAD
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.UUIDUtil;
@@ -26,6 +27,11 @@ import com.starrocks.sql.ast.DropDbStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.PlanTestBase;
+=======
+import com.starrocks.common.FeConstants;
+import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.qe.ConnectContext;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -33,9 +39,12 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+<<<<<<< HEAD
 import java.util.List;
 import java.util.Map;
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public class PreAggregationTest {
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
@@ -45,6 +54,11 @@ public class PreAggregationTest {
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
 
+<<<<<<< HEAD
+=======
+        FeConstants.enablePruneEmptyOutputScan = false;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         connectContext.setQueryId(UUIDUtil.genUUID());

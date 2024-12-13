@@ -15,14 +15,23 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.authentication.AuthenticationMgr;
+<<<<<<< HEAD
+=======
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.AuthorizationMgr;
+import com.starrocks.authorization.PrivilegeType;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
+<<<<<<< HEAD
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.privilege.PrivilegeType;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.MetadataMgr;
@@ -107,7 +116,11 @@ public class ExternalDbTablePrivTest {
         try {
             Authorizer.check(statement, ctx);
             Assert.fail();
+<<<<<<< HEAD
         } catch (AccessDeniedException e) {
+=======
+        } catch (Exception e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             System.out.println(e.getMessage() + ", sql: " + sql);
             Assert.assertTrue(e.getMessage().contains(expectError));
         }
@@ -125,7 +138,11 @@ public class ExternalDbTablePrivTest {
         try {
             Authorizer.check(statement, starRocksAssert.getCtx());
             Assert.fail();
+<<<<<<< HEAD
         } catch (AccessDeniedException e) {
+=======
+        } catch (Exception e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             System.out.println(e.getMessage() + ", sql: " + sql);
             Assert.assertTrue(e.getMessage().contains(expectError));
         }

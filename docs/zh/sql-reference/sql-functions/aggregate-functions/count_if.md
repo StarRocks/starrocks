@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # count_if
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 计算满足指定条件（即条件表达试的结果为 `true`）的记录数。
 

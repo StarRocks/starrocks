@@ -20,13 +20,19 @@ import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.GroupByClause;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.OrderByElement;
+<<<<<<< HEAD
 import com.starrocks.analysis.SlotRef;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.analyzer.AnalyzeState;
 import com.starrocks.sql.analyzer.FieldId;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.parser.NodePosition;
 
+<<<<<<< HEAD
 import java.util.HashMap;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.List;
 import java.util.Map;
 
@@ -79,12 +85,15 @@ public class SelectRelation extends QueryRelation {
 
     private Map<Expr, FieldId> columnReferences;
 
+<<<<<<< HEAD
     /**
      *  materializeExpressionToColumnRef stores the mapping relationship
      *  between generated expressions and generated columns
      */
     private Map<Expr, SlotRef> generatedExprToColumnRef = new HashMap<>();
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public SelectRelation(
             SelectList selectList,
             Relation fromRelation,
@@ -160,8 +169,11 @@ public class SelectRelation extends QueryRelation {
 
         this.columnReferences = analyzeState.getColumnReferences();
 
+<<<<<<< HEAD
         this.generatedExprToColumnRef = analyzeState.getGeneratedExprToColumnRef();
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.setScope(analyzeState.getOutputScope());
     }
 
@@ -307,8 +319,11 @@ public class SelectRelation extends QueryRelation {
     public List<Expr> getOutputExpression() {
         return outputExpr;
     }
+<<<<<<< HEAD
 
     public Map<Expr, SlotRef> getGeneratedExprToColumnRef() {
         return generatedExprToColumnRef;
     }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

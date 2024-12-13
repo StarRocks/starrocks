@@ -23,6 +23,10 @@ add_library(Common STATIC
   configbase.cpp
   s3_uri.cpp
   tracer.cpp
+<<<<<<< HEAD
+=======
+  process_exit.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
   prof/heap_prof.cpp
 )
 

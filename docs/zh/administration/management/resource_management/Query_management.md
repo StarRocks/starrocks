@@ -13,13 +13,21 @@ Property 指针对用户粒度的属性的设置项。设置用户的属性，�
 您可以通过以下命令管理特定用户的客户端到 FE 最大连接数。
 
 ```sql
+<<<<<<< HEAD
 SET PROPERTY [FOR 'user'] 'key' = 'value'[, ...];
+=======
+ALTER USER '<username>' SET PROPERTIES ("key"="value", ...)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ```
 
 以下示例修改用户 jack 的最大连接数为 1000。
 
 ```sql
+<<<<<<< HEAD
 SET PROPERTY FOR 'jack' 'max_user_connections' = '1000';
+=======
+ALTER USER 'jack' SET PROPERTIES ("max_user_connections" = "1000");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ```
 
 您可以通过以下命令查看特定用户的连接数限制。

@@ -8,8 +8,13 @@ displayed_sidebar: docs
 
 **使用文档：**
 
+<<<<<<< HEAD
 - [使用 Spark connector 导入数据至 StarRocks](../loading/Spark-connector-starrocks.md)
 - [使用 Spark connector 从 StarRocks 读取数据](../unloading/Spark_connector.md)
+=======
+- [使用 Spark connector 导入数据至 StarRocks](https://docs.starrocks.io/zh/docs/loading/Spark-connector-starrocks/)
+- [使用 Spark connector 从 StarRocks 读取数据](https://docs.starrocks.io/zh/docs/unloading/Spark_connector/)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 **源码下载地址：**[starrocks-connector-for-apache-spark](https://github.com/StarRocks/starrocks-connector-for-apache-spark)
 
@@ -20,8 +25,13 @@ displayed_sidebar: docs
 您可以通过以下方式获取 Spark connector 的 JAR 包：
 
 - 从 [Maven Central Repository](https://repo1.maven.org/maven2/com/starrocks) 直接下载编译好的 JAR 包。
+<<<<<<< HEAD
 - 在 Maven 项目的 pom 文件添加 Spark connector 为依赖项，作为依赖下载。具体方式，参见[使用文档](../loading/Spark-connector-starrocks.md)。
 - 使用源码手动编译成 JAR 包。具体方式，参见[使用文档](../loading/Spark-connector-starrocks.md)。
+=======
+- 在 Maven 项目的 pom 文件添加 Spark connector 为依赖项，作为依赖下载。具体方式，参见[使用文档](https://docs.starrocks.io/zh/docs/loading/Spark-connector-starrocks/)。
+- 使用源码手动编译成 JAR 包。具体方式，参见[使用文档](https://docs.starrocks.io/zh/docs/loading/Spark-connector-starrocks/)。
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 **版本要求：**
 
@@ -34,13 +44,34 @@ displayed_sidebar: docs
 
 ### 1.1
 
+<<<<<<< HEAD
 **1.1.1**
+=======
+### 1.1.2
+
+**新增特性**
+
+- 支持 Spark 的版本为 3.5。[#89](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/89)
+- 通过 Spark SQL 读取 StarRocks 时支持 `starrocks.filter.query` 参数。[#92](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/92)
+- 支持读取 StarRocks 中 JSON 类型的列。[#100](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/100)
+
+**功能优化**
+
+- 优化报错信息。读取 StarRocks 时如果在 `starrocks.columns` 指定 StarRocks 表中不存在的列，则报错信息会明确提示不存在的列名。[#97](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/97)
+- Spark connector 通过 HTTP 向 StarRocks 的 FE 请求查询计划时出现异常的时候，FE 会把异常信息通过 HTTP 本身的 status 和 entity 返回给 Spark connector。[#98](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/98)
+
+#### 1.1.1
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 本版本发布主要包括如下新增特性和功能优化，涉及导入数据到 StarRocks。
 
 > **注意**
 >
+<<<<<<< HEAD
 > 升级至本版本，涉及行为变更。详细信息，参见[升级 Spark connector](../loading/Spark-connector-starrocks.md#升级-spark-connector)。
+=======
+> 升级至本版本，涉及行为变更。详细信息，参见[升级 Spark connector](https://docs.starrocks.io/zh/docs/loading/Spark-connector-starrocks/#升级-spark-connector)。
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 **新增特性**
 
@@ -71,9 +102,15 @@ displayed_sidebar: docs
 - 新增示例说明如何导入至 BITMAP 和 HLL 类型的列。[#70](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/70)
 - 新增 Python 编写的 Spark 应用程序示例。[#72](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/72)
 - 新增导入 ARRAY 类型数据的示例。[#75](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/75)
+<<<<<<< HEAD
 - 新增示例说明如何实现主键模型表的部分更新和条件更新。[#80](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/80)
 
 **1.1.0**
+=======
+- 新增示例说明如何实现主键表的部分更新和条件更新。[#80](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/80)
+
+#### 1.1.0
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 **新增特性**
 
@@ -81,7 +118,11 @@ displayed_sidebar: docs
 
 ### 1.0
 
+<<<<<<< HEAD
 **1.0.0**
+=======
+#### 1.0.0
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 **新增特性**
 

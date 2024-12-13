@@ -124,14 +124,20 @@ void FileScanNodeTest::_create_runtime_state() {
 
 std::shared_ptr<TPlanNode> FileScanNodeTest::_create_tplan_node() {
     std::vector<::starrocks::TTupleId> tuple_ids{0};
+<<<<<<< HEAD
     std::vector<bool> nullable_tuples{true};
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     auto tnode = std::make_shared<TPlanNode>();
 
     tnode->__set_node_id(1);
     tnode->__set_node_type(TPlanNodeType::FILE_SCAN_NODE);
     tnode->__set_row_tuples(tuple_ids);
+<<<<<<< HEAD
     tnode->__set_nullable_tuples(nullable_tuples);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     tnode->__set_limit(-1);
 
     TConnectorScanNode connector_scan_node;
@@ -153,8 +159,14 @@ DescriptorTbl* FileScanNodeTest::_create_table_desc(const std::vector<TypeDescri
     tuple_desc_builder.build(&desc_tbl_builder);
 
     DescriptorTbl* tbl = nullptr;
+<<<<<<< HEAD
     DescriptorTbl::create(_runtime_state.get(), _pool, desc_tbl_builder.desc_tbl(), &tbl, config::vector_chunk_size);
 
+=======
+    CHECK(DescriptorTbl::create(_runtime_state.get(), _pool, desc_tbl_builder.desc_tbl(), &tbl,
+                                config::vector_chunk_size)
+                  .ok());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     _runtime_state->set_desc_tbl(tbl);
     return tbl;
 }

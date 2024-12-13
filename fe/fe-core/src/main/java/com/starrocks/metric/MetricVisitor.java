@@ -54,6 +54,11 @@ public abstract class MetricVisitor {
 
     public abstract void visitHistogram(String name, Histogram histogram);
 
+<<<<<<< HEAD
+=======
+    public abstract void visitHistogram(HistogramMetric histogram);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public abstract void getNodeInfo();
 
     public abstract String build();

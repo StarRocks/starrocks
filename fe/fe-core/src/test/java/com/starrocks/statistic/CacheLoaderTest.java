@@ -18,6 +18,10 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.qe.ConnectContext;
+<<<<<<< HEAD
+=======
+import com.starrocks.server.GlobalStateMgr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.optimizer.statistics.Bucket;
 import com.starrocks.sql.optimizer.statistics.ColumnBasicStatsCacheLoader;
 import com.starrocks.sql.optimizer.statistics.ColumnHistogramStatsCacheLoader;
@@ -62,7 +66,11 @@ public class CacheLoaderTest {
 
     @Test
     public void testCovertBasicStatistics() {
+<<<<<<< HEAD
         Database db = connectContext.getGlobalStateMgr().getDb("test");
+=======
+        Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         OlapTable table = (OlapTable) db.getTable("t0");
         ColumnBasicStatsCacheLoader basicStatsCacheLoader
                 = Deencapsulation.newInstance(ColumnBasicStatsCacheLoader.class);
@@ -103,8 +111,13 @@ public class CacheLoaderTest {
 
     @Test
     public void testCovertHistogramStatistics() {
+<<<<<<< HEAD
         Database db = connectContext.getGlobalStateMgr().getDb("test");
         OlapTable table = (OlapTable) db.getTable("t0");
+=======
+        Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t0");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ColumnHistogramStatsCacheLoader columnHistogramStatsCacheLoader
                 = Deencapsulation.newInstance(ColumnHistogramStatsCacheLoader.class);
 
@@ -146,8 +159,13 @@ public class CacheLoaderTest {
 
     @Test
     public void testCovertHistogramStatisticsDate() {
+<<<<<<< HEAD
         Database db = connectContext.getGlobalStateMgr().getDb("test");
         OlapTable table = (OlapTable) db.getTable("t0");
+=======
+        Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t0");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ColumnHistogramStatsCacheLoader columnHistogramStatsCacheLoader
                 = Deencapsulation.newInstance(ColumnHistogramStatsCacheLoader.class);
 

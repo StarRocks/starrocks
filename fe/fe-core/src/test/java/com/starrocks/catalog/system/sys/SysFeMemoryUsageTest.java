@@ -15,16 +15,27 @@
 package com.starrocks.catalog.system.sys;
 
 import com.google.common.collect.ImmutableMap;
+<<<<<<< HEAD
 import com.starrocks.memory.MemoryStat;
 import com.starrocks.memory.MemoryUsageTracker;
 import com.starrocks.privilege.AccessControlProvider;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.PrivilegeType;
+=======
+import com.starrocks.authorization.AccessControlProvider;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.PrivilegeType;
+import com.starrocks.memory.MemoryStat;
+import com.starrocks.memory.MemoryUsageTracker;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TFeMemoryReq;
+<<<<<<< HEAD
 import com.starrocks.thrift.TFeMemoryRes;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import mockit.Expectations;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.thrift.TException;
@@ -57,7 +68,11 @@ public class SysFeMemoryUsageTest {
         MemoryStat memoryStat = new MemoryStat();
         memoryUsage.put("test", ImmutableMap.of("test", memoryStat));
 
+<<<<<<< HEAD
         TFeMemoryRes res = SysFeMemoryUsage.listFeMemoryUsage(req);
+=======
+        var res = SysFeMemoryUsage.listFeMemoryUsage(req);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         assertTrue(StringUtils.isNotEmpty(res.toString()));
     }
 

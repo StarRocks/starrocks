@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     l_returnflag,
@@ -20,6 +21,8 @@ group by
 order by
     l_returnflag,
     l_linestatus ;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 [planCount]
 1
 [plan-1]

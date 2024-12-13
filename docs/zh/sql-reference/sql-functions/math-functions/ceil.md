@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # ceil, dceil
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 返回大于或等于 `x` 的最小整数。
 

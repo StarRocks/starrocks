@@ -1,0 +1,826 @@
+-- name: test_predicate_move_around
+CREATE TABLE `t0` (   `v1` bigint NULL COMMENT "",   `v2` bigint NULL COMMENT "",   `v3` bigint NULL ) ENGINE=OLAP DUPLICATE KEY(`v1`, `v2`, v3) DISTRIBUTED BY HASH(`v1`) BUCKETS 3 PROPERTIES ( "replication_num" = "1", "in_memory" = "false" );
+-- result:
+-- !result
+CREATE TABLE `t1` (   `v4` bigint NULL COMMENT "",   `v5` bigint NULL COMMENT "",   `v6` bigint NULL ) ENGINE=OLAP DUPLICATE KEY(`v4`, `v5`, v6) DISTRIBUTED BY HASH(`v4`) BUCKETS 3 PROPERTIES ( "replication_num" = "1", "in_memory" = "false" );
+-- result:
+-- !result
+CREATE TABLE `t2` (   `v7` bigint NULL COMMENT "",   `v8` bigint NULL COMMENT "",   `v9` bigint NULL ) ENGINE=OLAP DUPLICATE KEY(`v7`, `v8`, v9) DISTRIBUTED BY HASH(`v7`) BUCKETS 3 PROPERTIES ( "replication_num" = "1", "in_memory" = "false" );
+-- result:
+-- !result
+CREATE TABLE `t3` (   `v10` bigint NULL COMMENT "",   `v11` bigint NULL COMMENT "",   `v12` bigint NULL ) ENGINE=OLAP DUPLICATE KEY(`v10`, `v11`, v12) DISTRIBUTED BY HASH(`v10`) BUCKETS 3 PROPERTIES ( "replication_num" = "1", "in_memory" = "false" );
+-- result:
+-- !result
+CREATE TABLE `test_all_type` (   `t1a` varchar(20) NULL COMMENT "",   `t1b` smallint(6) NULL COMMENT "",   `t1c` int(11) NULL COMMENT "",   `t1d` bigint(20) NULL COMMENT "",   `t1e` float NULL COMMENT "",   `t1f` double NULL COMMENT "",   `t1g` bigint(20) NULL COMMENT "",   `id_datetime` datetime NULL COMMENT "",   `id_date` date NULL COMMENT "",    `id_decimal` decimal(10,2) NULL COMMENT ""  ) ENGINE=OLAP DUPLICATE KEY(`t1a`) COMMENT "OLAP" DISTRIBUTED BY HASH(`t1a`) BUCKETS 3 PROPERTIES ( "replication_num" = "1", "in_memory" = "false" );
+-- result:
+-- !result
+CREATE TABLE `test_all_type_not_null` (   `t1a` varchar(20) NOT NULL COMMENT "",   `t1b` smallint(6) NOT NULL COMMENT "",   `t1c` int(11) NOT NULL COMMENT "",   `t1d` bigint(20) NOT NULL COMMENT "",   `t1e` float NOT NULL COMMENT "",   `t1f` double NOT NULL COMMENT "",   `t1g` bigint(20) NOT NULL COMMENT "",   `id_datetime` datetime NOT NULL COMMENT "",   `id_date` date NOT NULL COMMENT "",    `id_decimal` decimal(10,2) NOT NULL COMMENT ""  ) ENGINE=OLAP DUPLICATE KEY(`t1a`) COMMENT "OLAP" DISTRIBUTED BY HASH(`t1a`) BUCKETS 3 PROPERTIES ( "replication_num" = "1", "in_memory" = "false" );
+-- result:
+-- !result
+insert into t0 values (-10, -10, -10), (0, 0, 0), (1, 1, 1), (2, 2, 2), (10, 10, 10), (20, 20, 20), (75, 75, 75), (511, 511, 511);
+-- result:
+-- !result
+insert into t1 select * from t0;
+-- result:
+-- !result
+insert into t1 select v1 - 5, v2 + 5, v3 + 10 from t0 order by v1 limit 3;
+-- result:
+-- !result
+insert into t2 select * from t0;
+-- result:
+-- !result
+insert into t1 select v1 + 5, v2 -10, v3 + 5 from t0 order by v1 limit 3;
+-- result:
+-- !result
+insert into t3 select * from t0;
+-- result:
+-- !result
+insert into t3 select v1 * 2, v2 + 5, v3 * 3 from t0 order by v1 limit 3;
+-- result:
+-- !result
+insert into test_all_type values
+('abc', 1, 1, 20, 1.1, 1.1, 1, '2021-01-01 00:00:00', '2021-01-01', 1.2),
+('中文', 1, 1, 20, 1.1, 1.1, 1, '2021-02-01 00:00:00', '2021-01-01', 1.2),
+('中文', 1, 1, 20, 1.1, 1.1, 1, '2021-02-04 00:00:00', '2021-02-04', 1.2),
+('中文', 1, 1, 1, 1.1, 1.1, 1, '2021-02-04 00:00:00', '2021-02-04', 1.2),
+('abcd', 2, 2, 2, 1.2, 1.2, 10, '2021-04-01 00:00:00', '2021-04-01', 1.25),
+('abcd', 2, 2, 2, 1.2, 1.2, 10, '2021-04-02 00:00:00', '2021-04-02', 1.25),
+('abcdefg', 20, 20, 20, 11.2, 11.2, 20, '2021-01-01 00:00:00', '2021-01-01', 2.25),
+('中文', 100, 100, 100, 100.01, 100.02, 1, '2021-01-01 00:00:00', '2021-01-01', 100.25),
+(null, null, null, null, null, null, null, null, null, null);
+-- result:
+-- !result
+insert into test_all_type_not_null values
+('ab', 1, -1, 18, 1.1, 1.1, 1, '2022-01-01 00:00:00', '2022-01-01', 1.2),
+('abc', 1, 1, 18, 1.1, 1.1, 1, '2021-01-01 00:00:00', '2021-01-01', 1.2),
+('中文', 1, 1, 20, 1.1, 1.1, 1, '2021-02-01 00:00:00', '2021-01-01', 1.2),
+('中文', 1, 1, 20, 1.1, 1.1, 1, '2021-02-04 00:00:00', '2021-02-04', 1.2),
+('中文', 1, 1, 21, 1.1, 1.1, 1, '2021-02-04 00:00:00', '2021-02-04', 1.2),
+('abc', 1, 1, 21, 1.1, 1.1, 1, '2021-02-04 00:00:00', '2021-02-04', 1.2),
+('中文', 21, 1, 21, 1.1, 1.1, 1, '2021-02-04 00:00:00', '2021-02-04', 1.2),
+('中文', 200, 1, 21, 1.1, 1.1, 1, '2021-02-04 00:00:00', '2021-02-04', 1.2),
+('中文', 1, 1, 1, 1.1, 1.1, 1, '2021-02-04 00:00:00', '2021-02-04', 1.2),
+('abcd', 2, 2, 2, 1.2, 1.2, 10, '2021-04-01 00:00:00', '2021-04-01', 1.25),
+('abcd', 2, 2, 1, 1.2, 1.2, 10, '2021-04-02 00:00:00', '2021-04-02', 1.25),
+('abcdefg', 20, 20, 20, 11.2, 11.2, 20, '2021-01-01 00:00:00', '2021-01-01', 2.25),
+('中文', 100, 100, 100, 100.01, 100.02, 1, '2021-01-01 00:00:00', '2021-01-01', 100.25);
+-- result:
+-- !result
+select * from
+(select * from test_all_type where t1a in ('abc', '中文') and t1b = 1 and t1c = 1
+and t1d = 20 and t1f = 1.1 and id_datetime between '2021-01-01' and '2021-02-01' and id_decimal = 1.2) t1
+ inner join test_all_type_not_null t2
+on t1.t1a > t2.t1a and t1.t1b = t2.t1b and t1.t1c > t2.t1c and t1.id_datetime  < t2.id_datetime;
+-- result:
+abc	1	1	20	1.1	1.1	1	2021-01-01 00:00:00	2021-01-01	1.20	ab	1	-1	18	1.1	1.1	1	2022-01-01 00:00:00	2022-01-01	1.20
+中文	1	1	20	1.1	1.1	1	2021-02-01 00:00:00	2021-01-01	1.20	ab	1	-1	18	1.1	1.1	1	2022-01-01 00:00:00	2022-01-01	1.20
+-- !result
+select * from
+(select * from test_all_type where t1a in ('abc', '中文') and t1b = 1 and t1c = 1
+and t1d = 20 and t1f = 1.1 and id_datetime between '2021-01-01' and '2021-02-01' and id_decimal = 1.2) t1
+ left join test_all_type_not_null t2
+on t1.t1a > t2.t1a and t1.t1b = t2.t1b and t1.t1c > t2.t1c and t1.id_datetime  < t2.id_datetime;
+-- result:
+中文	1	1	20	1.1	1.1	1	2021-02-01 00:00:00	2021-01-01	1.20	ab	1	-1	18	1.1	1.1	1	2022-01-01 00:00:00	2022-01-01	1.20
+abc	1	1	20	1.1	1.1	1	2021-01-01 00:00:00	2021-01-01	1.20	ab	1	-1	18	1.1	1.1	1	2022-01-01 00:00:00	2022-01-01	1.20
+-- !result
+select * from
+(select * from test_all_type where (t1d in (1, 2, 3) and id_date = '2021-01-01') or (id_date >'2021-04-01')) t1 inner join test_all_type_not_null t2
+on t1.t1d > t2.t1d and t1.id_date = t2.id_date;
+-- result:
+abcd	2	2	2	1.2	1.2	10	2021-04-02 00:00:00	2021-04-02	1.25	abcd	2	2	1	1.2	1.2	10	2021-04-02 00:00:00	2021-04-02	1.25
+-- !result
+select * from
+(select * from test_all_type where (t1d in (1, 2, 3) and id_date = '2021-01-01') or (id_date >'2021-04-01')) t1 left join test_all_type_not_null t2
+on t1.t1d > t2.t1d and t1.id_date = t2.id_date;
+-- result:
+abcd	2	2	2	1.2	1.2	10	2021-04-02 00:00:00	2021-04-02	1.25	abcd	2	2	1	1.2	1.2	10	2021-04-02 00:00:00	2021-04-02	1.25
+-- !result
+select * from
+(select * from test_all_type where abs(t1b + t1d) > 20 and t1a in ('abc', '中文')) t1
+inner join test_all_type_not_null t2
+on abs(t1.t1b + t1.t1d) = t2.t1b;
+-- result:
+abc	1	1	20	1.1	1.1	1	2021-01-01 00:00:00	2021-01-01	1.20	中文	21	1	21	1.1	1.1	1	2021-02-04 00:00:00	2021-02-04	1.20
+中文	1	1	20	1.1	1.1	1	2021-02-04 00:00:00	2021-02-04	1.20	中文	21	1	21	1.1	1.1	1	2021-02-04 00:00:00	2021-02-04	1.20
+中文	1	1	20	1.1	1.1	1	2021-02-01 00:00:00	2021-01-01	1.20	中文	21	1	21	1.1	1.1	1	2021-02-04 00:00:00	2021-02-04	1.20
+中文	100	100	100	100.01	100.02	1	2021-01-01 00:00:00	2021-01-01	100.25	中文	200	1	21	1.1	1.1	1	2021-02-04 00:00:00	2021-02-04	1.20
+-- !result
+select * from
+(select * from test_all_type where abs(t1b + t1d) > 20 and t1a in ('abc', '中文')) t1
+left join test_all_type_not_null t2
+on abs(t1.t1b + t1.t1d) = t2.t1b;
+-- result:
+中文	1	1	20	1.1	1.1	1	2021-02-04 00:00:00	2021-02-04	1.20	中文	21	1	21	1.1	1.1	1	2021-02-04 00:00:00	2021-02-04	1.20
+中文	1	1	20	1.1	1.1	1	2021-02-01 00:00:00	2021-01-01	1.20	中文	21	1	21	1.1	1.1	1	2021-02-04 00:00:00	2021-02-04	1.20
+abc	1	1	20	1.1	1.1	1	2021-01-01 00:00:00	2021-01-01	1.20	中文	21	1	21	1.1	1.1	1	2021-02-04 00:00:00	2021-02-04	1.20
+中文	100	100	100	100.01	100.02	1	2021-01-01 00:00:00	2021-01-01	100.25	中文	200	1	21	1.1	1.1	1	2021-02-04 00:00:00	2021-02-04	1.20
+-- !result
+select * from test_all_type_not_null t2 inner join (select * from test_all_type where t1a in ('abc', '中文') and t1b = 1 and t1c = 1
+and t1d = 20 and t1f = 1.1 and id_datetime between '2021-01-01' and '2021-02-01' and id_decimal = 1.2) t1
+on t1.t1a > t2.t1a and t1.t1b = t2.t1b and t1.t1c > t2.t1c and t1.id_datetime  < t2.id_datetime;
+-- result:
+ab	1	-1	18	1.1	1.1	1	2022-01-01 00:00:00	2022-01-01	1.20	abc	1	1	20	1.1	1.1	1	2021-01-01 00:00:00	2021-01-01	1.20
+ab	1	-1	18	1.1	1.1	1	2022-01-01 00:00:00	2022-01-01	1.20	中文	1	1	20	1.1	1.1	1	2021-02-01 00:00:00	2021-01-01	1.20
+-- !result
+select * from test_all_type_not_null t2 right join (select * from test_all_type where t1a in ('abc', '中文') and t1b = 1 and t1c = 1
+and t1d = 20 and t1f = 1.1 and id_datetime between '2021-01-01' and '2021-02-01' and id_decimal = 1.2) t1
+on t1.t1a > t2.t1a and t1.t1b = t2.t1b and t1.t1c > t2.t1c and t1.id_datetime  < t2.id_datetime;
+-- result:
+ab	1	-1	18	1.1	1.1	1	2022-01-01 00:00:00	2022-01-01	1.20	abc	1	1	20	1.1	1.1	1	2021-01-01 00:00:00	2021-01-01	1.20
+ab	1	-1	18	1.1	1.1	1	2022-01-01 00:00:00	2022-01-01	1.20	中文	1	1	20	1.1	1.1	1	2021-02-01 00:00:00	2021-01-01	1.20
+-- !result
+select * from
+(select max(t1d) t1d, t1a from test_all_type group by t1a having max(t1d) > 10 and t1a in ('abc', '中文')) t1
+inner join test_all_type_not_null t2
+on t1.t1d = t2.t1d and t1.t1a = t2.t1a;
+-- result:
+100	中文	中文	100	100	100	100.01	100.02	1	2021-01-01 00:00:00	2021-01-01	100.25
+-- !result
+select * from
+(select max(t1d) t1d, t1a from test_all_type group by t1a having max(t1d) > 10 and t1a in ('abc', '中文')) t1
+left join test_all_type_not_null t2
+on t1.t1d = t2.t1d and t1.t1a = t2.t1a;
+-- result:
+20	abc	None	None	None	None	None	None	None	None	None	None
+100	中文	中文	100	100	100	100.01	100.02	1	2021-01-01 00:00:00	2021-01-01	100.25
+-- !result
+select * from
+(select * from t0 where v1 = 1) t0
+inner join
+(select * from t1 where v4 = 1) t1
+on t0.v1 = t1.v4;
+-- result:
+1	1	1	1	1	1
+-- !result
+select * from
+(select * from t0 where v1 = 1) t0
+left join
+(select * from t1 where v4 = 1) t1
+on t0.v1 = t1.v4;
+-- result:
+1	1	1	1	1	1
+-- !result
+select * from
+(select * from t0 where v1 = 1) t0
+inner join
+(select * from t1 where v4 = 1) t1
+on t0.v1 > t1.v4;
+-- result:
+-- !result
+select * from
+(select * from t0 where v1 = 1) t0
+left join
+(select * from t1 where v4 = 1) t1
+on t0.v1 > t1.v4;
+-- result:
+1	1	1	None	None	None
+-- !result
+select * from
+(select * from t0 where v1 > 4 and v2 = 3) t0
+inner join
+(select * from t1 where v4 = 1) t1
+on t0.v1 > t1.v4;
+-- result:
+-- !result
+select * from
+(select * from t0 where v1 > 4 and v2 = 3) t0
+left join
+(select * from t1 where v4 = 1) t1
+on t0.v1 > t1.v4;
+-- result:
+-- !result
+select * from
+(select * from t0 where v1 > 1 and v1 < 4) t0
+inner join
+(select * from t1 where v4 = 2) t1
+on t0.v1 > t1.v4;
+-- result:
+-- !result
+select * from
+(select * from t0 where v1 > 1 and v1 < 4) t0
+right join
+(select * from t1 where v4 = 2) t1
+on t0.v1 > t1.v4;
+-- result:
+None	None	None	2	2	2
+-- !result
+select * from (select * from t0 where v1 < 10) t0 inner join t1 on v1 = v4 inner join (select * from t2 where v7 > 1) t2
+on v4 = v7;
+-- result:
+2	2	2	2	2	2	2	2	2
+-- !result
+select * from (select * from t0 where v1 < 10) t0 left join t1 on v1 = v4 inner join (select * from t2 where v7 > 1) t2
+on v4 = v7;
+-- result:
+2	2	2	2	2	2	2	2	2
+-- !result
+select * from (select * from t0 where v1 < 10) t0 inner join t1 on v1 = v4 left join (select * from t2 where v7 > 1) t2
+on v4 = v7;
+-- result:
+0	0	0	0	0	0	None	None	None
+1	1	1	1	1	1	None	None	None
+-10	-10	-10	-10	-10	-10	None	None	None
+2	2	2	2	2	2	2	2	2
+-- !result
+select * from (select * from t0 where v1 < 10) t0 left join t1 on v1 = v4 left join (select * from t2 where v7 > 1) t2
+on v4 = v7;
+-- result:
+2	2	2	2	2	2	2	2	2
+0	0	0	0	0	0	None	None	None
+1	1	1	1	1	1	None	None	None
+-10	-10	-10	-10	-10	-10	None	None	None
+-- !result
+select * from (select * from t0 where v1 < 10) t0 inner join t1 on v1 = v4 join t2 inner join (select * from t3 where v10 > 1) t3
+on v7 = v10 and v10 = v4;
+-- result:
+2	2	2	2	2	2	2	2	2	2	6	3
+2	2	2	2	2	2	2	2	2	2	2	2
+-- !result
+select * from (select * from t0 where v1 < 10) t0 left join t1 on v1 = v4 join t2 left join (select * from t3 where v10 > 1) t3
+on v7 = v10 and v10 = v4;
+-- result:
+-10	-10	-10	-10	-10	-10	1	1	1	None	None	None
+2	2	2	2	2	2	1	1	1	None	None	None
+0	0	0	0	0	0	1	1	1	None	None	None
+1	1	1	1	1	1	1	1	1	None	None	None
+-10	-10	-10	-10	-10	-10	2	2	2	None	None	None
+2	2	2	2	2	2	2	2	2	2	6	3
+2	2	2	2	2	2	2	2	2	2	2	2
+0	0	0	0	0	0	2	2	2	None	None	None
+1	1	1	1	1	1	2	2	2	None	None	None
+-10	-10	-10	-10	-10	-10	10	10	10	None	None	None
+2	2	2	2	2	2	10	10	10	None	None	None
+0	0	0	0	0	0	10	10	10	None	None	None
+1	1	1	1	1	1	10	10	10	None	None	None
+-10	-10	-10	-10	-10	-10	0	0	0	None	None	None
+2	2	2	2	2	2	0	0	0	None	None	None
+0	0	0	0	0	0	0	0	0	None	None	None
+1	1	1	1	1	1	0	0	0	None	None	None
+-10	-10	-10	-10	-10	-10	20	20	20	None	None	None
+2	2	2	2	2	2	20	20	20	None	None	None
+0	0	0	0	0	0	20	20	20	None	None	None
+1	1	1	1	1	1	20	20	20	None	None	None
+-10	-10	-10	-10	-10	-10	75	75	75	None	None	None
+2	2	2	2	2	2	75	75	75	None	None	None
+0	0	0	0	0	0	75	75	75	None	None	None
+1	1	1	1	1	1	75	75	75	None	None	None
+-10	-10	-10	-10	-10	-10	511	511	511	None	None	None
+2	2	2	2	2	2	511	511	511	None	None	None
+0	0	0	0	0	0	511	511	511	None	None	None
+1	1	1	1	1	1	511	511	511	None	None	None
+-10	-10	-10	-10	-10	-10	-10	-10	-10	None	None	None
+2	2	2	2	2	2	-10	-10	-10	None	None	None
+0	0	0	0	0	0	-10	-10	-10	None	None	None
+1	1	1	1	1	1	-10	-10	-10	None	None	None
+-- !result
+select * from (select * from t0 where v1 < 10) t0 right join t1 on v1 = v4 join t2 right join (select * from t3 where v10 > 1) t3
+on v7 = v10 and v10 = v4;
+-- result:
+None	None	None	10	10	10	10	10	10	10	10	10
+None	None	None	75	75	75	75	75	75	75	75	75
+None	None	None	20	20	20	20	20	20	20	20	20
+None	None	None	511	511	511	511	511	511	511	511	511
+2	2	2	2	2	2	2	2	2	2	6	3
+2	2	2	2	2	2	2	2	2	2	2	2
+-- !result
+select * from (select * from t0 where v1 < 10) t0 inner join t1 on v1 = v4 join t2 left join (select * from t3 where v10 > 1) t3
+on v7 = v10 and v10 = v4;
+-- result:
+0	0	0	0	0	0	10	10	10	None	None	None
+-10	-10	-10	-10	-10	-10	10	10	10	None	None	None
+2	2	2	2	2	2	10	10	10	None	None	None
+1	1	1	1	1	1	10	10	10	None	None	None
+0	0	0	0	0	0	0	0	0	None	None	None
+-10	-10	-10	-10	-10	-10	0	0	0	None	None	None
+2	2	2	2	2	2	0	0	0	None	None	None
+1	1	1	1	1	1	0	0	0	None	None	None
+0	0	0	0	0	0	2	2	2	None	None	None
+-10	-10	-10	-10	-10	-10	2	2	2	None	None	None
+2	2	2	2	2	2	2	2	2	2	6	3
+2	2	2	2	2	2	2	2	2	2	2	2
+1	1	1	1	1	1	2	2	2	None	None	None
+0	0	0	0	0	0	20	20	20	None	None	None
+-10	-10	-10	-10	-10	-10	20	20	20	None	None	None
+2	2	2	2	2	2	20	20	20	None	None	None
+1	1	1	1	1	1	20	20	20	None	None	None
+0	0	0	0	0	0	-10	-10	-10	None	None	None
+-10	-10	-10	-10	-10	-10	-10	-10	-10	None	None	None
+2	2	2	2	2	2	-10	-10	-10	None	None	None
+1	1	1	1	1	1	-10	-10	-10	None	None	None
+0	0	0	0	0	0	75	75	75	None	None	None
+-10	-10	-10	-10	-10	-10	75	75	75	None	None	None
+2	2	2	2	2	2	75	75	75	None	None	None
+1	1	1	1	1	1	75	75	75	None	None	None
+0	0	0	0	0	0	511	511	511	None	None	None
+-10	-10	-10	-10	-10	-10	511	511	511	None	None	None
+2	2	2	2	2	2	511	511	511	None	None	None
+1	1	1	1	1	1	511	511	511	None	None	None
+0	0	0	0	0	0	1	1	1	None	None	None
+-10	-10	-10	-10	-10	-10	1	1	1	None	None	None
+2	2	2	2	2	2	1	1	1	None	None	None
+1	1	1	1	1	1	1	1	1	None	None	None
+-- !result
+select * from (select * from t0 where v1 < 10) t0 left join t1 on v1 = v4 join t2 inner join (select * from t3 where v10 > 1) t3
+on v7 = v10 and v10 = v4;
+-- result:
+2	2	2	2	2	2	2	2	2	2	6	3
+2	2	2	2	2	2	2	2	2	2	2	2
+-- !result
+select * from (select * from t0 where v1 < 10) t0 left join t1 on v1 = v4 join t2 right join (select * from t3 where v10 > 1) t3
+on v7 = v10 and v10 = v4;
+-- result:
+None	None	None	None	None	None	None	None	None	75	75	75
+None	None	None	None	None	None	None	None	None	511	511	511
+None	None	None	None	None	None	None	None	None	10	10	10
+None	None	None	None	None	None	None	None	None	20	20	20
+2	2	2	2	2	2	2	2	2	2	6	3
+2	2	2	2	2	2	2	2	2	2	2	2
+-- !result
+select * from (select * from t0 where v1 < 10) t0 right join t1 on v1 = v4 join t2 right join (select * from t3 where v10 > 1) t3
+on v7 = v10 and v10 = v4;
+-- result:
+2	2	2	2	2	2	2	2	2	2	6	3
+2	2	2	2	2	2	2	2	2	2	2	2
+None	None	None	10	10	10	10	10	10	10	10	10
+None	None	None	511	511	511	511	511	511	511	511	511
+None	None	None	75	75	75	75	75	75	75	75	75
+None	None	None	20	20	20	20	20	20	20	20	20
+-- !result
+select * from (select * from t0 where v1 < 10) t0 inner join t1 on v1 = v4 + abs(1) join t2 inner join (select * from t3 where v10 > 1) t3
+on v7 > v10 and v10 > v4;
+-- result:
+1	1	1	0	0	0	75	75	75	2	6	3
+1	1	1	0	0	0	511	511	511	2	6	3
+1	1	1	0	0	0	20	20	20	2	6	3
+1	1	1	0	0	0	10	10	10	2	6	3
+2	2	2	1	1	1	75	75	75	2	6	3
+2	2	2	1	1	1	511	511	511	2	6	3
+2	2	2	1	1	1	20	20	20	2	6	3
+2	2	2	1	1	1	10	10	10	2	6	3
+1	1	1	0	0	0	511	511	511	75	75	75
+2	2	2	1	1	1	511	511	511	75	75	75
+1	1	1	0	0	0	75	75	75	20	20	20
+1	1	1	0	0	0	511	511	511	20	20	20
+1	1	1	0	0	0	75	75	75	10	10	10
+1	1	1	0	0	0	511	511	511	10	10	10
+1	1	1	0	0	0	20	20	20	10	10	10
+1	1	1	0	0	0	75	75	75	2	2	2
+1	1	1	0	0	0	511	511	511	2	2	2
+1	1	1	0	0	0	20	20	20	2	2	2
+1	1	1	0	0	0	10	10	10	2	2	2
+2	2	2	1	1	1	75	75	75	20	20	20
+2	2	2	1	1	1	511	511	511	20	20	20
+2	2	2	1	1	1	75	75	75	10	10	10
+2	2	2	1	1	1	511	511	511	10	10	10
+2	2	2	1	1	1	20	20	20	10	10	10
+2	2	2	1	1	1	75	75	75	2	2	2
+2	2	2	1	1	1	511	511	511	2	2	2
+2	2	2	1	1	1	20	20	20	2	2	2
+2	2	2	1	1	1	10	10	10	2	2	2
+-- !result
+select * from (select * from t0 where v1 < 10) t0 left join t1 on v1 = v4 + abs(1) join t2 left join (select * from t3 where v10 > 1) t3
+on v7 > v10 and v10 > v4;
+-- result:
+2	2	2	1	1	1	1	1	1	None	None	None
+-10	-10	-10	None	None	None	1	1	1	None	None	None
+0	0	0	None	None	None	1	1	1	None	None	None
+1	1	1	0	0	0	1	1	1	None	None	None
+2	2	2	1	1	1	2	2	2	None	None	None
+-10	-10	-10	None	None	None	2	2	2	None	None	None
+0	0	0	None	None	None	2	2	2	None	None	None
+1	1	1	0	0	0	2	2	2	None	None	None
+2	2	2	1	1	1	511	511	511	20	20	20
+2	2	2	1	1	1	511	511	511	2	2	2
+2	2	2	1	1	1	511	511	511	75	75	75
+2	2	2	1	1	1	511	511	511	2	6	3
+2	2	2	1	1	1	511	511	511	10	10	10
+1	1	1	0	0	0	511	511	511	20	20	20
+1	1	1	0	0	0	511	511	511	2	2	2
+1	1	1	0	0	0	511	511	511	75	75	75
+1	1	1	0	0	0	511	511	511	2	6	3
+1	1	1	0	0	0	511	511	511	10	10	10
+-10	-10	-10	None	None	None	511	511	511	None	None	None
+0	0	0	None	None	None	511	511	511	None	None	None
+2	2	2	1	1	1	10	10	10	2	2	2
+2	2	2	1	1	1	10	10	10	2	6	3
+1	1	1	0	0	0	10	10	10	2	2	2
+1	1	1	0	0	0	10	10	10	2	6	3
+2	2	2	1	1	1	75	75	75	20	20	20
+2	2	2	1	1	1	75	75	75	2	2	2
+2	2	2	1	1	1	75	75	75	2	6	3
+2	2	2	1	1	1	75	75	75	10	10	10
+1	1	1	0	0	0	75	75	75	20	20	20
+1	1	1	0	0	0	75	75	75	2	2	2
+1	1	1	0	0	0	75	75	75	2	6	3
+1	1	1	0	0	0	75	75	75	10	10	10
+-10	-10	-10	None	None	None	10	10	10	None	None	None
+0	0	0	None	None	None	10	10	10	None	None	None
+-10	-10	-10	None	None	None	75	75	75	None	None	None
+0	0	0	None	None	None	75	75	75	None	None	None
+2	2	2	1	1	1	20	20	20	2	2	2
+2	2	2	1	1	1	20	20	20	2	6	3
+2	2	2	1	1	1	20	20	20	10	10	10
+1	1	1	0	0	0	20	20	20	2	2	2
+1	1	1	0	0	0	20	20	20	2	6	3
+1	1	1	0	0	0	20	20	20	10	10	10
+2	2	2	1	1	1	0	0	0	None	None	None
+-10	-10	-10	None	None	None	0	0	0	None	None	None
+0	0	0	None	None	None	0	0	0	None	None	None
+1	1	1	0	0	0	0	0	0	None	None	None
+2	2	2	1	1	1	-10	-10	-10	None	None	None
+-10	-10	-10	None	None	None	-10	-10	-10	None	None	None
+0	0	0	None	None	None	-10	-10	-10	None	None	None
+1	1	1	0	0	0	-10	-10	-10	None	None	None
+-10	-10	-10	None	None	None	20	20	20	None	None	None
+0	0	0	None	None	None	20	20	20	None	None	None
+-- !result
+select * from (select * from t0 where v1 < 10) t0 right join t1 on v1 = v4 + abs(1) join t2 right join (select * from t3 where v10 > 1) t3
+on v7 > v10 and v10 > v4;
+-- result:
+None	None	None	-5	-20	-5	20	20	20	10	10	10
+None	None	None	-5	-20	-5	20	20	20	2	2	2
+None	None	None	-5	-20	-5	20	20	20	2	6	3
+None	None	None	-5	-20	-5	10	10	10	2	2	2
+None	None	None	-5	-20	-5	10	10	10	2	6	3
+None	None	None	-5	-20	-5	75	75	75	10	10	10
+None	None	None	-5	-20	-5	75	75	75	2	2	2
+None	None	None	-5	-20	-5	75	75	75	2	6	3
+None	None	None	-5	-20	-5	75	75	75	20	20	20
+None	None	None	-5	-20	-5	511	511	511	10	10	10
+None	None	None	-5	-20	-5	511	511	511	2	2	2
+None	None	None	-5	-20	-5	511	511	511	75	75	75
+None	None	None	-5	-20	-5	511	511	511	2	6	3
+None	None	None	-5	-20	-5	511	511	511	20	20	20
+None	None	None	20	20	20	511	511	511	75	75	75
+None	None	None	-15	-5	0	20	20	20	10	10	10
+None	None	None	-15	-5	0	20	20	20	2	2	2
+None	None	None	-15	-5	0	20	20	20	2	6	3
+None	None	None	-15	-5	0	10	10	10	2	2	2
+None	None	None	-15	-5	0	10	10	10	2	6	3
+None	None	None	-15	-5	0	75	75	75	10	10	10
+None	None	None	-15	-5	0	75	75	75	2	2	2
+None	None	None	-15	-5	0	75	75	75	2	6	3
+None	None	None	-15	-5	0	75	75	75	20	20	20
+None	None	None	-15	-5	0	511	511	511	10	10	10
+None	None	None	-15	-5	0	511	511	511	2	2	2
+None	None	None	-15	-5	0	511	511	511	75	75	75
+None	None	None	-15	-5	0	511	511	511	2	6	3
+None	None	None	-15	-5	0	511	511	511	20	20	20
+None	None	None	5	-10	5	20	20	20	10	10	10
+None	None	None	5	-10	5	75	75	75	10	10	10
+None	None	None	5	-10	5	75	75	75	20	20	20
+None	None	None	5	-10	5	511	511	511	10	10	10
+None	None	None	5	-10	5	511	511	511	75	75	75
+None	None	None	5	-10	5	511	511	511	20	20	20
+None	None	None	6	-9	6	20	20	20	10	10	10
+None	None	None	6	-9	6	75	75	75	10	10	10
+None	None	None	6	-9	6	75	75	75	20	20	20
+None	None	None	6	-9	6	511	511	511	10	10	10
+None	None	None	6	-9	6	511	511	511	75	75	75
+None	None	None	6	-9	6	511	511	511	20	20	20
+1	1	1	0	0	0	20	20	20	10	10	10
+1	1	1	0	0	0	20	20	20	2	2	2
+1	1	1	0	0	0	20	20	20	2	6	3
+1	1	1	0	0	0	10	10	10	2	2	2
+1	1	1	0	0	0	10	10	10	2	6	3
+1	1	1	0	0	0	75	75	75	10	10	10
+1	1	1	0	0	0	75	75	75	2	2	2
+1	1	1	0	0	0	75	75	75	2	6	3
+1	1	1	0	0	0	75	75	75	20	20	20
+1	1	1	0	0	0	511	511	511	10	10	10
+1	1	1	0	0	0	511	511	511	2	2	2
+1	1	1	0	0	0	511	511	511	75	75	75
+1	1	1	0	0	0	511	511	511	2	6	3
+1	1	1	0	0	0	511	511	511	20	20	20
+2	2	2	1	1	1	20	20	20	10	10	10
+2	2	2	1	1	1	20	20	20	2	2	2
+2	2	2	1	1	1	20	20	20	2	6	3
+2	2	2	1	1	1	10	10	10	2	2	2
+2	2	2	1	1	1	10	10	10	2	6	3
+2	2	2	1	1	1	75	75	75	10	10	10
+2	2	2	1	1	1	75	75	75	2	2	2
+2	2	2	1	1	1	75	75	75	2	6	3
+2	2	2	1	1	1	75	75	75	20	20	20
+2	2	2	1	1	1	511	511	511	10	10	10
+2	2	2	1	1	1	511	511	511	2	2	2
+2	2	2	1	1	1	511	511	511	75	75	75
+2	2	2	1	1	1	511	511	511	2	6	3
+2	2	2	1	1	1	511	511	511	20	20	20
+None	None	None	10	10	10	75	75	75	20	20	20
+None	None	None	10	10	10	511	511	511	75	75	75
+None	None	None	10	10	10	511	511	511	20	20	20
+None	None	None	-5	5	10	20	20	20	10	10	10
+None	None	None	-5	5	10	20	20	20	2	2	2
+None	None	None	-5	5	10	20	20	20	2	6	3
+None	None	None	-5	5	10	10	10	10	2	2	2
+None	None	None	-5	5	10	10	10	10	2	6	3
+None	None	None	-5	5	10	75	75	75	10	10	10
+None	None	None	-5	5	10	75	75	75	2	2	2
+None	None	None	-5	5	10	75	75	75	2	6	3
+None	None	None	-5	5	10	75	75	75	20	20	20
+None	None	None	-5	5	10	511	511	511	10	10	10
+None	None	None	-5	5	10	511	511	511	2	2	2
+None	None	None	-5	5	10	511	511	511	75	75	75
+None	None	None	-5	5	10	511	511	511	2	6	3
+None	None	None	-5	5	10	511	511	511	20	20	20
+None	None	None	-4	6	11	20	20	20	10	10	10
+None	None	None	-4	6	11	20	20	20	2	2	2
+None	None	None	-4	6	11	20	20	20	2	6	3
+None	None	None	-4	6	11	10	10	10	2	2	2
+None	None	None	-4	6	11	10	10	10	2	6	3
+None	None	None	-4	6	11	75	75	75	10	10	10
+None	None	None	-4	6	11	75	75	75	2	2	2
+None	None	None	-4	6	11	75	75	75	2	6	3
+None	None	None	-4	6	11	75	75	75	20	20	20
+None	None	None	-4	6	11	511	511	511	10	10	10
+None	None	None	-4	6	11	511	511	511	2	2	2
+None	None	None	-4	6	11	511	511	511	75	75	75
+None	None	None	-4	6	11	511	511	511	2	6	3
+None	None	None	-4	6	11	511	511	511	20	20	20
+None	None	None	-10	-10	-10	20	20	20	10	10	10
+None	None	None	-10	-10	-10	20	20	20	2	2	2
+None	None	None	-10	-10	-10	20	20	20	2	6	3
+None	None	None	-10	-10	-10	10	10	10	2	2	2
+None	None	None	-10	-10	-10	10	10	10	2	6	3
+None	None	None	-10	-10	-10	75	75	75	10	10	10
+None	None	None	-10	-10	-10	75	75	75	2	2	2
+None	None	None	-10	-10	-10	75	75	75	2	6	3
+None	None	None	-10	-10	-10	75	75	75	20	20	20
+None	None	None	-10	-10	-10	511	511	511	10	10	10
+None	None	None	-10	-10	-10	511	511	511	2	2	2
+None	None	None	-10	-10	-10	511	511	511	75	75	75
+None	None	None	-10	-10	-10	511	511	511	2	6	3
+None	None	None	-10	-10	-10	511	511	511	20	20	20
+None	None	None	2	2	2	20	20	20	10	10	10
+None	None	None	2	2	2	75	75	75	10	10	10
+None	None	None	2	2	2	75	75	75	20	20	20
+None	None	None	2	2	2	511	511	511	10	10	10
+None	None	None	2	2	2	511	511	511	75	75	75
+None	None	None	2	2	2	511	511	511	20	20	20
+None	None	None	None	None	None	None	None	None	511	511	511
+-- !result
+select * from (select * from t0 where v1 < 10) t0 inner join t1 on v1 = v4 + abs(1) join t2 left join (select * from t3 where v10 > 1) t3
+on v7 > v10 and v10 > v4;
+-- result:
+1	1	1	0	0	0	1	1	1	None	None	None
+2	2	2	1	1	1	1	1	1	None	None	None
+1	1	1	0	0	0	2	2	2	None	None	None
+2	2	2	1	1	1	2	2	2	None	None	None
+1	1	1	0	0	0	20	20	20	2	2	2
+1	1	1	0	0	0	20	20	20	2	6	3
+1	1	1	0	0	0	20	20	20	10	10	10
+2	2	2	1	1	1	20	20	20	2	2	2
+2	2	2	1	1	1	20	20	20	2	6	3
+2	2	2	1	1	1	20	20	20	10	10	10
+1	1	1	0	0	0	0	0	0	None	None	None
+2	2	2	1	1	1	0	0	0	None	None	None
+1	1	1	0	0	0	-10	-10	-10	None	None	None
+2	2	2	1	1	1	-10	-10	-10	None	None	None
+1	1	1	0	0	0	10	10	10	2	2	2
+1	1	1	0	0	0	10	10	10	2	6	3
+2	2	2	1	1	1	10	10	10	2	2	2
+2	2	2	1	1	1	10	10	10	2	6	3
+1	1	1	0	0	0	75	75	75	2	2	2
+1	1	1	0	0	0	75	75	75	2	6	3
+1	1	1	0	0	0	75	75	75	20	20	20
+1	1	1	0	0	0	75	75	75	10	10	10
+2	2	2	1	1	1	75	75	75	2	2	2
+2	2	2	1	1	1	75	75	75	2	6	3
+2	2	2	1	1	1	75	75	75	20	20	20
+2	2	2	1	1	1	75	75	75	10	10	10
+1	1	1	0	0	0	511	511	511	2	2	2
+1	1	1	0	0	0	511	511	511	75	75	75
+1	1	1	0	0	0	511	511	511	2	6	3
+1	1	1	0	0	0	511	511	511	20	20	20
+1	1	1	0	0	0	511	511	511	10	10	10
+2	2	2	1	1	1	511	511	511	2	2	2
+2	2	2	1	1	1	511	511	511	75	75	75
+2	2	2	1	1	1	511	511	511	2	6	3
+2	2	2	1	1	1	511	511	511	20	20	20
+2	2	2	1	1	1	511	511	511	10	10	10
+-- !result
+select * from (select * from t0 where v1 < 10) t0 left join t1 on v1 = v4 + abs(1) join t2 inner join (select * from t3 where v10 > 1) t3
+on v7 > v10 and v10 > v4;
+-- result:
+2	2	2	1	1	1	511	511	511	75	75	75
+1	1	1	0	0	0	511	511	511	75	75	75
+2	2	2	1	1	1	75	75	75	2	6	3
+2	2	2	1	1	1	511	511	511	2	6	3
+2	2	2	1	1	1	20	20	20	2	6	3
+2	2	2	1	1	1	10	10	10	2	6	3
+1	1	1	0	0	0	75	75	75	2	6	3
+1	1	1	0	0	0	511	511	511	2	6	3
+1	1	1	0	0	0	20	20	20	2	6	3
+1	1	1	0	0	0	10	10	10	2	6	3
+2	2	2	1	1	1	75	75	75	20	20	20
+2	2	2	1	1	1	511	511	511	20	20	20
+1	1	1	0	0	0	75	75	75	20	20	20
+1	1	1	0	0	0	511	511	511	20	20	20
+2	2	2	1	1	1	75	75	75	10	10	10
+2	2	2	1	1	1	511	511	511	10	10	10
+2	2	2	1	1	1	20	20	20	10	10	10
+1	1	1	0	0	0	75	75	75	10	10	10
+1	1	1	0	0	0	511	511	511	10	10	10
+1	1	1	0	0	0	20	20	20	10	10	10
+2	2	2	1	1	1	75	75	75	2	2	2
+2	2	2	1	1	1	511	511	511	2	2	2
+2	2	2	1	1	1	20	20	20	2	2	2
+2	2	2	1	1	1	10	10	10	2	2	2
+1	1	1	0	0	0	75	75	75	2	2	2
+1	1	1	0	0	0	511	511	511	2	2	2
+1	1	1	0	0	0	20	20	20	2	2	2
+1	1	1	0	0	0	10	10	10	2	2	2
+-- !result
+select * from (select * from t0 where v1 < 10) t0 left join t1 on v1 = v4 + abs(1) join t2 right join (select * from t3 where v10 > 1) t3
+on v7 > v10 and v10 > v4;
+-- result:
+1	1	1	0	0	0	10	10	10	2	2	2
+1	1	1	0	0	0	10	10	10	2	6	3
+2	2	2	1	1	1	10	10	10	2	2	2
+2	2	2	1	1	1	10	10	10	2	6	3
+1	1	1	0	0	0	75	75	75	10	10	10
+1	1	1	0	0	0	75	75	75	2	2	2
+1	1	1	0	0	0	75	75	75	2	6	3
+1	1	1	0	0	0	75	75	75	20	20	20
+2	2	2	1	1	1	75	75	75	10	10	10
+2	2	2	1	1	1	75	75	75	2	2	2
+2	2	2	1	1	1	75	75	75	2	6	3
+2	2	2	1	1	1	75	75	75	20	20	20
+1	1	1	0	0	0	511	511	511	10	10	10
+1	1	1	0	0	0	511	511	511	2	2	2
+1	1	1	0	0	0	511	511	511	75	75	75
+1	1	1	0	0	0	511	511	511	2	6	3
+1	1	1	0	0	0	511	511	511	20	20	20
+2	2	2	1	1	1	511	511	511	10	10	10
+2	2	2	1	1	1	511	511	511	2	2	2
+2	2	2	1	1	1	511	511	511	75	75	75
+2	2	2	1	1	1	511	511	511	2	6	3
+2	2	2	1	1	1	511	511	511	20	20	20
+1	1	1	0	0	0	20	20	20	10	10	10
+1	1	1	0	0	0	20	20	20	2	2	2
+1	1	1	0	0	0	20	20	20	2	6	3
+2	2	2	1	1	1	20	20	20	10	10	10
+2	2	2	1	1	1	20	20	20	2	2	2
+2	2	2	1	1	1	20	20	20	2	6	3
+None	None	None	None	None	None	None	None	None	511	511	511
+-- !result
+select * from (select * from t0 where v1 < 10) t0 right join t1 on v1 = v4 + abs(1) join t2 right join (select * from t3 where v10 > 1) t3
+on v7 > v10 and v10 > v4;
+-- result:
+None	None	None	20	20	20	511	511	511	75	75	75
+None	None	None	-15	-5	0	10	10	10	2	2	2
+None	None	None	-15	-5	0	10	10	10	2	6	3
+None	None	None	-15	-5	0	75	75	75	10	10	10
+None	None	None	-15	-5	0	75	75	75	2	2	2
+None	None	None	-15	-5	0	75	75	75	2	6	3
+None	None	None	-15	-5	0	75	75	75	20	20	20
+None	None	None	-15	-5	0	511	511	511	10	10	10
+None	None	None	-15	-5	0	511	511	511	2	2	2
+None	None	None	-15	-5	0	511	511	511	75	75	75
+None	None	None	-15	-5	0	511	511	511	2	6	3
+None	None	None	-15	-5	0	511	511	511	20	20	20
+None	None	None	-15	-5	0	20	20	20	10	10	10
+None	None	None	-15	-5	0	20	20	20	2	2	2
+None	None	None	-15	-5	0	20	20	20	2	6	3
+None	None	None	-5	-20	-5	10	10	10	2	2	2
+None	None	None	-5	-20	-5	10	10	10	2	6	3
+None	None	None	-5	-20	-5	75	75	75	10	10	10
+None	None	None	-5	-20	-5	75	75	75	2	2	2
+None	None	None	-5	-20	-5	75	75	75	2	6	3
+None	None	None	-5	-20	-5	75	75	75	20	20	20
+None	None	None	-5	-20	-5	511	511	511	10	10	10
+None	None	None	-5	-20	-5	511	511	511	2	2	2
+None	None	None	-5	-20	-5	511	511	511	75	75	75
+None	None	None	-5	-20	-5	511	511	511	2	6	3
+None	None	None	-5	-20	-5	511	511	511	20	20	20
+None	None	None	-5	-20	-5	20	20	20	10	10	10
+None	None	None	-5	-20	-5	20	20	20	2	2	2
+None	None	None	-5	-20	-5	20	20	20	2	6	3
+None	None	None	5	-10	5	75	75	75	10	10	10
+None	None	None	5	-10	5	75	75	75	20	20	20
+None	None	None	5	-10	5	511	511	511	10	10	10
+None	None	None	5	-10	5	511	511	511	75	75	75
+None	None	None	5	-10	5	511	511	511	20	20	20
+None	None	None	5	-10	5	20	20	20	10	10	10
+None	None	None	6	-9	6	75	75	75	10	10	10
+None	None	None	6	-9	6	75	75	75	20	20	20
+None	None	None	6	-9	6	511	511	511	10	10	10
+None	None	None	6	-9	6	511	511	511	75	75	75
+None	None	None	6	-9	6	511	511	511	20	20	20
+None	None	None	6	-9	6	20	20	20	10	10	10
+None	None	None	-5	5	10	10	10	10	2	2	2
+None	None	None	-5	5	10	10	10	10	2	6	3
+None	None	None	-5	5	10	75	75	75	10	10	10
+None	None	None	-5	5	10	75	75	75	2	2	2
+None	None	None	-5	5	10	75	75	75	2	6	3
+None	None	None	-5	5	10	75	75	75	20	20	20
+None	None	None	-5	5	10	511	511	511	10	10	10
+None	None	None	-5	5	10	511	511	511	2	2	2
+None	None	None	-5	5	10	511	511	511	75	75	75
+None	None	None	-5	5	10	511	511	511	2	6	3
+None	None	None	-5	5	10	511	511	511	20	20	20
+None	None	None	-5	5	10	20	20	20	10	10	10
+None	None	None	-5	5	10	20	20	20	2	2	2
+None	None	None	-5	5	10	20	20	20	2	6	3
+None	None	None	-4	6	11	10	10	10	2	2	2
+None	None	None	-4	6	11	10	10	10	2	6	3
+None	None	None	-4	6	11	75	75	75	10	10	10
+None	None	None	-4	6	11	75	75	75	2	2	2
+None	None	None	-4	6	11	75	75	75	2	6	3
+None	None	None	-4	6	11	75	75	75	20	20	20
+None	None	None	-4	6	11	511	511	511	10	10	10
+None	None	None	-4	6	11	511	511	511	2	2	2
+None	None	None	-4	6	11	511	511	511	75	75	75
+None	None	None	-4	6	11	511	511	511	2	6	3
+None	None	None	-4	6	11	511	511	511	20	20	20
+None	None	None	-4	6	11	20	20	20	10	10	10
+None	None	None	-4	6	11	20	20	20	2	2	2
+None	None	None	-4	6	11	20	20	20	2	6	3
+1	1	1	0	0	0	10	10	10	2	2	2
+1	1	1	0	0	0	10	10	10	2	6	3
+1	1	1	0	0	0	75	75	75	10	10	10
+1	1	1	0	0	0	75	75	75	2	2	2
+1	1	1	0	0	0	75	75	75	2	6	3
+1	1	1	0	0	0	75	75	75	20	20	20
+1	1	1	0	0	0	511	511	511	10	10	10
+1	1	1	0	0	0	511	511	511	2	2	2
+1	1	1	0	0	0	511	511	511	75	75	75
+1	1	1	0	0	0	511	511	511	2	6	3
+1	1	1	0	0	0	511	511	511	20	20	20
+1	1	1	0	0	0	20	20	20	10	10	10
+1	1	1	0	0	0	20	20	20	2	2	2
+1	1	1	0	0	0	20	20	20	2	6	3
+2	2	2	1	1	1	10	10	10	2	2	2
+2	2	2	1	1	1	10	10	10	2	6	3
+2	2	2	1	1	1	75	75	75	10	10	10
+2	2	2	1	1	1	75	75	75	2	2	2
+2	2	2	1	1	1	75	75	75	2	6	3
+2	2	2	1	1	1	75	75	75	20	20	20
+2	2	2	1	1	1	511	511	511	10	10	10
+2	2	2	1	1	1	511	511	511	2	2	2
+2	2	2	1	1	1	511	511	511	75	75	75
+2	2	2	1	1	1	511	511	511	2	6	3
+2	2	2	1	1	1	511	511	511	20	20	20
+2	2	2	1	1	1	20	20	20	10	10	10
+2	2	2	1	1	1	20	20	20	2	2	2
+2	2	2	1	1	1	20	20	20	2	6	3
+None	None	None	10	10	10	75	75	75	20	20	20
+None	None	None	10	10	10	511	511	511	75	75	75
+None	None	None	10	10	10	511	511	511	20	20	20
+None	None	None	-10	-10	-10	10	10	10	2	2	2
+None	None	None	-10	-10	-10	10	10	10	2	6	3
+None	None	None	-10	-10	-10	75	75	75	10	10	10
+None	None	None	-10	-10	-10	75	75	75	2	2	2
+None	None	None	-10	-10	-10	75	75	75	2	6	3
+None	None	None	-10	-10	-10	75	75	75	20	20	20
+None	None	None	-10	-10	-10	511	511	511	10	10	10
+None	None	None	-10	-10	-10	511	511	511	2	2	2
+None	None	None	-10	-10	-10	511	511	511	75	75	75
+None	None	None	-10	-10	-10	511	511	511	2	6	3
+None	None	None	-10	-10	-10	511	511	511	20	20	20
+None	None	None	-10	-10	-10	20	20	20	10	10	10
+None	None	None	-10	-10	-10	20	20	20	2	2	2
+None	None	None	-10	-10	-10	20	20	20	2	6	3
+None	None	None	2	2	2	75	75	75	10	10	10
+None	None	None	2	2	2	75	75	75	20	20	20
+None	None	None	2	2	2	511	511	511	10	10	10
+None	None	None	2	2	2	511	511	511	75	75	75
+None	None	None	2	2	2	511	511	511	20	20	20
+None	None	None	2	2	2	20	20	20	10	10	10
+None	None	None	None	None	None	None	None	None	511	511	511
+-- !result
+SELECT *
+FROM t0
+INNER JOIN t1 ON t0.v1 = t1.v4 AND t0.v2 >= t1.v5
+INNER JOIN t2 ON t1.v5 = t2.v7 AND t2.v9 BETWEEN 0 AND 200
+INNER JOIN t3 ON t2.v8 = t3.v10 AND t3.v12 IN (SELECT MAX(v12) - 501 FROM t3);
+-- result:
+10	10	10	10	10	10	10	10	10	10	10	10
+-- !result
+SELECT *
+FROM (select * from t0 where v1 = 2) t0
+INNER JOIN (select * from t1 where v6 > 10 and v6 < 50) t1 ON t0.v1 = t1.v4 AND t1.v6 = (SELECT MIN(v6) FROM t1 WHERE v4 = t0.v1)
+LEFT JOIN t2 ON t1.v5 = t2.v7 AND t2.v9 < (SELECT AVG(v9) FROM t2)
+RIGHT JOIN t3 ON t2.v8 = t3.v10 AND t2.v9 > t3.v12;
+-- result:
+None	None	None	None	None	None	None	None	None	75	75	75
+None	None	None	None	None	None	None	None	None	20	20	20
+None	None	None	None	None	None	None	None	None	-10	-10	-10
+None	None	None	None	None	None	None	None	None	-20	-5	-30
+None	None	None	None	None	None	None	None	None	0	0	0
+None	None	None	None	None	None	None	None	None	10	10	10
+None	None	None	None	None	None	None	None	None	0	5	0
+None	None	None	None	None	None	None	None	None	2	2	2
+None	None	None	None	None	None	None	None	None	2	6	3
+None	None	None	None	None	None	None	None	None	511	511	511
+None	None	None	None	None	None	None	None	None	1	1	1
+-- !result
+SELECT *
+FROM t0
+LEFT JOIN t1 ON t0.v1 = t1.v4 AND t1.v5 IN (SELECT v5 FROM t1)
+RIGHT JOIN t2 ON t1.v5 = t2.v7 OR t2.v9 NOT IN (SELECT DISTINCT v9 FROM t2)
+INNER JOIN t3 ON t2.v8 = t3.v10 AND t3.v12 >= (SELECT max(v12) FROM t3);
+-- result:
+511	511	511	511	511	511	511	511	511	511	511	511
+-- !result

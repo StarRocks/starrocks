@@ -15,13 +15,24 @@
 package com.starrocks.lake;
 
 import com.staros.proto.FileStoreInfo;
+<<<<<<< HEAD
 import com.starrocks.catalog.Database;
+=======
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedIndex;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.PropertyAnalyzer;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
@@ -40,6 +51,10 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+<<<<<<< HEAD
+=======
+import java.util.Map;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.Objects;
 
 public class CreateLakeTableTest {
@@ -53,7 +68,11 @@ public class CreateLakeTableTest {
         // create database
         String createDbStmtStr = "create database lake_test;";
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
+=======
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @AfterClass
@@ -62,25 +81,43 @@ public class CreateLakeTableTest {
 
     private static void createTable(String sql) throws Exception {
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentState().createTable(createTableStmt);
     }
 
     private void checkLakeTable(String dbName, String tableName) {
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         Table table = db.getTable(tableName);
+=======
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(createTableStmt);
+    }
+
+    private void checkLakeTable(String dbName, String tableName) {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertTrue(table.isCloudNativeTable());
     }
 
     private LakeTable getLakeTable(String dbName, String tableName) {
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         Table table = db.getTable(tableName);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertTrue(table.isCloudNativeTable());
         return (LakeTable) table;
     }
 
     private String getDefaultStorageVolumeFullPath() {
         StorageVolume sv = GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getDefaultStorageVolume();
+<<<<<<< HEAD
         StarOSAgent starOSAgent = GlobalStateMgr.getCurrentStarOSAgent();
+=======
+        StarOSAgent starOSAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         FileStoreInfo fsInfo = sv.toFileStoreInfo();
         String serviceId = "";
         try {
@@ -92,7 +129,11 @@ public class CreateLakeTableTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testCreateLakeTable() throws UserException {
+=======
+    public void testCreateLakeTable() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // normal
         ExceptionChecker.expectThrowsNoException(() -> createTable(
                 "create table lake_test.single_partition_duplicate_key (key1 int, key2 varchar(10))\n" +
@@ -119,6 +160,7 @@ public class CreateLakeTableTest {
                         "properties('replication_num' = '1');"));
         checkLakeTable("lake_test", "multi_partition_unique_key");
 
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb("lake_test");
         LakeTable table = getLakeTable("lake_test", "multi_partition_unique_key");
         String defaultFullPath = getDefaultStorageVolumeFullPath();
@@ -130,6 +172,23 @@ public class CreateLakeTableTest {
 
     @Test
     public void testCreateLakeTableWithStorageCache() throws UserException {
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("lake_test");
+        LakeTable table = getLakeTable("lake_test", "multi_partition_unique_key");
+        String defaultFullPath = getDefaultStorageVolumeFullPath();
+        String defaultTableFullPath = String.format("%s/db%d/%d", defaultFullPath, db.getId(), table.getId());
+        Assert.assertEquals(defaultTableFullPath, Objects.requireNonNull(table.getDefaultFilePathInfo()).getFullPath());
+        Assert.assertEquals(defaultTableFullPath + "/100",
+                Objects.requireNonNull(table.getPartitionFilePathInfo(100)).getFullPath());
+        Assert.assertEquals(2, table.getMaxColUniqueId());
+        Assert.assertEquals(0, table.getColumn("key1").getUniqueId());
+        Assert.assertEquals(1, table.getColumn("key2").getUniqueId());
+        Assert.assertEquals(2, table.getColumn("v").getUniqueId());
+    }
+
+    @Test
+    public void testCreateLakeTableWithStorageCache() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // normal
         ExceptionChecker.expectThrowsNoException(() -> createTable(
                 "create table lake_test.single_partition_duplicate_key_cache (key1 int, key2 varchar(10))\n" +
@@ -222,13 +281,21 @@ public class CreateLakeTableTest {
             Assert.assertTrue(enablePersistentIndex);
             // check table persistentIndexType
             String indexType = lakeTable.getPersistentIndexTypeString();
+<<<<<<< HEAD
             Assert.assertEquals(indexType, "LOCAL");
+=======
+            Assert.assertEquals(indexType, "CLOUD_NATIVE");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
             String sql = "show create table lake_test.table_with_persistent_index";
             ShowCreateTableStmt showCreateTableStmt =
                     (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+<<<<<<< HEAD
             ShowExecutor executor = new ShowExecutor(connectContext, showCreateTableStmt);
             ShowResultSet resultSet = executor.execute();
+=======
+            ShowResultSet resultSet = ShowExecutor.execute(showCreateTableStmt, connectContext);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
             Assert.assertFalse(resultSet.getResultRows().isEmpty());
         }
@@ -241,7 +308,11 @@ public class CreateLakeTableTest {
                         "(c0 int, c1 string, c2 int, c3 bigint)\n" +
                         "PRIMARY KEY(c0)\n" +
                         "distributed by hash(c0) buckets 2\n" +
+<<<<<<< HEAD
                         "properties('enable_persistent_index' = 'true');"));
+=======
+                        "properties('enable_persistent_index' = 'true', 'persistent_index_type' = 'LOCAL');"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         ExceptionChecker.expectThrowsNoException(() -> createTable(
                 "create table lake_test.table_in_be_and_cn\n" +
@@ -252,13 +323,21 @@ public class CreateLakeTableTest {
             LakeTable lakeTable = getLakeTable("lake_test", "table_in_be_and_cn");
             // check table persistentIndex
             boolean enablePersistentIndex = lakeTable.enablePersistentIndex();
+<<<<<<< HEAD
             Assert.assertFalse(enablePersistentIndex);
+=======
+            Assert.assertTrue(enablePersistentIndex);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
             String sql = "show create table lake_test.table_in_be_and_cn";
             ShowCreateTableStmt showCreateTableStmt =
                     (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+<<<<<<< HEAD
             ShowExecutor executor = new ShowExecutor(connectContext, showCreateTableStmt);
             ShowResultSet resultSet = executor.execute();
+=======
+            ShowResultSet resultSet = ShowExecutor.execute(showCreateTableStmt, connectContext);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
             Assert.assertNotEquals(0, resultSet.getResultRows().size());
         }
@@ -311,7 +390,11 @@ public class CreateLakeTableTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testCreateLakeTableListPartition() throws UserException {
+=======
+    public void testCreateLakeTableListPartition() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // list partition
         ExceptionChecker.expectThrowsNoException(() -> createTable(
                 "create table lake_test.list_partition (dt date not null, key2 varchar(10))\n" +
@@ -328,4 +411,113 @@ public class CreateLakeTableTest {
                         "distributed by hash(dt) buckets 3;"));
         checkLakeTable("lake_test", "auto_list_partition");
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testCreateLakeTableEnableCloudNativePersistentIndex() throws Exception {
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table lake_test.table_with_cloud_native_persistent_index\n" +
+                        "(c0 int, c1 string, c2 int, c3 bigint)\n" +
+                        "PRIMARY KEY(c0)\n" +
+                        "distributed by hash(c0) buckets 2\n" +
+                        "properties('enable_persistent_index' = 'true', 'persistent_index_type' = 'cloud_native');"));
+        {
+            LakeTable lakeTable = getLakeTable("lake_test", "table_with_cloud_native_persistent_index");
+            // check table persistentIndex
+            boolean enablePersistentIndex = lakeTable.enablePersistentIndex();
+            Assert.assertTrue(enablePersistentIndex);
+            // check table persistentIndexType
+            String indexType = lakeTable.getPersistentIndexTypeString();
+            Assert.assertEquals("CLOUD_NATIVE", indexType);
+
+            String sql = "show create table lake_test.table_with_cloud_native_persistent_index";
+            ShowCreateTableStmt showCreateTableStmt =
+                    (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            ShowResultSet resultSet = ShowExecutor.execute(showCreateTableStmt, connectContext);
+
+            Assert.assertNotEquals(0, resultSet.getResultRows().size());
+        }
+    }
+
+    @Test
+    public void testCreateTableWithRollUp() throws Exception {
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table lake_test.table_with_rollup\n" +
+                        "(c0 int, c1 string, c2 int, c3 bigint)\n" +
+                        "DUPLICATE KEY(c0)\n" +
+                        "distributed by hash(c0) buckets 2\n" +
+                        "ROLLUP (mv1 (c0, c1));"));
+        {
+            LakeTable lakeTable = getLakeTable("lake_test", "table_with_rollup");
+            Assert.assertEquals(2, lakeTable.getShardGroupIds().size());
+
+            Assert.assertEquals(2, lakeTable.getAllPartitions().stream().findAny().
+                    get().getDefaultPhysicalPartition().getMaterializedIndices(MaterializedIndex.IndexExtState.ALL).size());
+
+        }
+    }
+    @Test
+    public void testRestoreColumnUniqueId() throws Exception {
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table lake_test.test_unique_id\n" +
+                        "(c0 int, c1 string, c2 int, c3 bigint)\n" +
+                        "PRIMARY KEY(c0)\n" +
+                        "distributed by hash(c0) buckets 2\n" +
+                        "properties('enable_persistent_index' = 'true', 'persistent_index_type' = 'cloud_native');"));
+        LakeTable lakeTable = getLakeTable("lake_test", "test_unique_id");
+        // Clear unique id first
+        lakeTable.setMaxColUniqueId(0);
+        for (Column column : lakeTable.getColumns()) {
+            column.setUniqueId(0);
+        }
+        lakeTable.gsonPostProcess();
+        Assert.assertEquals(3, lakeTable.getMaxColUniqueId());
+        Assert.assertEquals(0, lakeTable.getColumn("c0").getUniqueId());
+        Assert.assertEquals(1, lakeTable.getColumn("c1").getUniqueId());
+        Assert.assertEquals(2, lakeTable.getColumn("c2").getUniqueId());
+        Assert.assertEquals(3, lakeTable.getColumn("c3").getUniqueId());
+    }
+
+    @Test
+    public void testCreateTableWithUKFK() {
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "CREATE TABLE lake_test.region (\n" +
+                        "  r_regionkey  INT NOT NULL,\n" +
+                        "  r_name       VARCHAR(25) NOT NULL,\n" +
+                        "  r_comment    VARCHAR(152)\n" +
+                        ") ENGINE=OLAP\n" +
+                        "DUPLICATE KEY(`r_regionkey`)\n" +
+                        "DISTRIBUTED BY HASH(`r_regionkey`) BUCKETS 1\n" +
+                        "PROPERTIES (\n" +
+                        " 'replication_num' = '1',\n " +
+                        " 'enable_persistent_index' = 'true', \n" +
+                        " 'persistent_index_type' = 'cloud_native', \n" +
+                        " 'unique_constraints' = 'r_regionkey'\n" +
+                        ");"));
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "CREATE TABLE lake_test.nation (\n" +
+                        "  n_nationkey INT(11) NOT NULL,\n" +
+                        "  n_name      VARCHAR(25) NOT NULL,\n" +
+                        "  n_regionkey INT(11) NOT NULL,\n" +
+                        "  n_comment   VARCHAR(152) NULL\n" +
+                        ") ENGINE=OLAP\n" +
+                        "DUPLICATE KEY(`N_NATIONKEY`)\n" +
+                        "DISTRIBUTED BY HASH(`N_NATIONKEY`) BUCKETS 1\n" +
+                        "PROPERTIES (\n" +
+                        " 'replication_num' = '1',\n" +
+                        " 'enable_persistent_index' = 'true', \n" +
+                        " 'persistent_index_type' = 'cloud_native', \n" +
+                        " 'unique_constraints' = 'n_nationkey',\n" +
+                        " 'foreign_key_constraints' = '(n_regionkey) references region(r_regionkey)'\n" +
+                        ");"));
+        LakeTable region = getLakeTable("lake_test", "region");
+        LakeTable nation = getLakeTable("lake_test", "nation");
+        Map<String, String> regionProps = region.getProperties();
+        Assert.assertTrue(regionProps.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT));
+        Map<String, String> nationProps = nation.getProperties();
+        Assert.assertTrue(nationProps.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT));
+        Assert.assertTrue(nationProps.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT));
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

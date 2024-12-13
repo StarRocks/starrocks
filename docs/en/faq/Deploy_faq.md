@@ -47,9 +47,15 @@ wget https://bootstrap.pypa.io/ez_setup.py -O - | python
 
 ## Can FE and BE configuration items be modified and then take effect without restarting the cluster?
 
+<<<<<<< HEAD
 Yes. Perform the following steps to modify the configurations of [FE and BE parameters](../administration/management/FE_configuration.md):
 
 - FE
+=======
+Yes. Perform the following steps to complete the modifications for an FE and a BE configuration item:
+
+- FE: You can complete the modification for an FE in one of the following ways:
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
   - SQL
 
   ```plaintext
@@ -76,7 +82,11 @@ Yes. Perform the following steps to modify the configurations of [FE and BE para
   http://192.168.110.101:8030/api/_set_config?enable_statistic_collect=true
   ```
 
+<<<<<<< HEAD
 - BE
+=======
+- BE: You can complete the modification for a BE in the following way:
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ```plaintext
 curl -XPOST -u username:password \
@@ -91,6 +101,7 @@ CREATE USER 'test'@'%' IDENTIFIED BY '123456';
 GRANT SELECT ON . TO 'test'@'%';
 ```
 
+<<<<<<< HEAD
 ## What do I do if the error "Failed to get scan range, no queryable replica found in tablet:xxxxx" occurs after I extend the BE disk space?
 
 ### Problem description
@@ -104,6 +115,8 @@ Patches to this bug (Primary Key tables do not support BE disk space re-balancin
 - Manually distribute data among disks. For example, copy the directory from the disk with a high space usage to a disk with a larger space.
 - If the data on these disks is not important, we recommend you delete the disks and modify the disk path. If this error persists, use [TRUNCATE TABLE](../sql-reference/sql-statements/table_bucket_part_index/TRUNCATE_TABLE.md) to clear data in the table to free up some space.
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ## Why does the error "Fe type:unknown ,is ready :false." occur when I start an FE during the cluster restart?
 
 Check if the leader FE is running. If not, restart the FE nodes in your cluster one by one.

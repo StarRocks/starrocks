@@ -38,10 +38,22 @@ enum TCounterMergeType {
     SKIP_SECOND_MERGE,
 }
 
+<<<<<<< HEAD
+=======
+enum TCounterMinMaxType {
+  MIN_MAX_ALL = 0,
+  SKIP_ALL = 1
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 struct TCounterStrategy {
     1: required TCounterAggregateType aggregate_type
     2: required TCounterMergeType merge_type
     3: required i64 display_threshold = 0
+<<<<<<< HEAD
+=======
+    4: optional TCounterMinMaxType min_max_type = TCounterMinMaxType.MIN_MAX_ALL
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 // Counter data
@@ -74,6 +86,12 @@ struct TRuntimeProfileNode {
   
   // map from parent counter name to child counter name
   8: required map<string, set<string>> child_counters_map
+<<<<<<< HEAD
+=======
+
+  // The version of this profile
+  9: optional i64 version
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 // A flattened tree of runtime profiles, obtained by an

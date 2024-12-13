@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # bitmap_agg
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 将一列中的多行非 NULL 数值合并成一行 BITMAP 值，即多行转一行。
 

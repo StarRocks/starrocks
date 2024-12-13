@@ -31,7 +31,11 @@ namespace starrocks {
 
 #ifdef BE_TEST
 // Allow injected send_reply in BE TEST mode
+<<<<<<< HEAD
 void (*s_injected_send_reply)(HttpRequest*, HttpStatus, const std::string&) = nullptr;
+=======
+void (*s_injected_send_reply)(HttpRequest*, HttpStatus, std::string_view) = nullptr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #endif
 
 // Send Unauthorized status with basic challenge
@@ -51,7 +55,11 @@ void HttpChannel::send_reply(HttpRequest* request, HttpStatus status) {
     evhttp_send_reply(request->get_evhttp_request(), status, defalut_reason(status).c_str(), nullptr);
 }
 
+<<<<<<< HEAD
 void HttpChannel::send_reply(HttpRequest* request, HttpStatus status, const std::string& content) {
+=======
+void HttpChannel::send_reply(HttpRequest* request, HttpStatus status, std::string_view content) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #ifdef BE_TEST
     if (s_injected_send_reply != nullptr) {
         s_injected_send_reply(request, status, content);
@@ -59,7 +67,11 @@ void HttpChannel::send_reply(HttpRequest* request, HttpStatus status, const std:
     }
 #endif
     auto evb = evbuffer_new();
+<<<<<<< HEAD
     evbuffer_add(evb, content.c_str(), content.size());
+=======
+    evbuffer_add(evb, content.data(), content.size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     evhttp_send_reply(request->get_evhttp_request(), status, defalut_reason(status).c_str(), evb);
     evbuffer_free(evb);
 }

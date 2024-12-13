@@ -6,7 +6,11 @@ displayed_sidebar: docs
 
 ## Description
 
+<<<<<<< HEAD
 Views the last BACKUP task in a specified database. For more information, see [data backup and restoration](../../../administration/management/Backup_and_restore.md).
+=======
+Views the last BACKUP task in a specified database.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 > **NOTE**
 >

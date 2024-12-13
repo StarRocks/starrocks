@@ -35,12 +35,20 @@
 package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
+<<<<<<< HEAD
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt.QuotaType;
 
 import java.io.DataInput;
+=======
+import com.starrocks.common.io.Text;
+import com.starrocks.common.io.Writable;
+import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.sql.ast.AlterDatabaseQuotaStmt.QuotaType;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.io.DataOutput;
 import java.io.IOException;
 
@@ -86,6 +94,7 @@ public class DatabaseInfo implements Writable {
         return quota;
     }
 
+<<<<<<< HEAD
     public static DatabaseInfo read(DataInput in) throws IOException {
         DatabaseInfo dbInfo = new DatabaseInfo();
         dbInfo.readFields(in);
@@ -116,6 +125,11 @@ public class DatabaseInfo implements Writable {
         // Compatible with dbState
         Text.readString(in);
         this.quotaType = QuotaType.valueOf(Text.readString(in));
+=======
+    @Override
+    public void write(DataOutput out) throws IOException {
+        Text.writeString(out, GsonUtils.GSON.toJson(this));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public String getClusterName() {

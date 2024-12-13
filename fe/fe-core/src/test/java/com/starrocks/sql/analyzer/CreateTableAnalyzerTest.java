@@ -14,12 +14,20 @@
 
 package com.starrocks.sql.analyzer;
 
+<<<<<<< HEAD
 import com.starrocks.common.AnalysisException;
+=======
+import com.starrocks.common.Config;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+<<<<<<< HEAD
+=======
+import org.junit.AfterClass;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.Test;
@@ -44,13 +52,24 @@ public class CreateTableAnalyzerTest {
         connectContext = UtFrameUtils.createDefaultCtx();
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withDatabase("test_create_table_db");
+<<<<<<< HEAD
 
 
+=======
+    }
+
+    @AfterClass
+    public static void afterClass() throws Exception {
+        Config.max_column_number_per_table = 10000;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
     public void testAnalyze() throws Exception {
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         String sql = "CREATE TABLE test_create_table_db.starrocks_test_table\n" +
                 "(\n" +
                 "    `tag_id` string,\n" +
@@ -66,6 +85,7 @@ public class CreateTableAnalyzerTest {
                 "\"compression\" = \"LZ4\"\n" +
                 ")\n";
 
+<<<<<<< HEAD
         expectedEx.expect(AnalysisException.class);
         expectedEx.expectMessage("Getting analyzing error. Detail message: Unknown column 'id' does not exist.");
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
@@ -73,4 +93,55 @@ public class CreateTableAnalyzerTest {
         CreateTableAnalyzer.analyze(createTableStmt, connectContext);
     }
 
+=======
+        expectedEx.expect(SemanticException.class);
+        expectedEx.expectMessage("doesn't exist");
+        CreateTableStmt createTableStmt = (CreateTableStmt) com.starrocks.sql.parser.SqlParser
+                .parse(sql, connectContext.getSessionVariable().getSqlMode()).get(0);
+        CreateTableAnalyzer.analyze(createTableStmt, connectContext);
+    }
+
+    @Test
+    public void testAnalyzeMaxBucket() throws Exception {
+        Config.max_column_number_per_table = 10000;
+
+        String sql = "CREATE TABLE test_create_table_db.starrocks_test_table\n" +
+                "(\n" +
+                "    `tag_id` bigint not null,\n" +
+                "    `tag_name` string\n" +
+                ") DUPLICATE KEY(`tag_id`)\n" +
+                "PARTITION BY (`tag_id`)\n" +
+                "DISTRIBUTED BY HASH(`tag_id`) BUCKETS 1025\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")\n";
+
+        expectedEx.expect(SemanticException.class);
+        expectedEx.expectMessage("max_bucket_number_per_partition");
+        CreateTableStmt createTableStmt = (CreateTableStmt) com.starrocks.sql.parser.SqlParser
+                .parse(sql, connectContext.getSessionVariable().getSqlMode()).get(0);
+        CreateTableAnalyzer.analyze(createTableStmt, connectContext);
+    }
+
+    @Test
+    public void testMaxColumn() throws Exception {
+        Config.max_column_number_per_table = 1;
+
+        String sql = "CREATE TABLE test_create_table_db.starrocks_test_table\n" +
+                "(\n" +
+                "    `tag_id` bigint not null,\n" +
+                "    `tag_name` string\n" +
+                ") DUPLICATE KEY(`tag_id`)\n" +
+                "PARTITION BY (`tag_id`)\n" +
+                "DISTRIBUTED BY HASH(`tag_id`)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")\n";
+        expectedEx.expect(SemanticException.class);
+        expectedEx.expectMessage("max_column_number_per_table");
+        CreateTableStmt createTableStmt = (CreateTableStmt) com.starrocks.sql.parser.SqlParser
+                .parse(sql, connectContext.getSessionVariable().getSqlMode()).get(0);
+        CreateTableAnalyzer.analyze(createTableStmt, connectContext);
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

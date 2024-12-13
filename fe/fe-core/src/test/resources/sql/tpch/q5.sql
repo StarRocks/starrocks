@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     n_name,
@@ -23,6 +24,8 @@ group by
     n_name
 order by
     revenue desc ;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 [result]
 TOP-N (order by [[55: sum DESC NULLS LAST]])
     TOP-N (order by [[55: sum DESC NULLS LAST]])

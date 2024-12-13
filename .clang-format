@@ -13,7 +13,10 @@ PointerAlignment: Left
 ReflowComments: false
 SortUsingDeclarations: false
 SpacesBeforeTrailingComments: 1
+<<<<<<< HEAD
 AllowShortFunctionsOnASingleLine: Inline
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ---
 Language: Java
 BasedOnStyle: Google
@@ -29,3 +32,9 @@ PointerAlignment: Left
 ReflowComments: false
 SortUsingDeclarations: false
 SpacesBeforeTrailingComments: 1
+<<<<<<< HEAD
+=======
+---
+Language: Proto
+BasedOnStyle: Google
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

@@ -17,6 +17,10 @@
 
 #include <glog/logging.h>
 #include <glog/vlog_is_on.h>
+<<<<<<< HEAD
+=======
+#include <jemalloc/jemalloc.h>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 #include <cerrno>
 #include <cstdio>
@@ -28,8 +32,15 @@
 #include "common/config.h"
 #include "gutil/endian.h"
 #include "gutil/stringprintf.h"
+<<<<<<< HEAD
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
+=======
+#include "gutil/sysinfo.h"
+#include "runtime/current_thread.h"
+#include "runtime/exec_env.h"
+#include "storage/page_cache.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "util/logging.h"
 #include "util/stack_util.h"
 
@@ -121,13 +132,52 @@ static void dump_trace_info() {
     start_dump = true;
 }
 
+<<<<<<< HEAD
 static void failure_writer(const char* data, int size) {
+=======
+static void dontdump_unused_pages() {
+    static bool start_dump = false;
+    if (!start_dump) {
+        std::string purge_msg = "arena." + std::to_string(MALLCTL_ARENAS_ALL) + ".purge";
+        int ret = je_mallctl(purge_msg.c_str(), nullptr, nullptr, nullptr, 0);
+        if (ret != 0) {
+            LOG(ERROR) << "je_mallctl execute purge failed: " << strerror(ret);
+        } else {
+            LOG(INFO) << "je_mallctl execute purge success";
+        }
+
+        std::string dontdump_msg = "arena." + std::to_string(MALLCTL_ARENAS_ALL) + ".dontdump";
+        ret = je_mallctl(dontdump_msg.c_str(), nullptr, nullptr, nullptr, 0);
+        if (ret != 0) {
+            LOG(ERROR) << "je_mallctl execute dontdump failed: " << strerror(ret);
+        } else {
+            LOG(INFO) << "je_mallctl execute dontdump success";
+        }
+    }
+    start_dump = true;
+}
+
+static void failure_handler_after_output_log() {
+    static bool start_dump = false;
+    if (!start_dump && config::enable_core_file_size_optimization && base::get_cur_core_file_limit() != 0) {
+        ExecEnv::GetInstance()->try_release_resource_before_core_dump();
+        dontdump_unused_pages();
+    }
+    start_dump = true;
+}
+
+static void failure_writer(const char* data, size_t size) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     dump_trace_info();
     [[maybe_unused]] auto wt = write(STDERR_FILENO, data, size);
 }
 
 static void failure_function() {
     dump_trace_info();
+<<<<<<< HEAD
+=======
+    failure_handler_after_output_log();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::abort();
 }
 
@@ -228,7 +278,12 @@ bool init_glog(const char* basename, bool install_signal_handler) {
 
     if (config::dump_trace_info) {
         google::InstallFailureWriter(failure_writer);
+<<<<<<< HEAD
         google::InstallFailureFunction(failure_function);
+=======
+        google::InstallFailureFunction((google::logging_fail_func_t)failure_function);
+        google::InstallFailureHandlerAfterOutputLog(failure_handler_after_output_log);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     logging_initialized = true;

@@ -39,6 +39,10 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.common.AnalysisException;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.SchemaConstants;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.commons.lang.StringUtils;
 
 import java.util.Arrays;
@@ -94,7 +98,11 @@ public class IndexSchemaProcNode implements ProcNodeInterface {
 
             List<String> rowList = Arrays.asList(column.getName(),
                     column.getType().canonicalName().toLowerCase(),
+<<<<<<< HEAD
                     column.isAllowNull() ? "YES" : "NO",
+=======
+                    column.isAllowNull() ? SchemaConstants.YES : SchemaConstants.NO,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     ((Boolean) column.isKey()).toString(),
                     defaultStr,
                     extraStr);

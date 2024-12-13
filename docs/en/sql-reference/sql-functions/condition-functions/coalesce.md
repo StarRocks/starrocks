@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # coalesce
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Returns the first non-NULL expression among the input parameters. Returns NULL if non-NULL expressions cannot be found.
 

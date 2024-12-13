@@ -14,20 +14,48 @@
 
 #pragma once
 
+<<<<<<< HEAD
 #include <string>
+=======
+#include <glog/logging.h>
+
+#include <ostream>
+#include <string>
+#include <unordered_map>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include <unordered_set>
 #include <vector>
 
 #include "exec/hdfs_scanner.h"
 #include "formats/parquet/group_reader.h"
+<<<<<<< HEAD
 #include "gen_cpp/Descriptors_types.h"
 #include "metadata.h"
 #include "runtime/descriptors.h"
 
+=======
+#include "formats/parquet/metadata.h"
+#include "gen_cpp/Descriptors_types.h"
+#include "gen_cpp/parquet_types.h"
+#include "runtime/descriptors.h"
+
+namespace starrocks {
+class SlotDescriptor;
+class TIcebergSchema;
+class TIcebergSchemaField;
+
+namespace parquet {
+class FileMetaData;
+struct ParquetField;
+} // namespace parquet
+} // namespace starrocks
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 namespace starrocks::parquet {
 
 class MetaHelper {
 public:
+<<<<<<< HEAD
     virtual ~MetaHelper() = default;
     virtual void set_existed_column_names(std::unordered_set<std::string>* names) const = 0;
 
@@ -58,6 +86,15 @@ public:
         **/
         return &row_group.columns[it->second].meta_data;
     }
+=======
+    MetaHelper(FileMetaData* file_metadata, bool case_sensitive)
+            : _file_metadata(file_metadata), _case_sensitive(case_sensitive) {}
+    virtual ~MetaHelper() = default;
+
+    virtual void prepare_read_columns(const std::vector<HdfsScannerContext::ColumnInfo>& materialized_columns,
+                                      std::vector<GroupReaderParam::Column>& read_cols,
+                                      std::unordered_set<std::string>& existed_column_names) const = 0;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 protected:
     GroupReaderParam::Column _build_column(int32_t idx_in_parquet, const tparquet::Type::type& type_in_parquet,
@@ -72,12 +109,18 @@ protected:
         return column;
     }
 
+<<<<<<< HEAD
     bool _case_sensitive = false;
     std::shared_ptr<FileMetaData> _file_metadata;
+=======
+    FileMetaData* _file_metadata = nullptr;
+    bool _case_sensitive = false;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 class ParquetMetaHelper : public MetaHelper {
 public:
+<<<<<<< HEAD
     ParquetMetaHelper(std::shared_ptr<FileMetaData> file_metadata, bool case_sensitive) {
         _file_metadata = std::move(file_metadata);
         _case_sensitive = case_sensitive;
@@ -92,14 +135,30 @@ public:
                               std::vector<GroupReaderParam::Column>& read_cols) const override;
 
     const ParquetField* get_parquet_field(const std::string& col_name) const override;
+=======
+    ParquetMetaHelper(FileMetaData* file_metadata, bool case_sensitive) : MetaHelper(file_metadata, case_sensitive) {}
+    ~ParquetMetaHelper() override = default;
+
+    void prepare_read_columns(const std::vector<HdfsScannerContext::ColumnInfo>& materialized_columns,
+                              std::vector<GroupReaderParam::Column>& read_cols,
+                              std::unordered_set<std::string>& existed_column_names) const override;
+
+private:
+    bool _is_valid_type(const ParquetField* parquet_field, const TypeDescriptor* type_descriptor) const;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 class IcebergMetaHelper : public MetaHelper {
 public:
+<<<<<<< HEAD
     IcebergMetaHelper(std::shared_ptr<FileMetaData> file_metadata, bool case_sensitive,
                       const TIcebergSchema* t_iceberg_schema) {
         _file_metadata = std::move(file_metadata);
         _case_sensitive = case_sensitive;
+=======
+    IcebergMetaHelper(FileMetaData* file_metadata, bool case_sensitive, const TIcebergSchema* t_iceberg_schema)
+            : MetaHelper(file_metadata, case_sensitive) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         _t_iceberg_schema = t_iceberg_schema;
         DCHECK(_t_iceberg_schema != nullptr);
         _init_field_mapping();
@@ -107,6 +166,7 @@ public:
 
     ~IcebergMetaHelper() override = default;
 
+<<<<<<< HEAD
     void set_existed_column_names(std::unordered_set<std::string>* names) const override;
     void build_column_name_2_pos_in_meta(std::unordered_map<std::string, size_t>& column_name_2_pos_in_meta,
                                          const tparquet::RowGroup& row_group,
@@ -117,9 +177,23 @@ public:
 
 private:
     void _init_field_mapping();
+=======
+    void prepare_read_columns(const std::vector<HdfsScannerContext::ColumnInfo>& materialized_columns,
+                              std::vector<GroupReaderParam::Column>& read_cols,
+                              std::unordered_set<std::string>& existed_column_names) const override;
+
+private:
+    void _init_field_mapping();
+    bool _is_valid_type(const ParquetField* parquet_field, const TIcebergSchemaField* field_schema,
+                        const TypeDescriptor* type_descriptor) const;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     const TIcebergSchema* _t_iceberg_schema = nullptr;
     // field name has already been formatted
     std::unordered_map<std::string, const TIcebergSchemaField*> _field_name_2_iceberg_field;
 };
 
+<<<<<<< HEAD
 } // namespace starrocks::parquet
+=======
+} // namespace starrocks::parquet
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

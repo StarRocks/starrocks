@@ -14,12 +14,19 @@
 
 package com.starrocks.sql.optimizer;
 
+<<<<<<< HEAD
+=======
+import com.google.common.base.Preconditions;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 
+<<<<<<< HEAD
 import java.util.Collections;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -131,6 +138,7 @@ public class CTEContext {
     }
 
     public boolean needPushPredicate() {
+<<<<<<< HEAD
         for (Map.Entry<Integer, Integer> entry : consumeNums.entrySet()) {
             int cteId = entry.getKey();
             int nums = entry.getValue();
@@ -140,10 +148,19 @@ public class CTEContext {
             }
         }
 
+=======
+        for (Integer cteId : consumePredicates.keySet()) {
+            Preconditions.checkState(consumeNums.containsKey(cteId));
+            if (consumePredicates.get(cteId).size() >= consumeNums.get(cteId)) {
+                return true;
+            }
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return false;
     }
 
     public boolean needPushLimit() {
+<<<<<<< HEAD
         for (Map.Entry<Integer, Integer> entry : consumeNums.entrySet()) {
             int cteId = entry.getKey();
             int num = entry.getValue();
@@ -153,6 +170,14 @@ public class CTEContext {
             }
         }
 
+=======
+        for (Integer cteId : consumeLimits.keySet()) {
+            Preconditions.checkState(consumeNums.containsKey(cteId));
+            if (consumeLimits.get(cteId).size() >= consumeNums.get(cteId)) {
+                return true;
+            }
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return false;
     }
 

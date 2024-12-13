@@ -54,7 +54,10 @@ import com.sleepycat.je.rep.UnknownMasterException;
 import com.sleepycat.je.rep.util.ReplicationGroupAdmin;
 import com.starrocks.journal.bdbje.BDBEnvironment;
 import com.starrocks.journal.bdbje.CloseSafeDatabase;
+<<<<<<< HEAD
 import com.starrocks.server.GlobalStateMgr;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -90,7 +93,11 @@ public class BDBHA implements HAProtocol {
 
         for (int i = 0; i < RETRY_TIME; i++) {
             try {
+<<<<<<< HEAD
                 long myEpoch = getLatestEpoch(epochDb.getDb()) + 1;
+=======
+                long myEpoch = getLatestEpoch() + 1;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 LOG.info("start fencing, epoch number is {}", myEpoch);
                 Long key = myEpoch;
                 DatabaseEntry theKey = new DatabaseEntry();
@@ -99,7 +106,10 @@ public class BDBHA implements HAProtocol {
                 DatabaseEntry theData = new DatabaseEntry(new byte[1]);
                 OperationStatus status = epochDb.putNoOverwrite(null, theKey, theData);
                 if (status == OperationStatus.SUCCESS) {
+<<<<<<< HEAD
                     GlobalStateMgr.getCurrentState().setEpoch(myEpoch);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     return true;
                 } else if (status == OperationStatus.KEYEXIST) {
                     return false;
@@ -118,7 +128,12 @@ public class BDBHA implements HAProtocol {
         return false;
     }
 
+<<<<<<< HEAD
     private long getLatestEpoch(Database epochDB) {
+=======
+    public long getLatestEpoch() {
+        Database epochDB = environment.getEpochDB().getDb();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         DatabaseEntry key = new DatabaseEntry();
         DatabaseEntry data = new DatabaseEntry();
         OperationResult result = epochDB.get(null, key, data, Get.LAST,

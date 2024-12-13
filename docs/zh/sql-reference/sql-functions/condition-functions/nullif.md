@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # nullif
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 若参数 `expr1` 与 `expr2` 相等，则返回 NULL，否则返回 `expr1` 的值。
 

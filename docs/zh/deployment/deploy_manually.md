@@ -10,7 +10,11 @@ displayed_sidebar: docs
 
 本文介绍如何手动部署 StarRocks 存算一体集群（BE 同时做数据存储和计算）。其他安装方式请参考[部署概览](../deployment/deployment_overview.md)。
 
+<<<<<<< HEAD
 如果要部署存算分离集群，参见 [部署使用 StarRocks 存算分离集群](./deploy_shared_data.md)。
+=======
+如果要部署存算分离集群，参见 [部署使用 StarRocks 存算分离集群](./shared_data/s3.md)。
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ## 第一步：启动 Leader FE 节点
 
@@ -53,7 +57,12 @@ displayed_sidebar: docs
 
       > **说明**
       >
+<<<<<<< HEAD
       > 您可以在终端中运行 `ifconfig` 以查看当前实例拥有的 IP 地址。
+=======
+      > - 您可以在终端中运行 `ifconfig` 以查看当前实例拥有的 IP 地址。
+      > - 从 v3.3.0 开始，StarRocks 支持基于 IPv6 的部署。
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
    d. 如果您的实例安装了多个 JDK，并且您要使用 JDK 与环境变量 `JAVA_HOME` 中指定的不同，则必须在配置文件中添加配置项 `JAVA_HOME` 来指定所选该 JDK 的安装路径。
 
@@ -131,7 +140,12 @@ displayed_sidebar: docs
 
       > **说明**
       >
+<<<<<<< HEAD
       > 您可以在终端中运行 `ifconfig` 以查看当前实例拥有的 IP 地址。
+=======
+      > - 您可以在终端中运行 `ifconfig` 以查看当前实例拥有的 IP 地址。
+      > - 从 v3.3.0 开始，StarRocks 支持基于 IPv6 的部署。
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
    d. 如果您的实例安装了多个 JDK，并且您要使用 JDK 与环境变量 `JAVA_HOME` 中指定的不同，则必须在配置文件中添加配置项 `JAVA_HOME` 来指定所选该 JDK 的安装路径。
 
@@ -168,6 +182,14 @@ displayed_sidebar: docs
 > **说明**
 >
 > 在一个 StarRocks 集群中部署并添加至少 3 个 BE 节点后，这些节点将自动形成一个 BE 高可用集群。
+<<<<<<< HEAD
+=======
+> 如果您只想部署一个 BE 节点，您必须在 FE 配置文件 **fe/conf/fe.conf** 中设置 `default_replication_num` 为 `1`。
+
+      ```YAML
+      default_replication_num = 1
+      ```
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ## 第三步：（可选）启动 CN 服务
 
@@ -178,7 +200,11 @@ Compute Node（CN）是一种无状态的计算服务，本身不存储数据。
    a. 如果任何在 [环境配置清单](../deployment/environment_configurations.md) 中提到的 CN 端口被占用，您必须在 CN 配置文件中为其分配其他可用端口。.
 
       ```YAML
+<<<<<<< HEAD
       be_port = vvvv                   # 默认值：9060 （自 v3.1 起，该配置项由 `thrift_port` 更名为 `be_port`。）
+=======
+      be_port = vvvv                   # 默认值：9060
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
       be_http_port = xxxx              # 默认值：8040
       heartbeat_service_port = yyyy    # 默认值：9050
       brpc_port = zzzz                 # 默认值：8060
@@ -192,7 +218,12 @@ Compute Node（CN）是一种无状态的计算服务，本身不存储数据。
 
       > **说明**
       >
+<<<<<<< HEAD
       > 您可以在终端中运行 `ifconfig` 以查看当前实例拥有的 IP 地址。
+=======
+      > - 您可以在终端中运行 `ifconfig` 以查看当前实例拥有的 IP 地址。
+      > - 从 v3.3.0 开始，StarRocks 支持基于 IPv6 的部署。
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
    c. 如果您的实例安装了多个 JDK，并且您要使用 JDK 与环境变量 `JAVA_HOME` 中指定的不同，则必须在配置文件中添加配置项 `JAVA_HOME` 来指定所选该 JDK 的安装路径。
 

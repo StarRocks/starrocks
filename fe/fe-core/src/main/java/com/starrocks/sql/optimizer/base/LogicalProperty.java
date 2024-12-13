@@ -37,6 +37,10 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTableFunctionOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.logical.MockOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -80,12 +84,20 @@ public class LogicalProperty implements Property {
 
     public LogicalProperty() {
         this.outputColumns = new ColumnRefSet();
+<<<<<<< HEAD
         this.usedCTEs = CTEProperty.EMPTY;
+=======
+        this.usedCTEs = EmptyCTEProperty.INSTANCE;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public LogicalProperty(ColumnRefSet outputColumns) {
         this.outputColumns = outputColumns;
+<<<<<<< HEAD
         this.usedCTEs = CTEProperty.EMPTY;
+=======
+        this.usedCTEs = EmptyCTEProperty.INSTANCE;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public LogicalProperty(LogicalProperty other) {
@@ -127,7 +139,11 @@ public class LogicalProperty implements Property {
             }
         }
 
+<<<<<<< HEAD
         usedCTEs = new CTEProperty(cteIds);
+=======
+        usedCTEs = CTEProperty.createProperty(cteIds);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public static final class OneTabletProperty {
@@ -168,9 +184,21 @@ public class LogicalProperty implements Property {
         }
 
         @Override
+<<<<<<< HEAD
         public OneTabletProperty visitLogicalTableScan(LogicalScanOperator node, ExpressionContext context) {
             if (node instanceof LogicalOlapScanOperator) {
                 if (((LogicalOlapScanOperator) node).getSelectedTabletId().size() <= 1) {
+=======
+        public OneTabletProperty visitLogicalViewScan(LogicalViewScanOperator node, ExpressionContext context) {
+            return OneTabletProperty.notSupport();
+        }
+
+        @Override
+        public OneTabletProperty visitLogicalTableScan(LogicalScanOperator node, ExpressionContext context) {
+            if (node instanceof LogicalOlapScanOperator) {
+                LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) node;
+                if (olapScanOperator.getSelectedTabletId() != null && olapScanOperator.getSelectedTabletId().size() <= 1) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     Set<String> distributionColumnNames = node.getTable().getDistributionColumnNames();
                     List<ColumnRefOperator> bucketColumns = Lists.newArrayList();
                     for (Map.Entry<ColumnRefOperator, Column> entry : node.getColRefToColumnMetaMap().entrySet()) {

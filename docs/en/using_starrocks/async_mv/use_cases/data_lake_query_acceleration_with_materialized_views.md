@@ -13,7 +13,11 @@ However, when it comes to building complex and efficient reports using data from
 
 ## Overview
 
+<<<<<<< HEAD
 StarRocks supports building asynchronous materialized views based on external catalogs such as Hive catalog, Iceberg catalog, Hudi catalog, and JDBC catalog. External catalog-based materialized views are particularly useful in the following scenarios:
+=======
+StarRocks supports building asynchronous materialized views based on external catalogs such as Hive catalog, Iceberg catalog, Hudi catalog, JDBC catalog, and Paimon catalog. External catalog-based materialized views are particularly useful in the following scenarios:
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 - **Transparent Acceleration of data lake reports**
 
@@ -21,7 +25,11 @@ StarRocks supports building asynchronous materialized views based on external ca
 
   Through the query rewrite capability of materialized views, report acceleration can be made transparent and imperceptible to users. When slow queries are identified, data engineers can analyze the pattern of slow queries and create materialized views on demand. Application-side queries are then intelligently rewritten and transparently accelerated by the materialized view, allowing for rapid improvement in query performance without modifying the logic of the business application or the query statement.
 
+<<<<<<< HEAD
 - **Incremental calculation of real-time  data associated with historical data**
+=======
+- **Incremental calculation of real-time data associated with historical data**
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
   Suppose your business application requires the association of real-time data in StarRocks native tables and historical data in the data lake for incremental calculations. In this situation, materialized views can provide a straightforward solution. For example, if the real-time fact table is a native table in StarRocks and the dimension table is stored in the data lake, you can easily perform incremental calculations by constructing materialized views that associate the native table with the table in the external data sources.
 
@@ -70,11 +78,17 @@ Materialized views, Data Cache, and native tables in StarRocks are all effective
 
 Compared to directly querying lake data or loading data into native tables, materialized views offer several unique advantages:
 
+<<<<<<< HEAD
 - **Local storage  acceleration**: Materialized views can leverage StarRocks' acceleration advantages with local storage, such as indexes, partitioning, bucketing, and collocate groups, resulting in better query performance compared to querying data from the data lake directly.
 - **Zero maintenance for loading tasks**: Materialized views update data transparently via automatic refresh tasks. There's no need to maintain loading tasks to perform scheduled data updates. Additionally, Hive catalog-based materialized views can detect data changes and perform incremental refreshes at the partition level.
 - **Intelligent  query  rewrite**: Queries can be transparently rewritten to use materialized views. You can benefit from acceleration instantly without the need to modify the query statements your application uses.
 
 <br />
+=======
+- **Local storage acceleration**: Materialized views can leverage StarRocks' acceleration advantages with local storage, such as indexes, partitioning, bucketing, and collocate groups, resulting in better query performance compared to querying data from the data lake directly.
+- **Zero maintenance for loading tasks**: Materialized views update data transparently via automatic refresh tasks. There's no need to maintain loading tasks to perform scheduled data updates. Additionally, Hive, Iceberg, and Paimon catalog-based materialized views can detect data changes and perform incremental refreshes at the partition level.
+- **Intelligent query rewrite**: Queries can be transparently rewritten to use materialized views. You can benefit from acceleration instantly without the need to modify the query statements your application uses.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Therefore, we recommend using materialized views in the following scenarios:
 
@@ -82,8 +96,11 @@ Therefore, we recommend using materialized views in the following scenarios:
 - Queries involve reusable components, such as fixed aggregation functions or join patterns.
 - Data is organized in partitions, while queries involve aggregation on a relatively high level (e.g., aggregating by day).
 
+<<<<<<< HEAD
 <br />
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 In the following scenarios, we recommend prioritizing acceleration through Data Cache:
 
 - Queries do not have many reusable components and may scan any data from the data lake.
@@ -91,13 +108,21 @@ In the following scenarios, we recommend prioritizing acceleration through Data 
 
 ## Create external catalog-based materialized views
 
+<<<<<<< HEAD
 Creating a materialized view on tables in external catalogs is similar to creating a materialized view on StarRiocks' native tables. You only need to set a suitable refresh strategy in accordance with the data source you are using, and manually enable query rewrite for external catalog-based materialized views.
+=======
+Creating a materialized view on tables in external catalogs is similar to creating a materialized view on StarRocks native tables. You only need to set a suitable refresh strategy in accordance with the data source you are using, and manually enable query rewrite for external catalog-based materialized views.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ### Choose a suitable refresh strategy
 
 Currently, StarRocks cannot detect partition-level data changes in Hudi catalogs. Therefore, a full-size refresh is performed once the task is triggered.
 
+<<<<<<< HEAD
 For Hive Catalog, Iceberg Catalog (starting from v3.1.4), and JDBC catalog (starting from v3.1.4, only for MySQL range-partitioned tables), StarRocks supports detecting data changes at the partition level. As a result, StarRocks can:
+=======
+For Hive Catalog, Iceberg Catalog (starting from v3.1.4), JDBC catalog (starting from v3.1.4, only for MySQL range-partitioned tables), and Paimon Catalog (starting from v3.2.1), StarRocks supports detecting data changes at the partition level. As a result, StarRocks can:
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 - Refresh only the partitions with data changes to avoid full-size refresh, reducing resource consumption caused by refresh.
 
@@ -111,10 +136,42 @@ You can still choose to tolerate a certain level of data inconsistency by settin
 
 Please note that if you need to refresh by partition, the partitioning keys of the materialized view must be included in that of the base table.
 
+<<<<<<< HEAD
+=======
+From v3.2.3, StarRocks supports creating partitioned materialized views upon Iceberg tables with [Partition Transforms](https://iceberg.apache.org/spec/#partition-transforms), and the materialized views are partitioned by the column after the transformation. Currently, only Iceberg tables with the `identity`, `year`, `month`, `day`, or `hour` transforms are supported.
+
+The following example shows the definition of an Iceberg table with the `day` partition transform and creates a materialized view with aligned partitions upon it:
+
+```SQL
+-- Iceberg table definition.
+CREATE TABLE spark_catalog.test.iceberg_sample_datetime_day (
+  id         BIGINT,
+  data       STRING,
+  category   STRING,
+  ts         TIMESTAMP)
+USING iceberg
+PARTITIONED BY (days(ts))
+
+-- Create a materialized view upon the Iceberg table.
+CREATE MATERIALIZED VIEW `test_iceberg_datetime_day_mv` (`id`, `data`, `category`, `ts`)
+PARTITION BY (`ts`)
+DISTRIBUTED BY HASH(`id`)
+REFRESH MANUAL
+AS 
+SELECT 
+  `iceberg_sample_datetime_day`.`id`, 
+  `iceberg_sample_datetime_day`.`data`, 
+  `iceberg_sample_datetime_day`.`category`, 
+  `iceberg_sample_datetime_day`.`ts`
+FROM `iceberg`.`test`.`iceberg_sample_datetime_day`;
+```
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 For Hive catalogs, you can enable the Hive metadata cache refresh feature to allow StarRocks to detect data changes at the partition level. When this feature is enabled, StarRocks periodically accesses the Hive Metastore Service (HMS) or AWS Glue to check the metadata information of recently queried hot data.
 
 To enable the Hive metadata cache refresh feature, you can set the following FE dynamic configuration item using [ADMIN SET FRONTEND CONFIG](../../../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md):
 
+<<<<<<< HEAD
 | **Configuration item**                                       | **Default**                | **Description**                                              |
 | ------------------------------------------------------------ | -------------------------- | ------------------------------------------------------------ |
 | enable_background_refresh_connector_metadata                 | true in v3.0 false in v2.5 | Whether to enable the periodic Hive metadata cache refresh. After it is enabled, StarRocks polls the metastore (Hive Metastore or AWS Glue) of your Hive cluster, and refreshes the cached metadata of the frequently accessed Hive catalogs to perceive data changes. true indicates to enable the Hive metadata cache refresh, and false indicates to disable it. |
@@ -122,6 +179,26 @@ To enable the Hive metadata cache refresh feature, you can set the following FE 
 | background_refresh_metadata_time_secs_since_last_access_secs | 86400 (24 hours)           | The expiration time of a Hive metadata cache refresh task. For the Hive catalog that has been accessed, if it has not been accessed for more than the specified time, StarRocks stops refreshing its cached metadata. For the Hive catalog that has not been accessed, StarRocks will not refresh its cached metadata. Unit: second. |
 
 From v3.1.4, StarRocks supports detecting data changes for Iceberg Catalog at the partition level. Currently only Iceberg V1 tables are supported.
+=======
+### Configuration items
+
+#### enable_background_refresh_connector_metadata
+
+**Default**: true in v3.0 false in v2.5<br/>
+**Description**: Whether to enable the periodic Hive metadata cache refresh. After it is enabled, StarRocks polls the metastore (Hive Metastore or AWS Glue) of your Hive cluster, and refreshes the cached metadata of the frequently accessed Hive catalogs to perceive data changes. True indicates to enable the Hive metadata cache refresh, and false indicates to disable it.<br/>
+
+#### background_refresh_metadata_interval_millis
+
+**Default**: 600000 (10 minutes)<br/>
+**Description**: The interval between two consecutive Hive metadata cache refreshes. Unit: millisecond.<br/>
+
+#### background_refresh_metadata_time_secs_since_last_access_secs
+
+**Default**: 86400 (24 hours)<br/>
+**Description**: The expiration time of a Hive metadata cache refresh task. For the Hive catalog that has been accessed, if it has not been accessed for more than the specified time, StarRocks stops refreshing its cached metadata. For the Hive catalog that has not been accessed, StarRocks will not refresh its cached metadata. Unit: second.
+
+From v3.1.4, StarRocks supports detecting data changes for Iceberg Catalog at the partition level. Currently, only Iceberg V1 tables are supported.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ### Enable query rewrite for external catalog-based materialized views
 

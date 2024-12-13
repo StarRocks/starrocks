@@ -37,7 +37,11 @@ public class PushDownLimitCTEAnchor extends TransformationRule {
         OptExpression anchor = input.inputAt(0);
 
         // push down to right child
+<<<<<<< HEAD
         OptExpression nl = new OptExpression(new LogicalLimitOperator(limit.getLimit(), limit.getOffset(), limit.getPhase()));
+=======
+        OptExpression nl = new OptExpression(limit);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         nl.getInputs().add(anchor.getInputs().get(1));
         anchor.getInputs().set(1, nl);
 

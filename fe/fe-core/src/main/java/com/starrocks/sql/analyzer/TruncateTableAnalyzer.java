@@ -19,12 +19,19 @@ import com.google.common.base.Strings;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.TruncateTableStmt;
+<<<<<<< HEAD
 import com.starrocks.sql.common.MetaUtils;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 public class TruncateTableAnalyzer {
 
     public static void analyze(TruncateTableStmt statement, ConnectContext context) {
+<<<<<<< HEAD
         MetaUtils.normalizationTableName(context, statement.getTblRef().getName());
+=======
+        statement.getTblRef().getName().normalization(context);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (statement.getTblRef().hasExplicitAlias()) {
             throw new SemanticException("Not support truncate table with alias");
         }

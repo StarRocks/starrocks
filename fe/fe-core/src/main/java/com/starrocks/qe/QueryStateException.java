@@ -18,10 +18,17 @@
 package com.starrocks.qe;
 
 import com.google.common.base.Strings;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
 import com.starrocks.qe.QueryState.MysqlStateType;
 
 public class QueryStateException extends UserException {
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.qe.QueryState.MysqlStateType;
+
+public class QueryStateException extends StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private QueryState queryState;
 
     public QueryStateException(MysqlStateType stateType, String msg) {

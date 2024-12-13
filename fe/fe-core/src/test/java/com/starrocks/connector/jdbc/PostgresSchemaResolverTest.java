@@ -166,9 +166,16 @@ public class PostgresSchemaResolverTest {
             Table table = jdbcMetadata.getTable("test", "tbl1");
             Assert.assertTrue(table instanceof JDBCTable);
             Assert.assertEquals("catalog.test.tbl1", table.getUUID());
+<<<<<<< HEAD
 
             Assert.assertEquals("tbl1", table.getName());
             Assert.assertNull(properties.get(JDBCTable.JDBC_TABLENAME));
+=======
+            Assert.assertEquals("tbl1", table.getName());
+            Assert.assertNull(properties.get(JDBCTable.JDBC_TABLENAME));
+            Assert.assertEquals(11, table.getColumns().size());
+            Assert.assertTrue(table.getColumn("h").getType().isStringType());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } catch (Exception e) {
             System.out.println(e.getMessage());
             Assert.fail();

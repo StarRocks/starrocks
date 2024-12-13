@@ -12,17 +12,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 package com.starrocks.qe;
 
 import com.starrocks.common.FeConstants;
 import com.starrocks.planner.OlapTableSink;
+<<<<<<< HEAD
 import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.RuntimeFilterDescription;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.TPCDSPlanTest;
 import com.starrocks.sql.plan.TPCDSPlanTestBase;
 import com.starrocks.system.SystemInfoService;
+=======
+import com.starrocks.planner.RuntimeFilterDescription;
+import com.starrocks.qe.scheduler.dag.ExecutionFragment;
+import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.sql.plan.TPCDSPlanTest;
+import com.starrocks.sql.plan.TPCDSPlanTestBase;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.utframe.UtFrameUtils;
@@ -72,7 +83,10 @@ public class TPCDSCoordTest extends TPCDSPlanTestBase {
                 "from inventory a join inventory b on a.inv_item_sk = b.inv_item_sk ) t1 " +
                 "join [shuffle] item t0  on t0.i_item_sk = t1.x;";
         String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+<<<<<<< HEAD
         System.out.println("plan:" + plan);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         String[] ss = plan.split("\\n");
         List<String> fragments = new ArrayList<>();
         String currentFragment = null;
@@ -91,6 +105,7 @@ public class TPCDSCoordTest extends TPCDSPlanTestBase {
         Assert.assertEquals(3, fragments.size());
 
         ExecPlan execPlan = UtFrameUtils.getPlanAndFragment(ctx, sql).second;
+<<<<<<< HEAD
         Coordinator coord = new Coordinator(ctx, execPlan.getFragments(), execPlan.getScanNodes(),
                 execPlan.getDescTbl().toThrift());
         coord.prepareExec();
@@ -98,6 +113,14 @@ public class TPCDSCoordTest extends TPCDSPlanTestBase {
         PlanFragmentId topFragmentId = coord.getFragments().get(0).getFragmentId();
         CoordinatorPreprocessor.FragmentExecParams params = coord.getFragmentExecParamsMap().get(topFragmentId);
         Assert.assertEquals(params.instanceExecParams.get(0).runtimeFilterParams.id_to_prober_params.get(1).size(), 15);
+=======
+        DefaultCoordinator coord = new DefaultCoordinator.Factory().createQueryScheduler(
+                ctx, execPlan.getFragments(), execPlan.getScanNodes(), execPlan.getDescTbl().toThrift());
+        coord.prepareExec();
+
+        ExecutionFragment execFragment = coord.getExecutionDAG().getRootFragment();
+        Assert.assertEquals(15, execFragment.getRuntimeFilterParams().id_to_prober_params.get(1).size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -136,17 +159,29 @@ public class TPCDSCoordTest extends TPCDSPlanTestBase {
         String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
         String[] ss = plan.split("\\n");
         List<String> filterLines = Stream.of(ss).filter(s -> s.contains("filter_id = 2")).collect(Collectors.toList());
+<<<<<<< HEAD
         System.out.println(filterLines.size());
         Assert.assertTrue(filterLines.size() == 5);
         ExecPlan execPlan = UtFrameUtils.getPlanAndFragment(ctx, sql).second;
         Coordinator coord = new Coordinator(ctx, execPlan.getFragments(), execPlan.getScanNodes(),
                 execPlan.getDescTbl().toThrift());
+=======
+        Assert.assertTrue(filterLines.size() == 5);
+        ExecPlan execPlan = UtFrameUtils.getPlanAndFragment(ctx, sql).second;
+        DefaultCoordinator coord = new DefaultCoordinator.Factory().createQueryScheduler(
+                ctx, execPlan.getFragments(), execPlan.getScanNodes(), execPlan.getDescTbl().toThrift());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         coord.prepareExec();
 
         int filterId = 2;
         boolean rfExists = false;
+<<<<<<< HEAD
         for (CoordinatorPreprocessor.FragmentExecParams params : coord.getFragmentExecParamsMap().values()) {
             Map<Integer, RuntimeFilterDescription> buildRfFilters = params.fragment.getBuildRuntimeFilters();
+=======
+        for (ExecutionFragment execFragment : coord.getExecutionDAG().getFragmentsInPreorder()) {
+            Map<Integer, RuntimeFilterDescription> buildRfFilters = execFragment.getPlanFragment().getBuildRuntimeFilters();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (buildRfFilters == null || !buildRfFilters.containsKey(filterId)) {
                 continue;
             }
@@ -184,6 +219,7 @@ public class TPCDSCoordTest extends TPCDSPlanTestBase {
         Assert.assertFalse(filterLines.isEmpty());
         Assert.assertTrue(filterLines.stream().anyMatch(ln -> ln.contains("remote = true")));
         ExecPlan execPlan = UtFrameUtils.getPlanAndFragment(ctx, sql).second;
+<<<<<<< HEAD
         Coordinator coord = new Coordinator(ctx, execPlan.getFragments(), execPlan.getScanNodes(),
                 execPlan.getDescTbl().toThrift());
         coord.prepareExec();
@@ -200,6 +236,20 @@ public class TPCDSCoordTest extends TPCDSPlanTestBase {
                 coord.getFragmentExecParamsMap().values().stream().flatMap(execFragment -> {
                     Map<Integer, RuntimeFilterDescription> buildRfFilters =
                             execFragment.fragment.getBuildRuntimeFilters();
+=======
+        DefaultCoordinator coord = new DefaultCoordinator.Factory().createQueryScheduler(
+                ctx, execPlan.getFragments(), execPlan.getScanNodes(), execPlan.getDescTbl().toThrift());
+        coord.prepareExec();
+
+        ExecutionFragment rootExecFragment = coord.getExecutionDAG().getFragmentsInPreorder().get(0);
+        Assert.assertTrue(rootExecFragment.getPlanFragment().getSink() instanceof OlapTableSink);
+        Assert.assertFalse(rootExecFragment.getRuntimeFilterParams().getRuntime_filter_builder_number().isEmpty());
+
+        Set<TNetworkAddress> grfCoordinators =
+                coord.getExecutionDAG().getFragmentsInPreorder().stream().flatMap(execFragment -> {
+                    Map<Integer, RuntimeFilterDescription> buildRfFilters =
+                            execFragment.getPlanFragment().getBuildRuntimeFilters();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     if (buildRfFilters == null || buildRfFilters.isEmpty()) {
                         return Stream.empty();
                     } else {
@@ -210,6 +260,11 @@ public class TPCDSCoordTest extends TPCDSPlanTestBase {
                 }).collect(Collectors.toSet());
 
         Assert.assertEquals(grfCoordinators.size(), 1);
+<<<<<<< HEAD
         Assert.assertTrue(grfCoordinators.contains(SystemInfoService.toBrpcIp(rootFInstance.getHost())));
+=======
+        Assert.assertTrue(
+                grfCoordinators.contains(rootExecFragment.getInstances().get(0).getWorker().getBrpcAddress()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }

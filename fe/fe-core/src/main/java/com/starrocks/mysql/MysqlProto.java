@@ -65,7 +65,11 @@ public class MysqlProto {
         String usePasswd = scramble.length == 0 ? "NO" : "YES";
 
         if (user == null || user.isEmpty()) {
+<<<<<<< HEAD
             ErrorReport.report(ErrorCode.ERR_ACCESS_DENIED_ERROR, "", usePasswd);
+=======
+            ErrorReport.report(ErrorCode.ERR_AUTHENTICATION_FAIL, "", usePasswd);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return false;
         }
 
@@ -76,7 +80,11 @@ public class MysqlProto {
         if (Config.enable_auth_check) {
             currentUser = authenticationManager.checkPassword(user, remoteIp, scramble, randomString);
             if (currentUser == null) {
+<<<<<<< HEAD
                 ErrorReport.report(ErrorCode.ERR_ACCESS_DENIED_ERROR, user, usePasswd);
+=======
+                ErrorReport.report(ErrorCode.ERR_AUTHENTICATION_FAIL, user, usePasswd);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 return false;
             }
         } else {
@@ -84,7 +92,11 @@ public class MysqlProto {
                     authenticationManager.getBestMatchedUserIdentity(user, remoteIp);
             if (matchedUserIdentity == null) {
                 LOG.info("enable_auth_check is false, but cannot find user '{}'@'{}'", user, remoteIp);
+<<<<<<< HEAD
                 ErrorReport.report(ErrorCode.ERR_ACCESS_DENIED_ERROR, user, usePasswd);
+=======
+                ErrorReport.report(ErrorCode.ERR_AUTHENTICATION_FAIL, user, usePasswd);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 return false;
             } else {
                 currentUser = matchedUserIdentity.getKey();
@@ -227,7 +239,11 @@ public class MysqlProto {
         String db = authPacket.getDb();
         if (!Strings.isNullOrEmpty(db)) {
             try {
+<<<<<<< HEAD
                 GlobalStateMgr.getCurrentState().changeCatalogDb(context, db);
+=======
+                context.changeCatalogDb(db);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             } catch (DdlException e) {
                 sendResponsePacket(context);
                 return new NegotiateResult(authPacket, NegotiateState.SET_DATABASE_FAILED);
@@ -288,7 +304,11 @@ public class MysqlProto {
         String db = changeUserPacket.getDb();
         if (!Strings.isNullOrEmpty(db)) {
             try {
+<<<<<<< HEAD
                 GlobalStateMgr.getCurrentState().changeCatalogDb(context, db);
+=======
+                context.changeCatalogDb(db);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             } catch (DdlException e) {
                 LOG.error("Command `Change user` failed at stage changing db, from [{}] to [{}], err[{}] ",
                         previousQualifiedUser, changeUserPacket.getUser(), e.getMessage());

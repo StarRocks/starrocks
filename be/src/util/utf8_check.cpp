@@ -9,12 +9,15 @@
 
 #include "util/utf8_check.h"
 
+<<<<<<< HEAD
 #if defined(__x86_64__) && defined(__SSE4_2__)
 #include "util/simdutf8check.h"
 #elif defined(__aarch64__)
 #include <arm_neon.h>
 #endif
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 /*
  * http://www.unicode.org/versions/Unicode6.0.0/ch03.pdf - page 94
  *
@@ -100,6 +103,7 @@ bool validate_utf8_naive(const char* data, size_t len) {
     return true;
 }
 
+<<<<<<< HEAD
 #if defined(__x86_64__) && defined(__SSE4_2__)
 bool validate_utf8(const char* src, size_t len) {
     return validate_utf8_fast(src, len);
@@ -328,4 +332,6 @@ bool validate_utf8(const char* src, size_t len) {
     return validate_utf8_naive(src, len);
 }
 #endif
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // namespace starrocks

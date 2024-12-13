@@ -47,8 +47,11 @@ public abstract class SinglePartitionDesc extends PartitionDesc {
     private boolean isInMemory;
     private DataCacheInfo dataCacheInfo;
 
+<<<<<<< HEAD
     protected boolean isAnalyzed;
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public SinglePartitionDesc(boolean ifNotExists, String partName, Map<String, String> properties, NodePosition pos) {
         super(pos);
         this.partName = partName;
@@ -60,7 +63,10 @@ public abstract class SinglePartitionDesc extends PartitionDesc {
         this.versionInfo = null;
         this.isInMemory = false;
         this.dataCacheInfo = null;
+<<<<<<< HEAD
         this.isAnalyzed = false;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -108,10 +114,13 @@ public abstract class SinglePartitionDesc extends PartitionDesc {
         return dataCacheInfo;
     }
 
+<<<<<<< HEAD
     public boolean isAnalyzed() {
         return isAnalyzed;
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     protected void analyzeProperties(Map<String, String> tableProperties,
                                      PartitionKeyDesc partitionKeyDesc) throws AnalysisException {
         Map<String, String> partitionAndTableProperties = Maps.newHashMap();

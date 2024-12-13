@@ -160,6 +160,7 @@ Status parse_conf_store_paths(const string& config_path, std::vector<StorePath>*
     return Status::OK();
 }
 
+<<<<<<< HEAD
 Status parse_conf_block_cache_paths(const std::string& config_path, std::vector<std::string>* paths) {
     if (config_path.empty()) {
         return Status::OK();
@@ -194,4 +195,6 @@ Status parse_conf_block_cache_paths(const std::string& config_path, std::vector<
     return Status::OK();
 }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // end namespace starrocks

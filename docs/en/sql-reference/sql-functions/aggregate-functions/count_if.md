@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # count_if
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Returns the number of records that meet the specified condition or `0` if no records satisfy the condition.
 

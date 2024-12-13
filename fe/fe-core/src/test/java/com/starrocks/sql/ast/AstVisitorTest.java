@@ -29,9 +29,15 @@ public class AstVisitorTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testVisitModifyBackendHostClause() {
         AstVisitor<String, String> visitor = new AstVisitor<String, String>() {};
         Object ret = visitor.visitModifyBackendHostClause(null, null);
+=======
+    public void testVisitModifyBackendClause() {
+        AstVisitor<String, String> visitor = new AstVisitor<String, String>() {};
+        Object ret = visitor.visitModifyBackendClause(null, null);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertNull(ret);
     }
 }

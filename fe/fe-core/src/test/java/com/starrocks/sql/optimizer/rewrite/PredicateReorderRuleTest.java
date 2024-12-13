@@ -107,7 +107,11 @@ public class PredicateReorderRuleTest {
                         ");");
         CreateDbStmt dbStmt = new CreateDbStmt(false, StatsConstants.STATISTICS_DB_NAME);
         try {
+<<<<<<< HEAD
             GlobalStateMgr.getCurrentState().getMetadata().createDb(dbStmt.getFullDbName());
+=======
+            GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(dbStmt.getFullDbName());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } catch (DdlException e) {
             return;
         }
@@ -139,8 +143,13 @@ public class PredicateReorderRuleTest {
 
         GlobalStateMgr catalog = GlobalStateMgr.getCurrentState();
         CachedStatisticStorage cachedStatisticStorage = new CachedStatisticStorage();
+<<<<<<< HEAD
         OlapTable t0 = (OlapTable) catalog.getDb("test").getTable("t0");
         OlapTable t1 = (OlapTable) catalog.getDb("test").getTable("t1");
+=======
+        OlapTable t0 = (OlapTable) catalog.getLocalMetastore().getDb("test").getTable("t0");
+        OlapTable t1 = (OlapTable) catalog.getLocalMetastore().getDb("test").getTable("t1");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         cachedStatisticStorage.addColumnStatistic(t0, v1.getName(), statistics.getColumnStatistic(v1));
         cachedStatisticStorage.addColumnStatistic(t0, v2.getName(), statistics.getColumnStatistic(v2));
         cachedStatisticStorage.addColumnStatistic(t1, v1.getName(), statistics.getColumnStatistic(v1));
@@ -156,7 +165,11 @@ public class PredicateReorderRuleTest {
 
         sessionVariable.enablePredicateReorder();
 
+<<<<<<< HEAD
         OlapTable t0 = (OlapTable) GlobalStateMgr.getCurrentState().getDb("test").getTable("t0");
+=======
+        OlapTable t0 = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTable("t0");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         PredicateReorderRule predicateReorderRule = new PredicateReorderRule(sessionVariable);
 
@@ -230,8 +243,13 @@ public class PredicateReorderRuleTest {
     public void testHashJoinPredicateReorder() {
         sessionVariable.enablePredicateReorder();
 
+<<<<<<< HEAD
         OlapTable t0 = (OlapTable) GlobalStateMgr.getCurrentState().getDb("test").getTable("t0");
         OlapTable t1 = (OlapTable) GlobalStateMgr.getCurrentState().getDb("test").getTable("t1");
+=======
+        OlapTable t0 = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTable("t0");
+        OlapTable t1 = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTable("t1");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         PredicateReorderRule predicateReorderRule = new PredicateReorderRule(sessionVariable);
 

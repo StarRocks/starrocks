@@ -14,22 +14,43 @@
 
 #pragma once
 
+<<<<<<< HEAD
+=======
+#include <future>
+#include <memory>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include <string>
 #include <vector>
 
 #include "gutil/macros.h"
+<<<<<<< HEAD
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/tablet_writer.h"
 
 namespace starrocks {
 class SegmentWriter;
 }
+=======
+#include "storage/lake/tablet_writer.h"
+
+namespace starrocks {
+class ConcurrencyLimitedThreadPoolToken;
+class SegmentWriter;
+class ThreadPool;
+} // namespace starrocks
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 namespace starrocks::lake {
 
 class HorizontalGeneralTabletWriter : public TabletWriter {
 public:
+<<<<<<< HEAD
     explicit HorizontalGeneralTabletWriter(Tablet tablet, std::shared_ptr<const TabletSchema> schema, int64_t txn_id);
+=======
+    explicit HorizontalGeneralTabletWriter(TabletManager* tablet_mgr, int64_t tablet_id,
+                                           std::shared_ptr<const TabletSchema> schema, int64_t txn_id,
+                                           bool is_compaction, ThreadPool* flush_pool = nullptr);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     ~HorizontalGeneralTabletWriter() override;
 
@@ -37,9 +58,15 @@ public:
 
     Status open() override;
 
+<<<<<<< HEAD
     Status write(const starrocks::Chunk& data) override;
 
     Status write(const Chunk& data, const std::vector<uint64_t>& rssid_rowids) {
+=======
+    Status write(const Chunk& data, SegmentPB* segment = nullptr) override;
+
+    Status write(const Chunk& data, const std::vector<uint64_t>& rssid_rowids, SegmentPB* segment = nullptr) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return Status::NotSupported("HorizontalGeneralTabletWriter write not support");
     }
 
@@ -56,13 +83,21 @@ public:
         return Status::NotSupported("HorizontalGeneralTabletWriter flush_del_file not support");
     }
 
+<<<<<<< HEAD
     Status flush() override;
+=======
+    Status flush(SegmentPB* segment = nullptr) override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     Status flush_columns() override {
         return Status::NotSupported("HorizontalGeneralTabletWriter flush_columns not support");
     }
 
+<<<<<<< HEAD
     Status finish() override;
+=======
+    Status finish(SegmentPB* segment = nullptr) override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     void close() override;
 
@@ -70,15 +105,26 @@ public:
 
 protected:
     Status reset_segment_writer();
+<<<<<<< HEAD
     virtual Status flush_segment_writer();
+=======
+    virtual Status flush_segment_writer(SegmentPB* segment = nullptr);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     std::unique_ptr<SegmentWriter> _seg_writer;
 };
 
 class VerticalGeneralTabletWriter : public TabletWriter {
 public:
+<<<<<<< HEAD
     explicit VerticalGeneralTabletWriter(Tablet tablet, std::shared_ptr<const TabletSchema> schema, int64_t txn_id,
                                          uint32_t max_rows_per_segment);
+=======
+    explicit VerticalGeneralTabletWriter(TabletManager* tablet_mgr, int64_t tablet_id,
+                                         std::shared_ptr<const TabletSchema> schema, int64_t txn_id,
+                                         uint32_t max_rows_per_segment, bool is_compaction,
+                                         ThreadPool* flush_pool = nullptr);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     ~VerticalGeneralTabletWriter() override;
 
@@ -86,11 +132,19 @@ public:
 
     Status open() override;
 
+<<<<<<< HEAD
     Status write(const starrocks::Chunk& data) override {
         return Status::NotSupported("VerticalGeneralTabletWriter write not support");
     }
 
     Status write(const Chunk& data, const std::vector<uint64_t>& rssid_rowids) override {
+=======
+    Status write(const Chunk& data, SegmentPB* segment = nullptr) override {
+        return Status::NotSupported("VerticalGeneralTabletWriter write not support");
+    }
+
+    Status write(const Chunk& data, const std::vector<uint64_t>& rssid_rowids, SegmentPB* segment = nullptr) override {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return Status::NotSupported("HorizontalGeneralTabletWriter write not support");
     }
 
@@ -105,17 +159,26 @@ public:
         return Status::NotSupported("VerticalGeneralTabletWriter flush_del_file not support");
     }
 
+<<<<<<< HEAD
     Status flush() override;
+=======
+    Status flush(SegmentPB* segment = nullptr) override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     Status flush_columns() override;
 
     // Finalize all segments footer.
+<<<<<<< HEAD
     Status finish() override;
+=======
+    Status finish(SegmentPB* segment = nullptr) override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     void close() override;
 
     RowsetTxnMetaPB* rowset_txn_meta() override { return nullptr; }
 
+<<<<<<< HEAD
 private:
     StatusOr<std::unique_ptr<SegmentWriter>> create_segment_writer(const std::vector<uint32_t>& column_indexes,
                                                                    bool is_key);
@@ -125,6 +188,24 @@ private:
     uint32_t _max_rows_per_segment = 0;
     std::vector<std::unique_ptr<SegmentWriter>> _segment_writers;
     size_t _current_writer_index = 0;
+=======
+protected:
+    StatusOr<std::shared_ptr<SegmentWriter>> create_segment_writer(const std::vector<uint32_t>& column_indexes,
+                                                                   bool is_key);
+
+    Status flush_columns(const std::shared_ptr<SegmentWriter>& segment_writer);
+    Status check_futures();
+    Status wait_futures_finish();
+
+    uint32_t _max_rows_per_segment = 0;
+    std::vector<std::shared_ptr<SegmentWriter>> _segment_writers;
+    size_t _current_writer_index = 0;
+
+    static constexpr int64_t kDefaultTimeoutForAsyncWriteSegment = 1 * 60 * 1000L; // 1 minutes
+
+    std::unique_ptr<ConcurrencyLimitedThreadPoolToken> _segment_writer_finalize_token;
+    std::vector<std::future<Status>> _futures;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 } // namespace starrocks::lake

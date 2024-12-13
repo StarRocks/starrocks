@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     nation,
@@ -31,6 +32,8 @@ group by
 order by
     nation,
     o_year desc ;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 [planCount]
 2
 [plan-1]

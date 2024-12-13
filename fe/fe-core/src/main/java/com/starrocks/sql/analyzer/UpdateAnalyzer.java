@@ -23,6 +23,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
+<<<<<<< HEAD
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
@@ -31,10 +32,23 @@ import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
+=======
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Type;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.analyzer.SelectAnalyzer.RewriteAliasVisitor;
 import com.starrocks.sql.ast.ColumnAssignment;
 import com.starrocks.sql.ast.DefaultValueExpr;
 import com.starrocks.sql.ast.JoinRelation;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.LoadStmt;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectList;
@@ -52,7 +66,10 @@ import java.util.stream.Collectors;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 
 public class UpdateAnalyzer {
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private static boolean checkIfUsePartialUpdate(int updateColumnCnt, int tableColumnCnt) {
         if (updateColumnCnt <= 3 && updateColumnCnt < tableColumnCnt * 0.3) {
             return true;
@@ -61,6 +78,7 @@ public class UpdateAnalyzer {
         }
     }
 
+<<<<<<< HEAD
     public static void analyze(UpdateStmt updateStmt, ConnectContext session) {
         TableName tableName = updateStmt.getTableName();
         MetaUtils.normalizationTableName(session, tableName);
@@ -71,6 +89,31 @@ public class UpdateAnalyzer {
             throw new SemanticException(
                     "The data of '%s' cannot be modified because '%s' is a materialized view," +
                             "and the data of materialized view must be consistent with the base table.",
+=======
+    private static void analyzeProperties(UpdateStmt updateStmt, ConnectContext session) {
+        Map<String, String> properties = updateStmt.getProperties();
+        properties.put(LoadStmt.MAX_FILTER_RATIO_PROPERTY,
+                String.valueOf(session.getSessionVariable().getInsertMaxFilterRatio()));
+        properties.put(LoadStmt.STRICT_MODE, String.valueOf(session.getSessionVariable().getEnableInsertStrict()));
+        properties.put(LoadStmt.TIMEOUT_PROPERTY, String.valueOf(session.getSessionVariable().getInsertTimeoutS()));
+    }
+
+    public static void analyze(UpdateStmt updateStmt, ConnectContext session) {
+        analyzeProperties(updateStmt, session);
+
+        TableName tableName = updateStmt.getTableName();
+        tableName.normalization(session);
+        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                .getDb(tableName.getCatalog(), tableName.getDb());
+        if (db == null) {
+            throw new SemanticException("Database %s is not found", tableName.getCatalogAndDb());
+        }
+        Table table = MetaUtils.getSessionAwareTable(session, null, tableName);
+
+        if (table instanceof MaterializedView) {
+            throw new SemanticException("The data of '%s' cannot be modified because '%s' is a materialized view,"
+                    + "and the data of materialized view must be consistent with the base table.",
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     tableName.getTbl(), tableName.getTbl());
         }
 
@@ -79,32 +122,60 @@ public class UpdateAnalyzer {
         }
 
         List<ColumnAssignment> assignmentList = updateStmt.getAssignments();
+<<<<<<< HEAD
         Map<String, ColumnAssignment> assignmentByColName = assignmentList.stream().collect(
                 Collectors.toMap(assign -> assign.getColumn().toLowerCase(), a -> a));
+=======
+        Map<String, ColumnAssignment> assignmentByColName =
+                assignmentList.stream().collect(Collectors.toMap(assign -> assign.getColumn().toLowerCase(), a -> a));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         for (String colName : assignmentByColName.keySet()) {
             if (table.getColumn(colName) == null) {
                 throw new SemanticException("table '%s' do not existing column '%s'", tableName.getTbl(), colName);
             }
         }
 
+<<<<<<< HEAD
         if (table.isOlapTable()) {
             if (session.getSessionVariable().getPartialUpdateMode().equals("column")) {
                 // use partial update by column
                 updateStmt.setUsePartialUpdate();
+=======
+        if (table.isOlapTable() || table.isCloudNativeTable()) {
+            if (session.getSessionVariable().getPartialUpdateMode().equals("column")) {
+                // use partial update by column
+                updateStmt.setUsePartialUpdate();
+                if (((OlapTable) table).hasRowStorageType()) {
+                    throw new SemanticException("column_with_row table do not support column mode update");
+                }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             } else if (session.getSessionVariable().getPartialUpdateMode().equals("auto")) {
                 // decide by default rules
                 if (updateStmt.getWherePredicate() == null) {
                     if (checkIfUsePartialUpdate(assignmentList.size(), table.getBaseSchema().size())) {
+<<<<<<< HEAD
                         // use partial update if:
                         // 1. Columns updated are less than 4
                         // 2. The proportion of columns updated is less than 30%
                         // 3. No where predicate in update stmt
                         updateStmt.setUsePartialUpdate();
+=======
+                        if (!((OlapTable) table).hasRowStorageType()) {
+                            // use partial update if:
+                            // 1. Columns updated are less than 4
+                            // 2. The proportion of columns updated is less than 30%
+                            // 3. No where predicate in update stmt
+                            updateStmt.setUsePartialUpdate();
+                        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     }
                 }
             }
         }
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (!updateStmt.usePartialUpdate() && updateStmt.getWherePredicate() == null) {
             throw new SemanticException("must specify where clause to prevent full table update");
         }
@@ -113,7 +184,11 @@ public class UpdateAnalyzer {
         List<Column> assignColumnList = Lists.newArrayList();
         boolean nullExprInAutoIncrement = false;
         Column autoIncrementColumn = null;
+<<<<<<< HEAD
         Map<Column, SelectListItem>  mcToItem = Maps.newHashMap();
+=======
+        Map<Column, SelectListItem> mcToItem = Maps.newHashMap();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         for (Column col : table.getBaseSchema()) {
             SelectListItem item;
             ColumnAssignment assign = assignmentByColName.get(col.getName().toLowerCase());
@@ -137,7 +212,12 @@ public class UpdateAnalyzer {
 
                 if (assign.getExpr() instanceof DefaultValueExpr) {
                     if (!col.isAutoIncrement()) {
+<<<<<<< HEAD
                         assign.setExpr(TypeManager.addCastExpr(new StringLiteral(col.calculatedDefaultValue()), col.getType()));
+=======
+                        assign.setExpr(TypeManager.addCastExpr(new StringLiteral(col.calculatedDefaultValue()),
+                                col.getType()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     } else {
                         assign.setExpr(TypeManager.addCastExpr(new NullLiteral(), col.getType()));
                     }
@@ -147,7 +227,11 @@ public class UpdateAnalyzer {
                 selectList.addItem(item);
                 assignColumnList.add(col);
             } else if (col.isGeneratedColumn()) {
+<<<<<<< HEAD
                 Expr expr = col.generatedColumnExpr();
+=======
+                Expr expr = col.getGeneratedColumnExpr(table.getIdToColumn());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 item = new SelectListItem(expr, col.getName());
                 mcToItem.put(col, item);
                 selectList.addItem(item);
@@ -160,8 +244,13 @@ public class UpdateAnalyzer {
         }
 
         if (autoIncrementColumn != null && nullExprInAutoIncrement) {
+<<<<<<< HEAD
             throw new SemanticException("AUTO_INCREMENT column: " + autoIncrementColumn.getName() +
                                         " must not be NULL");
+=======
+            throw new SemanticException(
+                    "AUTO_INCREMENT column: " + autoIncrementColumn.getName() + " must not be NULL");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         /*
@@ -177,10 +266,21 @@ public class UpdateAnalyzer {
             SelectListItem item = mcToItem.get(column);
             Expr orginExpr = item.getExpr();
 
+<<<<<<< HEAD
             ExpressionAnalyzer.analyzeExpression(orginExpr,
                 new AnalyzeState(), new Scope(RelationId.anonymous(), new RelationFields(
                     table.getBaseSchema().stream().map(col -> new Field(col.getName(), col.getType(),
                         tableName, null)).collect(Collectors.toList()))), session);
+=======
+            ExpressionAnalyzer.analyzeExpression(orginExpr, new AnalyzeState(),
+                    new Scope(RelationId.anonymous(),
+                            new RelationFields(
+                                    table.getBaseSchema()
+                                            .stream()
+                                            .map(col -> new Field(col.getName(), col.getType(), tableName, null))
+                                            .collect(Collectors.toList()))),
+                    session);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
             // check if all the expression refers are sepecfied in
             // partial update mode
@@ -199,7 +299,11 @@ public class UpdateAnalyzer {
                         }
                     }
                 }
+<<<<<<< HEAD
     
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (matchCount != checkSlots.size()) {
                     throw new SemanticException("All ref Column must be sepecfied in partial update mode");
                 }
@@ -217,10 +321,18 @@ public class UpdateAnalyzer {
             // sourceScope must be set null tableName for its Field in RelationFields
             // because we hope slotRef can not be resolved in sourceScope but can be
             // resolved in outputScope to force to replace the node using outputExprs.
+<<<<<<< HEAD
             Scope sourceScope = new Scope(RelationId.anonymous(), 
                                     new RelationFields(table.getBaseSchema().stream().map(col ->
                                         new Field(col.getName(), col.getType(), null, null))
                                             .collect(Collectors.toList())));
+=======
+            Scope sourceScope = new Scope(RelationId.anonymous(),
+                    new RelationFields(table.getBaseSchema()
+                            .stream()
+                            .map(col -> new Field(col.getName(), col.getType(), null, null))
+                            .collect(Collectors.toList())));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
             // outputScope should be resolved for the column with assign expr in update statement.
             List<Field> fields = Lists.newArrayList();
@@ -233,9 +345,13 @@ public class UpdateAnalyzer {
             }
             Scope outputScope = new Scope(RelationId.anonymous(), new RelationFields(fields));
 
+<<<<<<< HEAD
             RewriteAliasVisitor visitor =
                                 new RewriteAliasVisitor(sourceScope, outputScope,
                                     outputExprs, session);
+=======
+            RewriteAliasVisitor visitor = new RewriteAliasVisitor(sourceScope, outputScope, outputExprs, session);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
             Expr expr = orginExpr.accept(visitor, null);
 
@@ -263,7 +379,11 @@ public class UpdateAnalyzer {
         List<Expr> outputExpression = queryStatement.getQueryRelation().getOutputExpression();
         Preconditions.checkState(outputExpression.size() == assignColumnList.size());
         if (!updateStmt.usePartialUpdate()) {
+<<<<<<< HEAD
             Preconditions.checkState(table.getBaseSchema().size() == assignColumnList.size());   
+=======
+            Preconditions.checkState(table.getBaseSchema().size() == assignColumnList.size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         List<Expr> castOutputExpressions = Lists.newArrayList();
         for (int i = 0; i < assignColumnList.size(); ++i) {

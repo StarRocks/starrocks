@@ -15,6 +15,10 @@
 #include "storage/lake/spark_load.h"
 
 #include "storage/lake/filenames.h"
+<<<<<<< HEAD
+=======
+#include "storage/lake/tablet_manager.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "storage/lake/tablet_writer.h"
 #include "storage/push_utils.h"
 #include "storage/storage_engine.h"
@@ -24,8 +28,13 @@ namespace starrocks::lake {
 
 using PushBrokerReader = starrocks::PushBrokerReader;
 
+<<<<<<< HEAD
 Status SparkLoadHandler::process_streaming_ingestion(Tablet& tablet, const TPushReq& request, PushType push_type,
                                                      std::vector<TTabletInfo>* tablet_info_vec) {
+=======
+Status SparkLoadHandler::process_streaming_ingestion(VersionedTablet& tablet, const TPushReq& request,
+                                                     PushType push_type, std::vector<TTabletInfo>* tablet_info_vec) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     LOG(INFO) << "begin to realtime vectorized push. tablet=" << tablet.id() << ", txn_id=" << request.transaction_id;
     DCHECK_EQ(push_type, PUSH_NORMAL_V2);
 
@@ -43,7 +52,11 @@ Status SparkLoadHandler::process_streaming_ingestion(Tablet& tablet, const TPush
     return st;
 }
 
+<<<<<<< HEAD
 Status SparkLoadHandler::_load_convert(Tablet& cur_tablet) {
+=======
+Status SparkLoadHandler::_load_convert(VersionedTablet& cur_tablet) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     Status st;
 
     VLOG(3) << "start to convert delta file.";
@@ -53,8 +66,13 @@ Status SparkLoadHandler::_load_convert(Tablet& cur_tablet) {
     RETURN_IF_ERROR(writer->open());
     DeferOp defer([&]() { writer->close(); });
 
+<<<<<<< HEAD
     ASSIGN_OR_RETURN(auto tablet_schema, cur_tablet.get_schema());
     Schema schema = ChunkHelper::convert_schema(*tablet_schema);
+=======
+    auto tablet_schema = cur_tablet.get_schema();
+    Schema schema = ChunkHelper::convert_schema(tablet_schema);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ChunkPtr chunk = ChunkHelper::new_chunk(schema, 0);
     auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
 
@@ -96,7 +114,11 @@ Status SparkLoadHandler::_load_convert(Tablet& cur_tablet) {
                     break;
                 }
 
+<<<<<<< HEAD
                 ChunkHelper::padding_char_columns(char_field_indexes, schema, *tablet_schema, chunk.get());
+=======
+                ChunkHelper::padding_char_columns(char_field_indexes, schema, tablet_schema, chunk.get());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 RETURN_IF_ERROR(writer->write(*chunk));
                 chunk->reset();
             }
@@ -107,7 +129,11 @@ Status SparkLoadHandler::_load_convert(Tablet& cur_tablet) {
     }
 
     // finish
+<<<<<<< HEAD
     auto txn_log = std::make_shared<TxnLog>();
+=======
+    auto txn_log = std::make_shared<TxnLogPB>();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     txn_log->set_tablet_id(cur_tablet.id());
     txn_log->set_txn_id(_request.transaction_id);
     auto op_write = txn_log->mutable_op_write();
@@ -115,6 +141,10 @@ Status SparkLoadHandler::_load_convert(Tablet& cur_tablet) {
         if (is_segment(f.path)) {
             op_write->mutable_rowset()->add_segments(std::move(f.path));
             op_write->mutable_rowset()->add_segment_size(f.size.value());
+<<<<<<< HEAD
+=======
+            op_write->mutable_rowset()->add_segment_encryption_metas(f.encryption_meta);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } else {
             return Status::InternalError(fmt::format("unknown file {}", f.path));
         }
@@ -122,7 +152,11 @@ Status SparkLoadHandler::_load_convert(Tablet& cur_tablet) {
     op_write->mutable_rowset()->set_num_rows(writer->num_rows());
     op_write->mutable_rowset()->set_data_size(writer->data_size());
     op_write->mutable_rowset()->set_overlapped(false);
+<<<<<<< HEAD
     RETURN_IF_ERROR(cur_tablet.put_txn_log(std::move(txn_log)));
+=======
+    RETURN_IF_ERROR(cur_tablet.tablet_manager()->put_txn_log(std::move(txn_log)));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     _write_bytes += static_cast<int64_t>(writer->data_size());
     _write_rows += static_cast<int64_t>(writer->num_rows());
@@ -131,7 +165,11 @@ Status SparkLoadHandler::_load_convert(Tablet& cur_tablet) {
     return st;
 }
 
+<<<<<<< HEAD
 void SparkLoadHandler::_get_tablet_infos(const Tablet& tablet, std::vector<TTabletInfo>* tablet_info_vec) {
+=======
+void SparkLoadHandler::_get_tablet_infos(const VersionedTablet& tablet, std::vector<TTabletInfo>* tablet_info_vec) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     TTabletInfo tablet_info;
     tablet_info.tablet_id = tablet.id();
     tablet_info.schema_hash = 0;

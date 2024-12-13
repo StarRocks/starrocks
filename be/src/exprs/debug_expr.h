@@ -14,7 +14,11 @@ public:
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new DebugExpr(*this)); }
 
+<<<<<<< HEAD
     [[nodiscard]] Status prepare(RuntimeState* state, ExprContext* context) override;
+=======
+    Status prepare(RuntimeState* state, ExprContext* context) override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
 

@@ -17,12 +17,26 @@
 #include "common/statusor.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/olap_file.pb.h"
+<<<<<<< HEAD
 #include "storage/lake/tablet.h"
 #include "storage/schema_change_utils.h"
 
 namespace starrocks::lake {
 
 class TabletManager;
+=======
+#include "storage/schema_change_utils.h"
+
+namespace starrocks {
+class TxnLogPB_OpSchemaChange;
+}
+
+namespace starrocks::lake {
+
+class TabletManager;
+class VersionedTablet;
+struct SchemaChangeParams;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 class SchemaChangeHandler {
 public:
@@ -31,6 +45,7 @@ public:
 
     Status process_alter_tablet(const TAlterTabletReqV2& request);
 
+<<<<<<< HEAD
     // for update tablet meta
     Status process_update_tablet_meta(const TUpdateTabletMetaInfoReq& request);
     DISALLOW_COPY_AND_MOVE(SchemaChangeHandler);
@@ -48,6 +63,13 @@ private:
         std::unique_ptr<ChunkChanger> chunk_changer = nullptr;
     };
 
+=======
+    Status process_update_tablet_meta(const TUpdateTabletMetaInfoReq& request);
+
+    DISALLOW_COPY_AND_MOVE(SchemaChangeHandler);
+
+private:
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     Status do_process_alter_tablet(const TAlterTabletReqV2& request);
     Status convert_historical_rowsets(const SchemaChangeParams& sc_params, TxnLogPB_OpSchemaChange* op_schema_change);
 

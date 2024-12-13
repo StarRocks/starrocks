@@ -99,7 +99,11 @@ protected:
     void TearDown() override {}
 
     std::shared_ptr<Segment> create_dummy_segment(const std::shared_ptr<FileSystem>& fs, const std::string& fname) {
+<<<<<<< HEAD
         return std::make_shared<Segment>(fs, FileInfo{fname}, 1, _dummy_segment_schema.get());
+=======
+        return std::make_shared<Segment>(fs, FileInfo{fname}, 1, _dummy_segment_schema, nullptr);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     template <LogicalType type, EncodingTypePB encoding, uint32_t version>
@@ -160,11 +164,16 @@ protected:
         }
         // read and check
         {
+<<<<<<< HEAD
             // create page cache
             std::unique_ptr<MemTracker> page_cache_mem_tracker = std::make_unique<MemTracker>();
             StoragePageCache::create_global_cache(page_cache_mem_tracker.get(), 1000000000);
             // read and check
             auto res = ColumnReader::create(&meta, segment.get());
+=======
+            // read and check
+            auto res = ColumnReader::create(&meta, segment.get(), nullptr);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             ASSERT_TRUE(res.ok());
             auto reader = std::move(res).value();
 
@@ -226,11 +235,19 @@ protected:
                     ASSERT_TRUE(st.ok());
 
                     ColumnPtr dst = ChunkHelper::column_from_field_type(type, true);
+<<<<<<< HEAD
                     SparseRange read_range;
                     size_t write_num = src.size();
                     read_range.add(Range(0, write_num / 3));
                     read_range.add(Range(write_num / 2, (write_num * 2 / 3)));
                     read_range.add(Range((write_num * 3 / 4), write_num));
+=======
+                    SparseRange<> read_range;
+                    size_t write_num = src.size();
+                    read_range.add(Range<>(0, write_num / 3));
+                    read_range.add(Range<>(write_num / 2, (write_num * 2 / 3)));
+                    read_range.add(Range<>((write_num * 3 / 4), write_num));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     size_t read_num = read_range.span_size();
 
                     st = iter->next_batch(read_range, dst.get());
@@ -238,9 +255,15 @@ protected:
                     ASSERT_EQ(read_num, dst->size());
 
                     size_t offset = 0;
+<<<<<<< HEAD
                     SparseRangeIterator read_iter = read_range.new_iterator();
                     while (read_iter.has_more()) {
                         Range r = read_iter.next(read_num);
+=======
+                    SparseRangeIterator<> read_iter = read_range.new_iterator();
+                    while (read_iter.has_more()) {
+                        Range<> r = read_iter.next(read_num);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         for (int i = 0; i < r.span_size(); ++i) {
                             ASSERT_EQ(0, type_info->cmp(src.get(r.begin() + i), dst->get(i + offset)))
                                     << " row " << r.begin() + i << ": "
@@ -389,7 +412,11 @@ protected:
 
         // read and check
         {
+<<<<<<< HEAD
             auto res = ColumnReader::create(&meta, segment.get());
+=======
+            auto res = ColumnReader::create(&meta, segment.get(), nullptr);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             ASSERT_TRUE(res.ok());
             auto reader = std::move(res).value();
 
@@ -478,7 +505,11 @@ protected:
         nc->reserve(count);
         down_cast<BinaryColumn*>(nc->data_column().get())->get_data().reserve(count * s1.size());
         for (size_t i = 0; i < count; i += 8) {
+<<<<<<< HEAD
             (void)col->append_strings({s1, s2, s3, s4, s5, s6, s7, s8});
+=======
+            (void)col->append_strings(std::vector<Slice>{s1, s2, s3, s4, s5, s6, s7, s8});
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
             std::next_permutation(s1.begin(), s1.end());
             std::next_permutation(s2.begin(), s2.end());
@@ -712,7 +743,11 @@ TEST_F(ColumnReaderWriterTest, test_scalar_column_total_mem_footprint) {
     // read and check
     {
         // read and check
+<<<<<<< HEAD
         auto res = ColumnReader::create(&meta, segment.get());
+=======
+        auto res = ColumnReader::create(&meta, segment.get(), nullptr);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ASSERT_TRUE(res.ok());
         auto reader = std::move(res).value();
         ASSERT_EQ(1024, meta.num_rows());
@@ -773,7 +808,11 @@ TEST_F(ColumnReaderWriterTest, test_large_varchar_column_writer) {
             ASSERT_TRUE(wfile->close().ok());
             // read and check result
             auto segment = create_dummy_segment(fs, fname);
+<<<<<<< HEAD
             auto res = ColumnReader::create(&meta, segment.get());
+=======
+            auto res = ColumnReader::create(&meta, segment.get(), nullptr);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             ASSERT_TRUE(res.ok());
             auto reader = std::move(res).value();
             ASSIGN_OR_ABORT(auto iter, reader->new_iterator());

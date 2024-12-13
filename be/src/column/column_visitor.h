@@ -80,6 +80,12 @@ public:
     virtual Status visit(const FixedLengthColumnBase<uint24_t>& column);
     virtual Status visit(const FixedLengthColumnBase<decimal12_t>& column);
     virtual Status visit(const ObjectColumn<JsonValue>& column);
+<<<<<<< HEAD
+=======
+    virtual Status visit(const ArrayViewColumn& column) {
+        return Status::NotSupported("ArrayViewColumn is not supported");
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 } // namespace starrocks

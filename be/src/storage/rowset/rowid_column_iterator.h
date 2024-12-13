@@ -63,12 +63,21 @@ public:
         return Status::OK();
     }
 
+<<<<<<< HEAD
     Status next_batch(const SparseRange& range, Column* dst) override {
         SparseRangeIterator iter = range.new_iterator();
         size_t to_read = range.span_size();
         while (to_read > 0) {
             _current_rowid = iter.begin();
             Range r = iter.next(to_read);
+=======
+    Status next_batch(const SparseRange<>& range, Column* dst) override {
+        SparseRangeIterator<> iter = range.new_iterator();
+        size_t to_read = range.span_size();
+        while (to_read > 0) {
+            _current_rowid = iter.begin();
+            Range<> r = iter.next(to_read);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             Buffer<rowid_t>& v = down_cast<FixedLengthColumn<rowid_t>*>(dst)->get_data();
             const size_t sz = v.size();
             raw::stl_vector_resize_uninitialized(&v, sz + r.span_size());
@@ -88,10 +97,14 @@ public:
 
     ordinal_t get_current_ordinal() const override { return _current_rowid; }
 
+<<<<<<< HEAD
     Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
                                       const ColumnPredicate* del_predicate, SparseRange* row_ranges) override {
         return Status::NotSupported("Not supported by RowIdColumnIterator: get_row_ranges_by_zone_map");
     }
+=======
+    ordinal_t num_rows() const override { return std::numeric_limits<ordinal_t>::max(); }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     bool all_page_dict_encoded() const override { return false; }
 

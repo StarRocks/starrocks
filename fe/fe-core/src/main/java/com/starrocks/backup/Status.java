@@ -31,7 +31,12 @@ public class Status {
         BAD_CONNECTION,
         COMMON_ERROR,
         OLAP_VERSION_ALREADY_MERGED,
+<<<<<<< HEAD
         UNSUPPORTED
+=======
+        UNSUPPORTED,
+        BAD_REPLACE
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @SerializedName("ec")

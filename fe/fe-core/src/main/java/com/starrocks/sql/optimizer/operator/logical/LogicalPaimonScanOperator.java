@@ -53,6 +53,14 @@ public class LogicalPaimonScanOperator extends LogicalScanOperator {
     }
 
     @Override
+<<<<<<< HEAD
+=======
+    public boolean isEmptyOutputRows() {
+        return !table.isUnPartitioned() && predicates.getSelectedPartitionIds().isEmpty();
+    }
+
+    @Override
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void setScanOperatorPredicates(ScanOperatorPredicates predicates) {
         this.predicates = predicates;
     }

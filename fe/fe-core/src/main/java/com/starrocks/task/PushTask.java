@@ -42,9 +42,17 @@ import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.SlotRef;
+<<<<<<< HEAD
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.Status;
 import com.starrocks.thrift.TBrokerScanRange;
+=======
+import com.starrocks.common.Status;
+import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
+import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.thrift.TBrokerScanRange;
+import com.starrocks.thrift.TColumn;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.TCondition;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TPriority;
@@ -88,11 +96,21 @@ public class PushTask extends AgentTask {
 
     private TTabletType tabletType;
 
+<<<<<<< HEAD
+=======
+    // for light schema change
+    private List<TColumn> columnsDesc = null;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public PushTask(TResourceInfo resourceInfo, long backendId, long dbId, long tableId, long partitionId,
                     long indexId, long tabletId, long replicaId, int schemaHash, long version,
                     int timeoutSecond, long loadJobId, TPushType pushType,
                     List<Predicate> conditions, TPriority priority, TTaskType taskType,
+<<<<<<< HEAD
                     long transactionId, long signature) {
+=======
+                    long transactionId, long signature, List<TColumn> columnsDesc) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         super(resourceInfo, backendId, taskType, dbId, tableId, partitionId, indexId, tabletId, signature);
         this.replicaId = replicaId;
         this.schemaHash = schemaHash;
@@ -109,6 +127,10 @@ public class PushTask extends AgentTask {
         this.tBrokerScanRange = null;
         this.tDescriptorTable = null;
         this.useVectorized = true;
+<<<<<<< HEAD
+=======
+        this.columnsDesc = columnsDesc;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     // for cancel delete
@@ -123,12 +145,21 @@ public class PushTask extends AgentTask {
 
     // for load v2 (SparkLoadJob)
     public PushTask(long backendId, long dbId, long tableId, long partitionId, long indexId, long tabletId,
+<<<<<<< HEAD
                     long replicaId, int schemaHash, int timeoutSecond, long loadJobId, TPushType pushType,
                     TPriority priority, long transactionId, long signature, TBrokerScanRange tBrokerScanRange,
                     TDescriptorTable tDescriptorTable, String timezone, TTabletType tabletType) {
         this(null, backendId, dbId, tableId, partitionId, indexId,
                 tabletId, replicaId, schemaHash, -1, timeoutSecond, loadJobId, pushType, null,
                 priority, TTaskType.REALTIME_PUSH, transactionId, signature);
+=======
+                    long replicaId, int schemaHash, long version, int timeoutSecond, long loadJobId, TPushType pushType,
+                    TPriority priority, long transactionId, long signature, TBrokerScanRange tBrokerScanRange,
+                    TDescriptorTable tDescriptorTable, String timezone, TTabletType tabletType, List<TColumn> columnsDesc) {
+        this(null, backendId, dbId, tableId, partitionId, indexId,
+                tabletId, replicaId, schemaHash, version, timeoutSecond, loadJobId, pushType, null,
+                priority, TTaskType.REALTIME_PUSH, transactionId, signature, columnsDesc);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.tBrokerScanRange = tBrokerScanRange;
         this.tDescriptorTable = tDescriptorTable;
         this.useVectorized = true;
@@ -159,7 +190,12 @@ public class PushTask extends AgentTask {
                         String columnName = ((SlotRef) binaryPredicate.getChild(0)).getColumnName();
                         String value = ((LiteralExpr) binaryPredicate.getChild(1)).getStringValue();
                         BinaryType op = binaryPredicate.getOp();
+<<<<<<< HEAD
                         tCondition.setColumn_name(columnName);
+=======
+                        tCondition.setColumn_name(MetaUtils.getColumnByColumnName(dbId, tableId, columnName)
+                                .getColumnId().getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         tCondition.setCondition_op(op.toString());
                         conditionValues.add(value);
                     } else if (condition instanceof IsNullPredicate) {
@@ -170,14 +206,24 @@ public class PushTask extends AgentTask {
                         if (isNullPredicate.isNotNull()) {
                             value = "NOT NULL";
                         }
+<<<<<<< HEAD
                         tCondition.setColumn_name(columnName);
+=======
+                        tCondition.setColumn_name(MetaUtils.getColumnByColumnName(dbId, tableId, columnName)
+                                .getColumnId().getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         tCondition.setCondition_op(op);
                         conditionValues.add(value);
                     } else if (condition instanceof InPredicate) {
                         InPredicate inPredicate = (InPredicate) condition;
                         String columnName = ((SlotRef) inPredicate.getChild(0)).getColumnName();
                         String op = inPredicate.isNotIn() ? "!*=" : "*=";
+<<<<<<< HEAD
                         tCondition.setColumn_name(columnName);
+=======
+                        tCondition.setColumn_name(MetaUtils.getColumnByColumnName(dbId, tableId, columnName)
+                                .getColumnId().getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         tCondition.setCondition_op(op);
                         for (int i = 1; i <= inPredicate.getInElementNum(); i++) {
                             conditionValues.add(((LiteralExpr) inPredicate.getChild(i)).getStringValue());
@@ -189,12 +235,18 @@ public class PushTask extends AgentTask {
                     tConditions.add(tCondition);
                 }
                 request.setDelete_conditions(tConditions);
+<<<<<<< HEAD
                 request.setUse_vectorized(useVectorized);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 break;
             case LOAD_V2:
                 request.setBroker_scan_range(tBrokerScanRange);
                 request.setDesc_tbl(tDescriptorTable);
+<<<<<<< HEAD
                 request.setUse_vectorized(useVectorized);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 request.setTablet_type(tabletType);
                 break;
             case CANCEL_DELETE:
@@ -204,6 +256,10 @@ public class PushTask extends AgentTask {
                 LOG.warn("unknown push type. type: " + pushType.name());
                 break;
         }
+<<<<<<< HEAD
+=======
+        request.setColumns_desc(columnsDesc);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         return request;
     }

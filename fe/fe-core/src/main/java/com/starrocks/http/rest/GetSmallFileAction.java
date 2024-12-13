@@ -71,7 +71,11 @@ public class GetSmallFileAction extends RestBaseAction {
         }
 
         // check token
+<<<<<<< HEAD
         if (!token.equals(GlobalStateMgr.getCurrentState().getToken())) {
+=======
+        if (!token.equals(GlobalStateMgr.getCurrentState().getNodeMgr().getToken())) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             response.appendContent("Invalid token");
             writeResponse(request, response, HttpResponseStatus.BAD_REQUEST);
             return;

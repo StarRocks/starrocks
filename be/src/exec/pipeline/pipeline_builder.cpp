@@ -14,13 +14,31 @@
 
 #include "exec/pipeline/pipeline_builder.h"
 
+<<<<<<< HEAD
+=======
+#include <memory>
+
+#include "adaptive/event.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "common/config.h"
 #include "exec/exec_node.h"
 #include "exec/pipeline/adaptive/collect_stats_context.h"
 #include "exec/pipeline/adaptive/collect_stats_sink_operator.h"
 #include "exec/pipeline/adaptive/collect_stats_source_operator.h"
+<<<<<<< HEAD
 #include "exec/pipeline/exchange/exchange_source_operator.h"
 #include "exec/pipeline/noop_sink_operator.h"
+=======
+#include "exec/pipeline/chunk_accumulate_operator.h"
+#include "exec/pipeline/exchange/exchange_source_operator.h"
+#include "exec/pipeline/exchange/local_exchange_source_operator.h"
+#include "exec/pipeline/group_execution/execution_group.h"
+#include "exec/pipeline/group_execution/execution_group_fwd.h"
+#include "exec/pipeline/group_execution/group_operator.h"
+#include "exec/pipeline/limit_operator.h"
+#include "exec/pipeline/noop_sink_operator.h"
+#include "exec/pipeline/pipeline_fwd.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "exec/pipeline/spill_process_operator.h"
 #include "exec/query_cache/cache_manager.h"
 #include "exec/query_cache/cache_operator.h"
@@ -30,6 +48,25 @@
 
 namespace starrocks::pipeline {
 
+<<<<<<< HEAD
+=======
+void PipelineBuilderContext::init_colocate_groups(std::unordered_map<int32_t, ExecutionGroupPtr>&& colocate_groups) {
+    _group_id_to_colocate_groups = std::move(colocate_groups);
+    for (auto& [group_id, group] : _group_id_to_colocate_groups) {
+        _execution_groups.emplace_back(group);
+    }
+}
+
+ExecutionGroupRawPtr PipelineBuilderContext::find_exec_group_by_plan_node_id(int32_t plan_node_id) {
+    for (auto& [group_id, group] : _group_id_to_colocate_groups) {
+        if (group->contains(plan_node_id)) {
+            return group.get();
+        }
+    }
+    return _normal_exec_group;
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 /// PipelineBuilderContext.
 OpFactories PipelineBuilderContext::maybe_interpolate_local_broadcast_exchange(RuntimeState* state,
                                                                                int32_t plan_node_id,
@@ -71,6 +108,16 @@ OpFactories PipelineBuilderContext::maybe_interpolate_local_passthrough_exchange
                                                          LocalExchanger::PassThroughType::CHUNK);
 }
 
+<<<<<<< HEAD
+=======
+OpFactories PipelineBuilderContext::maybe_interpolate_local_passthrough_exchange(
+        RuntimeState* state, int32_t plan_node_id, OpFactories& pred_operators, int num_receivers,
+        LocalExchanger::PassThroughType pass_through_type) {
+    return _maybe_interpolate_local_passthrough_exchange(state, plan_node_id, pred_operators, num_receivers, false,
+                                                         pass_through_type);
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 OpFactories PipelineBuilderContext::maybe_interpolate_local_random_passthrough_exchange(RuntimeState* state,
                                                                                         int32_t plan_node_id,
                                                                                         OpFactories& pred_operators,
@@ -97,6 +144,11 @@ OpFactories PipelineBuilderContext::_maybe_interpolate_local_passthrough_exchang
         return pred_operators;
     }
 
+<<<<<<< HEAD
+=======
+    pred_operators = maybe_interpolate_grouped_exchange(plan_node_id, pred_operators);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     int max_input_dop = std::max(num_receivers, static_cast<int>(source_op->degree_of_parallelism()));
     auto mem_mgr = std::make_shared<ChunkBufferMemoryManager>(max_input_dop,
                                                               config::local_exchange_buffer_mem_limit_per_driver);
@@ -112,6 +164,13 @@ OpFactories PipelineBuilderContext::_maybe_interpolate_local_passthrough_exchang
         local_exchange = std::make_shared<AdaptivePassthroughExchanger>(mem_mgr, local_exchange_source.get());
     } else if (pass_through_type == LocalExchanger::PassThroughType::RANDOM) {
         local_exchange = std::make_shared<RandomPassthroughExchanger>(mem_mgr, local_exchange_source.get());
+<<<<<<< HEAD
+=======
+    } else if (state->query_options().__isset.enable_connector_sink_writer_scaling &&
+               state->query_options().enable_connector_sink_writer_scaling &&
+               pass_through_type == LocalExchanger::PassThroughType::SCALE) {
+        local_exchange = std::make_shared<ConnectorSinkPassthroughExchanger>(mem_mgr, local_exchange_source.get());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     } else {
         local_exchange = std::make_shared<PassthroughExchanger>(mem_mgr, local_exchange_source.get());
     }
@@ -123,6 +182,7 @@ OpFactories PipelineBuilderContext::_maybe_interpolate_local_passthrough_exchang
     return {std::move(local_exchange_source)};
 }
 
+<<<<<<< HEAD
 void PipelineBuilderContext::maybe_interpolate_local_passthrough_exchange_for_sink(RuntimeState* state,
                                                                                    int32_t plan_node_id,
                                                                                    OpFactoryPtr table_sink_operator,
@@ -181,6 +241,29 @@ void PipelineBuilderContext::maybe_interpolate_local_key_partition_exchange_for_
     auto pipeline_with_local_exchange_source =
             std::make_shared<Pipeline>(next_pipe_id(), operators_source_with_local_shuffle);
     _fragment_context->pipelines().emplace_back(std::move(pipeline_with_local_exchange_source));
+=======
+OpFactories PipelineBuilderContext::interpolate_local_key_partition_exchange(
+        RuntimeState* state, int32_t plan_node_id, OpFactories& pred_operators,
+        const std::vector<ExprContext*>& partition_expr_ctxs, int num_receivers) {
+    auto* pred_source_op = source_operator(pred_operators);
+    size_t source_dop = pred_source_op->degree_of_parallelism();
+    auto mem_mgr =
+            std::make_shared<ChunkBufferMemoryManager>(source_dop, config::local_exchange_buffer_mem_limit_per_driver);
+    auto local_shuffle_source =
+            std::make_shared<LocalExchangeSourceOperatorFactory>(next_operator_id(), plan_node_id, mem_mgr);
+    auto local_exchanger = std::make_shared<KeyPartitionExchanger>(mem_mgr, local_shuffle_source.get(),
+                                                                   partition_expr_ctxs, source_dop);
+    auto local_shuffle_sink =
+            std::make_shared<LocalExchangeSinkOperatorFactory>(next_operator_id(), plan_node_id, local_exchanger);
+    pred_operators.emplace_back(std::move(local_shuffle_sink));
+    add_pipeline(pred_operators);
+
+    local_shuffle_source->set_runtime_state(state);
+    inherit_upstream_source_properties(local_shuffle_source.get(), pred_source_op);
+    local_shuffle_source->set_degree_of_parallelism(num_receivers);
+
+    return {std::move(local_shuffle_source)};
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 OpFactories PipelineBuilderContext::maybe_interpolate_local_shuffle_exchange(
@@ -212,6 +295,13 @@ OpFactories PipelineBuilderContext::_do_maybe_interpolate_local_shuffle_exchange
         const std::vector<ExprContext*>& partition_expr_ctxs, const TPartitionType::type part_type) {
     DCHECK(!pred_operators.empty() && pred_operators[0]->is_source());
 
+<<<<<<< HEAD
+=======
+    // interpolate grouped exchange if needed
+    // TODO: If the local exchange supports spills, we don't need to prevent group execution
+    pred_operators = maybe_interpolate_grouped_exchange(plan_node_id, pred_operators);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // If DOP is one, we needn't partition input chunks.
     size_t shuffle_partitions_num = degree_of_parallelism();
     if (shuffle_partitions_num <= 1) {
@@ -219,6 +309,10 @@ OpFactories PipelineBuilderContext::_do_maybe_interpolate_local_shuffle_exchange
     }
 
     auto* pred_source_op = source_operator(pred_operators);
+<<<<<<< HEAD
+=======
+    int64_t limit_size = _prev_limit_size(pred_operators);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // To make sure at least one partition source operator is ready to output chunk before sink operators are full.
     auto mem_mgr = std::make_shared<ChunkBufferMemoryManager>(shuffle_partitions_num,
@@ -237,7 +331,13 @@ OpFactories PipelineBuilderContext::_do_maybe_interpolate_local_shuffle_exchange
     pred_operators.emplace_back(std::move(local_shuffle_sink));
     add_pipeline(pred_operators);
 
+<<<<<<< HEAD
     return {std::move(local_shuffle_source)};
+=======
+    OpFactories source_operators = {std::move(local_shuffle_source)};
+    _try_interpolate_limit_operator(plan_node_id, source_operators, limit_size);
+    return source_operators;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 OpFactories PipelineBuilderContext::maybe_interpolate_local_ordered_partition_exchange(
@@ -245,6 +345,13 @@ OpFactories PipelineBuilderContext::maybe_interpolate_local_ordered_partition_ex
         const std::vector<ExprContext*>& partition_expr_ctxs) {
     DCHECK(!pred_operators.empty() && pred_operators[0]->is_source());
 
+<<<<<<< HEAD
+=======
+    // interpolate grouped exchange if needed
+    // TODO: If the local exchange supports spills, we don't need to prevent group execution
+    pred_operators = maybe_interpolate_grouped_exchange(plan_node_id, pred_operators);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // If DOP is one, we needn't partition input chunks.
     size_t shuffle_partitions_num = degree_of_parallelism();
     if (shuffle_partitions_num <= 1) {
@@ -252,6 +359,10 @@ OpFactories PipelineBuilderContext::maybe_interpolate_local_ordered_partition_ex
     }
 
     auto* pred_source_op = source_operator(pred_operators);
+<<<<<<< HEAD
+=======
+    int64_t limit_size = _prev_limit_size(pred_operators);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     auto mem_mgr = std::make_shared<ChunkBufferMemoryManager>(shuffle_partitions_num,
                                                               config::local_exchange_buffer_mem_limit_per_driver);
@@ -270,7 +381,13 @@ OpFactories PipelineBuilderContext::maybe_interpolate_local_ordered_partition_ex
     pred_operators.emplace_back(std::move(local_shuffle_sink));
     add_pipeline(pred_operators);
 
+<<<<<<< HEAD
     return {std::move(local_shuffle_source)};
+=======
+    OpFactories source_operators = {std::move(local_shuffle_source)};
+    _try_interpolate_limit_operator(plan_node_id, source_operators, limit_size);
+    return source_operators;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 void PipelineBuilderContext::interpolate_spill_process(size_t plan_node_id,
@@ -286,6 +403,47 @@ void PipelineBuilderContext::interpolate_spill_process(size_t plan_node_id,
     add_pipeline(std::move(spill_process_operators));
 }
 
+<<<<<<< HEAD
+=======
+OpFactories PipelineBuilderContext::interpolate_grouped_exchange(int32_t plan_node_id, OpFactories& pred_operators) {
+    size_t physical_dop = degree_of_parallelism();
+    auto* source_op = source_operator(pred_operators);
+    int logical_dop = source_op->degree_of_parallelism();
+
+    // check should interpolate limit operator
+    int64_t limit_size = _prev_limit_size(pred_operators);
+
+    auto mem_mgr =
+            std::make_shared<ChunkBufferMemoryManager>(logical_dop, config::local_exchange_buffer_mem_limit_per_driver);
+    auto local_shuffle_source =
+            std::make_shared<LocalExchangeSourceOperatorFactory>(next_operator_id(), plan_node_id, mem_mgr);
+    auto local_exchanger = std::make_shared<PassthroughExchanger>(mem_mgr, local_shuffle_source.get());
+    auto group_exchange_sink = std::make_shared<GroupedExecutionSinkFactory>(next_operator_id(), plan_node_id,
+                                                                             local_exchanger, _current_execution_group);
+    pred_operators.emplace_back(std::move(group_exchange_sink));
+
+    auto prev_source_operator = source_operator(pred_operators);
+    inherit_upstream_source_properties(local_shuffle_source.get(), prev_source_operator);
+    local_shuffle_source->set_could_local_shuffle(true);
+    local_shuffle_source->set_degree_of_parallelism(physical_dop);
+    add_pipeline(pred_operators);
+    // switch to new normal group
+    _current_execution_group = _normal_exec_group;
+
+    OpFactories source_operators = {std::move(local_shuffle_source)};
+    _try_interpolate_limit_operator(plan_node_id, source_operators, limit_size);
+    return source_operators;
+}
+
+OpFactories PipelineBuilderContext::maybe_interpolate_grouped_exchange(int32_t plan_node_id,
+                                                                       OpFactories& pred_operators) {
+    if (dynamic_cast<ColocateExecutionGroup*>(_current_execution_group) != nullptr) {
+        return interpolate_grouped_exchange(plan_node_id, pred_operators);
+    }
+    return pred_operators;
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 OpFactories PipelineBuilderContext::maybe_gather_pipelines_to_one(RuntimeState* state, int32_t plan_node_id,
                                                                   std::vector<OpFactories>& pred_operators_list) {
     // If there is only one pred pipeline, we needn't local passthrough anymore.
@@ -305,10 +463,37 @@ OpFactories PipelineBuilderContext::maybe_gather_pipelines_to_one(RuntimeState* 
     auto local_exchange_source =
             std::make_shared<LocalExchangeSourceOperatorFactory>(next_operator_id(), plan_node_id, mem_mgr);
     local_exchange_source->set_runtime_state(state);
+<<<<<<< HEAD
     inherit_upstream_source_properties(local_exchange_source.get(), source_operator(pred_operators_list[0]));
     local_exchange_source->set_could_local_shuffle(true);
     local_exchange_source->set_degree_of_parallelism(degree_of_parallelism());
 
+=======
+    auto* first_upstream_source = source_operator(pred_operators_list[0]);
+    inherit_upstream_source_properties(local_exchange_source.get(), first_upstream_source);
+    local_exchange_source->set_could_local_shuffle(true);
+    local_exchange_source->set_degree_of_parallelism(degree_of_parallelism());
+
+    std::vector<EventPtr> group_blocking_events;
+    for (const auto& pred_ops : pred_operators_list) {
+        auto* source = source_operator(pred_ops);
+        if (auto event = source->group_leader()->adaptive_blocking_event(); event != nullptr) {
+            group_blocking_events.emplace_back(std::move(event));
+        }
+    }
+
+    for (int i = 1; i < pred_operators_list.size(); i++) {
+        auto* upstream_source = source_operator(pred_operators_list[i]);
+        local_exchange_source->add_upstream_source(upstream_source);
+        first_upstream_source->union_group(upstream_source);
+    }
+
+    if (!group_blocking_events.empty()) {
+        EventPtr merged_blocking_events = Event::depends_all(group_blocking_events);
+        local_exchange_source->group_leader()->set_adaptive_blocking_event(std::move(merged_blocking_events));
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     auto exchanger = std::make_shared<PassthroughExchanger>(mem_mgr, local_exchange_source.get());
     for (auto& pred_operators : pred_operators_list) {
         auto local_exchange_sink =
@@ -322,7 +507,11 @@ OpFactories PipelineBuilderContext::maybe_gather_pipelines_to_one(RuntimeState* 
 
 OpFactories PipelineBuilderContext::maybe_interpolate_collect_stats(RuntimeState* state, int32_t plan_node_id,
                                                                     OpFactories& pred_operators) {
+<<<<<<< HEAD
     if (_force_disable_adaptive_dop || !_fragment_context->enable_adaptive_dop()) {
+=======
+    if (!_fragment_context->enable_adaptive_dop()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return pred_operators;
     }
 
@@ -439,10 +628,15 @@ void PipelineBuilderContext::inherit_upstream_source_properties(SourceOperatorFa
         downstream_source->set_partition_exprs(upstream_source->partition_exprs());
     }
 
+<<<<<<< HEAD
     if (downstream_source->adaptive_state() != SourceOperatorFactory::AdaptiveState::NONE) {
         downstream_source->set_group_leader(downstream_source);
     } else {
         downstream_source->set_group_leader(upstream_source);
+=======
+    if (downstream_source->adaptive_initial_state() == SourceOperatorFactory::AdaptiveState::NONE) {
+        downstream_source->add_upstream_source(upstream_source);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }
 
@@ -453,11 +647,50 @@ void PipelineBuilderContext::pop_dependent_pipeline() {
     _dependent_pipelines.pop_back();
 }
 
+<<<<<<< HEAD
 /// PipelineBuilder.
 Pipelines PipelineBuilder::build(const FragmentContext& fragment, ExecNode* exec_node) {
     pipeline::OpFactories operators = exec_node->decompose_to_pipeline(&_context);
     _context.add_pipeline(operators);
     return _context.get_pipelines();
+=======
+int64_t PipelineBuilderContext::_prev_limit_size(const OpFactories& pred_operators) {
+    for (auto it = pred_operators.rbegin(); it != pred_operators.rend(); ++it) {
+        if (auto limit = dynamic_cast<LimitOperatorFactory*>(it->get())) {
+            return limit->limit();
+        } else if (dynamic_cast<ChunkAccumulateOperatorFactory*>(it->get()) == nullptr) {
+            return -1;
+        }
+    }
+    return -1;
+}
+
+void PipelineBuilderContext::_try_interpolate_limit_operator(int32_t plan_node_id, OpFactories& pred_operators,
+                                                             int64_t limit_size) {
+    if (limit_size >= 0 && limit_size < config::pipline_limit_max_delivery) {
+        pred_operators.emplace_back(
+                std::make_shared<LimitOperatorFactory>(next_operator_id(), plan_node_id, limit_size));
+    }
+}
+
+void PipelineBuilderContext::_subscribe_pipeline_event(Pipeline* pipeline) {
+    bool enable_wait_event = _fragment_context->runtime_state()->enable_wait_dependent_event();
+    enable_wait_event &= !_current_execution_group->is_colocate_exec_group();
+    if (enable_wait_event && !_dependent_pipelines.empty()) {
+        pipeline->pipeline_event()->set_need_wait_dependencies_finished(true);
+        pipeline->pipeline_event()->add_dependency(_dependent_pipelines.back()->pipeline_event());
+    }
+}
+
+OpFactories PipelineBuilder::decompose_exec_node_to_pipeline(const FragmentContext& fragment, ExecNode* exec_node) {
+    pipeline::OpFactories operators = exec_node->decompose_to_pipeline(&_context);
+    operators = _context.maybe_interpolate_grouped_exchange(exec_node->id(), operators);
+    return operators;
+}
+
+std::pair<ExecutionGroups, Pipelines> PipelineBuilder::build() {
+    return {_context.execution_groups(), _context.pipelines()};
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 } // namespace starrocks::pipeline

@@ -17,7 +17,11 @@ package com.starrocks.connector.hive.events;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+<<<<<<< HEAD
 import com.starrocks.connector.hive.CacheUpdateProcessor;
+=======
+import com.starrocks.connector.hive.HiveCacheUpdateProcessor;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.connector.hive.HivePartitionName;
 import org.apache.hadoop.hive.common.FileUtils;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
@@ -42,7 +46,11 @@ public class AddPartitionEvent extends MetastoreTableEvent {
      * Prevent instantiation from outside should use MetastoreEventFactory instead
      */
     private AddPartitionEvent(NotificationEvent event,
+<<<<<<< HEAD
                               CacheUpdateProcessor cacheProcessor,
+=======
+                              HiveCacheUpdateProcessor cacheProcessor,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                               Partition addedPartition,
                               String catalogName) {
         super(event, cacheProcessor, catalogName);
@@ -68,7 +76,11 @@ public class AddPartitionEvent extends MetastoreTableEvent {
     }
 
     protected static List<MetastoreEvent> getEvents(NotificationEvent event,
+<<<<<<< HEAD
                                                     CacheUpdateProcessor cacheProcessor,
+=======
+                                                    HiveCacheUpdateProcessor cacheProcessor,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                                     String catalogName) {
         List<MetastoreEvent> addPartitionEvents = Lists.newArrayList();
         try {

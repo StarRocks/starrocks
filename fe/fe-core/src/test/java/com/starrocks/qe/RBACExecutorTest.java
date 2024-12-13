@@ -15,15 +15,30 @@ package com.starrocks.qe;
 
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.InformationFunction;
+<<<<<<< HEAD
+=======
+import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.AuthorizationMgr;
+import com.starrocks.authorization.DefaultAuthorizationProvider;
+import com.starrocks.authorization.PrivilegeType;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+<<<<<<< HEAD
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.PrivilegeStmtAnalyzer;
+=======
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AuthorizationAnalyzer;
+import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.analyzer.CreateFunctionAnalyzer;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
@@ -71,6 +86,13 @@ public class RBACExecutorTest {
 
         GlobalStateMgr globalStateMgr = starRocksAssert.getCtx().getGlobalStateMgr();
 
+<<<<<<< HEAD
+=======
+        GlobalStateMgr.getCurrentState()
+                .setAuthorizationMgr(new AuthorizationMgr(globalStateMgr, new DefaultAuthorizationProvider()));
+        GlobalStateMgr.getCurrentState().setAuthenticationMgr(new AuthenticationMgr());
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         for (int i = 0; i < 5; i++) {
             String sql = "create user u" + i;
             CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
@@ -90,8 +112,13 @@ public class RBACExecutorTest {
         DDLStmtExecutor.execute(grantPrivilegeStmt, ctx);
 
         ShowGrantsStmt stmt = new ShowGrantsStmt(new UserIdentity("u1", "%"));
+<<<<<<< HEAD
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
+=======
+
+        ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals("[['u1'@'%', default_catalog, GRANT USAGE, CREATE DATABASE, DROP, ALTER " +
                 "ON CATALOG default_catalog TO USER 'u1'@'%']]", resultSet.getResultRows().toString());
 
@@ -100,8 +127,12 @@ public class RBACExecutorTest {
         DDLStmtExecutor.execute(grantPrivilegeStmt, ctx);
 
         stmt = new ShowGrantsStmt("r1");
+<<<<<<< HEAD
         executor = new ShowExecutor(ctx, stmt);
         resultSet = executor.execute();
+=======
+        resultSet = ShowExecutor.execute(stmt, ctx);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals("[[r1, default_catalog, GRANT USAGE, CREATE DATABASE, DROP, ALTER " +
                 "ON CATALOG default_catalog TO ROLE 'r1']]", resultSet.getResultRows().toString());
 
@@ -118,8 +149,12 @@ public class RBACExecutorTest {
         DDLStmtExecutor.execute(grantPrivilegeStmt, ctx);
 
         stmt = new ShowGrantsStmt("r0");
+<<<<<<< HEAD
         executor = new ShowExecutor(ctx, stmt);
         resultSet = executor.execute();
+=======
+        resultSet = ShowExecutor.execute(stmt, ctx);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals("[[r0, null, GRANT 'r1', 'r2' TO  ROLE r0]," +
                         " [r0, default_catalog, GRANT SELECT ON TABLE db.tbl0 TO ROLE 'r0']]",
                 resultSet.getResultRows().toString());
@@ -133,8 +168,13 @@ public class RBACExecutorTest {
 
         ShowRolesStmt stmt = new ShowRolesStmt();
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
+<<<<<<< HEAD
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
+=======
+
+        ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         String resultString = resultSet.getResultRows().toString();
         // sampling test a some of the result rows
         Assert.assertTrue(
@@ -152,8 +192,13 @@ public class RBACExecutorTest {
     public void testShowUsers() throws Exception {
         ShowUserStmt stmt = new ShowUserStmt(true);
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
+<<<<<<< HEAD
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
+=======
+
+        ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals("[['u3'@'%'], ['root'@'%'], ['u2'@'%'], ['u4'@'%'], ['u1'@'%'], ['u0'@'%']]",
                 resultSet.getResultRows().toString());
     }
@@ -240,15 +285,26 @@ public class RBACExecutorTest {
 
     @Test
     public void testShowFunctionsWithPriv() throws Exception {
+<<<<<<< HEAD
         new MockUp<CreateFunctionStmt>() {
+=======
+        new MockUp<AuthorizationAnalyzer>() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             @Mock
             public void analyze(ConnectContext context) throws AnalysisException {
             }
         };
 
+<<<<<<< HEAD
         new MockUp<PrivilegeStmtAnalyzer>() {
             @Mock
             public void analyze(ConnectContext context) throws AnalysisException {
+=======
+        new MockUp<CreateFunctionAnalyzer>() {
+            @Mock
+            public void analyze(CreateFunctionStmt stmt, ConnectContext context) {
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         };
 
@@ -270,19 +326,29 @@ public class RBACExecutorTest {
         DDLStmtExecutor.execute(statement, ctx);
 
         ShowFunctionsStmt stmt = new ShowFunctionsStmt("db", false, false, false, null, null);
+<<<<<<< HEAD
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
+=======
+
+        ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals("[[my_udf_json_get]]", resultSet.getResultRows().toString());
 
         ctx.setCurrentUserIdentity(new UserIdentity("u1", "%"));
         stmt = new ShowFunctionsStmt("db", false, false, false, null, null);
+<<<<<<< HEAD
         executor = new ShowExecutor(ctx, stmt);
         resultSet = executor.execute();
+=======
+        resultSet = ShowExecutor.execute(stmt, ctx);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals("[]", resultSet.getResultRows().toString());
 
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant usage on function db.my_udf_json_get(int) to u1", ctx), ctx);
         stmt = new ShowFunctionsStmt("db", false, false, false, null, null);
+<<<<<<< HEAD
         executor = new ShowExecutor(ctx, stmt);
         resultSet = executor.execute();
         Assert.assertEquals("[[my_udf_json_get]]", resultSet.getResultRows().toString());
@@ -290,6 +356,13 @@ public class RBACExecutorTest {
         stmt = new ShowFunctionsStmt("db", true, false, false, null, null);
         executor = new ShowExecutor(ctx, stmt);
         resultSet = executor.execute();
+=======
+        resultSet = ShowExecutor.execute(stmt, ctx);
+        Assert.assertEquals("[[my_udf_json_get]]", resultSet.getResultRows().toString());
+
+        stmt = new ShowFunctionsStmt("db", true, false, false, null, null);
+        resultSet = ShowExecutor.execute(stmt, ctx);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertTrue(resultSet.getResultRows().size() > 0);
     }
 }

@@ -15,10 +15,20 @@
 
 package com.starrocks.connector.iceberg;
 
+<<<<<<< HEAD
+=======
+import com.google.common.collect.ImmutableList;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.connector.iceberg.rest.IcebergRESTCatalog;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.hadoop.conf.Configuration;
+<<<<<<< HEAD
+=======
+import org.apache.iceberg.catalog.Namespace;
+import org.apache.iceberg.catalog.TableIdentifier;
+import org.apache.iceberg.rest.RESTCatalog;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -29,12 +39,21 @@ import java.util.Map;
 
 public class IcebergRESTCatalogTest {
     @Test
+<<<<<<< HEAD
     public void testListAllDatabases(@Mocked IcebergRESTCatalog restCatalog) {
         new Expectations() {
             {
                 restCatalog.listAllDatabases();
                 result = Arrays.asList("db1", "db2");
                 minTimes = 0;
+=======
+    public void testListAllDatabases(@Mocked RESTCatalog restCatalog) {
+        new Expectations() {
+            {
+                restCatalog.listNamespaces();
+                result = ImmutableList.of(Namespace.of("db1"), Namespace.of("db2"));
+                times = 1;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         };
 
@@ -44,4 +63,36 @@ public class IcebergRESTCatalogTest {
         List<String> dbs = icebergRESTCatalog.listAllDatabases();
         Assert.assertEquals(Arrays.asList("db1", "db2"), dbs);
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testTableExists(@Mocked RESTCatalog restCatalog) {
+        new Expectations() {
+            {
+                restCatalog.tableExists((TableIdentifier) any);
+                result = true;
+            }
+        };
+        IcebergRESTCatalog icebergRESTCatalog = new IcebergRESTCatalog(
+                "rest_native_catalog", new Configuration(), new HashMap<>());
+        boolean exists = icebergRESTCatalog.tableExists("db1", "tbl1");
+        Assert.assertTrue(exists);
+    }
+
+    @Test
+    public void testRenameTable(@Mocked RESTCatalog restCatalog) {
+        new Expectations() {
+            {
+                restCatalog.tableExists((TableIdentifier) any);
+                result = true;
+            }
+        };
+        IcebergRESTCatalog icebergRESTCatalog = new IcebergRESTCatalog(
+                "rest_native_catalog", new Configuration(), new HashMap<>());
+        icebergRESTCatalog.renameTable("db", "tb1", "tb2");
+        boolean exists = icebergRESTCatalog.tableExists("db", "tbl2");
+        Assert.assertTrue(exists);
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

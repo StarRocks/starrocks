@@ -26,6 +26,7 @@ namespace starrocks::pipeline {
 
 class MockSinkIOBuffer : public SinkIOBuffer {
 public:
+<<<<<<< HEAD
     MockSinkIOBuffer(int num_sinkers) : SinkIOBuffer(num_sinkers) { _value = std::make_unique<int>(); }
 
     static int execute_io_task(void* meta, bthread::TaskIterator<ChunkPtr>& iter) {
@@ -48,6 +49,16 @@ public:
 
 private:
     std::unique_ptr<int> _value;
+=======
+    MockSinkIOBuffer(int num_sinkers) : SinkIOBuffer(num_sinkers) {}
+
+    void _add_chunk(const ChunkPtr& chunk) override { ++_chunk_added; }
+
+    int num_chunks() const { return _chunk_added; }
+
+private:
+    int _chunk_added = 0;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 class SinkIOBufferTest : public testing::Test {
@@ -63,6 +74,16 @@ protected:
 
         auto second_chunk = gen_test_chunk(2);
         ASSERT_OK(buf->append_chunk(runtime_state, second_chunk));
+<<<<<<< HEAD
+=======
+
+        // append a nullptr, won't cause the queue termination
+        ASSERT_OK(buf->append_chunk(runtime_state, nullptr));
+
+        // the forth chunk can be processed correctly
+        auto forth_chunk = gen_test_chunk(4);
+        ASSERT_OK(buf->append_chunk(runtime_state, forth_chunk));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     static void poll_thread(void* arg1) {
@@ -70,16 +91,29 @@ protected:
         (void)buf->set_finishing();
     }
 
+<<<<<<< HEAD
     void wait(const std::function<bool()>& func) {
+=======
+    static bool wait(const std::function<bool()>& func) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         int i = 0;
         while (!func()) {
             bthread_usleep(1000);
             i++;
+<<<<<<< HEAD
             if (i > 50000) {
                 // max wait 50s
                 ASSERT_TRUE(false);
             }
         }
+=======
+            if (i > 10000) {
+                // max wait 10s
+                return false;
+            }
+        }
+        return true;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
 protected:
@@ -107,6 +141,7 @@ std::shared_ptr<RuntimeState> SinkIOBufferTest::gen_test_runtime_state() {
 // Execute sequentially one by one
 TEST_F(SinkIOBufferTest, test_basic_1) {
     SyncPoint::GetInstance()->EnableProcessing();
+<<<<<<< HEAD
     SyncPoint::GetInstance()->SetCallBack("sink_io_buffer_append_chunk", [this](void* arg) {
         wait([this]() -> bool { return _data_chunk <= 0; });
 
@@ -124,6 +159,16 @@ TEST_F(SinkIOBufferTest, test_basic_1) {
             _data_chunk--;
         }
     });
+=======
+    SyncPoint::GetInstance()->SetCallBack("sink_io_buffer_append_chunk", [this](void*) {
+        ASSERT_PRED1(SinkIOBufferTest::wait, [this]() -> bool { return _data_chunk <= 0; });
+        _data_chunk++;
+    });
+    SyncPoint::GetInstance()->SetCallBack("sink_io_buffer_before_process_chunk", [](void*) {});
+    SyncPoint::GetInstance()->SetCallBack("sink_io_buffer_after_process_chunk", [this](void*) { _data_chunk--; });
+    SyncPoint::GetInstance()->SetCallBack("sink_io_buffer_apend_chunk_end_queue", [this](void*) { _close_chunk++; });
+    SyncPoint::GetInstance()->SetCallBack("sink_io_buffer_process_chunk_end_queue", [this](void*) { _close_chunk--; });
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     auto runtime_state = gen_test_runtime_state();
     auto sink_buffer = std::make_unique<MockSinkIOBuffer>(1);
@@ -135,9 +180,17 @@ TEST_F(SinkIOBufferTest, test_basic_1) {
     std::thread thread2(poll_thread, sink_buffer.get());
     thread2.join();
 
+<<<<<<< HEAD
     wait([this]() -> bool { return _data_chunk == 0 && _close_chunk == 0; });
     wait([&sink_buffer]() -> bool { return sink_buffer->is_finished(); });
 
+=======
+    EXPECT_PRED1(SinkIOBufferTest::wait, [this]() -> bool { return _data_chunk == 0 && _close_chunk == 0; });
+    EXPECT_PRED1(SinkIOBufferTest::wait, [&sink_buffer]() -> bool { return sink_buffer->is_finished(); });
+
+    // MockSinkIOBuffer::_add_chunk() called 4 times
+    EXPECT_EQ(4, sink_buffer->num_chunks());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     sink_buffer.reset();
 
     SyncPoint::GetInstance()->DisableProcessing();
@@ -147,6 +200,7 @@ TEST_F(SinkIOBufferTest, test_basic_1) {
 TEST_F(SinkIOBufferTest, test_basic_2) {
     SyncPoint::GetInstance()->EnableProcessing();
     bool _need_process_chunk = false;
+<<<<<<< HEAD
     SyncPoint::GetInstance()->SetCallBack("sink_io_buffer_append_chunk", [this](void* arg) {
         if (arg == nullptr) {
             _close_chunk++;
@@ -165,6 +219,15 @@ TEST_F(SinkIOBufferTest, test_basic_2) {
             _data_chunk--;
         }
     });
+=======
+    SyncPoint::GetInstance()->SetCallBack("sink_io_buffer_append_chunk", [this](void*) { _data_chunk++; });
+    SyncPoint::GetInstance()->SetCallBack("sink_io_buffer_before_process_chunk", [&_need_process_chunk](void* arg) {
+        ASSERT_PRED1(SinkIOBufferTest::wait, [&_need_process_chunk]() -> bool { return _need_process_chunk; });
+    });
+    SyncPoint::GetInstance()->SetCallBack("sink_io_buffer_after_process_chunk", [this](void*) { _data_chunk--; });
+    SyncPoint::GetInstance()->SetCallBack("sink_io_buffer_apend_chunk_end_queue", [this](void*) { _close_chunk++; });
+    SyncPoint::GetInstance()->SetCallBack("sink_io_buffer_process_chunk_end_queue", [this](void*) { _close_chunk--; });
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     auto runtime_state = gen_test_runtime_state();
     auto sink_buffer = std::make_unique<MockSinkIOBuffer>(1);
@@ -173,16 +236,30 @@ TEST_F(SinkIOBufferTest, test_basic_2) {
     std::thread thread1(operator_thread, sink_buffer.get(), runtime_state.get());
     thread1.join();
 
+<<<<<<< HEAD
     wait([this]() -> bool { return _data_chunk == 2; });
+=======
+    EXPECT_PRED1(SinkIOBufferTest::wait, [this]() -> bool { return _data_chunk == 4; });
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     std::thread thread2(poll_thread, sink_buffer.get());
     thread2.join();
 
+<<<<<<< HEAD
     wait([this]() -> bool { return _close_chunk == 1; });
     _need_process_chunk = true;
 
     wait([&sink_buffer]() -> bool { return sink_buffer->is_finished(); });
 
+=======
+    EXPECT_PRED1(SinkIOBufferTest::wait, [this]() -> bool { return _close_chunk == 1; });
+    _need_process_chunk = true;
+
+    EXPECT_PRED1(SinkIOBufferTest::wait, [&sink_buffer]() -> bool { return sink_buffer->is_finished(); });
+
+    // MockSinkIOBuffer::_add_chunk() called 4 times
+    EXPECT_EQ(4, sink_buffer->num_chunks());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     sink_buffer.reset();
 
     SyncPoint::GetInstance()->DisableProcessing();
@@ -191,6 +268,7 @@ TEST_F(SinkIOBufferTest, test_basic_2) {
 // Cancel when there is no task
 TEST_F(SinkIOBufferTest, test_cancel_1) {
     SyncPoint::GetInstance()->EnableProcessing();
+<<<<<<< HEAD
     SyncPoint::GetInstance()->SetCallBack("sink_io_buffer_append_chunk", [this](void* arg) {
         if (arg == nullptr) {
             _close_chunk++;
@@ -206,6 +284,13 @@ TEST_F(SinkIOBufferTest, test_cancel_1) {
             _data_chunk--;
         }
     });
+=======
+    SyncPoint::GetInstance()->SetCallBack("sink_io_buffer_append_chunk", [this](void*) { _data_chunk++; });
+    SyncPoint::GetInstance()->SetCallBack("sink_io_buffer_before_process_chunk", [](void*) {});
+    SyncPoint::GetInstance()->SetCallBack("sink_io_buffer_after_process_chunk", [this](void*) { _data_chunk--; });
+    SyncPoint::GetInstance()->SetCallBack("sink_io_buffer_apend_chunk_end_queue", [this](void*) { _close_chunk++; });
+    SyncPoint::GetInstance()->SetCallBack("sink_io_buffer_process_chunk_end_queue", [this](void*) { _close_chunk--; });
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     auto runtime_state = gen_test_runtime_state();
     auto sink_buffer = std::make_unique<MockSinkIOBuffer>(1);
@@ -214,15 +299,27 @@ TEST_F(SinkIOBufferTest, test_cancel_1) {
     std::thread thread1(operator_thread, sink_buffer.get(), runtime_state.get());
     thread1.join();
 
+<<<<<<< HEAD
     wait([this]() -> bool { return _data_chunk == 0; });
+=======
+    EXPECT_PRED1(SinkIOBufferTest::wait, [this]() -> bool { return _data_chunk == 0; });
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     sink_buffer->cancel_one_sinker();
     std::thread thread2(poll_thread, sink_buffer.get());
     thread2.join();
 
+<<<<<<< HEAD
     wait([this]() -> bool { return _close_chunk == 0; });
     wait([&sink_buffer]() -> bool { return sink_buffer->is_finished(); });
 
+=======
+    EXPECT_PRED1(SinkIOBufferTest::wait, [this]() -> bool { return _close_chunk == 0; });
+    EXPECT_PRED1(SinkIOBufferTest::wait, [&sink_buffer]() -> bool { return sink_buffer->is_finished(); });
+
+    // MockSinkIOBuffer::_add_chunk() called 4 times
+    EXPECT_EQ(4, sink_buffer->num_chunks());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     sink_buffer.reset();
 
     SyncPoint::GetInstance()->DisableProcessing();
@@ -235,6 +332,7 @@ TEST_F(SinkIOBufferTest, test_cancel_2) {
     ASSERT_OK(sink_buffer->prepare(runtime_state.get(), nullptr));
 
     SyncPoint::GetInstance()->EnableProcessing();
+<<<<<<< HEAD
     SyncPoint::GetInstance()->SetCallBack("sink_io_buffer_append_chunk", [this](void* arg) {
         if (arg == nullptr) {
             _close_chunk++;
@@ -252,6 +350,15 @@ TEST_F(SinkIOBufferTest, test_cancel_2) {
             _data_chunk--;
         }
     });
+=======
+    SyncPoint::GetInstance()->SetCallBack("sink_io_buffer_append_chunk", [this](void*) { _data_chunk++; });
+    SyncPoint::GetInstance()->SetCallBack("sink_io_buffer_before_process_chunk", [&sink_buffer](void* arg) {
+        ASSERT_PRED1(SinkIOBufferTest::wait, [&sink_buffer]() -> bool { return sink_buffer->is_cancelled(); });
+    });
+    SyncPoint::GetInstance()->SetCallBack("sink_io_buffer_after_process_chunk", [this](void*) { _data_chunk--; });
+    SyncPoint::GetInstance()->SetCallBack("sink_io_buffer_apend_chunk_end_queue", [this](void*) { _close_chunk++; });
+    SyncPoint::GetInstance()->SetCallBack("sink_io_buffer_process_chunk_end_queue", [this](void*) { _close_chunk--; });
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     std::thread thread1(operator_thread, sink_buffer.get(), runtime_state.get());
     thread1.join();
@@ -261,12 +368,25 @@ TEST_F(SinkIOBufferTest, test_cancel_2) {
     std::thread thread2(poll_thread, sink_buffer.get());
     thread2.join();
 
+<<<<<<< HEAD
     wait([this]() -> bool { return _data_chunk == 0 && _close_chunk == 0; });
     wait([&sink_buffer]() -> bool { return sink_buffer->is_finished(); });
 
+=======
+    EXPECT_PRED1(SinkIOBufferTest::wait, [this]() -> bool { return _data_chunk == 0 && _close_chunk == 0; });
+    EXPECT_PRED1(SinkIOBufferTest::wait, [&sink_buffer]() -> bool { return sink_buffer->is_finished(); });
+
+    // MockSinkIOBuffer::_add_chunk() can be called at most once (because the callback is waiting for the cancelling),
+    // and possibly never done if the cancel is done before the processing. Rest of the chunks are all fast skipped.
+    EXPECT_LE(sink_buffer->num_chunks(), 1);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     sink_buffer.reset();
 
     SyncPoint::GetInstance()->DisableProcessing();
 }
 
+<<<<<<< HEAD
 } // namespace starrocks::pipeline
+=======
+} // namespace starrocks::pipeline
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

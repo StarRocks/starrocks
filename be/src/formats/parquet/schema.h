@@ -14,17 +14,30 @@
 
 #pragma once
 
+<<<<<<< HEAD
 #include <memory>
+=======
+#include <stddef.h>
+#include <stdint.h>
+
+#include <memory>
+#include <string>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include <unordered_map>
 #include <vector>
 
 #include "common/status.h"
+<<<<<<< HEAD
+=======
+#include "common/statusor.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "gen_cpp/parquet_types.h"
 #include "runtime/types.h"
 
 namespace starrocks::parquet {
 
 struct LevelInfo {
+<<<<<<< HEAD
     int16_t max_def_level = 0;
     int16_t max_rep_level = 0;
 
@@ -43,12 +56,81 @@ struct LevelInfo {
     std::string debug_string() const;
 };
 
+=======
+    // The definition level at which the value for the field
+    // is considered not null (definition levels greater than
+    // or equal to this value indicate a not-null
+    // value for the field). For list fields definition levels
+    // greater than or equal to this field indicate a present,
+    // possibly null, child value.
+    int16_t max_def_level = 0;
+
+    // The repetition level corresponding to this element
+    // or the closest repeated ancestor. Any repetition
+    // level less than this indicates either a new list OR
+    // an empty list (which is determined in conjunction
+    // with definition levels).
+    int16_t max_rep_level = 0;
+
+    // The definition level indicating the level at which the closest
+    // repeated ancestor is not empty. This is used to discriminate
+    // between a value less than |def_level| being null or excluded entirely.
+    // For instance if we have an arrow schema like:
+    // list(struct(f0: int)).  Then then there are the following
+    // definition levels:
+    //   0 = null list
+    //   1 = present but empty list.
+    //   2 = a null value in the list
+    //   3 = a non null struct but null integer.
+    //   4 = a present integer.
+    // When reconstructing, the struct and integer arrays'
+    // repeated_ancestor_def_level would be 2.  Any
+    // def_level < 2 indicates that there isn't a corresponding
+    // child value in the list.
+    // i.e. [null, [], [null], [{f0: null}], [{f0: 1}]]
+    // has the def levels [0, 1, 2, 3, 4].  The actual
+    // struct array is only of length 3: [not-set, set, set] and
+    // the int array is also of length 3: [N/A, null, 1].
+    //
+    int16_t immediate_repeated_ancestor_def_level = 0;
+
+    int16_t increment_repeated() {
+        auto origin_ancestor_def_levels = immediate_repeated_ancestor_def_level;
+
+        // Repeated fields add both a repetition and definition level. This is used
+        // to distinguish between an empty list and a list with an item in it.
+        max_def_level++;
+        max_rep_level++;
+
+        // For levels >= immediate_repeated_ancestor_def_level it indicates the list was
+        // non-null and had at least one element. This is important
+        // for later decoding because we need to add a slot for these
+        // values. For levels < current_def_level no slots are added
+        // to arrays.
+        immediate_repeated_ancestor_def_level = max_def_level;
+        return origin_ancestor_def_levels;
+    }
+
+    void increment_optional() { max_def_level++; }
+
+    std::string debug_string() const;
+};
+
+enum ColumnType { SCALAR = 0, ARRAY, MAP, STRUCT };
+
+std::string column_type_to_string(const ColumnType& column_type);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 struct ParquetField {
     std::string name;
     tparquet::SchemaElement schema_element;
 
     // Used to identify if this field is a nested field.
+<<<<<<< HEAD
     TypeDescriptor type;
+=======
+    ColumnType type;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     bool is_nullable;
 
     // Only valid when this field is a leaf node
@@ -72,6 +154,11 @@ struct ParquetField {
     int16_t max_def_level() const { return level_info.max_def_level; }
     int16_t max_rep_level() const { return level_info.max_rep_level; }
     std::string debug_string() const;
+<<<<<<< HEAD
+=======
+    bool is_complex_type() const;
+    bool has_same_complex_type(const TypeDescriptor& type_descriptor) const;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 class SchemaDescriptor {
@@ -89,14 +176,23 @@ public:
     const ParquetField* get_stored_column_by_field_idx(size_t field_idx) const { return &_fields[field_idx]; }
     const ParquetField* get_stored_column_by_field_id(int32_t field_id) const;
     const ParquetField* get_stored_column_by_column_name(const std::string& column_name) const;
+<<<<<<< HEAD
+=======
+    const std::vector<ParquetField>& get_parquet_fields() const { return _fields; }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     const size_t get_fields_size() const { return _fields.size(); }
     const bool contain_field_id(int32_t field_id) const {
         return _field_id_2_field_idx.find(field_id) != _field_id_2_field_idx.end();
     }
 
 private:
+<<<<<<< HEAD
     void leaf_to_field(const tparquet::SchemaElement& t_schema, const LevelInfo& cur_level_info, bool is_nullable,
                        ParquetField* field);
+=======
+    Status leaf_to_field(const tparquet::SchemaElement* t_schema, const LevelInfo& cur_level_info, bool is_nullable,
+                         ParquetField* field);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     Status list_to_field(const std::vector<tparquet::SchemaElement>& t_schemas, size_t pos, LevelInfo cur_level_info,
                          ParquetField* field, size_t* next_pos);
@@ -113,6 +209,19 @@ private:
     Status node_to_field(const std::vector<tparquet::SchemaElement>& t_schemas, size_t pos, LevelInfo cur_level_info,
                          ParquetField* field, size_t* next_pos);
 
+<<<<<<< HEAD
+=======
+    StatusOr<const tparquet::SchemaElement*> _get_schema_element(const std::vector<tparquet::SchemaElement>& t_schemas,
+                                                                 size_t pos) {
+        if (pos >= t_schemas.size()) {
+            return Status::InvalidArgument("Access out-of-bounds SchemaElement");
+        }
+        return &t_schemas[pos];
+    }
+
+    void _increment(const tparquet::SchemaElement* t_schema, LevelInfo* level_info);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::vector<ParquetField> _fields;
     std::vector<ParquetField*> _physical_fields;
     // Parquet filed name(formatted with case-sensitive) mapping to field position in schema.

@@ -23,9 +23,17 @@ import static com.starrocks.catalog.system.SystemTable.MAX_FIELD_VARCHAR_LENGTH;
 import static com.starrocks.catalog.system.SystemTable.builder;
 
 public class MaterializedViewsSystemTable {
+<<<<<<< HEAD
     public static SystemTable create() {
         return new SystemTable(SystemId.MATERIALIZED_VIEWS_ID,
                 "materialized_views",
+=======
+    public static final String NAME = "materialized_views";
+
+    public static SystemTable create() {
+        return new SystemTable(SystemId.MATERIALIZED_VIEWS_ID,
+                NAME,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 Table.TableType.SCHEMA,
                 builder()
                         .column("MATERIALIZED_VIEW_ID", ScalarType.createVarchar(50))
@@ -51,6 +59,12 @@ public class MaterializedViewsSystemTable {
                         .column("TABLE_ROWS", ScalarType.createVarchar(50))
                         .column("MATERIALIZED_VIEW_DEFINITION",
                                 ScalarType.createVarchar(MAX_FIELD_VARCHAR_LENGTH))
+<<<<<<< HEAD
+=======
+                        .column("EXTRA_MESSAGE", ScalarType.createVarchar(1024))
+                        .column("QUERY_REWRITE_STATUS", ScalarType.createVarcharType(64))
+                        .column("CREATOR", ScalarType.createVarchar(64))
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         .build(), TSchemaTableType.SCH_MATERIALIZED_VIEWS);
     }
 }

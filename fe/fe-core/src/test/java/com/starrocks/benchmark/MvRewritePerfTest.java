@@ -52,13 +52,21 @@ public class MvRewritePerfTest extends MvRewriteTestBase {
         for (int i = 0; i < MV_NUM; i++) {
             // join MV
             String joinMV = "mv_candidate_join_" + i;
+<<<<<<< HEAD
             createAndRefreshMv("create materialized view " + joinMV +
+=======
+            starRocksAssert.withRefreshedMaterializedView("create materialized view " + joinMV +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     " refresh async as " +
                     " select t0.v1, t0.v2, t0.v3, t1.k1 from t0 left join t1 on t0.v1 = t1.v1");
 
             // agg MV
             String aggMV = "mv_candidate_agg_" + i;
+<<<<<<< HEAD
             createAndRefreshMv("create materialized view " + aggMV +
+=======
+            starRocksAssert.withRefreshedMaterializedView("create materialized view " + aggMV +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     " refresh async as " +
                     " select t0.v1, sum(t1.v1), count(t1.v2) from t0 left join t1 on t0.v1 = t1.v1" +
                     " group by t0.v1");

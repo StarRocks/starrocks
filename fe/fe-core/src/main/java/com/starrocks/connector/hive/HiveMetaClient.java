@@ -16,11 +16,20 @@ package com.starrocks.connector.hive;
 
 import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.profile.Timer;
+import com.starrocks.common.profile.Tracers;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.events.MetastoreNotificationFetchException;
 import com.starrocks.connector.hive.glue.AWSCatalogMetastoreClient;
+<<<<<<< HEAD
 import com.starrocks.sql.PlannerProfile;
+=======
+import org.apache.commons.lang.exception.ExceptionUtils;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.HiveMetaHookLoader;
 import org.apache.hadoop.hive.metastore.HiveMetaStoreClient;
@@ -44,6 +53,11 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 
+<<<<<<< HEAD
+=======
+import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
+import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_TIMEOUT;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_TYPE;
 import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_URIS;
 
@@ -76,8 +90,13 @@ public class HiveMetaClient {
         if (properties.containsKey(HIVE_METASTORE_URIS)) {
             conf.set(MetastoreConf.ConfVars.THRIFT_URIS.getHiveName(), properties.get(HIVE_METASTORE_URIS));
         }
+<<<<<<< HEAD
         conf.set(MetastoreConf.ConfVars.CLIENT_SOCKET_TIMEOUT.getHiveName(),
                 String.valueOf(Config.hive_meta_store_timeout_s));
+=======
+        String hmsTimeout = properties.getOrDefault(HIVE_METASTORE_TIMEOUT, String.valueOf(Config.hive_meta_store_timeout_s));
+        conf.set(MetastoreConf.ConfVars.CLIENT_SOCKET_TIMEOUT.getHiveName(), hmsTimeout);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return new HiveMetaClient(conf);
     }
 
@@ -156,9 +175,16 @@ public class HiveMetaClient {
             argClasses = argClasses == null ? ClassUtils.getCompatibleParamClasses(args) : argClasses;
             Method method = client.hiveClient.getClass().getDeclaredMethod(methodName, argClasses);
             return (T) method.invoke(client.hiveClient, args);
+<<<<<<< HEAD
         } catch (Exception e) {
             LOG.error(messageIfError, e);
             connectionException = new StarRocksConnectorException(messageIfError + ", msg: " + e.getMessage(), e);
+=======
+        } catch (Throwable e) {
+            LOG.error(messageIfError, e);
+            connectionException = new StarRocksConnectorException(messageIfError + ", msg: " +
+                    ExceptionUtils.getRootCauseMessage(e), e);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             throw connectionException;
         } finally {
             if (client == null && connectionException != null) {
@@ -174,51 +200,151 @@ public class HiveMetaClient {
     }
 
     public List<String> getAllDatabaseNames() {
+<<<<<<< HEAD
         try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.getAllDatabases")) {
+=======
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "HMS.getAllDatabases")) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return callRPC("getAllDatabases", "Failed to getAllDatabases", new Object[0]);
         }
     }
 
+<<<<<<< HEAD
     public List<String> getAllTableNames(String dbName) {
         try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.getAllTables")) {
+=======
+    public void createDatabase(Database database) {
+        Class<?>[] argClasses = {Database.class};
+
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "HMS.createDatabase")) {
+            callRPC("createDatabase", "Failed to create database " + database.getName(), argClasses, database);
+        }
+    }
+
+    public void dropDatabase(String dbName, boolean deleteData) {
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "HMS.dropDatabase")) {
+            callRPC("dropDatabase", "Failed to drop database " + dbName, dbName, deleteData, false, false);
+        }
+    }
+
+    public List<String> getAllTableNames(String dbName) {
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "HMS.getAllTables")) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return callRPC("getAllTables", "Failed to get all table names on database: " + dbName, dbName);
         }
     }
 
+<<<<<<< HEAD
     public List<String> getPartitionKeys(String dbName, String tableName) {
         try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.listPartitionNames")) {
+=======
+    public void createTable(Table table) {
+        Class<?>[] argClasses = {Table.class};
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "HMS.createTable")) {
+            callRPC("createTable", "Failed to create table " + table.getDbName() + "." + table.getTableName(),
+                    argClasses, table);
+        }
+    }
+
+    public void dropTable(String dbName, String tableName) {
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "HMS.dropTable")) {
+            callRPC("dropTable", "Failed to drop table " + dbName + "." + tableName,
+                    dbName, tableName, true, false);
+        }
+    }
+
+    public void alterTable(String dbName, String tableName, Table newTable) {
+        Class<?>[] argClasses = {String.class, String.class, Table.class};
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "HMS.alterTable")) {
+            callRPC("alter_table", "Failed to alter table " + dbName + "." + tableName,
+                    argClasses, dbName, tableName, newTable);
+        }
+    }
+
+    public void alterPartition(String dbName, String tableName, Partition newPartition) {
+        Class<?>[] argClasses = {String.class, String.class, Partition.class};
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "HMS.alterPartition")) {
+            callRPC("alter_partition", "Failed to alter partition " + dbName + "." + tableName + newPartition.getValues(),
+                    argClasses, dbName, tableName, newPartition);
+        }
+    }
+
+    public List<String> getPartitionKeys(String dbName, String tableName) {
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "HMS.listPartitionNames")) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return callRPC("listPartitionNames", String.format("Failed to get partitionKeys on [%s.%s]", dbName, tableName),
                     dbName, tableName, (short) -1);
         }
     }
 
     public List<String> getPartitionKeysByValue(String dbName, String tableName, List<String> partitionValues) {
+<<<<<<< HEAD
         try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.listPartitionNamesByValue")) {
+=======
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "HMS.listPartitionNamesByValue")) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return callRPC("listPartitionNames", String.format("Failed to get partitionKeys on [%s.%s]", dbName, tableName),
                     dbName, tableName, partitionValues, (short) -1);
         }
     }
 
     public Database getDb(String dbName) {
+<<<<<<< HEAD
         try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.getDatabase")) {
+=======
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "HMS.getDatabase")) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return callRPC("getDatabase", String.format("Failed to get database %s", dbName), dbName);
         }
     }
 
     public Table getTable(String dbName, String tableName) {
+<<<<<<< HEAD
         try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.getTable")) {
+=======
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "HMS.getTable")) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return callRPC("getTable", String.format("Failed to get table [%s.%s]", dbName, tableName),
                     dbName, tableName);
         }
     }
 
+<<<<<<< HEAD
     public Partition getPartition(String dbName, String tableName, List<String> partitionValues) {
         try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.getPartition")) {
+=======
+    public boolean tableExists(String dbName, String tableName) {
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "HMS.tableExists")) {
+            return callRPC("tableExists", String.format("Failed to get table exists [%s.%s]", dbName, tableName),
+                    dbName, tableName);
+        }
+    }
+
+    public Partition getPartition(String dbName, String tableName, List<String> partitionValues) {
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "HMS.getPartition")) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return callRPC("getPartition", String.format("Failed to get partition on %s.%s", dbName, tableName),
                     dbName, tableName, partitionValues);
         }
     }
 
+<<<<<<< HEAD
+=======
+    public void addPartitions(String dbName, String tableName, List<Partition> partitions) {
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "HMS.addPartitions")) {
+            callRPC("add_partitions", String.format("Failed to add partitions on %s.%s",
+                    dbName, tableName), partitions);
+        }
+    }
+
+    public void dropPartition(String dbName, String tableName, List<String> partValues, boolean deleteData) {
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "HMS.dropPartition")) {
+            callRPC("dropPartition", String.format("Failed to drop partition on %s.%s.%s",
+                    dbName, tableName, partValues), dbName, tableName, partValues, deleteData);
+        }
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     /**
      * Both 'getPartitionsByNames' and 'getPartitionColumnStatistics' could throw exception or no response
      * when querying too many partitions at present. Due to statistics don't affect accuracy, user could adjust
@@ -229,10 +355,15 @@ public class HiveMetaClient {
     public List<Partition> getPartitionsByNames(String dbName, String tblName, List<String> partitionNames) {
         int size = partitionNames.size();
         List<Partition> partitions;
+<<<<<<< HEAD
         PlannerProfile.addCustomProperties("HMS.PARTITIONS.getPartitionsByNames." + tblName,
                 String.format("%s partitions", size));
 
         try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.getPartitionsByNames")) {
+=======
+        Tracers.record(EXTERNAL, "HMS.PARTITIONS.getPartitionsByNames." + tblName, size + " partitions");
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "HMS.getPartitionsByNames")) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             RecyclableClient client = null;
             StarRocksConnectorException connectionException = null;
             try {
@@ -265,13 +396,18 @@ public class HiveMetaClient {
     }
 
     public List<ColumnStatisticsObj> getTableColumnStats(String dbName, String tableName, List<String> columns) {
+<<<<<<< HEAD
         try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.getTableColumnStatistics")) {
+=======
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "HMS.getTableColumnStatistics")) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return callRPC("getTableColumnStatistics",
                     String.format("Failed to get table column statistics on [%s.%s]", dbName, tableName),
                     dbName, tableName, columns);
         }
     }
 
+<<<<<<< HEAD
     public Map<String, List<ColumnStatisticsObj>> getPartitionColumnStats(String dbName,
                                                                           String tableName,
                                                                           List<String> partitionNames,
@@ -288,6 +424,8 @@ public class HiveMetaClient {
         }
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     /**
      * When the query scans many partitions in the table or the 'hive.metastore.try.direct.sql' in
      * hive metastore is false. The hive metastore will throw StackOverFlow exception.
@@ -337,6 +475,89 @@ public class HiveMetaClient {
         }
     }
 
+<<<<<<< HEAD
+=======
+    public Map<String, List<ColumnStatisticsObj>> getPartitionColumnStats(String dbName, String tblName,
+                                                                          List<String> partitionNames, List<String> columnNames) {
+        int size = partitionNames.size();
+        Map<String, List<ColumnStatisticsObj>> partitionStats;
+        Tracers.record(EXTERNAL, "HMS.PARTITIONS.getPartitionColumnStats." + tblName, size + " partitionStats");
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "HMS.getPartitionColumnStats")) {
+            RecyclableClient client = null;
+            StarRocksConnectorException connectionException = null;
+            try {
+                client = getClient();
+                partitionStats = client.hiveClient.getPartitionColumnStatistics(dbName, tblName, partitionNames, columnNames);
+                if (partitionStats.size() != partitionNames.size()) {
+                    LOG.warn("Expect to fetch {} partitionStats on [{}.{}], but actually fetched {} partition",
+                            partitionNames.size(), dbName, tblName, partitionStats.size());
+                }
+            } catch (TTransportException te) {
+                partitionStats = getPartitionColumnStatsWithRetry(dbName, tblName, partitionNames, columnNames, 1);
+            } catch (Exception e) {
+                LOG.error("Failed to get partitionStats on {}.{}", dbName, tblName, e);
+                connectionException = new StarRocksConnectorException("Failed to get partitionStats on [%s.%s]" +
+                        " from meta store: %s", dbName, tblName, e.getMessage());
+                throw connectionException;
+            } finally {
+                if (client == null && connectionException != null) {
+                    LOG.error("Failed to get hive client. {}", connectionException.getMessage());
+                } else if (connectionException != null) {
+                    LOG.error("An exception occurred when using the current long link " +
+                            "to access metastore. msg: {}", connectionException.getMessage());
+                    client.close();
+                } else if (client != null) {
+                    client.finish();
+                }
+            }
+        }
+        return partitionStats;
+    }
+
+    private Map<String, List<ColumnStatisticsObj>> getPartitionColumnStatsWithRetry(String dbName,
+                                                                                    String tableName,
+                                                                                    List<String> partNames,
+                                                                                    List<String> columnNames,
+                                                                                    int retryNum)
+            throws StarRocksConnectorException {
+        int subListSize = (int) Math.pow(2, retryNum);
+        int subListNum = partNames.size() / subListSize;
+        if (subListNum == 0) {
+            subListNum = 1;
+        }
+        List<List<String>> partNamesList = Lists.partition(partNames, subListNum);
+        Map<String, List<ColumnStatisticsObj>> partitionStats = new HashMap<>();
+
+        LOG.warn("Execute getPartitionColumnStatistics on [{}.{}] with {} times retry, slice size is {}, partName size is {}",
+                dbName, tableName, retryNum, subListSize, partNames.size());
+
+        RecyclableClient client = null;
+        try {
+            client = getClient();
+            for (List<String> parts : partNamesList) {
+                partitionStats.putAll(client.hiveClient.getPartitionColumnStatistics(dbName, tableName, parts, columnNames));
+            }
+            LOG.info("Succeed to getPartitionColumnStatistics on [{}.{}] with {} times retry, slice size is {}," +
+                            " partName size is {}", dbName, tableName, retryNum, subListSize, partNames.size());
+            return partitionStats;
+        } catch (TTransportException te) {
+            if (subListNum > 1) {
+                return getPartitionColumnStatsWithRetry(dbName, tableName, partNames, columnNames, retryNum + 1);
+            } else {
+                throw new StarRocksConnectorException("Failed to getPartitionColumnStatistics on [%s.%s] with slice size is %d",
+                        dbName, tableName, subListNum);
+            }
+        } catch (Exception e) {
+            throw new StarRocksConnectorException("Failed to getPartitionColumnStatistics on [%s.%s], msg: %s",
+                    dbName, tableName, e.getMessage());
+        } finally {
+            if (client != null) {
+                client.close();
+            }
+        }
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public CurrentNotificationEventId getCurrentNotificationEventId() {
         try {
             return callRPC("getCurrentNotificationEventId",
@@ -399,4 +620,8 @@ public class HiveMetaClient {
             return (Class) WRAPPER_TO_PRIMITIVE.get(primitiveType);
         }
     }
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

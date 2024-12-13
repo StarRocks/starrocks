@@ -109,7 +109,11 @@ DISTRIBUTED BY HASH(user);
 
 > **注意**
 >
+<<<<<<< HEAD
 > 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [确定分桶数量](../table_design/data_distribution/Data_distribution.md#确定分桶数量)。
+=======
+> 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [设置分桶数量](../table_design/data_distribution/Data_distribution.md#设置分桶数量)。
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ## 通过 INSERT INTO VALUES 语句导入数据
 
@@ -192,6 +196,13 @@ WITH LABEL insert_load_wikipedia_3
 SELECT event_time, channel FROM source_wiki_edit;
 ```
 
+<<<<<<< HEAD
+=======
+:::note
+自 v3.3.1 起，INSERT INTO 导入主键表时指定 Column List 会执行部分列更新（而在先前版本中，指定 Column List 仍然导致 Full Upsert）。如不指定 Column List，系统执行 Full Upsert。
+:::
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 | 参数        | 说明                                                         |
 | ----------- | ------------------------------------------------------------ |
 | table_name  | 导入数据的目标表。可以为 `db_name.table_name` 形式。         |
@@ -409,7 +420,11 @@ AS INSERT OVERWRITE insert_wiki_edit
 SELECT * FROM source_wiki_edit;
 ```
 
+<<<<<<< HEAD
 您可以通过查询 Information Schema 中的元数据表 `task_runs` 来查看异步 INSERT 任务的状态。
+=======
+您可以通过查询 Information Schema 中的元数据视图 `task_runs` 来查看异步 INSERT 任务的状态。
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 以下示例查看异步 INSERT 任务 `async` 的状态。
 
@@ -497,7 +512,11 @@ REJECTED_RECORD_PATH: NULL
 1 row in set (0.01 sec)
 ```
 
+<<<<<<< HEAD
 有关返回字段的说明，参见 [Information Schema > loads](../sql-reference/information_schema.md#loads)。
+=======
+有关返回字段的说明，参见 [`information_schema.loads`](../sql-reference/information_schema/loads.md)。
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ## 相关配置项
 

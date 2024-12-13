@@ -46,7 +46,11 @@
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "gen_cpp/Types_types.h" // for TUniqueId
+<<<<<<< HEAD
 #include "gen_cpp/doris_internal_service.pb.h"
+=======
+#include "gen_cpp/internal_service.pb.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "runtime/descriptors.h" // for PlanNodeId
 #include "runtime/local_pass_through_buffer.h"
 #include "runtime/mem_tracker.h"
@@ -118,7 +122,11 @@ private:
     // map from hash value of fragment instance id/node id pair to stream receivers;
     // Ownership of the stream revcr is shared between this instance and the caller of
     // create_recvr().
+<<<<<<< HEAD
     typedef phmap::flat_hash_map<PlanNodeId, std::shared_ptr<DataStreamRecvr>> RecvrMap;
+=======
+    typedef phmap::flat_hash_map<PlanNodeId, std::shared_ptr<DataStreamRecvr>, StdHash<PlanNodeId>> RecvrMap;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     typedef phmap::flat_hash_map<TUniqueId, std::shared_ptr<RecvrMap>> StreamMap;
     StreamMap _receiver_map[BUCKET_NUM];
     std::atomic<uint32_t> _fragment_count{0};
@@ -129,7 +137,11 @@ private:
     std::shared_ptr<DataStreamRecvr> find_recvr(const TUniqueId& fragment_instance_id, PlanNodeId node_id);
 
     // Remove receiver block for fragment_instance_id/node_id from the map.
+<<<<<<< HEAD
     Status deregister_recvr(const TUniqueId& fragment_instance_id, PlanNodeId node_id);
+=======
+    void deregister_recvr(const TUniqueId& fragment_instance_id, PlanNodeId node_id);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     inline uint32_t get_bucket(const TUniqueId& fragment_instance_id);
 

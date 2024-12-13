@@ -20,5 +20,9 @@ import javax.validation.constraints.NotNull;
 
 public interface Sorter {
     @NotNull
+<<<<<<< HEAD
     List<PartitionStatistics> sort(@NotNull List<PartitionStatistics> partitionStatistics);
+=======
+    List<PartitionStatisticsSnapshot> sort(@NotNull List<PartitionStatisticsSnapshot> partitionStatistics);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

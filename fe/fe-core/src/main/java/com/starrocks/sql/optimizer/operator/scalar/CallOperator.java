@@ -215,6 +215,10 @@ public class CallOperator extends ScalarOperator {
                 Objects.equals(fn, other.fn);
     }
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // Only used for meaning equivalence comparison in iceberg table scan predicate
     @Override
     public boolean equivalent(Object obj) {
@@ -236,6 +240,10 @@ public class CallOperator extends ScalarOperator {
                 Objects.equals(fn, other.fn) &&
                 IntStream.range(0, this.arguments.size())
                         .allMatch(i -> this.arguments.get(i).equivalent(other.arguments.get(i)));
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override

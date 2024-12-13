@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # array_agg
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Aggregates values (including `NULL`) in a column into an array (multiple rows to one row), and optionally order the elements by specific columns. From v3.0, array_agg() supports using ORDER BY to sort elements.
 

@@ -34,8 +34,11 @@ OlapMetaReader::OlapMetaReader() : MetaReader() {}
 Status OlapMetaReader::_init_params(const OlapMetaReaderParams& read_params) {
     read_params.check_validation();
     _tablet = read_params.tablet;
+<<<<<<< HEAD
     _version = read_params.version;
     _chunk_size = read_params.chunk_size;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     _params = read_params;
 
     return Status::OK();
@@ -57,13 +60,21 @@ Status OlapMetaReader::init(const OlapMetaReaderParams& read_params) {
 }
 
 Status OlapMetaReader::_build_collect_context(const OlapMetaReaderParams& read_params) {
+<<<<<<< HEAD
     _collect_context.seg_collecter_params.max_cid = 0;
+=======
+    auto tablet_schema = read_params.tablet_schema;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     for (const auto& it : *(read_params.id_to_names)) {
         std::string col_name = "";
         std::string collect_field = "";
         RETURN_IF_ERROR(SegmentMetaCollecter::parse_field_and_colname(it.second, &collect_field, &col_name));
 
+<<<<<<< HEAD
         int32_t index = _tablet->field_index(col_name);
+=======
+        int32_t index = tablet_schema->field_index(col_name);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (index < 0) {
             std::stringstream ss;
             ss << "invalid column name: " << it.second;
@@ -72,7 +83,11 @@ Status OlapMetaReader::_build_collect_context(const OlapMetaReaderParams& read_p
         }
 
         // get column type
+<<<<<<< HEAD
         LogicalType type = _tablet->tablet_schema().column(index).type();
+=======
+        LogicalType type = tablet_schema->column(index).type();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         _collect_context.seg_collecter_params.field_type.emplace_back(type);
 
         // get collect field
@@ -80,20 +95,34 @@ Status OlapMetaReader::_build_collect_context(const OlapMetaReaderParams& read_p
 
         // get column id
         _collect_context.seg_collecter_params.cids.emplace_back(index);
+<<<<<<< HEAD
         _collect_context.seg_collecter_params.max_cid = std::max(_collect_context.seg_collecter_params.max_cid, index);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // get result slot id
         _collect_context.result_slot_ids.emplace_back(it.first);
 
         // only collect the field of dict need read data page
         // others just depend on footer
+<<<<<<< HEAD
         if (collect_field == "dict_merge") {
+=======
+        if (collect_field == META_DICT_MERGE || collect_field == META_COUNT_COL) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             _collect_context.seg_collecter_params.read_page.emplace_back(true);
         } else {
             _collect_context.seg_collecter_params.read_page.emplace_back(false);
         }
+<<<<<<< HEAD
         _has_count_agg |= (collect_field == "count");
     }
+=======
+        _has_count_agg |= (collect_field == META_COUNT_ROWS);
+        _has_count_agg |= (collect_field == META_COUNT_COL);
+    }
+    _collect_context.seg_collecter_params.tablet_schema = read_params.tablet_schema;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     return Status::OK();
 }
 
@@ -113,6 +142,7 @@ Status OlapMetaReader::_init_seg_meta_collecters(const OlapMetaReaderParams& par
 
 Status OlapMetaReader::_get_segments(const TabletSharedPtr& tablet, const Version& version,
                                      std::vector<SegmentSharedPtr>* segments) {
+<<<<<<< HEAD
     if (tablet->updates() != nullptr) {
         LOG(INFO) << "Skipped Update tablet";
         return Status::OK();
@@ -122,6 +152,12 @@ Status OlapMetaReader::_get_segments(const TabletSharedPtr& tablet, const Versio
     {
         std::shared_lock l(tablet->get_header_lock());
         acquire_rowset_st = tablet->capture_consistent_rowsets(_version, &_rowsets);
+=======
+    Status acquire_rowset_st;
+    {
+        std::shared_lock l(tablet->get_header_lock());
+        acquire_rowset_st = tablet->capture_consistent_rowsets(_params.version, &_rowsets);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     if (!acquire_rowset_st.ok()) {
@@ -135,7 +171,11 @@ Status OlapMetaReader::_get_segments(const TabletSharedPtr& tablet, const Versio
 
     for (auto& rowset : _rowsets) {
         RETURN_IF_ERROR(rowset->load());
+<<<<<<< HEAD
         for (auto seg : rowset->segments()) {
+=======
+        for (const auto& seg : rowset->segments()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             segments->emplace_back(seg);
         }
     }
@@ -144,7 +184,11 @@ Status OlapMetaReader::_get_segments(const TabletSharedPtr& tablet, const Versio
 }
 
 Status OlapMetaReader::do_get_next(ChunkPtr* result) {
+<<<<<<< HEAD
     const uint32_t chunk_capacity = _chunk_size;
+=======
+    const uint32_t chunk_capacity = _params.chunk_size;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     uint16_t chunk_start = 0;
 
     *result = std::make_shared<Chunk>();

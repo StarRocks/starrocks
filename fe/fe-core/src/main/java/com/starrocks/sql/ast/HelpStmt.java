@@ -17,11 +17,16 @@
 
 package com.starrocks.sql.ast;
 
+<<<<<<< HEAD
 import com.google.common.base.Strings;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.AnalysisException;
+=======
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ScalarType;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -59,6 +64,7 @@ public class HelpStmt extends ShowStmt {
     }
 
     @Override
+<<<<<<< HEAD
     public void analyze(Analyzer analyzer) throws AnalysisException {
         if (Strings.isNullOrEmpty(mask)) {
             throw new AnalysisException("Help empty info.");
@@ -66,6 +72,8 @@ public class HelpStmt extends ShowStmt {
     }
 
     @Override
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public String toSql() {
         return "HELP " + mask;
     }
@@ -87,4 +95,12 @@ public class HelpStmt extends ShowStmt {
     public ShowResultSetMetaData getKeywordMetaData() {
         return KEYWORD_META_DATA;
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitHelpStatement(this, context);
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

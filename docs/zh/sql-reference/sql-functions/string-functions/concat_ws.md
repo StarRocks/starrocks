@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # concat_ws
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 使用分隔符将两个或以上的字符串拼接成一个新的字符串。新字符串使用分隔符进行连接。
 

@@ -13,7 +13,11 @@ StarRocks 提供了开箱即用的数据湖查询功能，非常适用于对湖�
 
 ## 概述
 
+<<<<<<< HEAD
 StarRocks 支持基于 External Catalog，如 Hive Catalog、Iceberg Catalog、Hudi Catalog 和 JDBC Catalog，构建异步物化视图。基于 External Catalog 的物化视图在以下情况下特别有用：
+=======
+StarRocks 支持基于 External Catalog，如 Hive Catalog、Iceberg Catalog、Hudi Catalog、JDBC Catalog 和 Paimon Catalog 构建异步物化视图。基于 External Catalog 的物化视图在以下情况下特别有用：
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 - **数据湖报表的透明加速**
 
@@ -69,7 +73,11 @@ StarRocks 支持基于 External Catalog，如 Hive Catalog、Iceberg Catalog、H
 与直接查询数据湖数据或将数据导入到本地表中相比，物化视图提供了几个独特的优势：
 
 - **本地存储加速**：物化视图可以利用 StarRocks 的本地存储加速优势，如索引、分区分桶和 Colocate Group，从而相较直接从数据湖查询数据具有更好的查询性能。
+<<<<<<< HEAD
 - **无需维护加载任务**：物化视图通过自动刷新任务透明地更新数据，无需维护导入任务。此外，基于 Hive Catalog 的物化视图可以检测数据更改并在分区级别执行增量刷新。
+=======
+- **无需维护加载任务**：物化视图通过自动刷新任务透明地更新数据，无需维护导入任务。此外，基于 Hive、Iceberg 和 Paimon Catalog 的物化视图可以检测数据更改并在分区级别执行增量刷新。
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 - **智能查询改写**：查询可以被透明改写至物化视图，无需修改应用使用的查询语句即可加速查询。
 
 <br />
@@ -95,7 +103,11 @@ StarRocks 支持基于 External Catalog，如 Hive Catalog、Iceberg Catalog、H
 
 目前，StarRocks 无法检测 Hudi Catalog 中的分区级别数据更改。因此，一旦触发刷新任务，将执行全量刷新。
 
+<<<<<<< HEAD
 对于 Hive Catalog、Iceberg Catalog (从 v3.1.4 版本起) 和 JDBC Catalog (从 v3.1.4 版本起，且仅支持 MySQL Range 分区) , StarRocks 支持检测分区级别数据更改。从而，StarRocks 可以: 
+=======
+对于 Hive Catalog、Iceberg Catalog (从 v3.1.4 版本起)、JDBC Catalog (从 v3.1.4 版本起，且仅支持 MySQL Range 分区) 和 Paimon Catalog (从 v3.2.1 版本起), StarRocks 支持检测分区级别数据更改。从而，StarRocks 可以: 
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 - 仅刷新数据有更改的分区，避免全量刷新，减少刷新导致的资源消耗。
 - 在查询改写期间在一定程度上确保数据一致性。如果数据湖中的基表发生数据更改，查询将不会被改写至使用物化视图。
@@ -106,15 +118,66 @@ StarRocks 支持基于 External Catalog，如 Hive Catalog、Iceberg Catalog、H
 
 请注意，如需按照分区刷新，物化视图的分区键必须包含在基表的分区键中。
 
+<<<<<<< HEAD
+=======
+从 v3.2.3 版本开始，StarRocks 支持在使用 [Partition Transforms (分区变换)](https://iceberg.apache.org/spec/#partition-transforms) 的 Iceberg 表上创建分区物化视图，物化视图将根据变换后的列进行分区。目前，仅支持使用 `identity`、`year`、`month`、`day` 或 `hour` Transform 的 Iceberg 表。
+
+以下示例展示了一个使用 `day` Transform 的 Iceberg 表的定义，并在该表上创建了一个分区对齐的物化视图：
+
+```SQL
+-- Iceberg 表定义。
+CREATE TABLE spark_catalog.test.iceberg_sample_datetime_day (
+  id         BIGINT,
+  data       STRING,
+  category   STRING,
+  ts         TIMESTAMP)
+USING iceberg
+PARTITIONED BY (days(ts))
+
+-- 基于以上 Iceberg 表创建物化视图。
+CREATE MATERIALIZED VIEW `test_iceberg_datetime_day_mv` (`id`, `data`, `category`, `ts`)
+PARTITION BY (`ts`)
+DISTRIBUTED BY HASH(`id`)
+REFRESH MANUAL
+AS 
+SELECT 
+  `iceberg_sample_datetime_day`.`id`, 
+  `iceberg_sample_datetime_day`.`data`, 
+  `iceberg_sample_datetime_day`.`category`, 
+  `iceberg_sample_datetime_day`.`ts`
+FROM `iceberg`.`test`.`iceberg_sample_datetime_day`;
+```
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 对于 Hive Catalog，您可以启用 Hive 元数据缓存刷新功能，允许 StarRocks 在分区级别检测数据更改。启用此功能后，StarRocks 定期访问 Hive 元数据存储服务（HMS）或 AWS Glue，以检查最近查询的热数据的元数据信息。
 
 要启用 Hive 元数据缓存刷新功能，您可以使用 [ADMIN SET FRONTEND CONFIG](../../../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) 设置以下 FE 动态配置项：
 
+<<<<<<< HEAD
 | **配置名称**                                                 | **默认值**                      | **说明**                                                     |
 | ------------------------------------------------------------ | ------------------------------- | ------------------------------------------------------------ |
 | enable_background_refresh_connector_metadata                 | v3.0 为 `true`，v2.5 为 `false` | 是否开启 Hive 元数据缓存周期性刷新。开启后，StarRocks 会轮询 Hive 集群的元数据服务（HMS 或 AWS Glue），并刷新经常访问的 Hive 外部数据目录的元数据缓存，以感知数据更新。`true` 代表开启，`false` 代表关闭。 |
 | background_refresh_metadata_interval_millis                  | 600000（10 分钟）               | 接连两次 Hive 元数据缓存刷新之间的间隔。单位：毫秒。         |
 | background_refresh_metadata_time_secs_since_last_access_secs | 86400（24 小时）                | Hive 元数据缓存刷新任务过期时间。对于已被访问过的 Hive Catalog，如果超过该时间没有被访问，则停止刷新其元数据缓存。对于未被访问过的 Hive Catalog，StarRocks 不会刷新其元数据缓存。单位：秒。 |
+=======
+### 配置名称                                           
+
+####  enable_background_refresh_connector_metadata                 
+
+**Default**:  v3.0 为 `true`，v2.5 为 `false` <br/>
+**Description**:  是否开启 Hive 元数据缓存周期性刷新。开启后，StarRocks 会轮询 Hive 集群的元数据服务（HMS 或 AWS Glue），并刷新经常访问的 Hive 外部数据目录的元数据缓存，以感知数据更新。`true` 代表开启，`false` 代表关闭。 <br/>
+
+####  background_refresh_metadata_interval_millis                  
+
+**Default**:  600000（10 分钟）               <br/>
+**Description**:  接连两次 Hive 元数据缓存刷新之间的间隔。单位：毫秒。         <br/>
+
+####  background_refresh_metadata_time_secs_since_last_access_secs 
+
+**Default**:  86400（24 小时）                <br/>
+**Description**:  Hive 元数据缓存刷新任务过期时间。对于已被访问过的 Hive Catalog，如果超过该时间没有被访问，则停止刷新其元数据缓存。对于未被访问过的 Hive Catalog，StarRocks 不会刷新其元数据缓存。单位：秒。 <br/>
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 对于 Iceberg Catalog, 从 v3.1.4 版本开始，StarRocks 支持检测分区级别的数据更改，当前只支持 Iceberg V1 表。
 

@@ -54,13 +54,21 @@ class NJJoinBuildInputChannel {
 public:
     NJJoinBuildInputChannel(size_t chunk_size) : _chunk_size(chunk_size), _accumulator(chunk_size) {}
 
+<<<<<<< HEAD
     void add_chunk(ChunkPtr build_chunk);
+=======
+    Status add_chunk(ChunkPtr build_chunk);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     void set_spiller(std::shared_ptr<spill::Spiller> spiller) { _spiller = std::move(spiller); }
     const std::shared_ptr<spill::Spiller>& spiller() { return _spiller; }
     bool has_spilled() { return _spiller && _spiller->spilled(); }
 
+<<<<<<< HEAD
     Status add_chunk_to_spill_buffer(RuntimeState* state, ChunkPtr build_chunk, spill::IOTaskExecutor& executor);
+=======
+    Status add_chunk_to_spill_buffer(RuntimeState* state, ChunkPtr build_chunk);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     void finalize();
 
@@ -102,12 +110,20 @@ public:
             : _build_chunks(std::move(build_chunks)), _spillers(std::move(spillers)) {}
 
     // prefetch next chunk from spiller
+<<<<<<< HEAD
     Status prefetch(RuntimeState* state, spill::IOTaskExecutor& executor);
+=======
+    Status prefetch(RuntimeState* state);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     bool has_output();
 
     // return EOF if all data has been read
+<<<<<<< HEAD
     StatusOr<ChunkPtr> get_next(RuntimeState* state, spill::IOTaskExecutor& executor);
+=======
+    StatusOr<ChunkPtr> get_next(RuntimeState* state);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // reset stream
     Status reset(RuntimeState* state, spill::Spiller* dummy_spiller);
@@ -167,7 +183,11 @@ public:
 
     int get_build_chunk_size() const { return _build_chunk_desired_size; }
 
+<<<<<<< HEAD
     void append_build_chunk(int32_t sinker_id, const ChunkPtr& build_chunk);
+=======
+    Status append_build_chunk(int32_t sinker_id, const ChunkPtr& build_chunk);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     size_t channel_num_rows(int32_t sinker_id);
     NJJoinBuildInputChannel& input_channel(int32_t sinker_id) { return *_input_channel[sinker_id]; }
 
@@ -177,9 +197,15 @@ public:
     bool is_right_finished() const { return _all_right_finished.load(std::memory_order_acquire); }
 
     // Return true if it's the last prober, which need to perform the right join task
+<<<<<<< HEAD
     bool finish_probe(int32_t driver_seq, const std::vector<uint8_t>& build_match_flags);
 
     const std::vector<uint8_t> get_shared_build_match_flag() const;
+=======
+    bool finish_probe(int32_t driver_seq, const Filter& build_match_flags);
+
+    const Filter get_shared_build_match_flag() const;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     const SpillProcessChannelFactoryPtr& spill_channel_factory() { return _spill_process_factory_ptr; }
     NLJoinBuildChunkStreamBuilder& builder() { return _build_stream_builder; }
@@ -206,7 +232,11 @@ private:
     std::vector<ChunkPtr> _build_chunks; // Normalized chunks of _input_chunks
     int _build_chunk_desired_size = 0;
     int _num_post_probers = 0;
+<<<<<<< HEAD
     std::vector<uint8_t> _shared_build_match_flag;
+=======
+    Filter _shared_build_match_flag;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // conjuncts in cross join, used for generate runtime_filter
     std::vector<ExprContext*> _rf_conjuncts_ctx;

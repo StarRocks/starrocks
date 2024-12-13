@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     sum(l_extendedprice* (1 - l_discount)) as revenue
@@ -34,6 +35,8 @@ where
             and l_shipmode in ('AIR', 'AIR REG')
             and l_shipinstruct = 'DELIVER IN PERSON'
     ) ;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 [fragment]
 PLAN FRAGMENT 0
 OUTPUT EXPRS:29: sum
@@ -90,7 +93,10 @@ rollup: part
 tabletRatio=10/10
 cardinality=5714286
 avgRowSize=32.0
+<<<<<<< HEAD
 numNodes=0
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 PLAN FRAGMENT 3
 OUTPUT EXPRS:
@@ -115,6 +121,9 @@ rollup: lineitem
 tabletRatio=20/20
 cardinality=26239067
 avgRowSize=67.0
+<<<<<<< HEAD
 numNodes=0
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 [end]
 

@@ -85,24 +85,42 @@ public class SplitScanORToUnionRule extends TransformationRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         try {
+<<<<<<< HEAD
             return transformImpl(input, context);
         } catch (Exception e) {
             if (LOG.isDebugEnabled()) {
                 LOG.debug("input: {}, msg: {}", input.explain(), e.getMessage());
+=======
+            boolean isForceRewrite = isForceRewrite();
+            return transformImpl(input, context, isForceRewrite);
+        } catch (Exception e) {
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("input: {}, msg: {}", input.debugString(), e.getMessage());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
             return Lists.newArrayList();
         }
     }
 
+<<<<<<< HEAD
     private List<OptExpression> transformImpl(OptExpression input, OptimizerContext context) {
         LogicalOlapScanOperator scan = (LogicalOlapScanOperator) input.getOp();
+=======
+    private List<OptExpression> transformImpl(OptExpression input, OptimizerContext context, boolean isForceRewrite) {
+        LogicalOlapScanOperator scan = (LogicalOlapScanOperator) input.getOp();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         long totalRowCount = StatisticsCalcUtils.getTableRowCount(scan.getTable(), scan);
         Statistics.Builder builder = StatisticsCalcUtils.estimateScanColumns(scan.getTable(),
                 scan.getColRefToColumnMetaMap());
         Statistics statistics = builder.setOutputRowCount(totalRowCount).build();
 
+<<<<<<< HEAD
         if (!isForceRewrite() &&
                 statistics.getComputeSize() <= context.getSessionVariable().getScanOrToUnionThreshold()) {
+=======
+        if (!isForceRewrite && statistics.getComputeSize() <= context.getSessionVariable().getScanOrToUnionThreshold()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return Lists.newArrayList();
         }
 
@@ -111,7 +129,11 @@ public class SplitScanORToUnionRule extends TransformationRule {
         List<ColumnFilter> columnFilters = selectivityEvaluator.evaluate();
 
         // already has a predicate can use index and late materialized to filter a large part of rows
+<<<<<<< HEAD
         if (!isForceRewrite() && columnFilters.get(0).getSelectRatio() < HIGH_SELECTIVITY) {
+=======
+        if (!isForceRewrite && columnFilters.get(0).getSelectRatio() < HIGH_SELECTIVITY) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return Lists.newArrayList();
         }
 
@@ -121,7 +143,11 @@ public class SplitScanORToUnionRule extends TransformationRule {
                 .collect(Collectors.toList());
 
         Pair<List<ColumnFilter>, List<ColumnFilter>> pair = chooseRewriteColumnFilter(unknownSelectivityFilters,
+<<<<<<< HEAD
                 statistics, columnFilters.get(0).getSelectRatio());
+=======
+                statistics, columnFilters.get(0).getSelectRatio(), isForceRewrite);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (pair.first == null) {
             return Lists.newArrayList();
         }
@@ -139,7 +165,12 @@ public class SplitScanORToUnionRule extends TransformationRule {
 
     private Pair<List<ColumnFilter>, List<ColumnFilter>> chooseRewriteColumnFilter(List<ColumnFilter> columnFilters,
                                                                                    Statistics statistics,
+<<<<<<< HEAD
                                                                                    double existSelectRatio) {
+=======
+                                                                                   double existSelectRatio,
+                                                                                   boolean isForceRewrite) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<List<ColumnFilter>> decomposeFilters = Lists.newArrayList();
         for (ColumnFilter columnFilter : columnFilters) {
             ScalarOperator scalarOperator = columnFilter.getFilter();
@@ -150,7 +181,11 @@ public class SplitScanORToUnionRule extends TransformationRule {
         }
 
         int idx = -1;
+<<<<<<< HEAD
         double min  = isForceRewrite() ? NON_SELECTIVITY + 1 : NON_SELECTIVITY;
+=======
+        double min = isForceRewrite ? NON_SELECTIVITY + 1 : NON_SELECTIVITY;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         int childrenOfUnion = ConnectContext.get().getSessionVariable().getScanOrToUnionLimit();
 
@@ -170,7 +205,11 @@ public class SplitScanORToUnionRule extends TransformationRule {
         if (idx != -1) {
             List<ColumnFilter> selectedFilters = decomposeFilters.get(idx);
             double maxSelectRatio = selectedFilters.get(selectedFilters.size() - 1).getSelectRatio();
+<<<<<<< HEAD
             if (canBenefitFromSplit(existSelectRatio, maxSelectRatio)) {
+=======
+            if (isForceRewrite || canBenefitFromSplit(existSelectRatio, maxSelectRatio)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 columnFilters.remove(idx);
                 return Pair.create(selectedFilters, columnFilters);
             }
@@ -279,14 +318,23 @@ public class SplitScanORToUnionRule extends TransformationRule {
     private boolean canBenefitFromSplit(double existSelectRatio, double splitMaxSelectRatio) {
         SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
         int childrenNumOfUnion = sessionVariable.getScanOrToUnionLimit();
+<<<<<<< HEAD
         if (isForceRewrite()) {
             return true;
         }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         existSelectRatio = Math.min(existSelectRatio, sessionVariable.getSelectRatioThreshold());
         return splitMaxSelectRatio < existSelectRatio / childrenNumOfUnion;
     }
 
+<<<<<<< HEAD
     private boolean isForceRewrite() {
+=======
+    public static boolean isForceRewrite() {
+        // TODO: If or predicates contain olap table's sort key, we can force it to union all so to use
+        //  short key optimization.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return ConnectContext.get().getSessionVariable().getSelectRatioThreshold() < 0;
     }
 }

@@ -70,6 +70,18 @@ public class LeaderTaskExecutorTest {
         }
     }
 
+<<<<<<< HEAD
+=======
+    @Test
+    public void testPoolSize() {
+        int size = executor.getCorePoolSize();
+        executor.setPoolSize(size + 1);
+        Assert.assertEquals(size + 1, executor.getCorePoolSize());
+        executor.setPoolSize(size);
+        Assert.assertEquals(size, executor.getCorePoolSize());
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private class TestLeaderTask extends LeaderTask {
 
         public TestLeaderTask(long signature) {

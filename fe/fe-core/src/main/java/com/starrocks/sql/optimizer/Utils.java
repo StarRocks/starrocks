@@ -28,18 +28,32 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.DebugUtil;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.base.LogicalProperty;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+<<<<<<< HEAD
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
+=======
+import com.starrocks.sql.optimizer.operator.Projection;
+import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalDeltaLakeScanOperator;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHudiScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.operator.logical.LogicalTreeAnchorOperator;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -52,6 +66,10 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.SetUtils;
 import org.apache.logging.log4j.LogManager;
@@ -144,6 +162,7 @@ public class Utils {
     }
 
     public static List<ColumnRefOperator> extractColumnRef(ScalarOperator root) {
+<<<<<<< HEAD
         if (null == root || !root.isVariable()) {
             return new LinkedList<>();
         }
@@ -167,6 +186,17 @@ public class Utils {
 
     private static int countColumnRef(ScalarOperator root, int count) {
         if (null == root || !root.isVariable()) {
+=======
+        if (null == root) {
+            return new LinkedList<>();
+        }
+
+        return root.getColumnRefs();
+    }
+
+    public static int countColumnRef(ScalarOperator root) {
+        if (null == root) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return 0;
         }
 
@@ -174,8 +204,14 @@ public class Utils {
             return 1;
         }
 
+<<<<<<< HEAD
         for (ScalarOperator child : root.getChildren()) {
             count += countColumnRef(child, count);
+=======
+        int count = 0;
+        for (ScalarOperator child : root.getChildren()) {
+            count += countColumnRef(child);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         return count;
@@ -408,12 +444,20 @@ public class Utils {
                                         .map(Column::getName)
                                         .collect(Collectors.toList());
                         List<ColumnStatistic> keyColumnStatisticList =
+<<<<<<< HEAD
                                 GlobalStateMgr.getCurrentStatisticStorage().getColumnStatistics(table, keyColumnNames);
+=======
+                                GlobalStateMgr.getCurrentState().getStatisticStorage().getColumnStatistics(table, keyColumnNames);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         return keyColumnStatisticList.stream().anyMatch(ColumnStatistic::isUnknown);
                     }
                 }
                 List<ColumnStatistic> columnStatisticList =
+<<<<<<< HEAD
                         GlobalStateMgr.getCurrentStatisticStorage().getColumnStatistics(table, colNames);
+=======
+                        GlobalStateMgr.getCurrentState().getStatisticStorage().getColumnStatistics(table, colNames);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 return columnStatisticList.stream().anyMatch(ColumnStatistic::isUnknown);
             } else if (operator instanceof LogicalHiveScanOperator || operator instanceof LogicalHudiScanOperator) {
                 if (ConnectContext.get().getSessionVariable().enableHiveColumnStats()) {
@@ -426,6 +470,11 @@ public class Utils {
                 return true;
             } else if (operator instanceof LogicalIcebergScanOperator) {
                 return ((LogicalIcebergScanOperator) operator).hasUnknownColumn();
+<<<<<<< HEAD
+=======
+            } else if (operator instanceof LogicalDeltaLakeScanOperator)  {
+                return ((LogicalDeltaLakeScanOperator) operator).hasUnknownColumn();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             } else {
                 // For other scan operators, we do not know the column statistics.
                 return true;
@@ -506,6 +555,7 @@ public class Utils {
             return Optional.empty();
         }
 
+<<<<<<< HEAD
         try {
             if (((ConstantOperator) op).isNull()) {
                 return Optional.of(ConstantOperator.createNull(descType));
@@ -521,6 +571,25 @@ public class Utils {
             }
         } catch (Exception ignored) {
             LOG.debug("invalid value: {} to type {}", op, descType);
+=======
+        if (((ConstantOperator) op).isNull()) {
+            return Optional.of(ConstantOperator.createNull(descType));
+        }
+
+        Optional<ConstantOperator> result = ((ConstantOperator) op).castToStrictly(descType);
+        if (result.isEmpty()) {
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("invalid value: {} to type {}", op, descType);
+            }
+            return Optional.empty();
+        }
+        if (result.get().toString().equalsIgnoreCase(op.toString())) {
+            return Optional.of(result.get());
+        } else if (descType.isDate() && (op.getType().isIntegerType() || op.getType().isStringType())) {
+            if (op.toString().equalsIgnoreCase(result.get().toString().replaceAll("-", ""))) {
+                return Optional.of(result.get());
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return Optional.empty();
     }
@@ -544,8 +613,12 @@ public class Utils {
         }
         // Guarantee that both childType casting to lhsType and rhsType casting to childType are
         // lossless
+<<<<<<< HEAD
         if (!Type.isAssignable2Decimal((ScalarType) lhsType, (ScalarType) childType) ||
                 !Type.isAssignable2Decimal((ScalarType) childType, (ScalarType) rhsType)) {
+=======
+        if (!Type.isAssignable2Decimal((ScalarType) lhsType, (ScalarType) childType)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return Optional.empty();
         }
 
@@ -553,10 +626,22 @@ public class Utils {
             return Optional.of(ConstantOperator.createNull(childType));
         }
 
+<<<<<<< HEAD
         try {
             ConstantOperator result = rhs.castTo(childType);
             return Optional.of(result);
         } catch (Exception ignored) {
+=======
+        Optional<ConstantOperator> result = rhs.castTo(childType);
+        if (result.isEmpty()) {
+            return Optional.empty();
+        }
+        if (Type.isAssignable2Decimal((ScalarType) childType, (ScalarType) rhsType)) {
+            return Optional.of(result.get());
+        } else if (result.get().toString().equalsIgnoreCase(rhs.toString())) {
+            // check lossless
+            return Optional.of(result.get());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return Optional.empty();
     }
@@ -607,6 +692,7 @@ public class Utils {
         return num < 0 ? 1 : num + 1;
     }
 
+<<<<<<< HEAD
     public static boolean canEliminateNull(Set<ColumnRefOperator> nullOutputColumnOps, ScalarOperator expression) {
         Map<ColumnRefOperator, ScalarOperator> m = nullOutputColumnOps.stream()
                 .map(op -> new ColumnRefOperator(op.getId(), op.getType(), op.getName(), true))
@@ -623,6 +709,40 @@ public class Utils {
             } else if (nullEval.equals(ConstantOperator.createBoolean(false))) {
                 return true;
             }
+=======
+    public static int log2(int n) {
+        return 31 - Integer.numberOfLeadingZeros(n);
+    }
+
+    /**
+     * Check the input expression is not nullable or not.
+     * @param nullOutputColumnOps the nullable column reference operators.
+     * @param expression the input expression.
+     * @return true if the expression is not nullable, otherwise false.
+     */
+    public static boolean canEliminateNull(Set<ColumnRefOperator> nullOutputColumnOps, ScalarOperator expression) {
+        try {
+            Map<ColumnRefOperator, ScalarOperator> m = nullOutputColumnOps.stream()
+                    .map(op -> new ColumnRefOperator(op.getId(), op.getType(), op.getName(), true))
+                    .collect(Collectors.toMap(identity(), col -> ConstantOperator.createNull(col.getType())));
+            for (ScalarOperator e : Utils.extractConjuncts(expression)) {
+                ScalarOperator nullEval = new ReplaceColumnRefRewriter(m).rewrite(e);
+                ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();
+                // Call the ScalarOperatorRewriter function to perform constant folding
+                nullEval = scalarRewriter.rewrite(nullEval, ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
+                // Only result is `null` or false, which means the expression "xxx is null" can never be true,
+                // it can eliminate null.
+                if (nullEval.isConstantRef() && ((ConstantOperator) nullEval).isNull()) {
+                    return true;
+                } else if (nullEval.equals(ConstantOperator.FALSE)) {
+                    return true;
+                }
+            }
+        } catch (Throwable e) {
+            LOG.warn("[query_id={}] Failed to eliminate null: {}",
+                    DebugUtil.getSessionQueryId(), DebugUtil.getStackTrace(e));
+            return false;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return false;
     }
@@ -780,6 +900,84 @@ public class Utils {
         return false;
     }
 
+<<<<<<< HEAD
+=======
+    public static void calculateStatistics(OptExpression expr, OptimizerContext context) {
+        for (OptExpression child : expr.getInputs()) {
+            calculateStatistics(child, context);
+        }
+        // Do not calculate statistics for LogicalTreeAnchorOperator
+        if (expr.getOp() instanceof LogicalTreeAnchorOperator) {
+            return;
+        }
+
+        ExpressionContext expressionContext = new ExpressionContext(expr);
+        StatisticsCalculator statisticsCalculator = new StatisticsCalculator(
+                expressionContext, context.getColumnRefFactory(), context);
+        try {
+            statisticsCalculator.estimatorStats();
+        } catch (Exception e) {
+            LOG.warn("[query={}] Failed to calculate statistics for expression: {}",
+                    DebugUtil.getSessionQueryId(), expr, e);
+            return;
+        }
+
+        expr.setStatistics(expressionContext.getStatistics());
+    }
+
+    /**
+     * Add new project into input, merge input's existing project if input has one.
+     * @param input input expression
+     * @param newProjectionMap new project map to be pushed down into input
+     * @return a new expression with new project
+     */
+    public static OptExpression mergeProjection(OptExpression input,
+                                                Map<ColumnRefOperator, ScalarOperator> newProjectionMap) {
+        if (newProjectionMap == null || newProjectionMap.isEmpty()) {
+            return input;
+        }
+        Operator newOp = input.getOp();
+        if (newOp.getProjection() == null || newOp.getProjection().getColumnRefMap().isEmpty()) {
+            newOp.setProjection(new Projection(newProjectionMap));
+        } else {
+            // merge two projections
+            ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(newOp.getProjection().getColumnRefMap());
+            Map<ColumnRefOperator, ScalarOperator> resultMap = Maps.newHashMap();
+            for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : newProjectionMap.entrySet()) {
+                ScalarOperator result = rewriter.rewrite(entry.getValue());
+                resultMap.put(entry.getKey(), result);
+            }
+            newOp.setProjection(new Projection(resultMap));
+        }
+        return input;
+    }
+
+    /**
+     * Check if the optExpression has applied the rule in recursively
+     * @param optExpression input optExpression to be checked
+     * @param ruleMask specific rule mask
+     * @return true if the optExpression or its children have applied the rule, false otherwise
+     */
+    public static boolean isOptHasAppliedRule(OptExpression optExpression, int ruleMask) {
+        return isOptHasAppliedRule(optExpression, op -> op.isOpRuleBitSet(ruleMask));
+    }
+
+    public static boolean isOptHasAppliedRule(OptExpression optExpression, Predicate<Operator> pred) {
+        if (optExpression == null) {
+            return false;
+        }
+        if (pred.test(optExpression.getOp())) {
+            return true;
+        }
+        for (OptExpression child : optExpression.getInputs()) {
+            if (isOptHasAppliedRule(child, pred)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @SuppressWarnings("unchecked")
     public static <T, S extends T> Optional<S> downcast(T obj, Class<S> klass) {
         Preconditions.checkArgument(obj != null);
@@ -794,4 +992,28 @@ public class Utils {
         return downcast(obj, klass)
                 .orElseThrow(() -> new IllegalArgumentException("Cannot cast " + obj.getClass() + " to " + klass));
     }
+<<<<<<< HEAD
+=======
+
+    // this method is useful when map is small, but key is very complex  like compound predicate with 1000 OR
+    // in which case key's hashCode() can be super slow because of bad time complexity
+    // so we can use equals' short-circuit logic to help us find whether key is in map quickly
+    // which means key's type is not same as map's key's types
+    public static <K, V> V getValueIfExists(Map<K, V> map, K key) {
+        V value = null;
+
+        if (map.size() < 4) {
+            for (Map.Entry<K, V> entry : map.entrySet()) {
+                if (entry.getKey().equals(key)) {
+                    value = entry.getValue();
+                    break;
+                }
+            }
+        } else {
+            value = map.get(key);
+        }
+
+        return value;
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

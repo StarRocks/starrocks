@@ -44,7 +44,11 @@ void DelVector::_add_dels(const std::vector<uint32_t>& dels) {
 
 void DelVector::add_dels_as_new_version(const std::vector<uint32_t>& dels, int64_t version,
                                         std::shared_ptr<DelVector>* pdelvec) const {
+<<<<<<< HEAD
     CHECK(this != pdelvec->get());
+=======
+    DCHECK(this != pdelvec->get());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     DelVectorPtr tmp(new DelVector());
     if (_roaring) {
         tmp->_roaring = std::make_unique<Roaring>(*_roaring);

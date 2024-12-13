@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # unnest_bitmap
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 unnest_bitmap is a table function that takes a bitmap and converts elements in that bitmap into multiple rows of a table.
 

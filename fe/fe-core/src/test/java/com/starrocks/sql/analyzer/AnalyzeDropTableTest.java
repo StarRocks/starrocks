@@ -15,10 +15,18 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.catalog.Database;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.HiveTable;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.Table;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.utframe.StarRocksAssert;
 import mockit.Expectations;
+<<<<<<< HEAD
+=======
+import mockit.Mocked;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -34,6 +42,12 @@ public class AnalyzeDropTableTest {
         String createIcebergCatalogStmt = "create external catalog iceberg_catalog properties (\"type\"=\"iceberg\", " +
                 "\"hive.metastore.uris\"=\"thrift://hms:9083\", \"iceberg.catalog.type\"=\"hive\")";
         starRocksAssert.withCatalog(createIcebergCatalogStmt);
+<<<<<<< HEAD
+=======
+
+        starRocksAssert.withCatalog("create external catalog hive_catalog properties (\"type\"=\"hive\", " +
+                "\"hive.metastore.uris\"=\"thrift://hms:9083\")");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -72,4 +86,30 @@ public class AnalyzeDropTableTest {
         };
         analyzeSuccess("DROP TABLE iceberg_catalog.iceberg_db.iceberg_table");
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testDropHiveNonManagedTable(@Mocked HiveTable hiveTable) {
+        MetadataMgr metadata = AnalyzeTestUtil.getConnectContext().getGlobalStateMgr().getMetadataMgr();
+
+        new Expectations(metadata, hiveTable) {
+            {
+                metadata.getDb(anyString, anyString);
+                result = new Database();
+                minTimes = 0;
+
+                metadata.getTable(anyString, anyString, anyString);
+                result = hiveTable;
+                minTimes = 0;
+
+                hiveTable.getHiveTableType();
+                result = HiveTable.HiveTableType.EXTERNAL_TABLE;
+                minTimes = 0;
+            }
+        };
+
+        analyzeSuccess("DROP TABLE hive_catalog.hive_db.hive_table");
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

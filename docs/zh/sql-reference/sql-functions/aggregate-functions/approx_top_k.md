@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # approx_top_k
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 返回表达式 `expr` 中最常出现的 `k` 个项目以及每个项目出现的近似次数。
 

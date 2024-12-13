@@ -68,6 +68,10 @@ bool BalancedChunkBuffer::try_get(int buffer_index, ChunkPtr* output_chunk) {
     bool ok = _get_sub_buffer(buffer_index)->try_get(&chunk_with_token);
     if (ok) {
         *output_chunk = std::move(chunk_with_token.first);
+<<<<<<< HEAD
+=======
+        _memory_usage -= (*output_chunk)->memory_usage();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     return ok;
 }
@@ -77,18 +81,36 @@ bool BalancedChunkBuffer::put(int buffer_index, ChunkPtr chunk, ChunkBufferToken
     // EOS chunks may be empty and must be delivered in order to notify CacheOperator that all chunks of the tablet
     // has been processed.
     if (!chunk || (!chunk->owner_info().is_last_chunk() && chunk->num_rows() == 0)) return true;
+<<<<<<< HEAD
     if (_strategy == BalanceStrategy::kDirect) {
         return _get_sub_buffer(buffer_index)->put(std::make_pair(std::move(chunk), std::move(chunk_token)));
+=======
+    bool ret;
+    size_t memory_usage = chunk->memory_usage();
+    if (_strategy == BalanceStrategy::kDirect) {
+        ret = _get_sub_buffer(buffer_index)->put(std::make_pair(std::move(chunk), std::move(chunk_token)));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     } else if (_strategy == BalanceStrategy::kRoundRobin) {
         // TODO: try to balance data according to number of rows
         // But the hard part is, that may needs to maintain a min-heap to account the rows of each
         // output operator, which would introduce some extra overhead
         int target_index = _output_index.fetch_add(1);
         target_index %= _output_operators;
+<<<<<<< HEAD
         return _get_sub_buffer(target_index)->put(std::make_pair(std::move(chunk), std::move(chunk_token)));
     } else {
         CHECK(false) << "unreachable";
     }
+=======
+        ret = _get_sub_buffer(target_index)->put(std::make_pair(std::move(chunk), std::move(chunk_token)));
+    } else {
+        CHECK(false) << "unreachable";
+    }
+    if (ret) {
+        _memory_usage += memory_usage;
+    }
+    return ret;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 void BalancedChunkBuffer::set_finished(int buffer_index) {

@@ -32,8 +32,15 @@
 #include "formats/orc/utils.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
+<<<<<<< HEAD
 #include "simd/simd.h"
 #include "types/logical_type.h"
+=======
+#include "orc_schema_builder.h"
+#include "simd/simd.h"
+#include "types/logical_type.h"
+#include "util/stack_util.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "util/timezone_utils.h"
 
 namespace starrocks {
@@ -93,13 +100,21 @@ void OrcChunkReader::build_column_name_set(std::unordered_set<std::string>* name
         // build hive column names index.
         int size = std::min(hive_column_names->size(), root_type.getSubtypeCount());
         for (int i = 0; i < size; i++) {
+<<<<<<< HEAD
             std::string col_name = format_column_name(hive_column_names->at(i), case_sensitive);
+=======
+            std::string col_name = Utils::format_name(hive_column_names->at(i), case_sensitive);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             name_set->insert(col_name);
         }
     } else {
         // build orc column names index.
         for (int i = 0; i < root_type.getSubtypeCount(); i++) {
+<<<<<<< HEAD
             std::string col_name = format_column_name(root_type.getFieldName(i), case_sensitive);
+=======
+            std::string col_name = Utils::format_name(root_type.getFieldName(i), case_sensitive);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             name_set->insert(col_name);
         }
     }
@@ -188,6 +203,12 @@ Status OrcChunkReader::init(std::unique_ptr<orc::Reader> reader, const OrcPredic
         return Status::InternalError(s);
     }
 
+<<<<<<< HEAD
+=======
+    // _batch can't be reused because the schema between files may be different
+    _batch.reset();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // TODO(SmithCruise) delete _init_position_in_orc() when develop subfield lazy load.
     RETURN_IF_ERROR(_init_position_in_orc());
     RETURN_IF_ERROR(_init_cast_exprs());
@@ -315,6 +336,16 @@ static Status _create_type_descriptor_by_orc(const TypeDescriptor& origin_type, 
         result->len = len;
         result->precision = precision;
         result->scale = scale;
+<<<<<<< HEAD
+=======
+        // To support iceberg table time type
+        // When orc type is bigint and orc attribute iceberg.long-type is TIME, then convert result type to TYPE_TIME
+        if (result->type == TYPE_BIGINT && orc_type->hasAttributeKey("iceberg.long-type")) {
+            if ("TIME" == orc_type->getAttributeValue("iceberg.long-type")) {
+                result->type = TYPE_TIME;
+            }
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     return Status::OK();
 }
@@ -442,6 +473,10 @@ Status OrcChunkReader::read_next(orc::RowReader::ReadPosition* pos) {
             return Status::EndOfFile("");
         }
     } catch (std::exception& e) {
+<<<<<<< HEAD
+=======
+        LOG(WARNING) << get_stack_trace();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         auto s = strings::Substitute("ORC reader read file $0 failed. Reason is $1.", _current_file_name, e.what());
         LOG(WARNING) << s;
         return Status::InternalError(s);
@@ -715,7 +750,11 @@ bool OrcChunkReader::_ok_to_add_binary_in_conjunct(
     const TExprOpcode::type& op_type = conjunct->op();
     DCHECK(node_type == TExprNodeType::BINARY_PRED || node_type == TExprNodeType::IN_PRED);
 
+<<<<<<< HEAD
     if (_supported_binary_ops.find(op_type) == _supported_binary_ops.end()) {
+=======
+    if (!_supported_binary_ops.contains(op_type)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return false;
     }
 
@@ -749,12 +788,20 @@ bool OrcChunkReader::_ok_to_add_binary_in_conjunct(
 
     for (int i = 1; i < conjunct->get_num_children(); i++) {
         c = conjunct->get_child(i);
+<<<<<<< HEAD
         if (_supported_literal_types.find(c->node_type()) == _supported_literal_types.end()) {
+=======
+        if (!_supported_literal_types.contains(c->node_type())) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return false;
         }
     }
     for (int i = 0; i < conjunct->get_num_children(); i++) {
+<<<<<<< HEAD
         if (_supported_logical_types.find(conjunct->get_child(i)->type().type) == _supported_logical_types.end()) {
+=======
+        if (!_supported_logical_types.contains(conjunct->get_child(i)->type().type)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return false;
         }
     }
@@ -800,7 +847,11 @@ bool OrcChunkReader::_ok_to_add_is_null_conjunct(
 bool OrcChunkReader::_ok_to_add_conjunct(
         const Expr* conjunct, const std::unordered_map<SlotId, size_t>& slot_id_to_pos_in_src_slot_descriptors) {
     const TExprNodeType::type& node_type = conjunct->node_type();
+<<<<<<< HEAD
     if (_supported_expr_node_types.find(node_type) == _supported_expr_node_types.end()) {
+=======
+    if (!_supported_expr_node_types.contains(node_type)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return false;
     }
 
@@ -1173,7 +1224,11 @@ Status OrcChunkReader::build_search_argument_by_predicates(const OrcPredicates* 
     if (orc_predicates->rf_collector != nullptr) {
         for (auto& it : orc_predicates->rf_collector->descriptors()) {
             RuntimeFilterProbeDescriptor* rf_desc = it.second;
+<<<<<<< HEAD
             const JoinRuntimeFilter* filter = rf_desc->runtime_filter();
+=======
+            const JoinRuntimeFilter* filter = rf_desc->runtime_filter(-1);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             SlotId probe_slot_id;
             if (filter == nullptr || filter->has_null() || !rf_desc->is_probe_slot_ref(&probe_slot_id)) continue;
             auto it2 = slot_id_to_pos_in_src_slot_descriptors.find(probe_slot_id);
@@ -1211,6 +1266,17 @@ ColumnPtr OrcChunkReader::get_row_delete_filter(const std::set<int64_t>& deleted
     return filter_column;
 }
 
+<<<<<<< HEAD
+=======
+size_t OrcChunkReader::get_row_delete_number(const std::set<int64_t>& deleted_pos) {
+    int64_t start_pos = _row_reader->getRowNumber();
+    auto num_rows = _batch->numElements;
+    auto iter = deleted_pos.lower_bound(start_pos);
+    auto end = deleted_pos.upper_bound(start_pos + num_rows - 1);
+    return std::distance(iter, end);
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 Status OrcChunkReader::apply_dict_filter_eval_cache(const std::unordered_map<SlotId, FilterPtr>& dict_filter_eval_cache,
                                                     Filter* filter) {
     if (dict_filter_eval_cache.size() == 0) {
@@ -1311,6 +1377,7 @@ Status OrcChunkReader::get_schema(std::vector<SlotDescriptor>* schema) {
         auto name = root.getFieldName(i);
 
         auto subtype = root.getSubtype(i);
+<<<<<<< HEAD
         switch (subtype->getKind()) {
         case orc::TypeKind::BOOLEAN:
             tp = TypeDescriptor(TYPE_BOOLEAN);
@@ -1380,6 +1447,11 @@ Status OrcChunkReader::get_schema(std::vector<SlotDescriptor>* schema) {
             return Status::NotSupported(
                     fmt::format("Unkown supported orc type: {}, column name: {}", subtype->getKind(), name));
         }
+=======
+
+        RETURN_IF_ERROR(get_orc_type(subtype, &tp));
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         schema->emplace_back(i, name, tp);
     }
     return Status::OK();

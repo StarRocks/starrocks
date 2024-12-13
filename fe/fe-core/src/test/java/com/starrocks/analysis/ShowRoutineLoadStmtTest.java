@@ -46,7 +46,11 @@ public class ShowRoutineLoadStmtTest {
         Assert.assertEquals("label", stmt.getName());
         Assert.assertEquals("testDb", stmt.getDbFullName());
         Assert.assertFalse(stmt.isIncludeHistory());
+<<<<<<< HEAD
         Assert.assertEquals(20, stmt.getMetaData().getColumnCount());
+=======
+        Assert.assertEquals(21, stmt.getMetaData().getColumnCount());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals("Id", stmt.getMetaData().getColumn(0).getName());
     }
 

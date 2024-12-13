@@ -35,7 +35,10 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
+<<<<<<< HEAD
 import com.starrocks.mysql.privilege.Auth;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.mysql.privilege.MockedAuth;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.DeleteStmt;
@@ -47,13 +50,19 @@ import org.junit.Test;
 
 public class DeleteStmtTest {
     @Mocked
+<<<<<<< HEAD
     private Auth auth;
     @Mocked
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private ConnectContext ctx;
 
     @Before
     public void setUp() {
+<<<<<<< HEAD
         MockedAuth.mockedAuth(auth);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         MockedAuth.mockedConnectContext(ctx, "root", "192.168.1.1");
     }
 

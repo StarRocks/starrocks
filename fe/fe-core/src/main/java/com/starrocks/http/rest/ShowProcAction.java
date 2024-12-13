@@ -38,6 +38,10 @@ import com.google.common.base.Strings;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.starrocks.analysis.RedirectStatus;
+<<<<<<< HEAD
+=======
+import com.starrocks.authorization.AccessDeniedException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.Column;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
@@ -75,7 +79,11 @@ public class ShowProcAction extends RestBaseAction {
     }
 
     @Override
+<<<<<<< HEAD
     public void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException {
+=======
+    public void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException, AccessDeniedException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // check authority
         UserIdentity currentUser = ConnectContext.get().getCurrentUserIdentity();
         checkUserOwnsAdminRole(currentUser);
@@ -129,7 +137,11 @@ public class ShowProcAction extends RestBaseAction {
                     procNode = instance.open(path);
                 }
             } catch (AnalysisException e) {
+<<<<<<< HEAD
                 LOG.warn(e.getMessage());
+=======
+                LOG.warn(e.getMessage(), e);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 response.getContent().append("[]");
             }
 
@@ -143,7 +155,11 @@ public class ShowProcAction extends RestBaseAction {
                     response.setContentType("application/json");
                     response.getContent().append(formatResultToJson(columnNames, rows));
                 } catch (AnalysisException e) {
+<<<<<<< HEAD
                     LOG.warn(e.getMessage());
+=======
+                    LOG.warn(e.getMessage(), e);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     response.getContent().append("[]");
                 }
             }

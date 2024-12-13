@@ -145,8 +145,13 @@ public class ExternalProcDirTest {
     public void testExternalScemaFetchResultNormal() throws AnalysisException {
         Table table = new HiveTable();
         List<Column> fullSchema = new ArrayList<>();
+<<<<<<< HEAD
         Column columnId = new Column("id", Type.INT);
         Column columnName = new Column("name", Type.VARCHAR);
+=======
+        Column columnId = new Column("id", Type.INT, false, "id");
+        Column columnName = new Column("name", Type.VARCHAR, false, "name");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         fullSchema.add(columnId);
         fullSchema.add(columnName);
         table.setNewFullSchema(fullSchema);
@@ -154,11 +159,20 @@ public class ExternalProcDirTest {
         ProcResult result = dir.fetchResult();
         Assert.assertNotNull(result);
         Assert.assertTrue(result instanceof BaseProcResult);
+<<<<<<< HEAD
         Assert.assertEquals(Lists.newArrayList("Field", "Type", "Null", "Key", "Default", "Extra"), result.getColumnNames());
         Assert.assertEquals(2, result.getRows().size());
         List<List<String>> rows = Lists.newArrayList();
         rows.add(Arrays.asList("id", "INT", "No", "false", FeConstants.NULL_STRING, ""));
         rows.add(Arrays.asList("name", "VARCHAR", "No", "false", FeConstants.NULL_STRING, ""));
+=======
+        Assert.assertEquals(Lists.newArrayList("Field", "Type", "Null", "Key", "Default", "Extra", "Comment"),
+                result.getColumnNames());
+        Assert.assertEquals(2, result.getRows().size());
+        List<List<String>> rows = Lists.newArrayList();
+        rows.add(Arrays.asList("id", "INT", "No", "false", FeConstants.NULL_STRING, "", "id"));
+        rows.add(Arrays.asList("name", "VARCHAR", "No", "false", FeConstants.NULL_STRING, "", "name"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals(rows, result.getRows());
     }
 }

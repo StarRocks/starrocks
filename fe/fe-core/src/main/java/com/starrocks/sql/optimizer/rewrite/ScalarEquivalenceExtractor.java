@@ -20,6 +20,10 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
@@ -270,6 +274,24 @@ public class ScalarEquivalenceExtractor {
             return buildEquivalenceValue(predicate);
         }
 
+<<<<<<< HEAD
+=======
+        @Override
+        public Void visitCall(CallOperator call, Void context) {
+            if (!call.getType().isBoolean()) {
+                return null;
+            }
+            List<ColumnRefOperator> child1Lists = call.getColumnRefs();
+            if (Sets.newHashSet(child1Lists).size() != 1) {
+                return null;
+            }
+            ColumnRefOperator child1 = child1Lists.get(0);
+            columnValuesMap.computeIfAbsent(child1, k -> Sets.newLinkedHashSet()).add(call);
+            return null;
+        }
+
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         private Void buildEquivalenceValue(PredicateOperator predicate) {
             List<ColumnRefOperator> child1Lists = Utils.extractColumnRef(predicate.getChild(0));
             if (child1Lists.size() != 1) {

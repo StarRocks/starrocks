@@ -57,6 +57,10 @@ public class ClusterBalanceProcDir implements ProcDirInterface {
     public static final String PENDING_TABLETS = "pending_tablets";
     public static final String RUNNING_TABLETS = "running_tablets";
     public static final String HISTORY_TABLETS = "history_tablets";
+<<<<<<< HEAD
+=======
+    public static final String ALL_TABLETS = "all_tablets";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     @Override
     public boolean register(String name, ProcNodeInterface node) {
@@ -94,6 +98,10 @@ public class ClusterBalanceProcDir implements ProcDirInterface {
         result.addRow(Lists.newArrayList(PENDING_TABLETS, String.valueOf(tabletScheduler.getPendingNum())));
         result.addRow(Lists.newArrayList(RUNNING_TABLETS, String.valueOf(tabletScheduler.getRunningNum())));
         result.addRow(Lists.newArrayList(HISTORY_TABLETS, String.valueOf(tabletScheduler.getHistoryNum())));
+<<<<<<< HEAD
+=======
+        result.addRow(Lists.newArrayList(ALL_TABLETS, String.valueOf(tabletScheduler.getTotalNum())));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return result;
     }
 }

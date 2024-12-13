@@ -28,11 +28,18 @@ import com.starrocks.sql.optimizer.RequiredPropertyDeriver;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.CTEProperty;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+<<<<<<< HEAD
 import com.starrocks.sql.optimizer.base.DistributionProperty;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.GatherDistributionSpec;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.base.SortProperty;
+=======
+import com.starrocks.sql.optimizer.base.DistributionSpec;
+import com.starrocks.sql.optimizer.base.EmptyDistributionProperty;
+import com.starrocks.sql.optimizer.base.EmptySortProperty;
+import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.optimizer.cost.CostModel;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
@@ -383,8 +390,13 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         if (childBestExpr.getOp() instanceof PhysicalDistributionOperator) {
             PhysicalDistributionOperator distributionOperator =
                     (PhysicalDistributionOperator) childBestExpr.getOp();
+<<<<<<< HEAD
             if (distributionOperator.getDistributionSpec().getType().equals(DistributionSpec.DistributionType.GATHER) &&
                     ((GatherDistributionSpec) distributionOperator.getDistributionSpec()).hasLimit()) {
+=======
+            if (childBestExpr.getOp().hasLimit() && distributionOperator.getDistributionSpec().getType()
+                    .equals(DistributionSpec.DistributionType.GATHER)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 return true;
             }
         }
@@ -476,7 +488,11 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
                  * because repartition require sort again
                  */
                 PhysicalPropertySet newProperty =
+<<<<<<< HEAD
                         new PhysicalPropertySet(DistributionProperty.EMPTY, SortProperty.EMPTY,
+=======
+                        new PhysicalPropertySet(EmptyDistributionProperty.INSTANCE, EmptySortProperty.INSTANCE,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                 outputProperty.getCteProperty());
                 groupExpression.getGroup().replaceBestExpressionProperty(outputProperty, newProperty,
                         groupExpression.getCost(outputProperty));

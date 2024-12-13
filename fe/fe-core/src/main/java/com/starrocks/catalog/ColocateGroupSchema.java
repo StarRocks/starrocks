@@ -41,11 +41,19 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.io.Writable;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.common.MetaUtils;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
+<<<<<<< HEAD
+=======
+import java.util.Map;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.stream.Collectors;
 
 /*
@@ -89,11 +97,20 @@ public class ColocateGroupSchema implements Writable {
     }
 
     public void checkColocateSchema(OlapTable tbl) throws DdlException {
+<<<<<<< HEAD
         checkDistribution(tbl.getDefaultDistributionInfo());
         checkReplicationNum(tbl.getPartitionInfo());
     }
 
     public void checkDistribution(DistributionInfo distributionInfo) throws DdlException {
+=======
+        checkDistribution(tbl.getIdToColumn(), tbl.getDefaultDistributionInfo());
+        checkReplicationNum(tbl.getPartitionInfo());
+    }
+
+    public void checkDistribution(Map<ColumnId, Column> idToColumn, DistributionInfo distributionInfo)
+            throws DdlException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (distributionInfo instanceof HashDistributionInfo) {
             HashDistributionInfo info = (HashDistributionInfo) distributionInfo;
             // buckets num
@@ -107,11 +124,21 @@ public class ColocateGroupSchema implements Writable {
                         distributionColTypes.size(), groupId.toString(), info.toString());
             }
             // distribution col type
+<<<<<<< HEAD
             for (int i = 0; i < distributionColTypes.size(); i++) {
                 Type targetColType = distributionColTypes.get(i);
                 if (!targetColType.equals(info.getDistributionColumns().get(i).getType())) {
                     ErrorReport.reportDdlException(ErrorCode.ERR_COLOCATE_TABLE_MUST_HAS_SAME_DISTRIBUTION_COLUMN_TYPE,
                             groupId.toString(), info.getDistributionColumns().get(i).getName(), targetColType, info.toString());
+=======
+            List<Column> distributionColumns = MetaUtils.getColumnsByColumnIds(
+                    idToColumn, distributionInfo.getDistributionColumns());
+            for (int i = 0; i < distributionColTypes.size(); i++) {
+                Type targetColType = distributionColTypes.get(i);
+                if (!targetColType.equals(distributionColumns.get(i).getType())) {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_COLOCATE_TABLE_MUST_HAS_SAME_DISTRIBUTION_COLUMN_TYPE,
+                            groupId.toString(), distributionColumns.get(i).getName(), targetColType, info.toString());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
             }
         }

@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
             100.00 * sum(case
@@ -12,6 +13,8 @@ where
         l_partkey = p_partkey
   and l_shipdate >= date '1997-02-01'
   and l_shipdate < date '1997-03-01';
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 [result]
 AGGREGATE ([GLOBAL] aggregate [{28: sum=sum(28: sum), 29: sum=sum(29: sum)}] group by [[]] having [null]
     EXCHANGE GATHER

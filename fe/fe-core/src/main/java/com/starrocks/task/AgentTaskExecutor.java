@@ -24,7 +24,11 @@ import java.util.concurrent.ExecutorService;
 
 public class AgentTaskExecutor {
 
+<<<<<<< HEAD
     private static final ExecutorService EXECUTOR =
+=======
+    public static final ExecutorService EXECUTOR =
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             ThreadPoolManager.newDaemonCacheThreadPool(Config.max_agent_task_threads_num, "agent-task-pool", true);
 
     public AgentTaskExecutor() {

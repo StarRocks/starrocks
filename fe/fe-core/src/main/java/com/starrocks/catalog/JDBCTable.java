@@ -15,13 +15,20 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Splitter;
+<<<<<<< HEAD
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+=======
+import com.google.common.base.Strings;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.catalog.Resource.ResourceType;
 import com.starrocks.common.DdlException;
+<<<<<<< HEAD
 import com.starrocks.common.io.Text;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TJDBCTable;
 import com.starrocks.thrift.TTableDescriptor;
@@ -31,12 +38,19 @@ import org.apache.commons.lang3.EnumUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+<<<<<<< HEAD
 import org.apache.parquet.Strings;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.net.URI;
+=======
+
+import java.net.URI;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -86,19 +100,37 @@ public class JDBCTable extends Table {
         validate(properties);
     }
 
+<<<<<<< HEAD
+=======
+    @Override
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public String getResourceName() {
         return resourceName;
     }
 
+<<<<<<< HEAD
+=======
+    @Override
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public String getCatalogName() {
         return catalogName;
     }
 
+<<<<<<< HEAD
     public String getDbName() {
         return dbName;
     }
 
     public String getJdbcTable() {
+=======
+    @Override
+    public String getCatalogDBName() {
+        return dbName;
+    }
+
+    @Override
+    public String getCatalogTableName() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return jdbcTable;
     }
 
@@ -179,9 +211,35 @@ public class JDBCTable extends Table {
         // -> jdbc_postgresql_172.26.194.237_5432_db_pg_select
         // requirement: it should be used as local path.
         // and there is no ':' in it to avoid be parsed into non-local filesystem.
+<<<<<<< HEAD
         return uri.replace("//", "")
                 .replace("/", "_")
                 .replace(":", "_");
+=======
+        String ans = uri.replaceAll("[^0-9a-zA-Z]", "_");
+
+        // currently we use this uri as part of name of download file.
+        // so if this uri is too long, we might fail to write file on BE side.
+        // so here we have to shorten it to reduce fail probability because of long file name.
+
+        final String prefix = "jdbc_";
+        try {
+            // 256bits = 32bytes = 64hex chars.
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            digest.update(ans.getBytes());
+            byte[] hashBytes = digest.digest();
+            StringBuilder sb = new StringBuilder();
+            // it's for be side parsing: expect a _ in name.
+            sb.append(prefix);
+            for (byte b : hashBytes) {
+                sb.append(String.format("%02x", b));
+            }
+            ans = sb.toString();
+        } catch (NoSuchAlgorithmException e) {
+            // don't update `ans`.
+        }
+        return ans;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -231,6 +289,7 @@ public class JDBCTable extends Table {
     }
 
     @Override
+<<<<<<< HEAD
     public void write(DataOutput out) throws IOException {
         super.write(out);
 
@@ -250,6 +309,8 @@ public class JDBCTable extends Table {
     }
 
     @Override
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public boolean isSupported() {
         return true;
     }
@@ -278,6 +339,13 @@ public class JDBCTable extends Table {
         UNKNOWN,
         MYSQL,
         POSTGRES,
+<<<<<<< HEAD
         ORACLE;
+=======
+        ORACLE,
+        MARIADB,
+
+        CLICKHOUSE
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }

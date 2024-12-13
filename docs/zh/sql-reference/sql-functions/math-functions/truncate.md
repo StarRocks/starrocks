@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # truncate
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 返回数值 `x` 保留到小数点后 `y` 位的值。
 

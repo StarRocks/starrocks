@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # hll_hash
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Converts a value to an hll type. Typically used in imports to map a value in the source data to an HLL column type in the StarRocks table.
 

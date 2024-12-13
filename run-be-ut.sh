@@ -32,7 +32,12 @@ usage() {
   echo "
 Usage: $0 <options>
   Optional options:
+<<<<<<< HEAD
      --test  [TEST_NAME]            run specific test
+=======
+     --test TEST_NAME               run specific test
+     --gtest_filter GTEST_FILTER    run test cases with gtest filters
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
      --dry-run                      dry-run unit tests
      --clean                        clean old unit tests before run
      --with-gcov                    enable to build with gcov
@@ -40,7 +45,13 @@ Usage: $0 <options>
      --with-bench                   enable to build with benchmark
      --excluding-test-suit          don't run cases of specific suit
      --module                       module to run uts
+<<<<<<< HEAD
      --use-staros                   enable to build with staros
+=======
+     --enable-shared-data           enable to build with shared-data feature support
+     --without-starcache            build without starcache library
+     --use-staros                   DEPRECATED. an alias of --enable-shared-data option
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
      -j                             build parallel
 
   Eg.
@@ -49,13 +60,21 @@ Usage: $0 <options>
     $0 --dry-run                    dry-run unit tests
     $0 --clean                      clean old unit tests before run
     $0 --help                       display usage
+<<<<<<< HEAD
+=======
+    $0 --gtest_filter CompactionUtilsTest*:TabletUpdatesTest*   run the two test suites: CompactionUtilsTest and TabletUpdatesTest
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
   "
   exit 1
 }
 
 # Append negative cases to existing $TEST_NAME
 # refer to https://github.com/google/googletest/blob/main/docs/advanced.md#running-a-subset-of-the-tests
+<<<<<<< HEAD
 # for detailed explanation of `--gtest_filter`
+=======
+# for detailed explaination of `--gtest_filter`
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 append_negative_case() {
     local exclude_case=$1
     case $TEST_NAME in
@@ -83,6 +102,12 @@ OPTS=$(getopt \
   -l 'with-bench' \
   -l 'excluding-test-suit:' \
   -l 'use-staros' \
+<<<<<<< HEAD
+=======
+  -l 'enable-shared-data' \
+  -l 'without-starcache' \
+  -l 'with-brpc-keepalive' \
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
   -o 'j:' \
   -l 'help' \
   -l 'run' \
@@ -104,19 +129,36 @@ HELP=0
 WITH_AWS=OFF
 USE_STAROS=OFF
 WITH_GCOV=OFF
+<<<<<<< HEAD
+=======
+WITH_STARCACHE=ON
+WITH_BRPC_KEEPALIVE=OFF
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 while true; do
     case "$1" in
         --clean) CLEAN=1 ; shift ;;
         --dry-run) DRY_RUN=1 ; shift ;;
         --run) shift ;; # Option only for compatibility
+<<<<<<< HEAD
         --test) TEST_NAME=$2 ; shift 2;;
         --gtest_filter) TEST_NAME=$2 ; shift 2;; # Option only for compatibility
+=======
+        --test) TEST_NAME=${2}* ; shift 2;;
+        --gtest_filter) TEST_NAME=$2 ; shift 2;;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         --module) TEST_MODULE=$2; shift 2;;
         --help) HELP=1 ; shift ;;
         --with-aws) WITH_AWS=ON; shift ;;
         --with-gcov) WITH_GCOV=ON; shift ;;
+<<<<<<< HEAD
         --use-staros) USE_STAROS=ON; shift ;;
         --excluding-test-suit) EXCLUDING_TEST_SUIT=$2; shift 2;;
+=======
+        --without-starcache) WITH_STARCACHE=OFF; shift ;;
+        --with-brpc-keepalive) WITH_BRPC_KEEPALIVE=ON; shift ;;
+        --excluding-test-suit) EXCLUDING_TEST_SUIT=$2; shift 2;;
+        --enable-shared-data|--use-staros) USE_STAROS=ON; shift ;;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         -j) PARALLEL=$2; shift 2 ;;
         --) shift ;  break ;;
         *) echo "Internal error" ; exit 1 ;;
@@ -133,6 +175,12 @@ CMAKE_BUILD_TYPE="${CMAKE_BUILD_TYPE}"
 if [[ -z ${USE_SSE4_2} ]]; then
     USE_SSE4_2=ON
 fi
+<<<<<<< HEAD
+=======
+if [[ -z ${USE_BMI_2} ]]; then
+    USE_BMI_2=ON
+fi
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 if [[ -z ${USE_AVX2} ]]; then
     USE_AVX2=ON
 fi
@@ -163,20 +211,33 @@ if [ "${USE_STAROS}" == "ON"  ]; then
   export STARLET_INSTALL_DIR
 fi
 
+<<<<<<< HEAD
 if [[ -z ${WITH_STARCACHE} ]]; then
   WITH_STARCACHE=ON
 fi
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ${CMAKE_CMD}  -G "${CMAKE_GENERATOR}" \
             -DSTARROCKS_THIRDPARTY=${STARROCKS_THIRDPARTY}\
             -DSTARROCKS_HOME=${STARROCKS_HOME} \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             -DMAKE_TEST=ON -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} \
+<<<<<<< HEAD
             -DUSE_AVX2=$USE_AVX2 -DUSE_AVX512=$USE_AVX512 -DUSE_SSE4_2=$USE_SSE4_2 \
+=======
+            -DUSE_AVX2=$USE_AVX2 -DUSE_AVX512=$USE_AVX512 -DUSE_SSE4_2=$USE_SSE4_2 -DUSE_BMI_2=$USE_BMI_2\
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             -DUSE_STAROS=${USE_STAROS} \
             -DSTARLET_INSTALL_DIR=${STARLET_INSTALL_DIR}          \
             -DWITH_GCOV=${WITH_GCOV} \
             -DWITH_STARCACHE=${WITH_STARCACHE} \
+<<<<<<< HEAD
+=======
+            -DWITH_BRPC_KEEPALIVE=${WITH_BRPC_KEEPALIVE} \
+            -DSTARROCKS_JIT_ENABLE=ON \
+            -DWITH_RELATIVE_SRC_PATH=OFF \
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON ../
 
 ${BUILD_SYSTEM} -j${PARALLEL}
@@ -223,10 +284,23 @@ else
 fi
 
 export LD_LIBRARY_PATH=$STARROCKS_HOME/lib/hadoop/native:$LD_LIBRARY_PATH
+<<<<<<< HEAD
+=======
+if [[ -n "$STARROCKS_GCC_HOME" ]] ; then
+    # add gcc lib64 into LD_LIBRARY_PATH because of dynamic link libstdc++ and libgcc
+    export LD_LIBRARY_PATH=$STARROCKS_GCC_HOME/lib64:$LD_LIBRARY_PATH
+fi
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 THIRDPARTY_HADOOP_HOME=${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop
 if [[ -d ${THIRDPARTY_HADOOP_HOME} ]] ; then
     export HADOOP_CLASSPATH=${THIRDPARTY_HADOOP_HOME}/common/*:${THIRDPARTY_HADOOP_HOME}/common/lib/*:${THIRDPARTY_HADOOP_HOME}/hdfs/*:${THIRDPARTY_HADOOP_HOME}/hdfs/lib/*
+<<<<<<< HEAD
+=======
+    # get rid of StackOverflowError on the process reaper thread, which has a small stack size.
+    # https://bugs.openjdk.org/browse/JDK-8153057
+    export LIBHDFS_OPTS="$LIBHDFS_OPTS -Djdk.lang.processReaperUseDefaultStackSize=true"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 else
     # exclude HdfsFileSystemTest related test case if no hadoop env found
     echo "[INFO] Can't find available HADOOP common lib, disable HdfsFileSystemTest related test!"
@@ -270,7 +344,11 @@ echo "[INFO] gtest_filter: $TEST_NAME"
 if [[ $TEST_MODULE == '.*'  || $TEST_MODULE == 'starrocks_test' ]]; then
   echo "Run test: ${STARROCKS_TEST_BINARY_DIR}/starrocks_test"
   if [ ${DRY_RUN} -eq 0 ]; then
+<<<<<<< HEAD
     if [ -x ${GTEST_PARALLEL} ]; then
+=======
+    if [ -x "${GTEST_PARALLEL}" ]; then
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ${GTEST_PARALLEL} ${STARROCKS_TEST_BINARY_DIR}/starrocks_test \
             --gtest_filter=${TEST_NAME} \
             --serialize_test_cases ${GTEST_PARALLEL_OPTIONS}
@@ -280,6 +358,7 @@ if [[ $TEST_MODULE == '.*'  || $TEST_MODULE == 'starrocks_test' ]]; then
   fi
 fi
 
+<<<<<<< HEAD
 for test in $test_files
 do
     echo "Run test: $test"
@@ -287,6 +366,15 @@ do
         file_name=${test##*/}
         if [ -z $RUN_FILE ] || [ $file_name == $RUN_FILE ]; then
             $test $GTEST_OPTIONS --gtest_filter=${TEST_NAME}
+=======
+for test_bin in $test_files
+do
+    echo "Run test: $test_bin"
+    if [ ${DRY_RUN} -eq 0 ]; then
+        file_name=${test_bin##*/}
+        if [ -z $RUN_FILE ] || [ $file_name == $RUN_FILE ]; then
+            $test_bin $GTEST_OPTIONS --gtest_filter=${TEST_NAME}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         fi
     fi
 done

@@ -59,6 +59,10 @@ import com.starrocks.catalog.Partition.PartitionState;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.PhysicalPartition;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
@@ -69,19 +73,41 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
+<<<<<<< HEAD
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReportException;
+import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.NotImplementedException;
+import com.starrocks.common.Pair;
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.load.DeleteJob;
 import com.starrocks.load.OlapDeleteJob;
 import com.starrocks.load.loadv2.SparkLoadJob;
 import com.starrocks.memory.MemoryUsageTracker;
+<<<<<<< HEAD
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.service.FrontendOptions;
+=======
+import com.starrocks.rpc.ThriftConnectionPool;
+import com.starrocks.rpc.ThriftRPCRequestExecutor;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.common.MetaUtils;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.task.AgentTask;
@@ -100,7 +126,11 @@ import com.starrocks.task.PushTask;
 import com.starrocks.task.RemoteSnapshotTask;
 import com.starrocks.task.ReplicateSnapshotTask;
 import com.starrocks.task.SnapshotTask;
+<<<<<<< HEAD
 import com.starrocks.task.UpdateTabletMetaInfoTask;
+=======
+import com.starrocks.task.TabletMetadataUpdateAgentTask;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.task.UploadTask;
 import com.starrocks.thrift.TAbortRemoteTxnRequest;
 import com.starrocks.thrift.TAbortRemoteTxnResponse;
@@ -140,6 +170,10 @@ import com.starrocks.thrift.TTableReplicationResponse;
 import com.starrocks.thrift.TTabletInfo;
 import com.starrocks.thrift.TTabletMeta;
 import com.starrocks.thrift.TTaskType;
+<<<<<<< HEAD
+=======
+import com.starrocks.transaction.GlobalTransactionMgr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionState;
@@ -199,11 +233,19 @@ public class LeaderImpl {
         int bePort = tBackend.getBe_port();
         long backendId;
         // TODO: need to refactor after be has been split into cn + dn.
+<<<<<<< HEAD
         ComputeNode cn = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(host, bePort);
 
         if (cn == null) {
             if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
                 cn = GlobalStateMgr.getCurrentSystemInfo().getComputeNodeWithBePort(host, bePort);
+=======
+        ComputeNode cn = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendWithBePort(host, bePort);
+
+        if (cn == null) {
+            if (RunMode.isSharedDataMode()) {
+                cn = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNodeWithBePort(host, bePort);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
             if (cn == null) {
                 tStatus.setStatus_code(TStatusCode.CANCELLED);
@@ -246,11 +288,17 @@ public class LeaderImpl {
                         && taskType != TTaskType.CREATE && taskType != TTaskType.UPDATE_TABLET_META_INFO
                         && taskType != TTaskType.DROP_AUTO_INCREMENT_MAP
                         && taskType != TTaskType.STORAGE_MEDIUM_MIGRATE
+<<<<<<< HEAD
                         && taskType != TTaskType.REMOTE_SNAPSHOT && taskType != TTaskType.REPLICATE_SNAPSHOT) {
+=======
+                        && taskType != TTaskType.REMOTE_SNAPSHOT && taskType != TTaskType.REPLICATE_SNAPSHOT
+                        && taskType != TTaskType.UPDATE_SCHEMA) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     if (taskType == TTaskType.REALTIME_PUSH) {
                         PushTask pushTask = (PushTask) task;
                         if (pushTask.getPushType() == TPushType.DELETE) {
                             LOG.info("remove push replica. tabletId: {}, backendId: {}", task.getSignature(),
+<<<<<<< HEAD
                                      pushTask.getBackendId());
 
                             String failMsg = "Backend: " + task.getBackendId() + "Tablet: " + pushTask.getTabletId() +
@@ -258,6 +306,15 @@ public class LeaderImpl {
                             pushTask.countDownLatch(pushTask.getBackendId(), pushTask.getTabletId(), failMsg);
                             AgentTaskQueue.removeTask(pushTask.getBackendId(), TTaskType.REALTIME_PUSH, 
                                                       task.getSignature());
+=======
+                                    pushTask.getBackendId());
+
+                            String failMsg = "Backend: " + task.getBackendId() + "Tablet: " + pushTask.getTabletId() +
+                                    " error msg: " + taskStatus.getError_msgs().toString();
+                            pushTask.countDownLatch(pushTask.getBackendId(), pushTask.getTabletId(), failMsg);
+                            AgentTaskQueue.removeTask(pushTask.getBackendId(), TTaskType.REALTIME_PUSH,
+                                    task.getSignature());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         }
                     }
                     return result;
@@ -324,12 +381,24 @@ public class LeaderImpl {
                 case COMPACTION:
                     finishCompactionTask(task, request);
                     break;
+<<<<<<< HEAD
+=======
+                case COMPACTION_CONTROL:
+                    finishCompactionControlTask(task, request);
+                    break;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 case REMOTE_SNAPSHOT:
                     finishRemoteSnapshotTask(task, request);
                     break;
                 case REPLICATE_SNAPSHOT:
                     finishReplicateSnapshotTask(task, request);
                     break;
+<<<<<<< HEAD
+=======
+                case UPDATE_SCHEMA:
+                    finishUpdateSchemaTask(task, request);
+                    break;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 default:
                     break;
             }
@@ -374,7 +443,11 @@ public class LeaderImpl {
             } else {
                 long tabletId = createReplicaTask.getTabletId();
                 if (request.isSetFinish_tablet_infos()) {
+<<<<<<< HEAD
                     Replica replica = GlobalStateMgr.getCurrentInvertedIndex()
+=======
+                    Replica replica = GlobalStateMgr.getCurrentState().getTabletInvertedIndex()
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                             .getReplica(tabletId, createReplicaTask.getBackendId());
                     if (replica != null) {
                         replica.setPathHash(request.getFinish_tablet_infos().get(0).getPath_hash());
@@ -395,7 +468,11 @@ public class LeaderImpl {
                 }
 
                 // this should be called before 'countDownLatch()'
+<<<<<<< HEAD
                 GlobalStateMgr.getCurrentSystemInfo()
+=======
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         .updateBackendReportVersion(task.getBackendId(), request.getReport_version(), task.getDbId());
 
                 createReplicaTask.countDownLatch(task.getBackendId(), task.getSignature());
@@ -417,7 +494,11 @@ public class LeaderImpl {
         // because in this function, the only problem that cause failure is meta missing.
         // and if meta is missing, we no longer need to resend this task
         try {
+<<<<<<< HEAD
             UpdateTabletMetaInfoTask tabletTask = (UpdateTabletMetaInfoTask) task;
+=======
+            TabletMetadataUpdateAgentTask tabletTask = (TabletMetadataUpdateAgentTask) task;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (request.getTask_status().getStatus_code() != TStatusCode.OK) {
                 tabletTask.countDownToZero(
                         task.getBackendId() + ": " + request.getTask_status().getError_msgs().toString());
@@ -435,6 +516,13 @@ public class LeaderImpl {
         AgentTaskQueue.removeTask(task.getBackendId(), task.getTaskType(), task.getSignature());
     }
 
+<<<<<<< HEAD
+=======
+    private void finishCompactionControlTask(AgentTask task, TFinishTaskRequest request) {
+        AgentTaskQueue.removeTask(task.getBackendId(), task.getTaskType(), task.getSignature());
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private void finishRemoteSnapshotTask(AgentTask task, TFinishTaskRequest request) throws MetaNotFoundException {
         try {
             GlobalStateMgr.getCurrentState().getReplicationMgr().finishRemoteSnapshotTask(
@@ -453,6 +541,37 @@ public class LeaderImpl {
         }
     }
 
+<<<<<<< HEAD
+=======
+    private void finishUpdateSchemaTask(AgentTask task, TFinishTaskRequest request) {
+        try {
+            long dbId = task.getDbId();
+            long tableId = task.getTableId();
+            long indexId = task.getIndexId();
+            long backendId = task.getBackendId();
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+            if (db != null) {
+                Locker locker = new Locker();
+                locker.lockDatabase(db.getId(), LockType.READ);
+                try {
+                    OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                .getTable(db.getId(), tableId);
+                    if (olapTable != null) {
+                        MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(indexId);
+                        if (indexMeta != null) {
+                            indexMeta.removeUpdateSchemaBackend(backendId);
+                        }
+                    }
+                } finally {
+                    locker.unLockDatabase(db.getId(), LockType.READ);
+                }
+            }
+        } finally {
+            AgentTaskQueue.removeTask(task.getBackendId(), task.getTaskType(), task.getSignature());
+        }
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private void finishRealtimePush(AgentTask task, TFinishTaskRequest request) {
         List<TTabletInfo> finishTabletInfos = request.getFinish_tablet_infos();
         Preconditions.checkState(finishTabletInfos != null && !finishTabletInfos.isEmpty());
@@ -463,14 +582,22 @@ public class LeaderImpl {
         long backendId = pushTask.getBackendId();
         long signature = task.getSignature();
         long transactionId = ((PushTask) task).getTransactionId();
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (db == null) {
             AgentTaskQueue.removeTask(backendId, TTaskType.REALTIME_PUSH, signature);
             return;
         }
 
         long tableId = pushTask.getTableId();
+<<<<<<< HEAD
         long partitionId = pushTask.getPartitionId();
+=======
+        long physicalPartitionId = pushTask.getPartitionId();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         long pushIndexId = pushTask.getIndexId();
         long pushTabletId = pushTask.getTabletId();
         // push finish type:
@@ -495,19 +622,35 @@ public class LeaderImpl {
         }
         LOG.debug("push report state: {}", pushState.name());
 
+<<<<<<< HEAD
         db.writeLock();
         try {
             OlapTable olapTable = (OlapTable) db.getTable(tableId);
+=======
+        Locker locker = new Locker();
+        locker.lockDatabase(db.getId(), LockType.WRITE);
+        try {
+            OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (olapTable == null) {
                 throw new MetaNotFoundException("cannot find table[" + tableId + "] when push finished");
             }
 
+<<<<<<< HEAD
             Partition partition = olapTable.getPartition(partitionId);
             if (partition == null) {
                 throw new MetaNotFoundException("cannot find partition[" + partitionId + "] when push finished");
             }
 
             MaterializedIndex pushIndex = partition.getIndex(pushIndexId);
+=======
+            PhysicalPartition physicalPartition = olapTable.getPhysicalPartition(physicalPartitionId);
+            if (physicalPartition == null) {
+                throw new MetaNotFoundException("cannot find partition[" + physicalPartitionId + "] when push finished");
+            }
+
+            MaterializedIndex pushIndex = physicalPartition.getIndex(pushIndexId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (pushIndex == null) {
                 // yiguolei: if index is dropped during load, it is not a failure.
                 // throw exception here and cause the job to cancel the task
@@ -516,12 +659,23 @@ public class LeaderImpl {
 
             // should be done before addReplicaPersistInfos and countDownLatch
             long reportVersion = request.getReport_version();
+<<<<<<< HEAD
             GlobalStateMgr.getCurrentSystemInfo().updateBackendReportVersion(task.getBackendId(), reportVersion,
                     task.getDbId());
 
             List<Long> tabletIds = finishTabletInfos.stream().map(
                     TTabletInfo::getTablet_id).collect(Collectors.toList());
             List<TabletMeta> tabletMetaList = GlobalStateMgr.getCurrentInvertedIndex().getTabletMetaList(tabletIds);
+=======
+            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                    .updateBackendReportVersion(task.getBackendId(), reportVersion,
+                            task.getDbId());
+
+            List<Long> tabletIds = finishTabletInfos.stream().map(
+                    TTabletInfo::getTablet_id).collect(Collectors.toList());
+            List<TabletMeta> tabletMetaList =
+                    GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletMetaList(tabletIds);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
             // handle load job
             // TODO yiguolei: why delete should check request version and task version?
@@ -537,10 +691,17 @@ public class LeaderImpl {
                 for (int i = 0; i < tabletMetaList.size(); i++) {
                     TabletMeta tabletMeta = tabletMetaList.get(i);
                     long tabletId = tabletIds.get(i);
+<<<<<<< HEAD
                     Replica replica = findRelatedReplica(olapTable, partition,
                             backendId, tabletId, tabletMeta.getIndexId());
                     if (replica != null) {
                         olapDeleteJob.addFinishedReplica(partitionId, pushTabletId, replica);
+=======
+                    Replica replica = findRelatedReplica(olapTable, physicalPartition,
+                            backendId, tabletId, tabletMeta.getIndexId());
+                    if (replica != null) {
+                        olapDeleteJob.addFinishedReplica(physicalPartitionId, pushTabletId, replica);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         pushTask.countDownLatch(backendId, pushTabletId);
                     }
                 }
@@ -556,7 +717,11 @@ public class LeaderImpl {
                     checkReplica(finishTabletInfos.get(i), tabletMeta);
                     long tabletId = tabletIds.get(i);
                     Replica replica =
+<<<<<<< HEAD
                             findRelatedReplica(olapTable, partition, backendId, tabletId, tabletMeta.getIndexId());
+=======
+                            findRelatedReplica(olapTable, physicalPartition, backendId, tabletId, tabletMeta.getIndexId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     // if the replica is under schema change, could not find the replica with aim schema hash
                     if (replica != null) {
                         ((SparkLoadJob) job).addFinishedReplica(replica.getId(), pushTabletId, backendId);
@@ -570,7 +735,11 @@ public class LeaderImpl {
             AgentTaskQueue.removeTask(backendId, TTaskType.REALTIME_PUSH, signature);
             LOG.warn("finish push replica error", e);
         } finally {
+<<<<<<< HEAD
             db.writeUnlock();
+=======
+            locker.unLockDatabase(db.getId(), LockType.WRITE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -600,7 +769,11 @@ public class LeaderImpl {
         }
     }
 
+<<<<<<< HEAD
     private Replica findRelatedReplica(OlapTable olapTable, Partition partition,
+=======
+    private Replica findRelatedReplica(OlapTable olapTable, PhysicalPartition physicalPartition,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                        long backendId, long tabletId, long indexId)
             throws MetaNotFoundException {
         // both normal index and rolling up index are in inverted index
@@ -609,7 +782,11 @@ public class LeaderImpl {
             LOG.warn("tablet[{}] may be dropped. push index[{}]", tabletId, indexId);
             return null;
         }
+<<<<<<< HEAD
         MaterializedIndex index = partition.getIndex(indexId);
+=======
+        MaterializedIndex index = physicalPartition.getIndex(indexId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (index == null) {
             if (olapTable.getState() == OlapTableState.ROLLUP) {
                 // this happens when:
@@ -657,7 +834,11 @@ public class LeaderImpl {
         if (request.isSetReport_version()) {
             // report version is required. here we check if set, for compatibility.
             long reportVersion = request.getReport_version();
+<<<<<<< HEAD
             GlobalStateMgr.getCurrentSystemInfo()
+=======
+            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     .updateBackendReportVersion(task.getBackendId(), reportVersion, task.getDbId());
         }
 
@@ -720,19 +901,28 @@ public class LeaderImpl {
 
             TTabletInfo reportedTablet = request.getFinish_tablet_infos().get(0);
             long tabletId = reportedTablet.getTablet_id();
+<<<<<<< HEAD
             TabletMeta tabletMeta = GlobalStateMgr.getCurrentInvertedIndex().getTabletMeta(tabletId);
+=======
+            TabletMeta tabletMeta = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletMeta(tabletId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (tabletMeta == null) {
                 LOG.warn("tablet meta does not exist. tablet id: {}", tabletId);
                 return;
             }
 
             long dbId = tabletMeta.getDbId();
+<<<<<<< HEAD
             Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+=======
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (db == null) {
                 LOG.warn("db does not exist. db id: {}", dbId);
                 return;
             }
 
+<<<<<<< HEAD
             db.writeLock();
             try {
                 // local migration just set path hash
@@ -741,6 +931,18 @@ public class LeaderImpl {
                 replica.setPathHash(reportedTablet.getPath_hash());
             } finally {
                 db.writeUnlock();
+=======
+            Locker locker = new Locker();
+            locker.lockDatabase(db.getId(), LockType.WRITE);
+            try {
+                // local migration just set path hash
+                Replica replica =
+                        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplica(tabletId, task.getBackendId());
+                Preconditions.checkArgument(reportedTablet.isSetPath_hash());
+                replica.setPathHash(reportedTablet.getPath_hash());
+            } finally {
+                locker.unLockDatabase(db.getId(), LockType.WRITE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         } finally {
             AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.STORAGE_MEDIUM_MIGRATE, task.getSignature());
@@ -846,7 +1048,11 @@ public class LeaderImpl {
         }
 
         // checkTblAuth(ConnectContext.get().getCurrentUserIdentity(), fullDbName, tableName, PrivPredicate.SELECT);
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (db == null) {
             TStatus status = new TStatus(TStatusCode.NOT_FOUND);
             status.setError_msgs(Lists.newArrayList("db not exist"));
@@ -854,10 +1060,18 @@ public class LeaderImpl {
             return response;
         }
 
+<<<<<<< HEAD
         try {
             db.readLock();
 
             Table table = db.getTable(tableName);
+=======
+        Locker locker = new Locker();
+        try {
+            locker.lockDatabase(db.getId(), LockType.READ);
+
+            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (table == null) {
                 TStatus status = new TStatus(TStatusCode.NOT_FOUND);
                 status.setError_msgs(Lists.newArrayList("table " + tableName + " not exist"));
@@ -880,11 +1094,18 @@ public class LeaderImpl {
             tableMeta.setTable_type(TableType.serialize(table.getType()));
             tableMeta.setDb_id(db.getId());
             tableMeta.setDb_name(dbName);
+<<<<<<< HEAD
             tableMeta.setCluster_id(GlobalStateMgr.getCurrentState().getClusterId());
             tableMeta.setState(olapTable.getState().name());
             tableMeta.setBloomfilter_fpp(olapTable.getBfFpp());
             if (olapTable.getCopiedBfColumns() != null) {
                 for (String bfColumn : olapTable.getCopiedBfColumns()) {
+=======
+            tableMeta.setState(olapTable.getState().name());
+            tableMeta.setBloomfilter_fpp(olapTable.getBfFpp());
+            if (olapTable.getBfColumnNames() != null) {
+                for (String bfColumn : olapTable.getBfColumnNames()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     tableMeta.addToBloomfilter_columns(bfColumn);
                 }
             }
@@ -904,13 +1125,25 @@ public class LeaderImpl {
             TBasePartitionDesc basePartitionDesc = new TBasePartitionDesc();
             // fill partition meta info
             for (Partition partition : olapTable.getAllPartitions()) {
+<<<<<<< HEAD
+=======
+
+                PhysicalPartition physicalPartition = partition.getDefaultPhysicalPartition();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 TPartitionMeta partitionMeta = new TPartitionMeta();
                 partitionMeta.setPartition_id(partition.getId());
                 partitionMeta.setPartition_name(partition.getName());
                 partitionMeta.setState(partition.getState().name());
+<<<<<<< HEAD
                 partitionMeta.setVisible_version(partition.getVisibleVersion());
                 partitionMeta.setVisible_time(partition.getVisibleVersionTime());
                 partitionMeta.setNext_version(partition.getNextVersion());
+=======
+                partitionMeta.setVisible_version(physicalPartition.getVisibleVersion());
+                partitionMeta.setVisible_time(physicalPartition.getVisibleVersionTime());
+                partitionMeta.setNext_version(physicalPartition.getNextVersion());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 partitionMeta.setIs_temp(olapTable.getPartition(partition.getName(), true) != null);
                 tableMeta.addToPartitions(partitionMeta);
                 short replicaNum = partitionInfo.getReplicationNum(partition.getId());
@@ -929,7 +1162,11 @@ public class LeaderImpl {
             if (partitionInfo.isRangePartition()) {
                 TRangePartitionDesc rangePartitionDesc = new TRangePartitionDesc();
                 RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
+<<<<<<< HEAD
                 for (Column column : rangePartitionInfo.getPartitionColumns()) {
+=======
+                for (Column column : rangePartitionInfo.getPartitionColumns(olapTable.getIdToColumn())) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     TColumnMeta columnMeta = new TColumnMeta();
                     columnMeta.setColumnName(column.getName());
                     columnMeta.setColumnType(column.getType().toThrift());
@@ -977,14 +1214,23 @@ public class LeaderImpl {
                 indexInfo.setIndex_name(index.getIndexName());
                 indexInfo.setIndex_type(index.getIndexType().name());
                 indexInfo.setComment(index.getComment());
+<<<<<<< HEAD
                 for (String column : index.getColumns()) {
+=======
+                for (String column : MetaUtils.getColumnNamesByColumnIds(olapTable, index.getColumns())) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     indexInfo.addToColumns(column);
                 }
                 tableMeta.addToIndex_infos(indexInfo);
             }
 
             for (Partition partition : olapTable.getAllPartitions()) {
+<<<<<<< HEAD
                 List<MaterializedIndex> indexes = partition.getMaterializedIndices(IndexExtState.ALL);
+=======
+                List<MaterializedIndex> indexes =
+                        partition.getDefaultPhysicalPartition().getMaterializedIndices(IndexExtState.ALL);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 for (MaterializedIndex index : indexes) {
                     TIndexMeta indexMeta = new TIndexMeta();
                     indexMeta.setIndex_id(index.getId());
@@ -1062,16 +1308,27 @@ public class LeaderImpl {
             LOG.info("error msg: {}", e.getMessage(), e);
             response.setStatus(status);
         } finally {
+<<<<<<< HEAD
             db.readUnlock();
+=======
+            locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return response;
     }
 
     private static void initTabletMeta(Tablet tablet, TTabletMeta tTabletMeta) {
+<<<<<<< HEAD
         TabletMeta tabletMeta = GlobalStateMgr.getCurrentInvertedIndex().getTabletMeta(tablet.getId());
         tTabletMeta.setDb_id(tabletMeta.getDbId());
         tTabletMeta.setTable_id(tabletMeta.getTableId());
         tTabletMeta.setPartition_id(tabletMeta.getPartitionId());
+=======
+        TabletMeta tabletMeta = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletMeta(tablet.getId());
+        tTabletMeta.setDb_id(tabletMeta.getDbId());
+        tTabletMeta.setTable_id(tabletMeta.getTableId());
+        tTabletMeta.setPartition_id(tabletMeta.getPhysicalPartitionId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         tTabletMeta.setIndex_id(tabletMeta.getIndexId());
         tTabletMeta.setStorage_medium(tabletMeta.getStorageMedium());
         tTabletMeta.setOld_schema_hash(tabletMeta.getOldSchemaHash());
@@ -1106,7 +1363,12 @@ public class LeaderImpl {
             THashDistributionInfo tHashDistributionInfo = new THashDistributionInfo();
             HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distributionInfo;
             tHashDistributionInfo.setBucket_num(hashDistributionInfo.getBucketNum());
+<<<<<<< HEAD
             for (Column column : hashDistributionInfo.getDistributionColumns()) {
+=======
+            for (Column column : MetaUtils.getColumnsByColumnIds(
+                    olapTable, hashDistributionInfo.getDistributionColumns())) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 tHashDistributionInfo.addToDistribution_columns(column.getName());
             }
             distributionDesc.setHash_distribution(tHashDistributionInfo);
@@ -1139,7 +1401,11 @@ public class LeaderImpl {
     }
 
     public TNetworkAddress masterAddr() {
+<<<<<<< HEAD
         Pair<String, Integer> ipAndPort = GlobalStateMgr.getCurrentState().getLeaderIpAndRpcPort();
+=======
+        Pair<String, Integer> ipAndPort = GlobalStateMgr.getCurrentState().getNodeMgr().getLeaderIpAndRpcPort();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return new TNetworkAddress(ipAndPort.first, ipAndPort.second);
     }
 
@@ -1153,9 +1419,15 @@ public class LeaderImpl {
             try {
                 LOG.info("beginRemoteTxn as follower, forward it to master. Label: {}, master: {}",
                         request.getLabel(), addr.toString());
+<<<<<<< HEAD
                 response = FrontendServiceProxy.call(addr,
                         Config.thrift_rpc_timeout_ms,
                         Config.thrift_rpc_retry_times,
+=======
+                response = ThriftRPCRequestExecutor.call(
+                        ThriftConnectionPool.frontendPool,
+                        addr,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         client -> client.beginRemoteTxn(request));
             } catch (Exception e) {
                 LOG.warn("create thrift client failed during beginRemoteTxn, label: {}, exception: {}",
@@ -1167,7 +1439,11 @@ public class LeaderImpl {
             return response;
         }
 
+<<<<<<< HEAD
         Database db = globalStateMgr.getDb(request.getDb_id());
+=======
+        Database db = globalStateMgr.getLocalMetastore().getDb(request.getDb_id());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (db == null) {
             TStatus status = new TStatus(TStatusCode.NOT_FOUND);
             status.setError_msgs(Lists.newArrayList("db not exist"));
@@ -1179,10 +1455,18 @@ public class LeaderImpl {
 
         long txnId;
         try {
+<<<<<<< HEAD
             txnId = GlobalStateMgr.getCurrentGlobalTransactionMgr().beginTransaction(db.getId(),
                     request.getTable_ids(), request.getLabel(),
                     new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
                     LoadJobSourceType.valueOf(request.getSource_type()), request.getTimeout_second());
+=======
+            txnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().beginTransaction(db.getId(),
+                    request.getTable_ids(), request.getLabel(),
+                    new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
+                    LoadJobSourceType.valueOf(request.getSource_type()), request.getTimeout_second(),
+                    WarehouseManager.DEFAULT_WAREHOUSE_ID);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } catch (Exception e) {
             LOG.warn("begin remote txn failed, label {}", request.getLabel(), e);
             TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
@@ -1209,10 +1493,18 @@ public class LeaderImpl {
             try {
                 LOG.info("commitRemoteTxn as follower, forward it to master. txn_id: {}, master: {}",
                         request.getTxn_id(), addr.toString());
+<<<<<<< HEAD
                 response = FrontendServiceProxy.call(addr,
                         // commit txn might take a while, so add transaction timeout
                         Config.thrift_rpc_timeout_ms + Config.external_table_commit_timeout_ms,
                         Config.thrift_rpc_retry_times,
+=======
+                response = ThriftRPCRequestExecutor.call(
+                        ThriftConnectionPool.frontendPool,
+                        addr,
+                        // commit txn might take a while, so add transaction timeout
+                        Config.thrift_rpc_timeout_ms + Config.external_table_commit_timeout_ms,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         client -> client.commitRemoteTxn(request));
             } catch (Exception e) {
                 LOG.warn("create thrift client failed during commitRemoteTxn, txn_id: {}, exception: {}",
@@ -1224,7 +1516,11 @@ public class LeaderImpl {
             return response;
         }
 
+<<<<<<< HEAD
         Database db = globalStateMgr.getDb(request.getDb_id());
+=======
+        Database db = globalStateMgr.getLocalMetastore().getDb(request.getDb_id());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (db == null) {
             TStatus status = new TStatus(TStatusCode.NOT_FOUND);
             status.setError_msgs(Lists.newArrayList("db not exist or already deleted"));
@@ -1238,23 +1534,42 @@ public class LeaderImpl {
             TxnCommitAttachment attachment = TxnCommitAttachment.fromThrift(request.getCommit_attachment());
             long timeoutMs = request.isSetCommit_timeout_ms() ? request.getCommit_timeout_ms() :
                     Config.external_table_commit_timeout_ms;
+<<<<<<< HEAD
             boolean ret = GlobalStateMgr.getCurrentGlobalTransactionMgr().commitAndPublishTransaction(
                     db, request.getTxn_id(),
                     TabletCommitInfo.fromThrift(request.getCommit_infos()),
                     TabletFailInfo.fromThrift(request.getFail_infos()),
                     timeoutMs, attachment);
             if (!ret) { // timeout
+=======
+            GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+            boolean visible = transactionMgr.commitAndPublishTransaction(db, request.getTxn_id(),
+                    TabletCommitInfo.fromThrift(request.getCommit_infos()),
+                    TabletFailInfo.fromThrift(request.getFail_infos()),
+                    timeoutMs,
+                    attachment);
+            if (!visible) { // timeout
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 TStatus status = new TStatus(TStatusCode.TIMEOUT);
                 status.setError_msgs(Lists.newArrayList("commit and publish txn timeout"));
                 response.setStatus(status);
                 return response;
             }
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             LOG.warn("commit remote txn failed, txn_id: {}", request.getTxn_id(), e);
             TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
             status.setError_msgs(Lists.newArrayList(e.getMessage()));
             response.setStatus(status);
             return response;
+<<<<<<< HEAD
+=======
+        } catch (LockTimeoutException e) {
+            throw ErrorReportException.report(ErrorCode.ERR_LOCK_ERROR, e.getMessage());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         TStatus status = new TStatus(TStatusCode.OK);
@@ -1273,9 +1588,15 @@ public class LeaderImpl {
             try {
                 LOG.info("abortRemoteTxn as follower, forward it to master. txn_id: {}, master: {}",
                         request.getTxn_id(), addr.toString());
+<<<<<<< HEAD
                 response = FrontendServiceProxy.call(addr,
                         Config.thrift_rpc_timeout_ms,
                         Config.thrift_rpc_retry_times,
+=======
+                response = ThriftRPCRequestExecutor.call(
+                        ThriftConnectionPool.frontendPool,
+                        addr,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         client -> client.abortRemoteTxn(request));
             } catch (Exception e) {
                 LOG.warn("create thrift client failed during abortRemoteTxn, txn_id: {}, exception: {}",
@@ -1287,7 +1608,11 @@ public class LeaderImpl {
             return response;
         }
 
+<<<<<<< HEAD
         Database db = globalStateMgr.getDb(request.getDb_id());
+=======
+        Database db = globalStateMgr.getLocalMetastore().getDb(request.getDb_id());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (db == null) {
             TStatus status = new TStatus(TStatusCode.NOT_FOUND);
             status.setError_msgs(Lists.newArrayList("db not exist or already deleted"));
@@ -1324,9 +1649,15 @@ public class LeaderImpl {
             TNetworkAddress addr = masterAddr();
             try {
                 LOG.info("startTableReplication as follower, forward it to master. master: {}", addr.toString());
+<<<<<<< HEAD
                 return FrontendServiceProxy.call(addr,
                         Config.thrift_rpc_timeout_ms,
                         Config.thrift_rpc_retry_times,
+=======
+                return ThriftRPCRequestExecutor.call(
+                        ThriftConnectionPool.frontendPool,
+                        addr,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         client -> client.startTableReplication(request));
             } catch (Exception e) {
                 LOG.warn("create thrift client failed during startTableReplication, exception: ", e);

@@ -34,11 +34,17 @@
 
 package com.starrocks.persist;
 
+<<<<<<< HEAD
+=======
+import com.google.gson.annotations.SerializedName;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 /**
  * This class is designed for sending storage information from master to standby master.
  * StorageInfo is easier to serialize to a Json String than class Storage
  */
 public class StorageInfo {
+<<<<<<< HEAD
     private int clusterID;
     private long imageJournalId;
 
@@ -57,13 +63,33 @@ public class StorageInfo {
 
     public void setClusterID(int clusterID) {
         this.clusterID = clusterID;
+=======
+    @SerializedName("imageJournalId")
+    private long imageJournalId;
+
+    @SerializedName("imageFormatVersion")
+    private ImageFormatVersion imageFormatVersion;
+
+    public StorageInfo() {
+        this(0, ImageFormatVersion.v1);
+    }
+
+    public StorageInfo(long imageJournalId, ImageFormatVersion imageFormatVersion) {
+        this.imageJournalId = imageJournalId;
+        this.imageFormatVersion = imageFormatVersion;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public long getImageJournalId() {
         return imageJournalId;
     }
 
+<<<<<<< HEAD
     public void setImageJournalId(long imageJournalId) {
         this.imageJournalId = imageJournalId;
+=======
+    public ImageFormatVersion getImageFormatVersion() {
+        return imageFormatVersion;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }

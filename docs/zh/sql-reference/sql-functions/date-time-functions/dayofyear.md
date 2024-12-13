@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # dayofyear
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 计算指定日期为对应年中的哪一天。
 

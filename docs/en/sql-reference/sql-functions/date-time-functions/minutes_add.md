@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # minutes_add
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Adds the specified minutes to the date, accurate to the minute.
 
@@ -49,4 +53,8 @@ select minutes_add('2022-01-01', 1);
 +------------------------------+
 | 2022-01-01 00:01:00          |
 +------------------------------+
+<<<<<<< HEAD
 ```
+=======
+```
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

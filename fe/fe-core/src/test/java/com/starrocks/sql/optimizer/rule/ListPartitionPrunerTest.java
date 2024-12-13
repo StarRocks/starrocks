@@ -61,6 +61,10 @@ public class ListPartitionPrunerTest {
     private List<ScalarOperator> conjuncts;
     private ColumnRefOperator dateColumn;
     private ColumnRefOperator intColumn;
+<<<<<<< HEAD
+=======
+    private ColumnRefOperator stringColumn;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private ListPartitionPruner pruner;
 
     @Before
@@ -97,7 +101,11 @@ public class ListPartitionPrunerTest {
         columnToNullPartitions.put(intColumn, Sets.newHashSet(9L));
 
         conjuncts = Lists.newArrayList();
+<<<<<<< HEAD
         pruner = new ListPartitionPruner(columnToPartitionValuesMap, columnToNullPartitions, conjuncts, null);
+=======
+        pruner = new ListPartitionPruner(columnToPartitionValuesMap, columnToNullPartitions, conjuncts, null, null);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test

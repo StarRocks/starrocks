@@ -35,21 +35,36 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.PartitionKey;
+<<<<<<< HEAD
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.common.Pair;
+=======
+import com.starrocks.common.AnalysisException;
+import com.starrocks.common.IdGenerator;
+import com.starrocks.common.Pair;
+import com.starrocks.common.util.UnionFind;
+import com.starrocks.rpc.ConfigurableSerDesFactory;
+import com.starrocks.server.RunMode;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TCacheParam;
 import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TGlobalDict;
 import com.starrocks.thrift.TNormalPlanNode;
+<<<<<<< HEAD
 import com.starrocks.thrift.TExpr;
 import org.apache.thrift.TException;
 import org.apache.thrift.TSerializer;
 import org.apache.thrift.protocol.TCompactProtocol;
 import org.apache.thrift.protocol.TSimpleJSONProtocol;
+=======
+import org.apache.thrift.TException;
+import org.apache.thrift.TSerializer;
+import org.apache.thrift.protocol.TCompactProtocol;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import java.nio.ByteBuffer;
 import java.security.MessageDigest;
@@ -66,6 +81,11 @@ import java.util.Stack;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+<<<<<<< HEAD
+=======
+import static com.starrocks.rpc.ConfigurableSerDesFactory.Protocol.SIMPLE_JSON;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 // FragmentNormalizer is used to normalize a cacheable Fragment. After a cacheable Fragment
 // is normalized, FragmentNormalizer draws out required information as follows from the fragment.
 // 1. MD5 digest: semantically-equivalent Fragments always produce the same MD5 digest.
@@ -231,9 +251,14 @@ public class FragmentNormalizer {
     public ByteBuffer normalizeExpr(Expr expr) {
         uncacheable = uncacheable || hasNonDeterministicFunctions(expr);
         TExpr texpr = expr.normalize(this);
+<<<<<<< HEAD
         //TSerializer ser = new TSerializer(new TCompactProtocol.Factory());
         TSerializer ser = new TSerializer(new TSimpleJSONProtocol.Factory());
         try {
+=======
+        try {
+            TSerializer ser = ConfigurableSerDesFactory.getTSerializer(SIMPLE_JSON.name());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return ByteBuffer.wrap(ser.serialize(texpr));
         } catch (Exception ignored) {
             Preconditions.checkArgument(false);
@@ -241,7 +266,11 @@ public class FragmentNormalizer {
         return null;
     }
 
+<<<<<<< HEAD
     public static class SimpleRangePredicateVisitor extends AstVisitor<String, Void> {
+=======
+    public static class SimpleRangePredicateVisitor implements AstVisitor<String, Void> {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         @Override
         public String visitBinaryPredicate(BinaryPredicate node, Void context) {
             String lhs = visit(node.getChild(0), context);
@@ -331,6 +360,13 @@ public class FragmentNormalizer {
             cacheParam.setCan_use_multiversion(canUseMultiVersion);
             cacheParam.setKeys_type(keysType.toThrift());
             cacheParam.setCached_plan_node_ids(cachedPlanNodeIds);
+<<<<<<< HEAD
+=======
+            if (RunMode.isSharedDataMode()) {
+                cacheParam.setIs_lake(true);
+            }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             fragment.setCacheParam(cacheParam);
             return true;
         } catch (TException | NoSuchAlgorithmException e) {
@@ -512,8 +548,13 @@ public class FragmentNormalizer {
     }
 
     List<Expr> getPartitionRangePredicates(List<Expr> conjuncts,
+<<<<<<< HEAD
                                            List<Map.Entry<Long, Range<PartitionKey>>> rangeMap,
                                            RangePartitionInfo partitionInfo,
+=======
+                                           List<Pair<Long, Range<PartitionKey>>> rangeMap,
+                                           List<Column> partitionColumns,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                            SlotId partitionSlotId) {
 
         List<Expr> exprs = conjuncts.stream().flatMap(e -> flatAndPredicate(e).stream()).collect(Collectors.toList());
@@ -541,20 +582,35 @@ public class FragmentNormalizer {
         //  create a simpleRangeMap without predicates' decomposition to turn on the cache. date_trunc function
         //  is frequently-used, we should decompose predicates contains date_trunc in the future.
         if (!boundOtherExprs.isEmpty() && boundSimpleRegionExprs.isEmpty()) {
+<<<<<<< HEAD
             createSimpleRangeMap(rangeMap.stream().map(Map.Entry::getKey).collect(Collectors.toSet()));
+=======
+            createSimpleRangeMap(rangeMap.stream().map(r -> r.first).collect(Collectors.toSet()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return conjuncts;
         }
 
         if (boundSimpleRegionExprs.isEmpty()) {
+<<<<<<< HEAD
             for (Map.Entry<Long, Range<PartitionKey>> range : rangeMap) {
                 selectedRangeMap.put(range.getKey(), range.getValue().toString());
+=======
+            for (Pair<Long, Range<PartitionKey>> range : rangeMap) {
+                selectedRangeMap.put(range.first, range.second.toString());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
             return conjuncts;
         }
 
+<<<<<<< HEAD
         Column partitionColumn = partitionInfo.getPartitionColumns().get(0);
         List<Range<PartitionKey>> partitionRanges = rangeMap.stream()
                 .map(Map.Entry::getValue).collect(Collectors.toList());
+=======
+        Column partitionColumn = partitionColumns.get(0);
+        List<Range<PartitionKey>> partitionRanges = rangeMap.stream()
+                .map(r -> r.second).collect(Collectors.toList());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // compute the intersection region of partition range and region predicates
         for (Expr expr : boundSimpleRegionExprs) {
@@ -574,16 +630,27 @@ public class FragmentNormalizer {
                 continue;
             }
             range = toClosedOpenRange(range);
+<<<<<<< HEAD
             Map.Entry<Long, Range<PartitionKey>> partitionKeyRange = rangeMap.get(i);
             // when the range is to total cover this partition, we also cache it
             if (!range.isEmpty()) {
                 selectedRangeMap.put(partitionKeyRange.getKey(), range.toString());
+=======
+            Pair<Long, Range<PartitionKey>> partitionKeyRange = rangeMap.get(i);
+            // when the range is to total cover this partition, we also cache it
+            if (!range.isEmpty()) {
+                selectedRangeMap.put(partitionKeyRange.first, range.toString());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
         // After we decompose the predicates, we should create a simple selectedRangeMap to turn on query cache if
         // we get a empty selectedRangeMap. it is defensive-style programming.
         if (selectedRangeMap.isEmpty()) {
+<<<<<<< HEAD
             createSimpleRangeMap(rangeMap.stream().map(Map.Entry::getKey).collect(Collectors.toSet()));
+=======
+            createSimpleRangeMap(rangeMap.stream().map(r -> r.first).collect(Collectors.toSet()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return conjuncts;
         } else {
             List<Expr> remainConjuncts = Lists.newArrayList();
@@ -597,7 +664,11 @@ public class FragmentNormalizer {
     // just create a simple selectedRangeMap which is used to construct cache key in BE.
     public void createSimpleRangeMap(Collection<Long> selectedPartitionIds) {
         selectedRangeMap = Maps.newHashMap();
+<<<<<<< HEAD
         selectedPartitionIds.stream().forEach(id -> selectedRangeMap.put(id, "[]"));
+=======
+        selectedPartitionIds.forEach(id -> selectedRangeMap.put(id, "[]"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public Set<SlotId> getSlotsUseAggColumns() {
@@ -842,6 +913,7 @@ public class FragmentNormalizer {
         return dicts;
     }
 
+<<<<<<< HEAD
     public static class SlotEquivRelation {
         private Map<SlotId, Integer> slotId2Group = Maps.newHashMap();
         private Map<Integer, Set<SlotId>> eqGroupMap = Maps.newHashMap();
@@ -893,6 +965,11 @@ public class FragmentNormalizer {
     private SlotEquivRelation equivRelation = new SlotEquivRelation();
 
     public SlotEquivRelation getEquivRelation() {
+=======
+    private UnionFind<SlotId> equivRelation = new UnionFind<>();
+
+    public UnionFind<SlotId> getEquivRelation() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return equivRelation;
     }
 

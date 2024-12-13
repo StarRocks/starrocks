@@ -17,7 +17,11 @@
 
 package com.starrocks.common;
 
+<<<<<<< HEAD
 public class DdlException extends UserException {
+=======
+public class DdlException extends StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public DdlException(String msg) {
         super(msg);
     }
@@ -25,4 +29,13 @@ public class DdlException extends UserException {
     public DdlException(String msg, Throwable e) {
         super(msg, e);
     }
+<<<<<<< HEAD
+=======
+
+    public static void requireNotNull(String name, Object obj) throws DdlException {
+        if (obj == null) {
+            throw new DdlException(name + " not exists");
+        }
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

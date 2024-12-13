@@ -111,6 +111,7 @@ public class PriorityLeaderTaskExecutor {
     }
 
     public void setPoolSize(int poolSize) {
+<<<<<<< HEAD
         // When the previous poolSize is larger than the poolSize to be set,
         // you need to setCorePoolSize first and then setMaximumPoolSize, and vice versa.
         // Otherwise, it will throw IllegalArgumentException
@@ -122,6 +123,9 @@ public class PriorityLeaderTaskExecutor {
             executor.setMaximumPoolSize(poolSize);
             executor.setCorePoolSize(poolSize);
         }
+=======
+        ThreadPoolManager.setFixedThreadPoolSize(executor, poolSize);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     private class TaskChecker implements Runnable {

@@ -47,6 +47,10 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.GlobalVarPersistInfo;
+<<<<<<< HEAD
+=======
+import com.starrocks.persist.ImageWriter;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -61,8 +65,11 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.json.JSONObject;
 
+<<<<<<< HEAD
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.io.IOException;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -128,6 +135,7 @@ public class VariableMgr {
 
     // Map variable name to variable context which have enough information to change variable value.
     // This map contains info of all session and global variables.
+<<<<<<< HEAD
     private static final ImmutableMap<String, VarContext> CTX_BY_VAR_NAME;
 
     private static final ImmutableMap<String, String> ALIASES;
@@ -145,6 +153,24 @@ public class VariableMgr {
     static {
         // Session value
         DEFAULT_SESSION_VARIABLE = new SessionVariable();
+=======
+    private final ImmutableMap<String, VarContext> ctxByVarName;
+
+    private final ImmutableMap<String, String> aliases;
+
+    // This variable is equivalent to the default value of session variables.
+    // Whenever a new session is established, the value in this object is copied to the session-level variable.
+    private final SessionVariable defaultSessionVariable;
+
+    // Global read/write lock to protect access of globalSessionVariable.
+    private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
+    private final Lock rLock = rwLock.readLock();
+    private final Lock wLock = rwLock.writeLock();
+
+    public VariableMgr() {
+        // Session value
+        defaultSessionVariable = new SessionVariable();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ImmutableSortedMap.Builder<String, VarContext> ctxBuilder =
                 ImmutableSortedMap.orderedBy(String.CASE_INSENSITIVE_ORDER);
         ImmutableSortedMap.Builder<String, String> aliasBuilder =
@@ -161,8 +187,13 @@ public class VariableMgr {
             }
 
             field.setAccessible(true);
+<<<<<<< HEAD
             ctxBuilder.put(attr.name(), new VarContext(field, DEFAULT_SESSION_VARIABLE, SESSION | attr.flag(),
                     getValue(DEFAULT_SESSION_VARIABLE, field), attr));
+=======
+            ctxBuilder.put(attr.name(), new VarContext(field, defaultSessionVariable, SESSION | attr.flag(),
+                    getValue(defaultSessionVariable, field), attr));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
             if (!attr.alias().isEmpty()) {
                 aliasBuilder.put(attr.alias(), attr.name());
@@ -185,6 +216,7 @@ public class VariableMgr {
             }
         }
 
+<<<<<<< HEAD
         CTX_BY_VAR_NAME = ctxBuilder.build();
         ALIASES = aliasBuilder.build();
     }
@@ -195,6 +227,18 @@ public class VariableMgr {
 
     // Set value to a variable
     private static boolean setValue(Object obj, Field field, String value) throws DdlException {
+=======
+        ctxByVarName = ctxBuilder.build();
+        aliases = aliasBuilder.build();
+    }
+
+    public SessionVariable getDefaultSessionVariable() {
+        return defaultSessionVariable;
+    }
+
+    // Set value to a variable
+    private boolean setValue(Object obj, Field field, String value) throws DdlException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         VarAttr attr = field.getAnnotation(VarAttr.class);
 
         String variableName;
@@ -254,12 +298,27 @@ public class VariableMgr {
         return true;
     }
 
+<<<<<<< HEAD
     public static SessionVariable newSessionVariable() {
         return (SessionVariable) DEFAULT_SESSION_VARIABLE.clone();
     }
 
     // Check if this setVar can be set correctly
     private static void checkUpdate(SystemVariable setVar, int flag) throws DdlException {
+=======
+    public SessionVariable newSessionVariable() {
+        return (SessionVariable) defaultSessionVariable.clone();
+    }
+
+    // Check if this sessionVariable can be set correctly
+    public void checkUpdate(SystemVariable sessionVariable) throws DdlException {
+        VarContext ctx = getVarContext(sessionVariable.getVariable());
+        checkUpdate(sessionVariable, ctx.getFlag());
+    }
+
+    // Check if this setVar can be set correctly
+    private void checkUpdate(SystemVariable setVar, int flag) throws DdlException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if ((flag & READ_ONLY) != 0) {
             ErrorReport.reportDdlException(ErrorCode.ERR_VARIABLE_IS_READONLY, setVar.getVariable());
         }
@@ -271,7 +330,11 @@ public class VariableMgr {
         }
     }
 
+<<<<<<< HEAD
     public static void checkSystemVariableExist(SystemVariable setVar) throws DdlException {
+=======
+    public void checkSystemVariableExist(SystemVariable setVar) throws DdlException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         VarContext ctx = getVarContext(setVar.getVariable());
         if (ctx == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_SYSTEM_VARIABLE, setVar.getVariable(),
@@ -279,11 +342,22 @@ public class VariableMgr {
         }
     }
 
+<<<<<<< HEAD
+=======
+    public boolean containsVariable(String name) {
+        return ctxByVarName.containsKey(name);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // Entry of handling SetVarStmt
     // Input:
     //      sessionVariable: the variable of current session
     //      setVar: variable information that needs to be set
+<<<<<<< HEAD
     public static void setSystemVariable(SessionVariable sessionVariable, SystemVariable setVar, boolean onlySetSessionVar)
+=======
+    public void setSystemVariable(SessionVariable sessionVariable, SystemVariable setVar, boolean onlySetSessionVar)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             throws DdlException {
         if (SessionVariable.DEPRECATED_VARIABLES.stream().anyMatch(c -> c.equalsIgnoreCase(setVar.getVariable()))) {
             return;
@@ -312,16 +386,28 @@ public class VariableMgr {
         }
 
         if (!onlySetSessionVar && setVar.getType() == SetType.GLOBAL) {
+<<<<<<< HEAD
             WLOCK.lock();
+=======
+            wLock.lock();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             try {
                 setValue(ctx.getObj(), ctx.getField(), value);
                 // write edit log
                 GlobalVarPersistInfo info =
+<<<<<<< HEAD
                         new GlobalVarPersistInfo(DEFAULT_SESSION_VARIABLE, Lists.newArrayList(attr.name()));
                 EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
                 editLog.logGlobalVariableV2(info);
             } finally {
                 WLOCK.unlock();
+=======
+                        new GlobalVarPersistInfo(defaultSessionVariable, Lists.newArrayList(attr.name()));
+                EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
+                editLog.logGlobalVariableV2(info);
+            } finally {
+                wLock.unlock();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
 
@@ -329,6 +415,7 @@ public class VariableMgr {
         setValue(sessionVariable, ctx.getField(), value);
     }
 
+<<<<<<< HEAD
     // global variable persistence
     public static void write(DataOutputStream out) throws IOException {
         DEFAULT_SESSION_VARIABLE.write(out);
@@ -350,6 +437,9 @@ public class VariableMgr {
     }
 
     public static void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
+=======
+    public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Map<String, String> m = new HashMap<>();
         Map<String, String> g = new HashMap<>();
         try {
@@ -366,7 +456,11 @@ public class VariableMgr {
                     case "float":
                     case "double":
                     case "String":
+<<<<<<< HEAD
                         m.put(attr.name(), field.get(DEFAULT_SESSION_VARIABLE).toString());
+=======
+                        m.put(attr.name(), field.get(defaultSessionVariable).toString());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         break;
                     default:
                         // Unsupported type variable.
@@ -399,20 +493,31 @@ public class VariableMgr {
             throw new IOException("failed to write session variable: " + e.getMessage());
         }
 
+<<<<<<< HEAD
         SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.VARIABLE_MGR, 1 + m.size() + 1 + g.size());
 
         writer.writeJson(m.size());
+=======
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.VARIABLE_MGR, 1 + m.size() + 1 + g.size());
+
+        writer.writeInt(m.size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         for (Map.Entry<String, String> e : m.entrySet()) {
             writer.writeJson(new VariableInfo(e.getKey(), e.getValue()));
         }
 
+<<<<<<< HEAD
         writer.writeJson(g.size());
+=======
+        writer.writeInt(g.size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         for (Map.Entry<String, String> e : g.entrySet()) {
             writer.writeJson(new VariableInfo(e.getKey(), e.getValue()));
         }
         writer.close();
     }
 
+<<<<<<< HEAD
     public static void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
         try {
             int sessionVarSize = reader.readInt();
@@ -463,6 +568,35 @@ public class VariableMgr {
     // this method is used to replace the `replayGlobalVariable()`
     public static void replayGlobalVariableV2(GlobalVarPersistInfo info) throws DdlException {
         WLOCK.lock();
+=======
+    public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        reader.readCollection(VariableInfo.class, v -> {
+            VarContext varContext = getVarContext(v.name);
+            if (varContext != null) {
+                try {
+                    setValue(varContext.getObj(), varContext.getField(), v.variable);
+                } catch (DdlException e) {
+                    throw new IOException(e);
+                }
+            }
+        });
+
+        reader.readCollection(VariableInfo.class, v -> {
+            VarContext varContext = getVarContext(v.name);
+            if (varContext != null) {
+                try {
+                    setValue(varContext.getObj(), varContext.getField(), v.variable);
+                } catch (DdlException e) {
+                    throw new IOException(e);
+                }
+            }
+        });
+    }
+
+    // this method is used to replace the `replayGlobalVariable()`
+    public void replayGlobalVariableV2(GlobalVarPersistInfo info) throws DdlException {
+        wLock.lock();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         try {
             String json = info.getPersistJsonString();
             JSONObject root = new JSONObject(json);
@@ -475,12 +609,20 @@ public class VariableMgr {
                 setValue(varContext.getObj(), varContext.getField(), root.get(varName).toString());
             }
         } finally {
+<<<<<<< HEAD
             WLOCK.unlock();
+=======
+            wLock.unlock();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
     // Get variable value through variable name, used to satisfy statement like `SELECT @@comment_version`
+<<<<<<< HEAD
     public static void fillValue(SessionVariable var, VariableExpr desc) {
+=======
+    public void fillValue(SessionVariable var, VariableExpr desc) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         VarContext ctx = getVarContext(desc.getName());
         if (ctx == null) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_UNKNOWN_SYSTEM_VARIABLE, desc.getName(),
@@ -488,18 +630,30 @@ public class VariableMgr {
         }
 
         if (desc.getSetType() == SetType.GLOBAL) {
+<<<<<<< HEAD
             RLOCK.lock();
             try {
                 fillValue(ctx.getObj(), ctx.getField(), desc);
             } finally {
                 RLOCK.unlock();
+=======
+            rLock.lock();
+            try {
+                fillValue(ctx.getObj(), ctx.getField(), desc);
+            } finally {
+                rLock.unlock();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         } else {
             fillValue(var, ctx.getField(), desc);
         }
     }
 
+<<<<<<< HEAD
     private static void fillValue(Object obj, Field field, VariableExpr desc) {
+=======
+    private void fillValue(Object obj, Field field, VariableExpr desc) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         try {
             switch (field.getType().getSimpleName()) {
                 case "boolean":
@@ -545,7 +699,11 @@ public class VariableMgr {
     }
 
     // Get variable value through variable name, used to satisfy statement like `SELECT @@comment_version`
+<<<<<<< HEAD
     public static String getValue(SessionVariable var, VariableExpr desc) {
+=======
+    public String getValue(SessionVariable var, VariableExpr desc) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         VarContext ctx = getVarContext(desc.getName());
         if (ctx == null) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_UNKNOWN_SYSTEM_VARIABLE, desc.getName(),
@@ -553,18 +711,30 @@ public class VariableMgr {
         }
 
         if (desc.getSetType() == SetType.GLOBAL) {
+<<<<<<< HEAD
             RLOCK.lock();
             try {
                 return getValue(ctx.getObj(), ctx.getField());
             } finally {
                 RLOCK.unlock();
+=======
+            rLock.lock();
+            try {
+                return getValue(ctx.getObj(), ctx.getField());
+            } finally {
+                rLock.unlock();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         } else {
             return getValue(var, ctx.getField());
         }
     }
 
+<<<<<<< HEAD
     private static String getValue(Object obj, Field field) {
+=======
+    private String getValue(Object obj, Field field) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         try {
             switch (field.getType().getSimpleName()) {
                 case "boolean":
@@ -592,7 +762,11 @@ public class VariableMgr {
         return "";
     }
 
+<<<<<<< HEAD
     public static String getDefaultValue(String variable) {
+=======
+    public String getDefaultValue(String variable) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         VarContext ctx = getVarContext(variable);
         if (ctx == null) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_UNKNOWN_SYSTEM_VARIABLE, variable,
@@ -607,12 +781,21 @@ public class VariableMgr {
     }
 
     // Dump all fields. Used for `show variables`, but note `sessionVar` would be null.
+<<<<<<< HEAD
     public static List<List<String>> dump(SetType type, SessionVariable sessionVar, PatternMatcher matcher) {
         List<List<String>> rows = Lists.newArrayList();
         // Hold the read lock when session dump, because this option need to access global variable.
         RLOCK.lock();
         try {
             for (Map.Entry<String, VarContext> entry : CTX_BY_VAR_NAME.entrySet()) {
+=======
+    public List<List<String>> dump(SetType type, SessionVariable sessionVar, PatternMatcher matcher) {
+        List<List<String>> rows = Lists.newArrayList();
+        // Hold the read lock when session dump, because this option need to access global variable.
+        rLock.lock();
+        try {
+            for (Map.Entry<String, VarContext> entry : ctxByVarName.entrySet()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 // Filter variable not match to the regex.
                 String name = StringUtils.isBlank(entry.getValue().getVarAttr().show()) ? entry.getKey()
                         : entry.getValue().getVarAttr().show();
@@ -630,7 +813,11 @@ public class VariableMgr {
                 }
 
                 List<String> row = Lists.newArrayList();
+<<<<<<< HEAD
                 if (type != SetType.GLOBAL && ctx.getObj() == DEFAULT_SESSION_VARIABLE) {
+=======
+                if (type != SetType.GLOBAL && ctx.getObj() == defaultSessionVariable) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     // In this condition, we may retrieve session variables for caller.
                     if (sessionVar != null) {
                         row.add(name);
@@ -666,7 +853,11 @@ public class VariableMgr {
                 rows.add(row);
             }
         } finally {
+<<<<<<< HEAD
             RLOCK.unlock();
+=======
+            rLock.unlock();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         // Sort all variables by variable name.
@@ -675,6 +866,7 @@ public class VariableMgr {
         return rows;
     }
 
+<<<<<<< HEAD
     // global variable persistence
     public static long loadGlobalVariable(DataInputStream in, long checksum) throws IOException, DdlException {
         read(in);
@@ -688,6 +880,9 @@ public class VariableMgr {
     }
 
     public static boolean shouldForwardToLeader(String name) {
+=======
+    public boolean shouldForwardToLeader(String name) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         VarContext varContext = getVarContext(name);
         if (varContext == null) {
             // DEPRECATED_VARIABLES like enable_cbo don't have flag
@@ -698,6 +893,17 @@ public class VariableMgr {
         }
     }
 
+<<<<<<< HEAD
+=======
+    public Field getField(String name) {
+        VarContext ctx = getVarContext(name);
+        if (ctx == null) {
+            return null;
+        }
+        return ctx.getField();
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Retention(RetentionPolicy.RUNTIME)
     public @interface VarAttr {
         // Name in show variables and set statement;
@@ -747,18 +953,32 @@ public class VariableMgr {
         }
     }
 
+<<<<<<< HEAD
     private static VarContext getVarContext(String name) {
         VarContext ctx = CTX_BY_VAR_NAME.get(name);
         if (ctx == null) {
             ctx = CTX_BY_VAR_NAME.get(ALIASES.get(name));
+=======
+    private VarContext getVarContext(String name) {
+        VarContext ctx = ctxByVarName.get(name);
+        if (ctx == null) {
+            ctx = ctxByVarName.get(aliases.get(name));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return ctx;
     }
 
+<<<<<<< HEAD
     public static String findSimilarVarNames(String inputName) {
         JaroWinklerDistance jaroWinklerDistance = new JaroWinklerDistance();
         StringJoiner joiner = new StringJoiner(", ", "{", "}");
         CTX_BY_VAR_NAME.keySet().stream()
+=======
+    public String findSimilarVarNames(String inputName) {
+        JaroWinklerDistance jaroWinklerDistance = new JaroWinklerDistance();
+        StringJoiner joiner = new StringJoiner(", ", "{", "}");
+        ctxByVarName.keySet().stream()
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 .sorted(Comparator.comparingDouble(s ->
                         jaroWinklerDistance.apply(StringUtils.upperCase(s), StringUtils.upperCase(inputName))))
                 .limit(3).map(e -> "'" + e + "'").forEach(joiner::add);

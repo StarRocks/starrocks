@@ -169,7 +169,11 @@ public abstract class TestWithFeService {
     }
 
     public void createDatabase(String db) throws Exception {
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentState().getMetadata().createDb(db);
+=======
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(db);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public void useDatabase(String dbName) {
@@ -189,30 +193,50 @@ public abstract class TestWithFeService {
     public void dropTable(String table, boolean force) throws Exception {
         DropTableStmt dropTableStmt = (DropTableStmt) parseAndAnalyzeStmt(
                 "drop table " + table + (force ? " force" : "") + ";", connectContext);
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+=======
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public void createTables(String... sqls) throws Exception {
         for (String sql : sqls) {
             CreateTableStmt stmt = (CreateTableStmt) parseAndAnalyzeStmt(sql);
+<<<<<<< HEAD
             GlobalStateMgr.getCurrentState().createTable(stmt);
+=======
+            StarRocksAssert.utCreateTableWithRetry(stmt);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         updateReplicaPathHash();
     }
 
     private void updateReplicaPathHash() {
         com.google.common.collect.Table<Long, Long, Replica> replicaMetaTable =
+<<<<<<< HEAD
                 GlobalStateMgr.getCurrentInvertedIndex()
                         .getReplicaMetaTable();
         for (com.google.common.collect.Table.Cell<Long, Long, Replica> cell : replicaMetaTable.cellSet()) {
             long beId = cell.getColumnKey();
             Backend be = GlobalStateMgr.getCurrentSystemInfo().getBackend(beId);
+=======
+                GlobalStateMgr.getCurrentState().getTabletInvertedIndex()
+                        .getReplicaMetaTable();
+        for (com.google.common.collect.Table.Cell<Long, Long, Replica> cell : replicaMetaTable.cellSet()) {
+            long beId = cell.getColumnKey();
+            Backend be = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(beId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (be == null) {
                 continue;
             }
             Replica replica = cell.getValue();
             TabletMeta tabletMeta =
+<<<<<<< HEAD
                     GlobalStateMgr.getCurrentInvertedIndex().getTabletMeta(cell.getRowKey());
+=======
+                    GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletMeta(cell.getRowKey());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             ImmutableMap<String, DiskInfo> diskMap = be.getDisks();
             for (DiskInfo diskInfo : diskMap.values()) {
                 if (diskInfo.getStorageMedium() == tabletMeta.getStorageMedium()) {

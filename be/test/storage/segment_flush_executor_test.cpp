@@ -93,8 +93,13 @@ public:
 
     TupleDescriptor* _create_tuple_desc() {
         TTupleDescriptorBuilder tuple_builder;
+<<<<<<< HEAD
         for (int i = 0; i < _tablet->tablet_schema().num_columns(); i++) {
             auto& column = _tablet->tablet_schema().column(i);
+=======
+        for (int i = 0; i < _tablet->tablet_schema()->num_columns(); i++) {
+            auto& column = _tablet->tablet_schema()->column(i);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             TSlotDescriptorBuilder builder;
             std::string column_name{column.name()};
             TSlotDescriptor slot_desc = builder.type(column.type())
@@ -107,10 +112,16 @@ public:
         TDescriptorTableBuilder table_builder;
         tuple_builder.build(&table_builder);
         std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
+<<<<<<< HEAD
         std::vector<bool> nullable_tuples = std::vector<bool>{false};
         DescriptorTbl* tbl = nullptr;
         DescriptorTbl::create(&_runtime_state, &_pool, table_builder.desc_tbl(), &tbl, config::vector_chunk_size);
         auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples, nullable_tuples));
+=======
+        DescriptorTbl* tbl = nullptr;
+        DescriptorTbl::create(&_runtime_state, &_pool, table_builder.desc_tbl(), &tbl, config::vector_chunk_size);
+        auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         auto* tuple_desc = row_desc->tuple_descriptors()[0];
 
         return tuple_desc;
@@ -149,7 +160,11 @@ public:
         writer_context.partition_id = tablet->partition_id();
         writer_context.rowset_path_prefix = _tablet->schema_hash_path();
         writer_context.rowset_state = VISIBLE;
+<<<<<<< HEAD
         writer_context.tablet_schema = &tablet->tablet_schema();
+=======
+        writer_context.tablet_schema = tablet->tablet_schema();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         writer_context.version.first = 0;
         writer_context.version.second = 0;
 
@@ -199,7 +214,11 @@ public:
         OlapReaderStatistics stats;
         seg_options.stats = &stats;
         std::string segment_file = Rowset::segment_file_path(_tablet->schema_hash_path(), rowset->rowset_id(), 0);
+<<<<<<< HEAD
         auto segment = *Segment::open(seg_options.fs, FileInfo{segment_file}, 0, &_tablet->tablet_schema());
+=======
+        auto segment = *Segment::open(seg_options.fs, FileInfo{segment_file}, 0, _tablet->tablet_schema());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ASSERT_EQ(segment->num_rows(), num_rows);
         auto schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
         auto res = segment->new_iterator(schema, seg_options);

@@ -17,7 +17,10 @@ package com.starrocks.sql.plan;
 import com.starrocks.common.DdlException;
 import com.starrocks.planner.HdfsScanNode;
 import com.starrocks.planner.ScanNode;
+<<<<<<< HEAD
 import com.starrocks.server.GlobalStateMgr;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -26,8 +29,18 @@ import java.util.List;
 
 public class HivePartitionPruneTest extends ConnectorPlanTestBase {
     @Before
+<<<<<<< HEAD
     public void setUp() throws DdlException {
         GlobalStateMgr.getCurrentState().changeCatalogDb(connectContext, "hive0.partitioned_db");
+=======
+    public void setUp() {
+        super.setUp();
+        try {
+            connectContext.changeCatalogDb("hive0.partitioned_db");
+        } catch (DdlException e) {
+            throw new RuntimeException(e);
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -45,7 +58,11 @@ public class HivePartitionPruneTest extends ConnectorPlanTestBase {
                 "     TABLE: t1\n" +
                 "     PARTITION PREDICATES: 4: par_col = 1\n" +
                 "     NON-PARTITION PREDICATES: 1: c1 = 2\n" +
+<<<<<<< HEAD
                 "     MIN/MAX PREDICATES: 5: c1 <= 2, 6: c1 >= 2\n" +
+=======
+                "     MIN/MAX PREDICATES: 1: c1 <= 2, 1: c1 >= 2\n" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "     partitions=1/3");
 
         sql = "select * from t1 where par_col = abs(-1) and c1 = 2";
@@ -55,7 +72,11 @@ public class HivePartitionPruneTest extends ConnectorPlanTestBase {
                 "     PARTITION PREDICATES: 4: par_col = CAST(abs(-1) AS INT)\n" +
                 "     NON-PARTITION PREDICATES: 1: c1 = 2\n" +
                 "     NO EVAL-PARTITION PREDICATES: 4: par_col = CAST(abs(-1) AS INT)\n" +
+<<<<<<< HEAD
                 "     MIN/MAX PREDICATES: 5: c1 <= 2, 6: c1 >= 2\n" +
+=======
+                "     MIN/MAX PREDICATES: 1: c1 <= 2, 1: c1 >= 2\n" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "     partitions=3/3");
 
         sql = "select * from t1 where par_col = 1+1 and c1 = 2";
@@ -64,7 +85,11 @@ public class HivePartitionPruneTest extends ConnectorPlanTestBase {
                 "     TABLE: t1\n" +
                 "     PARTITION PREDICATES: 4: par_col = 2\n" +
                 "     NON-PARTITION PREDICATES: 1: c1 = 2\n" +
+<<<<<<< HEAD
                 "     MIN/MAX PREDICATES: 5: c1 <= 2, 6: c1 >= 2\n" +
+=======
+                "     MIN/MAX PREDICATES: 1: c1 <= 2, 1: c1 >= 2\n" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "     partitions=1/3");
     }
 
@@ -168,4 +193,30 @@ public class HivePartitionPruneTest extends ConnectorPlanTestBase {
         Assert.assertFalse(node0.getScanNodePredicates().getSelectedPartitionIds().equals(
                 node1.getScanNodePredicates().getSelectedPartitionIds()));
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testLikeInPartitionColumn() throws Exception {
+        String sql = "select * from hive0.datacache_db.single_partition_table where l_shipdate LIKE '1998-01-03'";
+        assertPlanContains(sql, "partitions=1/1");
+    }
+
+    @Test
+    public void testWithDuplicatePartition() throws Exception {
+        assertPlanContains("select * from hive0.partitioned_db.duplicate_partition", "partitions=2/2");
+        assertPlanContains("select * from hive0.partitioned_db.duplicate_partition where day='2012-01-01'",
+                "partitions=2/2");
+        assertPlanContains("select * from hive0.partitioned_db.duplicate_partition where day='2012-01-01' and hour=6",
+                "partitions=2/2");
+        assertPlanContains("select * from hive0.partitioned_db.duplicate_partition where day='2012-01-01' and hour>0",
+                "partitions=2/2");
+        assertPlanContains("select * from hive0.partitioned_db.duplicate_partition where day='2012-01-01' and hour=0",
+                "partitions=0/2");
+        assertPlanContains("select * from hive0.partitioned_db.duplicate_partition where day='2012-01-01' and hour > 10",
+                "partitions=0/2");
+        assertPlanContains("select * from hive0.partitioned_db.duplicate_partition where day='2012-01-01' and hour < 10",
+                "partitions=2/2");
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

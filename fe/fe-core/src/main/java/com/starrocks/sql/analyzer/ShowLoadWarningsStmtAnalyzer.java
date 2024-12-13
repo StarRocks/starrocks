@@ -39,7 +39,11 @@ public class ShowLoadWarningsStmtAnalyzer {
         new ShowLoadWarningsStmtAnalyzerVisitor().visit(statement, context);
     }
 
+<<<<<<< HEAD
     static class ShowLoadWarningsStmtAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+=======
+    static class ShowLoadWarningsStmtAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         private String label;
         private long jobId;

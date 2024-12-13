@@ -9,4 +9,8 @@
 #   https://hub.docker.com/r/starrocks/starlet-artifacts-centos7/tags
 #
 # Update the following tag when STARLET releases a new version.
+<<<<<<< HEAD
 export STARLET_ARTIFACTS_TAG=v3.1.10
+=======
+export STARLET_ARTIFACTS_TAG=v3.4-rc1
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

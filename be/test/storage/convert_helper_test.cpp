@@ -484,6 +484,70 @@ PARALLEL_TEST(ConvertHelperTest, testSameTypeConvertColumn_TIMESTAMP) {
     EXPECT_EQ(values[1], c1->get(1).get_timestamp());
 }
 
+<<<<<<< HEAD
+=======
+PARALLEL_TEST(ConvertHelperTest, testValidSchema) {
+    std::shared_ptr<Schema> in_schema;
+    std::shared_ptr<Schema> out_schema;
+    {
+        TabletSchemaPB schema_pb;
+        schema_pb.set_keys_type(PRIMARY_KEYS);
+        schema_pb.set_num_short_key_columns(1);
+        schema_pb.set_num_rows_per_row_block(5);
+        schema_pb.set_next_column_unique_id(2);
+
+        ColumnPB& col = *(schema_pb.add_column());
+        col.set_unique_id(1);
+        col.set_name("col1");
+        col.set_type("DECIMAL_V2");
+        col.set_is_key(true);
+        col.set_is_nullable(false);
+        col.set_length(4);
+        col.set_index_length(4);
+
+        ColumnPB& col2 = *(schema_pb.add_column());
+        col2.set_unique_id(2);
+        col2.set_name("col2");
+        col2.set_type("DECIMAL_V2");
+        col2.set_is_key(false);
+        col2.set_is_nullable(false);
+        col.set_length(4);
+        col.set_index_length(4);
+
+        auto table_schema = std::make_shared<TabletSchema>(schema_pb);
+        in_schema = std::make_shared<Schema>(ChunkHelper::convert_schema(table_schema));
+    }
+    {
+        TabletSchemaPB schema_pb;
+        schema_pb.set_keys_type(PRIMARY_KEYS);
+        schema_pb.set_num_short_key_columns(1);
+        schema_pb.set_num_rows_per_row_block(5);
+        schema_pb.set_next_column_unique_id(2);
+
+        ColumnPB& col = *(schema_pb.add_column());
+        col.set_unique_id(1);
+        col.set_name("col1");
+        col.set_type("DECIMAL");
+        col.set_is_key(true);
+        col.set_is_nullable(false);
+        col.set_length(4);
+        col.set_index_length(4);
+
+        ColumnPB& col2 = *(schema_pb.add_column());
+        col2.set_unique_id(2);
+        col2.set_name("col2");
+        col2.set_type("DECIMAL");
+        col2.set_is_key(false);
+        col2.set_is_nullable(false);
+        col.set_length(4);
+        col.set_index_length(4);
+
+        auto table_schema = std::make_shared<TabletSchema>(schema_pb);
+        out_schema = std::make_shared<Schema>(ChunkHelper::convert_schema(table_schema));
+    }
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 PARALLEL_TEST(ConvertHelperTest, testNullableIntConvertString) {
     std::unique_ptr<MemPool> mem_pool(new MemPool());
     auto conv = get_type_converter(TYPE_INT, TYPE_VARCHAR);

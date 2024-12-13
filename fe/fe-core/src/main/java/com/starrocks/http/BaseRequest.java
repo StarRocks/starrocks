@@ -52,15 +52,26 @@ import java.util.Map;
 
 public class BaseRequest {
     protected ChannelHandlerContext context;
+<<<<<<< HEAD
+=======
+    protected HttpConnectContext connectContext;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     protected HttpRequest request;
     protected Map<String, String> params = Maps.newHashMap();
 
     private boolean isAuthorized = false;
     private QueryStringDecoder decoder;
 
+<<<<<<< HEAD
     public BaseRequest(ChannelHandlerContext ctx, HttpRequest request) {
         this.context = ctx;
         this.request = request;
+=======
+    public BaseRequest(ChannelHandlerContext ctx, HttpRequest request, HttpConnectContext connectContext) {
+        this.context = ctx;
+        this.request = request;
+        this.connectContext = connectContext;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public ChannelHandlerContext getContext() {
@@ -168,4 +179,11 @@ public class BaseRequest {
         InetSocketAddress clientSocket = (InetSocketAddress) context.channel().remoteAddress();
         return clientSocket.getHostString();
     }
+<<<<<<< HEAD
+=======
+
+    public HttpConnectContext getConnectContext() {
+        return connectContext;
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

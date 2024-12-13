@@ -30,11 +30,19 @@ struct LocateCaseSensitiveUTF8 {
 
     static SearcherInBigHaystack createSearcherInBigHaystack(const char* needle_data, size_t needle_size,
                                                              size_t haystack_size_hint) {
+<<<<<<< HEAD
         return SearcherInBigHaystack(needle_data, needle_size, haystack_size_hint);
     }
 
     static SearcherInSmallHaystack createSearcherInSmallHaystack(const char* needle_data, size_t needle_size) {
         return SearcherInSmallHaystack(needle_data, needle_size);
+=======
+        return {needle_data, needle_size, haystack_size_hint};
+    }
+
+    static SearcherInSmallHaystack createSearcherInSmallHaystack(const char* needle_data, size_t needle_size) {
+        return {needle_data, needle_size};
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 };
 
@@ -79,7 +87,11 @@ ColumnPtr haystack_vector_and_needle_const(const ColumnPtr& haystack_ptr, const 
         start_pos = ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(start_pos_expansion);
     }
 
+<<<<<<< HEAD
     const std::vector<uint32_t>& offsets = haystack->get_offset();
+=======
+    const Buffer<uint32_t>& offsets = haystack->get_offset();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     Slice needle = ColumnHelper::get_const_value<TYPE_VARCHAR>(needle_ptr);
     auto res = RunTimeColumnType<TYPE_INT>::create();
     res->resize(haystack->size());

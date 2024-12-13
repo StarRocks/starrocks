@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # hex
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 若参数 `x` 是数字，则返回十六进制值的字符串表示形式；若参数 `x` 是字符串，则将每个字符转化为两个十六进制的字符，将转化后的所有字符拼接为字符串输出。
 

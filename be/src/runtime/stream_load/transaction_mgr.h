@@ -92,7 +92,11 @@ public:
     Status create_channel_context(ExecEnv* exec_env, const string& label, int channel_id, const string& db_name,
                                   const string& table_name, TFileFormatType::type format, StreamLoadContext*& ctx,
                                   const TUniqueId& load_id, long txn_id) {
+<<<<<<< HEAD
         auto pipe = std::make_shared<StreamLoadPipe>();
+=======
+        auto pipe = std::make_shared<StreamLoadPipe>(true);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         RETURN_IF_ERROR(exec_env->load_stream_mgr()->put(load_id, pipe));
         ctx = new StreamLoadContext(exec_env, load_id);
         if (ctx == nullptr) {
@@ -188,10 +192,17 @@ public:
                     // 1. finish stream pipe & wait it done
                     if (ctx->buffer != nullptr && ctx->buffer->pos > 0) {
                         ctx->buffer->flip();
+<<<<<<< HEAD
                         ctx->body_sink->append(std::move(ctx->buffer));
                         ctx->buffer = nullptr;
                     }
                     ctx->body_sink->finish();
+=======
+                        RETURN_IF_ERROR(ctx->body_sink->append(std::move(ctx->buffer)));
+                        ctx->buffer = nullptr;
+                    }
+                    RETURN_IF_ERROR(ctx->body_sink->finish());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 } else {
                     std::string error_msg = fmt::format("stream load {} channel_id {}'s pipe doesn't exist", label,
                                                         std::to_string(channel_id));

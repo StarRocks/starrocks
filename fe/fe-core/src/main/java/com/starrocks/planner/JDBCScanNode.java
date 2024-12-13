@@ -27,8 +27,14 @@ import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.JDBCResource;
 import com.starrocks.catalog.JDBCTable;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
 import com.starrocks.server.GlobalStateMgr;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AstToStringBuilder;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TJDBCScanNode;
 import com.starrocks.thrift.TPlanNode;
@@ -52,7 +58,11 @@ public class JDBCScanNode extends ScanNode {
         super(id, desc, "SCAN JDBC");
         table = tbl;
         String objectIdentifier = getIdentifierSymbol();
+<<<<<<< HEAD
         tableName = objectIdentifier + tbl.getJdbcTable() + objectIdentifier;
+=======
+        tableName = objectIdentifier + tbl.getCatalogTableName() + objectIdentifier;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -62,7 +72,11 @@ public class JDBCScanNode extends ScanNode {
     }
 
     @Override
+<<<<<<< HEAD
     public void finalizeStats(Analyzer analyzer) throws UserException {
+=======
+    public void finalizeStats(Analyzer analyzer) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         createJDBCTableColumns();
         createJDBCTableFilters();
         computeStats(analyzer);
@@ -139,16 +153,23 @@ public class JDBCScanNode extends ScanNode {
 
         ArrayList<Expr> jdbcConjuncts = Expr.cloneList(conjuncts, sMap);
         for (Expr p : jdbcConjuncts) {
+<<<<<<< HEAD
             filters.add(p.toJDBCSQL());
+=======
+            filters.add(AstToStringBuilder.toString(p));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
     @Override
+<<<<<<< HEAD
     public boolean canUsePipeLine() {
         return true;
     }
 
     @Override
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public boolean canUseRuntimeAdaptiveDop() {
         return true;
     }
@@ -170,11 +191,14 @@ public class JDBCScanNode extends ScanNode {
     }
 
     @Override
+<<<<<<< HEAD
     public int getNumInstances() {
         return 1;
     }
 
     @Override
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void computeStats(Analyzer analyzer) {
         super.computeStats(analyzer);
     }

@@ -115,6 +115,13 @@ public class ShowResultSet {
         return Short.parseShort(getString(col));
     }
 
+<<<<<<< HEAD
+=======
+    public int numColumns() {
+        return metaData.getColumnCount();
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public TShowResultSet tothrift() {
         TShowResultSet set = new TShowResultSet();
         set.metaData = new TShowResultSetMetaData();

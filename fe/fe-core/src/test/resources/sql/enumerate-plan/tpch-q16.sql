@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     p_brand,
@@ -29,6 +30,8 @@ order by
     p_brand,
     p_type,
     p_size ;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 [planCount]
 2
 [plan-1]

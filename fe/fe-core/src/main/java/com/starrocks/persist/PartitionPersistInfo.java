@@ -38,6 +38,7 @@ import com.google.common.collect.Range;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
+<<<<<<< HEAD
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.RangeUtils;
 
@@ -46,6 +47,11 @@ import java.io.DataOutput;
 import java.io.IOException;
 
 public class PartitionPersistInfo implements Writable {
+=======
+import com.starrocks.common.io.JsonWriter;
+
+public class PartitionPersistInfo extends JsonWriter {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private Long dbId;
     private Long tableId;
     private Partition partition;
@@ -105,6 +111,7 @@ public class PartitionPersistInfo implements Writable {
     public boolean isTempPartition() {
         return isTempPartition;
     }
+<<<<<<< HEAD
 
     public void write(DataOutput out) throws IOException {
         out.writeLong(dbId);
@@ -136,4 +143,6 @@ public class PartitionPersistInfo implements Writable {
         isTempPartition = in.readBoolean();
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

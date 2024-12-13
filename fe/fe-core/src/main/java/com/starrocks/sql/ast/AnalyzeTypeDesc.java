@@ -29,4 +29,11 @@ public abstract class AnalyzeTypeDesc implements ParseNode {
     public NodePosition getPos() {
         return pos;
     }
+<<<<<<< HEAD
+=======
+
+    public boolean isHistogram() {
+        return false;
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

@@ -15,9 +15,18 @@
 #pragma once
 
 #include "column/field.h"
+<<<<<<< HEAD
 #include "storage/column_aggregator.h"
 
 namespace starrocks {
+=======
+#include "runtime/memory/mem_hook_allocator.h"
+#include "storage/column_aggregator.h"
+
+namespace starrocks {
+
+static MemHookAllocator kDefaultColumnAggregatorAllocator = MemHookAllocator{};
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 class ColumnAggregatorFactory {
 public:
     static ColumnAggregatorPtr create_key_column_aggregator(const FieldPtr& field);

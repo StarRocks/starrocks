@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # date_diff
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 根据指定的时间单位返回两个日期的差值。该函数按照 `unit` 指定的时间单位返回 `expr1 - expr2` 的差值。比如 `date_diff('second', '2010-11-30 23:59:59', '2010-11-30 20:58:59',)` 以秒为单位返回这两个日期的差值。
 

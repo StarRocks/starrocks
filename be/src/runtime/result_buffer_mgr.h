@@ -34,6 +34,11 @@
 
 #pragma once
 
+<<<<<<< HEAD
+=======
+#include <arrow/record_batch.h>
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include <map>
 #include <thread>
 #include <unordered_map>
@@ -48,7 +53,11 @@ namespace starrocks {
 
 class TFetchDataResult;
 class BufferControlBlock;
+<<<<<<< HEAD
 class GetResultBatchCtx;
+=======
+struct GetResultBatchCtx;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 class PUniqueId;
 
 // manage all result buffer control block in one backend
@@ -74,9 +83,22 @@ public:
     // cancel one query at a future time.
     Status cancel_at_time(time_t cancel_time, const TUniqueId& query_id);
 
+<<<<<<< HEAD
 private:
     typedef std::unordered_map<TUniqueId, std::shared_ptr<BufferControlBlock>> BufferMap;
     typedef std::map<time_t, std::vector<TUniqueId>> TimeoutMap;
+=======
+    Status fetch_arrow_data(const TUniqueId& query_id, std::shared_ptr<arrow::RecordBatch>* result);
+
+    void set_arrow_schema(const TUniqueId& query_id, const std::shared_ptr<arrow::Schema>& arrow_schema);
+
+    std::shared_ptr<arrow::Schema> get_arrow_schema(const TUniqueId& query_id);
+
+private:
+    typedef std::unordered_map<TUniqueId, std::shared_ptr<BufferControlBlock>> BufferMap;
+    typedef std::map<time_t, std::vector<TUniqueId>> TimeoutMap;
+    typedef std::unordered_map<TUniqueId, std::shared_ptr<arrow::Schema>> ArrowSchemaMap;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     std::shared_ptr<BufferControlBlock> find_control_block(const TUniqueId& query_id);
 
@@ -98,5 +120,10 @@ private:
     TimeoutMap _timeout_map;
 
     std::unique_ptr<std::thread> _cancel_thread;
+<<<<<<< HEAD
+=======
+
+    ArrowSchemaMap _arrow_schema_map;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 } // namespace starrocks

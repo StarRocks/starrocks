@@ -117,8 +117,17 @@ Status CompactionAction::do_compaction(uint64_t tablet_id, const string& compact
 
     auto* mem_tracker = GlobalEnv::GetInstance()->compaction_mem_tracker();
     if (tablet->updates() != nullptr) {
+<<<<<<< HEAD
         if (rowset_ids_string.empty()) {
             RETURN_IF_ERROR(tablet->updates()->compaction(mem_tracker));
+=======
+        StarRocksMetrics::instance()->update_compaction_request_total.increment(1);
+        StarRocksMetrics::instance()->running_update_compaction_task_num.increment(1);
+        DeferOp op([&] { StarRocksMetrics::instance()->running_update_compaction_task_num.increment(-1); });
+        Status res;
+        if (rowset_ids_string.empty()) {
+            res = tablet->updates()->compaction(mem_tracker);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } else {
             vector<string> id_str_list = strings::Split(rowset_ids_string, ",", strings::SkipEmpty());
             vector<uint32_t> rowset_ids;
@@ -138,7 +147,17 @@ Status CompactionAction::do_compaction(uint64_t tablet_id, const string& compact
             if (rowset_ids.empty()) {
                 return Status::InvalidArgument(fmt::format("empty argument. rowset_ids:{}", rowset_ids_string));
             }
+<<<<<<< HEAD
             RETURN_IF_ERROR(tablet->updates()->compaction(mem_tracker, rowset_ids));
+=======
+            res = tablet->updates()->compaction(mem_tracker, rowset_ids);
+        }
+        if (!res.ok()) {
+            StarRocksMetrics::instance()->update_compaction_request_failed.increment(1);
+            LOG(WARNING) << "failed to perform update compaction. res=" << res.message()
+                         << ", tablet=" << tablet->full_name();
+            return res;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return Status::OK();
     }
@@ -149,7 +168,10 @@ Status CompactionAction::do_compaction(uint64_t tablet_id, const string& compact
     }
 
     if (compaction_type == to_string(CompactionType::CUMULATIVE_COMPACTION)) {
+<<<<<<< HEAD
         StarRocksMetrics::instance()->cumulative_compaction_request_total.increment(1);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (config::enable_size_tiered_compaction_strategy) {
             if (tablet->need_compaction()) {
                 auto compaction_task = tablet->create_compaction_task();
@@ -183,7 +205,10 @@ Status CompactionAction::do_compaction(uint64_t tablet_id, const string& compact
         }
         tablet->set_last_cumu_compaction_failure_time(0);
     } else if (compaction_type == to_string(CompactionType::BASE_COMPACTION)) {
+<<<<<<< HEAD
         StarRocksMetrics::instance()->base_compaction_request_total.increment(1);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (config::enable_size_tiered_compaction_strategy) {
             if (tablet->force_base_compaction()) {
                 auto compaction_task = tablet->create_compaction_task();

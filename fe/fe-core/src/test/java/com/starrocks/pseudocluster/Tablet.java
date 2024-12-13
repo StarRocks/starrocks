@@ -386,7 +386,11 @@ public class Tablet {
                 pendingRowsets.size());
     }
 
+<<<<<<< HEAD
     public synchronized void cloneFrom(Tablet src, long srcBackendId) throws Exception {
+=======
+    public synchronized void cloneFrom(Tablet src, long srcBackendId, Long destBackendId) throws Exception {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (maxContinuousVersion() >= src.maxContinuousVersion()) {
             LOG.warn("tablet {} clone, nothing to copy src:{} dest:{}", id, src.versionInfo(),
                     versionInfo());
@@ -396,7 +400,11 @@ public class Tablet {
         if (missingVersions.get(0) < src.minVersion()) {
             LOG.warn(String.format("incremental clone failed src:%d versions:[%d,%d] dest:%d missing::%s", srcBackendId,
                     src.minVersion(), src.maxContinuousVersion(), id, missingVersions));
+<<<<<<< HEAD
             fullCloneFrom(src, srcBackendId);
+=======
+            fullCloneFrom(src, srcBackendId, destBackendId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } else {
             String oldInfo = versionInfo();
             List<Pair<Long, Rowset>> versionAndRowsets = src.getRowsetsByMissingVersionList(missingVersions);
@@ -414,7 +422,11 @@ public class Tablet {
         }
     }
 
+<<<<<<< HEAD
     public synchronized void fullCloneFrom(Tablet src, long srcBackendId) throws Exception {
+=======
+    public synchronized void fullCloneFrom(Tablet src, long srcBackendId, Long destBackendId) throws Exception {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         String oldInfo = versionInfo();
         // only copy the maxContinuousVersion, not pendingRowsets, to be same as current BE's behavior
         EditVersion srcVersion = src.getMaxContinuousEditVersion();
@@ -431,7 +443,12 @@ public class Tablet {
         totalFullClone.incrementAndGet();
         totalClone.incrementAndGet();
         cloneExecuted.incrementAndGet();
+<<<<<<< HEAD
         String msg = String.format("tablet:%d full clone src:%d %s before:%s after:%s", id, srcBackendId, src.versionInfo(),
+=======
+        String msg = String.format("tablet:%d full clone src:%d %s dest:%d before:%s after:%s", id,
+                srcBackendId, src.versionInfo(), destBackendId,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 oldInfo, versionInfo());
         System.out.println(msg);
         LOG.info(msg);
@@ -516,6 +533,18 @@ public class Tablet {
                 versionInfo());
     }
 
+<<<<<<< HEAD
+=======
+    @Override
+    public String toString() {
+        return "Tablet{" +
+                "id=" + id +
+                ", tableId=" + tableId +
+                ", cloneExecuted=" + cloneExecuted +
+                '}';
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static void main(String[] args) {
         Tablet tablet = new Tablet(1, 1, 1, 1, true);
         String json = GsonUtils.GSON.toJson(tablet);

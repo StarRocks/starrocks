@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # transform_keys
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Transforms keys in a map using a [Lambda expression](../Lambda_expression.md) and produces a new key for each entry in the map.
 

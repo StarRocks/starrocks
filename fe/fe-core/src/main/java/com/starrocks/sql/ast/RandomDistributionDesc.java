@@ -90,4 +90,16 @@ public class RandomDistributionDesc extends DistributionDesc {
     public void readFields(DataInput in) throws IOException {
         numBucket = in.readInt();
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    public String toString() {
+        if (numBucket > 0) {
+            return "DISTRIBUTED BY RANDOM BUCKETS " + numBucket;
+        } else {
+            return "DISTRIBUTED BY RANDOM";
+        }
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

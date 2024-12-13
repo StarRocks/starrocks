@@ -18,7 +18,12 @@ namespace starrocks {
 
 Status StreamAggregateNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::init(tnode, state));
+<<<<<<< HEAD
     RETURN_IF_ERROR(Expr::create_expr_trees(_pool, tnode.stream_agg_node.grouping_exprs, &_group_by_expr_ctxs, state));
+=======
+    RETURN_IF_ERROR(
+            Expr::create_expr_trees(_pool, tnode.stream_agg_node.grouping_exprs, &_group_by_expr_ctxs, state, true));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     for (auto& expr : _group_by_expr_ctxs) {
         auto& type_desc = expr->root()->type();
         if (!type_desc.support_groupby()) {

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # datediff
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 计算两个日期的差值，结果精确到天。
 

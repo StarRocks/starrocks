@@ -15,11 +15,16 @@ Drops an asynchronous ETL task submitted using [SUBMIT TASK](SUBMIT_TASK.md). Th
 ## Syntax
 
 ```SQL
+<<<<<<< HEAD
 DROP TASK `<task_name>`
+=======
+DROP TASK `<task_name>` [FORCE]
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ```
 
 ## Parameters
 
+<<<<<<< HEAD
 | **Parameter** | **Description**               |
 | ------------- | ----------------------------- |
 | task_name     | The name of the task to drop. Please wrap the task name with backticks (`) to prevent any parse failure. |
@@ -27,6 +32,16 @@ DROP TASK `<task_name>`
 ## Usage notes
 
 You can check the information of asynchronous tasks by querying the metadata tables `tasks` and `task_runs` in Information Schema.
+=======
+| **Parameter** | **Required** | **Description**               |
+| ------------- | ------------ | ----------------------------- |
+| task_name     | Yes          | The name of the task to drop. Please wrap the task name with backticks (`) to prevent any parse failure. |
+| FORCE         | No           | Forces to drop the task. |
+
+## Usage notes
+
+You can check the information of asynchronous tasks by querying the metadata views `tasks` and `task_runs` in Information Schema.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ```SQL
 SELECT * FROM INFORMATION_SCHEMA.tasks;
@@ -35,6 +50,16 @@ SELECT * FROM information_schema.task_runs;
 SELECT * FROM information_schema.task_runs WHERE task_name = '<task_name>';
 ```
 
+<<<<<<< HEAD
+=======
+You can obtain the `task_name` of materialized view refresh tasks by using the SHOW MATERIALIZED VIEWS statement.
+
+```SQL
+SHOW MATERIALIZED VIEWS;
+SHOW MATERIALIZED VIEWS WHERE name = '<mv_name>';
+```
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ## Examples
 
 ```Plain

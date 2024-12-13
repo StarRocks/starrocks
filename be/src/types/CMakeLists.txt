@@ -19,8 +19,18 @@ add_library(Types STATIC
     bitmap_value.cpp
     date_value.cpp
     hll.cpp
+<<<<<<< HEAD
+=======
+    hll_sketch.cpp
+    large_int_value.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     logical_type.cpp
     map_type_info.cpp
     struct_type_info.cpp
     timestamp_value.cpp
+<<<<<<< HEAD
+=======
+    checker/type_checker.cpp
+    type_checker_manager.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 )

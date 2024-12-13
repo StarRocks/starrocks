@@ -275,12 +275,27 @@ inline bool RleDecoder<T>::ReadHeader() {
         bool is_literal = indicator_value & 1;
         if (is_literal) {
             literal_count_ = (indicator_value >> 1) * 8;
+<<<<<<< HEAD
             DCHECK_GT(literal_count_, 0);
         } else {
             repeat_count_ = indicator_value >> 1;
             DCHECK_GT(repeat_count_, 0);
             result = bit_reader_.GetAligned<T>(BitUtil::Ceil(bit_width_, 8), reinterpret_cast<T*>(&current_value_));
             DCHECK(result);
+=======
+            if (PREDICT_FALSE(literal_count_ == 0)) {
+                return false;
+            }
+        } else {
+            repeat_count_ = indicator_value >> 1;
+            if (PREDICT_FALSE(repeat_count_ == 0)) {
+                return false;
+            }
+            result = bit_reader_.GetAligned<T>(BitUtil::Ceil(bit_width_, 8), reinterpret_cast<T*>(&current_value_));
+            if (PREDICT_FALSE(!result)) {
+                return false;
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
     return true;
@@ -697,10 +712,21 @@ public:
     // truncated.
     bool GetLiteralValues(int32_t num_literals_to_consume, T* values) WARN_UNUSED_RESULT;
 
+<<<<<<< HEAD
+=======
+    bool SkipLiteralValues(int32_t num_literals_to_skip) WARN_UNUSED_RESULT;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // Consume 'num_values_to_consume' values and copy them to 'values'.
     // Returns the number of consumed values or 0 if an error occurred.
     int32_t GetBatch(T* values, int32_t batch_num);
 
+<<<<<<< HEAD
+=======
+    // skip a batch of values
+    int32_t SkipBatch(int32_t batch_num);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // Like GetBatch but the values are then decoded using the provided dictionary
     template <typename TV>
     int GetBatchWithDict(const TV* dictionary, int32_t dictionary_length, TV* values, int32_t batch_num);
@@ -851,6 +877,41 @@ inline bool RleBatchDecoder<T>::GetLiteralValues(int32_t num_literals_to_consume
 }
 
 template <typename T>
+<<<<<<< HEAD
+=======
+inline bool RleBatchDecoder<T>::SkipLiteralValues(int32_t num_literals_to_skip) {
+    int32_t num_consumed = 0;
+    if (HaveBufferedLiterals()) {
+        int32_t num_to_skip = std::min<int32_t>(num_literals_to_skip, num_buffered_literals_ - literal_buffer_pos_);
+        literal_buffer_pos_ += num_to_skip;
+        literal_count_ -= num_to_skip;
+        num_consumed = num_to_skip;
+    }
+
+    int32_t num_remaining = num_literals_to_skip - num_consumed;
+
+    int32_t num_to_bypass = std::min<int32_t>(literal_count_, BitUtil::RoundDownToPowerOf2(num_remaining, 32));
+    if (num_to_bypass) {
+        if (UNLIKELY(!bit_reader_.skip_bytes(num_to_bypass * bit_width_ / 8))) {
+            return false;
+        }
+        literal_count_ -= num_to_bypass;
+        num_consumed += num_to_bypass;
+        num_remaining = num_literals_to_skip - num_consumed;
+    }
+
+    // todo: lazy skip
+    if (num_remaining > 0) {
+        if (UNLIKELY(!FillLiteralBuffer())) return false;
+        DCHECK_LE(num_remaining, num_buffered_literals_ - literal_buffer_pos_);
+        literal_buffer_pos_ += num_remaining;
+        literal_count_ -= num_remaining;
+    }
+    return true;
+}
+
+template <typename T>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 inline bool RleBatchDecoder<T>::FillLiteralBuffer() {
     int32_t num_to_buffer = std::min<int32_t>(LITERAL_BUFFER_LEN, literal_count_);
     num_buffered_literals_ = bit_reader_.unpack_batch(bit_width_, num_to_buffer, literal_buffer_);
@@ -883,7 +944,11 @@ inline int32_t RleBatchDecoder<T>::GetBatch(T* values, int32_t batch_num) {
             break;
         }
         int32_t num_literals_to_set = std::min(num_literals, batch_num - num_consumed);
+<<<<<<< HEAD
         if (!GetLiteralValues(num_literals_to_set, values + num_consumed)) {
+=======
+        if (UNLIKELY(!GetLiteralValues(num_literals_to_set, values + num_consumed))) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return 0;
         }
         num_consumed += num_literals_to_set;
@@ -892,6 +957,32 @@ inline int32_t RleBatchDecoder<T>::GetBatch(T* values, int32_t batch_num) {
 }
 
 template <typename T>
+<<<<<<< HEAD
+=======
+inline int32_t RleBatchDecoder<T>::SkipBatch(int32_t batch_num) {
+    int32_t num_consumed = 0;
+    while (num_consumed < batch_num) {
+        int32_t num_repeats = NextNumRepeats();
+        if (num_repeats > 0) {
+            int32_t num_repeats_to_skip = std::min(num_repeats, batch_num - num_consumed);
+            [[maybe_unused]] T repeated_value = GetRepeatedValue(num_repeats_to_skip);
+            num_consumed += num_repeats_to_skip;
+            continue;
+        }
+
+        int32_t num_literals = NextNumLiterals();
+        if (num_literals == 0) {
+            break;
+        }
+        int32_t num_literals_to_skip = std::min(num_literals, batch_num - num_consumed);
+        if (UNLIKELY(!SkipLiteralValues(num_literals_to_skip))) return 0;
+        num_consumed += num_literals_to_skip;
+    }
+    return num_consumed;
+}
+
+template <typename T>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 static inline bool IndexInRange(T idx, int32_t dictionary_length) {
     return idx >= 0 && idx < dictionary_length;
 }

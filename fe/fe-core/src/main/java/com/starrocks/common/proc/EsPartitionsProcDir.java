@@ -44,6 +44,11 @@ import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.common.AnalysisException;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.connector.elasticsearch.EsShardPartitions;
 
 import java.util.ArrayList;
@@ -78,7 +83,12 @@ public class EsPartitionsProcDir implements ProcDirInterface {
 
         // get info
         List<List<Comparable>> partitionInfos = new ArrayList<List<Comparable>>();
+<<<<<<< HEAD
         db.readLock();
+=======
+        Locker locker = new Locker();
+        locker.lockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         try {
             Joiner joiner = Joiner.on(", ");
             Map<String, EsShardPartitions> unPartitionedIndices =
@@ -104,7 +114,11 @@ public class EsPartitionsProcDir implements ProcDirInterface {
                 for (EsShardPartitions esShardPartitions : partitionedIndices.values()) {
                     List<Comparable> partitionInfo = new ArrayList<Comparable>();
                     partitionInfo.add(esShardPartitions.getIndexName());
+<<<<<<< HEAD
                     List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
+=======
+                    List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns(esTable.getIdToColumn());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     List<String> colNames = new ArrayList<String>();
                     for (Column column : partitionColumns) {
                         colNames.add(column.getName());
@@ -118,7 +132,11 @@ public class EsPartitionsProcDir implements ProcDirInterface {
                 }
             }
         } finally {
+<<<<<<< HEAD
             db.readUnlock();
+=======
+            locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         // set result
@@ -143,11 +161,20 @@ public class EsPartitionsProcDir implements ProcDirInterface {
     @Override
     public ProcNodeInterface lookup(String indexName) throws AnalysisException {
 
+<<<<<<< HEAD
         db.readLock();
         try {
             return new EsShardProcDir(db, esTable, indexName);
         } finally {
             db.readUnlock();
+=======
+        Locker locker = new Locker();
+        locker.lockDatabase(db.getId(), LockType.READ);
+        try {
+            return new EsShardProcDir(db, esTable, indexName);
+        } finally {
+            locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 

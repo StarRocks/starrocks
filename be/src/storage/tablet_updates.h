@@ -25,6 +25,10 @@
 #include "storage/delta_column_group.h"
 #include "storage/edit_version.h"
 #include "storage/olap_common.h"
+<<<<<<< HEAD
+=======
+#include "storage/row_store_encoder_factory.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "storage/rowset/rowset_writer.h"
 #include "util/blocking_queue.hpp"
 
@@ -40,7 +44,11 @@ class MemTracker;
 class RowsetReadOptions;
 class SnapshotMeta;
 class Tablet;
+<<<<<<< HEAD
 class TabletBasicInfo;
+=======
+struct TabletBasicInfo;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 class TTabletInfo;
 
 class ChunkIterator;
@@ -79,6 +87,10 @@ struct ExtraFileSize {
 struct EditVersionInfo {
     EditVersion version;
     int64_t creation_time;
+<<<<<<< HEAD
+=======
+    int64_t gtid = 0;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::vector<uint32_t> rowsets;
     // used for rowset commit
     std::vector<uint32_t> deltas;
@@ -95,6 +107,10 @@ struct EditVersionInfo {
             compaction = std::make_unique<CompactionInfo>();
             *compaction = *rhs.compaction;
         }
+<<<<<<< HEAD
+=======
+        gtid = rhs.gtid;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     // add method to better expose to scripting engine
     CompactionInfo* get_compaction() { return compaction.get(); }
@@ -150,7 +166,12 @@ public:
 
     Status get_rowsets_total_stats(const std::vector<uint32_t>& rowsets, size_t* total_rows, size_t* total_dels);
 
+<<<<<<< HEAD
     Status rowset_commit(int64_t version, const RowsetSharedPtr& rowset, uint32_t wait_time);
+=======
+    Status rowset_commit(int64_t version, const RowsetSharedPtr& rowset, uint32_t wait_time,
+                         bool is_version_overwrite = false, bool is_double_write = false);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // should only called by UpdateManager's apply thread
     void do_apply();
@@ -225,10 +246,17 @@ public:
     Status get_applied_rowsets(int64_t version, std::vector<RowsetSharedPtr>* rowsets,
                                EditVersion* full_version = nullptr);
 
+<<<<<<< HEAD
+=======
+    Status get_applied_rowsets_by_gtid(int64_t gtid, std::vector<RowsetSharedPtr>* rowsets,
+                                       EditVersion* full_version = nullptr);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     void to_updates_pb(TabletUpdatesPB* updates_pb) const;
 
     // Used for schema change, migrate another tablet's version&rowsets to this tablet
     Status link_from(Tablet* base_tablet, int64_t request_version, ChunkChanger* chunk_changer,
+<<<<<<< HEAD
                      const std::string& err_msg_header = "");
 
     Status convert_from(const std::shared_ptr<Tablet>& base_tablet, int64_t request_version,
@@ -236,6 +264,17 @@ public:
 
     Status reorder_from(const std::shared_ptr<Tablet>& base_tablet, int64_t request_version,
                         ChunkChanger* chunk_changer, std::string err_msg_header = "");
+=======
+                     const TabletSchemaCSPtr& base_tablet_schema, const std::string& err_msg_header = "");
+
+    Status convert_from(const std::shared_ptr<Tablet>& base_tablet, int64_t request_version,
+                        ChunkChanger* chunk_changer, const TabletSchemaCSPtr& base_tablet_schema,
+                        const std::string& err_msg_header = "");
+
+    Status reorder_from(const std::shared_ptr<Tablet>& base_tablet, int64_t request_version,
+                        ChunkChanger* chunk_changer, const TabletSchemaCSPtr& base_tablet_schema,
+                        const std::string& err_msg_header = "");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     Status load_snapshot(const SnapshotMeta& snapshot_meta, bool restore_from_backup = false,
                          bool save_source_schema = false);
@@ -251,6 +290,10 @@ public:
     //  - logs
     Status clear_meta();
 
+<<<<<<< HEAD
+=======
+    // Note: values in column_ids must be valid, unique and increasing, do not support out-of-order column_ids
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // get column values by rssids and rowids, at currently applied version
     // for example:
     // get_column_values with
@@ -295,7 +338,13 @@ public:
     // ]
     Status get_column_values(const std::vector<uint32_t>& column_ids, int64_t read_version, bool with_default,
                              std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
+<<<<<<< HEAD
                              vector<std::unique_ptr<Column>>* columns, void* state);
+=======
+                             vector<std::unique_ptr<Column>>* columns, void* state,
+                             const TabletSchemaCSPtr& tablet_schema,
+                             const std::map<string, string>* column_to_expr_value = nullptr);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     Status get_rss_rowids_by_pk(Tablet* tablet, const Column& keys, EditVersion* read_version,
                                 std::vector<uint64_t>* rss_rowids, int64_t timeout_ms = 0);
@@ -331,8 +380,18 @@ public:
 
     double get_pk_index_write_amp_score() const { return _pk_index_write_amp_score.load(); }
 
+<<<<<<< HEAD
     Status pk_index_major_compaction();
 
+=======
+    void set_pk_index_write_amp_score(double score) { _pk_index_write_amp_score.store(score); }
+
+    Status pk_index_major_compaction();
+
+    // get the max rowset creation time for largest major version
+    int64_t max_rowset_creation_time();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     Status get_rowset_stats(std::map<uint32_t, std::string>* output_rowset_stats);
 
     Status primary_index_dump(PrimaryKeyDump* dump, PrimaryIndexMultiLevelPB* dump_pb);
@@ -349,6 +408,29 @@ public:
 
     RowsetSharedPtr get_rowset(uint32_t rowset_id);
 
+<<<<<<< HEAD
+=======
+    void check_for_apply() {
+        _apply_schedule.store(false);
+        _check_for_apply();
+    }
+
+    // just for ut
+    void reset_update_state() {
+        const EditVersionInfo* version_info_apply = nullptr;
+        {
+            std::lock_guard rl(_lock);
+            if (_edit_version_infos.empty()) {
+                return;
+            }
+            version_info_apply = _edit_version_infos[_apply_version_idx + 1].get();
+            _reset_apply_status(*version_info_apply);
+        }
+    }
+
+    void rewrite_rs_meta(bool is_fatal);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 private:
     friend class Tablet;
     friend class PrimaryIndex;
@@ -385,6 +467,7 @@ private:
 
     void _ignore_rowset_commit(int64_t version, const RowsetSharedPtr& rowset);
 
+<<<<<<< HEAD
     void _apply_rowset_commit(const EditVersionInfo& version_info);
 
     // used for normal update or row-mode partial update
@@ -397,6 +480,21 @@ private:
     // wait a version to be applied, so reader can read this version
     // assuming _lock already hold
     Status _wait_for_version(const EditVersion& version, int64_t timeout_ms, std::unique_lock<std::mutex>& lock);
+=======
+    Status _apply_rowset_commit(const EditVersionInfo& version_info);
+
+    // used for normal update or row-mode partial update
+    Status _apply_normal_rowset_commit(const EditVersionInfo& version_info, const RowsetSharedPtr& rowset);
+    // used for column-mode partial update
+    Status _apply_column_partial_update_commit(const EditVersionInfo& version_info, const RowsetSharedPtr& rowset);
+
+    Status _apply_compaction_commit(const EditVersionInfo& version_info);
+
+    // wait a version to be applied, so reader can read this version
+    // assuming _lock already hold
+    Status _wait_for_version(const EditVersion& version, int64_t timeout_ms, std::unique_lock<std::mutex>& lock,
+                             bool is_compaction = false);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     Status _commit_compaction(std::unique_ptr<CompactionInfo>* info, const RowsetSharedPtr& rowset,
                               EditVersion* commit_version);
@@ -410,7 +508,11 @@ private:
 
     Status _do_update(uint32_t rowset_id, int32_t upsert_idx, int32_t condition_column, int64_t read_version,
                       const std::vector<ColumnUniquePtr>& upserts, PrimaryIndex& index, int64_t tablet_id,
+<<<<<<< HEAD
                       DeletesMap* new_deletes);
+=======
+                      DeletesMap* new_deletes, const TabletSchemaCSPtr& tablet_schema);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // This method will acquire |_lock|.
     size_t _get_rowset_num_deletes(uint32_t rowsetid);
@@ -428,6 +530,12 @@ private:
 
     void _set_error(const string& msg);
 
+<<<<<<< HEAD
+=======
+    Status _get_applied_rowsets(int64_t version, std::vector<RowsetSharedPtr>* rowsets, EditVersion* full_edit_version,
+                                std::unique_lock<std::mutex>& ul, int64_t begin_ms);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     Status _load_meta_and_log(const TabletUpdatesPB& tablet_updates_pb);
 
     Status _load_pending_rowsets();
@@ -450,8 +558,14 @@ private:
 
     void _update_total_stats(const std::vector<uint32_t>& rowsets, size_t* row_count_before, size_t* row_count_after);
 
+<<<<<<< HEAD
     Status _convert_from_base_rowset(const std::shared_ptr<Tablet>& base_tablet, const ChunkIteratorPtr& seg_iterator,
                                      ChunkChanger* chunk_changer, const std::unique_ptr<RowsetWriter>& rowset_writer);
+=======
+    Status _convert_from_base_rowset(const Schema& base_schema, const Schema& new_schema,
+                                     const ChunkIteratorPtr& seg_iterator, ChunkChanger* chunk_changer,
+                                     const std::unique_ptr<RowsetWriter>& rowset_writer);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     void _check_creation_time_increasing();
 
@@ -469,9 +583,13 @@ private:
 
     bool compaction_running() { return _compaction_running; }
 
+<<<<<<< HEAD
     void check_for_apply() { _check_for_apply(); }
 
     std::timed_mutex* get_index_lock() { return &_index_lock; }
+=======
+    std::shared_timed_mutex* get_index_lock() { return &_index_lock; }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     StatusOr<ExtraFileSize> _get_extra_file_size() const;
 
@@ -481,6 +599,13 @@ private:
                                           size_t* total_deletes, size_t* total_rows,
                                           vector<std::pair<uint32_t, DelVectorPtr>>* delvecs);
 
+<<<<<<< HEAD
+=======
+    bool _is_tolerable(Status& status);
+
+    void _reset_apply_status(const EditVersionInfo& version_info_apply);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 private:
     Tablet& _tablet;
 
@@ -499,10 +624,20 @@ private:
     mutable std::mutex _rowsets_lock;
     std::unordered_map<uint32_t, RowsetSharedPtr> _rowsets;
 
+<<<<<<< HEAD
     // used for async apply, make sure at most 1 thread is doing applying
     mutable std::mutex _apply_running_lock;
     // make sure at most 1 thread is read or write primary index
     mutable std::timed_mutex _index_lock;
+=======
+    // gtid -> version
+    std::map<int64_t, int64_t> _gtid_to_version_map;
+
+    // used for async apply, make sure at most 1 thread is doing applying
+    mutable std::mutex _apply_running_lock;
+    // make sure at most 1 thread is read or write primary index
+    mutable std::shared_timed_mutex _index_lock;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // apply process is running currently
     bool _apply_running = false;
 
@@ -538,6 +673,11 @@ private:
     std::string _error_msg;
 
     std::atomic<double> _pk_index_write_amp_score{0.0};
+<<<<<<< HEAD
+=======
+
+    std::atomic<bool> _apply_schedule{false};
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 } // namespace starrocks

@@ -33,7 +33,14 @@ public:
     static bool init(bool is_cn);
     static std::string get_localhost();
     static TBackend get_localBackend();
+<<<<<<< HEAD
     static void set_localhost(const std::string& host);
+=======
+    static const char* get_service_bind_address();
+    static const char* get_service_bind_address_without_bracket();
+    static void set_localhost(const std::string& host);
+    static bool is_bind_ipv6();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     static bool is_cn();
 
 private:
@@ -43,6 +50,10 @@ private:
     static std::string _s_localhost;
     static std::vector<CIDR> _s_priority_cidrs;
     static TBackend _backend;
+<<<<<<< HEAD
+=======
+    static bool _bind_ipv6;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     static bool _is_cn;
 
     BackendOptions(const BackendOptions&) = delete;

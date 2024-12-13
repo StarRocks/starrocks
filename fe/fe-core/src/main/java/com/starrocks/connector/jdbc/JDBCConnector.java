@@ -59,7 +59,11 @@ public class JDBCConnector implements Connector {
     private void validate(String propertyKey) {
         String value = properties.get(propertyKey);
         if (value == null) {
+<<<<<<< HEAD
             throw new IllegalArgumentException("Missing " + propertyKey + " in properties");
+=======
+            throw new StarRocksConnectorException("Missing " + propertyKey + " in properties");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -87,7 +91,11 @@ public class JDBCConnector implements Connector {
             String checkSum = Hex.encodeHexString(digest.digest());
             properties.put(JDBCResource.CHECK_SUM, checkSum);
         } catch (Exception e) {
+<<<<<<< HEAD
             throw new IllegalArgumentException("Cannot get driver from url: " + properties.get(JDBCResource.DRIVER_URL));
+=======
+            throw new StarRocksConnectorException("Cannot get driver from url: " + properties.get(JDBCResource.DRIVER_URL));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 

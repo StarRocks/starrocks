@@ -15,6 +15,10 @@
 #include "storage/rowset/map_column_iterator.h"
 
 #include "column/column_access_path.h"
+<<<<<<< HEAD
+=======
+#include "column/const_column.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "column/map_column.h"
 #include "column/nullable_column.h"
 #include "storage/rowset/scalar_column_iterator.h"
@@ -106,20 +110,42 @@ Status MapColumnIterator::next_batch(size_t* n, Column* dst) {
     if (_access_keys) {
         RETURN_IF_ERROR(_keys->next_batch(&num_to_read, map_column->keys_column().get()));
     } else {
+<<<<<<< HEAD
         // todo: unpack struct in scan, and don't need append default values
         map_column->keys_column()->append_default(num_to_read);
+=======
+        if (!map_column->keys_column()->is_constant()) {
+            map_column->keys_column()->append_default(1);
+            map_column->keys_column() = ConstColumn::create(map_column->keys_column(), num_to_read);
+        } else {
+            map_column->keys_column()->append_default(num_to_read);
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     if (_access_values) {
         RETURN_IF_ERROR(_values->next_batch(&num_to_read, map_column->values_column().get()));
     } else {
+<<<<<<< HEAD
         map_column->values_column()->append_default(num_to_read);
+=======
+        if (!map_column->values_column()->is_constant()) {
+            map_column->values_column()->append_default(1);
+            map_column->values_column() = ConstColumn::create(map_column->values_column(), num_to_read);
+        } else {
+            map_column->values_column()->append_default(num_to_read);
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     return Status::OK();
 }
 
+<<<<<<< HEAD
 Status MapColumnIterator::next_batch(const SparseRange& range, Column* dst) {
+=======
+Status MapColumnIterator::next_batch(const SparseRange<>& range, Column* dst) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MapColumn* map_column = nullptr;
     NullColumn* null_column = nullptr;
     if (dst->is_nullable()) {
@@ -139,7 +165,11 @@ Status MapColumnIterator::next_batch(const SparseRange& range, Column* dst) {
         down_cast<NullableColumn*>(dst)->update_has_null();
     }
 
+<<<<<<< HEAD
     SparseRangeIterator iter = range.new_iterator();
+=======
+    SparseRangeIterator<> iter = range.new_iterator();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     size_t to_read = range.span_size();
 
     // array column can be nested, range may be empty
@@ -147,15 +177,24 @@ Status MapColumnIterator::next_batch(const SparseRange& range, Column* dst) {
     SparseRange element_read_range;
     size_t read_rows = 0;
     while (iter.has_more()) {
+<<<<<<< HEAD
         Range r = iter.next(to_read);
+=======
+        Range<> r = iter.next(to_read);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         RETURN_IF_ERROR(_offsets->seek_to_ordinal_and_calc_element_ordinal(r.begin()));
         size_t element_ordinal = _offsets->element_ordinal();
         // if array column in nullable or element of array is empty, element_read_range may be empty.
         // so we should reseek the element_ordinal
         if (element_read_range.span_size() == 0) {
+<<<<<<< HEAD
             _keys->seek_to_ordinal(element_ordinal);
             _values->seek_to_ordinal(element_ordinal);
+=======
+            RETURN_IF_ERROR(_keys->seek_to_ordinal(element_ordinal));
+            RETURN_IF_ERROR(_values->seek_to_ordinal(element_ordinal));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         // 2. Read offset column
         // [1, 2, 3], [4, 5, 6]
@@ -166,7 +205,11 @@ Status MapColumnIterator::next_batch(const SparseRange& range, Column* dst) {
         size_t end_offset = data.back();
 
         size_t prev_array_size = offsets->size();
+<<<<<<< HEAD
         SparseRange size_read_range(r);
+=======
+        SparseRange<> size_read_range(r);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         RETURN_IF_ERROR(_offsets->next_batch(size_read_range, offsets));
         size_t curr_array_size = offsets->size();
 
@@ -178,7 +221,11 @@ Status MapColumnIterator::next_batch(const SparseRange& range, Column* dst) {
         num_to_read = end_offset - num_to_read;
         read_rows += num_to_read;
 
+<<<<<<< HEAD
         element_read_range.add(Range(element_ordinal, element_ordinal + num_to_read));
+=======
+        element_read_range.add(Range<>(element_ordinal, element_ordinal + num_to_read));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     // if array column is nullable, element_read_range may be empty
@@ -186,13 +233,31 @@ Status MapColumnIterator::next_batch(const SparseRange& range, Column* dst) {
     if (_access_keys) {
         RETURN_IF_ERROR(_keys->next_batch(element_read_range, map_column->keys_column().get()));
     } else {
+<<<<<<< HEAD
         map_column->keys_column()->append_default(read_rows);
+=======
+        if (!map_column->keys_column()->is_constant()) {
+            map_column->keys_column()->append_default(1);
+            map_column->keys_column() = ConstColumn::create(map_column->keys_column(), read_rows);
+        } else {
+            map_column->keys_column()->append_default(read_rows);
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     if (_access_values) {
         RETURN_IF_ERROR(_values->next_batch(element_read_range, map_column->values_column().get()));
     } else {
+<<<<<<< HEAD
         map_column->values_column()->append_default(read_rows);
+=======
+        if (!map_column->values_column()->is_constant()) {
+            map_column->values_column()->append_default(1);
+            map_column->values_column() = ConstColumn::create(map_column->values_column(), read_rows);
+        } else {
+            map_column->values_column()->append_default(read_rows);
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     return Status::OK();
@@ -247,11 +312,29 @@ Status MapColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t si
     }
 
     if (!_access_keys) {
+<<<<<<< HEAD
         map_column->keys_column()->append_default(offset - start);
     }
 
     if (!_access_values) {
         map_column->values_column()->append_default(offset - start);
+=======
+        if (!map_column->keys_column()->is_constant()) {
+            map_column->keys_column()->append_default(1);
+            map_column->keys_column() = ConstColumn::create(map_column->keys_column(), offset - start);
+        } else {
+            map_column->keys_column()->append_default(offset - start);
+        }
+    }
+
+    if (!_access_values) {
+        if (!map_column->values_column()->is_constant()) {
+            map_column->values_column()->append_default(1);
+            map_column->values_column() = ConstColumn::create(map_column->values_column(), offset - start);
+        } else {
+            map_column->values_column()->append_default(offset - start);
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     return Status::OK();
@@ -278,10 +361,13 @@ Status MapColumnIterator::seek_to_ordinal(ordinal_t ord) {
     return Status::OK();
 }
 
+<<<<<<< HEAD
 Status MapColumnIterator::get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
                                                      const ColumnPredicate* del_predicate, SparseRange* row_ranges) {
     row_ranges->add({0, static_cast<rowid_t>(_reader->num_rows())});
     return Status::OK();
 }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // namespace starrocks

@@ -8,6 +8,7 @@ select * from ss;
 show partitions from ss;
 -- result:
 -- !result
+<<<<<<< HEAD
 -- name: test_automatic_partition_table_non_pipeline
 CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
 -- result:
@@ -112,6 +113,9 @@ show partitions from ss;
 .*p203410.*
 -- !result
 -- name: test_automatic_partition_in_new_node
+=======
+-- name: test_automatic_partition_in_new_node @sequential
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 CREATE TABLE dt_month( event_day DATETIME, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 1 PROPERTIES("replication_num" = "1");
 -- result:
 -- !result
@@ -473,7 +477,11 @@ show partitions from ss;
 .*p203409.*
 .*p203410.*
 -- !result
+<<<<<<< HEAD
 -- name: test_multi_fragment_open_new_node_channel
+=======
+-- name: test_multi_fragment_open_new_node_channel @sequential
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
 -- result:
 -- !result
@@ -742,3 +750,18 @@ select * from ss;
 2002-01-07	1	2
 2002-01-06	1	2
 -- !result
+<<<<<<< HEAD
+=======
+
+-- name: test_time_slice_with_minute_granularity
+create table tt(k datetime) partition by time_slice(k, interval 10 minute);
+-- result:
+-- !result
+insert into tt values(now());
+-- result:
+-- !result
+select count(*) from tt;
+-- result:
+1
+-- !result
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

@@ -41,11 +41,14 @@ Status DataStreamRecvr::SenderQueue::_build_chunk_meta(const ChunkPB& pb_chunk) 
         _chunk_meta.slot_id_to_index[pb_chunk.slot_id_map()[i]] = pb_chunk.slot_id_map()[i + 1];
     }
 
+<<<<<<< HEAD
     _chunk_meta.tuple_id_to_index.reserve(pb_chunk.tuple_id_map().size());
     for (int i = 0; i < pb_chunk.tuple_id_map().size(); i += 2) {
         _chunk_meta.tuple_id_to_index[pb_chunk.tuple_id_map()[i]] = pb_chunk.tuple_id_map()[i + 1];
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     _chunk_meta.is_nulls.resize(pb_chunk.is_nulls().size());
     for (int i = 0; i < pb_chunk.is_nulls().size(); ++i) {
         _chunk_meta.is_nulls[i] = pb_chunk.is_nulls()[i];
@@ -58,6 +61,10 @@ Status DataStreamRecvr::SenderQueue::_build_chunk_meta(const ChunkPB& pb_chunk) 
 
     size_t column_index = 0;
     _chunk_meta.types.resize(pb_chunk.is_nulls().size());
+<<<<<<< HEAD
+=======
+    std::set<SlotId> hit_flags;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     for (auto tuple_desc : _recvr->_row_desc.tuple_descriptors()) {
         const std::vector<SlotDescriptor*>& slots = tuple_desc->slots();
         phmap::flat_hash_map<SlotId, TypeDescriptor> slot_id_to_type;
@@ -69,6 +76,7 @@ Status DataStreamRecvr::SenderQueue::_build_chunk_meta(const ChunkPB& pb_chunk) 
             if (iter != slot_id_to_type.end()) {
                 _chunk_meta.types[kv.second] = iter->second;
                 ++column_index;
+<<<<<<< HEAD
             }
         }
     }
@@ -79,6 +87,30 @@ Status DataStreamRecvr::SenderQueue::_build_chunk_meta(const ChunkPB& pb_chunk) 
 
     if (UNLIKELY(column_index != _chunk_meta.is_nulls.size())) {
         return Status::InternalError("build chunk meta error");
+=======
+                hit_flags.insert(kv.first);
+            }
+        }
+    }
+
+    if (UNLIKELY(column_index != _chunk_meta.is_nulls.size())) {
+        std::vector<std::pair<SlotId, size_t>> missing_pairs;
+        for (const auto& kv : _chunk_meta.slot_id_to_index) {
+            if (hit_flags.find(kv.first) == hit_flags.end()) {
+                missing_pairs.emplace_back(kv.first, kv.second);
+            }
+        }
+        std::stringstream ss;
+        ss << "build chunk meta error";
+        ss << ", fragment_instance_id=" << _recvr->fragment_instance_id();
+        ss << ", node_id=" << _recvr->_dest_node_id;
+        ss << ", missing pairs: ";
+        for (const auto& kv : missing_pairs) {
+            ss << "(slot:" << kv.first << ", index:" << kv.second << ") ";
+        }
+        std::string msg = ss.str();
+        return Status::InternalError(msg);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     // decode extra chunk meta
@@ -528,7 +560,13 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks_and_keep_order(const PTr
 void DataStreamRecvr::PipelineSenderQueue::decrement_senders(int be_number) {
     {
         std::lock_guard<Mutex> l(_lock);
+<<<<<<< HEAD
         if (_sender_eos_set.find(be_number) != _sender_eos_set.end()) {
+=======
+        if (UNLIKELY(_sender_eos_set.find(be_number) != _sender_eos_set.end())) {
+            LOG(ERROR) << "More than one EOS from " << be_number << " in fragment "
+                       << print_id(_recvr->fragment_instance_id()) << " on node " << _recvr->dest_node_id();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return;
         }
         _sender_eos_set.insert(be_number);
@@ -537,6 +575,10 @@ void DataStreamRecvr::PipelineSenderQueue::decrement_senders(int be_number) {
     VLOG_FILE << "decremented senders: fragment_instance_id=" << print_id(_recvr->fragment_instance_id())
               << " node_id=" << _recvr->dest_node_id() << " #senders=" << _num_remaining_senders
               << " be_number=" << be_number;
+<<<<<<< HEAD
+=======
+    DCHECK(_num_remaining_senders >= 0);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 void DataStreamRecvr::PipelineSenderQueue::cancel() {
@@ -568,7 +610,10 @@ void DataStreamRecvr::PipelineSenderQueue::clean_buffer_queues() {
             }
         }
     }
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     for (auto& [_, chunk_queues] : _buffered_chunk_queues) {
         for (auto& [_, chunk_queue] : chunk_queues) {
             for (auto& item : chunk_queue) {
@@ -690,6 +735,11 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
     DCHECK(!(keep_order && use_pass_through));
     DCHECK(request.chunks_size() > 0 || use_pass_through);
     if (_is_cancelled || _num_remaining_senders <= 0) {
+<<<<<<< HEAD
+=======
+        VLOG_ROW << print_id(request.finst_id()) << " adds chunks to "
+                 << (_is_cancelled ? "cancelled queue" : "ended queue");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return Status::OK();
     }
 

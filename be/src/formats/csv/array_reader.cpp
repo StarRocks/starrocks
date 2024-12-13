@@ -93,7 +93,11 @@ bool HiveTextArrayReader::split_array_elements(const Slice& s, std::vector<Slice
             left = right + 1;
         }
     }
+<<<<<<< HEAD
     if (right > left) {
+=======
+    if (right >= left) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         elements.emplace_back(s.data + left, right - left);
     }
 

@@ -120,6 +120,13 @@ public class ColumnStatistic {
         return this.type == StatisticType.UNKNOWN;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean hasNonStats() {
+        return isUnknown() && histogram == null;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public boolean isInfiniteRange() {
         return this.minValue == NEGATIVE_INFINITY || this.maxValue == POSITIVE_INFINITY;
     }
@@ -146,6 +153,10 @@ public class ColumnStatistic {
                 + nullsFraction + separator
                 + averageRowSize + separator
                 + distinctValuesCount + "] "
+<<<<<<< HEAD
+=======
+                + (histogram == null ? "" : histogram.getMcvString() + " ")
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 + type;
     }
 
@@ -212,12 +223,21 @@ public class ColumnStatistic {
                     averageRowSize, distinctValuesCount, histogram, type);
         }
 
+<<<<<<< HEAD
         private Builder(String maxString, String minString, double minValue, double maxValue,
                         double nullsFraction, double averageRowSize,
                         double distinctValuesCount, Histogram histogram,
                         StatisticType type) {
             this.maxString = maxString;
             this.minString = minString;
+=======
+        private Builder(String minString, String maxString, double minValue, double maxValue,
+                        double nullsFraction, double averageRowSize,
+                        double distinctValuesCount, Histogram histogram,
+                        StatisticType type) {
+            this.minString = minString;
+            this.maxString = maxString;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             this.minValue = minValue;
             this.maxValue = maxValue;
             this.nullsFraction = nullsFraction;

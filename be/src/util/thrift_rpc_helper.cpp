@@ -60,8 +60,45 @@ void ThriftRpcHelper::setup(ExecEnv* exec_env) {
 }
 
 template <typename T>
+<<<<<<< HEAD
 Status ThriftRpcHelper::rpc(const std::string& ip, const int32_t port,
                             std::function<void(ClientConnection<T>&)> callback, int timeout_ms) {
+=======
+struct ThriftMsgTypeTraits {};
+
+template <>
+struct ThriftMsgTypeTraits<FrontendServiceClient> {
+    constexpr static const char* rpc_name = "FE RPC";
+};
+
+template <>
+struct ThriftMsgTypeTraits<BackendServiceClient> {
+    constexpr static const char* rpc_name = "BE/CN RPC";
+};
+
+template <>
+struct ThriftMsgTypeTraits<TFileBrokerServiceClient> {
+    constexpr static const char* rpc_name = "Broker RPC";
+};
+
+template <typename T>
+Status ThriftRpcHelper::rpc_impl(const std::function<void(ClientConnection<T>&)>& callback, ClientConnection<T>& client,
+                                 const TNetworkAddress& address) noexcept {
+    std::stringstream ss;
+    try {
+        callback(client);
+        return Status::OK();
+    } catch (apache::thrift::TException& e) {
+        ss << ThriftMsgTypeTraits<T>::rpc_name << " failure, address=" << address << ", reason=" << e.what();
+    }
+
+    return Status::ThriftRpcError(ss.str());
+}
+
+template <typename T>
+Status ThriftRpcHelper::rpc(const std::string& ip, const int32_t port,
+                            std::function<void(ClientConnection<T>&)> callback, int timeout_ms, int retry_times) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     if (UNLIKELY(_s_exec_env == nullptr)) {
         return Status::ThriftRpcError(
                 "Thrift client has not been setup to send rpc. Maybe BE has not been started completely. Please retry "
@@ -71,6 +108,7 @@ Status ThriftRpcHelper::rpc(const std::string& ip, const int32_t port,
     Status status;
     ClientConnection<T> client(_s_exec_env->get_client_cache<T>(), address, timeout_ms, &status);
     if (!status.ok()) {
+<<<<<<< HEAD
         LOG(WARNING) << "Connect frontend failed, address=" << address << ", status=" << status.get_error_msg();
         return status;
     }
@@ -95,10 +133,35 @@ Status ThriftRpcHelper::rpc(const std::string& ip, const int32_t port,
         return Status::ThriftRpcError(ss.str());
     }
     return Status::OK();
+=======
+        _s_exec_env->get_client_cache<T>()->close_connections(address);
+        LOG(WARNING) << "Connect " << ThriftMsgTypeTraits<T>::rpc_name << " failed, address=" << address
+                     << ", status=" << status.message();
+        return status;
+    }
+
+    int i = 0;
+    do {
+        status = rpc_impl(callback, client, address);
+        if (status.ok()) {
+            return Status::OK();
+        }
+        LOG(WARNING) << status;
+        SleepFor(MonoDelta::FromMilliseconds(config::thrift_client_retry_interval_ms));
+        // reopen failure will disable this connection to prevent it from being used again.
+        auto st = client.reopen(timeout_ms);
+        if (!st.ok()) {
+            LOG(WARNING) << "client reopen failed. address=" << address << ", status=" << st.message();
+            break;
+        }
+    } while (i++ < retry_times);
+    return status;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 template Status ThriftRpcHelper::rpc<FrontendServiceClient>(
         const std::string& ip, const int32_t port,
+<<<<<<< HEAD
         std::function<void(ClientConnection<FrontendServiceClient>&)> callback, int timeout_ms);
 
 template Status ThriftRpcHelper::rpc<BackendServiceClient>(
@@ -108,5 +171,16 @@ template Status ThriftRpcHelper::rpc<BackendServiceClient>(
 template Status ThriftRpcHelper::rpc<TFileBrokerServiceClient>(
         const std::string& ip, const int32_t port,
         std::function<void(ClientConnection<TFileBrokerServiceClient>&)> callback, int timeout_ms);
+=======
+        std::function<void(ClientConnection<FrontendServiceClient>&)> callback, int timeout_ms, int retry_times);
+
+template Status ThriftRpcHelper::rpc<BackendServiceClient>(
+        const std::string& ip, const int32_t port,
+        std::function<void(ClientConnection<BackendServiceClient>&)> callback, int timeout_ms, int retry_times);
+
+template Status ThriftRpcHelper::rpc<TFileBrokerServiceClient>(
+        const std::string& ip, const int32_t port,
+        std::function<void(ClientConnection<TFileBrokerServiceClient>&)> callback, int timeout_ms, int retry_times);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 } // namespace starrocks

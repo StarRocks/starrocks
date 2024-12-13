@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # sha2
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 计算 SHA-2 系列哈希函数 (SHA-224/SHA-256/SHA-384/SHA-512)。
 

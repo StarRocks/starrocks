@@ -17,7 +17,11 @@
 #include "common/statusor.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/MasterService_types.h"
+<<<<<<< HEAD
 #include "storage/lake/tablet.h"
+=======
+#include "storage/lake/versioned_tablet.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "storage/olap_common.h"
 
 namespace starrocks::lake {
@@ -27,16 +31,26 @@ public:
     SparkLoadHandler() = default;
     ~SparkLoadHandler() = default;
 
+<<<<<<< HEAD
     Status process_streaming_ingestion(Tablet& tablet, const TPushReq& request, PushType push_type,
+=======
+    Status process_streaming_ingestion(VersionedTablet& tablet, const TPushReq& request, PushType push_type,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                        std::vector<TTabletInfo>* tablet_info_vec);
 
     int64_t write_bytes() const { return _write_bytes; }
     int64_t write_rows() const { return _write_rows; }
 
 private:
+<<<<<<< HEAD
     Status _load_convert(Tablet& cur_tablet);
 
     void _get_tablet_infos(const Tablet& tablet, std::vector<TTabletInfo>* tablet_info_vec);
+=======
+    Status _load_convert(VersionedTablet& cur_tablet);
+
+    void _get_tablet_infos(const VersionedTablet& tablet, std::vector<TTabletInfo>* tablet_info_vec);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 private:
     // mainly tablet_id, version and delta file path

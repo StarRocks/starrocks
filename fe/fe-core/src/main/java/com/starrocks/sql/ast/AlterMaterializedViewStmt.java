@@ -15,18 +15,25 @@
 
 package com.starrocks.sql.ast;
 
+<<<<<<< HEAD
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Set;
 
+=======
+import com.starrocks.analysis.TableName;
+import com.starrocks.sql.parser.NodePosition;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 /**
  * 1.Support for modifying the way of refresh and the cycle of asynchronous refresh;
  * 2.Support for modifying the name of a materialized view;
  * 3.SYNC is not supported and ASYNC is not allow changed to SYNC
  */
 public class AlterMaterializedViewStmt extends DdlStmt {
+<<<<<<< HEAD
 
     private final TableName mvName;
     private final String newMvName;
@@ -56,12 +63,22 @@ public class AlterMaterializedViewStmt extends DdlStmt {
         this.modifyTablePropertiesClause = modifyTablePropertiesClause;
         this.status = status;
         this.swapTable = swapTable;
+=======
+    private final TableName mvName;
+    private final AlterTableClause alterTableClause;
+
+    public AlterMaterializedViewStmt(TableName mvName, AlterTableClause alterTableClause, NodePosition pos) {
+        super(pos);
+        this.mvName = mvName;
+        this.alterTableClause = alterTableClause;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public TableName getMvName() {
         return mvName;
     }
 
+<<<<<<< HEAD
     public String getNewMvName() {
         return newMvName;
     }
@@ -80,6 +97,10 @@ public class AlterMaterializedViewStmt extends DdlStmt {
 
     public SwapTableClause getSwapTable() {
         return swapTable;
+=======
+    public AlterTableClause getAlterTableClause() {
+        return alterTableClause;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override

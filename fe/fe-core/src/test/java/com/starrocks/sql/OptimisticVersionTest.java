@@ -19,6 +19,10 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.analyzer.PlannerMetaLocker;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -75,9 +79,16 @@ class OptimisticVersionTest extends PlanTestBase {
         Map<String, Database> dbs = AnalyzerUtils.collectAllDatabase(starRocksAssert.getCtx(), insertStmt);
 
         // normal planner
+<<<<<<< HEAD
         StatementPlanner.lock(dbs);
         new InsertPlanner(dbs, true).plan(insertStmt, starRocksAssert.getCtx());
         StatementPlanner.unLock(dbs);
+=======
+        PlannerMetaLocker locker = new PlannerMetaLocker(starRocksAssert.getCtx(), insertStmt);
+        StatementPlanner.lock(locker);
+        new InsertPlanner(locker, true).plan(insertStmt, starRocksAssert.getCtx());
+        StatementPlanner.unLock(locker);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // retry but failed
         new MockUp<OptimisticVersion>() {
@@ -87,11 +98,19 @@ class OptimisticVersionTest extends PlanTestBase {
             }
         };
         try {
+<<<<<<< HEAD
             StatementPlanner.lock(dbs);
             assertThrows(StarRocksPlannerException.class, () ->
                     new InsertPlanner(dbs, true).plan(insertStmt, starRocksAssert.getCtx()));
         } finally {
             StatementPlanner.unLock(dbs);
+=======
+            StatementPlanner.lock(locker);
+            assertThrows(StarRocksPlannerException.class, () ->
+                    new InsertPlanner(locker, true).plan(insertStmt, starRocksAssert.getCtx()));
+        } finally {
+            StatementPlanner.unLock(locker);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         // retry and succeed
@@ -108,10 +127,21 @@ class OptimisticVersionTest extends PlanTestBase {
             }
         };
         try {
+<<<<<<< HEAD
             StatementPlanner.lock(dbs);
             new InsertPlanner(dbs, true).plan(insertStmt, starRocksAssert.getCtx());
         } finally {
             StatementPlanner.unLock(dbs);
         }
     }
+=======
+            StatementPlanner.lock(locker);
+            new InsertPlanner(locker, true).plan(insertStmt, starRocksAssert.getCtx());
+        } finally {
+            StatementPlanner.unLock(locker);
+        }
+
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

@@ -51,7 +51,11 @@ TEST_F(ParquetPageReaderTest, Normal) {
         ThriftSerializer ser(true, 100);
         uint32_t len = 0;
         uint8_t* header_ser = nullptr;
+<<<<<<< HEAD
         ser.serialize(&page_header, &len, &header_ser);
+=======
+        CHECK(ser.serialize(&page_header, &len, &header_ser).ok());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         buffer.append((char*)header_ser, len);
 
         buffer.resize(buffer.size() + page_header.compressed_page_size);
@@ -69,7 +73,11 @@ TEST_F(ParquetPageReaderTest, Normal) {
         ThriftSerializer ser(true, 100);
         uint32_t len = 0;
         uint8_t* header_ser = nullptr;
+<<<<<<< HEAD
         ser.serialize(&page_header, &len, &header_ser);
+=======
+        CHECK(ser.serialize(&page_header, &len, &header_ser).ok());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         buffer.append((char*)header_ser, len);
 
         buffer.resize(buffer.size() + page_header.compressed_page_size);
@@ -124,7 +132,11 @@ TEST_F(ParquetPageReaderTest, ExtraBytes) {
         ThriftSerializer ser(true, 100);
         uint32_t len = 0;
         uint8_t* header_ser = nullptr;
+<<<<<<< HEAD
         ser.serialize(&page_header, &len, &header_ser);
+=======
+        CHECK(ser.serialize(&page_header, &len, &header_ser).ok());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         buffer.append((char*)header_ser, len);
 
         buffer.resize(buffer.size() + page_header.compressed_page_size);
@@ -142,7 +154,11 @@ TEST_F(ParquetPageReaderTest, ExtraBytes) {
         ThriftSerializer ser(true, 100);
         uint32_t len = 0;
         uint8_t* header_ser = nullptr;
+<<<<<<< HEAD
         ser.serialize(&page_header, &len, &header_ser);
+=======
+        CHECK(ser.serialize(&page_header, &len, &header_ser).ok());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         buffer.append((char*)header_ser, len);
 
         buffer.resize(buffer.size() + page_header.compressed_page_size);

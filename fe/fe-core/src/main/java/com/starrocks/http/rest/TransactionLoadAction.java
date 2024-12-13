@@ -35,17 +35,28 @@
 package com.starrocks.http.rest;
 
 import com.codahale.metrics.Histogram;
+<<<<<<< HEAD
 import com.google.common.base.Strings;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.UserException;
+=======
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.starrocks.catalog.Database;
+import com.starrocks.common.DdlException;
+import com.starrocks.common.LabelAlreadyUsedException;
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.StarRocksHttpException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.HttpMetricRegistry;
 import com.starrocks.http.IllegalArgException;
+<<<<<<< HEAD
 import com.starrocks.metric.LongCounterMetric;
 import com.starrocks.metric.Metric;
 import com.starrocks.server.GlobalStateMgr;
@@ -53,12 +64,41 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.transaction.TransactionStatus;
 import io.netty.handler.codec.http.HttpMethod;
+=======
+import com.starrocks.http.rest.transaction.BypassWriteTransactionHandler;
+import com.starrocks.http.rest.transaction.TransactionOperation;
+import com.starrocks.http.rest.transaction.TransactionOperationHandler;
+import com.starrocks.http.rest.transaction.TransactionOperationHandler.ResultWrapper;
+import com.starrocks.http.rest.transaction.TransactionOperationParams;
+import com.starrocks.http.rest.transaction.TransactionOperationParams.Body;
+import com.starrocks.http.rest.transaction.TransactionOperationParams.Channel;
+import com.starrocks.http.rest.transaction.TransactionWithChannelHandler;
+import com.starrocks.http.rest.transaction.TransactionWithoutChannelHandler;
+import com.starrocks.metric.LongCounterMetric;
+import com.starrocks.metric.Metric;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.system.ComputeNode;
+import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TransactionState.LoadJobSourceType;
+import io.netty.handler.codec.http.HttpMethod;
+import io.netty.handler.codec.http.HttpResponseStatus;
+import org.apache.commons.lang3.StringUtils;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
+<<<<<<< HEAD
+=======
+import java.util.Optional;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.function.Function;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import static com.starrocks.http.HttpMetricRegistry.TXN_STREAM_LOAD_BEGIN_LATENCY_MS;
 import static com.starrocks.http.HttpMetricRegistry.TXN_STREAM_LOAD_BEGIN_NUM;
@@ -70,6 +110,7 @@ import static com.starrocks.http.HttpMetricRegistry.TXN_STREAM_LOAD_PREPARE_LATE
 import static com.starrocks.http.HttpMetricRegistry.TXN_STREAM_LOAD_PREPARE_NUM;
 import static com.starrocks.http.HttpMetricRegistry.TXN_STREAM_LOAD_ROLLBACK_LATENCY_MS;
 import static com.starrocks.http.HttpMetricRegistry.TXN_STREAM_LOAD_ROLLBACK_NUM;
+<<<<<<< HEAD
 
 public class TransactionLoadAction extends RestBaseAction {
     private static final Logger LOG = LogManager.getLogger(TransactionLoadAction.class);
@@ -91,6 +132,36 @@ public class TransactionLoadAction extends RestBaseAction {
         protected boolean removeEldestEntry(Map.Entry<String, Long> eldest) {
             return size() > (GlobalStateMgr.getCurrentSystemInfo().getTotalBackendNumber() +
                     GlobalStateMgr.getCurrentSystemInfo().getTotalComputeNodeNumber()) * 512;
+=======
+import static com.starrocks.http.rest.transaction.TransactionOperation.TXN_BEGIN;
+import static com.starrocks.http.rest.transaction.TransactionOperation.TXN_COMMIT;
+import static com.starrocks.http.rest.transaction.TransactionOperation.TXN_LOAD;
+import static com.starrocks.http.rest.transaction.TransactionOperation.TXN_PREPARE;
+import static com.starrocks.http.rest.transaction.TransactionOperation.TXN_ROLLBACK;
+
+public class TransactionLoadAction extends RestBaseAction {
+    private static final Logger LOG = LogManager.getLogger(TransactionLoadAction.class);
+
+    private static final long DEFAULT_TXN_TIMEOUT_MILLIS = 20000L;
+
+    private static final String TXN_OP_KEY = "txn_op";
+    private static final String TIMEOUT_KEY = "timeout";
+    private static final String CHANNEL_NUM_STR = "channel_num";
+    private static final String CHANNEL_ID_STR = "channel_id";
+    private static final String SOURCE_TYPE = "source_type";
+
+    private static TransactionLoadAction ac;
+
+    // Map operation name to metrics
+    private final Map<TransactionOperation, OpMetrics> opMetricsMap = new HashMap<>();
+
+    private final ReadWriteLock txnNodeMapAccessLock = new ReentrantReadWriteLock();
+    private final Map<String, Long> txnNodeMap = new LinkedHashMap<>(512, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<String, Long> eldest) {
+            return size() > (GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getTotalBackendNumber() +
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getTotalComputeNodeNumber()) * 512;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     };
 
@@ -134,9 +205,13 @@ public class TransactionLoadAction extends RestBaseAction {
     }
 
     public int txnNodeMapSize() {
+<<<<<<< HEAD
         synchronized (this) {
             return txnNodeMap.size();
         }
+=======
+        return accessTxnNodeMapWithReadLock(Map::size);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public static TransactionLoadAction getAction() {
@@ -146,8 +221,12 @@ public class TransactionLoadAction extends RestBaseAction {
     public static void registerAction(ActionController controller) throws IllegalArgException {
         ac = new TransactionLoadAction(controller);
         controller.registerHandler(HttpMethod.POST, "/api/transaction/{" + TXN_OP_KEY + "}", ac);
+<<<<<<< HEAD
         controller.registerHandler(HttpMethod.PUT,
                 "/api/transaction/{" + TXN_OP_KEY + "}", ac);
+=======
+        controller.registerHandler(HttpMethod.PUT, "/api/transaction/{" + TXN_OP_KEY + "}", ac);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -158,12 +237,23 @@ public class TransactionLoadAction extends RestBaseAction {
             if (redirectToLeader(request, response)) {
                 return;
             }
+<<<<<<< HEAD
             String op = request.getSingleParameter(TXN_OP_KEY);
             opMetrics = opMetricsMap.get(op);
             if (opMetrics != null) {
                 opMetrics.opRunningNum.increase(1L);
             }
             executeTransaction(request, response, op);
+=======
+            TransactionOperation txnOperation = TransactionOperation.parse(request.getSingleParameter(TXN_OP_KEY))
+                    .orElseThrow(() -> new StarRocksException(
+                            "Unknown transaction operation: " + request.getSingleParameter(TXN_OP_KEY)));
+            opMetrics = opMetricsMap.get(txnOperation);
+            if (opMetrics != null) {
+                opMetrics.opRunningNum.increase(1L);
+            }
+            executeTransaction(request, response);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } catch (Exception e) {
             TransactionResult resp = new TransactionResult();
             if (e instanceof LabelAlreadyUsedException) {
@@ -172,7 +262,11 @@ public class TransactionLoadAction extends RestBaseAction {
                 resp.addResultEntry("ExistingJobStatus", ((LabelAlreadyUsedException) e).getJobStatus());
             } else {
                 resp.status = ActionStatus.FAILED;
+<<<<<<< HEAD
                 resp.msg = e.getClass().toString() + ": " + e.getMessage();
+=======
+                resp.msg = e.getClass() + ": " + e.getMessage();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
             LOG.warn(DebugUtil.getStackTrace(e));
             sendResult(request, response, resp);
@@ -184,6 +278,7 @@ public class TransactionLoadAction extends RestBaseAction {
         }
     }
 
+<<<<<<< HEAD
     public void executeTransaction(BaseRequest request, BaseResponse response, String op) throws UserException {
         String dbName = request.getRequest().headers().get(DB_KEY);
         String tableName = request.getRequest().headers().get(TABLE_KEY);
@@ -361,6 +456,221 @@ public class TransactionLoadAction extends RestBaseAction {
         redirectTo(request, response, redirectAddr);
     }
 
+=======
+    protected void executeTransaction(BaseRequest request, BaseResponse response) throws StarRocksException {
+        TransactionOperationParams txnOperationParams = toTxnOperationParams(request);
+        TransactionOperation txnOperation = txnOperationParams.getTxnOperation();
+        String label = txnOperationParams.getLabel();
+
+        TransactionOperationHandler txnOperationHandler = getTxnOperationHandler(txnOperationParams);
+        ResultWrapper result = txnOperationHandler.handle(request, response);
+        if (null != result.getResult()) {
+            sendResult(request, response, result.getResult());
+            return;
+        }
+
+        // redirect transaction op to BE
+        TNetworkAddress redirectAddress = result.getRedirectAddress();
+        if (null == redirectAddress) {
+            Long nodeId = getNodeId(txnOperation, label);
+            ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(nodeId);
+            if (node == null) {
+                node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNode(nodeId);
+                if (node == null) {
+                    throw new StarRocksException("Node " + nodeId + " is not alive");
+                }
+            }
+
+            redirectAddress = new TNetworkAddress(node.getHost(), node.getHttpPort());
+        }
+
+        LOG.info("Redirect transaction action to destination={}, db: {}, table: {}, op: {}, label: {}",
+                redirectAddress, txnOperationParams.getDbName(), txnOperationParams.getTableName(), txnOperation, label);
+        redirectTo(request, response, redirectAddress);
+    }
+
+    private TransactionOperationHandler getTxnOperationHandler(TransactionOperationParams params) throws
+            StarRocksException {
+        if (params.getChannel().notNull()) {
+            return new TransactionWithChannelHandler(params);
+        }
+
+        TransactionOperation txnOperation = params.getTxnOperation();
+        LoadJobSourceType sourceType = params.getSourceType();
+        if ((TXN_BEGIN.equals(txnOperation) || TXN_LOAD.equals(txnOperation)) && null == sourceType) {
+            return new TransactionWithoutChannelHandler(params);
+        }
+
+        String label = params.getLabel();
+        if (accessTxnNodeMapWithReadLock(txnNodeMap -> txnNodeMap.containsKey(label))) {
+            /*
+             * The Bypass Write scenario will not redirect the request to BE definitely,
+             * so if txnNodeMap contains the label, this must not be a Bypass Write scenario.
+             */
+            return new TransactionWithoutChannelHandler(params);
+        }
+
+        if (null == sourceType) {
+            String dbName = params.getDbName();
+            Database db = Optional.ofNullable(GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName))
+                    .orElseThrow(() -> new StarRocksException(String.format("Database[%s] does not exist.", dbName)));
+
+            TransactionState txnState = GlobalStateMgr.getCurrentState()
+                    .getGlobalTransactionMgr().getLabelTransactionState(db.getId(), label);
+            if (null == txnState) {
+                throw new StarRocksException(String.format("No transaction found by label %s", label));
+            }
+            sourceType = txnState.getSourceType();
+        }
+
+        return LoadJobSourceType.BYPASS_WRITE.equals(sourceType)
+                ? new BypassWriteTransactionHandler(params) : new TransactionWithoutChannelHandler(params);
+    }
+
+    private Long getNodeId(TransactionOperation txnOperation, String label) throws StarRocksException {
+        Long nodeId;
+        // save label->be hashmap when begin transaction, so that subsequent operator can send to same BE
+        if (TXN_BEGIN.equals(txnOperation)) {
+            Long chosenNodeId = GlobalStateMgr.getCurrentState().getNodeMgr()
+                    .getClusterInfo().getNodeSelector().seqChooseBackendOrComputeId();
+            nodeId = chosenNodeId;
+            // txnNodeMap is LRU cache, it atomic remove unused entry
+            accessTxnNodeMapWithWriteLock(txnNodeMap -> txnNodeMap.put(label, chosenNodeId));
+        } else {
+            nodeId = accessTxnNodeMapWithReadLock(txnNodeMap -> txnNodeMap.get(label));
+        }
+
+        if (nodeId == null) {
+            throw new StarRocksException(String.format(
+                    "Transaction with op[%s] and label[%s] has no node.", txnOperation.getValue(), label));
+        }
+
+        return nodeId;
+    }
+
+    /**
+     * Resolve and validate request, and wrap params it as {@link TransactionOperationParams} object.
+     */
+    private static TransactionOperationParams toTxnOperationParams(BaseRequest request) throws StarRocksException {
+        String dbName = request.getRequest().headers().get(DB_KEY);
+        if (StringUtils.isBlank(dbName)) {
+            throw new StarRocksException("No database selected.");
+        }
+
+        String tableName = request.getRequest().headers().get(TABLE_KEY);
+        String warehouseName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+        if (request.getRequest().headers().contains(WAREHOUSE_KEY)) {
+            warehouseName = request.getRequest().headers().get(WAREHOUSE_KEY);
+        }
+
+        String label = request.getRequest().headers().get(LABEL_KEY);
+        if (StringUtils.isBlank(label)) {
+            throw new StarRocksException("Empty label.");
+        }
+        String user = request.getRequest().headers().get(USER_KEY);
+
+        TransactionOperation txnOperation = TransactionOperation.parse(request.getSingleParameter(TXN_OP_KEY))
+                .orElseThrow(() -> new StarRocksException(
+                        "Unknown transaction operation: " + request.getSingleParameter(TXN_OP_KEY)));
+        Long timeoutMillis = Optional.ofNullable(request.getRequest().headers().get(TIMEOUT_KEY))
+                .map(Long::parseLong)
+                .map(sec -> sec * 1000L)
+                .orElse(DEFAULT_TXN_TIMEOUT_MILLIS);
+        LoadJobSourceType sourceType = parseSourceType(request.getSingleParameter(SOURCE_TYPE));
+
+        Integer channelId = Optional
+                .ofNullable(request.getRequest().headers().get(CHANNEL_ID_STR))
+                .map(Integer::parseInt)
+                .orElse(null);
+
+        Integer channelNum = Optional
+                .ofNullable(request.getRequest().headers().get(CHANNEL_NUM_STR))
+                .map(Integer::parseInt)
+                .orElse(null);
+
+        if (channelNum != null && channelId == null) {
+            throw new DdlException("Must provide channel_id when stream load begin.");
+        }
+
+        if (channelNum == null && channelId != null) {
+            throw new DdlException("Must provide channel_num when stream load begin.");
+        }
+
+        Channel channel = new Channel(channelId, channelNum);
+        if (LoadJobSourceType.BYPASS_WRITE.equals(sourceType) && channel.notNull()) {
+            throw new StarRocksException(String.format(
+                    "Param %s and %s is not expected when source type is %s",
+                    CHANNEL_NUM_STR, CHANNEL_ID_STR, sourceType));
+        }
+
+        Body body = new Body();
+        if (txnOperation != TransactionOperation.TXN_LOAD && StringUtils.isNotBlank(request.getContent())) {
+            try {
+                LOG.info("Parse request body, label: {}, {}", label, request.getContent());
+                body = mapper.readValue(request.getContent(), new TypeReference<>() {
+                });
+                if (null == body) {
+                    throw new StarRocksHttpException(
+                            HttpResponseStatus.BAD_REQUEST, "Malformed json tablets, label is " + label);
+                }
+            } catch (JsonProcessingException e) {
+                LOG.warn("Parse request body error, label: {}, {}", label, e.getMessage());
+                throw new StarRocksHttpException(
+                        HttpResponseStatus.BAD_REQUEST, "Malformed json tablets, label is " + label);
+            }
+        }
+
+        return new TransactionOperationParams(
+                dbName,
+                tableName,
+                warehouseName,
+                label,
+                txnOperation,
+                timeoutMillis,
+                channel,
+                sourceType,
+                body
+        );
+    }
+
+    private static LoadJobSourceType parseSourceType(String sourceType) throws StarRocksException {
+        if (StringUtils.isBlank(sourceType)) {
+            return null;
+        }
+
+        try {
+            LoadJobSourceType jobSourceType = LoadJobSourceType.valueOf(Integer.parseInt(sourceType));
+            if (null == jobSourceType) {
+                throw new StarRocksException("Unknown source type: " + sourceType);
+            }
+
+            return jobSourceType;
+        } catch (NumberFormatException e) {
+            throw new StarRocksException("Invalid source type: " + sourceType);
+        }
+    }
+
+    private <T> T accessTxnNodeMapWithReadLock(Function<Map<String, Long>, T> function) {
+        txnNodeMapAccessLock.readLock().lock();
+        try {
+            return function.apply(txnNodeMap);
+        } finally {
+            txnNodeMapAccessLock.readLock().unlock();
+        }
+    }
+
+    private <T> T accessTxnNodeMapWithWriteLock(Function<Map<String, Long>, T> function) {
+        txnNodeMapAccessLock.writeLock().lock();
+        try {
+            return function.apply(txnNodeMap);
+        } finally {
+            txnNodeMapAccessLock.writeLock().unlock();
+        }
+    }
+
+    /* helper classes */
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private static class OpMetrics {
         LongCounterMetric opRunningNum;
         Histogram opLatencyMs;

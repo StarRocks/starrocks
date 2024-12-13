@@ -27,6 +27,7 @@
 
 namespace starrocks {
 
+<<<<<<< HEAD
 ChunkChanger::ChunkChanger(const TabletSchema& base_schema, const TabletSchema& new_schema)
         : _base_schema(base_schema) {
     _schema_mapping.resize(new_schema.num_columns());
@@ -38,6 +39,22 @@ ChunkChanger::ChunkChanger(const TabletSchema& base_schema, const TabletSchema& 
           _base_table_column_names(base_table_column_names),
           _alter_job_type(alter_job_type) {
     _schema_mapping.resize(new_schema.num_columns());
+=======
+ChunkChanger::ChunkChanger(const TabletSchemaCSPtr& new_schema) {
+    _schema_mapping.resize(new_schema->num_columns());
+}
+
+ChunkChanger::ChunkChanger(const TabletSchemaCSPtr& base_schema, const TabletSchemaCSPtr& new_schema,
+                           std::vector<std::string>& base_table_column_names, TAlterJobType::type alter_job_type)
+        : _base_schema(std::move(base_schema)),
+          _base_table_column_names(base_table_column_names),
+          _alter_job_type(alter_job_type) {
+    size_t num_columns = new_schema->num_columns();
+    if (num_columns > 0 && new_schema->column(num_columns - 1).name() == Schema::FULL_ROW_COLUMN) {
+        num_columns--;
+    }
+    _schema_mapping.resize(num_columns);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 ChunkChanger::~ChunkChanger() {
@@ -49,7 +66,11 @@ ChunkChanger::~ChunkChanger() {
     }
 }
 
+<<<<<<< HEAD
 void ChunkChanger::init_runtime_state(TQueryOptions query_options, TQueryGlobals query_globals) {
+=======
+void ChunkChanger::init_runtime_state(const TQueryOptions& query_options, const TQueryGlobals& query_globals) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     _state = _obj_pool.add(
             new RuntimeState(TUniqueId(), TUniqueId(), query_options, query_globals, ExecEnv::GetInstance()));
 }
@@ -132,7 +153,11 @@ public:
 
     template <LogicalType from_type, LogicalType to_type>
     void add_convert_type_mapping() {
+<<<<<<< HEAD
         _convert_type_set.emplace(std::make_pair(from_type, to_type));
+=======
+        _convert_type_set.emplace(from_type, to_type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
 private:
@@ -213,9 +238,21 @@ ConvertTypeResolver::ConvertTypeResolver() {
 
 ConvertTypeResolver::~ConvertTypeResolver() = default;
 
+<<<<<<< HEAD
 Buffer<uint8_t> ChunkChanger::_execute_where_expr(ChunkPtr& chunk) {
     DCHECK(_where_expr != nullptr);
     ColumnPtr filter_col = _where_expr->evaluate(chunk.get()).value();
+=======
+StatusOr<Buffer<uint8_t>> ChunkChanger::_execute_where_expr(ChunkPtr& chunk) {
+    DCHECK(_where_expr != nullptr);
+    auto res = _where_expr->evaluate(chunk.get());
+    if (!res.ok()) {
+        std::stringstream ss;
+        ss << "execute where expr failed: " << res.status().message();
+        return Status::InternalError(ss.str());
+    }
+    ColumnPtr filter_col = std::move(res.value());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     size_t size = filter_col->size();
     Buffer<uint8_t> filter(size, 0);
@@ -244,7 +281,16 @@ bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, co
             }
         }
         if (_where_expr) {
+<<<<<<< HEAD
             auto filter = _execute_where_expr(base_chunk);
+=======
+            auto res = _execute_where_expr(base_chunk);
+            if (!res.ok()) {
+                LOG(WARNING) << res.status();
+                return false;
+            }
+            auto filter = std::move(res.value());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             // If no filtered rows are left, return directly
             if (SIMD::count_nonzero(filter) == 0) {
                 base_chunk->set_num_rows(0);
@@ -278,9 +324,13 @@ bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, co
             if (new_col->only_null()) {
                 // unfold only null columns to avoid no default values.
                 auto unfold_col = new_col->clone_empty();
+<<<<<<< HEAD
                 if (!unfold_col->append_nulls(new_col->size())) {
                     return false;
                 }
+=======
+                unfold_col->append_nulls(new_col->size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 new_col = std::move(unfold_col);
             } else {
                 // NOTE: Unpack const column first to avoid generating NullColumn<ConstColumn> result.
@@ -398,7 +448,11 @@ Status ChunkChanger::fill_generated_columns(ChunkPtr& new_chunk) {
             new_chunk->get_column_by_index(it.first).swap(tmp);
         } else {
             // generated column must be a nullable column. If tmp is not nullable column,
+<<<<<<< HEAD
             // new_chunk can not swap it directly
+=======
+            // it maybe a constant column or some other column type.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             // Unpack normal const column
             ColumnPtr output_column = ColumnHelper::unpack_and_duplicate_const_column(new_chunk->num_rows(), tmp);
             std::dynamic_pointer_cast<NullableColumn>(new_chunk->get_column_by_index(it.first))
@@ -417,7 +471,12 @@ Status ChunkChanger::prepare() {
         int real_idx = 0;
         DCHECK(!_base_table_column_names.empty());
         for (auto& ref_column_name : _base_table_column_names) {
+<<<<<<< HEAD
             size_t index = _base_schema.field_index(ref_column_name);
+=======
+            DCHECK(_base_schema);
+            size_t index = _base_schema->field_index(ref_column_name);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (index == -1) {
                 return Status::InternalError("referenced column was missing in base table: " + ref_column_name);
             }
@@ -435,7 +494,11 @@ Status ChunkChanger::prepare() {
             if (ref_column < 0) {
                 continue;
             }
+<<<<<<< HEAD
             auto ref_column_name = _base_schema.column(ref_column).name();
+=======
+            auto ref_column_name = _base_schema->column(ref_column).name();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (_column_ref_mapping.find(ref_column) == _column_ref_mapping.end()) {
                 return Status::InternalError("referenced column was missing in base table: " +
                                              std::string(ref_column_name));
@@ -543,7 +606,11 @@ void SchemaChangeUtils::init_materialized_params(const TAlterTabletReqV2& reques
     }
 }
 
+<<<<<<< HEAD
 Status SchemaChangeUtils::parse_request(const TabletSchema& base_schema, const TabletSchema& new_schema,
+=======
+Status SchemaChangeUtils::parse_request(const TabletSchemaCSPtr& base_schema, const TabletSchemaCSPtr& new_schema,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                         ChunkChanger* chunk_changer,
                                         const MaterializedViewParamMap& materialized_view_param_map,
                                         const std::unique_ptr<TExpr>& where_expr, bool has_delete_predicates,
@@ -552,6 +619,7 @@ Status SchemaChangeUtils::parse_request(const TabletSchema& base_schema, const T
     RETURN_IF_ERROR(parse_request_normal(base_schema, new_schema, chunk_changer, materialized_view_param_map,
                                          where_expr, has_delete_predicates, sc_sorting, sc_directly,
                                          generated_column_idxs));
+<<<<<<< HEAD
     if (base_schema.keys_type() == KeysType::PRIMARY_KEYS) {
         return parse_request_for_pk(base_schema, new_schema, sc_sorting, sc_directly);
     }
@@ -560,14 +628,32 @@ Status SchemaChangeUtils::parse_request(const TabletSchema& base_schema, const T
 
 Status SchemaChangeUtils::parse_request_normal(const TabletSchema& base_schema, const TabletSchema& new_schema,
                                                ChunkChanger* chunk_changer,
+=======
+    return parse_request_for_sort_key(base_schema, new_schema, sc_sorting, sc_directly);
+}
+
+Status SchemaChangeUtils::parse_request_normal(const TabletSchemaCSPtr& base_schema,
+                                               const TabletSchemaCSPtr& new_schema, ChunkChanger* chunk_changer,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                                const MaterializedViewParamMap& materialized_view_param_map,
                                                const std::unique_ptr<TExpr>& where_expr, bool has_delete_predicates,
                                                bool* sc_sorting, bool* sc_directly,
                                                std::unordered_set<int>* generated_column_idxs) {
     bool is_modify_generated_column = false;
+<<<<<<< HEAD
     for (int i = 0; i < new_schema.num_columns(); ++i) {
         const TabletColumn& new_column = new_schema.column(i);
         std::string column_name(new_column.name());
+=======
+    for (int i = 0; i < new_schema->num_columns(); ++i) {
+        const TabletColumn& new_column = new_schema->column(i);
+        std::string column_name(new_column.name());
+        if (column_name == Schema::FULL_ROW_COLUMN) {
+            // need to regenerate full_row column
+            *sc_directly = true;
+            continue;
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ColumnMapping* column_mapping = chunk_changer->get_mutable_column_mapping(i);
 
         if (materialized_view_param_map.find(column_name) != materialized_view_param_map.end()) {
@@ -583,7 +669,11 @@ Status SchemaChangeUtils::parse_request_normal(const TabletSchema& base_schema, 
                 RETURN_IF_ERROR(column_mapping->mv_expr_ctx->open(runtime_state));
             }
 
+<<<<<<< HEAD
             int32_t column_index = base_schema.field_index(mvParam.origin_column_name);
+=======
+            int32_t column_index = base_schema->field_index(mvParam.origin_column_name);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (column_index >= 0) {
                 column_mapping->ref_column = column_index;
                 continue;
@@ -595,7 +685,11 @@ Status SchemaChangeUtils::parse_request_normal(const TabletSchema& base_schema, 
             }
         }
 
+<<<<<<< HEAD
         int32_t column_index = base_schema.field_index(column_name);
+=======
+        int32_t column_index = base_schema->field_index(column_name);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // if generated_column_idxs contain column_index, it means that
         // MODIFY GENERATED COLUMN is executed. The value for the new schema
         // must be re-compute by the new expression so the column mapping can not be set.
@@ -614,7 +708,11 @@ Status SchemaChangeUtils::parse_request_normal(const TabletSchema& base_schema, 
         {
             column_mapping->ref_column = -1;
 
+<<<<<<< HEAD
             if (i < base_schema.num_short_key_columns()) {
+=======
+            if (i < base_schema->num_short_key_columns()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 *sc_directly = true;
             }
 
@@ -641,7 +739,14 @@ Status SchemaChangeUtils::parse_request_normal(const TabletSchema& base_schema, 
     // If the reference sequence of the Key column is out of order, it needs to be reordered
     int num_default_value = 0;
 
+<<<<<<< HEAD
     for (int i = 0; i < new_schema.num_key_columns(); ++i) {
+=======
+    for (int i = 0; i < new_schema->num_key_columns(); ++i) {
+        if (new_schema->column(i).name() == Schema::FULL_ROW_COLUMN) {
+            continue;
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ColumnMapping* column_mapping = chunk_changer->get_mutable_column_mapping(i);
 
         if (column_mapping->ref_column < 0) {
@@ -655,7 +760,11 @@ Status SchemaChangeUtils::parse_request_normal(const TabletSchema& base_schema, 
         }
     }
 
+<<<<<<< HEAD
     if (base_schema.keys_type() != new_schema.keys_type()) {
+=======
+    if (base_schema->keys_type() != new_schema->keys_type()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // only when base table is dup and mv is agg
         // the rollup job must be reagg.
         *sc_sorting = true;
@@ -669,7 +778,12 @@ Status SchemaChangeUtils::parse_request_normal(const TabletSchema& base_schema, 
     // followings need resort:
     //      old keys:    A   B   C   D
     //      new keys:    A   B
+<<<<<<< HEAD
     if (new_schema.keys_type() != KeysType::DUP_KEYS && new_schema.num_key_columns() < base_schema.num_key_columns()) {
+=======
+    if (new_schema->keys_type() != KeysType::DUP_KEYS &&
+        new_schema->num_key_columns() < base_schema->num_key_columns()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // this is a table with aggregate key type, and num of key columns in new schema
         // is less, which means the data in new tablet should be more aggregated.
         // so we use sorting schema change to sort and merge the data.
@@ -677,19 +791,35 @@ Status SchemaChangeUtils::parse_request_normal(const TabletSchema& base_schema, 
         return Status::OK();
     }
 
+<<<<<<< HEAD
     if (base_schema.num_short_key_columns() != new_schema.num_short_key_columns()) {
+=======
+    if (base_schema->num_short_key_columns() != new_schema->num_short_key_columns()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // the number of short_keys changed, can't do linked schema change
         *sc_directly = true;
         return Status::OK();
     }
 
+<<<<<<< HEAD
     for (size_t i = 0; i < new_schema.num_columns(); ++i) {
+=======
+    for (size_t i = 0; i < new_schema->num_columns(); ++i) {
+        if (new_schema->column(i).name() == Schema::FULL_ROW_COLUMN) {
+            continue;
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ColumnMapping* column_mapping = chunk_changer->get_mutable_column_mapping(i);
         if (column_mapping->ref_column < 0) {
             continue;
         } else {
+<<<<<<< HEAD
             auto& new_column = new_schema.column(i);
             auto& ref_column = base_schema.column(column_mapping->ref_column);
+=======
+            auto& new_column = new_schema->column(i);
+            auto& ref_column = base_schema->column(column_mapping->ref_column);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (new_column.type() != ref_column.type() || is_modify_generated_column) {
                 *sc_directly = true;
                 return Status::OK();
@@ -706,6 +836,21 @@ Status SchemaChangeUtils::parse_request_normal(const TabletSchema& base_schema, 
             } else if (new_column.has_bitmap_index() != ref_column.has_bitmap_index()) {
                 *sc_directly = true;
                 return Status::OK();
+<<<<<<< HEAD
+=======
+            } else if (new_schema->has_index(new_column.unique_id(), GIN) !=
+                       base_schema->has_index(ref_column.unique_id(), GIN)) {
+                *sc_directly = true;
+                return Status::OK();
+            } else if (new_schema->has_index(new_column.unique_id(), NGRAMBF) !=
+                       base_schema->has_index(ref_column.unique_id(), NGRAMBF)) {
+                *sc_directly = true;
+                return Status::OK();
+            } else if (new_schema->has_index(new_column.unique_id(), VECTOR) !=
+                       base_schema->has_index(ref_column.unique_id(), VECTOR)) {
+                *sc_directly = true;
+                return Status::OK();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
     }
@@ -721,6 +866,7 @@ Status SchemaChangeUtils::parse_request_normal(const TabletSchema& base_schema, 
     return Status::OK();
 }
 
+<<<<<<< HEAD
 Status SchemaChangeUtils::parse_request_for_pk(const TabletSchema& base_schema, const TabletSchema& new_schema,
                                                bool* sc_sorting, bool* sc_directly) {
     const auto& base_sort_key_idxes = base_schema.sort_key_idxes();
@@ -732,6 +878,20 @@ Status SchemaChangeUtils::parse_request_for_pk(const TabletSchema& base_schema, 
     }
     for (auto idx : new_sort_key_idxes) {
         new_sort_key_unique_ids.emplace_back(new_schema.column(idx).unique_id());
+=======
+Status SchemaChangeUtils::parse_request_for_sort_key(const TabletSchemaCSPtr& base_schema,
+                                                     const TabletSchemaCSPtr& new_schema, bool* sc_sorting,
+                                                     bool* sc_directly) {
+    const auto& base_sort_key_idxes = base_schema->sort_key_idxes();
+    const auto& new_sort_key_idxes = new_schema->sort_key_idxes();
+    std::vector<int32_t> base_sort_key_unique_ids;
+    std::vector<int32_t> new_sort_key_unique_ids;
+    for (auto idx : base_sort_key_idxes) {
+        base_sort_key_unique_ids.emplace_back(base_schema->column(idx).unique_id());
+    }
+    for (auto idx : new_sort_key_idxes) {
+        new_sort_key_unique_ids.emplace_back(new_schema->column(idx).unique_id());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     if (new_sort_key_unique_ids.size() > base_sort_key_unique_ids.size()) {

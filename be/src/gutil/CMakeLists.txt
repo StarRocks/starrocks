@@ -56,6 +56,11 @@ if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" 
     set(SOURCE_FILES ${SOURCE_FILES} atomicops-internals-x86.cc)
 endif()
 
+<<<<<<< HEAD
+=======
+SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC")
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 add_library(Gutil STATIC ${SOURCE_FILES})
 
 set_target_properties(Gutil PROPERTIES COMPILE_FLAGS "-funsigned-char -Wno-deprecated -Wno-char-subscripts")

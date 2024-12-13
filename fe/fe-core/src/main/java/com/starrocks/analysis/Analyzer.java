@@ -229,11 +229,19 @@ public class Analyzer {
     }
 
     public Table getTable(TableName tblName) {
+<<<<<<< HEAD
         Database db = globalState.globalStateMgr.getDb(tblName.getDb());
         if (db == null) {
             return null;
         }
         return db.getTable(tblName.getTbl());
+=======
+        Database db = globalState.globalStateMgr.getLocalMetastore().getDb(tblName.getDb());
+        if (db == null) {
+            return null;
+        }
+        return GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tblName.getTbl());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public TupleDescriptor getTupleDesc(TupleId id) {

@@ -19,34 +19,88 @@ import com.staros.proto.FilePathInfo;
 import com.staros.proto.ShardInfo;
 import com.staros.proto.StatusCode;
 import com.starrocks.catalog.MaterializedIndex;
+<<<<<<< HEAD
 import com.starrocks.catalog.Partition;
+=======
+import com.starrocks.catalog.PhysicalPartition;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.proto.DropTableRequest;
 import com.starrocks.proto.DropTableResponse;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
+<<<<<<< HEAD
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
+=======
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.system.ComputeNode;
+import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.warehouse.DefaultWarehouse;
+import com.starrocks.warehouse.Warehouse;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.assertj.core.util.Lists;
 import org.junit.Assert;
+<<<<<<< HEAD
+=======
+import org.junit.Before;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.junit.Test;
 
 import java.util.concurrent.CompletableFuture;
 
+<<<<<<< HEAD
 
 public class LakeTableCleanerTest {
     private final ShardInfo shardInfo;
 
     public LakeTableCleanerTest() {
         shardInfo = ShardInfo.newBuilder().setFilePath(FilePathInfo.newBuilder().setFullPath("oss://1/2")).build();
+=======
+public class LakeTableCleanerTest {
+    private final ShardInfo shardInfo;
+
+    @Mocked
+    private StarOSAgent starOSAgent;
+
+    @Mocked
+    private WarehouseManager warehouseManager;
+
+    public LakeTableCleanerTest() {
+        shardInfo = ShardInfo.newBuilder().setFilePath(FilePathInfo.newBuilder().setFullPath("oss://1/2")).build();
+        warehouseManager = new WarehouseManager();
+        warehouseManager.initDefaultWarehouse();
+    }
+
+    @Before
+    public void setup() {
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public StarOSAgent getStarOSAgent() {
+                return starOSAgent;
+            }
+        };
+
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public ShardInfo getShardInfo(long shardId, long workerGroupId) throws StarClientException {
+                return shardInfo;
+            }
+        };
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
     public void test(@Mocked LakeTable table,
+<<<<<<< HEAD
                      @Mocked Partition partition,
+=======
+                     @Mocked PhysicalPartition partition,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                      @Mocked MaterializedIndex index,
                      @Mocked LakeTablet tablet,
                      @Mocked LakeService lakeService) throws StarClientException {
@@ -54,7 +108,11 @@ public class LakeTableCleanerTest {
 
         new MockUp<Utils>() {
             @Mock
+<<<<<<< HEAD
             public ComputeNode chooseNode(LakeTablet tablet) {
+=======
+            public ComputeNode chooseNode(ShardInfo info) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 return new ComputeNode();
             }
         };
@@ -66,14 +124,35 @@ public class LakeTableCleanerTest {
             }
         };
 
+<<<<<<< HEAD
         new Expectations() {
             {
                 table.getAllPartitions();
+=======
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public Warehouse getWarehouse(String warehouseName) {
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID, WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            }
+
+            @Mock
+            public Warehouse getWarehouse(long warehouseId) {
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID, WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            }
+        };
+
+        new Expectations() {
+            {
+                table.getAllPhysicalPartitions();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 result = Lists.newArrayList(partition);
                 minTimes = 1;
                 maxTimes = 1;
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
                 result = Lists.newArrayList(index);
                 minTimes = 1;
@@ -84,11 +163,14 @@ public class LakeTableCleanerTest {
                 minTimes = 1;
                 maxTimes = 1;
 
+<<<<<<< HEAD
                 tablet.getShardInfo();
                 result = shardInfo;
                 minTimes = 1;
                 maxTimes = 1;
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 lakeService.dropTable((DropTableRequest) any);
                 result = CompletableFuture.completedFuture(new DropTableResponse());
                 minTimes = 1;
@@ -101,7 +183,11 @@ public class LakeTableCleanerTest {
 
     @Test
     public void testNoTablet(@Mocked LakeTable table,
+<<<<<<< HEAD
                              @Mocked Partition partition,
+=======
+                             @Mocked PhysicalPartition partition,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                              @Mocked MaterializedIndex index,
                              @Mocked LakeTablet tablet,
                              @Mocked LakeService lakeService) {
@@ -109,12 +195,19 @@ public class LakeTableCleanerTest {
 
         new Expectations() {
             {
+<<<<<<< HEAD
                 table.getAllPartitions();
+=======
+                table.getAllPhysicalPartitions();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 result = Lists.newArrayList(partition);
                 minTimes = 1;
                 maxTimes = 1;
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
                 result = Lists.newArrayList(index);
                 minTimes = 1;
@@ -132,7 +225,11 @@ public class LakeTableCleanerTest {
 
     @Test
     public void testNoAliveNode(@Mocked LakeTable table,
+<<<<<<< HEAD
                                 @Mocked Partition partition,
+=======
+                                @Mocked PhysicalPartition partition,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                 @Mocked MaterializedIndex index,
                                 @Mocked LakeTablet tablet,
                                 @Mocked LakeService lakeService) throws StarClientException {
@@ -140,19 +237,44 @@ public class LakeTableCleanerTest {
 
         new MockUp<Utils>() {
             @Mock
+<<<<<<< HEAD
             public ComputeNode chooseNode(LakeTablet tablet) {
+=======
+            public ComputeNode chooseNode(ShardInfo info) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 return null;
+            }
+        };
+
+<<<<<<< HEAD
+        new Expectations() {
+            {
+                table.getAllPartitions();
+=======
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public Warehouse getWarehouse(String warehouseName) {
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID, WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            }
+
+            @Mock
+            public Warehouse getWarehouse(long warehouseId) {
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID, WarehouseManager.DEFAULT_WAREHOUSE_NAME);
             }
         };
 
         new Expectations() {
             {
-                table.getAllPartitions();
+                table.getAllPhysicalPartitions();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 result = Lists.newArrayList(partition);
                 minTimes = 1;
                 maxTimes = 1;
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
                 result = Lists.newArrayList(index);
                 minTimes = 1;
@@ -162,11 +284,14 @@ public class LakeTableCleanerTest {
                 result = Lists.newArrayList(tablet);
                 minTimes = 1;
                 maxTimes = 1;
+<<<<<<< HEAD
 
                 tablet.getShardInfo();
                 result = shardInfo;
                 minTimes = 1;
                 maxTimes = 1;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         };
 
@@ -175,20 +300,45 @@ public class LakeTableCleanerTest {
 
     @Test
     public void testGetShardInfoFailed(@Mocked LakeTable table,
+<<<<<<< HEAD
                                        @Mocked Partition partition,
+=======
+                                       @Mocked PhysicalPartition partition,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                        @Mocked MaterializedIndex index,
                                        @Mocked LakeTablet tablet,
                                        @Mocked LakeService lakeService) throws StarClientException {
         LakeTableCleaner cleaner = new LakeTableCleaner(table);
 
+<<<<<<< HEAD
         new Expectations() {
             {
                 table.getAllPartitions();
+=======
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public Warehouse getWarehouse(String warehouseName) {
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID, WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            }
+
+            @Mock
+            public Warehouse getWarehouse(long warehouseId) {
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID, WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            }
+        };
+
+        new Expectations() {
+            {
+                table.getAllPhysicalPartitions();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 result = Lists.newArrayList(partition);
                 minTimes = 1;
                 maxTimes = 1;
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
                 result = Lists.newArrayList(index);
                 minTimes = 1;
@@ -198,11 +348,14 @@ public class LakeTableCleanerTest {
                 result = Lists.newArrayList(tablet);
                 minTimes = 1;
                 maxTimes = 1;
+<<<<<<< HEAD
 
                 tablet.getShardInfo();
                 result = new StarClientException(StatusCode.IO, "injected error");
                 minTimes = 1;
                 maxTimes = 1;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         };
 
@@ -211,7 +364,11 @@ public class LakeTableCleanerTest {
 
     @Test
     public void testRPCFailed(@Mocked LakeTable table,
+<<<<<<< HEAD
                               @Mocked Partition partition,
+=======
+                              @Mocked PhysicalPartition partition,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                               @Mocked MaterializedIndex index,
                               @Mocked LakeTablet tablet,
                               @Mocked LakeService lakeService) throws StarClientException {
@@ -219,7 +376,11 @@ public class LakeTableCleanerTest {
 
         new MockUp<Utils>() {
             @Mock
+<<<<<<< HEAD
             public ComputeNode chooseNode(LakeTablet tablet) {
+=======
+            public ComputeNode chooseNode(ShardInfo info) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 return new ComputeNode();
             }
         };
@@ -231,14 +392,35 @@ public class LakeTableCleanerTest {
             }
         };
 
+<<<<<<< HEAD
         new Expectations() {
             {
                 table.getAllPartitions();
+=======
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public Warehouse getWarehouse(String warehouseName) {
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID, WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            }
+
+            @Mock
+            public Warehouse getWarehouse(long warehouseId) {
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID, WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            }
+        };
+
+        new Expectations() {
+            {
+                table.getAllPhysicalPartitions();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 result = Lists.newArrayList(partition);
                 minTimes = 1;
                 maxTimes = 1;
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
                 result = Lists.newArrayList(index);
                 minTimes = 1;
@@ -249,11 +431,14 @@ public class LakeTableCleanerTest {
                 minTimes = 1;
                 maxTimes = 1;
 
+<<<<<<< HEAD
                 tablet.getShardInfo();
                 result = shardInfo;
                 minTimes = 1;
                 maxTimes = 1;
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 lakeService.dropTable((DropTableRequest) any);
                 result = new RuntimeException("Injected RPC error");
                 minTimes = 1;
@@ -266,20 +451,45 @@ public class LakeTableCleanerTest {
 
     @Test
     public void testShardNotFound(@Mocked LakeTable table,
+<<<<<<< HEAD
                                   @Mocked Partition partition,
+=======
+                                  @Mocked PhysicalPartition partition,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                   @Mocked MaterializedIndex index,
                                   @Mocked LakeTablet tablet,
                                   @Mocked LakeService lakeService) throws StarClientException {
         LakeTableCleaner cleaner = new LakeTableCleaner(table);
 
+<<<<<<< HEAD
         new Expectations() {
             {
                 table.getAllPartitions();
+=======
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public Warehouse getWarehouse(String warehouseName) {
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID, WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            }
+
+            @Mock
+            public Warehouse getWarehouse(long warehouseId) {
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID, WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            }
+        };
+
+        new Expectations() {
+            {
+                table.getAllPhysicalPartitions();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 result = Lists.newArrayList(partition);
                 minTimes = 1;
                 maxTimes = 1;
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
                 result = Lists.newArrayList(index);
                 minTimes = 1;
@@ -289,11 +499,21 @@ public class LakeTableCleanerTest {
                 result = Lists.newArrayList(tablet);
                 minTimes = 1;
                 maxTimes = 1;
+<<<<<<< HEAD
 
                 tablet.getShardInfo();
                 result = new StarClientException(StatusCode.NOT_EXIST, "injected error");
                 minTimes = 1;
                 maxTimes = 1;
+=======
+            }
+        };
+
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public ShardInfo getShardInfo(long shardId, long workerGroupId) throws StarClientException {
+                throw new StarClientException(StatusCode.NOT_EXIST, "injected error");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         };
 

@@ -47,8 +47,11 @@ public class VariableExpr extends Expr {
     private final SetType setType;
     private final String name;
     private Object value;
+<<<<<<< HEAD
     private boolean isNull;
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @VisibleForTesting
     public VariableExpr(String name) {
         this(name, SetType.SESSION);
@@ -69,7 +72,10 @@ public class VariableExpr extends Expr {
         setType = other.setType;
         name = other.name;
         value = other.value;
+<<<<<<< HEAD
         isNull = other.isNull;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public SetType getSetType() {
@@ -88,6 +94,7 @@ public class VariableExpr extends Expr {
         this.value = value;
     }
 
+<<<<<<< HEAD
     public boolean isNull() {
         return isNull;
     }
@@ -96,6 +103,8 @@ public class VariableExpr extends Expr {
         isNull = true;
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitVariableExpr(this, context);
@@ -117,7 +126,11 @@ public class VariableExpr extends Expr {
 
     @Override
     public int hashCode() {
+<<<<<<< HEAD
         return Objects.hash(super.hashCode(), name, setType, value, isNull);
+=======
+        return Objects.hash(super.hashCode(), name, setType, value);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -126,6 +139,10 @@ public class VariableExpr extends Expr {
         if (o == null || getClass() != o.getClass()) return false;
         if (!super.equals(o)) return false;
         VariableExpr that = (VariableExpr) o;
+<<<<<<< HEAD
         return isNull == that.isNull && setType == that.setType && Objects.equals(name, that.name) && Objects.equals(value, that.value);
+=======
+        return setType == that.setType && Objects.equals(name, that.name) && Objects.equals(value, that.value);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }

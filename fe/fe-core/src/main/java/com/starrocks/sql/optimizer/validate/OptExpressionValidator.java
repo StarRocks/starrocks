@@ -25,6 +25,10 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -36,6 +40,10 @@ import com.starrocks.sql.optimizer.rewrite.BaseScalarOperatorShuttle;
 
 import java.util.List;
 import java.util.Map;
+<<<<<<< HEAD
+=======
+import java.util.Optional;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 public class OptExpressionValidator extends OptExpressionVisitor<OptExpression, Void> {
 
@@ -81,6 +89,14 @@ public class OptExpressionValidator extends OptExpressionVisitor<OptExpression, 
 
     @Override
     public OptExpression visitLogicalLimit(OptExpression optExpression, Void context) {
+<<<<<<< HEAD
+=======
+        LogicalLimitOperator limit = optExpression.getOp().cast();
+        if (limit.hasOffset() && limit.isLocal()) {
+            ErrorReport.reportValidateException(ErrorCode.ERR_PLAN_VALIDATE_ERROR,
+                    ErrorType.INTERNAL_ERROR, optExpression, "offset limit transfer error, must be gather operator");
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return commonValidate(optExpression);
     }
 
@@ -256,9 +272,14 @@ public class OptExpressionValidator extends OptExpressionVisitor<OptExpression, 
         }
 
         private void checkDateType(ConstantOperator constant, Type toType) {
+<<<<<<< HEAD
             try {
                 constant.castTo(toType);
             } catch (Exception e) {
+=======
+            Optional<ConstantOperator> res = constant.castTo(toType);
+            if (!res.isPresent()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 ErrorReport.reportValidateException(ErrorCode.ERR_INVALID_DATE_ERROR,
                         ErrorType.USER_ERROR, toType, constant.getValue());
             }

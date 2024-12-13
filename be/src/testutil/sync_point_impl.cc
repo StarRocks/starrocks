@@ -22,10 +22,18 @@
 
 #include "testutil/sync_point_impl.h"
 
+<<<<<<< HEAD
 #include <signal.h>
 #include <sys/types.h>
 #include <unistd.h>
 
+=======
+#include <sys/types.h>
+#include <unistd.h>
+
+#include <csignal>
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #if defined(BE_TEST)
 namespace starrocks {
 KillPoint* KillPoint::GetInstance() {

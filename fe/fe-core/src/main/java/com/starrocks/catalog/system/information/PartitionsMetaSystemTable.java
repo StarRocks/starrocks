@@ -24,9 +24,17 @@ import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
 import static com.starrocks.catalog.system.SystemTable.builder;
 
 public class PartitionsMetaSystemTable {
+<<<<<<< HEAD
     public static SystemTable create() {
         return new SystemTable(SystemId.PARTITIONS_META_ID,
                 "partitions_meta",
+=======
+    public static final String NAME = "partitions_meta";
+
+    public static SystemTable create() {
+        return new SystemTable(SystemId.PARTITIONS_META_ID,
+                NAME,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 Table.TableType.SCHEMA,
                 builder()
                         .column("DB_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
@@ -37,6 +45,12 @@ public class PartitionsMetaSystemTable {
                         .column("VISIBLE_VERSION", ScalarType.createType(PrimitiveType.BIGINT))
                         .column("VISIBLE_VERSION_TIME", ScalarType.createType(PrimitiveType.DATETIME))
                         .column("NEXT_VERSION", ScalarType.createType(PrimitiveType.BIGINT))
+<<<<<<< HEAD
+=======
+                        .column("DATA_VERSION", ScalarType.createType(PrimitiveType.BIGINT))
+                        .column("VERSION_EPOCH", ScalarType.createType(PrimitiveType.BIGINT))
+                        .column("VERSION_TXN_TYPE", ScalarType.createVarchar(NAME_CHAR_LEN))
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         .column("PARTITION_KEY", ScalarType.createVarchar(NAME_CHAR_LEN))
                         // corresponding to `Range` or `List` in `SHOW PARTITIONS FROM XXX`
                         .column("PARTITION_VALUE", ScalarType.createVarchar(NAME_CHAR_LEN))

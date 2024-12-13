@@ -40,7 +40,14 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
+<<<<<<< HEAD
 import com.starrocks.analysis.FunctionName;
+=======
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FunctionName;
+import com.starrocks.catalog.combinator.AggStateDesc;
+import com.starrocks.common.Pair;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.sql.ast.HdfsURI;
@@ -55,7 +62,15 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+<<<<<<< HEAD
 
+=======
+import java.util.Vector;
+import java.util.function.BiFunction;
+import java.util.stream.Collectors;
+
+import static com.starrocks.common.io.IOUtils.readOptionStringOrNull;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import static com.starrocks.common.io.IOUtils.writeOptionString;
 
 /**
@@ -108,6 +123,12 @@ public class Function implements Writable {
     @SerializedName(value = "argTypes")
     private Type[] argTypes;
 
+<<<<<<< HEAD
+=======
+    @SerializedName(value = "argNames")
+    private String[] argNames;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // If true, this function has variable arguments.
     // TODO: we don't currently support varargs with no fixed types. i.e. fn(...)
     @SerializedName(value = "hasVarArgs")
@@ -131,6 +152,13 @@ public class Function implements Writable {
     @SerializedName(value = "checksum")
     protected String checksum = "";
 
+<<<<<<< HEAD
+=======
+    // aggStateDesc is used for combinator to generate the nested aggregated function.
+    @SerializedName(value = "aggStateDesc")
+    protected AggStateDesc aggStateDesc;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // Function id, every function has a unique id. Now all built-in functions' id is 0
     private long id = 0;
     // User specified function name e.g. "Add"
@@ -143,6 +171,13 @@ public class Function implements Writable {
 
     private boolean isNullable = true;
 
+<<<<<<< HEAD
+=======
+    private Vector<Pair<String, Expr>> defaultArgExprs;
+
+    private boolean isMetaFunction = false;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // Only used for serialization
     protected Function() {
     }
@@ -151,6 +186,13 @@ public class Function implements Writable {
         this(0, name, argTypes, retType, varArgs);
     }
 
+<<<<<<< HEAD
+=======
+    public Function(FunctionName name, Type[] argTypes, String[] argNames, Type retType, boolean varArgs) {
+        this(0, name, argTypes, argNames, retType, varArgs);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public Function(FunctionName name, List<Type> args, Type retType, boolean varArgs) {
         this(0, name, args, retType, varArgs);
     }
@@ -169,6 +211,24 @@ public class Function implements Writable {
         this.isPolymorphic = Arrays.stream(this.argTypes).anyMatch(Type::isPseudoType);
     }
 
+<<<<<<< HEAD
+=======
+    public Function(long id, FunctionName name, Type[] argTypes, String[] argNames, Type retType, boolean hasVarArgs) {
+        this.id = id;
+        this.functionId = id;
+        this.name = name;
+        this.hasVarArgs = hasVarArgs;
+        if (argTypes == null) {
+            this.argTypes = new Type[0];
+        } else {
+            this.argTypes = argTypes;
+        }
+        this.argNames = argNames;
+        this.retType = retType;
+        this.isPolymorphic = Arrays.stream(this.argTypes).anyMatch(Type::isPseudoType);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public Function(long id, FunctionName name, List<Type> argTypes, Type retType, boolean hasVarArgs) {
         this.id = id;
         this.functionId = id;
@@ -188,7 +248,12 @@ public class Function implements Writable {
         id = other.id;
         name = other.name;
         retType = other.retType;
+<<<<<<< HEAD
         argTypes = other.argTypes;
+=======
+        argTypes = Arrays.copyOf(other.argTypes, other.argTypes.length);
+        argNames = other.argNames;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         hasVarArgs = other.hasVarArgs;
         userVisible = other.userVisible;
         location = other.location;
@@ -198,6 +263,11 @@ public class Function implements Writable {
         isPolymorphic = other.isPolymorphic;
         couldApplyDictOptimize = other.couldApplyDictOptimize;
         isNullable = other.isNullable;
+<<<<<<< HEAD
+=======
+        isMetaFunction = other.isMetaFunction;
+        aggStateDesc = other.aggStateDesc;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public FunctionName getFunctionName() {
@@ -220,6 +290,17 @@ public class Function implements Writable {
         return argTypes;
     }
 
+<<<<<<< HEAD
+=======
+    public String[] getArgNames() {
+        return argNames;
+    }
+
+    public boolean hasNamedArg() {
+        return argNames != null && argNames.length > 0;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // Returns the number of arguments to this function.
     public int getNumArgs() {
         return argTypes.length;
@@ -241,6 +322,44 @@ public class Function implements Writable {
         binaryType = type;
     }
 
+<<<<<<< HEAD
+=======
+    public void setArgNames(List<String> names) {
+        if (names != null) {
+            argNames = names.toArray(new String[0]);
+            Preconditions.checkState(argNames.length == argTypes.length);
+        }
+    }
+
+    public void setDefaultNamedArgs(Vector<Pair<String, Expr>> defaultArgExprs) {
+        this.defaultArgExprs = defaultArgExprs;
+    }
+
+    public List<Expr> getLastDefaultsFromN(int n) {
+        if (defaultArgExprs == null || n >= argTypes.length || n < getRequiredArgNum()) {
+            return null;
+        }
+        return defaultArgExprs.subList(n - getRequiredArgNum(), defaultArgExprs.size()).
+                stream().map(x -> x.second).collect(Collectors.toList());
+    }
+
+    public Expr getDefaultNamedExpr(String argName) {
+        if (defaultArgExprs == null) {
+            return null;
+        }
+        for (Pair<String, Expr> arg : defaultArgExprs) {
+            if (arg.first.equals(argName)) {
+                return arg.second;
+            }
+        }
+        return null;
+    }
+
+    public int getRequiredArgNum() {
+        return argTypes.length - (defaultArgExprs == null ? 0 : defaultArgExprs.size());
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public boolean hasVarArgs() {
         return hasVarArgs;
     }
@@ -271,6 +390,21 @@ public class Function implements Writable {
         return isPolymorphic;
     }
 
+<<<<<<< HEAD
+=======
+    public void setPolymorphic(boolean isPolymorphic) {
+        this.isPolymorphic = isPolymorphic;
+    }
+
+    public boolean isMetaFunction() {
+        return isMetaFunction;
+    }
+
+    public void setMetaFunction(boolean metaFunction) {
+        isMetaFunction = metaFunction;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public long getFunctionId() {
         return functionId;
     }
@@ -340,6 +474,21 @@ public class Function implements Writable {
         this.couldApplyDictOptimize = couldApplyDictOptimize;
     }
 
+<<<<<<< HEAD
+=======
+    public AggStateDesc getAggStateDesc() {
+        return aggStateDesc;
+    }
+
+    public void setAggStateDesc(AggStateDesc aggStateDesc) {
+        this.aggStateDesc = aggStateDesc;
+    }
+
+    public void setFunctionName(FunctionName name) {
+        this.name = name;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // Compares this to 'other' for mode.
     public boolean compare(Function other, CompareMode mode) {
         switch (mode) {
@@ -357,6 +506,48 @@ public class Function implements Writable {
         }
     }
 
+<<<<<<< HEAD
+=======
+    private boolean compareNamedArguments(Function other, int start, BiFunction<Type, Type, Boolean> notMatch) {
+        if (!this.hasNamedArg() || other.argNames.length > this.argNames.length ||
+                other.hasVarArgs || this.hasVarArgs) {
+            return false;
+        }
+        boolean[] mask = new boolean[other.argTypes.length];
+        for (int i = start; i < this.argTypes.length; ++i) {
+            boolean found = false;
+            for (int j = start; j < other.argTypes.length && !found; ++j) {
+                if (!mask[j] && this.argNames[i].equals(other.argNames[j])) {
+                    if (notMatch.apply(other.argTypes[j], argTypes[i])) {
+                        return false;
+                    }
+                    found = true;
+                    mask[j] = true;
+                }
+            }
+            if (!found) {
+                // not default
+                if (this.getDefaultNamedExpr(this.argNames[i]) == null) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    private boolean comparePositionalArguments(Function other, int start, BiFunction<Type, Type, Boolean> notMatch) {
+        if (other.argTypes.length > this.argTypes.length ||
+                other.hasVarArgs || this.hasVarArgs || other.argTypes.length < getRequiredArgNum()) {
+            return false;
+        }
+        for (int i = start; i < other.argTypes.length; ++i) {
+            if (notMatch.apply(other.argTypes[i], argTypes[i])) {
+                return false;
+            }
+        }
+        return true;
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     /**
      * Returns true if 'this' is a supertype of 'other'. Each argument in other must
      * be implicitly castable to the matching argument in this.
@@ -364,6 +555,7 @@ public class Function implements Writable {
      * for "most" compatible or maybe return an error if it is ambiguous?
      */
     private boolean isSubtype(Function other) {
+<<<<<<< HEAD
         if (!this.hasVarArgs && other.argTypes.length != this.argTypes.length) {
             return false;
         }
@@ -371,12 +563,15 @@ public class Function implements Writable {
             return false;
         }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         int startArgIndex = 0;
         String functionName = other.getFunctionName().getFunction();
         // If function first arg must be boolean, we don't check it.
         if (functionName.equalsIgnoreCase("if")) {
             startArgIndex = 1;
         }
+<<<<<<< HEAD
         for (int i = startArgIndex; i < this.argTypes.length; ++i) {
             // Normally, if type A matches type B, then A and B must be implicitly castable,
             // but if one of the types is pseudotype, this rule does not hold anymore, so here
@@ -398,6 +593,45 @@ public class Function implements Writable {
                     return false;
                 }
             }
+=======
+        if (other.hasNamedArg()) {
+            return compareNamedArguments(other, startArgIndex,
+                    (Type ot, Type m) -> !ot.matchesType(m) && !Type.isImplicitlyCastable(ot, m, true));
+        } else if (this.defaultArgExprs != null && !other.hasVarArgs) {
+            // positional args with defaults in table functions
+            return comparePositionalArguments(other, startArgIndex,
+                    (Type ot, Type m) -> !ot.matchesType(m) && !Type.isImplicitlyCastable(ot, m, true));
+        } else {
+            if (!this.hasVarArgs && other.argTypes.length != this.argTypes.length) {
+                return false;
+            }
+            if (this.hasVarArgs && other.argTypes.length < this.argTypes.length) {
+                return false;
+            }
+            for (int i = startArgIndex; i < this.argTypes.length; ++i) {
+                // Normally, if type A matches type B, then A and B must be implicitly castable,
+                // but if one of the types is pseudotype, this rule does not hold anymore, so here
+                // we check type match first.
+                if (other.argTypes[i].matchesType(this.argTypes[i])) {
+                    continue;
+                }
+                if (!Type.isImplicitlyCastable(other.argTypes[i], this.argTypes[i], true)) {
+                    return false;
+                }
+            }
+
+            // Check trailing varargs.
+            if (this.hasVarArgs) {
+                for (int i = this.argTypes.length; i < other.argTypes.length; ++i) {
+                    if (other.argTypes[i].matchesType(getVarArgsType())) {
+                        continue;
+                    }
+                    if (!Type.isImplicitlyCastable(other.argTypes[i], getVarArgsType(), true)) {
+                        return false;
+                    }
+                }
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return true;
     }
@@ -405,6 +639,7 @@ public class Function implements Writable {
     // return true if 'this' is assign-compatible from 'other'.
     // Each argument in 'other' must be assign-compatible to the matching argument in 'this'.
     private boolean isAssignCompatible(Function other) {
+<<<<<<< HEAD
         if (!this.hasVarArgs && other.argTypes.length != this.argTypes.length) {
             return false;
         }
@@ -429,6 +664,41 @@ public class Function implements Writable {
                     return false;
                 }
             }
+=======
+        if (other.hasNamedArg()) {
+            return compareNamedArguments(other, 0,
+                    (Type ot, Type m) -> !ot.matchesType(m) && !Type.canCastTo(ot, m));
+        } else if (this.defaultArgExprs != null && !other.hasVarArgs) {
+            // positional args with defaults in table functions
+            return comparePositionalArguments(other, 0,
+                    (Type ot, Type m) -> !ot.matchesType(m) && !Type.canCastTo(ot, m));
+        } else {
+            if (!this.hasVarArgs && other.argTypes.length != this.argTypes.length) {
+                return false;
+            }
+            if (this.hasVarArgs && other.argTypes.length < this.argTypes.length) {
+                return false;
+            }
+            for (int i = 0; i < this.argTypes.length; ++i) {
+                if (other.argTypes[i].matchesType(this.argTypes[i])) {
+                    continue;
+                }
+                if (!Type.canCastTo(other.argTypes[i], argTypes[i])) {
+                    return false;
+                }
+            }
+            // Check trailing varargs.
+            if (this.hasVarArgs) {
+                for (int i = this.argTypes.length; i < other.argTypes.length; ++i) {
+                    if (other.argTypes[i].matchesType(getVarArgsType())) {
+                        continue;
+                    }
+                    if (!Type.canCastTo(other.argTypes[i], getVarArgsType())) {
+                        return false;
+                    }
+                }
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return true;
     }
@@ -443,9 +713,24 @@ public class Function implements Writable {
         if (o.hasVarArgs != this.hasVarArgs) {
             return false;
         }
+<<<<<<< HEAD
         for (int i = 0; i < this.argTypes.length; ++i) {
             if (!o.argTypes[i].matchesType(this.argTypes[i])) {
                 return false;
+=======
+
+        if (o.hasNamedArg()) {
+            return compareNamedArguments(o, 0,
+                    (Type ot, Type m) -> !ot.matchesType(m));
+        } else if (this.defaultArgExprs != null && !o.hasVarArgs) { // positional args with defaults in table functions
+            return comparePositionalArguments(o, 0,
+                    (Type ot, Type m) -> !ot.matchesType(m));
+        } else {
+            for (int i = 0; i < this.argTypes.length; ++i) {
+                if (!o.argTypes[i].matchesType(this.argTypes[i])) {
+                    return false;
+                }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
         return true;
@@ -457,6 +742,7 @@ public class Function implements Writable {
         }
         int minArgs = Math.min(o.argTypes.length, this.argTypes.length);
         // The first fully specified args must be identical.
+<<<<<<< HEAD
         for (int i = 0; i < minArgs; ++i) {
             if (o.argTypes[i].isNull() || this.argTypes[i].isNull()) {
                 continue;
@@ -474,6 +760,56 @@ public class Function implements Writable {
                 return false;
             }
             if (this.getNumArgs() > o.getNumArgs()) {
+=======
+        if (o.hasNamedArg()) {
+            return compareNamedArguments(o, 0,
+                    (Type ot, Type m) -> !ot.isNull() && !m.isNull() && !ot.matchesType(m));
+        } else if (this.defaultArgExprs != null && !o.hasVarArgs) { // positional args with defaults in table functions
+            return comparePositionalArguments(o, 0,
+                    (Type ot, Type m) -> !ot.isNull() && !m.isNull() && !ot.matchesType(m));
+        } else {
+            for (int i = 0; i < minArgs; ++i) {
+                if (o.argTypes[i].isNull() || this.argTypes[i].isNull()) {
+                    continue;
+                }
+                if (!o.argTypes[i].matchesType(this.argTypes[i])) {
+                    return false;
+                }
+            }
+            if (o.argTypes.length == this.argTypes.length) {
+                return true;
+            }
+
+            if (o.hasVarArgs && this.hasVarArgs) {
+                if (!o.getVarArgsType().matchesType(this.getVarArgsType())) {
+                    return false;
+                }
+                if (this.getNumArgs() > o.getNumArgs()) {
+                    for (int i = minArgs; i < this.getNumArgs(); ++i) {
+                        if (this.argTypes[i].isNull()) {
+                            continue;
+                        }
+                        if (!this.argTypes[i].matchesType(o.getVarArgsType())) {
+                            return false;
+                        }
+                    }
+                } else {
+                    for (int i = minArgs; i < o.getNumArgs(); ++i) {
+                        if (o.argTypes[i].isNull()) {
+                            continue;
+                        }
+                        if (!o.argTypes[i].matchesType(this.getVarArgsType())) {
+                            return false;
+                        }
+                    }
+                }
+                return true;
+            } else if (o.hasVarArgs) {
+                // o has var args so check the remaining arguments from this
+                if (o.getNumArgs() > minArgs) {
+                    return false;
+                }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 for (int i = minArgs; i < this.getNumArgs(); ++i) {
                     if (this.argTypes[i].isNull()) {
                         continue;
@@ -482,7 +818,16 @@ public class Function implements Writable {
                         return false;
                     }
                 }
+<<<<<<< HEAD
             } else {
+=======
+                return true;
+            } else if (this.hasVarArgs) {
+                // this has var args so check the remaining arguments from s
+                if (this.getNumArgs() > minArgs) {
+                    return false;
+                }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 for (int i = minArgs; i < o.getNumArgs(); ++i) {
                     if (o.argTypes[i].isNull()) {
                         continue;
@@ -491,6 +836,7 @@ public class Function implements Writable {
                         return false;
                     }
                 }
+<<<<<<< HEAD
             }
             return true;
         } else if (o.hasVarArgs) {
@@ -524,6 +870,13 @@ public class Function implements Writable {
         } else {
             // Neither has var args and the lengths don't match
             return false;
+=======
+                return true;
+            } else {
+                // Neither has var args and the lengths don't match
+                return false;
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -533,12 +886,37 @@ public class Function implements Writable {
             .build();
 
     public static String rectifyFunctionName(String s) {
+<<<<<<< HEAD
         return Optional.ofNullable(ACTUAL_NAMES.get(s)).orElse(s);
+=======
+        return Optional.ofNullable(ACTUAL_NAMES.get(s)).orElseGet(() -> {
+            Optional<String> optSuffix = Optional.empty();
+            if (s.endsWith(FunctionSet.AGG_STATE_SUFFIX)) {
+                optSuffix = Optional.of(FunctionSet.AGG_STATE_SUFFIX);
+            } else if (s.endsWith(FunctionSet.AGG_STATE_MERGE_SUFFIX)) {
+                optSuffix = Optional.of(FunctionSet.AGG_STATE_MERGE_SUFFIX);
+            } else if (s.endsWith(FunctionSet.AGG_STATE_UNION_SUFFIX)) {
+                optSuffix = Optional.of(FunctionSet.AGG_STATE_UNION_SUFFIX);
+            }
+            if (optSuffix.isEmpty()) {
+                return s;
+            } else {
+                String suffix = optSuffix.get();
+                String prefix = s.substring(0, s.length() - suffix.length());
+                return Optional.ofNullable(ACTUAL_NAMES.get(prefix))
+                        .map(actualName -> actualName + suffix)
+                        .orElse(s);
+            }
+        });
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public TFunction toThrift() {
         TFunction fn = new TFunction();
+<<<<<<< HEAD
         fn.setSignature(signatureString());
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         fn.setName(name.toThrift());
         fn.setBinary_type(binaryType);
         if (location != null) {
@@ -552,6 +930,12 @@ public class Function implements Writable {
         if (!checksum.isEmpty()) {
             fn.setChecksum(checksum);
         }
+<<<<<<< HEAD
+=======
+        if (aggStateDesc != null) {
+            fn.setAgg_state_desc(aggStateDesc.toThrift());
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         fn.setCould_apply_dict_optimize(couldApplyDictOptimize);
         return fn;
     }
@@ -652,6 +1036,17 @@ public class Function implements Writable {
         for (Type type : argTypes) {
             ColumnType.write(output, type);
         }
+<<<<<<< HEAD
+=======
+        if (hasNamedArg()) {
+            output.writeBoolean(true);
+            for (String name : argNames) {
+                writeOptionString(output, name);
+            }
+        } else {
+            output.writeBoolean(false);
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         output.writeBoolean(hasVarArgs);
         output.writeBoolean(userVisible);
         output.writeInt(binaryType.getValue());
@@ -679,6 +1074,17 @@ public class Function implements Writable {
         for (int i = 0; i < numArgs; ++i) {
             argTypes[i] = ColumnType.read(input);
         }
+<<<<<<< HEAD
+=======
+        boolean hasNamedArg = input.readBoolean();
+        if (hasNamedArg) {
+            argNames = new String[numArgs];
+            for (int i = 0; i < numArgs; ++i) {
+                argNames[i] = readOptionStringOrNull(input);
+                argNames[i] = argNames[i] == null ? "" : argNames[i];
+            }
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         hasVarArgs = input.readBoolean();
         userVisible = input.readBoolean();
         binaryType = TFunctionBinaryType.findByValue(input.readInt());
@@ -795,5 +1201,8 @@ public class Function implements Writable {
 
         return this;
     }
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

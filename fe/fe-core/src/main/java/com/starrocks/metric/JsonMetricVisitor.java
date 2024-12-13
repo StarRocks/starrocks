@@ -38,7 +38,10 @@ import com.codahale.metrics.Histogram;
 import com.starrocks.monitor.jvm.GcNames;
 import com.starrocks.monitor.jvm.JvmStats;
 
+<<<<<<< HEAD
 import java.util.Collections;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.List;
 
 public class JsonMetricVisitor extends MetricVisitor {
@@ -53,16 +56,28 @@ public class JsonMetricVisitor extends MetricVisitor {
 
     private void addGcMetric(String metricName, JvmStats.GarbageCollector gc) {
         buildMetric(metricName, "nounit", String.valueOf(gc.getCollectionCount()),
+<<<<<<< HEAD
                 Collections.singletonList(new MetricLabel("type", "count")));
         buildMetric(metricName, "milliseconds", String.valueOf(gc.getCollectionTime().getMillis()),
                 Collections.singletonList(new MetricLabel("type", "time")));
+=======
+                List.of(new MetricLabel("type", "count")));
+        buildMetric(metricName, "milliseconds", String.valueOf(gc.getCollectionTime().getMillis()),
+                List.of(new MetricLabel("type", "time")));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     private void addMemPoolMetric(String metricName, JvmStats.MemoryPool memPool) {
         buildMetric(metricName, "bytes", String.valueOf(memPool.getCommitted()),
+<<<<<<< HEAD
                 Collections.singletonList(new MetricLabel("type", "committed")));
         buildMetric(metricName, "bytes", String.valueOf(memPool.getUsed()),
                 Collections.singletonList(new MetricLabel("type", "used")));
+=======
+                List.of(new MetricLabel("type", "committed")));
+        buildMetric(metricName, "bytes", String.valueOf(memPool.getUsed()),
+                List.of(new MetricLabel("type", "used")));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -79,11 +94,19 @@ public class JsonMetricVisitor extends MetricVisitor {
         // mem overall
         JvmStats.Mem mem = jvmStats.getMem();
         buildMetric("jvm_heap_size_bytes", "bytes", String.valueOf(mem.getHeapMax()),
+<<<<<<< HEAD
                 Collections.singletonList(new MetricLabel("type", "max")));
         buildMetric("jvm_heap_size_bytes", "bytes", String.valueOf(mem.getHeapCommitted()),
                 Collections.singletonList(new MetricLabel("type", "committed")));
         buildMetric("jvm_heap_size_bytes", "bytes", String.valueOf(mem.getHeapUsed()),
                 Collections.singletonList(new MetricLabel("type", "used")));
+=======
+                List.of(new MetricLabel("type", "max")));
+        buildMetric("jvm_heap_size_bytes", "bytes", String.valueOf(mem.getHeapCommitted()),
+                List.of(new MetricLabel("type", "committed")));
+        buildMetric("jvm_heap_size_bytes", "bytes", String.valueOf(mem.getHeapUsed()),
+                List.of(new MetricLabel("type", "used")));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // mem pool
         for (JvmStats.MemoryPool memPool : jvmStats.getMem()) {
@@ -93,7 +116,11 @@ public class JsonMetricVisitor extends MetricVisitor {
                     percent = 100 * ((double) memPool.getUsed() / memPool.getCommitted());
                 }
                 buildMetric("jvm_size_percent", "percent", String.valueOf(percent),
+<<<<<<< HEAD
                         Collections.singletonList(new MetricLabel("type", GcNames.PERM)));
+=======
+                        List.of(new MetricLabel("type", GcNames.PERM)));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             } else if (memPool.getName().equalsIgnoreCase(GcNames.OLD)) {
                 double percent = 0.0;
                 if (memPool.getCommitted() > 0) {
@@ -102,7 +129,11 @@ public class JsonMetricVisitor extends MetricVisitor {
                 // **NOTICE**: We shouldn't use 'jvm_size_percent' as a metric name, it should be a type,
                 // but for compatibility reason, we won't remove it.
                 buildMetric("jvm_size_percent", "percent", String.valueOf(percent),
+<<<<<<< HEAD
                         Collections.singletonList(new MetricLabel("type", GcNames.OLD)));
+=======
+                        List.of(new MetricLabel("type", GcNames.OLD)));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
                 // {"metric":"jvm_old_size_bytes","type":"committed","unit":"bytes"}
                 // {"metric":"jvm_old_size_bytes","type":"used","unit":"bytes"}
@@ -118,9 +149,15 @@ public class JsonMetricVisitor extends MetricVisitor {
         for (JvmStats.BufferPool pool : jvmStats.getBufferPools()) {
             if (pool.getName().equalsIgnoreCase("direct")) {
                 buildMetric("jvm_direct_buffer_pool_size_bytes", "bytes", String.valueOf(pool.getTotalCapacity()),
+<<<<<<< HEAD
                         Collections.singletonList(new MetricLabel("type", "capacity")));
                 buildMetric("jvm_direct_buffer_pool_size_bytes", "bytes", String.valueOf(pool.getUsed()),
                         Collections.singletonList(new MetricLabel("type", "used")));
+=======
+                        List.of(new MetricLabel("type", "capacity")));
+                buildMetric("jvm_direct_buffer_pool_size_bytes", "bytes", String.valueOf(pool.getUsed()),
+                        List.of(new MetricLabel("type", "used")));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
     }
@@ -134,6 +171,14 @@ public class JsonMetricVisitor extends MetricVisitor {
     }
 
     @Override
+<<<<<<< HEAD
+=======
+    public void visitHistogram(HistogramMetric histogram) {
+
+    }
+
+    @Override
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void visitHistogram(String name, Histogram histogram) {
     }
 

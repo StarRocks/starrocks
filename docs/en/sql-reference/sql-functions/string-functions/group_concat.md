@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # group_concat
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Concatenates non-null values from a group into a single string, with a `sep` argument, which is `,` by default if not specified. This function can be used to concatenate values from multiple rows of a column into one string.
 

@@ -15,9 +15,14 @@
 #include "exec/schema_scanner/schema_helper.h"
 
 #include <sstream>
+<<<<<<< HEAD
 
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/FrontendService_types.h"
+=======
+#include <utility>
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "runtime/client_cache.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
@@ -27,6 +32,7 @@
 
 namespace starrocks {
 
+<<<<<<< HEAD
 Status SchemaHelper::get_db_names(const std::string& ip, const int32_t port, const TGetDbsParams& request,
                                   TGetDbsResult* result) {
     return ThriftRpcHelper::rpc<FrontendServiceClient>(
@@ -92,6 +98,89 @@ Status SchemaHelper::show_varialbes(const std::string& ip, const int32_t port, c
     return ThriftRpcHelper::rpc<FrontendServiceClient>(
             ip, port,
             [&request, &result](FrontendServiceConnection& client) { client->showVariables(*result, request); });
+=======
+Status SchemaHelper::_call_rpc(const SchemaScannerState& state,
+                               std::function<void(ClientConnection<FrontendServiceClient>&)> callback) {
+    DCHECK(state.param);
+    SCOPED_TIMER((state.param)->_rpc_timer);
+    return ThriftRpcHelper::rpc<FrontendServiceClient>(state.ip, state.port, std::move(callback), state.timeout_ms);
+}
+
+Status SchemaHelper::get_db_names(const SchemaScannerState& state, const TGetDbsParams& request,
+                                  TGetDbsResult* result) {
+    return _call_rpc(state,
+                     [&request, &result](FrontendServiceConnection& client) { client->getDbNames(*result, request); });
+}
+
+Status SchemaHelper::get_table_names(const SchemaScannerState& state, const TGetTablesParams& request,
+                                     TGetTablesResult* result) {
+    return _call_rpc(
+            state, [&request, &result](FrontendServiceConnection& client) { client->getTableNames(*result, request); });
+}
+
+Status SchemaHelper::list_table_status(const SchemaScannerState& state, const TGetTablesParams& request,
+                                       TListTableStatusResult* result) {
+    return _call_rpc(state, [&request, &result](FrontendServiceConnection& client) {
+        client->listTableStatus(*result, request);
+    });
+}
+
+Status SchemaHelper::list_materialized_view_status(const SchemaScannerState& state, const TGetTablesParams& request,
+                                                   TListMaterializedViewStatusResult* result) {
+    return _call_rpc(state, [&request, &result](FrontendServiceConnection& client) {
+        client->listMaterializedViewStatus(*result, request);
+    });
+}
+
+Status SchemaHelper::list_pipes(const SchemaScannerState& state, const TListPipesParams& req, TListPipesResult* res) {
+    return _call_rpc(state, [&req, &res](FrontendServiceConnection& client) { client->listPipes(*res, req); });
+}
+
+Status SchemaHelper::list_pipe_files(const SchemaScannerState& state, const TListPipeFilesParams& req,
+                                     TListPipeFilesResult* res) {
+    return _call_rpc(state, [&req, &res](FrontendServiceConnection& client) { client->listPipeFiles(*res, req); });
+}
+
+Status SchemaHelper::list_object_dependencies(const SchemaScannerState& state, const TObjectDependencyReq& req,
+                                              TObjectDependencyRes* res) {
+    return _call_rpc(state,
+                     [&req, &res](FrontendServiceConnection& client) { client->listObjectDependencies(*res, req); });
+}
+
+Status SchemaHelper::list_fe_locks(const SchemaScannerState& state, const TFeLocksReq& req, TFeLocksRes* res) {
+    return _call_rpc(state, [&req, &res](FrontendServiceConnection& client) { client->listFeLocks(*res, req); });
+}
+
+Status SchemaHelper::list_fe_memory_usage(const SchemaScannerState& state, const TFeMemoryReq& req, TFeMemoryRes* res) {
+    return _call_rpc(state, [&req, &res](FrontendServiceConnection& client) { client->listFeMemoryUsage(*res, req); });
+}
+
+Status SchemaHelper::get_tables_info(const SchemaScannerState& state, const TGetTablesInfoRequest& request,
+                                     TGetTablesInfoResponse* response) {
+    return _call_rpc(state, [&request, &response](FrontendServiceConnection& client) {
+        client->getTablesInfo(*response, request);
+    });
+}
+
+Status SchemaHelper::get_temporary_tables_info(const SchemaScannerState& state,
+                                               const TGetTemporaryTablesInfoRequest& request,
+                                               TGetTemporaryTablesInfoResponse* response) {
+    return _call_rpc(state, [&request, &response](FrontendServiceConnection& client) {
+        client->getTemporaryTablesInfo(*response, request);
+    });
+}
+
+Status SchemaHelper::describe_table(const SchemaScannerState& state, const TDescribeTableParams& request,
+                                    TDescribeTableResult* result) {
+    return _call_rpc(
+            state, [&request, &result](FrontendServiceConnection& client) { client->describeTable(*result, request); });
+}
+
+Status SchemaHelper::show_variables(const SchemaScannerState& state, const TShowVariableRequest& request,
+                                    TShowVariableResult* result) {
+    return _call_rpc(
+            state, [&request, &result](FrontendServiceConnection& client) { client->showVariables(*result, request); });
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 std::string SchemaHelper::extract_db_name(const std::string& full_name) {
@@ -103,6 +192,7 @@ std::string SchemaHelper::extract_db_name(const std::string& full_name) {
     return std::string(full_name.c_str() + found, full_name.size() - found);
 }
 
+<<<<<<< HEAD
 Status SchemaHelper::get_user_privs(const std::string& ip, const int32_t port, const TGetUserPrivsParams& request,
                                     TGetUserPrivsResult* result) {
     return ThriftRpcHelper::rpc<FrontendServiceClient>(
@@ -192,6 +282,101 @@ Status SchemaHelper::get_partitions_meta(const std::string& ip, const int32_t po
                 client->getPartitionsMeta(*var_result, var_params);
             },
             timeout_ms);
+=======
+Status SchemaHelper::get_user_privs(const SchemaScannerState& state, const TGetUserPrivsParams& request,
+                                    TGetUserPrivsResult* result) {
+    return _call_rpc(
+            state, [&request, &result](FrontendServiceConnection& client) { client->getUserPrivs(*result, request); });
+}
+
+Status SchemaHelper::get_db_privs(const SchemaScannerState& state, const TGetDBPrivsParams& request,
+                                  TGetDBPrivsResult* result) {
+    return _call_rpc(state,
+                     [&request, &result](FrontendServiceConnection& client) { client->getDBPrivs(*result, request); });
+}
+
+Status SchemaHelper::get_table_privs(const SchemaScannerState& state, const TGetTablePrivsParams& request,
+                                     TGetTablePrivsResult* result) {
+    return _call_rpc(
+            state, [&request, &result](FrontendServiceConnection& client) { client->getTablePrivs(*result, request); });
+}
+
+Status SchemaHelper::get_tables_config(const SchemaScannerState& state, const TGetTablesConfigRequest& var_params,
+                                       TGetTablesConfigResponse* var_result) {
+    return _call_rpc(state, [&var_params, &var_result](FrontendServiceConnection& client) {
+        client->getTablesConfig(*var_result, var_params);
+    });
+}
+
+Status SchemaHelper::get_tasks(const SchemaScannerState& state, const TGetTasksParams& var_params,
+                               TGetTaskInfoResult* var_result) {
+    return _call_rpc(state, [&var_params, &var_result](FrontendServiceConnection& client) {
+        client->getTasks(*var_result, var_params);
+    });
+}
+
+Status SchemaHelper::get_task_runs(const SchemaScannerState& state, const TGetTasksParams& var_params,
+                                   TGetTaskRunInfoResult* var_result) {
+    return _call_rpc(state, [&var_params, &var_result](FrontendServiceConnection& client) {
+        client->getTaskRuns(*var_result, var_params);
+    });
+}
+
+Status SchemaHelper::get_loads(const SchemaScannerState& state, const TGetLoadsParams& var_params,
+                               TGetLoadsResult* var_result) {
+    return _call_rpc(state, [&var_params, &var_result](FrontendServiceConnection& client) {
+        client->getLoads(*var_result, var_params);
+    });
+}
+
+Status SchemaHelper::get_tracking_loads(const SchemaScannerState& state, const TGetLoadsParams& var_params,
+                                        TGetTrackingLoadsResult* var_result) {
+    return _call_rpc(state, [&var_params, &var_result](FrontendServiceConnection& client) {
+        client->getTrackingLoads(*var_result, var_params);
+    });
+}
+
+Status SchemaHelper::get_routine_load_jobs(const SchemaScannerState& state, const TGetLoadsParams& var_params,
+                                           TGetRoutineLoadJobsResult* var_result) {
+    return _call_rpc(state, [&var_params, &var_result](FrontendServiceConnection& client) {
+        client->getRoutineLoadJobs(*var_result, var_params);
+    });
+}
+
+Status SchemaHelper::get_stream_loads(const SchemaScannerState& state, const TGetLoadsParams& var_params,
+                                      TGetStreamLoadsResult* var_result) {
+    return _call_rpc(state, [&var_params, &var_result](FrontendServiceConnection& client) {
+        client->getStreamLoads(*var_result, var_params);
+    });
+}
+
+Status SchemaHelper::get_tablet_schedules(const SchemaScannerState& state, const TGetTabletScheduleRequest& request,
+                                          TGetTabletScheduleResponse* response) {
+    return _call_rpc(state, [&request, &response](FrontendServiceConnection& client) {
+        client->getTabletSchedule(*response, request);
+    });
+}
+
+Status SchemaHelper::get_role_edges(const SchemaScannerState& state, const TGetRoleEdgesRequest& request,
+                                    TGetRoleEdgesResponse* response) {
+    return _call_rpc(state, [&request, &response](FrontendServiceConnection& client) {
+        client->getRoleEdges(*response, request);
+    });
+}
+
+Status SchemaHelper::get_grants_to(const SchemaScannerState& state, const TGetGrantsToRolesOrUserRequest& request,
+                                   TGetGrantsToRolesOrUserResponse* response) {
+    return _call_rpc(state, [&request, &response](FrontendServiceConnection& client) {
+        client->getGrantsTo(*response, request);
+    });
+}
+
+Status SchemaHelper::get_partitions_meta(const SchemaScannerState& state, const TGetPartitionsMetaRequest& var_params,
+                                         TGetPartitionsMetaResponse* var_result) {
+    return _call_rpc(state, [&var_params, &var_result](FrontendServiceConnection& client) {
+        client->getPartitionsMeta(*var_result, var_params);
+    });
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 void fill_data_column_with_null(Column* data_column) {

@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     n_name,
@@ -23,6 +24,8 @@ group by
     n_name
 order by
     revenue desc ;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 [fragment statistics]
 PLAN FRAGMENT 0(F12)
 Output Exprs:46: N_NAME | 55: sum
@@ -158,7 +161,11 @@ column statistics:
 * L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
 * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
 * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
+<<<<<<< HEAD
 * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
+=======
+* L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] MCV: [[0.05:54639500][0.07:54619200][0.02:54617300][0.01:54583400][0.10:54581500]] ESTIMATE
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 PLAN FRAGMENT 3(F07)
 
@@ -230,7 +237,11 @@ cardinality: 22752627
 column statistics:
 * O_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 2.2752627E7] ESTIMATE
 * O_CUSTKEY-->[1.0, 1.49999E7, 0.0, 8.0, 9999600.0] ESTIMATE
+<<<<<<< HEAD
 * O_ORDERDATE-->[7.888896E8, 8.204256E8, 0.0, 4.0, 2406.0] ESTIMATE
+=======
+* O_ORDERDATE-->[7.888896E8, 8.204256E8, 0.0, 4.0, 2406.0] MCV: [[1995-01-13:70200][1995-04-13:69000][1995-03-26:68500][1995-01-26:68300][1995-11-15:68100]] ESTIMATE
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 PLAN FRAGMENT 5(F01)
 
@@ -319,8 +330,13 @@ cardinality: 25
 probe runtime filters:
 - filter_id = 0, probe_expr = (47: N_REGIONKEY)
 column statistics:
+<<<<<<< HEAD
 * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
 * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
+=======
+* N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] MCV: [[22:1][23:1][24:1][10:1][11:1]] ESTIMATE
+* N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] MCV: [[CANADA:1][UNITED STATES:1][VIETNAM:1][MOROCCO:1][ARGENTINA:1]] ESTIMATE
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 * N_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 5.0] ESTIMATE
 
 PLAN FRAGMENT 7(F03)
@@ -345,5 +361,10 @@ actualRows=0, avgRowSize=29.0
 cardinality: 1
 column statistics:
 * R_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
+<<<<<<< HEAD
 * R_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
 [end]
+=======
+* R_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] MCV: [[EUROPE:1][AFRICA:1][AMERICA:1][ASIA:1][MIDDLE EAST:1]] ESTIMATE
+[end]
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

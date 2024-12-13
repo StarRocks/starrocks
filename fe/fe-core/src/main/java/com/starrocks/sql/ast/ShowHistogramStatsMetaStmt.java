@@ -17,17 +17,29 @@ package com.starrocks.sql.ast;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.RedirectStatus;
+<<<<<<< HEAD
+=======
+import com.starrocks.analysis.TableName;
+import com.starrocks.authorization.AccessDeniedException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.MetaNotFoundException;
+<<<<<<< HEAD
 import com.starrocks.privilege.AccessDeniedException;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.parser.NodePosition;
+<<<<<<< HEAD
+=======
+import com.starrocks.statistic.ExternalHistogramStatsMeta;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.statistic.HistogramStatsMeta;
 
 import java.time.format.DateTimeFormatter;
@@ -60,12 +72,20 @@ public class ShowHistogramStatsMetaStmt extends ShowStmt {
         long dbId = histogramStatsMeta.getDbId();
         long tableId = histogramStatsMeta.getTableId();
 
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (db == null) {
             throw new MetaNotFoundException("No found database: " + dbId);
         }
         row.set(0, db.getOriginName());
+<<<<<<< HEAD
         Table table = db.getTable(tableId);
+=======
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (table == null) {
             throw new MetaNotFoundException("No found table: " + tableId);
         }
@@ -86,6 +106,43 @@ public class ShowHistogramStatsMetaStmt extends ShowStmt {
         return row;
     }
 
+<<<<<<< HEAD
+=======
+    public static List<String> showExternalHistogramStatsMeta(ConnectContext context,
+                                                              ExternalHistogramStatsMeta histogramStatsMeta)
+            throws MetaNotFoundException {
+        List<String> row = Lists.newArrayList("", "", "", "", "", "");
+        String catalogName = histogramStatsMeta.getCatalogName();
+        String dbName = histogramStatsMeta.getDbName();
+        String tableName = histogramStatsMeta.getTableName();
+
+        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
+        if (db == null) {
+            throw new MetaNotFoundException("No found database: " + catalogName + "." + dbName);
+        }
+        row.set(0, catalogName + "." + dbName);
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, tableName);
+        if (table == null) {
+            throw new MetaNotFoundException("No found table: " + catalogName + "." + dbName + "." + tableName);
+        }
+        // In new privilege framework(RBAC), user needs any action on the table to show analysis status for it.
+        try {
+            Authorizer.checkAnyActionOnTable(context.getCurrentUserIdentity(),
+                    context.getCurrentRoleIds(), new TableName(catalogName, db.getFullName(), table.getName()));
+        } catch (AccessDeniedException e) {
+            return null;
+        }
+
+        row.set(1, table.getName());
+        row.set(2, histogramStatsMeta.getColumn());
+        row.set(3, histogramStatsMeta.getType().name());
+        row.set(4, histogramStatsMeta.getUpdateTime().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
+        row.set(5, histogramStatsMeta.getProperties() == null ? "{}" : histogramStatsMeta.getProperties().toString());
+
+        return row;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public ShowResultSetMetaData getMetaData() {
         return META_DATA;

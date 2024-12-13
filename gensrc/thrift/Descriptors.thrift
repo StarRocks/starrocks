@@ -39,6 +39,7 @@ include "Types.thrift"
 include "Exprs.thrift"
 
 struct TSlotDescriptor {
+<<<<<<< HEAD
   1: required Types.TSlotId id
   2: required Types.TTupleId parent
   3: required Types.TTypeDesc slotType
@@ -58,21 +59,60 @@ struct TTupleDescriptor {
   3: required i32 numNullBytes
   4: optional Types.TTableId tableId
   5: optional i32 numNullSlots
+=======
+  1: optional Types.TSlotId id
+  2: optional Types.TTupleId parent
+  3: optional Types.TTypeDesc slotType
+  4: optional i32 columnPos   // Deprecated
+  5: optional i32 byteOffset  // Deprecated
+  6: optional i32 nullIndicatorByte // Deprecated
+  7: optional i32 nullIndicatorBit // Deprecated
+  8: optional string colName;
+  9: optional i32 slotIdx // Deprecated
+  10: optional bool isMaterialized // Deprecated
+  11: optional bool isOutputColumn // Deprecated
+  12: optional bool isNullable // replace nullIndicatorBit & nullIndicatorByte
+  13: optional i32 col_unique_id = -1
+  // col_physical_name is used to store the physical name of the column in the storage layer.
+  // for example, the physical name of a column in a parquet file.
+  // used in delta lake column mapping name mode
+  14: optional string col_physical_name
+}
+
+struct TTupleDescriptor {
+  1: optional Types.TTupleId id
+  2: optional i32 byteSize // Deprecated
+  3: optional i32 numNullBytes // Deprecated
+  4: optional Types.TTableId tableId
+  5: optional i32 numNullSlots // Deprecated
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 enum THdfsFileFormat {
   TEXT = 0,
   LZO_TEXT = 1,
+<<<<<<< HEAD
   RC_FILE = 2,
   SEQUENCE_FILE = 3,
   AVRO = 4,
   PARQUET = 5,
   ORC = 6,
+=======
+  RC_BINARY = 2,
+  RC_TEXT = 3,
+  AVRO = 4,
+  PARQUET = 5,
+  ORC = 6,
+  SEQUENCE_FILE = 7,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
   UNKNOWN = 100
 }
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 // Text file desc
 struct TTextFileDesc {
     // property 'field.delim'
@@ -98,6 +138,11 @@ struct TTextFileDesc {
     
     // escape character
     8: optional i8 escape
+<<<<<<< HEAD
+=======
+
+    9: optional i32 skip_header_line_count
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 enum TSchemaTableType {
@@ -156,11 +201,25 @@ enum TSchemaTableType {
     STARROCKS_ROLE_EDGES,
     STARROCKS_GRANT_TO_ROLES,
     STARROCKS_GRANT_TO_USERS,
+<<<<<<< HEAD
     SCH_FE_METRICS = 58,
     STARROCKS_OBJECT_DEPENDENCIES = 59,
     SYS_FE_LOCKS = 60,
     SYS_FE_MEMORY_USAGE = 61,
     SCH_PARTITIONS_META = 62
+=======
+    SCH_ROUTINE_LOAD_JOBS,
+    SCH_STREAM_LOADS,
+    SCH_PIPE_FILES,
+    SCH_PIPES,
+    SCH_FE_METRICS,
+    STARROCKS_OBJECT_DEPENDENCIES,
+    SYS_FE_LOCKS,
+    SCH_BE_DATACACHE_METRICS,
+    SCH_PARTITIONS_META,
+    SYS_FE_MEMORY_USAGE,
+    SCH_TEMP_TABLES,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 enum THdfsCompression {
@@ -174,7 +233,14 @@ enum THdfsCompression {
 }
 
 enum TIndexType {
+<<<<<<< HEAD
   BITMAP
+=======
+  BITMAP,
+  GIN,
+  NGRAMBF,
+  VECTOR,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 // Mapping from names defined by Avro to the enum.
@@ -199,7 +265,14 @@ struct TColumn {
     6: optional string default_value               
     7: optional bool is_bloom_filter_column     
     8: optional Exprs.TExpr define_expr 
+<<<<<<< HEAD
     9: optional bool is_auto_increment                                                              
+=======
+    9: optional bool is_auto_increment
+    10: optional i32 col_unique_id  = -1
+    11: optional bool has_bitmap_index = false
+    12: optional Types.TAggStateDesc agg_state_desc
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                                                                                       
     // How many bytes used for short key index encoding.
     // For fixed-length column, this value may be ignored by BE when creating a tablet.
@@ -254,12 +327,30 @@ struct TOlapTablePartitionParam {
     9: optional bool enable_automatic_partition
 }
 
+<<<<<<< HEAD
 struct TOlapTableIndexSchema {
     1: required i64 id
     2: required list<string> columns
     3: required i32 schema_hash
 
     5: optional Exprs.TExpr where_clause
+=======
+struct TOlapTableColumnParam {
+    1: required list<TColumn> columns
+    2: required list<i32> sort_key_uid
+    3: required i32 short_key_column_count
+}
+
+struct TOlapTableIndexSchema {
+    1: required i64 id // index id
+    2: required list<string> columns
+    3: required i32 schema_hash
+    4: optional TOlapTableColumnParam column_param
+    5: optional Exprs.TExpr where_clause
+    6: optional i64 schema_id // schema id
+    7: optional map<string, string> column_to_expr_value
+    8: optional bool is_shadow
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 struct TOlapTableSchemaParam {
@@ -278,6 +369,23 @@ struct TOlapTableIndex {
   2: optional list<string> columns
   3: optional TIndexType index_type
   4: optional string comment
+<<<<<<< HEAD
+=======
+  5: optional i64 index_id
+
+  // for standalone index
+  // critical common properties
+  6: optional map<string, string> common_properties
+
+  // properties to affect index building
+  7: optional map<string, string> index_properties
+
+  // default properties to affect index searching, can rewrite them through hint
+  8: optional map<string, string> search_properties
+
+  // properties that are different from the above three
+  9: optional map<string, string> extra_properties
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 struct TTabletLocation {
@@ -364,6 +472,27 @@ struct THdfsTable {
 
     // The prefixes of locations of partitions in this table
     5: optional list<string> partition_prefixes
+<<<<<<< HEAD
+=======
+
+    // hive table hive_column_names
+    6: optional string hive_column_names
+
+    // hive table hive_column_types
+    7: optional string hive_column_types
+
+    // hive table input_format
+    8: optional string input_format
+
+    // hive table serde_lib
+    9: optional string serde_lib
+
+    // hive table serde properties
+    10: optional map<string, string> serde_properties
+
+    // timezone
+    11: optional string time_zone
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 struct TFileTable {
@@ -372,6 +501,20 @@ struct TFileTable {
 
     // Schema columns
     2: optional list<TColumn> columns
+<<<<<<< HEAD
+=======
+
+    3: optional string hive_column_names
+
+    4: optional string hive_column_types
+
+    5: optional string input_format
+
+    6: optional string serde_lib
+
+    // timezone
+    7: optional string time_zone
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 struct TTableFunctionTable {
@@ -380,10 +523,33 @@ struct TTableFunctionTable {
 
     // Schema columns
     2: optional list<TColumn> columns
+<<<<<<< HEAD
 }
 
 struct TIcebergSchema {
     1: optional list<TIcebergSchemaField> fields
+=======
+
+    // File format
+    3: optional string file_format;
+
+    // Compression type
+    4: optional Types.TCompressionType compression_type
+
+    // Partition column ids, set if partition_by used in table function
+    5: optional list<i32> partition_column_ids
+
+    // Write single file
+    6: optional bool write_single_file
+
+    7: optional i64 target_max_file_size
+
+    8: optional string csv_row_delimiter
+
+    9: optional string csv_column_seperator
+
+    10: optional bool parquet_use_legacy_encoding
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 struct TIcebergSchemaField {
@@ -400,6 +566,13 @@ struct TIcebergSchemaField {
     100: optional list<TIcebergSchemaField> children
 }
 
+<<<<<<< HEAD
+=======
+struct TIcebergSchema {
+    1: optional list<TIcebergSchemaField> fields
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 struct TPartitionMap {
     1: optional map<i64, THdfsPartition> partitions
 }
@@ -463,11 +636,25 @@ struct THudiTable {
 
     // hudi table serde_lib
     10: optional string serde_lib
+<<<<<<< HEAD
+=======
+
+    // timezone
+    11: optional string time_zone
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 struct TPaimonTable {
     // paimon table options
     1: optional string paimon_options
+<<<<<<< HEAD
+=======
+    // paimon table
+    2: optional string paimon_native_table
+
+    // timezone
+    3: optional string time_zone
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 struct TDeltaLakeTable {
@@ -573,4 +760,8 @@ struct TIMTDescriptor {
   // For maintained IMT, some extra information are necessary
   11: optional Types.TUniqueId load_id
   12: optional i64 txn_id
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

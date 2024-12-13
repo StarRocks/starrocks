@@ -289,9 +289,13 @@ public class ExistentialApply2OuterJoinRule extends TransformationRule {
 
         // filter(UnCorrelation) agg -> project -> un-correlation filter
         if (null != apply.getPredicate()) {
+<<<<<<< HEAD
             OptExpression filterOptExpression =
                     OptExpression.create(new LogicalFilterOperator(apply.getPredicate()), input.getInputs().get(1));
 
+=======
+            OptExpression filterOptExpression = OptExpression.create(new LogicalFilterOperator(apply.getPredicate()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             rootOptExpression.getInputs().add(filterOptExpression);
             rootOptExpression = filterOptExpression;
         }

@@ -60,6 +60,11 @@ public:
         }
         return pair->second.get();
     }
+<<<<<<< HEAD
+=======
+    TableFunctionResolver(const TableFunctionResolver&) = delete;
+    const TableFunctionResolver& operator=(const TableFunctionResolver&) = delete;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     void add_function_mapping(std::string&& name, const std::vector<LogicalType>& arg_type,
                               const std::vector<LogicalType>& return_type, const TableFunctionPtr& table_func) {
@@ -70,8 +75,11 @@ private:
     std::unordered_map<std::tuple<std::string, std::vector<LogicalType>, std::vector<LogicalType>>, TableFunctionPtr,
                        TableFunctionMapHash>
             _infos_mapping;
+<<<<<<< HEAD
     TableFunctionResolver(const TableFunctionResolver&) = delete;
     const TableFunctionResolver& operator=(const TableFunctionResolver&) = delete;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 TableFunctionResolver::TableFunctionResolver() {

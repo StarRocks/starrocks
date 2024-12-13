@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # time_slice
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 根据指定的时间粒度周期，将给定的时间转化为其所在的时间粒度周期的起始或结束时刻。
 

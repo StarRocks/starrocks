@@ -290,7 +290,11 @@ class BitmapUnionAggregator extends SparkRDDAggregator<BitmapValue> {
             ((BitmapValue) value).serialize(outputStream);
             return bos.toByteArray();
         } catch (IOException ioException) {
+<<<<<<< HEAD
             LOG.warn(ioException);
+=======
+            LOG.warn(ioException.getMessage(), ioException);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             throw new RuntimeException(ioException);
         }
     }
@@ -334,7 +338,11 @@ class HllUnionAggregator extends SparkRDDAggregator<Hll> {
             ((Hll) value).serialize(outputStream);
             return bos.toByteArray();
         } catch (IOException ioException) {
+<<<<<<< HEAD
             LOG.warn(ioException);
+=======
+            LOG.warn(ioException.getMessage(), ioException);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             throw new RuntimeException(ioException);
         }
     }
@@ -606,4 +614,8 @@ class BucketPartitioner extends Partitioner {
         List<Object> rddKey = (List<Object>) key;
         return bucketKeyMap.get(String.valueOf(rddKey.get(0)));
     }
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

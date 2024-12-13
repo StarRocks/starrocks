@@ -89,7 +89,11 @@ public class MvRewriteOnTpcdsTest extends MaterializedViewTestBase {
     public void testQuery39() throws Exception {
         connectContext.executeSql("drop materialized view if exists __mv__ta0006");
         createAndRefreshMV("test", "CREATE MATERIALIZED VIEW __mv__ta0006 (" +
+<<<<<<< HEAD
                 "d_moy, d_year, w_warehouse_name, w_warehouse_sk, i_item_sk, _ca0003, _ca0004, _ca0005)\n" +
+=======
+                "_ca0003, _ca0004, _ca0005, d_moy, d_year, w_warehouse_name, w_warehouse_sk, i_item_sk)\n" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "DISTRIBUTED BY HASH (d_moy, d_year, w_warehouse_name, w_warehouse_sk, i_item_sk)\n" +
                 "REFRESH ASYNC START(\"2023-12-01 10:00:00\") EVERY(INTERVAL 1 DAY)\n" +
                 "PROPERTIES (\n" +
@@ -97,14 +101,24 @@ public class MvRewriteOnTpcdsTest extends MaterializedViewTestBase {
                 ")\n" +
                 "AS\n" +
                 "SELECT\n" +
+<<<<<<< HEAD
                 "  _ta0000.d_moy\n" +
+=======
+                "  (stddev_samp(_ta0000.inv_quantity_on_hand)) AS _ca0003\n" +
+                "  ,(sum(_ta0000.inv_quantity_on_hand)) AS _ca0004\n" +
+                "  ,(count(_ta0000.inv_quantity_on_hand)) AS _ca0005\n" +
+                "  ,_ta0000.d_moy\n" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "  ,_ta0000.d_year\n" +
                 "  ,_ta0000.w_warehouse_name\n" +
                 "  ,_ta0000.w_warehouse_sk\n" +
                 "  ,_ta0000.i_item_sk\n" +
+<<<<<<< HEAD
                 "  ,(stddev_samp(_ta0000.inv_quantity_on_hand)) AS _ca0003\n" +
                 "  ,(sum(_ta0000.inv_quantity_on_hand)) AS _ca0004\n" +
                 "  ,(count(_ta0000.inv_quantity_on_hand)) AS _ca0005\n" +
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "FROM\n" +
                 "  (\n" +
                 "    SELECT\n" +

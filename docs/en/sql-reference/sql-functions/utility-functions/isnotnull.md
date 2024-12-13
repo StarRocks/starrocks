@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # isnotnull
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Checks whether the value is not `NULL`, returns `1` if it is not `NULL`, and returns `0` if it is `NULL`.
 

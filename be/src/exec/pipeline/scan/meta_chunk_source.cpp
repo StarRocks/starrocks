@@ -20,10 +20,17 @@
 namespace starrocks::pipeline {
 
 MetaChunkSource::MetaChunkSource(ScanOperator* op, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
+<<<<<<< HEAD
                                  MetaScanContextPtr scan_ctx)
         : ChunkSource(op, runtime_profile, std::move(morsel), scan_ctx->get_chunk_buffer()), _scan_ctx(scan_ctx) {}
 
 MetaChunkSource::~MetaChunkSource() {}
+=======
+                                 const MetaScanContextPtr& scan_ctx)
+        : ChunkSource(op, runtime_profile, std::move(morsel), scan_ctx->get_chunk_buffer()), _scan_ctx(scan_ctx) {}
+
+MetaChunkSource::~MetaChunkSource() = default;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Status MetaChunkSource::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(ChunkSource::prepare(state));
@@ -47,9 +54,12 @@ Status MetaChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
     return _scanner->get_chunk(state, chunk);
 }
 
+<<<<<<< HEAD
 const workgroup::WorkGroupScanSchedEntity* MetaChunkSource::_scan_sched_entity(const workgroup::WorkGroup* wg) const {
     DCHECK(wg != nullptr);
     return wg->scan_sched_entity();
 }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // namespace starrocks::pipeline

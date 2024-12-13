@@ -8,7 +8,10 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`v1`) BUCKETS 1 
 PROPERTIES (
 "replication_num" = "1",
+<<<<<<< HEAD
 "in_memory" = "false",
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 "enable_persistent_index" = "false",
 "replicated_storage" = "false",
 "compression" = "LZ4"
@@ -106,4 +109,8 @@ select lower(l.v1) as r1, if(l.v1 = 1, 1, null) as r2, upper(r.v2) as r3 from t1
 -- result:
 None	None	1000
 None	None	1000
+<<<<<<< HEAD
 -- !result
+=======
+-- !result
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

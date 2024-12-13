@@ -34,6 +34,15 @@ public class MaterializedViewMetricsBlackHoleEntity implements IMaterializedView
     public void increaseQueryMatchedCount(long count) {
 
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    public void increaseQueryTextBasedMatchedCount(long count) {
+
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public void increaseQueryHitCount(long count) {
 

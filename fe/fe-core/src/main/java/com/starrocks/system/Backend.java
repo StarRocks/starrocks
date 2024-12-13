@@ -35,6 +35,10 @@
 package com.starrocks.system;
 
 import com.google.common.base.Objects;
+<<<<<<< HEAD
+=======
+import com.google.common.base.Preconditions;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -43,10 +47,17 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.DiskInfo.DiskState;
 import com.starrocks.common.DdlException;
+<<<<<<< HEAD
 import com.starrocks.common.io.Text;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TDisk;
 import com.starrocks.thrift.TNetworkAddress;
+=======
+import com.starrocks.common.Pair;
+import com.starrocks.common.io.Text;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.thrift.TDisk;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.TStorageMedium;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -55,6 +66,10 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
+<<<<<<< HEAD
+=======
+import java.util.HashMap;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -79,6 +94,12 @@ public class Backend extends ComputeNode {
     @SerializedName(value = "d")
     private volatile ConcurrentHashMap<String, DiskInfo> disksRef;
 
+<<<<<<< HEAD
+=======
+    @SerializedName("loc")
+    private Map<String, String> location = new HashMap<>();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // This is used for the first time we initiate pathHashToDishInfo in SystemInfoService.
     // after initiating it, this variable is set to true.
     private boolean initPathInfo = false;
@@ -104,6 +125,31 @@ public class Backend extends ComputeNode {
         this.disksRef = new ConcurrentHashMap<>(disks);
     }
 
+<<<<<<< HEAD
+=======
+    public Map<String, String> getLocation() {
+        return location;
+    }
+
+    /**
+     * Currently only single-level location label is supported.
+     *
+     * @return null if location map is empty, otherwise return the first key-value pair
+     */
+    public Pair<String, String> getSingleLevelLocationKV() {
+        if (location.isEmpty()) {
+            return null;
+        } else {
+            Preconditions.checkArgument(location.size() == 1);
+            return new Pair<>(location.keySet().iterator().next(), location.values().iterator().next());
+        }
+    }
+
+    public void setLocation(Map<String, String> location) {
+        this.location = location;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public ImmutableMap<String, DiskInfo> getDisks() {
         return ImmutableMap.copyOf(this.disksRef);
     }
@@ -112,10 +158,13 @@ public class Backend extends ComputeNode {
         return disksRef.values().stream().allMatch(DiskInfo::hasPathHash);
     }
 
+<<<<<<< HEAD
     public TNetworkAddress getAddress() {
         return new TNetworkAddress(getHost(), getBePort());
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public long getTotalCapacityB() {
         long totalCapacityB = 0L;
         for (DiskInfo diskInfo : disksRef.values()) {
@@ -228,7 +277,11 @@ public class Backend extends ComputeNode {
             }
             if (allPathHashUpdated) {
                 initPathInfo = true;
+<<<<<<< HEAD
                 GlobalStateMgr.getCurrentSystemInfo()
+=======
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         .updatePathInfo(new ArrayList<>(disksRef.values()), Lists.newArrayList());
             }
         }
@@ -298,7 +351,11 @@ public class Backend extends ComputeNode {
         if (isChanged) {
             // update disksRef
             disksRef = new ConcurrentHashMap<>(newDiskInfos);
+<<<<<<< HEAD
             GlobalStateMgr.getCurrentSystemInfo().updatePathInfo(addedDisks, removedDisks);
+=======
+            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().updatePathInfo(addedDisks, removedDisks);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             // log disk changing
             GlobalStateMgr.getCurrentState().getEditLog().logBackendStateChange(this);
         }
@@ -350,6 +407,20 @@ public class Backend extends ComputeNode {
         }
     }
 
+<<<<<<< HEAD
+=======
+    public String getDiskRootPath(long pathHash) {
+        String rootPath = "Unknown";
+        for (DiskInfo diskInfo : disksRef.values()) {
+            if (diskInfo.getPathHash() == pathHash) {
+                rootPath = diskInfo.getRootPath();
+                break;
+            }
+        }
+        return rootPath;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void setStorageMediumForAllDisks(TStorageMedium m) {
         for (DiskInfo diskInfo : disksRef.values()) {
             diskInfo.setStorageMedium(m);
@@ -453,7 +524,11 @@ public class Backend extends ComputeNode {
     @Override
     public String toString() {
         return "Backend [id=" + getId() + ", host=" + getHost() + ", heartbeatPort=" + getHeartbeatPort()
+<<<<<<< HEAD
                 + ", alive=" + getIsAlive().get() + "]";
+=======
+                + ", alive=" + getIsAlive().get() + ", status=" + getStatus() + "]";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public void setTabletMaxCompactionScore(long compactionScore) {

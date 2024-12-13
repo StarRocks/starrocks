@@ -23,12 +23,17 @@
 #include "runtime/current_thread.h"
 #include "util/debug/query_trace.h"
 #include "util/defer_op.h"
+<<<<<<< HEAD
+=======
+#include "util/failpoint/fail_point.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "util/stack_util.h"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks::pipeline {
 
 GlobalDriverExecutor::GlobalDriverExecutor(const std::string& name, std::unique_ptr<ThreadPool> thread_pool,
+<<<<<<< HEAD
                                            bool enable_resource_group)
         : Base(name),
           _driver_queue(enable_resource_group ? std::unique_ptr<DriverQueue>(std::make_unique<WorkGroupDriverQueue>())
@@ -50,6 +55,21 @@ GlobalDriverExecutor::~GlobalDriverExecutor() {
 
 void GlobalDriverExecutor::close() {
     _driver_queue->close();
+=======
+                                           bool enable_resource_group, const CpuUtil::CpuIds& cpuids)
+        : Base("pip_exec_" + name),
+          _driver_queue(enable_resource_group ? std::unique_ptr<DriverQueue>(std::make_unique<WorkGroupDriverQueue>())
+                                              : std::make_unique<QuerySharedDriverQueue>()),
+          _thread_pool(std::move(thread_pool)),
+          _blocked_driver_poller(new PipelineDriverPoller(name, _driver_queue.get(), cpuids)),
+          _exec_state_reporter(new ExecStateReporter(cpuids)),
+          _audit_statistics_reporter(new AuditStatisticsReporter()) {}
+
+void GlobalDriverExecutor::close() {
+    _driver_queue->close();
+    _thread_pool->wait();
+    _blocked_driver_poller->shutdown();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 void GlobalDriverExecutor::initialize(int num_threads) {
@@ -60,13 +80,29 @@ void GlobalDriverExecutor::initialize(int num_threads) {
     }
 }
 
+<<<<<<< HEAD
+=======
+DriverExecutorMetrics GlobalDriverExecutor::metrics() const {
+    return {.schedule_count = _schedule_count.load(),
+            .driver_execution_ns = _driver_execution_ns.load(),
+            .driver_queue_len = static_cast<int64_t>(_driver_queue->size()),
+            .driver_poller_block_queue_len = static_cast<int64_t>(_blocked_driver_poller->num_drivers())};
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 void GlobalDriverExecutor::change_num_threads(int32_t num_threads) {
     int32_t old_num_threads = 0;
     if (!_num_threads_setter.adjust_expect_num(num_threads, &old_num_threads)) {
         return;
     }
     for (int i = old_num_threads; i < num_threads; ++i) {
+<<<<<<< HEAD
         (void)_thread_pool->submit_func([this]() { this->_worker_thread(); });
+=======
+        if (_num_threads_setter.should_expand()) {
+            (void)_thread_pool->submit_func([this]() { this->_worker_thread(); });
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }
 
@@ -80,7 +116,11 @@ void GlobalDriverExecutor::_worker_thread() {
     const int worker_id = _next_id++;
     std::queue<DriverRawPtr> local_driver_queue;
     while (true) {
+<<<<<<< HEAD
         if (_num_threads_setter.should_shrink()) {
+=======
+        if (local_driver_queue.empty() && _num_threads_setter.should_shrink()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             break;
         }
         // Reset TLS state
@@ -120,6 +160,12 @@ void GlobalDriverExecutor::_worker_thread() {
         auto* runtime_state = runtime_state_ptr.get();
         {
             SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(runtime_state->instance_mem_tracker());
+<<<<<<< HEAD
+=======
+#if !defined(ADDRESS_SANITIZER) && !defined(LEAK_SANITIZER) && !defined(THREAD_SANITIZER)
+            FAIL_POINT_SCOPE(mem_alloc_error);
+#endif
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (fragment_ctx->is_canceled()) {
                 driver->cancel_operators(runtime_state);
                 if (driver->is_still_pending_finish()) {
@@ -170,7 +216,11 @@ void GlobalDriverExecutor::_worker_thread() {
                 LOG(WARNING) << "[Driver] Process error, query_id=" << print_id(driver->query_ctx()->query_id())
                              << ", instance_id=" << print_id(driver->fragment_ctx()->fragment_instance_id())
                              << ", status=" << status;
+<<<<<<< HEAD
                 driver->runtime_profile()->add_info_string("ErrorMsg", status.get_error_msg());
+=======
+                driver->runtime_profile()->add_info_string("ErrorMsg", std::string(status.message()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 query_ctx->cancel(status);
                 driver->cancel_operators(runtime_state);
                 if (driver->is_still_pending_finish()) {
@@ -258,6 +308,11 @@ void GlobalDriverExecutor::submit(DriverRawPtr driver) {
         driver->mark_precondition_not_ready();
         this->_blocked_driver_poller->add_blocked_driver(driver);
     } else {
+<<<<<<< HEAD
+=======
+        if (driver->has_precondition() && !driver->precondition_prepared()) driver->mark_precondition_ready();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         driver->submit_operators();
 
         // Try to add the driver to poller first.
@@ -310,14 +365,19 @@ void GlobalDriverExecutor::report_exec_state(QueryContext* query_ctx, FragmentCo
         query_exec_wall_time->set(query_ctx->lifetime());
     }
 
+<<<<<<< HEAD
     auto params = ExecStateReporter::create_report_exec_status_params(query_ctx, fragment_ctx, profile, status, done);
     auto fe_addr = fragment_ctx->fe_addr();
+=======
+    const auto& fe_addr = fragment_ctx->fe_addr();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     if (fe_addr.hostname.empty()) {
         // query executed by external connectors, like spark and flink connector,
         // does not need to report exec state to FE, so return if fe addr is empty.
         return;
     }
 
+<<<<<<< HEAD
     auto exec_env = fragment_ctx->runtime_state()->exec_env();
     auto fragment_id = fragment_ctx->fragment_instance_id();
 
@@ -329,17 +389,53 @@ void GlobalDriverExecutor::report_exec_state(QueryContext* query_ctx, FragmentCo
                 if (status.is_not_found()) {
                     LOG(INFO) << "[Driver] Fail to report exec state due to query not found: fragment_instance_id="
                               << print_id(fragment_id);
+=======
+    // Load channel profile will be merged on FE
+    auto* load_channel_profile = fragment_ctx->runtime_state()->load_channel_profile();
+    std::shared_ptr<TReportExecStatusParams> params;
+    {
+        // move profile memory to process, similar with SinkBuffer. the params will be released in ExecStateReporter
+        int64_t before_bytes = CurrentThread::current().get_consumed_bytes();
+        params = ExecStateReporter::create_report_exec_status_params(query_ctx, fragment_ctx, profile,
+                                                                     load_channel_profile, status, done);
+        int64_t delta = CurrentThread::current().get_consumed_bytes() - before_bytes;
+
+        CurrentThread::current().mem_release(delta);
+        GlobalEnv::GetInstance()->process_mem_tracker()->consume(delta);
+    }
+
+    auto exec_env = fragment_ctx->runtime_state()->exec_env();
+    auto fragment_id = fragment_ctx->fragment_instance_id();
+
+    auto report_task = [params, exec_env, fe_addr, fragment_id]() {
+        int retry_times = 0;
+        while (retry_times++ < 3) {
+            auto status = ExecStateReporter::report_exec_status(*params, exec_env, fe_addr);
+            if (!status.ok()) {
+                if (status.is_not_found()) {
+                    VLOG(1) << "[Driver] Fail to report exec state due to query not found: fragment_instance_id="
+                            << print_id(fragment_id);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 } else {
                     LOG(WARNING) << "[Driver] Fail to report exec state: fragment_instance_id=" << print_id(fragment_id)
                                  << ", status: " << status.to_string() << ", retry_times=" << retry_times;
                     // if it is done exec state report, we should retry
+<<<<<<< HEAD
                     if (params.__isset.done && params.done) {
+=======
+                    if (params->__isset.done && params->done) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         continue;
                     }
                 }
             } else {
+<<<<<<< HEAD
                 LOG(INFO) << "[Driver] Succeed to report exec state: fragment_instance_id=" << print_id(fragment_id)
                           << ", is_done=" << params.done;
+=======
+                VLOG(1) << "[Driver] Succeed to report exec state: fragment_instance_id=" << print_id(fragment_id)
+                        << ", is_done=" << params->done;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
             break;
         }
@@ -349,7 +445,11 @@ void GlobalDriverExecutor::report_exec_state(QueryContext* query_ctx, FragmentCo
     // and is retried as much as possible to ensure success.
     // Otherwise, it may result in the query or ingestion status getting stuck.
     this->_exec_state_reporter->submit(std::move(report_task), done);
+<<<<<<< HEAD
     VLOG(1) << "[Driver] Submit exec state report task: fragment_instance_id=" << print_id(fragment_id)
+=======
+    VLOG(2) << "[Driver] Submit exec state report task: fragment_instance_id=" << print_id(fragment_id)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             << ", is_done=" << done;
 }
 
@@ -383,7 +483,11 @@ void GlobalDriverExecutor::report_audit_statistics(QueryContext* query_ctx, Frag
                              << print_id(fragment_id) << ", status: " << status.to_string();
             }
         } else {
+<<<<<<< HEAD
             LOG(INFO) << "[Driver] Succeed to report audit statistics: fragment_instance_id=" << print_id(fragment_id);
+=======
+            VLOG(1) << "[Driver] Succeed to report audit statistics: fragment_instance_id=" << print_id(fragment_id);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     };
     auto st = this->_audit_statistics_reporter->submit(std::move(report_task));
@@ -392,11 +496,19 @@ void GlobalDriverExecutor::report_audit_statistics(QueryContext* query_ctx, Frag
     }
 }
 
+<<<<<<< HEAD
 size_t GlobalDriverExecutor::activate_parked_driver(const ImmutableDriverPredicateFunc& predicate_func) {
     return _blocked_driver_poller->activate_parked_driver(predicate_func);
 }
 
 size_t GlobalDriverExecutor::calculate_parked_driver(const ImmutableDriverPredicateFunc& predicate_func) const {
+=======
+size_t GlobalDriverExecutor::activate_parked_driver(const ConstDriverPredicator& predicate_func) {
+    return _blocked_driver_poller->activate_parked_driver(predicate_func);
+}
+
+size_t GlobalDriverExecutor::calculate_parked_driver(const ConstDriverPredicator& predicate_func) const {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     return _blocked_driver_poller->calculate_parked_driver(predicate_func);
 }
 
@@ -425,15 +537,24 @@ void GlobalDriverExecutor::report_epoch(ExecEnv* exec_env, QueryContext* query_c
                              << ", status: " << status.to_string();
             }
         } else {
+<<<<<<< HEAD
             LOG(INFO) << "[Driver] Succeed to report epoch exec state: query_id=" << print_id(query_id);
+=======
+            VLOG(1) << "[Driver] Succeed to report epoch exec state: query_id=" << print_id(query_id);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     };
 
     this->_exec_state_reporter->submit(std::move(report_task));
 }
 
+<<<<<<< HEAD
 void GlobalDriverExecutor::iterate_immutable_blocking_driver(const IterateImmutableDriverFunc& call) const {
     _blocked_driver_poller->iterate_immutable_driver(call);
+=======
+void GlobalDriverExecutor::iterate_immutable_blocking_driver(const ConstDriverConsumer& call) const {
+    _blocked_driver_poller->for_each_driver(call);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 RuntimeProfile* GlobalDriverExecutor::_build_merged_instance_profile(QueryContext* query_ctx,
@@ -493,4 +614,15 @@ RuntimeProfile* GlobalDriverExecutor::_build_merged_instance_profile(QueryContex
 
     return new_instance_profile;
 }
+<<<<<<< HEAD
+=======
+
+void GlobalDriverExecutor::bind_cpus(const CpuUtil::CpuIds& cpuids,
+                                     const std::vector<CpuUtil::CpuIds>& borrowed_cpuids) {
+    _thread_pool->bind_cpus(cpuids, borrowed_cpuids);
+    _blocked_driver_poller->bind_cpus(cpuids);
+    _exec_state_reporter->bind_cpus(cpuids);
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // namespace starrocks::pipeline

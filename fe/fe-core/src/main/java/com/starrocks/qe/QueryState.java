@@ -70,6 +70,12 @@ public class QueryState {
 
         IO_ERR,
 
+<<<<<<< HEAD
+=======
+        // execution Timeout
+        EXEC_TIME_OUT,
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         UNKNOWN
     }
 

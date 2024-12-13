@@ -27,6 +27,10 @@ import java.util.Map;
 import java.util.Set;
 
 public class BaseResponse {
+<<<<<<< HEAD
+=======
+    public static final String HEADER_QUERY_ID = "X-StarRocks-Query-Id";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private String contentType;
     protected StringBuilder content = new StringBuilder();
 

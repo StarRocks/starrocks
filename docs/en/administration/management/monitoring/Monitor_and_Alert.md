@@ -423,7 +423,11 @@ After completing these steps, modify the Grafana configuration file on the node 
 vim /usr/share/grafana/conf/defaults.ini
 ```
 
+<<<<<<< HEAD
 Example: 
+=======
+Example:
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ```Properties
 ###################### SMTP / Emailing #####################

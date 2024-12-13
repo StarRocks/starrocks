@@ -64,7 +64,11 @@ public:
         writer_context.partition_id = 0;
         writer_context.rowset_path_prefix = tablet->schema_hash_path();
         writer_context.rowset_state = COMMITTED;
+<<<<<<< HEAD
         writer_context.tablet_schema = &tablet->tablet_schema();
+=======
+        writer_context.tablet_schema = tablet->tablet_schema();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         writer_context.version.first = 0;
         writer_context.version.second = 0;
         writer_context.segments_overlap = NONOVERLAPPING;
@@ -242,7 +246,11 @@ TEST_F(TableReaderTest, test_basic_read) {
         std::vector<RowsetSharedPtr> dummy_rowsets;
         EditVersion full_version;
         ASSERT_TRUE(_tablets[0]->updates()->get_applied_rowsets(4, &dummy_rowsets, &full_version).ok());
+<<<<<<< HEAD
         if (full_version.major() == 4) {
+=======
+        if (full_version.major_number() == 4) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             break;
         }
         std::cerr << "waiting for version 4\n";

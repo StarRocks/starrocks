@@ -68,7 +68,11 @@ public:
             auto value = col.get(_row).template get<T>();
             std::string str = CastToString::apply<T, std::string>(value);
             _add_element(std::move(str));
+<<<<<<< HEAD
         } else if constexpr (std::is_integral_v<T>) {
+=======
+        } else if constexpr (std::is_integral_v<T> || std::is_floating_point_v<T>) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             auto value = col.get(_row).template get<T>();
             _add_element(std::move(value));
         } else {
@@ -134,7 +138,11 @@ public:
         auto val_col = col.values_column();
 
         if (key_col->has_null()) {
+<<<<<<< HEAD
             return Status::NotSupported("key of Map should not be nullable");
+=======
+            return Status::NotSupported("key of Map should not be null");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         if (key_col->is_nullable()) {
             key_col = ColumnHelper::as_column<NullableColumn>(key_col)->data_column();
@@ -196,6 +204,16 @@ public:
         return {};
     }
 
+<<<<<<< HEAD
+=======
+    // for type like hll and bitmap, right now only output NULL
+    template <class T>
+    Status do_visit(const ObjectColumn<T>& col) {
+        _add_element(vpack::ValueType::Null);
+        return {};
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     template <class ColumnType>
     Status do_visit(const ColumnType& _) {
         return Status::NotSupported("not supported");
@@ -209,6 +227,7 @@ private:
 
 // Cast nested type(including struct/map/* to json)
 // TODO(murphy): optimize the performance with columnwise-casting
+<<<<<<< HEAD
 StatusOr<ColumnPtr> cast_nested_to_json(const ColumnPtr& column) {
     ColumnBuilder<TYPE_JSON> column_builder(column->size());
     vpack::Builder json_builder;
@@ -226,4 +245,50 @@ StatusOr<ColumnPtr> cast_nested_to_json(const ColumnPtr& column) {
     return column_builder.build(false);
 }
 
+=======
+StatusOr<ColumnPtr> cast_nested_to_json(const ColumnPtr& column, bool allow_throw_exception) {
+    ColumnBuilder<TYPE_JSON> column_builder(column->size());
+    vpack::Builder json_builder;
+    if (allow_throw_exception) {
+        for (int row = 0; row < column->size(); row++) {
+            if (column->is_null(row)) {
+                column_builder.append_null();
+                continue;
+            }
+            json_builder.clear();
+            RETURN_IF_ERROR(CastColumnItemVisitor::cast_datum_to_json(column, row, "", &json_builder));
+            JsonValue json(json_builder.slice());
+            column_builder.append(std::move(json));
+        }
+    } else {
+        for (int row = 0; row < column->size(); row++) {
+            if (column->is_null(row)) {
+                column_builder.append_null();
+                continue;
+            }
+            json_builder.clear();
+            auto st = CastColumnItemVisitor::cast_datum_to_json(column, row, "", &json_builder);
+            if (!st.ok()) {
+                column_builder.append_null();
+                continue;
+            }
+
+            JsonValue json(json_builder.slice());
+            column_builder.append(std::move(json));
+        }
+    }
+
+    return column_builder.build(false);
+}
+
+StatusOr<std::string> cast_type_to_json_str(const ColumnPtr& column, int idx) {
+    vpack::Builder json_builder;
+    json_builder.clear();
+    RETURN_IF_ERROR(CastColumnItemVisitor::cast_datum_to_json(column, idx, "", &json_builder));
+    JsonValue json(json_builder.slice());
+
+    return json.to_string();
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // namespace starrocks

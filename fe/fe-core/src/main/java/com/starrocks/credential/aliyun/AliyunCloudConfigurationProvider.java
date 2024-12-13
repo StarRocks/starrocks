@@ -20,9 +20,15 @@ import com.starrocks.credential.CloudConfigurationProvider;
 
 import java.util.Map;
 
+<<<<<<< HEAD
 import static com.starrocks.credential.CloudConfigurationConstants.ALIYUN_OSS_ACCESS_KEY;
 import static com.starrocks.credential.CloudConfigurationConstants.ALIYUN_OSS_ENDPOINT;
 import static com.starrocks.credential.CloudConfigurationConstants.ALIYUN_OSS_SECRET_KEY;
+=======
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.ALIYUN_OSS_ACCESS_KEY;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.ALIYUN_OSS_ENDPOINT;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.ALIYUN_OSS_SECRET_KEY;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 public class AliyunCloudConfigurationProvider implements CloudConfigurationProvider {
 

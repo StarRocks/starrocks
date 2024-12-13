@@ -16,7 +16,11 @@
 package com.starrocks.connector.hive.events;
 
 import com.google.common.collect.Lists;
+<<<<<<< HEAD
 import com.starrocks.connector.hive.CacheUpdateProcessor;
+=======
+import com.starrocks.connector.hive.HiveCacheUpdateProcessor;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.hadoop.hive.metastore.api.NotificationEvent;
 
 import java.util.List;
@@ -25,12 +29,20 @@ import java.util.List;
  * An event type which is ignored. Useful for unsupported metastore event types
  */
 public class IgnoredEvent extends MetastoreEvent {
+<<<<<<< HEAD
     protected IgnoredEvent(NotificationEvent event, CacheUpdateProcessor cacheProcessor, String catalogName) {
+=======
+    protected IgnoredEvent(NotificationEvent event, HiveCacheUpdateProcessor cacheProcessor, String catalogName) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         super(event, cacheProcessor, catalogName);
     }
 
     private static List<MetastoreEvent> getEvents(NotificationEvent event,
+<<<<<<< HEAD
                                                   CacheUpdateProcessor cacheProcessor, String catalogName) {
+=======
+                                                  HiveCacheUpdateProcessor cacheProcessor, String catalogName) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return Lists.newArrayList(new IgnoredEvent(event, cacheProcessor, catalogName));
     }
 

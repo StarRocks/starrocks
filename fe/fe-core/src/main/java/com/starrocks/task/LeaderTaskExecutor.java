@@ -114,6 +114,17 @@ public class LeaderTaskExecutor {
         }
     }
 
+<<<<<<< HEAD
+=======
+    public int getCorePoolSize() {
+        return executor.getCorePoolSize();
+    }
+
+    public void setPoolSize(int poolSize) {
+        ThreadPoolManager.setFixedThreadPoolSize(executor, poolSize);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private class TaskChecker implements Runnable {
         @Override
         public void run() {

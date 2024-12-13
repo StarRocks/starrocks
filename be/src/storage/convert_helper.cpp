@@ -1732,6 +1732,7 @@ void RowConverter::convert(std::vector<Datum>* dst, const std::vector<Datum>& sr
     }
 }
 
+<<<<<<< HEAD
 Status ChunkConverter::init(const Schema& in_schema, const Schema& out_schema) {
     DCHECK_EQ(in_schema.num_fields(), out_schema.num_fields());
     DCHECK_EQ(in_schema.num_key_fields(), out_schema.num_key_fields());
@@ -1778,4 +1779,6 @@ std::unique_ptr<Chunk> ChunkConverter::move_convert(Chunk* from) const {
     return dest;
 }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // namespace starrocks

@@ -30,10 +30,24 @@ public class UDFClassLoader extends URLClassLoader {
 
     private Map<String, Class<?>> genClazzMap = new HashMap<>();
     private static final int SINGLE_BATCH_UPDATE = 1;
+<<<<<<< HEAD
     private static final int BATCH_EVALUATE = 2; 
 
     public UDFClassLoader(String udfPath) throws IOException {
         super(new URL[] {new URL("file://" + udfPath)});
+=======
+    private static final int BATCH_EVALUATE = 2;
+
+    public UDFClassLoader(String udfPath) throws IOException {
+        super(new URL[] {new URL("file://" + udfPath)});
+        if (System.getSecurityManager() == null && System.getProperties().get("java.security.policy") != null) {
+            synchronized (UDFClassLoader.class) {
+                if (System.getSecurityManager() == null) {
+                    System.setSecurityManager(new UDFSecurityManager(UDFClassLoader.class));
+                }
+            }
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -45,7 +59,10 @@ public class UDFClassLoader extends URLClassLoader {
         return super.findClass(clazzName);
     }
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public Class<?> generateCallStubV(String name, Class<?> clazz, Method method, int genType) {
         String clazzName = name.replace("/", ".");
         if (!clazzName.startsWith(CallStubGenerator.GEN_KEYWORD)) {

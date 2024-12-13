@@ -23,6 +23,7 @@ namespace starrocks {
 
 SchemaScanner::ColumnDesc StarrocksGrantsToScanner::_s_grants_to_columns[] = {
         //   name,       type,          size
+<<<<<<< HEAD
         {"GRANTEE", TYPE_VARCHAR, sizeof(StringValue), false},
         {"OBJECT_CATALOG", TYPE_VARCHAR, sizeof(StringValue), true},
         {"OBJECT_DATABASE", TYPE_VARCHAR, sizeof(StringValue), true},
@@ -30,6 +31,15 @@ SchemaScanner::ColumnDesc StarrocksGrantsToScanner::_s_grants_to_columns[] = {
         {"OBJECT_TYPE", TYPE_VARCHAR, sizeof(StringValue), true},
         {"PRIVILEGE_TYPE", TYPE_VARCHAR, sizeof(StringValue), true},
         {"IS_GRANTABLE", TYPE_VARCHAR, sizeof(StringValue), true},
+=======
+        {"GRANTEE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"OBJECT_CATALOG", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"OBJECT_DATABASE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"OBJECT_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"OBJECT_TYPE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"PRIVILEGE_TYPE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"IS_GRANTABLE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 StarrocksGrantsToScanner::StarrocksGrantsToScanner(TGrantsToType::type type)
@@ -42,6 +52,7 @@ Status StarrocksGrantsToScanner::start(RuntimeState* state) {
     if (!_is_init) {
         return Status::InternalError("used before initialized.");
     }
+<<<<<<< HEAD
     TGetGrantsToRolesOrUserRequest grants_to_params;
     grants_to_params.__set_type(_type);
     if (nullptr != _param->ip && 0 != _param->port) {
@@ -51,6 +62,14 @@ Status StarrocksGrantsToScanner::start(RuntimeState* state) {
     } else {
         return Status::InternalError("IP or port doesn't exists");
     }
+=======
+    // init schema scanner state
+    RETURN_IF_ERROR(SchemaScanner::init_schema_scanner_state(state));
+
+    TGetGrantsToRolesOrUserRequest grants_to_params;
+    grants_to_params.__set_type(_type);
+    RETURN_IF_ERROR(SchemaHelper::get_grants_to(_ss_state, grants_to_params, &_grants_to_result));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     return Status::OK();
 }
 

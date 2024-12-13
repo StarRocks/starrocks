@@ -1,7 +1,10 @@
 -- name: test_bitmap_agg
+<<<<<<< HEAD
 set enable_rewrite_bitmap_union_to_bitamp_agg=true;
 -- result:
 -- !result
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 CREATE TABLE t1 (
     c1 int,
     c2 boolean,

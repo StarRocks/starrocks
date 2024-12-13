@@ -16,13 +16,54 @@
 package com.starrocks.common.proc;
 
 import com.starrocks.common.AnalysisException;
+<<<<<<< HEAD
 import com.starrocks.server.GlobalStateMgr;
 import org.junit.Test;
 
 public class StatisticProcDirTest {
+=======
+import com.starrocks.common.FeConstants;
+import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.UtFrameUtils;
+import org.junit.BeforeClass;
+import org.junit.Test;
+
+public class StatisticProcDirTest {
+    private static ConnectContext connectContext;
+    private static StarRocksAssert starRocksAssert;
+
+    @BeforeClass
+    public static void beforeClass() throws Exception {
+        FeConstants.runningUnitTest = true;
+
+        UtFrameUtils.createMinStarRocksCluster();
+
+        // create connect context
+        connectContext = UtFrameUtils.createDefaultCtx();
+        connectContext.setQueryId(UUIDUtil.genUUID());
+        starRocksAssert = new StarRocksAssert(connectContext);
+
+        starRocksAssert.withDatabase("test").useDatabase("test")
+                .withTable(
+                        "CREATE TABLE test.t1(k1 int, k2 int, k3 int)" +
+                                " distributed by hash(k1) buckets 3 properties('replication_num' = '1');");
+
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     @Test(expected = AnalysisException.class)
     public void testLookupInvalid() throws AnalysisException {
         new StatisticProcDir(GlobalStateMgr.getCurrentState()).lookup("12345");
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testFetchResult() throws AnalysisException {
+        new StatisticProcDir(GlobalStateMgr.getCurrentState()).fetchResult();
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

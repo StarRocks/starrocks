@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # percentile_hash
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Constructs DOUBLE values as PERCENTILE values.
 

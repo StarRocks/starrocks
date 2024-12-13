@@ -14,15 +14,21 @@
 
 #pragma once
 
+<<<<<<< HEAD
 #include <atomic>
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "util/logging.h"
 
 namespace starrocks {
 class ExecEnv;
 
+<<<<<<< HEAD
 extern std::atomic<bool> k_starrocks_exit;
 extern std::atomic<bool> k_starrocks_exit_quick;
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 void start_be(const std::vector<StorePath>& paths, bool as_cn);
 } // namespace starrocks

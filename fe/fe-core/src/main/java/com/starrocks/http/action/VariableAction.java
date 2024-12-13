@@ -22,7 +22,11 @@ import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
+<<<<<<< HEAD
 import com.starrocks.qe.VariableMgr;
+=======
+import com.starrocks.server.GlobalStateMgr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.SetType;
 import io.netty.handler.codec.http.HttpMethod;
 
@@ -68,7 +72,12 @@ public class VariableAction extends WebBaseAction {
     private void appendVariableInfo(StringBuilder buffer) {
         buffer.append("<h2>Variable Info</h2>");
         buffer.append("<pre>");
+<<<<<<< HEAD
         List<List<String>> variableInfo = VariableMgr.dump(SetType.GLOBAL, null, null);
+=======
+        List<List<String>> variableInfo = GlobalStateMgr.getCurrentState().getVariableMgr()
+                .dump(SetType.GLOBAL, null, null);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         for (List<String> list : variableInfo) {
             buffer.append(list.get(0) + "=" + list.get(1) + "\n");
         }

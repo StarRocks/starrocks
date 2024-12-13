@@ -42,6 +42,10 @@ import java.io.File;
 import java.util.Map;
 
 import static org.apache.iceberg.TableMetadata.newTableMetadata;
+<<<<<<< HEAD
+=======
+import static org.apache.iceberg.TableProperties.FORMAT_VERSION;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 public class TestTables {
     private static final String TEST_METADATA_LOCATION =
@@ -76,7 +80,12 @@ public class TestTables {
         ops.commit(
                 null,
                 newTableMetadata(
+<<<<<<< HEAD
                         schema, spec, sortOrder, temp.toString(), ImmutableMap.of()));
+=======
+                        schema, spec, sortOrder, temp.toString(),
+                        ImmutableMap.of(FORMAT_VERSION, String.valueOf(formatVersion))));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         return new TestTable(ops, name);
     }

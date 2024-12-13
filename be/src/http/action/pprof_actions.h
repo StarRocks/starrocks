@@ -104,5 +104,8 @@ public:
 private:
     BfdParser* _parser;
 };
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // namespace starrocks

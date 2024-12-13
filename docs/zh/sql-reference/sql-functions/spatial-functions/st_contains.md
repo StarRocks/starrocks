@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # ST_Contains
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 判断几何图形 `shape1` 是否完全能够包含几何图形 `shape2`。
 

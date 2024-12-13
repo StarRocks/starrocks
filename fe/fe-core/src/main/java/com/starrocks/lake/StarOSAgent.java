@@ -42,12 +42,20 @@ import com.staros.proto.ShardInfo;
 import com.staros.proto.StatusCode;
 import com.staros.proto.UpdateMetaGroupInfo;
 import com.staros.proto.WorkerGroupDetailInfo;
+<<<<<<< HEAD
+=======
+import com.staros.proto.WorkerGroupSpec;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.staros.proto.WorkerInfo;
 import com.staros.util.LockCloseable;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.InternalErrorCode;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.ComputeNode;
 import org.apache.logging.log4j.LogManager;
@@ -56,6 +64,10 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+<<<<<<< HEAD
+=======
+import java.util.Iterator;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -68,7 +80,11 @@ import javax.validation.constraints.NotNull;
 /**
  * StarOSAgent is responsible for
  * 1. Encapsulation of StarClient api.
+<<<<<<< HEAD
  * 2. Maintenance of StarOS worker to StarRocks backend map.
+=======
+ * 2. Maintenance of StarOS worker to StarRocks node map.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
  */
 public class StarOSAgent {
     private static final Logger LOG = LogManager.getLogger(StarOSAgent.class);
@@ -77,16 +93,29 @@ public class StarOSAgent {
 
     public static final long DEFAULT_WORKER_GROUP_ID = 0L;
 
+<<<<<<< HEAD
     private StarClient client;
     private String serviceId;
     private Map<String, Long> workerToId;
     private Map<Long, Long> workerToBackend;
     private ReentrantReadWriteLock rwLock;
+=======
+    protected StarClient client;
+    protected String serviceId;
+    protected Map<String, Long> workerToId;
+    // The value of this map is the id of backends or compute nodes
+    protected Map<Long, Long> workerToNode;
+    protected ReentrantReadWriteLock rwLock;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public StarOSAgent() {
         serviceId = "";
         workerToId = Maps.newHashMap();
+<<<<<<< HEAD
         workerToBackend = Maps.newHashMap();
+=======
+        workerToNode = Maps.newHashMap();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         rwLock = new ReentrantReadWriteLock();
     }
 
@@ -96,7 +125,11 @@ public class StarOSAgent {
         return true;
     }
 
+<<<<<<< HEAD
     private void prepare() {
+=======
+    protected void prepare() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (!serviceId.isEmpty()) {
             return;
         }
@@ -290,6 +323,16 @@ public class StarOSAgent {
         return 0;
     }
 
+<<<<<<< HEAD
+=======
+    /**
+     * create a worker to represent the node in StarMgr
+     *
+     * @param nodeId can be backend id or compute node id
+     * @param workerIpPort
+     * @param workerGroupId
+     */
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void addWorker(long nodeId, String workerIpPort, long workerGroupId) {
         prepare();
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
@@ -323,6 +366,7 @@ public class StarOSAgent {
             }
             tryRemovePreviousWorker(nodeId);
             workerToId.put(workerIpPort, workerId);
+<<<<<<< HEAD
             workerToBackend.put(workerId, nodeId);
             LOG.info("add worker {} success, backendId is {}", workerId, nodeId);
         }
@@ -331,6 +375,16 @@ public class StarOSAgent {
     // remove previous worker with same backend id
     private void tryRemovePreviousWorker(long backendId) {
         long prevWorkerId = getWorkerIdByBackendIdInternal(backendId);
+=======
+            workerToNode.put(workerId, nodeId);
+            LOG.info("add worker {} success, nodeId is {}", workerId, nodeId);
+        }
+    }
+
+    // remove previous worker with same node id
+    private void tryRemovePreviousWorker(long nodeId) {
+        long prevWorkerId = getWorkerIdByNodeIdInternal(nodeId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (prevWorkerId < 0) {
             return;
         }
@@ -338,6 +392,7 @@ public class StarOSAgent {
             client.removeWorker(serviceId, prevWorkerId);
         } catch (StarClientException e) {
             // TODO: fix this corner case later in star mgr
+<<<<<<< HEAD
             LOG.error("Failed to remove worker {} with backend id {}. error: {}", prevWorkerId, backendId, e.getMessage());
         }
         workerToBackend.remove(prevWorkerId);
@@ -345,12 +400,25 @@ public class StarOSAgent {
     }
 
     public void removeWorker(String workerIpPort) throws DdlException {
+=======
+            LOG.error("Failed to remove worker {} with node id {}. error: {}", prevWorkerId, nodeId, e.getMessage());
+        }
+        workerToNode.remove(prevWorkerId);
+        workerToId.entrySet().removeIf(e -> e.getValue() == prevWorkerId);
+    }
+
+    public void removeWorker(String workerIpPort, long workerGroupId) throws DdlException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         prepare();
 
         long workerId = getWorker(workerIpPort);
 
         try {
+<<<<<<< HEAD
             client.removeWorker(serviceId, workerId);
+=======
+            client.removeWorker(serviceId, workerId, workerGroupId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } catch (StarClientException e) {
             // when multi threads remove this worker, maybe we would get "NOT_EXIST"
             // but it is right, so only need to throw exception
@@ -365,7 +433,11 @@ public class StarOSAgent {
 
     public void removeWorkerFromMap(long workerId, String workerIpPort) {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+<<<<<<< HEAD
             workerToBackend.remove(workerId);
+=======
+            workerToNode.remove(workerId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             workerToId.remove(workerIpPort);
         }
 
@@ -376,12 +448,17 @@ public class StarOSAgent {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             Long workerId = workerToId.remove(workerIpPort);
             if (workerId != null) {
+<<<<<<< HEAD
                 workerToBackend.remove(workerId);
+=======
+                workerToNode.remove(workerId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
         LOG.info("remove worker {} success from StarMgr", workerIpPort);
     }
 
+<<<<<<< HEAD
     public long getWorkerIdByBackendId(long backendId) {
         try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
             return getWorkerIdByBackendIdInternal(backendId);
@@ -392,6 +469,24 @@ public class StarOSAgent {
         long workerId = -1;
         for (Map.Entry<Long, Long> entry : workerToBackend.entrySet()) {
             if (entry.getValue() == backendId) {
+=======
+    /**
+     * get the worker id by node id
+     *
+     * @param nodeId can be backend id or compute node id
+     */
+    public long getWorkerIdByNodeId(long nodeId) {
+        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
+            return getWorkerIdByNodeIdInternal(nodeId);
+        }
+    }
+
+    // nodeId can be backend id or compute node id
+    private long getWorkerIdByNodeIdInternal(long nodeId) {
+        long workerId = -1;
+        for (Map.Entry<Long, Long> entry : workerToNode.entrySet()) {
+            if (entry.getValue() == nodeId) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 workerId = entry.getKey();
                 break;
             }
@@ -399,7 +494,11 @@ public class StarOSAgent {
         return workerId;
     }
 
+<<<<<<< HEAD
     public long createShardGroup(long dbId, long tableId, long partitionId) throws DdlException {
+=======
+    public long createShardGroup(long dbId, long tableId, long partitionId, long indexId) throws DdlException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         prepare();
         List<ShardGroupInfo> shardGroupInfos = null;
         try {
@@ -409,6 +508,10 @@ public class StarOSAgent {
                     .putLabels("dbId", String.valueOf(dbId))
                     .putLabels("tableId", String.valueOf(tableId))
                     .putLabels("partitionId", String.valueOf(partitionId))
+<<<<<<< HEAD
+=======
+                    .putLabels("indexId", String.valueOf(indexId))
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     .putProperties("createTime", String.valueOf(System.currentTimeMillis()))
                     .build());
             shardGroupInfos = client.createShardGroup(serviceId, createShardGroupInfos);
@@ -439,6 +542,7 @@ public class StarOSAgent {
         }
     }
 
+<<<<<<< HEAD
     public List<Long> createShards(int numShards, FilePathInfo pathInfo, FileCacheInfo cacheInfo, long groupId)
         throws DdlException {
         return createShards(numShards, pathInfo, cacheInfo, groupId, null, Collections.EMPTY_MAP);
@@ -452,6 +556,11 @@ public class StarOSAgent {
 
     public List<Long> createShards(int numShards, FilePathInfo pathInfo, FileCacheInfo cacheInfo, long groupId,
                                    @Nullable List<Long> matchShardIds, @NotNull Map<String, String> properties)
+=======
+    public List<Long> createShards(int numShards, FilePathInfo pathInfo, FileCacheInfo cacheInfo, long groupId,
+                                   @Nullable List<Long> matchShardIds, @NotNull Map<String, String> properties,
+                                   long workerGroupId)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         throws DdlException {
         if (matchShardIds != null) {
             Preconditions.checkState(numShards == matchShardIds.size());
@@ -466,7 +575,12 @@ public class StarOSAgent {
                     .addGroupIds(groupId)
                     .setPathInfo(pathInfo)
                     .setCacheInfo(cacheInfo)
+<<<<<<< HEAD
                     .putAllShardProperties(properties);
+=======
+                    .putAllShardProperties(properties)
+                    .setScheduleToWorkerGroup(workerGroupId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
             for (int i = 0; i < numShards; ++i) {
                 builder.setShardId(GlobalStateMgr.getCurrentState().getNextId());
@@ -496,7 +610,12 @@ public class StarOSAgent {
 
         List<List<ShardInfo>> shardInfo;
         try {
+<<<<<<< HEAD
             shardInfo = client.listShard(serviceId, Arrays.asList(groupId));
+=======
+            shardInfo = client.listShard(serviceId, Arrays.asList(groupId), DEFAULT_WORKER_GROUP_ID,
+                                         true /* withoutReplicaInfo */);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } catch (StarClientException e) {
             throw new DdlException(String.format("Failed to list shards in group %d. error:%s", groupId, e.getMessage()));
         }
@@ -516,6 +635,7 @@ public class StarOSAgent {
         }
     }
 
+<<<<<<< HEAD
     private List<ReplicaInfo> getShardReplicas(long shardId) throws UserException {
         return getShardReplicas(shardId, DEFAULT_WORKER_GROUP_ID);
     }
@@ -544,16 +664,41 @@ public class StarOSAgent {
                 .getBackendWithHeartbeatPort(host, heartbeatPort);
         if (node == null) {
             node = GlobalStateMgr.getCurrentSystemInfo().
+=======
+    private Optional<Long> getNodeIdByHostStarletPort(String host, int starletPort) {
+        long nodeId = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                .getBackendIdWithStarletPort(host, starletPort);
+        if (nodeId == -1L) {
+            nodeId = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                .getComputeNodeIdWithStarletPort(host, starletPort);
+        }
+        return nodeId == -1 ? Optional.empty() : Optional.of(nodeId);
+    }
+
+    private Optional<Long> getNodeIdByHostHeartbeatPort(String host, int heartbeatPort) {
+        ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                .getBackendWithHeartbeatPort(host, heartbeatPort);
+        if (node == null) {
+            node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     getComputeNodeWithHeartbeatPort(host, heartbeatPort);
         }
         return node == null ? Optional.empty() : Optional.of(node.getId());
     }
 
+<<<<<<< HEAD
     private Optional<Long> getOrUpdateBackendIdByWorkerInfo(WorkerInfo info) {
         long workerId = info.getWorkerId();
         try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
             // get the backend id directly from workerToBackend
             Long beId = workerToBackend.get(workerId);
+=======
+    private Optional<Long> getOrUpdateNodeIdByWorkerInfo(WorkerInfo info) {
+        long workerId = info.getWorkerId();
+        try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
+            // get the backend id directly from workerToBackend
+            Long beId = workerToNode.get(workerId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (beId != null) {
                 return Optional.of(beId);
             }
@@ -568,7 +713,11 @@ public class StarOSAgent {
             LOG.warn("Malformed worker address info:" + workerAddr);
             return Optional.empty();
         }
+<<<<<<< HEAD
         Optional<Long> result = getBackendIdByHostStarletPort(host, starletPort);
+=======
+        Optional<Long> result = getNodeIdByHostStarletPort(host, starletPort);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (!result.isPresent()) {
             LOG.info("can't find backendId with starletPort for {}, try using be_heartbeat_port to search again",
                     workerAddr);
@@ -582,35 +731,57 @@ public class StarOSAgent {
                     LOG.warn("Malformed be_heartbeat_port for worker:" + workerAddr);
                     return Optional.empty();
                 }
+<<<<<<< HEAD
                 result = getBackendIdByHostHeartbeatPort(host, heartbeatPort);
+=======
+                result = getNodeIdByHostHeartbeatPort(host, heartbeatPort);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
         if (result.isPresent()) {
             try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
                 workerToId.put(workerAddr, workerId);
+<<<<<<< HEAD
                 workerToBackend.put(workerId, result.get());
+=======
+                workerToNode.put(workerId, result.get());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
         return result;
     }
 
+<<<<<<< HEAD
     public long getPrimaryComputeNodeIdByShard(long shardId) throws UserException {
         return getPrimaryComputeNodeIdByShard(shardId, DEFAULT_WORKER_GROUP_ID);
     }
 
     public long getPrimaryComputeNodeIdByShard(long shardId, long workerGroupId) throws UserException {
         Set<Long> backendIds = getAllBackendIdsByShard(shardId, workerGroupId, true);
+=======
+    public long getPrimaryComputeNodeIdByShard(long shardId) throws StarRocksException {
+        return getPrimaryComputeNodeIdByShard(shardId, DEFAULT_WORKER_GROUP_ID);
+    }
+
+    public long getPrimaryComputeNodeIdByShard(long shardId, long workerGroupId) throws StarRocksException {
+        Set<Long> backendIds = getAllNodeIdsByShard(shardId, workerGroupId, true);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (backendIds.isEmpty()) {
             // If BE stops, routine load task may catch UserException during load plan,
             // and the job state will changed to PAUSED.
             // The job will automatically recover from PAUSED to RUNNING if the error code is REPLICA_FEW_ERR
             // when all BEs become alive.
+<<<<<<< HEAD
             throw new UserException(InternalErrorCode.REPLICA_FEW_ERR,
+=======
+            throw new StarRocksException(InternalErrorCode.REPLICA_FEW_ERR,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     "Failed to get primary backend. shard id: " + shardId);
         }
         return backendIds.iterator().next();
     }
 
+<<<<<<< HEAD
     public Set<Long> getBackendIdsByShard(long shardId, long workerGroupId) throws UserException {
         return getAllBackendIdsByShard(shardId, workerGroupId, false);
     }
@@ -618,16 +789,39 @@ public class StarOSAgent {
     private Set<Long> getAllBackendIdsByShard(long shardId, long workerGroupId, boolean onlyPrimary)
             throws UserException {
         List<ReplicaInfo> replicas = getShardReplicas(shardId, workerGroupId);
+=======
+    public Set<Long> getAllNodeIdsByShard(long shardId, long workerGroupId, boolean onlyPrimary)
+            throws StarRocksException {
+        try {
+            ShardInfo shardInfo = getShardInfo(shardId, workerGroupId);
+            return getAllNodeIdsByShard(shardInfo, onlyPrimary);
+        } catch (StarClientException e) {
+            throw new StarRocksException(e);
+        }
+    }
+
+    public Set<Long> getAllNodeIdsByShard(ShardInfo shardInfo, boolean onlyPrimary) {
+        List<ReplicaInfo> replicas = shardInfo.getReplicaInfoList();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (onlyPrimary) {
             replicas = replicas.stream().filter(x -> x.getReplicaRole() == ReplicaRole.PRIMARY)
                     .collect(Collectors.toList());
         }
+<<<<<<< HEAD
         Set<Long> backendIds = Sets.newHashSet();
         replicas.stream()
                 .map(x -> getOrUpdateBackendIdByWorkerInfo(x.getWorkerInfo()))
                 .forEach(x -> x.ifPresent(backendIds::add));
 
         return backendIds;
+=======
+        Set<Long> nodeIds = Sets.newHashSet();
+        replicas.stream()
+                .map(x -> getOrUpdateNodeIdByWorkerInfo(x.getWorkerInfo()))
+                .forEach(x -> x.ifPresent(nodeIds::add));
+
+        return nodeIds;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public void createMetaGroup(long metaGroupId, List<Long> shardGroupIds) throws DdlException {
@@ -683,7 +877,11 @@ public class StarOSAgent {
         return false; // return false if any error happens
     }
 
+<<<<<<< HEAD
     public List<Long> getWorkersByWorkerGroup(long workerGroupId) throws UserException {
+=======
+    public List<Long> getWorkersByWorkerGroup(long workerGroupId) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<Long> nodeIds = new ArrayList<>();
         prepare();
         try {
@@ -691,6 +889,7 @@ public class StarOSAgent {
                     listWorkerGroup(serviceId, Collections.singletonList(workerGroupId), true);
             for (WorkerGroupDetailInfo detailInfo : workerGroupDetailInfos) {
                 detailInfo.getWorkersInfoList()
+<<<<<<< HEAD
                         .forEach(x -> getOrUpdateBackendIdByWorkerInfo(x).ifPresent(nodeIds::add));
             }
             return nodeIds;
@@ -700,11 +899,26 @@ public class StarOSAgent {
     }
 
     public List<String> listDefaultWorkerGroupIpPort() throws UserException {
+=======
+                        .forEach(x -> getOrUpdateNodeIdByWorkerInfo(x).ifPresent(nodeIds::add));
+            }
+            return nodeIds;
+        } catch (StarClientException e) {
+            throw new StarRocksException("Failed to get workers by group id. error: " + e.getMessage());
+        }
+    }
+
+    public List<String> listWorkerGroupIpPort(long workerGroupId) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<String> addresses = new ArrayList<>();
         prepare();
         try {
             List<WorkerGroupDetailInfo> workerGroupDetailInfos = client.
+<<<<<<< HEAD
                     listWorkerGroup(serviceId, Collections.singletonList(DEFAULT_WORKER_GROUP_ID), true);
+=======
+                    listWorkerGroup(serviceId, Collections.singletonList(workerGroupId), true);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             Preconditions.checkState(1 == workerGroupDetailInfos.size());
             WorkerGroupDetailInfo workerGroupInfo = workerGroupDetailInfos.get(0);
             for (WorkerInfo workerInfo : workerGroupInfo.getWorkersInfoList()) {
@@ -712,7 +926,79 @@ public class StarOSAgent {
             }
             return addresses;
         } catch (StarClientException e) {
+<<<<<<< HEAD
             throw new UserException("Fail to get workers by default group id, error: " + e.getMessage());
+=======
+            throw new StarRocksException("Fail to get workers by default group id, error: " + e.getMessage());
+        }
+    }
+
+    // remove previous worker with same backend id
+    private void tryRemovePreviousWorkerGroup(long workerGroupId) {
+        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+            Iterator<Map.Entry<Long, Long>> iterator = workerToNode.entrySet().iterator();
+            while (iterator.hasNext()) {
+                Map.Entry<Long, Long> entry = iterator.next();
+                long nodeId = entry.getValue();
+                long workerId = entry.getKey();
+                ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId);
+                if (node.getWorkerGroupId() == workerGroupId) {
+                    iterator.remove();
+                    workerToId.entrySet().removeIf(e -> e.getValue() == workerId);
+                }
+            }
+        }
+    }
+
+    public long createWorkerGroup(String size, int replicaNumber) throws DdlException {
+        prepare();
+
+        // size should be x0, x1, x2, x4...
+        WorkerGroupSpec spec = WorkerGroupSpec.newBuilder().setSize(size).build();
+        // owner means tenant, now there is only one tenant, so pass "Starrocks" to starMgr
+        String owner = "Starrocks";
+        WorkerGroupDetailInfo result = null;
+        try {
+            result = client.createWorkerGroup(serviceId, owner, spec, Collections.emptyMap(),
+                    Collections.emptyMap(), replicaNumber);
+        } catch (StarClientException e) {
+            LOG.warn("Failed to create worker group. error: {}", e.getMessage());
+            throw new DdlException("Failed to create worker group. error: " + e.getMessage());
+        }
+        return result.getGroupId();
+    }
+
+    public void updateWorkerGroup(long workerGroupId, int replicaNumber) throws DdlException {
+        prepare();
+        try {
+            client.updateWorkerGroup(serviceId, workerGroupId, null, null, replicaNumber);
+        } catch (StarClientException e) {
+            LOG.warn("Failed to update worker group. error: {}", e.getMessage());
+            throw new DdlException("Failed to update worker group. error: " + e.getMessage());
+        }
+    }
+
+    public void deleteWorkerGroup(long groupId) throws DdlException {
+        prepare();
+        try {
+            client.deleteWorkerGroup(serviceId, groupId);
+        } catch (StarClientException e) {
+            LOG.warn("Failed to delete worker group {}. error: {}", groupId, e.getMessage());
+            throw new DdlException("Failed to delete worker group. error: " + e.getMessage());
+        }
+
+        tryRemovePreviousWorkerGroup(groupId);
+    }
+
+    // dump all starmgr meta, for DEBUG purpose
+    public String dump() {
+        prepare();
+
+        try {
+            return client.dump();
+        } catch (StarClientException e) {
+            return "Fail to dump starmgr meta, " + e.getMessage();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -724,6 +1010,7 @@ public class StarOSAgent {
         return shardInfos.get(0);
     }
 
+<<<<<<< HEAD
     // dump all starmgr meta, for DEBUG purpose
     public String dump() {
         prepare();
@@ -734,5 +1021,10 @@ public class StarOSAgent {
             String str = "Fail to dump starmgr meta, " + e.getMessage();
             return str;
         }
+=======
+    public static FilePathInfo allocatePartitionFilePathInfo(FilePathInfo tableFilePathInfo, long physicalPartitionId) {
+        String allocPath = StarClient.allocateFilePath(tableFilePathInfo, Long.hashCode(physicalPartitionId));
+        return tableFilePathInfo.toBuilder().setFullPath(String.format("%s/%d", allocPath, physicalPartitionId)).build();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }

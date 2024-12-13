@@ -24,9 +24,15 @@ import static java.lang.String.format;
 
 public class SemanticException extends StarRocksPlannerException {
 
+<<<<<<< HEAD
     private final String detailMsg;
 
     private final NodePosition pos;
+=======
+    protected final String detailMsg;
+
+    protected final NodePosition pos;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     protected boolean canAppend = true;
 
@@ -49,6 +55,15 @@ public class SemanticException extends StarRocksPlannerException {
         this.canAppend = canAppend;
     }
 
+<<<<<<< HEAD
+=======
+    public SemanticException(String detailMsg, Exception cause) {
+        super(detailMsg, ErrorType.USER_ERROR, cause);
+        this.detailMsg = detailMsg;
+        this.pos = NodePosition.ZERO;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public SemanticException(String formatString, Object... args) {
         this(format(formatString, args), NodePosition.ZERO);
     }

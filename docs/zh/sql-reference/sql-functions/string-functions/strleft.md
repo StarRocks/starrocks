@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # strleft
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 从字符串左边部分返回指定长度的字符，长度的单位为「utf8 字符」。函数别名为 [left](left.md).
 

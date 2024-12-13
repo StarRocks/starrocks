@@ -15,6 +15,11 @@
 
 package com.starrocks.sql.optimizer.base;
 
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.ColumnId;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.Objects;
 
 /**
@@ -23,16 +28,28 @@ import java.util.Objects;
  */
 public final class ColumnIdentifier {
     private final long tableId;
+<<<<<<< HEAD
     private final String columnName;
 
     private long dbId = -1;
 
     public ColumnIdentifier(long tableId, String columnName) {
+=======
+    private final ColumnId columnName;
+
+    private long dbId = -1;
+
+    public ColumnIdentifier(long tableId, ColumnId columnName) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.tableId = tableId;
         this.columnName = columnName;
     }
 
+<<<<<<< HEAD
     public ColumnIdentifier(long dbId, long tableId, String columnName) {
+=======
+    public ColumnIdentifier(long dbId, long tableId, ColumnId columnName) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.dbId = dbId;
         this.tableId = tableId;
         this.columnName = columnName;
@@ -42,7 +59,11 @@ public final class ColumnIdentifier {
         return tableId;
     }
 
+<<<<<<< HEAD
     public String getColumnName() {
+=======
+    public ColumnId getColumnName() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return columnName;
     }
 

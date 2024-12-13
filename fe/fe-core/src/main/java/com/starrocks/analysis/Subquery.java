@@ -91,6 +91,13 @@ public class Subquery extends Expr {
 
     @Override
     public boolean equals(Object o) {
+<<<<<<< HEAD
+=======
+        if (this == o) {
+            return true;
+        }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (!super.equals(o)) {
             return false;
         }
@@ -98,7 +105,11 @@ public class Subquery extends Expr {
         if (((Subquery) o).getQueryStatement() == null) {
             return false;
         } else {
+<<<<<<< HEAD
             return o.equals(queryStatement);
+=======
+            return ((Subquery) o).getQueryStatement().equals(queryStatement);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
