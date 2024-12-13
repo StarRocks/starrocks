@@ -67,6 +67,7 @@ public:
 
     VectorizedInConstPredicate(const TExprNode& node) : Predicate(node), _is_not_in(node.in_predicate.is_not_in) {}
 
+    // _string_values is ColumnPtr, not deep copied, so once opened, should not be modified.
     VectorizedInConstPredicate(const VectorizedInConstPredicate& other)
             : Predicate(other),
               _is_not_in(other._is_not_in),
