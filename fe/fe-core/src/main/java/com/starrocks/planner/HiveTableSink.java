@@ -26,7 +26,10 @@ import com.starrocks.connector.hive.TextFileFormatDesc;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
 import com.starrocks.sql.analyzer.SemanticException;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TDataSink;
@@ -37,7 +40,10 @@ import com.starrocks.thrift.THiveTableSink;
 import java.util.List;
 import java.util.Optional;
 
+<<<<<<< HEAD
 import static com.starrocks.analysis.OutFileClause.PARQUET_COMPRESSION_TYPE_MAP;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import static com.starrocks.connector.hive.HiveMetastoreApiConverter.toTextFileFormatDesc;
 
 public class HiveTableSink extends DataSink {

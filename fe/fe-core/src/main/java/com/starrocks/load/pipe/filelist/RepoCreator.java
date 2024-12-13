@@ -14,7 +14,11 @@
 
 package com.starrocks.load.pipe.filelist;
 
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.statistic.StatisticUtils;
 import org.apache.logging.log4j.LogManager;
@@ -59,7 +63,11 @@ public class RepoCreator {
         return GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(FileListTableRepo.FILE_LIST_DB_NAME) != null;
     }
 
+<<<<<<< HEAD
     public static void createTable() throws UserException {
+=======
+    public static void createTable() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         int expectedReplicationNum =
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getSystemTableExpectedReplicationNum();
         String sql = FileListTableRepo.SQLBuilder.buildCreateTableSql(expectedReplicationNum);

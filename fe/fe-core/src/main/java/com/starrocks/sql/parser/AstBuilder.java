@@ -444,6 +444,10 @@ import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.TableRenameClause;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.TableSampleClause;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.TruncatePartitionClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.UninstallPluginStmt;
@@ -474,6 +478,10 @@ import com.starrocks.sql.ast.pipe.DescPipeStmt;
 import com.starrocks.sql.ast.pipe.DropPipeStmt;
 import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.sql.ast.pipe.ShowPipeStmt;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.warehouse.AlterWarehouseStmt;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.warehouse.CreateWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.DropWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.ResumeWarehouseStmt;
@@ -886,7 +894,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
         if (context.identifierList() == null) {
             if (context.partitionExpr() != null) {
+<<<<<<< HEAD
                 List<ParseNode> multiDescList = Lists.newArrayList(); 
+=======
+                List<ParseNode> multiDescList = Lists.newArrayList();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 for (StarRocksParser.PartitionExprContext partitionExpr : context.partitionExpr()) {
                     if (partitionExpr.identifier() != null) {
                         Identifier identifier = (Identifier) visit(partitionExpr.identifier());
@@ -2109,7 +2121,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
         }
         return new RefreshMaterializedViewStatement(mvName, new EitherOr(rangePartitionDesc, cells),
+<<<<<<< HEAD
                 context.FORCE() != null, context.SYNC() != null, createPos(context));
+=======
+                context.FORCE() != null, context.SYNC() != null,
+                context.priority != null ? Integer.parseInt(context.priority.getText()) : null,
+                createPos(context));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -2616,6 +2634,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 collect(toList());
         TableName tableName = qualifiedNameToTableName(qualifiedNames.get(0));
         List<Expr> columns = getAnalyzeColumns(qualifiedNames.subList(1, qualifiedNames.size()));
+<<<<<<< HEAD
+=======
+        PartitionNames partitionNames = null;
+        if (context.partitionNames() != null) {
+            partitionNames = (PartitionNames) visit(context.partitionNames());
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         Map<String, String> properties = new HashMap<>();
         if (context.properties() != null) {
@@ -2625,7 +2650,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
         }
 
+<<<<<<< HEAD
         return new AnalyzeStmt(tableName, columns, properties,
+=======
+        return new AnalyzeStmt(tableName, columns, partitionNames, properties,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 context.SAMPLE() != null,
                 context.ASYNC() != null,
                 new AnalyzeBasicDesc(), createPos(context));
@@ -2741,7 +2770,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             bucket = Config.histogram_buckets_size;
         }
 
+<<<<<<< HEAD
         return new AnalyzeStmt(tableName, columns, properties, true,
+=======
+        return new AnalyzeStmt(tableName, columns, null, properties, true,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 false, new AnalyzeHistogramDesc(bucket), createPos(context));
     }
 
@@ -4729,6 +4762,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         } else if (identifier != null) {
             String partitionName = ((Identifier) visit(context.identifier())).getValue();
             return new DropPartitionClause(exists, partitionName, temp, force, createPos(context));
+<<<<<<< HEAD
+=======
+        } else if (context.where != null) {
+            Expr whereExpr = (Expr) visitIfPresent(context.where);
+            return new DropPartitionClause(exists, whereExpr, temp, force, createPos(context));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } else {
             if (CollectionUtils.isNotEmpty(identifierList)) {
                 List<String> partitionNames = identifierList.stream().map(i -> i.getValue()).collect(toList());
@@ -5015,6 +5054,21 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new ShowNodesStmt(warehouseName, pattern, createPos(context));
     }
 
+<<<<<<< HEAD
+=======
+    @Override
+    public ParseNode visitAlterWarehouseStatement(StarRocksParser.AlterWarehouseStatementContext context) {
+        Identifier identifier = (Identifier) visit(context.identifierOrString());
+        String whName = identifier.getValue();
+        Map<String, String> properties = new HashMap<>();
+        if (context.modifyPropertiesClause() != null) {
+            ModifyTablePropertiesClause clause = (ModifyTablePropertiesClause) visit(context.modifyPropertiesClause());
+            properties = clause.getProperties();
+        }
+        return new AlterWarehouseStmt(whName, properties, createPos(context));
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // ------------------------------------------- Query Statement -----------------------------------------------------
 
     @Override
@@ -5494,10 +5548,34 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
         }
 
+<<<<<<< HEAD
+=======
+        if (context.sampleClause() != null) {
+            tableRelation.setSampleClause(visitSampleClause(context.sampleClause()));
+        }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return tableRelation;
     }
 
     @Override
+<<<<<<< HEAD
+=======
+    public TableSampleClause visitSampleClause(StarRocksParser.SampleClauseContext context) {
+        TableSampleClause result = new TableSampleClause(createPos(context));
+        if (context.propertyList() != null) {
+            Map<String, String> properties = getPropertyList(context.propertyList());
+            try {
+                result.analyzeProperties(properties);
+            } catch (AnalysisException e) {
+                throw new ParsingException(e.getMessage(), createPos(context));
+            }
+        }
+        return result;
+    }
+
+    @Override
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public ParseNode visitQueryPeriod(StarRocksParser.QueryPeriodContext context) {
         if (context.periodType() == null || context.end == null) {
             return null;

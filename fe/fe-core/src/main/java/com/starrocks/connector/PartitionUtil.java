@@ -43,7 +43,11 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -51,8 +55,14 @@ import com.starrocks.connector.iceberg.IcebergPartitionUtils;
 import com.starrocks.planner.PartitionColumnFilter;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.common.DmlException;
+<<<<<<< HEAD
 import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.common.RangePartitionDiff;
+=======
+import com.starrocks.sql.common.PCell;
+import com.starrocks.sql.common.PListCell;
+import com.starrocks.sql.common.PartitionDiff;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.common.RangePartitionDiffer;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.common.UnsupportedException;
@@ -295,16 +305,26 @@ public class PartitionUtil {
      * @param partitionColumn : the ref base table's partition column which mv's partition derives
      */
     public static Map<String, Range<PartitionKey>> getPartitionKeyRange(Table table, Column partitionColumn, Expr partitionExpr)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return ConnectorPartitionTraits.build(table).getPartitionKeyRange(partitionColumn, partitionExpr);
     }
 
     /**
      * NOTE: Ensure result list cell's order is the same with partitionColumns.
      */
+<<<<<<< HEAD
     public static Map<String, PListCell> getPartitionList(Table table, List<Column> partitionColumns)
             throws UserException {
         return ConnectorPartitionTraits.build(table).getPartitionList(partitionColumns);
+=======
+    public static Map<String, PCell> getPartitionCells(Table table, List<Column> partitionColumns)
+            throws StarRocksException {
+        return ConnectorPartitionTraits.build(table).getPartitionCells(partitionColumns);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     // check the partitionColumn exist in the partitionColumns
@@ -363,7 +383,11 @@ public class PartitionUtil {
                                                  Expr partitionExpr) throws AnalysisException {
 
         if (isListPartition) {
+<<<<<<< HEAD
             Map<String, PListCell> partitionNameWithList = getMVPartitionNameWithList(table, ImmutableList.of(partitionColumn),
+=======
+            Map<String, PCell> partitionNameWithList = getMVPartitionToCells(table, ImmutableList.of(partitionColumn),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     partitionNames);
             return Sets.newHashSet(partitionNameWithList.keySet());
         } else {
@@ -714,11 +738,19 @@ public class PartitionUtil {
     /**
      * NOTE: Ensure output plist cell's order is the same with partitionColumns.
      */
+<<<<<<< HEAD
     public static Map<String, PListCell> getMVPartitionNameWithList(Table table,
                                                                     List<Column> refPartitionColumns,
                                                                     List<String> partitionNames)
             throws AnalysisException {
         Map<String, PListCell> partitionListMap = new LinkedHashMap<>();
+=======
+    public static Map<String, PCell> getMVPartitionToCells(Table table,
+                                                           List<Column> refPartitionColumns,
+                                                           List<String> partitionNames)
+            throws AnalysisException {
+        Map<String, PCell> partitionListMap = new LinkedHashMap<>();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<Column> partitionColumns = getPartitionColumns(table);
 
         // Get the index of partitionColumn when table has multi partition columns.
@@ -865,10 +897,17 @@ public class PartitionUtil {
         thread.start();
     }
 
+<<<<<<< HEAD
     public static RangePartitionDiff getPartitionDiff(Expr partitionExpr,
                                                       Map<String, Range<PartitionKey>> basePartitionMap,
                                                       Map<String, Range<PartitionKey>> mvPartitionMap,
                                                       RangePartitionDiffer differ) {
+=======
+    public static PartitionDiff getPartitionDiff(Expr partitionExpr,
+                                                 Map<String, Range<PartitionKey>> basePartitionMap,
+                                                 Map<String, Range<PartitionKey>> mvPartitionMap,
+                                                 RangePartitionDiffer differ) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (partitionExpr instanceof SlotRef) {
             return SyncPartitionUtils.getRangePartitionDiffOfSlotRef(basePartitionMap, mvPartitionMap, differ);
         } else if (partitionExpr instanceof FunctionCallExpr) {

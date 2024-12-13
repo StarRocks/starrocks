@@ -60,6 +60,10 @@ public class DefaultWarehouse extends Warehouse {
                 "",
                 "",
                 "",
+<<<<<<< HEAD
+=======
+                "",
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 comment);
     }
 

@@ -15,8 +15,11 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
+<<<<<<< HEAD
 import com.starrocks.catalog.Dictionary;
 import com.starrocks.catalog.DictionaryMgr;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.persist.DictionaryMgrInfo;
 import com.starrocks.proto.PProcessDictionaryCacheResult;
 import com.starrocks.server.GlobalStateMgr;

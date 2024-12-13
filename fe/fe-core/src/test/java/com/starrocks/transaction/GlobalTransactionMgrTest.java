@@ -52,7 +52,11 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.LabelAlreadyUsedException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.load.routineload.KafkaProgress;
@@ -196,7 +200,11 @@ public class GlobalTransactionMgrTest {
 
     // all replica committed success
     @Test
+<<<<<<< HEAD
     public void testCommitTransaction1() throws UserException {
+=======
+    public void testCommitTransaction1() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
         long transactionId = masterTransMgr
                 .beginTransaction(GlobalStateMgrTestUtil.testDbId1, Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
@@ -242,7 +250,11 @@ public class GlobalTransactionMgrTest {
 
     // commit with only two replicas
     @Test
+<<<<<<< HEAD
     public void testCommitTransactionWithOneFailed() throws UserException {
+=======
+    public void testCommitTransactionWithOneFailed() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         TransactionState transactionState = null;
         FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
         long transactionId = masterTransMgr
@@ -360,7 +372,11 @@ public class GlobalTransactionMgrTest {
     @Test
     public void testCommitRoutineLoadTransaction(@Injectable TabletCommitInfo tabletCommitInfo,
                                                  @Mocked EditLog editLog)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
 
         TabletCommitInfo tabletCommitInfo1 =
@@ -450,7 +466,11 @@ public class GlobalTransactionMgrTest {
 
     @Test
     public void testCommitRoutineLoadTransactionWithErrorMax(@Injectable TabletCommitInfo tabletCommitInfo,
+<<<<<<< HEAD
                                                              @Mocked EditLog editLog) throws UserException {
+=======
+                                                             @Mocked EditLog editLog) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
 
@@ -540,7 +560,11 @@ public class GlobalTransactionMgrTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testFinishTransaction() throws UserException {
+=======
+    public void testFinishTransaction() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
 
         long transactionId = masterTransMgr
@@ -595,7 +619,11 @@ public class GlobalTransactionMgrTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testFinishTransactionWithOneFailed() throws UserException {
+=======
+    public void testFinishTransactionWithOneFailed() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         TransactionState transactionState = null;
         Partition testPartition =
                 masterGlobalStateMgr.getLocalMetastore()
@@ -803,7 +831,11 @@ public class GlobalTransactionMgrTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testPrepareTransaction() throws UserException {
+=======
+    public void testPrepareTransaction() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
 
         long transactionId = masterTransMgr
@@ -832,7 +864,11 @@ public class GlobalTransactionMgrTest {
                     masterGlobalStateMgr.getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDbId1), transactionId,
                     (long) 1000);
             Assert.fail("should throw publish timeout exception");
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         transactionState = fakeEditLog.getTransaction(transactionId);
         assertEquals(TransactionStatus.COMMITTED, transactionState.getTransactionStatus());
@@ -891,7 +927,11 @@ public class GlobalTransactionMgrTest {
 
     @Test
     public void testRetryCommitOnRateLimitExceededTimeout()
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Database db = new Database(10, "db0");
         GlobalTransactionMgr globalTransactionMgr = spy(new GlobalTransactionMgr(GlobalStateMgr.getCurrentState()));
         DatabaseTransactionMgr dbTransactionMgr = spy(new DatabaseTransactionMgr(10L, GlobalStateMgr.getCurrentState()));
@@ -909,7 +949,11 @@ public class GlobalTransactionMgrTest {
 
     @Test
     public void testPublishVersionTimeout()
+<<<<<<< HEAD
             throws UserException, LockTimeoutException {
+=======
+            throws StarRocksException, LockTimeoutException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Database db = new Database(10, "db0");
         GlobalTransactionMgr globalTransactionMgr = spy(new GlobalTransactionMgr(GlobalStateMgr.getCurrentState()));
         DatabaseTransactionMgr dbTransactionMgr = spy(new DatabaseTransactionMgr(10L, GlobalStateMgr.getCurrentState()));
@@ -927,7 +971,11 @@ public class GlobalTransactionMgrTest {
 
     @Test
     public void testRetryCommitOnRateLimitExceededThrowUnexpectedException()
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Database db = new Database(10, "db0");
         GlobalTransactionMgr globalTransactionMgr = spy(new GlobalTransactionMgr(GlobalStateMgr.getCurrentState()));
         DatabaseTransactionMgr dbTransactionMgr = spy(new DatabaseTransactionMgr(10L, GlobalStateMgr.getCurrentState()));
@@ -936,13 +984,21 @@ public class GlobalTransactionMgrTest {
         doThrow(NullPointerException.class)
                 .when(dbTransactionMgr)
                 .commitTransaction(1001L, Collections.emptyList(), Collections.emptyList(), null);
+<<<<<<< HEAD
         Assert.assertThrows(UserException.class, () -> globalTransactionMgr.commitAndPublishTransaction(db, 1001,
+=======
+        Assert.assertThrows(StarRocksException.class, () -> globalTransactionMgr.commitAndPublishTransaction(db, 1001,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 Collections.emptyList(), Collections.emptyList(), 10, null));
     }
 
     @Test
     public void testRetryCommitOnRateLimitExceededThrowLockTimeoutException()
+<<<<<<< HEAD
             throws UserException, LockTimeoutException {
+=======
+            throws StarRocksException, LockTimeoutException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Database db = new Database(10L, "db0");
         GlobalTransactionMgr globalTransactionMgr = spy(new GlobalTransactionMgr(GlobalStateMgr.getCurrentState()));
         TransactionState transactionState = new TransactionState();
@@ -1012,7 +1068,11 @@ public class GlobalTransactionMgrTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testCommitLockTimeout() throws UserException, LockTimeoutException {
+=======
+    public void testCommitLockTimeout() throws StarRocksException, LockTimeoutException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Database db = new Database(10L, "db0");
         GlobalTransactionMgr globalTransactionMgr = spy(new GlobalTransactionMgr(GlobalStateMgr.getCurrentState()));
         doThrow(LockTimeoutException.class)

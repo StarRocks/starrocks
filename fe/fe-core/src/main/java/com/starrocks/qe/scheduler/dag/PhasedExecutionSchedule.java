@@ -18,7 +18,11 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.UnionFind;
 import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.qe.ConnectContext;
@@ -202,7 +206,11 @@ public class PhasedExecutionSchedule implements ExecutionSchedule {
     }
 
     // schedule next
+<<<<<<< HEAD
     public void schedule(Coordinator.ScheduleOption option) throws RpcException, UserException {
+=======
+    public void schedule(Coordinator.ScheduleOption option) throws RpcException, StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         buildDeployStates();
         final int oldTaskCnt = inputScheduleTaskNums.getAndIncrement();
         if (oldTaskCnt == 0) {
@@ -218,7 +226,11 @@ public class PhasedExecutionSchedule implements ExecutionSchedule {
         cancelled = true;
     }
 
+<<<<<<< HEAD
     private void doDeploy() throws RpcException, UserException {
+=======
+    private void doDeploy() throws RpcException, StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (deployStates.isEmpty()) {
             return;
         }
@@ -239,7 +251,11 @@ public class PhasedExecutionSchedule implements ExecutionSchedule {
         }
     }
 
+<<<<<<< HEAD
     public void tryScheduleNextTurn(TUniqueId fragmentInstanceId) throws RpcException, UserException {
+=======
+    public void tryScheduleNextTurn(TUniqueId fragmentInstanceId) throws RpcException, StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (cancelled) {
             return;
         }

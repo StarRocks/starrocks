@@ -36,7 +36,11 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
@@ -179,7 +183,11 @@ public class DeleteTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testNormal() throws UserException, RpcException {
+=======
+    public void testNormal() throws StarRocksException, RpcException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         setUpExpectation();
         TransactionState transactionState = new TransactionState();
         transactionState.setTransactionStatus(TransactionStatus.VISIBLE);
@@ -259,7 +267,11 @@ public class DeleteTest {
     }
 
     @Test(expected = DdlException.class)
+<<<<<<< HEAD
     public void testBeDeleteFail() throws UserException {
+=======
+    public void testBeDeleteFail() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         setUpExpectation();
         new MockUp<BrpcProxy>() {
             @Mock
@@ -344,7 +356,11 @@ public class DeleteTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testBeDeleteArrayType() throws UserException {
+=======
+    public void testBeDeleteArrayType() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         setUpExpectationWithoutExec();
         new MockUp<BrpcProxy>() {
             @Mock

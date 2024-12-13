@@ -71,6 +71,10 @@ void OlapTableIndexSchema::to_protobuf(POlapTableIndexSchema* pindex) const {
     pindex->set_id(index_id);
     pindex->set_schema_hash(schema_hash);
     pindex->set_schema_id(schema_id);
+<<<<<<< HEAD
+=======
+    pindex->set_is_shadow(is_shadow);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     for (auto slot : slots) {
         pindex->add_columns(slot->col_name());
     }
@@ -128,6 +132,16 @@ Status OlapTableSchemaParam::init(const POlapTableSchemaParam& pschema) {
             index->column_to_expr_value.insert({entry.first, entry.second});
         }
 
+<<<<<<< HEAD
+=======
+        if (p_index.has_is_shadow()) {
+            index->is_shadow = p_index.is_shadow();
+            if (index->is_shadow) {
+                _shadow_indexes++;
+            }
+        }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         _indexes.emplace_back(index);
     }
 
@@ -187,6 +201,15 @@ Status OlapTableSchemaParam::init(const TOlapTableSchemaParam& tschema, RuntimeS
                 index->column_to_expr_value.insert({entry.first, entry.second});
             }
         }
+<<<<<<< HEAD
+=======
+        if (t_index.__isset.is_shadow) {
+            index->is_shadow = t_index.is_shadow;
+            if (index->is_shadow) {
+                _shadow_indexes++;
+            }
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         _indexes.emplace_back(index);
     }
 
@@ -477,10 +500,18 @@ Status OlapTablePartitionParam::add_partitions(const std::vector<TOlapTableParti
 
         part->num_buckets = t_part.num_buckets;
         auto num_indexes = _schema->indexes().size();
+<<<<<<< HEAD
         if (t_part.indexes.size() != num_indexes) {
             std::stringstream ss;
             ss << "number of partition's index is not equal with schema's"
                << ", num_part_indexes=" << t_part.indexes.size() << ", num_schema_indexes=" << num_indexes;
+=======
+        if (t_part.indexes.size() != num_indexes - _schema->shadow_index_size()) {
+            std::stringstream ss;
+            ss << "number of partition's index is not equal with schema's"
+               << ", num_part_indexes=" << t_part.indexes.size() << ", num_schema_indexes=" << num_indexes
+               << ", num_shadow_indexes=" << _schema->shadow_index_size();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             LOG(WARNING) << ss.str();
             return Status::InternalError(ss.str());
         }
@@ -490,6 +521,7 @@ Status OlapTablePartitionParam::add_partitions(const std::vector<TOlapTableParti
                       return lhs.index_id < rhs.index_id;
                   });
         // check index
+<<<<<<< HEAD
         for (int j = 0; j < num_indexes; ++j) {
             if (part->indexes[j].index_id != _schema->indexes()[j]->index_id) {
                 std::stringstream ss;
@@ -500,6 +532,27 @@ Status OlapTablePartitionParam::add_partitions(const std::vector<TOlapTableParti
                 return Status::InternalError(ss.str());
             }
         }
+=======
+        // If an add_partition operation is executed during the ALTER process, the ALTER operation will be canceled first.
+        // Therefore, the latest indexes will not include shadow indexes.
+        // However, the schema's index may still contain shadow indexes, so these shadow indexes need to be ignored.
+        int j = 0;
+        for (int i = 0; i < num_indexes; ++i) {
+            if (_schema->indexes()[i]->is_shadow) {
+                continue;
+            }
+            if (part->indexes[j].index_id != _schema->indexes()[i]->index_id) {
+                std::stringstream ss;
+                ss << "partition's index is not equal with schema's"
+                   << ", part_index=" << part->indexes[j].index_id
+                   << ", schema_index=" << _schema->indexes()[i]->index_id;
+                LOG(WARNING) << ss.str();
+                return Status::InternalError(ss.str());
+            }
+            j++;
+        }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         _partitions.emplace(part->id, part);
         if (t_part.__isset.in_keys) {
             for (auto& in_key : part->in_keys) {

@@ -15,8 +15,13 @@
 package com.starrocks.connector.metadata;
 
 import com.google.common.collect.Sets;
+<<<<<<< HEAD
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
+=======
+import com.starrocks.authorization.PrivilegeBuiltinConstants;
+import com.starrocks.common.util.UUIDUtil;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.scheduler.Coordinator;

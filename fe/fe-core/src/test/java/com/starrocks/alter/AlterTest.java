@@ -61,7 +61,11 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.persist.ListPartitionPersistInfo;
@@ -2543,7 +2547,11 @@ public class AlterTest {
     @Test
     public void testCatalogRenameColumnReserved() throws Exception {
         String stmt = "alter table test.tbl1 rename column __op TO __op";
+<<<<<<< HEAD
         Assert.assertThrows(UserException.class, () -> {
+=======
+        Assert.assertThrows(StarRocksException.class, () -> {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
         });
     }

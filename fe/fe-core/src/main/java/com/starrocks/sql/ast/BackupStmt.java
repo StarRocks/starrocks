@@ -17,7 +17,10 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.LabelName;
 import com.starrocks.analysis.TableRef;
+<<<<<<< HEAD
 import com.starrocks.sql.ast.FunctionRef;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;

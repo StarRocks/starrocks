@@ -40,13 +40,20 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.BrokerDesc;
+<<<<<<< HEAD
 import com.starrocks.catalog.AuthorizationInfo;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -67,9 +74,12 @@ import com.starrocks.transaction.TransactionState;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+<<<<<<< HEAD
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -100,7 +110,12 @@ public abstract class BulkLoadJob extends LoadJob {
     protected Map<String, String> sessionVariables = Maps.newHashMap();
 
     protected static final String PRIORITY_SESSION_VARIABLE_KEY = "priority.session.variable.key";
+<<<<<<< HEAD
     public static final String LOG_REJECTED_RECORD_NUM_SESSION_VARIABLE_KEY = "log.rejected.record.num.session.variable.key";
+=======
+    public static final String LOG_REJECTED_RECORD_NUM_SESSION_VARIABLE_KEY =
+            "log.rejected.record.num.session.variable.key";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static final String CURRENT_USER_IDENT_KEY = "current.user.ident.key";
     public static final String CURRENT_QUALIFIED_USER_KEY = "current.qualified.user.key";
 
@@ -109,15 +124,26 @@ public abstract class BulkLoadJob extends LoadJob {
         super();
     }
 
+<<<<<<< HEAD
     public BulkLoadJob(long dbId, String label, OriginStatement originStmt) throws MetaNotFoundException {
         super(dbId, label);
         this.originStmt = originStmt;
         this.authorizationInfo = gatherAuthInfo();
+=======
+    public BulkLoadJob(long dbId, String label, OriginStatement originStmt) {
+        super(dbId, label);
+        this.originStmt = originStmt;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         if (ConnectContext.get() != null) {
             SessionVariable var = ConnectContext.get().getSessionVariable();
             sessionVariables.put(SessionVariable.SQL_MODE, Long.toString(var.getSqlMode()));
+<<<<<<< HEAD
             sessionVariables.put(SessionVariable.LOAD_TRANSMISSION_COMPRESSION_TYPE, var.getloadTransmissionCompressionType());
+=======
+            sessionVariables.put(SessionVariable.LOAD_TRANSMISSION_COMPRESSION_TYPE,
+                    var.getloadTransmissionCompressionType());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             sessionVariables.put(CURRENT_QUALIFIED_USER_KEY, ConnectContext.get().getQualifiedUser());
             sessionVariables.put(CURRENT_USER_IDENT_KEY, ConnectContext.get().getCurrentUserIdentity().toString());
         } else {
@@ -184,6 +210,7 @@ public abstract class BulkLoadJob extends LoadJob {
         }
     }
 
+<<<<<<< HEAD
     private AuthorizationInfo gatherAuthInfo() throws MetaNotFoundException {
         Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (database == null) {
@@ -192,6 +219,8 @@ public abstract class BulkLoadJob extends LoadJob {
         return new AuthorizationInfo(database.getFullName(), getTableNames(false));
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public Set<String> getTableNamesForShow() {
         Set<String> result = Sets.newHashSet();
@@ -281,7 +310,11 @@ public abstract class BulkLoadJob extends LoadJob {
                         id, taskId, transactionId, failMsg.getMsg());
                 GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().abortTransaction(
                         dbId, transactionId, failMsg.getMsg());
+<<<<<<< HEAD
             } catch (UserException e) {
+=======
+            } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 LOG.warn("Loading task failed to abort transaction, job_id: {}, task_id: {}, txn_id: {}, " +
                         "task fail message: {}, abort exception:", id, taskId, transactionId, failMsg.getMsg(), e);
             }
@@ -330,6 +363,7 @@ public abstract class BulkLoadJob extends LoadJob {
         }
         unprotectReadEndOperation((LoadJobFinalOperation) txnState.getTxnCommitAttachment(), true);
     }
+<<<<<<< HEAD
 
     @Override
     public void write(DataOutput out) throws IOException {
@@ -366,4 +400,6 @@ public abstract class BulkLoadJob extends LoadJob {
             logRejectedRecordNum = Long.parseLong(sessionVariables.get(LOG_REJECTED_RECORD_NUM_SESSION_VARIABLE_KEY));
         }
     }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

@@ -46,7 +46,11 @@
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "gen_cpp/Types_types.h" // for TUniqueId
+<<<<<<< HEAD
 #include "gen_cpp/doris_internal_service.pb.h"
+=======
+#include "gen_cpp/internal_service.pb.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "runtime/descriptors.h" // for PlanNodeId
 #include "runtime/local_pass_through_buffer.h"
 #include "runtime/mem_tracker.h"

@@ -230,11 +230,21 @@ void ScanOperator::_detach_chunk_sources() {
 
 void ScanOperator::update_exec_stats(RuntimeState* state) {
     auto ctx = state->query_ctx();
+<<<<<<< HEAD
     ctx->update_pull_rows_stats(_plan_node_id, _pull_row_num_counter->value());
     if (ctx != nullptr && _bloom_filter_eval_context.join_runtime_filter_input_counter != nullptr) {
         int64_t input_rows = _bloom_filter_eval_context.join_runtime_filter_input_counter->value();
         int64_t output_rows = _bloom_filter_eval_context.join_runtime_filter_output_counter->value();
         ctx->update_rf_filter_stats(_plan_node_id, input_rows - output_rows);
+=======
+    if (ctx != nullptr) {
+        ctx->update_pull_rows_stats(_plan_node_id, _pull_row_num_counter->value());
+        if (_bloom_filter_eval_context.join_runtime_filter_input_counter != nullptr) {
+            int64_t input_rows = _bloom_filter_eval_context.join_runtime_filter_input_counter->value();
+            int64_t output_rows = _bloom_filter_eval_context.join_runtime_filter_output_counter->value();
+            ctx->update_rf_filter_stats(_plan_node_id, input_rows - output_rows);
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }
 

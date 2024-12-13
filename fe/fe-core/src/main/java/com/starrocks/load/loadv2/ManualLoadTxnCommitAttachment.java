@@ -21,7 +21,10 @@ import com.starrocks.thrift.TManualLoadTxnCommitAttachment;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TxnCommitAttachment;
 
+<<<<<<< HEAD
 import java.io.DataInput;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.io.DataOutput;
 import java.io.IOException;
 
@@ -111,6 +114,7 @@ public class ManualLoadTxnCommitAttachment extends TxnCommitAttachment {
         // out.writeLong(receivedBytes);
         // out.writeLong(loadedBytes);
     }
+<<<<<<< HEAD
 
     public void readFields(DataInput in) throws IOException {
         super.readFields(in);
@@ -125,4 +129,6 @@ public class ManualLoadTxnCommitAttachment extends TxnCommitAttachment {
         //     loadedBytes = in.readLong();
         // }
     }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

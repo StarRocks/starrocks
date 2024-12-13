@@ -17,7 +17,10 @@
 #include <string>
 
 #include "column/column_helper.h"
+<<<<<<< HEAD
 #include "column/datum.h"
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
@@ -27,13 +30,20 @@
 #include "formats/parquet/encoding_plain.h"
 #include "formats/parquet/schema.h"
 #include "gutil/casts.h"
+<<<<<<< HEAD
 #include "runtime/large_int_value.h"
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "runtime/types.h"
 #include "simd/simd.h"
 #include "storage/column_predicate.h"
 #include "storage/types.h"
 #include "storage/uint24.h"
 #include "types/date_value.h"
+<<<<<<< HEAD
+=======
+#include "types/large_int_value.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "types/logical_type.h"
 
 namespace starrocks::parquet {
@@ -303,10 +313,25 @@ Status StatisticsHelper::get_min_max_value(const FileMetaData* file_metadata, co
     return Status::OK();
 }
 
+<<<<<<< HEAD
+=======
+Status StatisticsHelper::get_has_nulls(const tparquet::ColumnMetaData* column_meta, std::vector<bool>& has_nulls) {
+    if (!column_meta->statistics.__isset.null_count) {
+        return Status::Aborted("No null_count in column statistics");
+    }
+    has_nulls.emplace_back(column_meta->statistics.null_count > 0);
+    return Status::OK();
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 bool StatisticsHelper::has_correct_min_max_stats(const FileMetaData* file_metadata,
                                                  const tparquet::ColumnMetaData& column_meta,
                                                  const SortOrder& sort_order) {
     return file_metadata->writer_version().HasCorrectStatistics(column_meta, sort_order);
 }
 
+<<<<<<< HEAD
 } // namespace starrocks::parquet
+=======
+} // namespace starrocks::parquet
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

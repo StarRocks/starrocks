@@ -312,6 +312,7 @@ bool ConnectorScanOperator::has_shared_chunk_source() const {
     return !active_inputs.empty();
 }
 
+<<<<<<< HEAD
 size_t ConnectorScanOperator::num_buffered_chunks() const {
     auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
     auto& buffer = factory->get_chunk_buffer();
@@ -370,6 +371,8 @@ void ConnectorScanOperator::set_buffer_finished() {
     buffer.set_finished(_driver_sequence);
 }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 connector::ConnectorType ConnectorScanOperator::connector_type() {
     auto* scan_node = down_cast<ConnectorScanNode*>(_scan_node);
     return scan_node->connector_type();

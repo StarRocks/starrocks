@@ -288,6 +288,10 @@ struct TOlapTableIndexSchema {
     5: optional Exprs.TExpr where_clause
     6: optional i64 schema_id // schema id
     7: optional map<string, string> column_to_expr_value
+<<<<<<< HEAD
+=======
+    8: optional bool is_shadow
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 struct TOlapTableSchemaParam {

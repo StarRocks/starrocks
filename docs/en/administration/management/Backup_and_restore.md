@@ -55,7 +55,11 @@ PROPERTIES(
   PROPERTIES(
       "aws.s3.access_key" = "XXXXXXXXXXXXXXXXX",
       "aws.s3.secret_key" = "yyyyyyyyyyyyyyyyyyyyyyyy",
+<<<<<<< HEAD
       "aws.s3.endpoint" = "s3.us-east-1.amazonaws.com"
+=======
+      "aws.s3.region" = "us-east-1"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
   );
   ```
 

@@ -56,8 +56,13 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
 import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.Status;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -781,7 +786,11 @@ public class SystemInfoService implements GsonPostProcessable {
                     GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
                             .getComputeNodeWithBePort(host.getHostname(), host.getPort());
             if (computeNode == null) {
+<<<<<<< HEAD
                 throw new UserException(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR);
+=======
+                throw new StarRocksException(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
         if (computeNode.getBrpcPort() < 0) {

@@ -122,12 +122,16 @@ public:
         }
     }
 
+<<<<<<< HEAD
     void print_debug_info() {
         for (int i = 0; i < _num_pages; i++) {
             LOG(INFO) << "ordinals" << i << _ordinals.get()[i];
             LOG(INFO) << "pages" << i << _pages.get()[i];
         }
     }
+=======
+    void print_debug_info();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 private:
     friend OrdinalPageIndexIterator;

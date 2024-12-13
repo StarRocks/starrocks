@@ -18,7 +18,11 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.Maps;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.InstallPluginStmt;
 import org.junit.Assert;
@@ -28,7 +32,11 @@ import java.util.Map;
 
 public class InstallPluginStmtTest {
     @Test
+<<<<<<< HEAD
     public void testNormal() throws UserException {
+=======
+    public void testNormal() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Map<String, String> properties = Maps.newHashMap();
         properties.put("md5sum", "7529db41471ec72e165f96fe9fb92742");
         InstallPluginStmt stmt = new InstallPluginStmt("http://test/test.zip", properties);

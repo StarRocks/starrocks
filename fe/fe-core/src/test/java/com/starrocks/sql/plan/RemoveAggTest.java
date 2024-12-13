@@ -39,7 +39,11 @@ public class RemoveAggTest extends PlanTestBase {
     void removeAggTest(String sql) throws Exception {
         String plan = getFragmentPlan(sql);
         assertNotContains(plan, "AGGREGATE");
+<<<<<<< HEAD
         assertContains(plan, "PREDICATES");
+=======
+        assertContainsAny(plan, "PREDICATE", "predicates");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         assertContains(plan, "PREAGGREGATION: OFF");
     }
 

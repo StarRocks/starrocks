@@ -14,7 +14,10 @@
 
 package com.starrocks.transaction;
 
+<<<<<<< HEAD
 import com.starrocks.transaction.GtidGenerator;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

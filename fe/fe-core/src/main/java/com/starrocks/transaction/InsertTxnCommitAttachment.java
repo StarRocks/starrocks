@@ -18,7 +18,10 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.persist.gson.GsonUtils;
 
+<<<<<<< HEAD
 import java.io.DataInput;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.io.DataOutput;
 import java.io.IOException;
 
@@ -65,6 +68,7 @@ public class InsertTxnCommitAttachment extends TxnCommitAttachment {
         String s = GsonUtils.GSON.toJson(this);
         Text.writeString(out, s);
     }
+<<<<<<< HEAD
 
     public void readFields(DataInput in) throws IOException {
         super.readFields(in);
@@ -75,4 +79,6 @@ public class InsertTxnCommitAttachment extends TxnCommitAttachment {
         this.isVersionOverwrite = insertTxnCommitAttachment.getIsVersionOverwrite();
         this.partitionVersion = insertTxnCommitAttachment.getPartitionVersion();
     }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

@@ -48,7 +48,11 @@ import com.starrocks.common.DuplicatedRequestException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LoadPriority;
 import com.starrocks.common.util.LogBuilder;
@@ -237,7 +241,11 @@ public class BrokerLoadJob extends BulkLoadJob {
         }
     }
 
+<<<<<<< HEAD
     private void createLoadingTask(Database db, BrokerPendingTaskAttachment attachment) throws UserException {
+=======
+    private void createLoadingTask(Database db, BrokerPendingTaskAttachment attachment) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // divide job into broker loading task by table
         Locker locker = new Locker();
         locker.lockDatabase(db.getId(), LockType.READ);
@@ -322,7 +330,11 @@ public class BrokerLoadJob extends BulkLoadJob {
                 TransactionState txnState =
                         GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionState(dbId, transactionId);
                 if (txnState == null) {
+<<<<<<< HEAD
                     throw new UserException("txn does not exist: " + transactionId);
+=======
+                    throw new StarRocksException("txn does not exist: " + transactionId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
                 txnState.addTableIndexes(table);
             }
@@ -487,14 +499,22 @@ public class BrokerLoadJob extends BulkLoadJob {
             } catch (CommitRateExceededException e) {
                 // Sleep and retry.
                 ThreadUtil.sleepAtLeastIgnoreInterrupts(Math.max(e.getAllowCommitTime() - System.currentTimeMillis(), 0));
+<<<<<<< HEAD
             } catch (UserException e) {
+=======
+            } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 cancelJobWithoutCheck(new FailMsg(FailMsg.CancelType.LOAD_RUN_FAIL, e.getMessage()), true, true);
                 break;
             }
         }
     }
 
+<<<<<<< HEAD
     private void commitTransactionUnderDatabaseLock(Database db) throws UserException {
+=======
+    private void commitTransactionUnderDatabaseLock(Database db) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         LOG.info(new LogBuilder(LogKey.LOAD_JOB, id)
                 .add("txn_id", transactionId)
                 .add("msg", "Load job try to commit txn")

@@ -115,6 +115,19 @@ public class PlanTestNoneDBBase {
         }
     }
 
+<<<<<<< HEAD
+=======
+    public static void assertContainsAny(String text, String... pattern) {
+        boolean contains = false;
+        for (String s : pattern) {
+            contains |= text.contains(s);
+        }
+        if (!contains) {
+            Assert.fail(text);
+        }
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private static final String NORMAL_PLAN_PREDICATE_PREFIX = "PREDICATES:";
     private static final String LOWER_NORMAL_PLAN_PREDICATE_PREFIX = "predicates:";
     private static final String LOGICAL_PLAN_SCAN_PREFIX = "SCAN ";

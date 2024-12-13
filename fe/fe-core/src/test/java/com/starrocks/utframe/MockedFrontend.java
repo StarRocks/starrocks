@@ -230,7 +230,13 @@ public class MockedFrontend {
 
             try {
                 // init config
+<<<<<<< HEAD
                 new Config().init(frontend.getRunningDir() + "/conf/fe.conf");
+=======
+                Config config = new Config();
+                config.init(frontend.getRunningDir() + "/conf/fe.conf");
+                config.initMutable(frontend.getRunningDir() + "/conf/fe_mutable.conf");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
                 // set dns cache ttl
                 java.security.Security.setProperty("networkaddress.cache.ttl", "60");

@@ -14,7 +14,10 @@
 
 package com.starrocks.task;
 
+<<<<<<< HEAD
 import com.starrocks.task.AgentTask;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.TBackend;
 import com.starrocks.thrift.TRemoteSnapshotRequest;
 import com.starrocks.thrift.TTabletType;

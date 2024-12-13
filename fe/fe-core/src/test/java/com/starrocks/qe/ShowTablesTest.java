@@ -14,9 +14,15 @@
 package com.starrocks.qe;
 
 import com.google.common.collect.Sets;
+<<<<<<< HEAD
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
+=======
+import com.starrocks.authorization.PrivilegeBuiltinConstants;
+import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.common.ErrorReportException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;

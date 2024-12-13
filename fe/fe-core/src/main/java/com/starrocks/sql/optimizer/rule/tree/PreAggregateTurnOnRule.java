@@ -61,7 +61,29 @@ public class PreAggregateTurnOnRule implements TreeRewriteRule {
 
     @Override
     public OptExpression rewrite(OptExpression root, TaskContext taskContext) {
+<<<<<<< HEAD
         root.getOp().accept(VISITOR, root, new PreAggregationContext());
+=======
+        boolean hasAggregation = false;
+        List<PhysicalOlapScanOperator> scans = Lists.newArrayList();
+        Utils.extractOperator(root, scans, o -> (o instanceof PhysicalOlapScanOperator));
+        for (PhysicalOlapScanOperator scan : scans) {
+            // default false
+            scan.setPreAggregation(false);
+            long selectedIndex = scan.getSelectedIndexId();
+            MaterializedIndexMeta meta = ((OlapTable) scan.getTable()).getIndexMetaByIndexId(selectedIndex);
+            if (!meta.getKeysType().isAggregationFamily()) {
+                scan.setPreAggregation(true);
+                scan.setTurnOffReason("");
+            } else {
+                hasAggregation = true;
+            }
+        }
+
+        if (hasAggregation) {
+            root.getOp().accept(VISITOR, root, new PreAggregationContext());
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return root;
     }
 
@@ -75,7 +97,11 @@ public class PreAggregateTurnOnRule implements TreeRewriteRule {
 
         @Override
         public Void visit(OptExpression opt, PreAggregationContext context) {
+<<<<<<< HEAD
             opt.getInputs().forEach(o -> process(o, context.copy()));
+=======
+            opt.getInputs().forEach(o -> process(o, context));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return null;
         }
 
@@ -84,7 +110,11 @@ public class PreAggregateTurnOnRule implements TreeRewriteRule {
                 rewriteProject(opt, context);
             }
 
+<<<<<<< HEAD
             opt.getOp().accept(this, opt, context.copy());
+=======
+            opt.getOp().accept(this, opt, context);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return null;
         }
 
@@ -93,6 +123,7 @@ public class PreAggregateTurnOnRule implements TreeRewriteRule {
             ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(projection.getColumnRefMap());
 
             context.aggregations = context.aggregations.stream()
+<<<<<<< HEAD
                     .map(rewriter::rewrite)
                     .collect(Collectors.toList());
 
@@ -102,6 +133,17 @@ public class PreAggregateTurnOnRule implements TreeRewriteRule {
 
             context.joinPredicates = context.joinPredicates.stream().filter(Objects::nonNull)
                     .map(rewriter::rewrite)
+=======
+                    .map(rewriter::rewriteWithoutClone)
+                    .collect(Collectors.toList());
+
+            context.groupings = context.groupings.stream()
+                    .map(rewriter::rewriteWithoutClone)
+                    .collect(Collectors.toList());
+
+            context.joinPredicates = context.joinPredicates.stream().filter(Objects::nonNull)
+                    .map(rewriter::rewriteWithoutClone)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     .collect(Collectors.toList());
         }
 
@@ -211,7 +253,11 @@ public class PreAggregateTurnOnRule implements TreeRewriteRule {
                 List<ColumnRefOperator> conditions = Lists.newArrayList();
 
                 if (OperatorType.VARIABLE.equals(child.getOpType())) {
+<<<<<<< HEAD
                     returns.add((ColumnRefOperator) child);
+=======
+                    returns.add(child.cast());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 } else if (child instanceof CastOperator
                         && OperatorType.VARIABLE.equals(child.getChild(0).getOpType())) {
                     if (child.getType().isNumericType() && child.getChild(0).getType().isNumericType()) {
@@ -347,7 +393,11 @@ public class PreAggregateTurnOnRule implements TreeRewriteRule {
                 context.aggregations.clear();
                 process(optExpression.inputAt(0), context);
                 // Avoid left child modify context will effect right child
+<<<<<<< HEAD
                 process(optExpression.inputAt(1), context.copy());
+=======
+                process(optExpression.inputAt(1), context);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 return null;
             }
 
@@ -405,6 +455,7 @@ public class PreAggregateTurnOnRule implements TreeRewriteRule {
         public List<ScalarOperator> aggregations = Lists.newArrayList();
         public List<ScalarOperator> groupings = Lists.newArrayList();
         public List<ScalarOperator> joinPredicates = Lists.newArrayList();
+<<<<<<< HEAD
 
         public PreAggregationContext copy() {
             PreAggregationContext context = new PreAggregationContext();
@@ -415,5 +466,7 @@ public class PreAggregateTurnOnRule implements TreeRewriteRule {
             context.joinPredicates = Lists.newArrayList(joinPredicates);
             return context;
         }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }

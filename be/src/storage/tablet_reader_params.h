@@ -100,6 +100,11 @@ struct TabletReaderParams {
 
     VectorSearchOptionPtr vector_search_option = nullptr;
 
+<<<<<<< HEAD
+=======
+    TTableSampleOptions sample_options;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public:
     std::string to_string() const;
 };

@@ -20,7 +20,11 @@ import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.catalog.ResourceGroupMgr;
 import com.starrocks.common.Config;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.lake.qe.scheduler.DefaultSharedDataWorkerProvider;
@@ -244,7 +248,11 @@ public class CoordinatorPreprocessor {
     }
 
     @VisibleForTesting
+<<<<<<< HEAD
     void computeFragmentInstances() throws UserException {
+=======
+    void computeFragmentInstances() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         for (ExecutionFragment execFragment : executionDAG.getFragmentsInPostorder()) {
             fragmentAssignmentStrategyFactory.create(execFragment, workerProvider).assignFragmentToWorker(execFragment);
         }
@@ -260,7 +268,12 @@ public class CoordinatorPreprocessor {
         executionDAG.finalizeDAG();
     }
 
+<<<<<<< HEAD
     public void assignIncrementalScanRangesToFragmentInstances(ExecutionFragment execFragment) throws UserException {
+=======
+    public void assignIncrementalScanRangesToFragmentInstances(ExecutionFragment execFragment) throws
+            StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         execFragment.getScanRangeAssignment().clear();
         for (FragmentInstance instance : execFragment.getInstances()) {
             instance.resetAllScanRanges();

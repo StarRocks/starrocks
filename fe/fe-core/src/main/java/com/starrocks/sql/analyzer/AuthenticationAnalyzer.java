@@ -19,8 +19,13 @@ import com.starrocks.authentication.AuthenticationProvider;
 import com.starrocks.authentication.AuthenticationProviderFactory;
 import com.starrocks.authentication.PlainPasswordAuthenticationProvider;
 import com.starrocks.authentication.UserAuthenticationInfo;
+<<<<<<< HEAD
 import com.starrocks.common.Config;
 import com.starrocks.privilege.AuthorizationMgr;
+=======
+import com.starrocks.authorization.AuthorizationMgr;
+import com.starrocks.common.Config;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterUserStmt;

@@ -31,4 +31,8 @@ add_library(Connector STATIC
         utils.cpp
         async_flush_stream_poller.cpp
         sink_memory_manager.cpp
+<<<<<<< HEAD
+=======
+        deletion_vector/deletion_vector.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 )

@@ -187,6 +187,13 @@ public:
         return std::visit([&](const auto& arg) { return is_equal(arg); }, key);
     }
 
+<<<<<<< HEAD
+=======
+    [[nodiscard]] bool operator==(const Datum& other) const { return _value == other._value; }
+
+    [[nodiscard]] bool operator!=(const Datum& other) const { return !(*this == other); }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 private:
     using Variant =
             std::variant<std::monostate, int8_t, uint8_t, int16_t, uint16_t, uint24_t, int32_t, uint32_t, int64_t,

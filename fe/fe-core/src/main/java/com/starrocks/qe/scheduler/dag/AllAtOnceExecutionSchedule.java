@@ -14,7 +14,11 @@
 
 package com.starrocks.qe.scheduler.dag;
 
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.qe.scheduler.Deployer;
 import com.starrocks.qe.scheduler.slot.DeployState;
@@ -55,7 +59,11 @@ public class AllAtOnceExecutionSchedule implements ExecutionSchedule {
                 for (DeployState state : states) {
                     deployer.deployFragments(state);
                 }
+<<<<<<< HEAD
             } catch (UserException | RpcException e) {
+=======
+            } catch (StarRocksException | RpcException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 throw new RuntimeException(e);
             }
             // jvm should use tail optimization.
@@ -79,7 +87,11 @@ public class AllAtOnceExecutionSchedule implements ExecutionSchedule {
     }
 
     @Override
+<<<<<<< HEAD
     public void schedule(Coordinator.ScheduleOption option) throws RpcException, UserException {
+=======
+    public void schedule(Coordinator.ScheduleOption option) throws RpcException, StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<DeployState> states = new ArrayList<>();
         for (List<ExecutionFragment> executionFragments : dag.getFragmentsInTopologicalOrderFromRoot()) {
             final DeployState deployState = deployer.createFragmentExecStates(executionFragments);

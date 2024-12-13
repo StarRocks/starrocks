@@ -14,9 +14,15 @@
 
 package com.starrocks.sql.analyzer;
 
+<<<<<<< HEAD
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.privilege.AuthorizationMgr;
+=======
+import com.starrocks.authorization.AuthorizationMgr;
+import com.starrocks.common.AnalysisException;
+import com.starrocks.common.ErrorReportException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.SetDefaultRoleExecutor;

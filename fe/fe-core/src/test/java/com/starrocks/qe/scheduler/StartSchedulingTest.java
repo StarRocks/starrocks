@@ -17,7 +17,11 @@ package com.starrocks.qe.scheduler;
 import com.google.api.client.util.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.Reference;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.proto.PCancelPlanFragmentRequest;
 import com.starrocks.proto.PCancelPlanFragmentResult;
 import com.starrocks.proto.PExecPlanFragmentResult;
@@ -191,7 +195,11 @@ public class StartSchedulingTest extends SchedulerTestBase {
         isFirstFragmentToDeploy.set(true);
         deployFuture.setRef(mockFutureWithException(new InterruptedException("test interrupted exception")));
         DefaultCoordinator scheduler = getScheduler(sql);
+<<<<<<< HEAD
         Assert.assertThrows("test interrupted exception", UserException.class, () -> scheduler.exec());
+=======
+        Assert.assertThrows("test interrupted exception", StarRocksException.class, () -> scheduler.exec());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // The deployed executions haven't reported.
         Assert.assertFalse(scheduler.isDone());
@@ -253,7 +261,11 @@ public class StartSchedulingTest extends SchedulerTestBase {
         String sql =
                 "select count(1) from lineitem UNION ALL select count(1) from lineitem UNION ALL select count(1) from lineitem";
         DefaultCoordinator scheduler = getScheduler(sql);
+<<<<<<< HEAD
         Assert.assertThrows("test error message", UserException.class, scheduler::exec);
+=======
+        Assert.assertThrows("test error message", StarRocksException.class, scheduler::exec);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // All the deployed fragment instances should be cancelled.
         Assert.assertEquals(successDeployedFragmentCount, cancelledInstanceIds.size());
@@ -288,7 +300,11 @@ public class StartSchedulingTest extends SchedulerTestBase {
 
             String sql = "select count(1) from lineitem t1 JOIN [shuffle] lineitem t2 using(l_orderkey)";
             DefaultCoordinator scheduler = getScheduler(sql);
+<<<<<<< HEAD
             Assert.assertThrows("deploy query timeout", UserException.class, () -> scheduler.exec());
+=======
+            Assert.assertThrows("deploy query timeout", StarRocksException.class, () -> scheduler.exec());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } finally {
             connectContext.getSessionVariable().setQueryDeliveryTimeoutS(prevQueryDeliveryTimeoutSecond);
         }

@@ -24,7 +24,11 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.persist.AlterMaterializedViewBaseTableInfosLog;
 import com.starrocks.planner.MaterializedViewTestBase;
@@ -787,7 +791,11 @@ public class MaterializedViewTest {
                     + ")" +
                     "as select k2, sum(v1) as total from table1 group by k2;";
         Assert.assertThrows("Duplicate index name 'index1'",
+<<<<<<< HEAD
                     UserException.class,
+=======
+                    StarRocksException.class,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     () -> starRocksAssert.withMaterializedView(mvSql));
 
         String mvSql2 = "create materialized view index_mv_to_check " +
@@ -807,7 +815,11 @@ public class MaterializedViewTest {
                     + ")" +
                     "as select k2, sum(v1) as total from table1 group by k2;";
         Assert.assertThrows("Duplicate column name 'k2' in index",
+<<<<<<< HEAD
                     UserException.class,
+=======
+                    StarRocksException.class,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     () -> starRocksAssert.withMaterializedView(mvSql2));
     }
 

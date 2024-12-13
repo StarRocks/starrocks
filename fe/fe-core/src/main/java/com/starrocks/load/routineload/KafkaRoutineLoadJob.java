@@ -56,7 +56,11 @@ import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.KafkaUtil;
@@ -184,7 +188,11 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
     }
 
     @Override
+<<<<<<< HEAD
     public void prepare() throws UserException {
+=======
+    public void prepare() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         super.prepare();
         checkCustomPartition(customKafkaPartitions);
         // should reset converted properties each time the job being prepared.
@@ -229,7 +237,11 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
     }
 
     @Override
+<<<<<<< HEAD
     public void divideRoutineLoadJob(int currentConcurrentTaskNum) throws UserException {
+=======
+    public void divideRoutineLoadJob(int currentConcurrentTaskNum) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<RoutineLoadTaskInfo> result = new ArrayList<>();
         writeLock();
         try {
@@ -342,7 +354,11 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
     }
 
     @Override
+<<<<<<< HEAD
     protected void updateProgress(RLTaskTxnCommitAttachment attachment) throws UserException {
+=======
+    protected void updateProgress(RLTaskTxnCommitAttachment attachment) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         super.updateProgress(attachment);
         this.progress.update(attachment.getProgress());
         this.timestampProgress.update(attachment.getTimestampProgress());
@@ -380,7 +396,11 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
     // update current kafka partition at the same time
     // current kafka partitions = customKafkaPartitions == 0 ? all of partition of kafka topic : customKafkaPartitions
     @Override
+<<<<<<< HEAD
     protected boolean unprotectNeedReschedule() throws UserException {
+=======
+    protected boolean unprotectNeedReschedule() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // only running and need_schedule job need to be changed current kafka partitions
         if (this.state == JobState.RUNNING || this.state == JobState.NEED_SCHEDULE) {
             if (customKafkaPartitions != null && customKafkaPartitions.size() != 0) {
@@ -458,13 +478,21 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         return gson.toJson(summary);
     }
 
+<<<<<<< HEAD
     private List<Integer> getAllKafkaPartitions() throws UserException {
+=======
+    private List<Integer> getAllKafkaPartitions() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         convertCustomProperties(false);
         return KafkaUtil.getAllKafkaPartitions(brokerList, topic,
                 ImmutableMap.copyOf(convertedCustomProperties), warehouseId);
     }
 
+<<<<<<< HEAD
     public static KafkaRoutineLoadJob fromCreateStmt(CreateRoutineLoadStmt stmt) throws UserException {
+=======
+    public static KafkaRoutineLoadJob fromCreateStmt(CreateRoutineLoadStmt stmt) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // check db and table
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(stmt.getDBName());
         if (db == null) {
@@ -496,7 +524,11 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         return kafkaRoutineLoadJob;
     }
 
+<<<<<<< HEAD
     private void checkCustomPartition(List<Integer> customKafkaPartitions) throws UserException {
+=======
+    private void checkCustomPartition(List<Integer> customKafkaPartitions) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (customKafkaPartitions.isEmpty()) {
             return;
         }
@@ -540,7 +572,11 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
     }
 
     @Override
+<<<<<<< HEAD
     protected void setOptional(CreateRoutineLoadStmt stmt) throws UserException {
+=======
+    protected void setOptional(CreateRoutineLoadStmt stmt) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         super.setOptional(stmt);
 
         if (!stmt.getKafkaPartitionOffsets().isEmpty()) {
@@ -776,7 +812,11 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
                 // check if partition is validate
                 try {
                     checkCustomPartition(kafkaPartitionOffsets.stream().map(k -> k.first).collect(Collectors.toList()));
+<<<<<<< HEAD
                 } catch (UserException e) {
+=======
+                } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     throw new DdlException("The specified partition is not in the consumed partitions ", e);
                 }
             }
@@ -815,7 +855,11 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
 
     // update substate according to the lag.
     @Override
+<<<<<<< HEAD
     public void updateSubstate() throws UserException {
+=======
+    public void updateSubstate() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         KafkaProgress progress = (KafkaProgress) getTimestampProgress();
         Map<Integer, Long> partitionTimestamps = progress.getPartitionIdToOffset();
         long now = System.currentTimeMillis();

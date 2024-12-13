@@ -53,6 +53,12 @@ public class TableRelation extends Relation {
     // used for time travel
     private QueryPeriod queryPeriod;
 
+<<<<<<< HEAD
+=======
+    // TABLE SAMPLE
+    private TableSampleClause sampleClause;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private Expr partitionPredicate;
 
     private Map<Expr, SlotRef> generatedExprToColumnRef = new HashMap<>();
@@ -219,6 +225,17 @@ public class TableRelation extends Relation {
         this.queryPeriod = queryPeriod;
     }
 
+<<<<<<< HEAD
+=======
+    public TableSampleClause getSampleClause() {
+        return sampleClause;
+    }
+
+    public void setSampleClause(TableSampleClause sampleClause) {
+        this.sampleClause = sampleClause;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void setGeneratedExprToColumnRef(Map<Expr, SlotRef> generatedExprToColumnRef) {
         this.generatedExprToColumnRef = generatedExprToColumnRef;
     }

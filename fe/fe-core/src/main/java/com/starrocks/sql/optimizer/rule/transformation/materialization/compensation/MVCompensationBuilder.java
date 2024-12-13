@@ -25,6 +25,10 @@ import com.starrocks.catalog.MvBaseTableUpdateInfo;
 import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.PartitionInfo;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
@@ -56,7 +60,10 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+<<<<<<< HEAD
 import static com.starrocks.connector.PartitionUtil.createPartitionKey;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import static com.starrocks.connector.PartitionUtil.generateMVPartitionName;
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvPartitionCompensator.SUPPORTED_PARTITION_PRUNE_EXTERNAL_SCAN_TYPES;
@@ -212,6 +219,7 @@ public class MVCompensationBuilder {
             if (mvBaseTableUpdateInfo == null) {
                 return null;
             }
+<<<<<<< HEAD
             Map<String, Range<PartitionKey>> refTablePartitionNameWithRanges =
                     mvBaseTableUpdateInfo.getPartitionNameWithRanges();
             List<PartitionKey> partitionKeys = Lists.newArrayList();
@@ -227,6 +235,46 @@ public class MVCompensationBuilder {
                 return MVCompensation.createUnkownState(sessionVariable);
             }
             return ofExternalTableCompensation(refBaseTable, partitionKeys);
+=======
+            PartitionInfo partitionInfo = mvContext.getMv().getPartitionInfo();
+            if (partitionInfo.isRangePartition()) {
+                Map<String, Range<PartitionKey>> refTablePartitionNameWithRanges =
+                        mvBaseTableUpdateInfo.getPartitionNameWithRanges();
+                List<PartitionKey> partitionKeys = Lists.newArrayList();
+                try {
+                    for (String partitionName : refTablePartitionNamesToRefresh) {
+                        Preconditions.checkState(refTablePartitionNameWithRanges.containsKey(partitionName));
+                        Range<PartitionKey> partitionKeyRange = refTablePartitionNameWithRanges.get(partitionName);
+                        partitionKeys.add(partitionKeyRange.lowerEndpoint());
+                    }
+                } catch (Exception e) {
+                    logMVRewrite("Failed to get partition keys for ref base table: {}", refBaseTable.getName(),
+                            DebugUtil.getStackTrace(e));
+                    return MVCompensation.createUnkownState(sessionVariable);
+                }
+                return ofExternalTableCompensation(refBaseTable, partitionKeys);
+            } else {
+                Preconditions.checkArgument(partitionInfo.isListPartition());
+                Map<String, PListCell> partitionNameWithLists = mvBaseTableUpdateInfo.getPartitionNameWithLists();
+                List<PartitionKey> partitionKeys = Lists.newArrayList();
+                try {
+                    List<Column> partitionCols = refBaseTable.getPartitionColumns();
+                    for (String partitionName : refTablePartitionNamesToRefresh) {
+                        Preconditions.checkState(partitionNameWithLists.containsKey(partitionName));
+                        PListCell pCell = partitionNameWithLists.get(partitionName);
+                        // TODO: we are assuming PListCell's cells' order is by partition's columns order, we may introduce
+                        // partition columns in PListCell.
+                        List<PartitionKey> keys = pCell.toPartitionKeys(partitionCols);
+                        partitionKeys.addAll(keys);
+                    }
+                } catch (Exception e) {
+                    logMVRewrite("Failed to get partition keys for ref base table: {}", refBaseTable.getName(),
+                            DebugUtil.getStackTrace(e));
+                    return MVCompensation.createUnkownState(sessionVariable);
+                }
+                return ofExternalTableCompensation(refBaseTable, partitionKeys);
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } else {
             return MVCompensation.createUnkownState(sessionVariable);
         }
@@ -327,7 +375,11 @@ public class MVCompensationBuilder {
                     return MVCompensation.createNoCompensateState(sessionVariable);
                 }
             }
+<<<<<<< HEAD
             // if mv's to refresh partitions contains any of query's select partition ids, then rewrite with compensate.
+=======
+            // if mv's to refresh partitions contains any of query's select partition ids, then rewrite with compensation.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             List<PartitionKey> toRefreshRefTablePartitions = getMVCompensatePartitionsOfExternal(refBaseTable,
                     refTablePartitionNamesToRefresh, refScanOperator);
             if (toRefreshRefTablePartitions == null) {
@@ -422,7 +474,11 @@ public class MVCompensationBuilder {
             return null;
         }
 
+<<<<<<< HEAD
         Map<String, PCell> nameToPartitionKeys = baseTableUpdateInfo.getNameToPartKeys();
+=======
+        Map<String, PCell> nameToPartitionKeys = baseTableUpdateInfo.getPartitonToCells();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<PartitionKey> partitionKeys = Lists.newArrayList();
         try {
             for (String partitionName : refTablePartitionNamesToRefresh) {
@@ -434,7 +490,12 @@ public class MVCompensationBuilder {
                     partitionKeys.add(((PRangeCell) pCell).getRange().lowerEndpoint());
                 } else if (pCell instanceof PListCell) {
                     List<Column> partitionColumns = refBaseTable.getPartitionColumns();
+<<<<<<< HEAD
                     partitionKeys.add(createPartitionKey(((PListCell) pCell).getPartitionItems().get(0), partitionColumns));
+=======
+                    List<PartitionKey> keys = ((PListCell) pCell).toPartitionKeys(partitionColumns);
+                    partitionKeys.addAll(keys);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
             }
         } catch (Exception e) {

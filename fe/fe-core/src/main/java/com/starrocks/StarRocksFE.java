@@ -106,7 +106,13 @@ public class StarRocksFE {
             }
 
             // init config
+<<<<<<< HEAD
             new Config().init(starRocksDir + "/conf/fe.conf");
+=======
+            Config config = new Config();
+            config.init(starRocksDir + "/conf/fe.conf");
+            config.initMutable(starRocksDir + "/conf/fe_mutable.conf");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
             // check command line options
             // NOTE: do it before init log4jConfig to avoid unnecessary stdout messages
@@ -164,8 +170,12 @@ public class StarRocksFE {
                     ExecuteEnv.getInstance().getScheduler());
             FrontendThriftServer frontendThriftServer = new FrontendThriftServer(Config.rpc_port);
             HttpServer httpServer = new HttpServer(Config.http_port);
+<<<<<<< HEAD
             ArrowFlightSqlService arrowFlightSqlService =
                     new ArrowFlightSqlService(Config.arrow_flight_port);
+=======
+            ArrowFlightSqlService arrowFlightSqlService = new ArrowFlightSqlService(Config.arrow_flight_port);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
             httpServer.setup();
 

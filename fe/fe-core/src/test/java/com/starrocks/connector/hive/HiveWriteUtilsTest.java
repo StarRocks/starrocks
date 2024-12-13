@@ -96,4 +96,12 @@ public class HiveWriteUtilsTest {
                 "Failed to create directory",
                 () -> HiveWriteUtils.createDirectory(path, new Configuration()));
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testFileCreateByQuery() {
+        Assert.assertFalse(HiveWriteUtils.fileCreatedByQuery("000000_0", "aaaa-bbbb"));
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

@@ -19,6 +19,10 @@ import com.starrocks.common.Pair;
 import com.starrocks.persist.gson.GsonUtils;
 import io.delta.kernel.data.Row;
 import io.delta.kernel.internal.InternalScanFileUtils;
+<<<<<<< HEAD
+=======
+import io.delta.kernel.internal.actions.DeletionVectorDescriptor;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import io.delta.kernel.utils.FileStatus;
 
 import java.util.Map;
@@ -67,7 +71,11 @@ public class ScanFileUtils {
     }
 
     public static Pair<FileScanTask, DeltaLakeAddFileStatsSerDe> convertFromRowToFileScanTask(
+<<<<<<< HEAD
             boolean needStats, Row file, long estimateRowSize) {
+=======
+            boolean needStats, Row file, long estimateRowSize, DeletionVectorDescriptor dv) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         FileStatus fileStatus = InternalScanFileUtils.getAddFileStatus(file);
         Map<String, String> partitionValues = InternalScanFileUtils.getPartitionValues(file);
         Row addFileRow = getAddFileEntry(file);
@@ -76,11 +84,19 @@ public class ScanFileUtils {
         if (needStats) {
             DeltaLakeAddFileStatsSerDe stats = ScanFileUtils.getColumnStatistics(
                     addFileRow, fileStatus, estimateRowSize);
+<<<<<<< HEAD
             fileScanTask = new FileScanTask(fileStatus, stats.numRecords, partitionValues);
             return new Pair<>(fileScanTask, stats);
         } else {
             long records = ScanFileUtils.getFileRows(addFileRow, fileStatus, estimateRowSize);
             fileScanTask = new FileScanTask(fileStatus, records, partitionValues);
+=======
+            fileScanTask = new FileScanTask(fileStatus, stats.numRecords, partitionValues, dv);
+            return new Pair<>(fileScanTask, stats);
+        } else {
+            long records = ScanFileUtils.getFileRows(addFileRow, fileStatus, estimateRowSize);
+            fileScanTask = new FileScanTask(fileStatus, records, partitionValues, dv);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return new Pair<>(fileScanTask, null);
         }
     }

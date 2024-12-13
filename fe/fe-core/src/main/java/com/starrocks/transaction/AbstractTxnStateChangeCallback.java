@@ -17,7 +17,11 @@
 
 package com.starrocks.transaction;
 
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 public abstract class AbstractTxnStateChangeCallback implements TxnStateChangeCallback {
     @Override
@@ -31,7 +35,11 @@ public abstract class AbstractTxnStateChangeCallback implements TxnStateChangeCa
     }
 
     @Override
+<<<<<<< HEAD
     public void afterCommitted(TransactionState txnState, boolean txnOperated) throws UserException {
+=======
+    public void afterCommitted(TransactionState txnState, boolean txnOperated) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     }
 
@@ -42,7 +50,11 @@ public abstract class AbstractTxnStateChangeCallback implements TxnStateChangeCa
 
     @Override
     public void afterAborted(TransactionState txnState, boolean txnOperated, String txnStatusChangeReason)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     }
 
@@ -67,7 +79,11 @@ public abstract class AbstractTxnStateChangeCallback implements TxnStateChangeCa
     }
 
     @Override
+<<<<<<< HEAD
     public void afterPrepared(TransactionState txnState, boolean txnOperated) throws UserException {
+=======
+    public void afterPrepared(TransactionState txnState, boolean txnOperated) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     }
 

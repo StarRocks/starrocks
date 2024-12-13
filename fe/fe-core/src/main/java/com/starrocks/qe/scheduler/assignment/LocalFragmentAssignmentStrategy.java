@@ -16,7 +16,11 @@ package com.starrocks.qe.scheduler.assignment;
 
 import com.google.common.collect.Sets;
 import com.starrocks.common.Config;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.ListUtil;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ScanNode;
@@ -69,7 +73,11 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
     }
 
     @Override
+<<<<<<< HEAD
     public void assignFragmentToWorker(ExecutionFragment execFragment) throws UserException {
+=======
+    public void assignFragmentToWorker(ExecutionFragment execFragment) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         for (ScanNode scanNode : execFragment.getScanNodes()) {
             assignScanRangesToWorker(execFragment, scanNode);
         }
@@ -86,7 +94,11 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
         }
     }
 
+<<<<<<< HEAD
     private void assignScanRangesToWorker(ExecutionFragment execFragment, ScanNode scanNode) throws UserException {
+=======
+    private void assignScanRangesToWorker(ExecutionFragment execFragment, ScanNode scanNode) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         BackendSelector backendSelector = BackendSelectorFactory.create(
                 scanNode, isLoadType, execFragment, workerProvider, connectContext, replicatedScanIds, useIncrementalScanRanges);
 

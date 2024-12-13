@@ -25,7 +25,11 @@
 namespace starrocks {
 
 template <LogicalType field_type>
+<<<<<<< HEAD
 class ColumnNotInPredicate : public ColumnPredicate {
+=======
+class ColumnNotInPredicate final : public ColumnPredicate {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     using ValueType = typename CppTypeTraits<field_type>::CppType;
 
 public:
@@ -177,7 +181,11 @@ private:
 
 // Template specialization for binary column
 template <LogicalType field_type>
+<<<<<<< HEAD
 class BinaryColumnNotInPredicate : public ColumnPredicate {
+=======
+class BinaryColumnNotInPredicate final : public ColumnPredicate {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public:
     BinaryColumnNotInPredicate(const TypeInfoPtr& type_info, ColumnId id, std::vector<std::string> strings)
             : ColumnPredicate(type_info, id), _zero_padded_strs(std::move(strings)) {

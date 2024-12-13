@@ -106,7 +106,11 @@ Currently, column comments cannot be modified.
 
 #### ADD PARTITION(S)
 
+<<<<<<< HEAD
 You can choose to add range partitions or list partitions.
+=======
+You can choose to add range partitions or list partitions. Adding expression partitions is not supported.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Syntax：
 

@@ -75,8 +75,12 @@ public class IcebergEqualityDeletePlanTest extends TableTestBase {
 
     public IcebergEqualityDeletePlanTest() throws IOException {
     }
+<<<<<<< HEAD
 
     @Test
+=======
+    
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void testNormalPlan() throws Exception {
         mockedNativeTableB.newAppend().appendFile(FILE_B_1).commit();
         mockedNativeTableB.refresh();

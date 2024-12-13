@@ -52,6 +52,10 @@ class SegmentReadOptions {
 public:
     std::shared_ptr<FileSystem> fs;
 
+<<<<<<< HEAD
+=======
+    // Specified ranges outside the segment, is used to support parallel-reading within a tablet
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::vector<SeekRange> ranges;
 
     PredicateTree pred_tree;
@@ -111,6 +115,14 @@ public:
 
     VectorSearchOptionPtr vector_search_option = nullptr;
 
+<<<<<<< HEAD
+=======
+    // Data sampling by block-level, which is a core-component of TABLE-SAMPLE feature
+    // 1. Regular block smapling: Bernoulli sampling on page-id
+    // 2. Partial-Sorted block: leverage data ordering to improve the evenness
+    TTableSampleOptions sample_options;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public:
     Status convert_to(SegmentReadOptions* dst, const std::vector<LogicalType>& new_types, ObjectPool* obj_pool) const;
 

@@ -18,7 +18,11 @@ package com.starrocks.common;
 /**
  * Thrown for SQL statements that Create while Exist.
  */
+<<<<<<< HEAD
 public class AlreadyExistsException extends UserException {
+=======
+public class AlreadyExistsException extends StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public AlreadyExistsException(String msg) {
         super(msg);
     }

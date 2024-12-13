@@ -45,7 +45,11 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.load.RoutineLoadDesc;
@@ -190,7 +194,11 @@ public class KafkaRoutineLoadJobTest {
     @Test
     public void testDivideRoutineLoadJob(@Injectable RoutineLoadMgr routineLoadManager,
                                          @Mocked RoutineLoadDesc routineLoadDesc)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         GlobalStateMgr globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
 
@@ -288,7 +296,11 @@ public class KafkaRoutineLoadJobTest {
         try {
             KafkaRoutineLoadJob kafkaRoutineLoadJob = KafkaRoutineLoadJob.fromCreateStmt(createRoutineLoadStmt);
             Assert.fail();
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             LOG.info(e.getMessage());
         }
     }
@@ -296,7 +308,11 @@ public class KafkaRoutineLoadJobTest {
     @Test
     public void testFromCreateStmt(@Mocked GlobalStateMgr globalStateMgr,
                                    @Injectable Database database,
+<<<<<<< HEAD
                                    @Injectable OlapTable table) throws UserException {
+=======
+                                   @Injectable OlapTable table) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         CreateRoutineLoadStmt createRoutineLoadStmt = initCreateRoutineLoadStmt();
         RoutineLoadDesc routineLoadDesc = new RoutineLoadDesc(columnSeparator, null, null, null, partitionNames);
         Deencapsulation.setField(createRoutineLoadStmt, "routineLoadDesc", routineLoadDesc);
@@ -330,7 +346,12 @@ public class KafkaRoutineLoadJobTest {
         new MockUp<KafkaUtil>() {
             @Mock
             public List<Integer> getAllKafkaPartitions(String brokerList, String topic,
+<<<<<<< HEAD
                                                        ImmutableMap<String, String> properties) throws UserException {
+=======
+                                                       ImmutableMap<String, String> properties) throws
+                    StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 return Lists.newArrayList(1, 2, 3);
             }
         };
@@ -368,7 +389,11 @@ public class KafkaRoutineLoadJobTest {
     @Test
     public void testSerializationCsv(@Mocked GlobalStateMgr globalStateMgr,
                                      @Injectable Database database,
+<<<<<<< HEAD
                                      @Injectable OlapTable table) throws UserException {
+=======
+                                     @Injectable OlapTable table) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         CreateRoutineLoadStmt createRoutineLoadStmt = initCreateRoutineLoadStmt();
         Map<String, String> jobProperties = createRoutineLoadStmt.getJobProperties();
         jobProperties.put("format", "csv");
@@ -410,7 +435,12 @@ public class KafkaRoutineLoadJobTest {
         new MockUp<KafkaUtil>() {
             @Mock
             public List<Integer> getAllKafkaPartitions(String brokerList, String topic,
+<<<<<<< HEAD
                                                        ImmutableMap<String, String> properties) throws UserException {
+=======
+                                                       ImmutableMap<String, String> properties) throws
+                    StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 return Lists.newArrayList(1, 2, 3);
             }
         };
@@ -436,7 +466,11 @@ public class KafkaRoutineLoadJobTest {
     @Test
     public void testSerializationJson(@Mocked GlobalStateMgr globalStateMgr,
                                       @Injectable Database database,
+<<<<<<< HEAD
                                       @Injectable OlapTable table) throws UserException {
+=======
+                                      @Injectable OlapTable table) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         CreateRoutineLoadStmt createRoutineLoadStmt = initCreateRoutineLoadStmt();
         Map<String, String> jobProperties = createRoutineLoadStmt.getJobProperties();
         jobProperties.put("format", "json");
@@ -478,7 +512,12 @@ public class KafkaRoutineLoadJobTest {
         new MockUp<KafkaUtil>() {
             @Mock
             public List<Integer> getAllKafkaPartitions(String brokerList, String topic,
+<<<<<<< HEAD
                                                        ImmutableMap<String, String> properties) throws UserException {
+=======
+                                                       ImmutableMap<String, String> properties) throws
+                    StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 return Lists.newArrayList(1, 2, 3);
             }
         };

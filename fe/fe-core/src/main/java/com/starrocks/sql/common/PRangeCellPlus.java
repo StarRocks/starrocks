@@ -36,6 +36,14 @@ public class PRangeCellPlus implements Comparable<PRangeCellPlus> {
         this.cell = new PRangeCell(partitionKeyRange);
     }
 
+<<<<<<< HEAD
+=======
+    public PRangeCellPlus(String partitionName, PRangeCell rangeCell) {
+        this.partitionName = partitionName;
+        this.cell = rangeCell;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public String getPartitionName() {
         return partitionName;
     }
@@ -48,6 +56,16 @@ public class PRangeCellPlus implements Comparable<PRangeCellPlus> {
         return cell.isIntersected(o.getCell());
     }
 
+<<<<<<< HEAD
+=======
+    public static List<PRangeCellPlus> toPRangeCellPlus(Map<String, PCell> rangeMap) {
+        return rangeMap.entrySet().stream()
+                .map(e -> new PRangeCellPlus(e.getKey(), (PRangeCell) e.getValue()))
+                .sorted(PRangeCellPlus::compareTo)
+                .collect(Collectors.toList());
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     /**
      * Convert range map to list of partition range cell plus which is sorted by range cell.
      * @param rangeMap range map to be converted
@@ -66,11 +84,19 @@ public class PRangeCellPlus implements Comparable<PRangeCellPlus> {
     /**
      * Convert a range map to list of partition range cell plus which is sorted by range cell.
      */
+<<<<<<< HEAD
     public static List<PRangeCellPlus> toPRangeCellPlus(Map<String, Range<PartitionKey>> rangeMap,
                                                         Expr expr) {
         return rangeMap.entrySet().stream()
                 .map(e -> {
                     Range<PartitionKey> partitionKeyRanges = e.getValue();
+=======
+    public static List<PRangeCellPlus> toPRangeCellPlus(Map<String, PCell> rangeMap,
+                                                        Expr expr) {
+        return rangeMap.entrySet().stream()
+                .map(e -> {
+                    Range<PartitionKey> partitionKeyRanges = ((PRangeCell) e.getValue()).getRange();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     Range<PartitionKey> convertRanges = SyncPartitionUtils.convertToDatePartitionRange(partitionKeyRanges);
                     return new PRangeCellPlus(e.getKey(), SyncPartitionUtils.transferRange(convertRanges, expr));
                 })

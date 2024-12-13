@@ -99,8 +99,14 @@ set(STORAGE_FILES
     rowset/ordinal_page_index.cpp
     rowset/page_io.cpp
     rowset/binary_dict_page.cpp
+<<<<<<< HEAD
     rowset/dict_page.cpp
     rowset/binary_prefix_page.cpp
+=======
+    rowset/binary_prefix_page.cpp
+    rowset/data_sample.cpp
+    rowset/dict_page.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     rowset/segment.cpp
     rowset/segment_writer.cpp
     rowset/segment_rewriter.cpp
@@ -135,6 +141,10 @@ set(STORAGE_FILES
     column_not_in_predicate.cpp
     column_null_predicate.cpp
     column_or_predicate.cpp
+<<<<<<< HEAD
+=======
+    column_and_predicate.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     column_expr_predicate.cpp
     conjunctive_predicates.cpp
     predicate_tree/predicate_tree.cpp

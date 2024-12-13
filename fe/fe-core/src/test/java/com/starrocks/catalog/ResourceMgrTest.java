@@ -36,7 +36,11 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Maps;
 import com.starrocks.common.DdlException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -84,7 +88,11 @@ public class ResourceMgrTest {
 
     @Test
     public void testAddDropResource(@Injectable BrokerMgr brokerMgr, @Injectable EditLog editLog,
+<<<<<<< HEAD
                                     @Mocked GlobalStateMgr globalStateMgr) throws UserException {
+=======
+                                    @Mocked GlobalStateMgr globalStateMgr) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ResourceMgr mgr = new ResourceMgr();
 
         // add
@@ -99,7 +107,11 @@ public class ResourceMgrTest {
     @Test(expected = DdlException.class)
     public void testAddResourceExist(@Injectable BrokerMgr brokerMgr, @Injectable EditLog editLog,
                                      @Mocked GlobalStateMgr globalStateMgr)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ResourceMgr mgr = new ResourceMgr();
 
         // add
@@ -110,7 +122,11 @@ public class ResourceMgrTest {
     }
 
     @Test(expected = DdlException.class)
+<<<<<<< HEAD
     public void testDropResourceNotExist() throws UserException {
+=======
+    public void testDropResourceNotExist() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // drop
         ResourceMgr mgr = new ResourceMgr();
         Assert.assertEquals(0, mgr.getResourceNum());
@@ -119,7 +135,12 @@ public class ResourceMgrTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testAlterResource(@Injectable EditLog editLog, @Mocked GlobalStateMgr globalStateMgr) throws UserException {
+=======
+    public void testAlterResource(@Injectable EditLog editLog, @Mocked GlobalStateMgr globalStateMgr) throws
+            StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ResourceMgr mgr = new ResourceMgr();
 
         // add hive resource
@@ -146,7 +167,11 @@ public class ResourceMgrTest {
     @Test(expected = DdlException.class)
     public void testAllowAlterHiveResourceOnly(@Injectable BrokerMgr brokerMgr, @Injectable EditLog editLog,
                                                @Mocked GlobalStateMgr globalStateMgr)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ResourceMgr mgr = new ResourceMgr();
 
         // add spark resource
@@ -162,7 +187,11 @@ public class ResourceMgrTest {
 
     @Test(expected = DdlException.class)
     public void testAlterResourceNotExist(@Injectable EditLog editLog, @Mocked GlobalStateMgr globalStateMgr)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ResourceMgr mgr = new ResourceMgr();
 
         // add hive resource
@@ -181,7 +210,11 @@ public class ResourceMgrTest {
 
     @Test(expected = DdlException.class)
     public void testAlterResourcePropertyNotExist(@Injectable EditLog editLog, @Mocked GlobalStateMgr globalStateMgr)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ResourceMgr mgr = new ResourceMgr();
 
         // add hive resource
@@ -199,7 +232,11 @@ public class ResourceMgrTest {
 
     @Test
     public void testReplayCreateResource(@Injectable EditLog editLog, @Mocked GlobalStateMgr globalStateMgr)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ResourceMgr mgr = new ResourceMgr();
         type = "hive";
         name = "hive0";
@@ -215,7 +252,11 @@ public class ResourceMgrTest {
     }
 
     private CreateResourceStmt addHiveResource(ResourceMgr mgr, EditLog editLog,
+<<<<<<< HEAD
                                                GlobalStateMgr globalStateMgr) throws UserException {
+=======
+                                               GlobalStateMgr globalStateMgr) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         new Expectations() {
             {
                 globalStateMgr.getEditLog();
@@ -246,7 +287,11 @@ public class ResourceMgrTest {
     }
 
     private CreateResourceStmt addSparkResource(ResourceMgr mgr, BrokerMgr brokerMgr, EditLog editLog,
+<<<<<<< HEAD
                                                 GlobalStateMgr globalStateMgr) throws UserException {
+=======
+                                                GlobalStateMgr globalStateMgr) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         new Expectations() {
             {
                 globalStateMgr.getBrokerMgr();

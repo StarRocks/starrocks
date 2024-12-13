@@ -202,6 +202,13 @@ public class AnalyzeStmtTest {
         sql = "analyze full table db.tbl with async mode";
         analyzeStmt = (AnalyzeStmt) analyzeSuccess(sql);
         Assert.assertTrue(analyzeStmt.isAsync());
+<<<<<<< HEAD
+=======
+
+        sql = "analyze full table db.tbl partition(`tbl`) with async mode";
+        analyzeStmt = (AnalyzeStmt) analyzeSuccess(sql);
+        Assert.assertTrue(analyzeStmt.isAsync());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test

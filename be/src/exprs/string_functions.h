@@ -276,6 +276,16 @@ public:
     DEFINE_VECTORIZED_FN(get_char);
 
     /**
+<<<<<<< HEAD
+=======
+     * @param: [string_value]
+     * @paramType: [BinaryColumn]
+     * @return: BigIntColumn
+     */
+    DEFINE_VECTORIZED_FN(inet_aton);
+
+    /**
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
      * Return the index of the first occurrence of substring
      *
      * @param: [string_value, sub_string_value]

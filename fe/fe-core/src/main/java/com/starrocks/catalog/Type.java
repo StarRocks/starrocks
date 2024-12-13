@@ -1147,8 +1147,18 @@ public abstract class Type implements Cloneable {
             return true;
         } else if (from.isStringType() && to.isArrayType()) {
             return true;
+<<<<<<< HEAD
         } else if (from.isJsonType() && to.isArrayScalar()) {
             // now we only support cast json to one dimensional array
+=======
+        } else if (from.isJsonType() && to.isArrayType()) {
+            ArrayType array = (ArrayType) to;
+            if (array.getItemType().isScalarType() || array.getItemType().isStructType()) {
+                return true;
+            }
+            return false;
+        } else if (from.isJsonType() && to.isStructType()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return true;
         } else if (from.isBoolean() && to.isComplexType()) {
             // for mock nest type with NULL value, the cast must return NULL
@@ -1159,6 +1169,7 @@ public abstract class Type implements Cloneable {
         }
     }
 
+<<<<<<< HEAD
     public boolean isArrayScalar() {
         if (!isArrayType()) {
             return false;
@@ -1167,6 +1178,8 @@ public abstract class Type implements Cloneable {
         return array.getItemType().isScalarType();
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     /**
      * Return type t such that values from both t1 and t2 can be assigned to t without an
      * explicit cast. If strict, does not consider conversions that would result in loss

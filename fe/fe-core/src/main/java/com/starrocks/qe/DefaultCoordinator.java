@@ -40,6 +40,10 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.authentication.AuthenticationMgr;
+<<<<<<< HEAD
+=======
+import com.starrocks.authorization.PrivilegeBuiltinConstants;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.common.AnalysisException;
@@ -48,9 +52,15 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.InternalErrorCode;
+<<<<<<< HEAD
 import com.starrocks.common.Status;
 import com.starrocks.common.ThriftServer;
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.Status;
+import com.starrocks.common.ThriftServer;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.AuditStatisticsUtil;
@@ -65,7 +75,10 @@ import com.starrocks.planner.ResultSink;
 import com.starrocks.planner.RuntimeFilterDescription;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.StreamLoadPlanner;
+<<<<<<< HEAD
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.proto.PPlanFragmentCancelReason;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.qe.scheduler.Coordinator;
@@ -638,7 +651,11 @@ public class DefaultCoordinator extends Coordinator {
         }
     }
 
+<<<<<<< HEAD
     private void deliverExecFragments(ScheduleOption option) throws RpcException, UserException {
+=======
+    private void deliverExecFragments(ScheduleOption option) throws RpcException, StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         lock();
         try (Timer ignored = Tracers.watchScope(Tracers.Module.SCHEDULER, "DeployLockInternalTime")) {
             Deployer deployer =
@@ -654,7 +671,11 @@ public class DefaultCoordinator extends Coordinator {
 
     @Override
     public List<DeployState> assignIncrementalScanRangesToDeployStates(Deployer deployer, List<DeployState> deployStates)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<DeployState> updatedStates = new ArrayList<>();
         if (!jobSpec.isIncrementalScanRanges()) {
             return updatedStates;
@@ -708,18 +729,30 @@ public class DefaultCoordinator extends Coordinator {
     }
 
     private void handleErrorExecution(Status status, FragmentInstanceExecState execution, Throwable failure)
+<<<<<<< HEAD
             throws UserException, RpcException {
         cancelInternal(PPlanFragmentCancelReason.INTERNAL_ERROR);
         switch (Objects.requireNonNull(status.getErrorCode())) {
             case TIMEOUT:
                 throw new UserException("query timeout. backend id: " + execution.getWorker().getId());
+=======
+            throws StarRocksException, RpcException {
+        cancelInternal(PPlanFragmentCancelReason.INTERNAL_ERROR);
+        switch (Objects.requireNonNull(status.getErrorCode())) {
+            case TIMEOUT:
+                throw new StarRocksException("query timeout. backend id: " + execution.getWorker().getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             case THRIFT_RPC_ERROR:
                 SimpleScheduler.addToBlocklist(execution.getWorker().getId());
                 throw new RpcException(
                         String.format("rpc failed with %s: %s", execution.getWorker().getHost(), status.getErrorMsg()),
                         failure);
             default:
+<<<<<<< HEAD
                 throw new UserException(status.getErrorMsg(), failure);
+=======
+                throw new StarRocksException(status.getErrorMsg(), failure);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -864,7 +897,11 @@ public class DefaultCoordinator extends Coordinator {
             return shortCircuitExecutor.getNext();
         }
         if (receiver == null) {
+<<<<<<< HEAD
             throw new UserException("There is no receiver.");
+=======
+            throw new StarRocksException("There is no receiver.");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         RowBatch resultBatch;
@@ -914,7 +951,11 @@ public class DefaultCoordinator extends Coordinator {
                     ErrorReport.reportTimeoutException(
                             ErrorCode.ERR_TIMEOUT, "Query", jobSpec.getQueryOptions().query_timeout, errMsg);
                 }
+<<<<<<< HEAD
                 throw new UserException(ec, errMsg);
+=======
+                throw new StarRocksException(ec, errMsg);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
 

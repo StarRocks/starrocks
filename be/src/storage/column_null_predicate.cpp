@@ -23,7 +23,11 @@
 
 namespace starrocks {
 
+<<<<<<< HEAD
 class ColumnIsNullPredicate : public ColumnPredicate {
+=======
+class ColumnIsNullPredicate final : public ColumnPredicate {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public:
     explicit ColumnIsNullPredicate(const TypeInfoPtr& type_info, ColumnId id) : ColumnPredicate(type_info, id) {}
 
@@ -103,7 +107,11 @@ public:
     std::string debug_string() const override { return strings::Substitute("(ColumnId($0) IS NULL)", _column_id); }
 };
 
+<<<<<<< HEAD
 class ColumnNotNullPredicate : public ColumnPredicate {
+=======
+class ColumnNotNullPredicate final : public ColumnPredicate {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public:
     explicit ColumnNotNullPredicate(const TypeInfoPtr& type_info, ColumnId id) : ColumnPredicate(type_info, id) {}
 

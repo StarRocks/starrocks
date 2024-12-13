@@ -17,9 +17,15 @@
 
 package com.starrocks.plugin;
 
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
 
 public class PluginException extends UserException {
+=======
+import com.starrocks.common.StarRocksException;
+
+public class PluginException extends StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public PluginException(String msg) {
         super(msg);
     }

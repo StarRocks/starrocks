@@ -15,9 +15,14 @@
 package com.starrocks.scheduler;
 
 import com.google.api.client.util.Lists;
+<<<<<<< HEAD
 import com.google.common.collect.Range;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
+=======
+import com.starrocks.catalog.Table;
+import com.starrocks.sql.common.PCell;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.common.PRangeCell;
 
 import java.util.List;
@@ -41,18 +46,30 @@ public class TableWithPartitions {
         return partitionNames;
     }
 
+<<<<<<< HEAD
     public List<PRangeCell> getSortedPartitionRanges(Map<String, Range<PartitionKey>> partitinRangeMap) {
         return getSortedPartitionRanges(partitinRangeMap, this.partitionNames);
     }
 
     public static List<PRangeCell> getSortedPartitionRanges(Map<String, Range<PartitionKey>> partitinRangeMap,
+=======
+    public List<PRangeCell> getSortedPartitionRanges(Map<String, PCell> partitinRangeMap) {
+        return getSortedPartitionRanges(partitinRangeMap, this.partitionNames);
+    }
+
+    public static List<PRangeCell> getSortedPartitionRanges(Map<String, PCell> partitinRangeMap,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                                             Set<String> partitionNames) {
         if (partitionNames == null || partitionNames.isEmpty()) {
             return Lists.newArrayList();
         }
         return partitionNames.stream()
                 .filter(partitinRangeMap::containsKey)
+<<<<<<< HEAD
                 .map(p -> new PRangeCell(partitinRangeMap.get(p)))
+=======
+                .map(p -> (PRangeCell) partitinRangeMap.get(p))
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 .sorted(PRangeCell::compareTo)
                 .collect(Collectors.toList());
     }

@@ -55,8 +55,13 @@ public class BackendHbResponse extends HeartbeatResponse implements Writable {
     private int httpPort;
     @SerializedName(value = "brpcPort")
     private int brpcPort;
+<<<<<<< HEAD
     @SerializedName(value = "beArrowPort")
     private int beArrowPort;
+=======
+    @SerializedName(value = "arrowFlightPort")
+    private int arrowFlightPort;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     @SerializedName(value = "starletPort")
     private int starletPort;
@@ -80,6 +85,7 @@ public class BackendHbResponse extends HeartbeatResponse implements Writable {
 
     public BackendHbResponse(long beId, int bePort, int httpPort, int brpcPort,
                              int starletPort, long hbTime, String version, int cpuCores, long memLimitBytes,
+<<<<<<< HEAD
                              boolean isSetStoragePath, int beArrowPort) {
         this(beId, bePort, httpPort, brpcPort, starletPort, hbTime, version, cpuCores, memLimitBytes, isSetStoragePath);
         this.beArrowPort = beArrowPort;
@@ -89,6 +95,11 @@ public class BackendHbResponse extends HeartbeatResponse implements Writable {
                              int starletPort, long hbTime, String version, int cpuCores, long memLimitBytes,
                              boolean isSetStoragePath) {
         this(beId, bePort, httpPort, brpcPort, starletPort, hbTime, version, cpuCores, memLimitBytes);
+=======
+                             boolean isSetStoragePath, int arrowFlightPort) {
+        this(beId, bePort, httpPort, brpcPort, starletPort, hbTime, version, cpuCores, memLimitBytes);
+        this.arrowFlightPort = arrowFlightPort;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.isSetStoragePath = isSetStoragePath;
     }
 
@@ -141,8 +152,13 @@ public class BackendHbResponse extends HeartbeatResponse implements Writable {
         return brpcPort;
     }
 
+<<<<<<< HEAD
     public int getBeArrowPort() {
         return beArrowPort;
+=======
+    public int getArrowFlightPort() {
+        return arrowFlightPort;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public int getStarletPort() {

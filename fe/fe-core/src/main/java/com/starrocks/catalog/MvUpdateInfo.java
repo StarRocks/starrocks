@@ -144,6 +144,7 @@ public class MvUpdateInfo {
         if (mvToRefreshType == MvToRefreshType.FULL) {
             return null;
         }
+<<<<<<< HEAD
         if (queryRewriteConsistencyMode == TableProperty.QueryRewriteConsistencyMode.LOOSE) {
             MvBaseTableUpdateInfo mvBaseTableUpdateInfo = baseTableUpdateInfos.get(refBaseTable);
             if (mvBaseTableUpdateInfo == null) {
@@ -152,6 +153,13 @@ public class MvUpdateInfo {
             return mvBaseTableUpdateInfo.getToRefreshPartitionNames();
         }
 
+=======
+        // TODO: For loose check mode, we cannot use compensate yet since there is no base table compensation info
+        // in the mv update info.
+        if (queryRewriteConsistencyMode == TableProperty.QueryRewriteConsistencyMode.LOOSE) {
+            return null;
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (mvPartToBasePartNames == null || mvPartToBasePartNames.isEmpty()) {
             return null;
         }

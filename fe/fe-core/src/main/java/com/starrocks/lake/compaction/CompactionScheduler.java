@@ -26,7 +26,11 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DuplicatedRequestException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.MetaNotFoundException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.Daemon;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -102,7 +106,11 @@ public class CompactionScheduler extends Daemon {
 
     @Override
     protected void runOneCycle() {
+<<<<<<< HEAD
         cleanPartition();
+=======
+        cleanPhysicalPartition();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // Schedule compaction tasks only when this is a leader FE and all edit logs have finished replay.
         // In order to ensure that the input rowsets of compaction still exists when doing publishing version, it is
@@ -228,7 +236,11 @@ public class CompactionScheduler extends Daemon {
             List<TabletCommitInfo> finishedTablets = job.buildTabletCommitInfo();
             transactionMgr.abortTransaction(job.getDb().getId(), job.getTxnId(), reason, finishedTablets,
                     Collections.emptyList(), null);
+<<<<<<< HEAD
         } catch (UserException ex) {
+=======
+        } catch (StarRocksException ex) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             LOG.error("Fail to abort txn " + job.getTxnId(), ex);
         }
     }
@@ -244,12 +256,20 @@ public class CompactionScheduler extends Daemon {
         return aliveComputeNodes.size() * 16;
     }
 
+<<<<<<< HEAD
     private void cleanPartition() {
+=======
+    private void cleanPhysicalPartition() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         long now = System.currentTimeMillis();
         if (now - lastPartitionCleanTime >= PARTITION_CLEAN_INTERVAL_SECOND * 1000L) {
             compactionManager.getAllPartitions()
                     .stream()
+<<<<<<< HEAD
                     .filter(p -> !MetaUtils.isPartitionExist(stateMgr, p.getDbId(), p.getTableId(), p.getPartitionId()))
+=======
+                    .filter(p -> !MetaUtils.isPhysicalPartitionExist(stateMgr, p.getDbId(), p.getTableId(), p.getPartitionId()))
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     .filter(p -> !runningCompactions.containsKey(p)) // Ignore those partitions in runningCompactions
                     .forEach(compactionManager::removePartition);
             lastPartitionCleanTime = now;
@@ -339,12 +359,20 @@ public class CompactionScheduler extends Daemon {
     @NotNull
     private List<CompactionTask> createCompactionTasks(long currentVersion, Map<Long, List<Long>> beToTablets, long txnId,
             boolean allowPartialSuccess, PartitionStatistics.CompactionPriority priority)
+<<<<<<< HEAD
             throws UserException, RpcException {
+=======
+            throws StarRocksException, RpcException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<CompactionTask> tasks = new ArrayList<>();
         for (Map.Entry<Long, List<Long>> entry : beToTablets.entrySet()) {
             ComputeNode node = systemInfoService.getBackendOrComputeNode(entry.getKey());
             if (node == null) {
+<<<<<<< HEAD
                 throw new UserException("Node " + entry.getKey() + " has been dropped");
+=======
+                throw new StarRocksException("Node " + entry.getKey() + " has been dropped");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
 
             LakeService service = BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort());
@@ -403,7 +431,11 @@ public class CompactionScheduler extends Daemon {
     }
 
     private void commitCompaction(PartitionIdentifier partition, CompactionJob job, boolean forceCommit)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<TabletCommitInfo> commitInfoList = job.buildTabletCommitInfo();
 
         Database db = stateMgr.getLocalMetastore().getDb(partition.getDbId());
@@ -440,7 +472,11 @@ public class CompactionScheduler extends Daemon {
             List<TabletCommitInfo> finishedTablets = job.buildTabletCommitInfo();
             transactionMgr.abortTransaction(job.getDb().getId(), job.getTxnId(), reason, finishedTablets,
                     Collections.emptyList(), null);
+<<<<<<< HEAD
         } catch (UserException ex) {
+=======
+        } catch (StarRocksException ex) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             LOG.error(ex);
         }
     }

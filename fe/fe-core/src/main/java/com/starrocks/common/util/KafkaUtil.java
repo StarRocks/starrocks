@@ -40,7 +40,11 @@ import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.LoadException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.proto.PKafkaLoadInfo;
 import com.starrocks.proto.PKafkaMetaProxyRequest;
 import com.starrocks.proto.PKafkaOffsetBatchProxyRequest;
@@ -74,7 +78,11 @@ public class KafkaUtil {
 
     public static List<Integer> getAllKafkaPartitions(String brokerList, String topic,
                                                       ImmutableMap<String, String> properties,
+<<<<<<< HEAD
                                                       long warehouseId) throws UserException {
+=======
+                                                      long warehouseId) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return PROXY_API.getAllKafkaPartitions(brokerList, topic, properties, warehouseId);
     }
 
@@ -82,19 +90,31 @@ public class KafkaUtil {
     public static Map<Integer, Long> getLatestOffsets(String brokerList, String topic,
                                                       ImmutableMap<String, String> properties,
                                                       List<Integer> partitions,
+<<<<<<< HEAD
                                                       long warehouseId) throws UserException {
+=======
+                                                      long warehouseId) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return PROXY_API.getLatestOffsets(brokerList, topic, properties, partitions, warehouseId);
     }
 
     public static Map<Integer, Long> getBeginningOffsets(String brokerList, String topic,
                                                          ImmutableMap<String, String> properties,
                                                          List<Integer> partitions,
+<<<<<<< HEAD
                                                          long warehouseId) throws UserException {
+=======
+                                                         long warehouseId) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return PROXY_API.getBeginningOffsets(brokerList, topic, properties, partitions, warehouseId);
     }
 
     public static List<PKafkaOffsetProxyResult> getBatchOffsets(List<PKafkaOffsetProxyRequest> requests)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return PROXY_API.getBatchOffsets(requests);
     }
 
@@ -121,7 +141,11 @@ public class KafkaUtil {
         public List<Integer> getAllKafkaPartitions(String brokerList, String topic,
                                                    ImmutableMap<String, String> convertedCustomProperties,
                                                    long warehouseId)
+<<<<<<< HEAD
                 throws UserException {
+=======
+                throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             // create request
             PKafkaMetaProxyRequest metaRequest = new PKafkaMetaProxyRequest();
             metaRequest.kafkaInfo = genPKafkaLoadInfo(brokerList, topic, convertedCustomProperties, warehouseId);
@@ -135,21 +159,33 @@ public class KafkaUtil {
         public Map<Integer, Long> getLatestOffsets(String brokerList, String topic,
                                                    ImmutableMap<String, String> properties,
                                                    List<Integer> partitions,
+<<<<<<< HEAD
                                                    long warehouseId) throws UserException {
+=======
+                                                   long warehouseId) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return getOffsets(brokerList, topic, properties, partitions, true, warehouseId);
         }
 
         public Map<Integer, Long> getBeginningOffsets(String brokerList, String topic,
                                                       ImmutableMap<String, String> properties,
                                                       List<Integer> partitions,
+<<<<<<< HEAD
                                                       long warehouseId) throws UserException {
+=======
+                                                      long warehouseId) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return getOffsets(brokerList, topic, properties, partitions, false, warehouseId);
         }
 
         public Map<Integer, Long> getOffsets(String brokerList, String topic,
                                              ImmutableMap<String, String> properties,
                                              List<Integer> partitions, boolean isLatest,
+<<<<<<< HEAD
                                              long warehouseId) throws UserException {
+=======
+                                             long warehouseId) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             // create request
             PKafkaOffsetProxyRequest offsetRequest = new PKafkaOffsetProxyRequest();
             offsetRequest.kafkaInfo = genPKafkaLoadInfo(brokerList, topic, properties, warehouseId);
@@ -175,7 +211,11 @@ public class KafkaUtil {
         }
 
         public List<PKafkaOffsetProxyResult> getBatchOffsets(List<PKafkaOffsetProxyRequest> requests)
+<<<<<<< HEAD
                 throws UserException {
+=======
+                throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             // create request
             PProxyRequest pProxyRequest = new PProxyRequest();
             PKafkaOffsetBatchProxyRequest pKafkaOffsetBatchProxyRequest = new PKafkaOffsetBatchProxyRequest();
@@ -188,7 +228,11 @@ public class KafkaUtil {
             return result.kafkaOffsetBatchResult.results;
         }
 
+<<<<<<< HEAD
         private PProxyResult sendProxyRequest(PProxyRequest request) throws UserException {
+=======
+        private PProxyResult sendProxyRequest(PProxyRequest request) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             // TODO: need to refactor after be split into cn + dn
             List<Long> nodeIds = new ArrayList<>();
             if (RunMode.isSharedDataMode()) {

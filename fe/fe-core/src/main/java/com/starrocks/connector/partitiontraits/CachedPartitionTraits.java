@@ -29,7 +29,11 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ThrowingSupplier;
 import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.connector.PartitionInfo;
+<<<<<<< HEAD
 import com.starrocks.sql.common.PListCell;
+=======
+import com.starrocks.sql.common.PCell;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
 
 import java.util.List;
@@ -156,9 +160,15 @@ public class CachedPartitionTraits extends DefaultTraits {
     }
 
     @Override
+<<<<<<< HEAD
     public Map<String, PListCell> getPartitionList(List<Column> partitionColumns) throws AnalysisException {
         return getCacheWithException("getPartitionList",
                 () -> delegate.getPartitionList(partitionColumns), () -> Maps.newHashMap());
+=======
+    public Map<String, PCell> getPartitionCells(List<Column> partitionColumns) throws AnalysisException {
+        return getCacheWithException("getPartitionList",
+                () -> delegate.getPartitionCells(partitionColumns), () -> Maps.newHashMap());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override

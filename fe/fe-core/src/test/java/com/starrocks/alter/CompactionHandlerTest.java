@@ -17,7 +17,11 @@ package com.starrocks.alter;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.GlobalStateMgrTestUtil;
 import com.starrocks.catalog.OlapTable;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -86,7 +90,11 @@ public class CompactionHandlerTest {
         try {
             compactionHandler.process(alterList, db, olapTable);
             Assert.assertEquals(expectedValue, GlobalStateMgr.getCurrentState().getCompactionMgr().getPartitionStatsCount());
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             e.printStackTrace();
             Assert.fail("process should not throw exceptions here");
         }
@@ -114,7 +122,11 @@ public class CompactionHandlerTest {
         List<AlterClause> alterList = Collections.singletonList((nonCompactionClause));
         try {
             compactionHandler.process(alterList, db, olapTable);
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             Assert.fail("process should not throw user exceptions here");
         }
     }

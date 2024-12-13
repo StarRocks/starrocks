@@ -45,10 +45,17 @@
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/datetime_value.h"
+<<<<<<< HEAD
 #include "runtime/large_int_value.h"
 #include "runtime/runtime_state.h"
 #include "runtime/types.h"
 #include "types/hll.h"
+=======
+#include "runtime/runtime_state.h"
+#include "runtime/types.h"
+#include "types/hll.h"
+#include "types/large_int_value.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "types/logical_type.h"
 #include "util/date_func.h"
 #include "util/json.h"
@@ -1596,6 +1603,28 @@ Expr* VectorizedCastExprFactory::create_primitive_cast(ObjectPool* pool, const T
         }
     }
 
+<<<<<<< HEAD
+=======
+    if (from_type == TYPE_JSON && to_type == TYPE_STRUCT) {
+        TypeDescriptor cast_to = TypeDescriptor::from_thrift(node.type);
+
+        std::vector<std::unique_ptr<Expr>> field_casts(cast_to.children.size());
+        for (int i = 0; i < cast_to.children.size(); ++i) {
+            TypeDescriptor json_type = TypeDescriptor::create_json_type();
+            auto ret = create_cast_expr(pool, json_type, cast_to.children[i], allow_throw_exception);
+            if (!ret.ok()) {
+                LOG(WARNING) << "Not support cast from type: " << json_type << ", to type: " << cast_to.children[i];
+                return nullptr;
+            }
+            field_casts[i] = std::move(ret.value());
+            auto cast_input = create_slot_ref(json_type);
+            field_casts[i]->add_child(cast_input.get());
+            pool->add(cast_input.release());
+        }
+        return new CastJsonToStruct(node, std::move(field_casts));
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     if (from_type == TYPE_VARCHAR && to_type == TYPE_OBJECT) {
         return dispatch_throw_exception<CastVarcharToBitmap>(allow_throw_exception, node);
     }

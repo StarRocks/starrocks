@@ -14,6 +14,11 @@
 
 package com.starrocks.sql.optimizer.validate;
 
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.ScalarType;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -195,7 +200,29 @@ public class TypeChecker implements PlanValidator.Checker {
             }
         }
 
+<<<<<<< HEAD
         private void checkColType(ScalarOperator arg, ScalarOperator expr, Type defined, Type actual) {
+=======
+        private boolean checkDecimalType(Type decimalType) {
+            ScalarType type = (ScalarType) decimalType;
+            final int scale = type.getScalarScale();
+            final int precision = type.getScalarPrecision();
+            final PrimitiveType primitiveType = type.getPrimitiveType();
+            return scale >= 0 && scale <= precision && precision <= PrimitiveType.getMaxPrecisionOfDecimal(primitiveType);
+        }
+
+        private void checkColType(ScalarOperator arg, ScalarOperator expr, Type defined, Type actual) {
+            if (actual.isDecimalV3()) {
+                checkArgument(checkDecimalType(actual),
+                        "expr '%s' invalid actual type: %s",
+                        PREFIX, expr, actual);
+            }
+            if (defined.isDecimalV3()) {
+                checkArgument(checkDecimalType(actual),
+                        "expr '%s' invalid defined type: %s",
+                        PREFIX, expr, defined);
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             checkArgument(actual.matchesType(defined),
                     "%s the type of arg %s in expr '%s' is defined as %s, but the actual type is %s",
                     PREFIX, arg, expr, defined, actual);

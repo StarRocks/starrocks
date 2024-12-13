@@ -14,6 +14,7 @@
 
 package com.starrocks.planner;
 
+<<<<<<< HEAD
 import com.google.api.client.util.Lists;
 import com.starrocks.analysis.DescriptorTable;
 
@@ -22,6 +23,10 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Stack;
 
+=======
+import com.starrocks.analysis.DescriptorTable;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public class RuntimeFilterPushDownContext {
     private final RuntimeFilterDescription description;
     private final DescriptorTable descTbl;

@@ -40,8 +40,13 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.LabelAlreadyUsedException;
+<<<<<<< HEAD
 import com.starrocks.common.StarRocksHttpException;
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.StarRocksHttpException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
@@ -182,7 +187,11 @@ public class TransactionLoadAction extends RestBaseAction {
                 return;
             }
             TransactionOperation txnOperation = TransactionOperation.parse(request.getSingleParameter(TXN_OP_KEY))
+<<<<<<< HEAD
                     .orElseThrow(() -> new UserException(
+=======
+                    .orElseThrow(() -> new StarRocksException(
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                             "Unknown transaction operation: " + request.getSingleParameter(TXN_OP_KEY)));
             opMetrics = opMetricsMap.get(txnOperation);
             if (opMetrics != null) {
@@ -209,7 +218,11 @@ public class TransactionLoadAction extends RestBaseAction {
         }
     }
 
+<<<<<<< HEAD
     protected void executeTransaction(BaseRequest request, BaseResponse response) throws UserException {
+=======
+    protected void executeTransaction(BaseRequest request, BaseResponse response) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         TransactionOperationParams txnOperationParams = toTxnOperationParams(request);
         TransactionOperation txnOperation = txnOperationParams.getTxnOperation();
         String label = txnOperationParams.getLabel();
@@ -229,7 +242,11 @@ public class TransactionLoadAction extends RestBaseAction {
             if (node == null) {
                 node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNode(nodeId);
                 if (node == null) {
+<<<<<<< HEAD
                     throw new UserException("Node " + nodeId + " is not alive");
+=======
+                    throw new StarRocksException("Node " + nodeId + " is not alive");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
             }
 
@@ -241,7 +258,12 @@ public class TransactionLoadAction extends RestBaseAction {
         redirectTo(request, response, redirectAddress);
     }
 
+<<<<<<< HEAD
     private TransactionOperationHandler getTxnOperationHandler(TransactionOperationParams params) throws UserException {
+=======
+    private TransactionOperationHandler getTxnOperationHandler(TransactionOperationParams params) throws
+            StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (params.getChannel().notNull()) {
             return new TransactionWithChannelHandler(params);
         }
@@ -264,12 +286,20 @@ public class TransactionLoadAction extends RestBaseAction {
         if (null == sourceType) {
             String dbName = params.getDbName();
             Database db = Optional.ofNullable(GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName))
+<<<<<<< HEAD
                     .orElseThrow(() -> new UserException(String.format("Database[%s] does not exist.", dbName)));
+=======
+                    .orElseThrow(() -> new StarRocksException(String.format("Database[%s] does not exist.", dbName)));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
             TransactionState txnState = GlobalStateMgr.getCurrentState()
                     .getGlobalTransactionMgr().getLabelTransactionState(db.getId(), label);
             if (null == txnState) {
+<<<<<<< HEAD
                 throw new UserException(String.format("No transaction found by label %s", label));
+=======
+                throw new StarRocksException(String.format("No transaction found by label %s", label));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
             sourceType = txnState.getSourceType();
         }
@@ -278,7 +308,11 @@ public class TransactionLoadAction extends RestBaseAction {
                 ? new BypassWriteTransactionHandler(params) : new TransactionWithoutChannelHandler(params);
     }
 
+<<<<<<< HEAD
     private Long getNodeId(TransactionOperation txnOperation, String label) throws UserException {
+=======
+    private Long getNodeId(TransactionOperation txnOperation, String label) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Long nodeId;
         // save label->be hashmap when begin transaction, so that subsequent operator can send to same BE
         if (TXN_BEGIN.equals(txnOperation)) {
@@ -292,7 +326,11 @@ public class TransactionLoadAction extends RestBaseAction {
         }
 
         if (nodeId == null) {
+<<<<<<< HEAD
             throw new UserException(String.format(
+=======
+            throw new StarRocksException(String.format(
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     "Transaction with op[%s] and label[%s] has no node.", txnOperation.getValue(), label));
         }
 
@@ -302,10 +340,17 @@ public class TransactionLoadAction extends RestBaseAction {
     /**
      * Resolve and validate request, and wrap params it as {@link TransactionOperationParams} object.
      */
+<<<<<<< HEAD
     private static TransactionOperationParams toTxnOperationParams(BaseRequest request) throws UserException {
         String dbName = request.getRequest().headers().get(DB_KEY);
         if (StringUtils.isBlank(dbName)) {
             throw new UserException("No database selected.");
+=======
+    private static TransactionOperationParams toTxnOperationParams(BaseRequest request) throws StarRocksException {
+        String dbName = request.getRequest().headers().get(DB_KEY);
+        if (StringUtils.isBlank(dbName)) {
+            throw new StarRocksException("No database selected.");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         String tableName = request.getRequest().headers().get(TABLE_KEY);
@@ -316,12 +361,20 @@ public class TransactionLoadAction extends RestBaseAction {
 
         String label = request.getRequest().headers().get(LABEL_KEY);
         if (StringUtils.isBlank(label)) {
+<<<<<<< HEAD
             throw new UserException("Empty label.");
+=======
+            throw new StarRocksException("Empty label.");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         String user = request.getRequest().headers().get(USER_KEY);
 
         TransactionOperation txnOperation = TransactionOperation.parse(request.getSingleParameter(TXN_OP_KEY))
+<<<<<<< HEAD
                 .orElseThrow(() -> new UserException(
+=======
+                .orElseThrow(() -> new StarRocksException(
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         "Unknown transaction operation: " + request.getSingleParameter(TXN_OP_KEY)));
         Long timeoutMillis = Optional.ofNullable(request.getRequest().headers().get(TIMEOUT_KEY))
                 .map(Long::parseLong)
@@ -349,7 +402,11 @@ public class TransactionLoadAction extends RestBaseAction {
 
         Channel channel = new Channel(channelId, channelNum);
         if (LoadJobSourceType.BYPASS_WRITE.equals(sourceType) && channel.notNull()) {
+<<<<<<< HEAD
             throw new UserException(String.format(
+=======
+            throw new StarRocksException(String.format(
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     "Param %s and %s is not expected when source type is %s",
                     CHANNEL_NUM_STR, CHANNEL_ID_STR, sourceType));
         }
@@ -384,7 +441,11 @@ public class TransactionLoadAction extends RestBaseAction {
         );
     }
 
+<<<<<<< HEAD
     private static LoadJobSourceType parseSourceType(String sourceType) throws UserException {
+=======
+    private static LoadJobSourceType parseSourceType(String sourceType) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (StringUtils.isBlank(sourceType)) {
             return null;
         }
@@ -392,12 +453,20 @@ public class TransactionLoadAction extends RestBaseAction {
         try {
             LoadJobSourceType jobSourceType = LoadJobSourceType.valueOf(Integer.parseInt(sourceType));
             if (null == jobSourceType) {
+<<<<<<< HEAD
                 throw new UserException("Unknown source type: " + sourceType);
+=======
+                throw new StarRocksException("Unknown source type: " + sourceType);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
 
             return jobSourceType;
         } catch (NumberFormatException e) {
+<<<<<<< HEAD
             throw new UserException("Invalid source type: " + sourceType);
+=======
+            throw new StarRocksException("Invalid source type: " + sourceType);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 

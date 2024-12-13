@@ -20,6 +20,10 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
 import com.starrocks.common.VectorSearchOptions;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.TableSampleClause;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
@@ -52,6 +56,10 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
     private boolean withoutColocateRequirement = false;
 
     private boolean usePkIndex = false;
+<<<<<<< HEAD
+=======
+    private TableSampleClause sample;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     private List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
     private Map<Integer, ScalarOperator> globalDictsExpr = Maps.newHashMap();
@@ -102,6 +110,10 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
         this.prunedPartitionPredicates = scanOperator.getPrunedPartitionPredicates();
         this.usePkIndex = scanOperator.isUsePkIndex();
         this.vectorSearchOptions = scanOperator.getVectorSearchOptions();
+<<<<<<< HEAD
+=======
+        this.sample = scanOperator.getSample();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public VectorSearchOptions getVectorSearchOptions() {
@@ -200,6 +212,17 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
         return usePkIndex;
     }
 
+<<<<<<< HEAD
+=======
+    public TableSampleClause getSample() {
+        return sample;
+    }
+
+    public void setSample(TableSampleClause sample) {
+        this.sample = sample;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public String toString() {
         return "PhysicalOlapScan" + " {" +
@@ -221,7 +244,11 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
     @Override
     public int hashCode() {
         return Objects.hash(super.hashCode(), selectedIndexId, selectedPartitionId,
+<<<<<<< HEAD
                 selectedTabletId);
+=======
+                selectedTabletId, sample);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -240,6 +267,10 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
                 gtid == that.gtid &&
                 Objects.equals(distributionSpec, that.distributionSpec) &&
                 Objects.equals(selectedPartitionId, that.selectedPartitionId) &&
+<<<<<<< HEAD
+=======
+                Objects.equals(sample, that.sample) &&
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 Objects.equals(selectedTabletId, that.selectedTabletId);
     }
 
@@ -289,6 +320,10 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
             builder.globalDicts = operator.globalDicts;
             builder.prunedPartitionPredicates = operator.prunedPartitionPredicates;
             builder.vectorSearchOptions = operator.vectorSearchOptions;
+<<<<<<< HEAD
+=======
+            builder.sample = operator.getSample();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return this;
         }
 

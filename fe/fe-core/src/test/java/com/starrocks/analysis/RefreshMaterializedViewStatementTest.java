@@ -21,6 +21,10 @@ import com.starrocks.catalog.Table;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.AfterClass;
@@ -73,7 +77,11 @@ public class RefreshMaterializedViewStatementTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testRereshNotMaterializedView() {
+=======
+    public void testRefreshNotMaterializedView() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         String sql = "REFRESH MATERIALIZED VIEW table_name_tmp_1;";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
@@ -84,6 +92,26 @@ public class RefreshMaterializedViewStatementTest {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testRefreshMaterializedViewWithPriority() throws Exception {
+        {
+            String sql = "refresh materialized view mv1 with sync mode";
+            RefreshMaterializedViewStatement stmt =
+                    (RefreshMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            Assert.assertTrue(stmt.isSync());
+            Assert.assertNull(stmt.getPriority());
+        }
+        {
+            String sql = "refresh materialized view mv1 with priority 70";
+            RefreshMaterializedViewStatement stmt =
+                    (RefreshMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            Assert.assertEquals(70, stmt.getPriority().intValue());
+        }
+    }
+
+    @Test
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void testRefreshMaterializedView() throws Exception {
 
         Database db = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore().getDb("test");

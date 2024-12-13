@@ -74,8 +74,13 @@ public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
     private volatile int beRpcPort; // be rpc port
     @SerializedName("brpcPort")
     private volatile int brpcPort = -1;
+<<<<<<< HEAD
     @SerializedName("beArrowPort")
     private volatile int beArrowPort; // be arrow port
+=======
+    @SerializedName("arrowFlightPort")
+    private volatile int arrowFlightPort = -1; // be arrow port
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     @SerializedName("cpuCores")
     private volatile int cpuCores = 0; // Cpu cores of node
@@ -162,7 +167,11 @@ public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
         this.bePort = 0;
         this.httpPort = 0;
         this.beRpcPort = 0;
+<<<<<<< HEAD
         this.beArrowPort = 0;
+=======
+        this.arrowFlightPort = -1;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         this.backendState = Backend.BackendState.free.ordinal();
 
@@ -178,7 +187,11 @@ public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
         this.bePort = -1;
         this.httpPort = -1;
         this.beRpcPort = -1;
+<<<<<<< HEAD
         this.beArrowPort = -1;
+=======
+        this.arrowFlightPort = -1;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.lastUpdateMs = -1L;
         this.lastStartTime = -1L;
 
@@ -253,12 +266,21 @@ public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
         return brpcPort;
     }
 
+<<<<<<< HEAD
     public int getBeArrowPort() {
         return beArrowPort;
     }
 
     public void setBeArrowPort(int beArrowPort) {
         this.beArrowPort = beArrowPort;
+=======
+    public int getArrowFlightPort() {
+        return arrowFlightPort;
+    }
+
+    public void setArrowFlightPort(int arrowFlightPort) {
+        this.arrowFlightPort = arrowFlightPort;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public TNetworkAddress getAddress() {
@@ -586,9 +608,15 @@ public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
                 this.starletPort = hbResponse.getStarletPort();
             }
 
+<<<<<<< HEAD
             if (this.beArrowPort != hbResponse.getBeArrowPort()) {
                 isChanged = true;
                 this.beArrowPort = hbResponse.getBeArrowPort();
+=======
+            if (this.arrowFlightPort != hbResponse.getArrowFlightPort()) {
+                isChanged = true;
+                this.arrowFlightPort = hbResponse.getArrowFlightPort();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
 
             if (RunMode.isSharedDataMode() && this.isSetStoragePath != hbResponse.isSetStoragePath()) {

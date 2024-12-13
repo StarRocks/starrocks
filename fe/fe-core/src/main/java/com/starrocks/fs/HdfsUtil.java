@@ -22,7 +22,11 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.common.Config;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.fs.hdfs.HdfsService;
 import com.starrocks.thrift.TBrokerCheckPathExistRequest;
 import com.starrocks.thrift.TBrokerCloseReaderRequest;
@@ -60,7 +64,12 @@ public class HdfsUtil {
     private static HdfsService hdfsService = new HdfsService();
 
     
+<<<<<<< HEAD
     public static void getTProperties(String path, BrokerDesc brokerDesc,  THdfsProperties tProperties) throws UserException {
+=======
+    public static void getTProperties(String path, BrokerDesc brokerDesc,  THdfsProperties tProperties) throws
+            StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         hdfsService.getTProperties(path, brokerDesc.getProperties(), tProperties);
     }
 
@@ -70,10 +79,17 @@ public class HdfsUtil {
      * @param path
      * @param brokerDesc
      * @param fileStatuses: file path, size, isDir, isSplitable
+<<<<<<< HEAD
      * @throws UserException if broker op failed
      */
     public static void parseFile(String path, BrokerDesc brokerDesc, List<TBrokerFileStatus> fileStatuses, boolean skipDir,
                                  boolean fileNameOnly) throws UserException {
+=======
+     * @throws StarRocksException if broker op failed
+     */
+    public static void parseFile(String path, BrokerDesc brokerDesc, List<TBrokerFileStatus> fileStatuses, boolean skipDir,
+                                 boolean fileNameOnly) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (path.startsWith(TableFunctionTable.FAKE_PATH)) {
             fileStatuses.add(new TBrokerFileStatus("file1", false, 1024, false));
             return;
@@ -83,7 +99,12 @@ public class HdfsUtil {
         hdfsService.listPath(request, fileStatuses, skipDir, fileNameOnly);
     }
 
+<<<<<<< HEAD
     public static List<FileStatus> listFileMeta(String path, BrokerDesc brokerDesc, boolean skipDir) throws UserException {
+=======
+    public static List<FileStatus> listFileMeta(String path, BrokerDesc brokerDesc, boolean skipDir) throws
+            StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (path.startsWith(TableFunctionTable.FAKE_PATH)) {
             path = StringUtils.removeStart(path, TableFunctionTable.FAKE_PATH);
             FileStatus fakeFile = new FileStatus(1, false, 1, 1024, System.currentTimeMillis(), new Path(path));
@@ -93,18 +114,30 @@ public class HdfsUtil {
     }
 
     public static void parseFile(String path, BrokerDesc brokerDesc, List<TBrokerFileStatus> fileStatuses)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         parseFile(path, brokerDesc, fileStatuses, true, false);
     }
 
     public static List<String> parseColumnsFromPath(String filePath, List<String> columnsFromPath)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (columnsFromPath == null || columnsFromPath.isEmpty()) {
             return Collections.emptyList();
         }
         String[] strings = filePath.split("/");
         if (strings.length < 2) {
+<<<<<<< HEAD
             throw new UserException(
+=======
+            throw new StarRocksException(
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     "Fail to parse columnsFromPath, expected: " + columnsFromPath + ", filePath: " + filePath);
         }
         String[] columns = new String[columnsFromPath.size()];
@@ -126,7 +159,11 @@ public class HdfsUtil {
 
         for (int i = 0; i < columns.length; i++) {
             if (columns[i] == null) {
+<<<<<<< HEAD
                 throw new UserException(
+=======
+                throw new StarRocksException(
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         "Fail to parse columnsFromPath, expected: " + columnsFromPath.get(i) + ", filePath: " + filePath);
             }
         }
@@ -139,9 +176,15 @@ public class HdfsUtil {
      * @param path
      * @param brokerDesc
      * @return byte[]
+<<<<<<< HEAD
      * @throws UserException if broker op failed or not only one file
      */
     public static byte[] readFile(String path, BrokerDesc brokerDesc) throws UserException {
+=======
+     * @throws StarRocksException if broker op failed or not only one file
+     */
+    public static byte[] readFile(String path, BrokerDesc brokerDesc) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         HdfsReader reader = new HdfsReader(path, brokerDesc);
         try {
             reader.open();
@@ -157,7 +200,11 @@ public class HdfsUtil {
         HdfsReader reader = new HdfsReader(path, brokerDesc);
         try {
             reader.open();
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             reader.close();
             return null;
         }
@@ -170,9 +217,15 @@ public class HdfsUtil {
      * @param data
      * @param destFilePath
      * @param brokerDesc
+<<<<<<< HEAD
      * @throws UserException if broker op failed
      */
     public static void writeFile(byte[] data, String destFilePath, BrokerDesc brokerDesc) throws UserException {
+=======
+     * @throws StarRocksException if broker op failed
+     */
+    public static void writeFile(byte[] data, String destFilePath, BrokerDesc brokerDesc) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         HdfsWriter writer = new HdfsWriter(destFilePath, brokerDesc);
         try {
             writer.open();
@@ -187,7 +240,11 @@ public class HdfsUtil {
         HdfsWriter writer = new HdfsWriter(destFilePath, brokerDesc);
         try {
             writer.open();
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             writer.close();
             return null;
         }
@@ -200,10 +257,17 @@ public class HdfsUtil {
      * @param srcFilePath
      * @param destFilePath
      * @param brokerDesc
+<<<<<<< HEAD
      * @throws UserException if broker op failed
      */
     public static void writeFile(String srcFilePath, String destFilePath,
             BrokerDesc brokerDesc) throws UserException {
+=======
+     * @throws StarRocksException if broker op failed
+     */
+    public static void writeFile(String srcFilePath, String destFilePath,
+            BrokerDesc brokerDesc) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         HdfsWriter writer = new HdfsWriter(destFilePath, brokerDesc);
         ByteBuffer byteBuffer = ByteBuffer.allocate(READ_BUFFER_SIZE_B);
         try (FileInputStream inputFs = new FileInputStream(srcFilePath); FileChannel channel = inputFs.getChannel()) {
@@ -222,7 +286,11 @@ public class HdfsUtil {
             String failMsg = "Write file exception. srcPath = " + srcFilePath + 
                     ", destPath = " + destFilePath;
             LOG.warn(failMsg, e);
+<<<<<<< HEAD
             throw new UserException(failMsg);
+=======
+            throw new StarRocksException(failMsg);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } finally {
             // close broker file writer and local file input stream
             writer.close();
@@ -234,27 +302,46 @@ public class HdfsUtil {
      *
      * @param path
      * @param brokerDesc
+<<<<<<< HEAD
      * @throws UserException if broker op failed
      */
     public static void deletePath(String path, BrokerDesc brokerDesc) throws UserException {
+=======
+     * @throws StarRocksException if broker op failed
+     */
+    public static void deletePath(String path, BrokerDesc brokerDesc) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         TBrokerDeletePathRequest tDeletePathRequest = new TBrokerDeletePathRequest(
                     TBrokerVersion.VERSION_ONE, path, brokerDesc.getProperties());
         hdfsService.deletePath(tDeletePathRequest);    
     }
 
+<<<<<<< HEAD
     public static boolean checkPathExist(String remotePath, BrokerDesc brokerDesc) throws UserException {
+=======
+    public static boolean checkPathExist(String remotePath, BrokerDesc brokerDesc) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         TBrokerCheckPathExistRequest tCheckPathExistRequest = new TBrokerCheckPathExistRequest(
                 TBrokerVersion.VERSION_ONE,
                 remotePath, brokerDesc.getProperties());
         return hdfsService.checkPathExist(tCheckPathExistRequest);
     }
 
+<<<<<<< HEAD
     public static void rename(String origFilePath, String destFilePath, BrokerDesc brokerDesc) throws UserException {
+=======
+    public static void rename(String origFilePath, String destFilePath, BrokerDesc brokerDesc) throws
+            StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         rename(origFilePath, destFilePath, brokerDesc, Config.broker_client_timeout_ms);
     }
 
     public static void rename(String origFilePath, String destFilePath, BrokerDesc brokerDesc, int timeoutMs)
+<<<<<<< HEAD
         throws UserException {
+=======
+        throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         TBrokerRenamePathRequest tRenamePathRequest = new TBrokerRenamePathRequest(TBrokerVersion.VERSION_ONE,
                 origFilePath,
                 destFilePath, brokerDesc.getProperties());
@@ -275,14 +362,22 @@ public class HdfsUtil {
             this.isReady = false;
         }
 
+<<<<<<< HEAD
         public void open() throws UserException {
+=======
+        public void open() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             // get file size
             TBrokerListPathRequest request = new TBrokerListPathRequest(TBrokerVersion.VERSION_ONE, filePath, 
                     false, brokerDesc.getProperties());
             List<TBrokerFileStatus> fileStatuses = Lists.newArrayList();
             hdfsService.listPath(request, fileStatuses, true, false);
             if (fileStatuses.size() != 1) {
+<<<<<<< HEAD
                 throw new UserException("HDFS files num error. path=" + filePath + ", files num: " + fileStatuses.size());
+=======
+                throw new StarRocksException("HDFS files num error. path=" + filePath + ", files num: " + fileStatuses.size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
             Preconditions.checkState(!fileStatuses.get(0).isIsDir());
             fileSize = fileStatuses.get(0).getSize();
@@ -299,9 +394,15 @@ public class HdfsUtil {
             return fileSize;
         }
 
+<<<<<<< HEAD
         public byte[] read(long readSize) throws UserException {
             if (!isReady) {
                 throw new UserException(
+=======
+        public byte[] read(long readSize) throws StarRocksException {
+            if (!isReady) {
+                throw new StarRocksException(
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         "HDFS reader is not ready. filePath=" + filePath);
             }
 
@@ -321,7 +422,11 @@ public class HdfsUtil {
                         TBrokerVersion.VERSION_ONE, fd);
                 try {
                     hdfsService.closeReader(tCloseReaderRequest);
+<<<<<<< HEAD
                 } catch (UserException e) {
+=======
+                } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     LOG.warn("HDFS close reader failed. path={}", filePath);
                 }
             }
@@ -342,7 +447,11 @@ public class HdfsUtil {
             this.isReady = false;
         }
 
+<<<<<<< HEAD
         public void open() throws UserException {
+=======
+        public void open() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             TBrokerOpenWriterRequest tOpenWriterRequest = new TBrokerOpenWriterRequest(
                     TBrokerVersion.VERSION_ONE, filePath, TBrokerOpenMode.APPEND,
                     "", brokerDesc.getProperties());
@@ -351,9 +460,15 @@ public class HdfsUtil {
             isReady = true;
         }
 
+<<<<<<< HEAD
         public void write(ByteBuffer byteBuffer, long bufferSize) throws UserException {
             if (!isReady) {
                 throw new UserException(
+=======
+        public void write(ByteBuffer byteBuffer, long bufferSize) throws StarRocksException {
+            if (!isReady) {
+                throw new StarRocksException(
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         "HDFS writer is not ready. filePath=" + filePath);
             }
 
@@ -370,7 +485,11 @@ public class HdfsUtil {
                         TBrokerVersion.VERSION_ONE, fd);
                 try {
                     hdfsService.closeWriter(tCloseWriterRequest);
+<<<<<<< HEAD
                 } catch (UserException e) {
+=======
+                } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     LOG.warn("HDFS close writer failed. filePath={}", filePath);
                 }
             }

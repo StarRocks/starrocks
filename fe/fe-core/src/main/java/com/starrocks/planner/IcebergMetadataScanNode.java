@@ -16,7 +16,11 @@ package com.starrocks.planner;
 
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.connector.RemoteMetaSplit;
 import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.iceberg.IcebergMetaSpec;
@@ -39,7 +43,10 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+<<<<<<< HEAD
 import java.util.stream.Collectors;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 public class IcebergMetadataScanNode extends ScanNode {
     private static final Logger LOG = LogManager.getLogger(IcebergMetadataScanNode.class);
@@ -83,7 +90,11 @@ public class IcebergMetadataScanNode extends ScanNode {
         return result;
     }
 
+<<<<<<< HEAD
     public void setupScanRangeLocations() throws UserException {
+=======
+    public void setupScanRangeLocations() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         String catalogName = table.getCatalogName();
         String originDbName = table.getOriginDb();
         String originTableName = table.getOriginTable();

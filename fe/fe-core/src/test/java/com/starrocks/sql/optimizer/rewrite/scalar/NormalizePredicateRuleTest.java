@@ -142,4 +142,23 @@ public class NormalizePredicateRuleTest {
         ScalarOperator res =
                 operatorRewriter.rewrite(compoundPredicateOperator, Lists.newArrayList(new NormalizePredicateRule()));
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testCompound2() {
+        InPredicateOperator inOp = new InPredicateOperator(
+                false,
+                ConstantOperator.createInt(1063),
+                new ColumnRefOperator(0, Type.INT, "col1", false),
+                new ColumnRefOperator(1, Type.INT, "col2", false),
+                new ColumnRefOperator(2, Type.INT, "col3", false),
+                new ColumnRefOperator(3, Type.INT, "col4", false)
+        );
+
+        ScalarOperatorRewriter operatorRewriter = new ScalarOperatorRewriter();
+        ScalarOperator res =
+                operatorRewriter.rewrite(inOp, Lists.newArrayList(new NormalizePredicateRule()));
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

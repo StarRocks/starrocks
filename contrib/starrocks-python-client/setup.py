@@ -57,6 +57,10 @@ setup(
         "sqlalchemy>=2.0",
         "sqlalchemy-utils>=0.41.2",
         "pymysql>=1.1.0",
+<<<<<<< HEAD
+=======
+        "alembic>=1.4.0"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ],
     setup_requires=["pytest-runner"],
     tests_require=["pytest", "mock"],

@@ -1283,6 +1283,9 @@ void PInternalServiceImplBase<T>::stream_load(google::protobuf::RpcController* c
 }
 
 template class PInternalServiceImplBase<PInternalService>;
+<<<<<<< HEAD
 template class PInternalServiceImplBase<doris::PBackendService>;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 } // namespace starrocks

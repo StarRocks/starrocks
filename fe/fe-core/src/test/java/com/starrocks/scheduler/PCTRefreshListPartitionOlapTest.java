@@ -25,12 +25,20 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TExplainLevel;
+<<<<<<< HEAD
+=======
+import com.starrocks.utframe.UtFrameUtils;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -44,6 +52,10 @@ import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+<<<<<<< HEAD
+=======
+import java.util.Set;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.plan.PlanTestBase.cleanupEphemeralMVs;
@@ -1045,6 +1057,7 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
 
     @Test
     public void testPartialRefreshSingleColumnMVWithSingleValues2() {
+<<<<<<< HEAD
         Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         starRocksAssert.withTable(S2, () -> {
             starRocksAssert.withMaterializedView("create materialized view mv1\n" +
@@ -1070,6 +1083,24 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
                         // If mv has partition_ttl_number, ensure only create ttl number partitions.
                         Assert.assertEquals("[p3]", partitions.toString());
                     });
+=======
+        starRocksAssert.withTable(S2, () -> {
+            try {
+                starRocksAssert.withMaterializedView("create materialized view mv1\n" +
+                        "partition by dt \n" +
+                        "distributed by random \n" +
+                        "REFRESH DEFERRED MANUAL \n" +
+                        "properties (" +
+                        "   'partition_refresh_number' = '1'," +
+                        "   'partition_ttl_number' = '1'" +
+                        ")" +
+                        "as select dt, province, sum(age) from s2 group by dt, province;");
+                Assert.fail();
+            } catch (Exception e) {
+                Assert.assertTrue(e.getMessage().contains("Invalid parameter partition_ttl_number does not support " +
+                        "non-range-partitioned materialized view"));
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         });
     }
 
@@ -1310,4 +1341,34 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
             starRocksAssert.dropMaterializedView("mv1");
         });
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testRefreshListPartitionMVWithMultiPartitionColumns() {
+        starRocksAssert.withTable(T3, () -> {
+            starRocksAssert.withMaterializedView("create materialized view test_mv1\n" +
+                            "partition by (dt, province) \n" +
+                            "distributed by random \n" +
+                            "REFRESH DEFERRED MANUAL \n" +
+                            "properties ('partition_refresh_number' = '1')" +
+                            "as select dt, province, sum(age) from t3 group by dt, province;",
+                    (obj) -> {
+                        {
+                            String sql = "REFRESH MATERIALIZED VIEW test_mv1 PARTITION (('20240101', 'beijing'), ('20240101', " +
+                                    "'nanjing')) FORCE;";
+                            RefreshMaterializedViewStatement statement =
+                                    (RefreshMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+                            Assert.assertTrue(statement.isForceRefresh());
+                            Assert.assertNull(statement.getPartitionRangeDesc());
+                            Set<PListCell> expect = ImmutableSet.of(
+                                    new PListCell(ImmutableList.of(ImmutableList.of("20240101", "beijing"))),
+                                    new PListCell(ImmutableList.of(ImmutableList.of("20240101", "nanjing")))
+                            );
+                            Assert.assertEquals(expect, statement.getPartitionListDesc());
+                        }
+                    });
+        });
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

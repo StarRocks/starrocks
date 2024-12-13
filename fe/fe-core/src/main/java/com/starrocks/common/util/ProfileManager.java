@@ -90,7 +90,10 @@ public class ProfileManager implements MemoryTrackable {
             Arrays.asList(QUERY_ID, USER, DEFAULT_DB, SQL_STATEMENT, QUERY_TYPE,
                     START_TIME, END_TIME, TOTAL_TIME, QUERY_STATE));
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static class ProfileElement {
         public Map<String, String> infoStrings = Maps.newHashMap();
         public byte[] profileContent;
@@ -114,8 +117,13 @@ public class ProfileManager implements MemoryTrackable {
     private final ReadLock readLock;
     private final WriteLock writeLock;
 
+<<<<<<< HEAD
     private final LinkedHashMap<String, ProfileElement> profileMap; // from QueryId to RuntimeProfile
     private final LinkedHashMap<String, ProfileElement> loadProfileMap; // from LoadId to RuntimeProfile
+=======
+    // from QueryId to RuntimeProfile
+    private final LinkedHashMap<String, ProfileElement> profileMap;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public static ProfileManager getInstance() {
         if (INSTANCE == null) {
@@ -129,7 +137,10 @@ public class ProfileManager implements MemoryTrackable {
         readLock = lock.readLock();
         writeLock = lock.writeLock();
         profileMap = new LinkedHashMap<>();
+<<<<<<< HEAD
         loadProfileMap = new LinkedHashMap<>();
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public ProfileElement createElement(RuntimeProfile summaryProfile, String profileString) {
@@ -172,7 +183,10 @@ public class ProfileManager implements MemoryTrackable {
         ProfileElement element = createElement(profile.getChildList().get(0).first, profileString);
         element.plan = plan;
         String queryId = element.infoStrings.get(ProfileManager.QUERY_ID);
+<<<<<<< HEAD
         String queryType = element.infoStrings.get(ProfileManager.QUERY_TYPE);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // check when push in, which can ensure every element in the list has QUERY_ID column,
         // so there is no need to check when remove element from list.
         if (Strings.isNullOrEmpty(queryId)) {
@@ -182,6 +196,7 @@ public class ProfileManager implements MemoryTrackable {
 
         writeLock.lock();
         try {
+<<<<<<< HEAD
             if (queryType != null && queryType.equals("Load")) {
                 loadProfileMap.put(queryId, element);
                 if (loadProfileMap.size() > Config.load_profile_info_reserved_num) {
@@ -192,6 +207,11 @@ public class ProfileManager implements MemoryTrackable {
                 if (profileMap.size() > Config.profile_info_reserved_num) {
                     profileMap.remove(profileMap.keySet().iterator().next());
                 }
+=======
+            profileMap.put(queryId, element);
+            if (profileMap.size() > Config.profile_info_reserved_num) {
+                profileMap.remove(profileMap.keySet().iterator().next());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         } finally {
             writeLock.unlock();
@@ -203,7 +223,11 @@ public class ProfileManager implements MemoryTrackable {
     public boolean hasProfile(String queryId) {
         readLock.lock();
         try {
+<<<<<<< HEAD
             return profileMap.containsKey(queryId) || loadProfileMap.containsKey(queryId);
+=======
+            return profileMap.containsKey(queryId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } finally {
             readLock.unlock();
         }
@@ -221,6 +245,7 @@ public class ProfileManager implements MemoryTrackable {
                 }
                 result.add(0, row);
             }
+<<<<<<< HEAD
             for (ProfileElement element : loadProfileMap.values()) {
                 Map<String, String> infoStrings = element.infoStrings;
                 List<String> row = Lists.newArrayList();
@@ -229,6 +254,8 @@ public class ProfileManager implements MemoryTrackable {
                 }
                 result.add(0, row);
             }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } finally {
             readLock.unlock();
         }
@@ -238,7 +265,10 @@ public class ProfileManager implements MemoryTrackable {
     public void removeProfile(String queryId) {
         writeLock.lock();
         try {
+<<<<<<< HEAD
             loadProfileMap.remove(queryId);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             profileMap.remove(queryId);
         } finally {
             writeLock.unlock();
@@ -248,7 +278,10 @@ public class ProfileManager implements MemoryTrackable {
     public void clearProfiles() {
         writeLock.lock();
         try {
+<<<<<<< HEAD
             loadProfileMap.clear();
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             profileMap.clear();
         } finally {
             writeLock.unlock();
@@ -259,7 +292,11 @@ public class ProfileManager implements MemoryTrackable {
         ProfileElement element = new ProfileElement();
         readLock.lock();
         try {
+<<<<<<< HEAD
             element = profileMap.get(queryId) == null ? loadProfileMap.get(queryId) : profileMap.get(queryId);
+=======
+            element = profileMap.get(queryId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (element == null) {
                 return null;
             }
@@ -277,7 +314,11 @@ public class ProfileManager implements MemoryTrackable {
     public ProfileElement getProfileElement(String queryId) {
         readLock.lock();
         try {
+<<<<<<< HEAD
             return profileMap.get(queryId) == null ? loadProfileMap.get(queryId) : profileMap.get(queryId);
+=======
+            return profileMap.get(queryId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } finally {
             readLock.unlock();
         }
@@ -288,7 +329,10 @@ public class ProfileManager implements MemoryTrackable {
         readLock.lock();
         try {
             result.addAll(profileMap.values());
+<<<<<<< HEAD
             result.addAll(loadProfileMap.values());
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } finally {
             readLock.unlock();
         }
@@ -297,8 +341,12 @@ public class ProfileManager implements MemoryTrackable {
 
     @Override
     public Map<String, Long> estimateCount() {
+<<<<<<< HEAD
         return ImmutableMap.of("QueryProfile", (long) profileMap.size(),
                 "LoadProfile", (long) loadProfileMap.size());
+=======
+        return ImmutableMap.of("QueryProfile", (long) profileMap.size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -309,6 +357,7 @@ public class ProfileManager implements MemoryTrackable {
                     .stream()
                     .limit(MEMORY_PROFILE_SAMPLES)
                     .collect(Collectors.toList());
+<<<<<<< HEAD
             List<Object> loadProfileSamples = loadProfileMap.values()
                     .stream()
                     .limit(MEMORY_PROFILE_SAMPLES)
@@ -316,6 +365,10 @@ public class ProfileManager implements MemoryTrackable {
 
             return Lists.newArrayList(Pair.create(profileSamples, (long) profileMap.size()),
                     Pair.create(loadProfileSamples, (long) loadProfileMap.size()));
+=======
+
+            return Lists.newArrayList(Pair.create(profileSamples, (long) profileMap.size()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } finally {
             readLock.unlock();
         }

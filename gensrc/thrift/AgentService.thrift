@@ -118,6 +118,11 @@ struct TCreateTabletReq {
     21: optional i32 compression_level = -1;
     // Whether or not use shared tablet initial metadata.
     22: optional bool enable_tablet_creation_optimization = false;
+<<<<<<< HEAD
+=======
+    // The timeout FE will wait for the tablet to be created.
+    23: optional i64 timeout_ms = -1;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 struct TDropTabletReq {

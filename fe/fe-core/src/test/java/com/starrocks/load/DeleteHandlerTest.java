@@ -32,7 +32,11 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.FeConstants;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.common.util.concurrent.lock.LockException;
@@ -232,7 +236,11 @@ public class DeleteHandlerTest {
             {
                 try {
                     globalTransactionMgr.abortTransaction(db.getId(), anyLong, anyString);
+<<<<<<< HEAD
                 } catch (UserException e) {
+=======
+                } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
                 minTimes = 0;
             }
@@ -382,9 +390,15 @@ public class DeleteHandlerTest {
                     globalTransactionMgr.commitTransaction(anyLong, anyLong, (List<TabletCommitInfo>) any,
                             (List<TabletFailInfo>) any,
                             (TxnCommitAttachment) any);
+<<<<<<< HEAD
                 } catch (UserException e) {
                 }
                 result = new UserException("commit fail");
+=======
+                } catch (StarRocksException e) {
+                }
+                result = new StarRocksException("commit fail");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         };
 

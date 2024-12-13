@@ -40,7 +40,11 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.persist.ImageWriter;
@@ -129,7 +133,11 @@ public class PluginMgr implements Writable {
 
     // install a plugin from user's command.
     // install should be successfully, or nothing should be left if failed to install.
+<<<<<<< HEAD
     public PluginInfo installPlugin(InstallPluginStmt stmt) throws IOException, UserException {
+=======
+    public PluginInfo installPlugin(InstallPluginStmt stmt) throws IOException, StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         PluginLoader pluginLoader = new DynamicPluginLoader(Config.plugin_dir, stmt.getPluginPath(), stmt.getMd5sum());
         pluginLoader.setStatus(PluginStatus.INSTALLING);
 
@@ -140,7 +148,11 @@ public class PluginMgr implements Writable {
             }
 
             if (checkDynamicPluginNameExist(info.getName())) {
+<<<<<<< HEAD
                 throw new UserException("plugin " + info.getName() + " has already been installed.");
+=======
+                throw new StarRocksException("plugin " + info.getName() + " has already been installed.");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
 
             // install plugin
@@ -148,7 +160,11 @@ public class PluginMgr implements Writable {
             pluginLoader.setStatus(PluginStatus.INSTALLED);
 
             if (!addDynamicPluginNameIfAbsent(info.getName())) {
+<<<<<<< HEAD
                 throw new UserException("plugin " + info.getName() + " has already been installed.");
+=======
+                throw new StarRocksException("plugin " + info.getName() + " has already been installed.");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
             plugins[info.getTypeId()].put(info.getName(), pluginLoader);
 
@@ -165,7 +181,11 @@ public class PluginMgr implements Writable {
      * Dynamic uninstall plugin.
      * If uninstall failed, the plugin should NOT be removed from plugin manager.
      */
+<<<<<<< HEAD
     public PluginInfo uninstallPlugin(String name) throws IOException, UserException {
+=======
+    public PluginInfo uninstallPlugin(String name) throws IOException, StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (!checkDynamicPluginNameExist(name)) {
             throw new DdlException("Plugin " + name + " does not exist");
         }
@@ -231,14 +251,22 @@ public class PluginMgr implements Writable {
             // should add to "plugins" first before loading.
             PluginLoader checkLoader = plugins[info.getTypeId()].putIfAbsent(info.getName(), pluginLoader);
             if (checkLoader != null) {
+<<<<<<< HEAD
                 throw new UserException("plugin " + info.getName() + " has already been installed.");
+=======
+                throw new StarRocksException("plugin " + info.getName() + " has already been installed.");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
 
             pluginLoader.setStatus(PluginStatus.INSTALLING);
             // install plugin
             pluginLoader.reload();
             pluginLoader.setStatus(PluginStatus.INSTALLED);
+<<<<<<< HEAD
         } catch (IOException | UserException e) {
+=======
+        } catch (IOException | StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             pluginLoader.setStatus(PluginStatus.ERROR, e.getMessage());
             LOG.warn("fail to load plugin", e);
         } finally {

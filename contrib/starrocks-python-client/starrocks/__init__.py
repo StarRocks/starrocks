@@ -14,4 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+<<<<<<< HEAD
 __version__ = "1.1.1"
+=======
+__version__ = "1.2.0"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

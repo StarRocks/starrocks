@@ -38,7 +38,11 @@ import com.starrocks.connector.partitiontraits.OdpsPartitionTraits;
 import com.starrocks.connector.partitiontraits.OlapPartitionTraits;
 import com.starrocks.connector.partitiontraits.PaimonPartitionTraits;
 import com.starrocks.qe.ConnectContext;
+<<<<<<< HEAD
 import com.starrocks.sql.common.PListCell;
+=======
+import com.starrocks.sql.common.PCell;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import org.apache.commons.lang.NotImplementedException;
 import org.slf4j.Logger;
@@ -189,7 +193,11 @@ public abstract class ConnectorPartitionTraits {
      *
      * @apiNote it must be a list-partitioned table
      */
+<<<<<<< HEAD
     public abstract Map<String, PListCell> getPartitionList(List<Column> partitionColumns) throws AnalysisException;
+=======
+    public abstract Map<String, PCell> getPartitionCells(List<Column> partitionColumns) throws AnalysisException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public abstract Map<String, PartitionInfo> getPartitionNameWithPartitionInfo();
 

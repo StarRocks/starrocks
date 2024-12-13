@@ -15,9 +15,15 @@
 
 package com.starrocks.qe;
 
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
 import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.privilege.PrivilegeException;
+=======
+import com.starrocks.authorization.AuthorizationMgr;
+import com.starrocks.authorization.PrivilegeException;
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SetRoleStmt;
 import com.starrocks.sql.ast.SetRoleType;
@@ -29,6 +35,7 @@ import java.util.Set;
 public class SetRoleExecutor {
 
     private static long getValidRoleId(AuthorizationMgr manager, Set<Long> roleIdsForUser, String roleName,
+<<<<<<< HEAD
                                        UserIdentity userIdentity) throws UserException {
         Long id = manager.getRoleIdByNameAllowNull(roleName);
         if (id == null) {
@@ -37,11 +44,25 @@ public class SetRoleExecutor {
 
         if (!roleIdsForUser.contains(id)) {
             throw new UserException("Role " + roleName + " is not granted to " + userIdentity.toString());
+=======
+                                       UserIdentity userIdentity) throws StarRocksException {
+        Long id = manager.getRoleIdByNameAllowNull(roleName);
+        if (id == null) {
+            throw new StarRocksException("Cannot find role " + roleName);
+        }
+
+        if (!roleIdsForUser.contains(id)) {
+            throw new StarRocksException("Role " + roleName + " is not granted to " + userIdentity.toString());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return id;
     }
 
+<<<<<<< HEAD
     public static void execute(SetRoleStmt stmt, ConnectContext context) throws UserException, PrivilegeException {
+=======
+    public static void execute(SetRoleStmt stmt, ConnectContext context) throws StarRocksException, PrivilegeException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         AuthorizationMgr manager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
         UserIdentity user = context.getCurrentUserIdentity();
         Set<Long> roleIdsForUser = manager.getRoleIdsByUser(user);

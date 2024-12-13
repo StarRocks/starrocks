@@ -43,18 +43,25 @@ import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.utframe.UtFrameUtils;
+<<<<<<< HEAD
 import mockit.Expectations;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import mockit.Injectable;
 import mockit.Mocked;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
 
+<<<<<<< HEAD
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+=======
+import java.io.File;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.List;
 import java.util.Map;
 
@@ -74,6 +81,7 @@ public class LoadMgrTest {
     public void testSerializationNormal(@Mocked GlobalStateMgr globalStateMgr,
                                         @Injectable Database database,
                                         @Injectable Table table) throws Exception {
+<<<<<<< HEAD
         new Expectations() {
             {
                 globalStateMgr.getLocalMetastore().getDb(anyLong);
@@ -88,11 +96,17 @@ public class LoadMgrTest {
             }
         };
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         loadManager = new LoadMgr(new LoadJobScheduler());
         LoadJob job1 = new InsertLoadJob("job1", 1L, 1L, System.currentTimeMillis(), "", "", null);
         Deencapsulation.invoke(loadManager, "addLoadJob", job1);
 
+<<<<<<< HEAD
         File file = serializeToFile(loadManager);
+=======
+        UtFrameUtils.PseudoImage file = serializeToFile(loadManager);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         LoadMgr newLoadManager = deserializeFromFile(file);
 
@@ -105,6 +119,7 @@ public class LoadMgrTest {
     public void testSerializationWithJobRemoved(@Mocked GlobalStateMgr globalStateMgr,
                                                 @Injectable Database database,
                                                 @Injectable Table table) throws Exception {
+<<<<<<< HEAD
         new Expectations() {
             {
                 globalStateMgr.getLocalMetastore().getDb(anyLong);
@@ -119,6 +134,8 @@ public class LoadMgrTest {
             }
         };
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         loadManager = new LoadMgr(new LoadJobScheduler());
         LoadJob job1 = new InsertLoadJob("job1", 1L, 1L, System.currentTimeMillis(), "", "", null);
         Deencapsulation.invoke(loadManager, "addLoadJob", job1);
@@ -127,7 +144,11 @@ public class LoadMgrTest {
         Config.label_keep_max_second = 1;
         Thread.sleep(2000);
 
+<<<<<<< HEAD
         File file = serializeToFile(loadManager);
+=======
+        UtFrameUtils.PseudoImage  file = serializeToFile(loadManager);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         LoadMgr newLoadManager = deserializeFromFile(file);
         Map<Long, LoadJob> newLoadJobs = Deencapsulation.getField(newLoadManager, fieldName);
@@ -139,6 +160,7 @@ public class LoadMgrTest {
     public void testDeserializationWithJobRemoved(@Mocked GlobalStateMgr globalStateMgr,
                                                 @Injectable Database database,
                                                 @Injectable Table table) throws Exception {
+<<<<<<< HEAD
         new Expectations() {
             {
                 globalStateMgr.getLocalMetastore().getDb(anyLong);
@@ -153,13 +175,19 @@ public class LoadMgrTest {
             }
         };
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Config.label_keep_max_second = 10;
 
         // 1. serialize 1 job to file
         loadManager = new LoadMgr(new LoadJobScheduler());
         LoadJob job1 = new InsertLoadJob("job1", 1L, 1L, System.currentTimeMillis(), "", "", null);
         Deencapsulation.invoke(loadManager, "addLoadJob", job1);
+<<<<<<< HEAD
         File file = serializeToFile(loadManager);
+=======
+        UtFrameUtils.PseudoImage  file = serializeToFile(loadManager);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // 2. read it directly, expect 1 job
         LoadMgr newLoadManager = deserializeFromFile(file);
@@ -175,6 +203,7 @@ public class LoadMgrTest {
         Assert.assertEquals(0, newLoadJobs.size());
     }
 
+<<<<<<< HEAD
     private File serializeToFile(LoadMgr loadManager) throws Exception {
         File file = new File("./loadManagerTest");
         file.createNewFile();
@@ -189,12 +218,25 @@ public class LoadMgrTest {
         DataInputStream dis = new DataInputStream(new FileInputStream(file));
         LoadMgr loadManager = new LoadMgr(new LoadJobScheduler());
         loadManager.readFields(dis);
+=======
+    private UtFrameUtils.PseudoImage serializeToFile(LoadMgr loadManager) throws Exception {
+        UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
+        loadManager.saveLoadJobsV2JsonFormat(image.getImageWriter());
+        return image;
+    }
+
+    private LoadMgr deserializeFromFile(UtFrameUtils.PseudoImage image) throws Exception {
+        LoadMgr loadManager = new LoadMgr(new LoadJobScheduler());
+        SRMetaBlockReader reader = new SRMetaBlockReaderV2(image.getJsonReader());
+        loadManager.loadLoadJobsV2JsonFormat(reader);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return loadManager;
     }
 
     @Test
     public void testRemoveOldLoadJob(@Mocked GlobalStateMgr globalStateMgr,
                                      @Injectable Database db) throws Exception {
+<<<<<<< HEAD
         new Expectations() {
             {
                 globalStateMgr.getLocalMetastore().getDb(anyLong);
@@ -202,6 +244,8 @@ public class LoadMgrTest {
             }
         };
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         loadManager = new LoadMgr(new LoadJobScheduler());
         int origLabelKeepMaxSecond = Config.label_keep_max_second;
         int origLabelKeepMaxNum = Config.label_keep_max_num;
@@ -309,6 +353,7 @@ public class LoadMgrTest {
     @Test
     public void testLoadJsonImage(@Mocked GlobalStateMgr globalStateMgr,
                                   @Injectable Database db) throws Exception {
+<<<<<<< HEAD
         new Expectations() {
             {
                 globalStateMgr.getLocalMetastore().getDb(anyLong);
@@ -316,6 +361,8 @@ public class LoadMgrTest {
             }
         };
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         LoadMgr loadManager = new LoadMgr(new LoadJobScheduler());
         LoadJob loadJob1 = new InsertLoadJob("job0", 0L, 1L, System.currentTimeMillis(), "", "", null);
         loadJob1.id = 1L;

@@ -82,6 +82,7 @@ public class InsertLoadJobTest {
     public void testUpdateProgress(@Mocked GlobalStateMgr globalStateMgr,
                                    @Injectable Database database,
                                    @Injectable Table table) throws MetaNotFoundException {
+<<<<<<< HEAD
         new Expectations() {
             {
                 globalStateMgr.getLocalMetastore().getDb(anyLong);
@@ -93,6 +94,8 @@ public class InsertLoadJobTest {
             }
         };
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         {
             InsertLoadJob loadJob = new InsertLoadJob("label", 1L,
                     1L, 1000, "", "", null);

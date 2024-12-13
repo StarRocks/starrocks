@@ -39,5 +39,9 @@ EOF
 )
 
 output=$(${mysql_cmd} -e "$sql")
+<<<<<<< HEAD
 check_keywords "$output" "LoadChannel" "1"
+=======
+check_keywords "$output" "LoadChannel:" "1"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 check_keywords "$output" "Index (id=" "3"

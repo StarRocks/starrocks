@@ -31,7 +31,11 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.CsvFormat;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.UserIdentity;
@@ -82,7 +86,11 @@ public class BrokerFileGroupTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testCSVParams() throws UserException {
+=======
+    public void testCSVParams() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         CsvFormat csvFormat = new CsvFormat((byte) '\'', (byte) '|', 3, true);
         List<String> filePaths = new ArrayList<>();
         filePaths.add("/a/b/c/file");
@@ -101,7 +109,11 @@ public class BrokerFileGroupTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testCSVParamsWithSpecialCharacter() throws UserException {
+=======
+    public void testCSVParamsWithSpecialCharacter() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         CsvFormat csvFormat = new CsvFormat((byte) '\t', (byte) '\\', 3, true);
         List<String> filePaths = new ArrayList<>();
         filePaths.add("/a/b/c/file");
@@ -120,7 +132,11 @@ public class BrokerFileGroupTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testParseHiveTable() throws UserException {
+=======
+    public void testParseHiveTable() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // k1 = bitmap_dict(k1)
         SlotRef slotRef1 = new SlotRef(null, "k1");
         List<Expr> params1 = Lists.newArrayList(slotRef1);
@@ -172,7 +188,11 @@ public class BrokerFileGroupTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testTableFunctionTableCSVDelimiter() throws UserException {
+=======
+    public void testTableFunctionTableCSVDelimiter() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Map<String, String> properties = new HashMap<>();
         properties.put("path", "fake://some_bucket/some_path/*");
         properties.put("format", "CSV");

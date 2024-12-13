@@ -20,7 +20,10 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TxnCommitAttachment;
 
+<<<<<<< HEAD
 import java.io.DataInput;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.Map;
@@ -60,6 +63,7 @@ public class ReplicationTxnCommitAttachment extends TxnCommitAttachment {
         String s = GsonUtils.GSON.toJson(this);
         Text.writeString(out, s);
     }
+<<<<<<< HEAD
 
     public void readFields(DataInput in) throws IOException {
         super.readFields(in);
@@ -68,4 +72,6 @@ public class ReplicationTxnCommitAttachment extends TxnCommitAttachment {
                 ReplicationTxnCommitAttachment.class);
         this.partitionVersions = insertTxnCommitAttachment.getPartitionVersions();
     }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

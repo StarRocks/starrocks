@@ -24,6 +24,10 @@ set(UTIL_FILES
   arrow/utils.cpp
   await.cpp
   bfd_parser.cpp
+<<<<<<< HEAD
+=======
+  base85.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
   compression/block_compression.cpp
   compression/compression_context_pool_singletons.cpp
   compression/stream_compression.cpp

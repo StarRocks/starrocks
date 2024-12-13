@@ -54,7 +54,11 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.MetaNotFoundException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.DebugUtil;
@@ -355,7 +359,11 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         return getEndTimestamp();
     }
 
+<<<<<<< HEAD
     protected void setOptional(CreateRoutineLoadStmt stmt) throws UserException {
+=======
+    protected void setOptional(CreateRoutineLoadStmt stmt) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (stmt.getRoutineLoadDesc() != null) {
             setRoutineLoadDesc(stmt.getRoutineLoadDesc());
         }
@@ -414,7 +422,11 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             }
             this.confluentSchemaRegistryUrl = stmt.getConfluentSchemaRegistryUrl();
         } else {
+<<<<<<< HEAD
             throw new UserException("Invalid format type.");
+=======
+            throw new StarRocksException("Invalid format type.");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         taskConsumeSecond = stmt.getTaskConsumeSecond();
         taskTimeoutSecond = stmt.getTaskTimeoutSecond();
@@ -427,7 +439,11 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
             Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName);
             if (warehouse == null) {
+<<<<<<< HEAD
                 throw new UserException("Warehouse " + warehouseName + " not exists.");
+=======
+                throw new StarRocksException("Warehouse " + warehouseName + " not exists.");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
 
             setWarehouseId(warehouse.getId());
@@ -741,7 +757,11 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         }
     }
 
+<<<<<<< HEAD
     abstract void divideRoutineLoadJob(int currentConcurrentTaskNum) throws UserException;
+=======
+    abstract void divideRoutineLoadJob(int currentConcurrentTaskNum) throws StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public int calculateCurrentConcurrentTaskNum() throws MetaNotFoundException {
         return 0;
@@ -758,7 +778,11 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     }
 
     // All of private method could not be call without lock
+<<<<<<< HEAD
     private void checkStateTransform(RoutineLoadJob.JobState desireState) throws UserException {
+=======
+    private void checkStateTransform(RoutineLoadJob.JobState desireState) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         switch (state) {
             case PAUSED:
                 if (desireState == JobState.PAUSED) {
@@ -774,14 +798,22 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     }
 
     // if rate of error data is more than max_filter_ratio, pause job
+<<<<<<< HEAD
     protected void updateProgress(RLTaskTxnCommitAttachment attachment) throws UserException {
+=======
+    protected void updateProgress(RLTaskTxnCommitAttachment attachment) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         updateNumOfData(attachment.getTotalRows(), attachment.getFilteredRows(), attachment.getUnselectedRows(),
                 attachment.getReceivedBytes(), attachment.getTaskExecutionTimeMs(),
                 false /* not replay */);
     }
 
     private void updateNumOfData(long numOfTotalRows, long numOfErrorRows, long unselectedRows, long receivedBytes,
+<<<<<<< HEAD
                                  long taskExecutionTime, boolean isReplay) throws UserException {
+=======
+                                 long taskExecutionTime, boolean isReplay) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.totalRows += numOfTotalRows;
         this.errorRows += numOfErrorRows;
         this.unselectedRows += unselectedRows;
@@ -855,7 +887,11 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         try {
             updateNumOfData(attachment.getTotalRows(), attachment.getFilteredRows(), attachment.getUnselectedRows(),
                     attachment.getReceivedBytes(), attachment.getTaskExecutionTimeMs(), true /* is replay */);
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             LOG.error("should not happen", e);
         }
     }
@@ -864,14 +900,22 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
     // call before first scheduling
     // derived class can override this.
+<<<<<<< HEAD
     public void prepare() throws UserException {
+=======
+    public void prepare() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     private Coordinator.Factory getCoordinatorFactory() {
         return new DefaultCoordinator.Factory();
     }
 
+<<<<<<< HEAD
     public TExecPlanFragmentParams plan(TUniqueId loadId, long txnId, String label) throws UserException {
+=======
+    public TExecPlanFragmentParams plan(TUniqueId loadId, long txnId, String label) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
             throw new MetaNotFoundException("db " + dbId + " does not exist");
@@ -915,7 +959,11 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             TransactionState txnState =
                     GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionState(db.getId(), txnId);
             if (txnState == null) {
+<<<<<<< HEAD
                 throw new UserException("txn does not exist: " + txnId);
+=======
+                throw new StarRocksException("txn does not exist: " + txnId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
             txnState.addTableIndexes(planner.getDestTable());
 
@@ -998,7 +1046,11 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     // paused job or renew task
     // *** Please do not call after individually. It must be combined use with before ***
     @Override
+<<<<<<< HEAD
     public void afterCommitted(TransactionState txnState, boolean txnOperated) throws UserException {
+=======
+    public void afterCommitted(TransactionState txnState, boolean txnOperated) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         long taskBeId = -1L;
         try {
             if (txnOperated) {
@@ -1104,7 +1156,11 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
                 try {
                     updateState(JobState.PAUSED, new ErrorReason(InternalErrorCode.IMPOSSIBLE_ERROR_ERR, msg),
                             false /* not replay */);
+<<<<<<< HEAD
                 } catch (UserException e) {
+=======
+                } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     // should not happen
                     LOG.warn("failed to pause the job {}. this should not happen", id, e);
                 }
@@ -1113,7 +1169,11 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
             try {
                 routineLoadTaskInfo.afterVisible(txnState, txnOperated);
+<<<<<<< HEAD
             } catch (UserException e) {
+=======
+            } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 LOG.warn("failed to execute 'routineLoadTaskInfo.afterVisible', txnId {}, label {}. " +
                         "this should not happen", txnState.getTransactionId(), routineLoadTaskInfo.getLabel());
             }
@@ -1146,7 +1206,11 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     // *** Please do not call after individually. It must be combined use with before ***
     @Override
     public void afterAborted(TransactionState txnState, boolean txnOperated, String txnStatusChangeReasonString)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         long taskBeId = -1L;
         try {
             if (txnOperated) {
@@ -1245,7 +1309,11 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     // check task exists or not before call method
     private void executeTaskOnTxnStatusChanged(RoutineLoadTaskInfo routineLoadTaskInfo, TransactionState txnState,
                                                TransactionStatus txnStatus, String txnStatusChangeReasonStr)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // step0: get progress from transaction state
         RLTaskTxnCommitAttachment rlTaskTxnCommitAttachment =
                 (RLTaskTxnCommitAttachment) txnState.getTxnCommitAttachment();
@@ -1302,7 +1370,11 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     }
 
     protected static void unprotectedCheckMeta(Database db, String tblName, RoutineLoadDesc routineLoadDesc)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tblName);
 
         if (table instanceof MaterializedView) {
@@ -1336,7 +1408,11 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         // columns will be checked when planing
     }
 
+<<<<<<< HEAD
     public void updateState(JobState jobState, ErrorReason reason, boolean isReplay) throws UserException {
+=======
+    public void updateState(JobState jobState, ErrorReason reason, boolean isReplay) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         writeLock();
         try {
             unprotectUpdateState(jobState, reason, isReplay);
@@ -1345,7 +1421,12 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         }
     }
 
+<<<<<<< HEAD
     protected void unprotectUpdateState(JobState jobState, ErrorReason reason, boolean isReplay) throws UserException {
+=======
+    protected void unprotectUpdateState(JobState jobState, ErrorReason reason, boolean isReplay) throws
+            StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         LOG.info(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, id)
                 .add("current_job_state", getState())
                 .add("desire_job_state", jobState)
@@ -1435,7 +1516,11 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         routineLoadTaskInfoList.clear();
     }
 
+<<<<<<< HEAD
     public void update() throws UserException {
+=======
+    public void update() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // check if db and table exist
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
@@ -1491,7 +1576,11 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     protected void unprotectUpdateProgress() {
     }
 
+<<<<<<< HEAD
     protected boolean unprotectNeedReschedule() throws UserException {
+=======
+    protected boolean unprotectNeedReschedule() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return false;
     }
 
@@ -2064,7 +2153,11 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         }
     }
 
+<<<<<<< HEAD
     protected void updateSubstate(JobSubstate substate, ErrorReason reason) throws UserException {
+=======
+    protected void updateSubstate(JobSubstate substate, ErrorReason reason) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         writeLock();
         LOG.info(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, id)
                 .add("current_job_substate", this.substate)
@@ -2079,11 +2172,19 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         }
     }
 
+<<<<<<< HEAD
     public void updateSubstateStable() throws UserException {
         updateSubstate(JobSubstate.STABLE, null);
     }
 
     public void updateSubstate() throws UserException {
+=======
+    public void updateSubstateStable() throws StarRocksException {
+        updateSubstate(JobSubstate.STABLE, null);
+    }
+
+    public void updateSubstate() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override

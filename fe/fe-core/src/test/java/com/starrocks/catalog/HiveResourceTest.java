@@ -15,7 +15,11 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Maps;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -39,7 +43,11 @@ public class HiveResourceTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testFromStmt(@Mocked GlobalStateMgr globalStateMgr) throws UserException {
+=======
+    public void testFromStmt(@Mocked GlobalStateMgr globalStateMgr) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         String name = "hive0";
         String type = "hive";
         String metastoreURIs = "thrift://127.0.0.1:9380";

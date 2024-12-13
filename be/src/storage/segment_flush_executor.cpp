@@ -43,7 +43,12 @@ public:
               _cntl(cntl),
               _request(request),
               _response(response),
+<<<<<<< HEAD
               _done(done) {}
+=======
+              _done(done),
+              _create_time_ns(MonotonicNanos()) {}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // Destructor which will respond to the brpc if run() or release() is not called.
     ~SegmentFlushTask() override {
@@ -63,6 +68,21 @@ public:
     // Run the task if release() is not called which will flush the segment, and respond the brpc
     // BackendInternalServiceImpl<T>::tablet_writer_add_segment.
     void run() override {
+<<<<<<< HEAD
+=======
+        auto& stat = _flush_token->_stat;
+        stat.num_pending_tasks.fetch_add(-1, std::memory_order_relaxed);
+        stat.pending_time_ns.fetch_add(MonotonicNanos() - _create_time_ns, std::memory_order_relaxed);
+        stat.num_running_tasks.fetch_add(1, std::memory_order_relaxed);
+        int64_t duration_ns = 0;
+        DeferOp defer([&stat, &duration_ns]() {
+            stat.num_running_tasks.fetch_add(-1, std::memory_order_relaxed);
+            stat.num_finished_tasks.fetch_add(1, std::memory_order_relaxed);
+            stat.execute_time_ns.fetch_add(duration_ns, std::memory_order_relaxed);
+        });
+        SCOPED_RAW_TIMER(&duration_ns);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         bool expect = false;
         if (!_run_or_released.compare_exchange_strong(expect, true)) {
             return;
@@ -151,6 +171,10 @@ private:
     const PTabletWriterAddSegmentRequest* _request;
     PTabletWriterAddSegmentResult* _response;
     google::protobuf::Closure* _done;
+<<<<<<< HEAD
+=======
+    int64_t _create_time_ns;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // whether run() or release() has been called
     std::atomic<bool> _run_or_released = false;
 };
@@ -172,6 +196,10 @@ Status SegmentFlushToken::submit(DeltaWriter* writer, brpc::Controller* cntl,
     auto task = std::make_shared<SegmentFlushTask>(this, writer, cntl, request, response, done);
     auto submit_st = _flush_token->submit(task);
     if (submit_st.ok()) {
+<<<<<<< HEAD
+=======
+        _stat.num_pending_tasks.fetch_add(1, std::memory_order_relaxed);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         closure_guard.release();
     } else {
         task->release();

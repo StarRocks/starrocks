@@ -833,6 +833,10 @@ Status NodeChannel::_wait_request(ReusableClosure<PTabletWriterAddBatchResult>* 
     }
 
     if (closure->result.has_load_channel_profile()) {
+<<<<<<< HEAD
+=======
+        SCOPED_TIMER(_ts_profile->update_load_channel_profile_timer);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         const auto* buf = (const uint8_t*)(closure->result.load_channel_profile().data());
         uint32_t len = closure->result.load_channel_profile().size();
         TRuntimeProfileTree thrift_profile;

@@ -16,10 +16,17 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.Sets;
+<<<<<<< HEAD
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
+=======
+import com.starrocks.authorization.PrivilegeBuiltinConstants;
+import com.starrocks.common.AnalysisException;
+import com.starrocks.common.DdlException;
+import com.starrocks.common.jmockit.Deencapsulation;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.ShowExecutor;

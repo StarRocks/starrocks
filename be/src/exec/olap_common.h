@@ -72,6 +72,10 @@ public:
     typedef typename std::set<T>::iterator iterator_type;
     ColumnValueRange();
     ColumnValueRange(std::string col_name, LogicalType type, T min, T max);
+<<<<<<< HEAD
+=======
+    ColumnValueRange(std::string col_name, LogicalType type, T type_min, T type_max, T min, T max);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     Status add_fixed_values(SQLFilterOp op, const std::set<T>& values);
 

@@ -36,7 +36,11 @@ import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LogBuilder;
@@ -138,7 +142,11 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
     }
 
     @Override
+<<<<<<< HEAD
     public void prepare() throws UserException {
+=======
+    public void prepare() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         super.prepare();
         // should reset converted properties each time the job being prepared.
         // because the file info can be changed anytime.
@@ -181,7 +189,11 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
     }
 
     @Override
+<<<<<<< HEAD
     public void divideRoutineLoadJob(int currentConcurrentTaskNum) throws UserException {
+=======
+    public void divideRoutineLoadJob(int currentConcurrentTaskNum) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<RoutineLoadTaskInfo> result = new ArrayList<>();
         writeLock();
         try {
@@ -291,7 +303,11 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
     }
 
     @Override
+<<<<<<< HEAD
     protected void updateProgress(RLTaskTxnCommitAttachment attachment) throws UserException {
+=======
+    protected void updateProgress(RLTaskTxnCommitAttachment attachment) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         super.updateProgress(attachment);
         this.progress.update(attachment.getProgress());
         this.timestampProgress.update(attachment.getTimestampProgress());
@@ -329,7 +345,11 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
     // update current pulsar partition at the same time
     // current pulsar partitions = customPulsarPartitions == 0 ? all of partition of pulsar topic : customPulsarPartitions
     @Override
+<<<<<<< HEAD
     protected boolean unprotectNeedReschedule() throws UserException {
+=======
+    protected boolean unprotectNeedReschedule() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // only running and need_schedule job need to be changed current pulsar partitions
         if (this.state == JobState.RUNNING || this.state == JobState.NEED_SCHEDULE) {
             if (customPulsarPartitions != null && customPulsarPartitions.size() != 0) {
@@ -405,14 +425,22 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
         return gson.toJson(summary);
     }
 
+<<<<<<< HEAD
     private List<String> getAllPulsarPartitions() throws UserException {
+=======
+    private List<String> getAllPulsarPartitions() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // Get custom properties like tokens
         convertCustomProperties(false);
         return PulsarUtil.getAllPulsarPartitions(serviceUrl, topic,
                 subscription, ImmutableMap.copyOf(convertedCustomProperties), warehouseId);
     }
 
+<<<<<<< HEAD
     public static PulsarRoutineLoadJob fromCreateStmt(CreateRoutineLoadStmt stmt) throws UserException {
+=======
+    public static PulsarRoutineLoadJob fromCreateStmt(CreateRoutineLoadStmt stmt) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // check db and table
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(stmt.getDBName());
         if (db == null) {
@@ -443,7 +471,11 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
         return pulsarRoutineLoadJob;
     }
 
+<<<<<<< HEAD
     private void checkCustomPartition() throws UserException {
+=======
+    private void checkCustomPartition() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (customPulsarPartitions.isEmpty()) {
             return;
         }
@@ -471,7 +503,11 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
     }
 
     @Override
+<<<<<<< HEAD
     protected void setOptional(CreateRoutineLoadStmt stmt) throws UserException {
+=======
+    protected void setOptional(CreateRoutineLoadStmt stmt) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         super.setOptional(stmt);
 
         if (!stmt.getPulsarPartitions().isEmpty()) {

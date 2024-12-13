@@ -40,8 +40,13 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.MvId;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
 import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.Status;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.qe.scheduler.Coordinator;
@@ -105,18 +110,30 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
     }
 
     @Override
+<<<<<<< HEAD
     public void registerQuery(TUniqueId queryId, Coordinator coord) throws UserException {
+=======
+    public void registerQuery(TUniqueId queryId, Coordinator coord) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         registerQuery(queryId, new QueryInfo(coord));
     }
 
     @Override
+<<<<<<< HEAD
     public void registerQuery(TUniqueId queryId, QueryInfo info) throws UserException {
+=======
+    public void registerQuery(TUniqueId queryId, QueryInfo info) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (needLogRegisterAndUnregisterQueryId(info)) {
             LOG.info("register query id = {}", DebugUtil.printId(queryId));
         }
         final QueryInfo result = coordinatorMap.putIfAbsent(queryId, info);
         if (result != null) {
+<<<<<<< HEAD
             throw new UserException("queryId " + queryId + " already exists");
+=======
+            throw new StarRocksException("queryId " + queryId + " already exists");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 

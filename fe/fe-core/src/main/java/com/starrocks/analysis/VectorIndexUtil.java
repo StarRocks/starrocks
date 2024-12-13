@@ -14,6 +14,25 @@
 
 package com.starrocks.analysis;
 
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.ArrayType;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.IndexParams;
+import com.starrocks.catalog.IndexParams.IndexParamItem;
+import com.starrocks.catalog.IndexParams.IndexParamType;
+import com.starrocks.catalog.KeysType;
+import com.starrocks.common.Config;
+import com.starrocks.common.VectorIndexParams;
+import com.starrocks.common.VectorIndexParams.CommonIndexParamKey;
+import com.starrocks.common.VectorIndexParams.IndexParamsKey;
+import com.starrocks.common.VectorIndexParams.SearchParamsKey;
+import com.starrocks.common.VectorIndexParams.VectorIndexType;
+import com.starrocks.server.RunMode;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.IndexDef.IndexType;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
@@ -24,6 +43,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+<<<<<<< HEAD
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.KeysType;
@@ -40,6 +60,8 @@ import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.IndexDef.IndexType;
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public class VectorIndexUtil {
 
     public static void checkVectorIndexValid(Column column, Map<String, String> properties, KeysType keysType) {

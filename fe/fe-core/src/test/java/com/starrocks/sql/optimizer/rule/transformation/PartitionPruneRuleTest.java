@@ -325,6 +325,12 @@ public class PartitionPruneRuleTest {
             {
                 olapTable.getPartitionInfo();
                 result = partitionInfo;
+<<<<<<< HEAD
+=======
+                
+                partitionInfo.isListPartition();
+                result = true;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
                 partitionInfo.getType();
                 result = PartitionType.LIST;
@@ -411,6 +417,12 @@ public class PartitionPruneRuleTest {
                 partitionInfo.getLiteralExprValues();
                 result = literalExprValues;
 
+<<<<<<< HEAD
+=======
+                partitionInfo.isListPartition();
+                result = true;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 olapTable.getPartitions();
                 result = Lists.newArrayList(part1, part2);
                 minTimes = 0;

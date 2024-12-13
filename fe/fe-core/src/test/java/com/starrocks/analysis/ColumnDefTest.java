@@ -36,6 +36,7 @@ package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.AggregateFunction;
+<<<<<<< HEAD
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.combinator.AggStateDesc;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -47,6 +48,19 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+=======
+import com.starrocks.catalog.AggregateType;
+import com.starrocks.catalog.ArrayType;
+import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.Type;
+import com.starrocks.catalog.combinator.AggStateDesc;
+import com.starrocks.common.AnalysisException;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.ColumnDef;
+import com.starrocks.sql.ast.ColumnDef.DefaultValueDef;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;

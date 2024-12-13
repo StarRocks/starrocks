@@ -95,8 +95,13 @@ public class ErrorReport {
     }
 
     public static void reportUserException(ErrorCode errorCode, Object... objs)
+<<<<<<< HEAD
             throws UserException {
         throw new UserException(reportCommon(null, errorCode, objs));
+=======
+            throws StarRocksException {
+        throw new StarRocksException(reportCommon(null, errorCode, objs));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public static void reportTimeoutException(ErrorCode errorCode, Object... objs)
@@ -110,13 +115,21 @@ public class ErrorReport {
     }
 
     public interface DdlExecutor {
+<<<<<<< HEAD
         void apply() throws UserException;
+=======
+        void apply() throws StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public static void wrapWithRuntimeException(DdlExecutor fun) {
         try {
             fun.apply();
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             throw new RuntimeException(e);
         }
     }

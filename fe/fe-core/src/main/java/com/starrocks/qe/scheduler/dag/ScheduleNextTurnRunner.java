@@ -14,11 +14,19 @@
 
 package com.starrocks.qe.scheduler.dag;
 
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.rpc.RpcException;
 
 import java.util.Collection;
 
 public interface ScheduleNextTurnRunner {
+<<<<<<< HEAD
     Collection<FragmentInstanceExecState> doSchedule() throws RpcException, UserException;
+=======
+    Collection<FragmentInstanceExecState> doSchedule() throws RpcException, StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

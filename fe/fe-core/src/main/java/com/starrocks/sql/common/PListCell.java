@@ -14,10 +14,25 @@
 
 package com.starrocks.sql.common;
 
+<<<<<<< HEAD
 import com.google.api.client.util.Sets;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSortedSet;
 import com.google.gson.annotations.SerializedName;
+=======
+import com.google.api.client.util.Lists;
+import com.google.api.client.util.Sets;
+import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableSortedSet;
+import com.google.gson.annotations.SerializedName;
+import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.Type;
+import com.starrocks.common.AnalysisException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.persist.gson.GsonUtils;
@@ -30,6 +45,10 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 /**
  * {@code PListCell} means a list partition's multiple values.
  * eg: partition p1 values in ((1, 'a'), (2, 'b')) is a partition items which contains multi values
@@ -98,6 +117,25 @@ public final class PListCell extends PCell implements Comparable<PListCell> {
                 .collect(Collectors.toSet());
     }
 
+<<<<<<< HEAD
+=======
+    public List<PartitionKey> toPartitionKeys(List<Column> columns) throws AnalysisException {
+        List<PartitionKey> partitionKeys = Lists.newArrayList();
+        List<PrimitiveType> types = columns.stream()
+                .map(Column::getType).map(Type::getPrimitiveType).collect(Collectors.toList());
+        for (List<String> item : partitionItems) {
+            Preconditions.checkArgument(item.size() == columns.size(),
+                    String.format("item size %s is not equal to columns size %s", item.size(), columns.size()));
+            List<LiteralExpr> literalExprs = Lists.newArrayList();
+            for (int i = 0; i < item.size(); i++) {
+                literalExprs.add(LiteralExpr.create(item.get(i), columns.get(i).getType()));
+            }
+            partitionKeys.add(new PartitionKey(literalExprs, types));
+        }
+        return partitionKeys;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     /**
      * Add a list of partition items as the partition values
      * @param items new partition items

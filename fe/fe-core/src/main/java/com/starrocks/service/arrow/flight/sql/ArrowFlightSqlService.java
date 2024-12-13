@@ -31,6 +31,7 @@ public class ArrowFlightSqlService {
 
     private static final Logger LOG = LogManager.getLogger(ArrowFlightSqlService.class);
 
+<<<<<<< HEAD
     private final FlightServer flightServer;
 
     protected volatile boolean running;
@@ -38,6 +39,23 @@ public class ArrowFlightSqlService {
     public ArrowFlightSqlService(int port) {
         BufferAllocator allocator = new RootAllocator();
         Location location = Location.forGrpcInsecure("0.0.0.0", port);
+=======
+    private final Location location;
+    private final FlightServer flightServer;
+
+    protected volatile boolean running = false;
+
+    public ArrowFlightSqlService(int port) {
+        // Disable Arrow Flight SQL feature if port is not set to a positive value.
+        if (port <= 0) {
+            this.location = null;
+            this.flightServer = null;
+            return;
+        }
+
+        BufferAllocator allocator = new RootAllocator();
+        this.location = Location.forGrpcInsecure("0.0.0.0", port);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         ArrowFlightSqlTokenManager arrowFlightSqlTokenManager = new ArrowFlightSqlTokenManager();
         ArrowFlightSqlSessionManager arrowFlightSqlSessionManager =
@@ -49,12 +67,17 @@ public class ArrowFlightSqlService {
         ArrowFlightSqlAuthenticator arrowFlightSqlAuthenticator =
                 new ArrowFlightSqlAuthenticator(arrowFlightSqlTokenManager);
 
+<<<<<<< HEAD
         flightServer = FlightServer.builder(allocator, location, producer)
+=======
+        this.flightServer = FlightServer.builder(allocator, location, producer)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 .headerAuthenticator(arrowFlightSqlAuthenticator)
                 .build();
     }
 
     public void start() {
+<<<<<<< HEAD
         try {
             flightServer.start();
             running = true;
@@ -66,11 +89,39 @@ public class ArrowFlightSqlService {
             System.exit(-1);
         } catch (Exception e) {
             LOG.error("Arrow Flight SQL server start failed");
+=======
+        if (location == null) {
+            LOG.info("[ARROW] Arrow Flight SQL server is disabled. You can modify `arrow_flight_port` in `fe.conf` " +
+                    "to a positive value to enable it.");
+            return;
+        }
+
+        if (running) {
+            return;
+        }
+
+        try {
+            flightServer.start();
+            running = true;
+            LOG.info("[ARROW] Arrow Flight SQL server starts on {}:{}.",
+                    location.getUri().getHost(), location.getUri().getPort());
+            flightServer.awaitTermination();
+        } catch (InterruptedException e) {
+            LOG.error("[ARROW] Arrow Flight SQL server was interrupted", e);
+            Thread.currentThread().interrupt();
+            System.exit(-1);
+        } catch (Exception e) {
+            LOG.error("[ARROW] Failed to start Arrow Flight SQL server on {}:{}. Its port might be occupied. You can " +
+                            "modify `arrow_flight_port` in `fe.conf` to an unused port or set it to -1 to disable it.",
+                    location.getUri().getHost(),
+                    location.getUri().getPort(), e);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             System.exit(-1);
         }
     }
 
     public void stop() {
+<<<<<<< HEAD
         if (running) {
             running = false;
             try {
@@ -83,6 +134,22 @@ public class ArrowFlightSqlService {
             } catch (Exception e) {
                 LOG.warn("Error while stopping Arrow Flight SQL server", e);
             }
+=======
+        if (!running) {
+            return;
+        }
+
+        running = false;
+        try {
+            LOG.info("[ARROW] Stopping Arrow Flight SQL server .");
+            flightServer.shutdown();
+            flightServer.awaitTermination(1, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            LOG.warn("[ARROW] Interrupted while stopping Arrow Flight SQL server", e);
+            Thread.currentThread().interrupt();
+        } catch (Exception e) {
+            LOG.warn("[ARROW] Error while stopping Arrow Flight SQL server", e);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 

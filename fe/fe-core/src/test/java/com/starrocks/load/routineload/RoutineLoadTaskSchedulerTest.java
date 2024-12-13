@@ -38,7 +38,11 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Queues;
 import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TRoutineLoadTask;
@@ -97,7 +101,11 @@ public class RoutineLoadTaskSchedulerTest {
                 routineLoadManager.getClusterIdleSlotNum();
                 minTimes = 0;
                 result = 1;
+<<<<<<< HEAD
                 routineLoadManager.checkTaskInJob((UUID) any);
+=======
+                routineLoadManager.checkTaskInJob(anyLong, (UUID) any);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 minTimes = 0;
                 result = true;
 
@@ -157,7 +165,11 @@ public class RoutineLoadTaskSchedulerTest {
                 routineLoadManager.getClusterIdleSlotNum();
                 minTimes = 0;
                 result = 1;
+<<<<<<< HEAD
                 routineLoadManager.checkTaskInJob((UUID) any);
+=======
+                routineLoadManager.checkTaskInJob(anyLong, (UUID) any);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 minTimes = 0;
                 result = true;
 
@@ -169,13 +181,22 @@ public class RoutineLoadTaskSchedulerTest {
 
         new MockUp<KafkaTaskInfo>() {
             @Mock
+<<<<<<< HEAD
             public boolean readyToExecute() throws UserException {
+=======
+            public boolean readyToExecute() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 return true;
             }
 
             @Mock
+<<<<<<< HEAD
             public TRoutineLoadTask createRoutineLoadTask() throws UserException {
                 throw new UserException("txn does not exist: 1");
+=======
+            public TRoutineLoadTask createRoutineLoadTask() throws StarRocksException {
+                throw new StarRocksException("txn does not exist: 1");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         };
 
@@ -186,8 +207,13 @@ public class RoutineLoadTaskSchedulerTest {
             }
 
             @Mock
+<<<<<<< HEAD
             public TRoutineLoadTask createRoutineLoadTask() throws UserException {
                 throw new UserException("txn does not exist: 1");
+=======
+            public TRoutineLoadTask createRoutineLoadTask() throws StarRocksException {
+                throw new StarRocksException("txn does not exist: 1");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         };
 
@@ -197,7 +223,11 @@ public class RoutineLoadTaskSchedulerTest {
         try {
             routineLoadTaskScheduler.scheduleOneTask(routineLoadTaskInfo1);
         } catch (Exception e) {
+<<<<<<< HEAD
             Assert.assertTrue(e instanceof UserException);
+=======
+            Assert.assertTrue(e instanceof StarRocksException);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             Assert.assertEquals("txn does not exist: 1", e.getMessage());
             Assert.assertEquals(RoutineLoadJob.JobState.PAUSED, routineLoadJob.state);
         }
@@ -239,7 +269,11 @@ public class RoutineLoadTaskSchedulerTest {
                 routineLoadManager.getClusterIdleSlotNum();
                 minTimes = 0;
                 result = 1;
+<<<<<<< HEAD
                 routineLoadManager.checkTaskInJob((UUID) any);
+=======
+                routineLoadManager.checkTaskInJob(anyLong, (UUID) any);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 minTimes = 0;
                 result = true;
 
@@ -251,12 +285,20 @@ public class RoutineLoadTaskSchedulerTest {
 
         new MockUp<KafkaTaskInfo>() {
             @Mock
+<<<<<<< HEAD
             public boolean readyToExecute() throws UserException {
+=======
+            public boolean readyToExecute() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 return true;
             }
 
             @Mock
+<<<<<<< HEAD
             public TRoutineLoadTask createRoutineLoadTask() throws UserException {
+=======
+            public TRoutineLoadTask createRoutineLoadTask() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 throw new MetaNotFoundException("database 1 does not exist");
             }
         };
@@ -268,7 +310,11 @@ public class RoutineLoadTaskSchedulerTest {
             }
 
             @Mock
+<<<<<<< HEAD
             public TRoutineLoadTask createRoutineLoadTask() throws UserException {
+=======
+            public TRoutineLoadTask createRoutineLoadTask() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 throw new MetaNotFoundException("database 1 does not exist");
             }
         };

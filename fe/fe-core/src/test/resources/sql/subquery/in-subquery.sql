@@ -703,7 +703,12 @@ select t0.v1 from t0 where (v1 + 10, v2 + v2) IN (select t1.v4 + t1.v5, t1.v5 fr
 LEFT SEMI JOIN (join-predicate [9: add = 7: expr AND 10: add = 5: v5] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2] predicate[null])
     EXCHANGE BROADCAST
+<<<<<<< HEAD
         SCAN (columns[4: v4, 5: v5] predicate[add(4: v4, 5: v5) IS NOT NULL AND 5: v5 IS NOT NULL])
+=======
+        PREDICATE 7: expr IS NOT NULL
+            SCAN (columns[4: v4, 5: v5] predicate[5: v5 IS NOT NULL])
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 [end]
 
 [sql]
@@ -723,4 +728,9 @@ LEFT SEMI JOIN (join-predicate [15: cast = 16: cast AND 17: cast = 18: cast] pos
     EXCHANGE BROADCAST
         PREDICATE cast(aa as double) IS NOT NULL
             VALUES (null)
+<<<<<<< HEAD
 [end]
+=======
+[end]
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

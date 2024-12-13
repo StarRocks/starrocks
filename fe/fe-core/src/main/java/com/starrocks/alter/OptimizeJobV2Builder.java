@@ -17,7 +17,11 @@ package com.starrocks.alter;
 
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.OptimizeClause;
 import com.starrocks.thrift.TStorageType;
 import org.apache.logging.log4j.LogManager;
@@ -40,7 +44,11 @@ public class OptimizeJobV2Builder extends AlterJobV2Builder {
     }
 
     @Override
+<<<<<<< HEAD
     public AlterJobV2 build() throws UserException {
+=======
+    public AlterJobV2 build() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         long tableId = table.getId();
         if (!Config.enable_online_optimize_table || optimizeClause.getKeysDesc() != null
                 || optimizeClause.getPartitionDesc() != null || optimizeClause.getSortKeys() != null

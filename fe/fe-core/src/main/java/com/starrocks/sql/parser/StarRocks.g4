@@ -316,6 +316,10 @@ statement
     | showWarehousesStatement
     | showClustersStatement
     | showNodesStatement
+<<<<<<< HEAD
+=======
+    | alterWarehouseStatement
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // Unsupported Statement
     | unsupportedStatement
@@ -674,7 +678,11 @@ alterMaterializedViewStatement
     ;
 
 refreshMaterializedViewStatement
+<<<<<<< HEAD
     : REFRESH MATERIALIZED VIEW mvName=qualifiedName (PARTITION (partitionRangeDesc | listPartitionValues))? FORCE? (WITH (SYNC | ASYNC) MODE)?
+=======
+    : REFRESH MATERIALIZED VIEW mvName=qualifiedName (PARTITION (partitionRangeDesc | listPartitionValues))? FORCE? (WITH (SYNC | ASYNC) MODE)? (WITH PRIORITY priority=INTEGER_VALUE)?
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ;
 
 cancelRefreshMaterializedViewStatement
@@ -1132,6 +1140,10 @@ addPartitionClause
 dropPartitionClause
     : DROP TEMPORARY? (PARTITION (IF EXISTS)? identifier | PARTITIONS (IF EXISTS)? identifierList) FORCE?
     | DROP TEMPORARY? PARTITIONS (IF EXISTS)? multiRangePartition FORCE?
+<<<<<<< HEAD
+=======
+    | DROP TEMPORARY? PARTITIONS (IF EXISTS)? WHERE where=expression FORCE?
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ;
 
 truncatePartitionClause
@@ -1263,7 +1275,11 @@ showStreamLoadStatement
 // ------------------------------------------- Analyze Statement -------------------------------------------------------
 
 analyzeStatement
+<<<<<<< HEAD
     : ANALYZE (FULL | SAMPLE)? TABLE qualifiedName ('(' qualifiedName  (',' qualifiedName)* ')')?
+=======
+    : ANALYZE (FULL | SAMPLE)? TABLE qualifiedName ('(' qualifiedName  (',' qualifiedName)* ')')? partitionNames?
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         (WITH (SYNC | ASYNC) MODE)?
         properties?
     ;
@@ -2037,6 +2053,13 @@ showNodesStatement
     | SHOW NODES FROM WAREHOUSE identifier
     ;
 
+<<<<<<< HEAD
+=======
+alterWarehouseStatement
+    : ALTER WAREHOUSE warehouseName=identifierOrString modifyPropertiesClause
+    ;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 // ------------------------------------------- Query Statement ---------------------------------------------------------
 
 queryStatement
@@ -2140,7 +2163,11 @@ relation
     ;
 
 relationPrimary
+<<<<<<< HEAD
     : qualifiedName queryPeriod? partitionNames? tabletList? replicaList? (
+=======
+    : qualifiedName queryPeriod? partitionNames? tabletList? replicaList? sampleClause? (
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         AS? alias=identifier)? bracketHint? (BEFORE ts=string)?                          #tableAtom
     | '(' VALUES rowConstructor (',' rowConstructor)* ')'
         (AS? alias=identifier columnAliases?)?                                          #inlineTable
@@ -2168,6 +2195,13 @@ pivotValue
     : (literalExpression | literalExpressionList) (AS? (identifier | string))?
     ;
 
+<<<<<<< HEAD
+=======
+sampleClause
+    : SAMPLE propertyList?
+    ;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 argumentList
     : expressionList
     | namedArgumentList

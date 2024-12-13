@@ -408,7 +408,12 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVRefreshTest
                     }
                     Assert.assertEquals(1, statuses.size());
                     TaskRunStatus status = statuses.get(0);
+<<<<<<< HEAD
                     Assert.assertEquals(Constants.TaskRunPriority.HIGHEST.value(), status.getPriority());
+=======
+                    // default priority for next refresh batch is Constants.TaskRunPriority.HIGHER.value()
+                    Assert.assertEquals(Constants.TaskRunPriority.HIGHER.value(), status.getPriority());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     starRocksAssert.dropMaterializedView("mv_refresh_priority");
                 }
         );
@@ -449,16 +454,42 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVRefreshTest
                                 MaterializedView mv = ((MaterializedView) testDb.getTable(mvName));
                                 executeInsertSql(connectContext,
                                         "insert into tbl6 partition(p1) values('2022-01-02',2,10);");
+<<<<<<< HEAD
+=======
+                                executeInsertSql(connectContext, "insert into tbl6 partition(p2) values('2022-02-02',2,10);");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
                                 HashMap<String, String> taskRunProperties = new HashMap<>();
                                 taskRunProperties.put(TaskRun.FORCE, Boolean.toString(true));
                                 Task task = TaskBuilder.buildMvTask(mv, testDb.getFullName());
+<<<<<<< HEAD
                                 TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
                                 initAndExecuteTaskRun(taskRun);
+=======
+                                ExecuteOption executeOption = new ExecuteOption(70, false, new HashMap<>());
+                                TaskRun taskRun = TaskRunBuilder.newBuilder(task).setExecuteOption(executeOption).build();
+                                initAndExecuteTaskRun(taskRun);
+                                TGetTasksParams params = new TGetTasksParams();
+                                params.setTask_name(task.getName());
+                                TaskManager tm = GlobalStateMgr.getCurrentState().getTaskManager();
+                                List<TaskRunStatus> statuses = tm.getMatchedTaskRunStatus(params);
+                                while (statuses.size() != 1) {
+                                    statuses = tm.getMatchedTaskRunStatus(params);
+                                    Thread.sleep(100);
+                                }
+                                Assert.assertEquals(1, statuses.size());
+                                TaskRunStatus status = statuses.get(0);
+                                // the priority for next refresh batch is 70 which is specified in executeOption
+                                Assert.assertEquals(70, status.getPriority());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
                                 PartitionBasedMvRefreshProcessor processor =
                                         (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
                                 MvTaskRunContext mvTaskRunContext = processor.getMvContext();
+<<<<<<< HEAD
+=======
+                                Assert.assertEquals(70, mvTaskRunContext.getExecuteOption().getPriority());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                 Map<String, String> properties = mvTaskRunContext.getProperties();
                                 Assert.assertEquals(1, properties.size());
                                 Assert.assertTrue(properties.containsKey(MV_ID));
@@ -470,6 +501,10 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVRefreshTest
                                 // Ensure that session properties are set
                                 Assert.assertTrue(sessionVariable.isEnableMaterializedViewRewrite());
                                 Assert.assertTrue(sessionVariable.isEnableMaterializedViewRewriteForInsert());
+<<<<<<< HEAD
+=======
+                                starRocksAssert.dropMaterializedView(mvName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                             });
                 }
         );

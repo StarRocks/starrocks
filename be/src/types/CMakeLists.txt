@@ -20,6 +20,10 @@ add_library(Types STATIC
     date_value.cpp
     hll.cpp
     hll_sketch.cpp
+<<<<<<< HEAD
+=======
+    large_int_value.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     logical_type.cpp
     map_type_info.cpp
     struct_type_info.cpp

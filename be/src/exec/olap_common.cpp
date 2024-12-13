@@ -44,8 +44,13 @@
 #include "exec/scan_node.h"
 #include "gutil/stl_util.h"
 #include "gutil/strings/substitute.h"
+<<<<<<< HEAD
 #include "runtime/large_int_value.h"
 #include "storage/tuple.h"
+=======
+#include "storage/tuple.h"
+#include "types/large_int_value.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 namespace starrocks {
 
@@ -462,8 +467,13 @@ Status ColumnValueRange<T>::add_range(SQLFilterOp op, T value) {
                 if (value > _low_value) {
                     _low_value = value;
                     _low_op = op;
+<<<<<<< HEAD
                 } else if (value <= _type_min) {
                     return Status::NotSupported("reject value smaller than or equals to type min");
+=======
+                } else if (value < _type_min) {
+                    return Status::NotSupported("reject value smaller than type min");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 } else {
                     // accept this value, but keep range unchanged.
                 }
@@ -484,8 +494,13 @@ Status ColumnValueRange<T>::add_range(SQLFilterOp op, T value) {
                 if (value < _high_value) {
                     _high_value = value;
                     _high_op = op;
+<<<<<<< HEAD
                 } else if (value >= _type_max) {
                     return Status::NotSupported("reject value larger than or equals to type max");
+=======
+                } else if (value > _type_max) {
+                    return Status::NotSupported("reject value larger than type max");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 } else {
                     // accept this value, but keep range unchanged.
                 }
@@ -661,6 +676,21 @@ ColumnValueRange<T>::ColumnValueRange(std::string col_name, LogicalType type, T 
           _fixed_op(FILTER_IN) {}
 
 template <class T>
+<<<<<<< HEAD
+=======
+ColumnValueRange<T>::ColumnValueRange(std::string col_name, LogicalType type, T type_min, T type_max, T min, T max)
+        : _column_name(std::move(col_name)),
+          _column_type(type),
+          _type_min(type_min),
+          _type_max(type_max),
+          _low_value(min),
+          _high_value(max),
+          _low_op(FILTER_LARGER_OR_EQUAL),
+          _high_op(FILTER_LESS_OR_EQUAL),
+          _fixed_op(FILTER_IN) {}
+
+template <class T>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 bool ColumnValueRange<T>::is_fixed_value_range() const {
     return _fixed_values.size() != 0 || _empty_range;
 }

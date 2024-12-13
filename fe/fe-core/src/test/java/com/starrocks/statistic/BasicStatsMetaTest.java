@@ -94,7 +94,12 @@ public class BasicStatsMetaTest extends PlanTestBase {
         {
             ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
             DataOutputStream dataOutputStream = new DataOutputStream(byteArrayOutputStream);
+<<<<<<< HEAD
             String s = "{\"dbId\":10001,\"tableId\":10177,\"columns\":[],\"type\":\"FULL\",\"updateTime\":1721650800," +
+=======
+            String s = "{\"dbId\":" + db.getId() +
+                    ",\"tableId\":" + tbl.getId() + ",\"columns\":[],\"type\":\"FULL\",\"updateTime\":1721650800," +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     "\"properties\":{},\"updateRows\":10000}";
             Text.writeString(dataOutputStream, s);
 

@@ -40,7 +40,10 @@ set(RUNTIME_FILES
     runtime_state.cpp
     string_value.cpp
     decimalv2_value.cpp
+<<<<<<< HEAD
     large_int_value.cpp
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     fragment_mgr.cpp
     load_path_mgr.cpp
     dummy_load_path_mgr.cpp

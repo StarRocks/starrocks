@@ -23,6 +23,10 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.Partition;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
@@ -129,6 +133,24 @@ public class AnalyzeStmtAnalyzer {
                 statement.setColumnNames(realColumnNames);
             }
 
+<<<<<<< HEAD
+=======
+            if (statement.getPartitionNames() != null) {
+                if (!analyzeTable.isNativeTableOrMaterializedView()) {
+                    throw new SemanticException("Analyze partition only support olap table");
+                }
+                List<Long> pidList = Lists.newArrayList();
+                for (String partitionName : statement.getPartitionNames().getPartitionNames()) {
+                    Partition p = analyzeTable.getPartition(partitionName);
+                    if (p == null) {
+                        throw new SemanticException("Partition '%s' not found", partitionName);
+                    }
+                    pidList.add(p.getId());
+                }
+                statement.setPartitionIds(pidList);
+            }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             analyzeProperties(statement.getProperties());
             analyzeAnalyzeTypeDesc(session, statement, statement.getAnalyzeTypeDesc());
 
@@ -318,7 +340,11 @@ public class AnalyzeStmtAnalyzer {
                         for (String partName : partitionNames) {
                             List<String> values = toPartitionValues(partName);
                             PartitionKey partitionKey = createPartitionKey(values, analyzeTable.getPartitionColumns(),
+<<<<<<< HEAD
                                     analyzeTable.getType());
+=======
+                                    analyzeTable);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                             keys.add(partitionKey);
                         }
                     } catch (AnalysisException e) {

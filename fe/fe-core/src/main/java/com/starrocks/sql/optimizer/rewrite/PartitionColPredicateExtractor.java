@@ -16,7 +16,10 @@ package com.starrocks.sql.optimizer.rewrite;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
+<<<<<<< HEAD
 import com.starrocks.catalog.RangePartitionInfo;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -52,8 +55,12 @@ public class PartitionColPredicateExtractor extends ScalarOperatorVisitor<Scalar
 
     private final ColumnRefSet partitionColumnSet;
 
+<<<<<<< HEAD
     public PartitionColPredicateExtractor(List<Column> partitionColumns, RangePartitionInfo rangePartitionInfo,
                                           Map<Column, ColumnRefOperator> columnMetaToColRefMap) {
+=======
+    public PartitionColPredicateExtractor(List<Column> partitionColumns, Map<Column, ColumnRefOperator> columnMetaToColRefMap) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<ColumnRefOperator> columnRefOperators = Lists.newArrayList();
         Column partitionColumn = partitionColumns.get(0);
         for (ColumnRefOperator columnRefOperator : columnMetaToColRefMap.values()) {
@@ -256,5 +263,8 @@ public class PartitionColPredicateExtractor extends ScalarOperatorVisitor<Scalar
         }
         return false;
     }
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

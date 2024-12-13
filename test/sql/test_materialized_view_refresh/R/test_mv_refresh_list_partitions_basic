@@ -459,9 +459,15 @@ partition by dt
 REFRESH DEFERRED MANUAL
 distributed by hash(dt, province) buckets 10 
 PROPERTIES (
+<<<<<<< HEAD
 'partition_refresh_number' = '-1',
 "replication_num" = "1",
 "partition_ttl_number" = "1"
+=======
+      'partition_refresh_number' = '-1',
+      "replication_num" = "1",
+      "partition_retention_condition" = "dt > '2024-01-01'"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ) 
 as select dt, province, sum(age) from t5 group by dt, province;
 -- result:
@@ -471,9 +477,15 @@ select * from test_mv1 order by 1, 2;
 -- result:
 2024-01-02	guangdong	20
 -- !result
+<<<<<<< HEAD
 function: assert_table_partitions_num("test_mv1", 1)
 -- result:
 None
+=======
+function: print_table_partitions_num("test_mv1")
+-- result:
+1
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result
 function: check_hit_materialized_view("select dt, province, sum(age) from t5 group by dt, province order by 1, 2;", "test_mv1")
 -- result:
@@ -502,16 +514,26 @@ drop materialized view test_mv1;
 -- result:
 -- !result
 create materialized view test_mv1
+<<<<<<< HEAD
 partition by province
 REFRESH DEFERRED MANUAL
 distributed by hash(dt, province) buckets 10 
 PROPERTIES (
 "replication_num" = "1",
 "partition_ttl_number" = "1"
+=======
+partition by dt
+REFRESH DEFERRED MANUAL
+distributed by hash(dt, province) buckets 10 
+PROPERTIES (
+      "replication_num" = "1",
+      "partition_retention_condition" = "dt > '2024-01-01'"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ) 
 as select dt, province, sum(age) from t5 group by dt, province;
 -- result:
 -- !result
+<<<<<<< HEAD
 refresh materialized view  test_mv1 with sync mode;
 select * from test_mv1 order by 1, 2;
 -- result:
@@ -522,6 +544,21 @@ function: assert_table_partitions_num("test_mv1", 1)
 -- result:
 None
 -- !result
+=======
+refresh materialized view  test_mv1;
+function: wait_async_materialized_view_finish("db_${uuid0}",'test_mv1')
+-- result:
+None
+-- !result
+select * from test_mv1 order by 1, 2;
+-- result:
+2024-01-02	guangdong	20
+-- !result
+function: print_table_partitions_num("test_mv1")
+-- result:
+1
+-- !result
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 function: check_hit_materialized_view("select dt, province, sum(age) from t5 group by dt, province order by 1, 2;", "test_mv1")
 -- result:
 None
@@ -548,6 +585,7 @@ select dt, province, sum(age) from t5 group by dt, province order by 1, 2;
 drop materialized view test_mv1;
 -- result:
 -- !result
+<<<<<<< HEAD
 create materialized view test_mv1
 partition by dt
 REFRESH DEFERRED MANUAL
@@ -598,6 +636,8 @@ select dt, province, sum(age) from t5 group by dt, province order by 1, 2;
 drop materialized view test_mv1;
 -- result:
 -- !result
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 drop table t3;
 -- result:
 -- !result

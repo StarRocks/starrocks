@@ -238,8 +238,12 @@ public class MaterializedViewAnalyzerTest {
             Assert.fail();
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage().
+<<<<<<< HEAD
                     contains("Do not support create materialized view when base iceberg table partition transform " +
                             "has bucket or truncate."));
+=======
+                    contains("Do not support create materialized view when base iceberg table partition transform "));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -265,7 +269,11 @@ public class MaterializedViewAnalyzerTest {
         try {
             starRocksAssert.useDatabase("test")
                     .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`iceberg_bucket_mv1`\n" +
+<<<<<<< HEAD
                             "PARTITION BY (id, data, ts)\n" +
+=======
+                            "PARTITION BY (id, data, date_trunc('year', ts))\n" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                             "REFRESH DEFERRED MANUAL\n" +
                             "AS SELECT id, data, ts  FROM `iceberg0`.`partitioned_transforms_db`.`t0_multi_year` as a;");
             Table mv = starRocksAssert.getTable("test", "iceberg_bucket_mv1");

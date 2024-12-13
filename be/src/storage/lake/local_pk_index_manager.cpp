@@ -40,7 +40,14 @@ Status LocalPkIndexManager::clear_persistent_index(int64_t tablet_id) {
         // Properly handle the case where the data_dir is null before proceeding.
         return Status::NotFound("Data directory not found for tablet_id=" + std::to_string(tablet_id));
     }
+<<<<<<< HEAD
 
+=======
+    return clear_persistent_index(tablet_id, data_dir);
+}
+
+Status LocalPkIndexManager::clear_persistent_index(int64_t tablet_id, DataDir* data_dir) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     WriteBatch wb;
     auto status = TabletMetaManager::clear_persistent_index(data_dir, &wb, tablet_id);
     if (status.ok()) {
@@ -59,7 +66,10 @@ Status LocalPkIndexManager::clear_persistent_index(int64_t tablet_id) {
             }
         }
     }
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     return status;
 }
 
@@ -86,6 +96,7 @@ void LocalPkIndexManager::gc(UpdateManager* update_manager, DataDir* data_dir, s
         }
         // judge whether tablet should be in the data_dir or not,
         // for data_dir may change if config:storage_path changed.
+<<<<<<< HEAD
         // just remove if not.
         if (StorageEngine::instance()->get_persistent_index_store(id) != data_dir) {
             dir_changed_tablet_ids.push_back(id);
@@ -94,6 +105,38 @@ void LocalPkIndexManager::gc(UpdateManager* update_manager, DataDir* data_dir, s
             } else {
                 gc_fail_because_delete_fail++;
             }
+=======
+        // just remove index from old dir if not.
+        auto dir_changed = StorageEngine::instance()->get_persistent_index_store(id) != data_dir;
+        TEST_SYNC_POINT_CALLBACK("LocalPkIndexManager:index_dir_changed:1", &dir_changed);
+        if (dir_changed) {
+            // try lock first, because the shard may be scheduled back to old dir again
+            auto try_lock = update_manager->try_lock_pk_index_shard(id);
+            TEST_SYNC_POINT_CALLBACK("LocalPkIndexManager:index_dir_changed:3", &try_lock);
+            if (!try_lock) {
+                LOG(WARNING) << "Fail to lock pk index, tablet id: " << id;
+                gc_fail_because_lock_fail++;
+                continue;
+            }
+            // double check in the lock
+            dir_changed = StorageEngine::instance()->get_persistent_index_store(id) != data_dir;
+            TEST_SYNC_POINT_CALLBACK("LocalPkIndexManager:index_dir_changed:2", &dir_changed);
+            if (dir_changed) {
+                dir_changed_tablet_ids.push_back(id);
+                // try to remove pk index cache to avoid continuing to use the index in the cache after deletion.
+                if (update_manager->try_remove_primary_index_cache(id)) {
+                    // clear index from old dir
+                    if (clear_persistent_index(id, data_dir).ok()) {
+                        removed_dir_tablet_ids.push_back(id);
+                    } else {
+                        gc_fail_because_delete_fail++;
+                    }
+                } else {
+                    gc_fail_because_ref++;
+                }
+            }
+            update_manager->unlock_pk_index_shard(id);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } else if (!tablet_manager->is_tablet_in_worker(id)) {
             // the shard may be scheduled to other nodes
             if (!update_manager->try_lock_pk_index_shard(id)) {

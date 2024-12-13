@@ -70,6 +70,10 @@ public enum RuleType {
     TF_PUSH_DOWN_PREDICATE_REPEAT,
     TF_PUSH_DOWN_AGG_TO_META_SCAN,
     TF_PUSH_DOWN_FLAT_JSON_TO_META_SCAN,
+<<<<<<< HEAD
+=======
+    TF_PULL_UP_PREDICATE_SCAN,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     TF_MERGE_PREDICATE_SCAN,
     TF_MERGE_TWO_FILTERS,
     TF_PUSH_DOWN_PREDICATE_CTE_CONSUME,

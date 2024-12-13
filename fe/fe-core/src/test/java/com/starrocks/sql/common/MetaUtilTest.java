@@ -20,6 +20,10 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.PhysicalPartition;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Table;
@@ -86,6 +90,24 @@ public class MetaUtilTest {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testIsPhysicalPartitionExist() {
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), "t0");
+        List<PhysicalPartition> partitionList = new ArrayList<>(table.getPhysicalPartitions());
+        Assert.assertFalse(MetaUtils.isPhysicalPartitionExist(GlobalStateMgr.getCurrentState(),
+                -1, -1, -1));
+        Assert.assertFalse(MetaUtils.isPhysicalPartitionExist(GlobalStateMgr.getCurrentState(),
+                database.getId(), -1, -1));
+        Assert.assertFalse(MetaUtils.isPhysicalPartitionExist(GlobalStateMgr.getCurrentState(),
+                database.getId(), table.getId(), -1));
+        Assert.assertTrue(MetaUtils.isPhysicalPartitionExist(GlobalStateMgr.getCurrentState(),
+                database.getId(), table.getId(), partitionList.get(0).getId()));
+    }
+
+    @Test
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void testGetColumnsByColumnIds() {
         Column columnA = new Column("a", Type.INT);
         Column columnB = new Column("b", Type.STRING);
