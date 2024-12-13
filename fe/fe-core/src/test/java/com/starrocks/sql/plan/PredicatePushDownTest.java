@@ -13,9 +13,15 @@
 // limitations under the License.
 package com.starrocks.sql.plan;
 
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 public class PredicatePushDownTest extends PlanTestBase {
+    @BeforeClass
+    public static void beforeClass() throws Exception {
+        PlanTestBase.beforeClass();
+        connectContext.getSessionVariable().setEnableScanPredicateExprReuse(true);
+    }
 
     @Test
     public void testCoalescePushDown() throws Exception {
@@ -67,7 +73,7 @@ public class PredicatePushDownTest extends PlanTestBase {
         {
             String sql = "select * from t0 where coalesce(v1 < 2, null, v2 > 1)";
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "PREDICATES: coalesce(1: v1 < 2, NULL, 2: v2 > 1)");
+            assertContains(plan, "predicates: coalesce(1: v1 < 2, NULL, 2: v2 > 1)");
         }
         {
             String sql = "WITH cte0 AS (\n" +

@@ -379,6 +379,15 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
     }
 
     @Override
+    public DecodeInfo visitPhysicalFilter(OptExpression optExpression, DecodeInfo context) {
+        if (optExpression.getInputs().get(0).getOp() instanceof PhysicalOlapScanOperator) {
+            // PhysicalFilter->PhysicalOlapScan is a special pattern, the Filter's predicate is extracted from OlapScan,
+            // we should keep the DecodeInfo from it's input.
+            return context.createOutputInfo();
+        }
+        return context.createDecodeInfo();
+    }
+    @Override
     public DecodeInfo visitPhysicalJoin(OptExpression optExpression, DecodeInfo context) {
         if (context.outputStringColumns.isEmpty()) {
             return DecodeInfo.EMPTY;
@@ -469,6 +478,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
 
         return info;
     }
+
 
     @Override
     public DecodeInfo visitPhysicalTableFunction(OptExpression optExpression, DecodeInfo context) {

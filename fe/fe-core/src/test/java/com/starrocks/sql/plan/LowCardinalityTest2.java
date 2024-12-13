@@ -167,6 +167,7 @@ public class LowCardinalityTest2 extends PlanTestBase {
         connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
         connectContext.getSessionVariable().setCboCteReuse(false);
         connectContext.getSessionVariable().setUseLowCardinalityOptimizeV2(true);
+        connectContext.getSessionVariable().setEnableScanPredicateExprReuse(true);
     }
 
     @AfterClass
@@ -932,15 +933,15 @@ public class LowCardinalityTest2 extends PlanTestBase {
         // Test multi input Expression with DictColumn
         sql = "select count(*) from supplier where if(S_ADDRESS = 'kks',cast(S_COMMENT as boolean), false)";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan, plan.contains(
-                "PREDICATES: if(DictDecode(12: S_ADDRESS, [<place-holder> = 'kks']), " +
-                        "DictDecode(13: S_COMMENT, [CAST(<place-holder> AS BOOLEAN)]), FALSE)"));
+        assertContains(plan,
+                "predicates: if(DictDecode(12: S_ADDRESS, [<place-holder> = 'kks']), " +
+                        "DictDecode(13: S_COMMENT, [CAST(<place-holder> AS BOOLEAN)]), FALSE)");
 
         // Test multi input Expression with No-String Column
         sql = "select count(*) from supplier where if(S_ADDRESS = 'kks',cast(S_NAME as boolean), false)";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan, plan.contains(
-                "PREDICATES: if(DictDecode(12: S_ADDRESS, [<place-holder> = 'kks']), CAST(2: S_NAME AS BOOLEAN), FALSE)"));
+        assertContains(plan,
+                "predicates: if(DictDecode(12: S_ADDRESS, [<place-holder> = 'kks']), CAST(2: S_NAME AS BOOLEAN), FALSE)");
 
         // Test Two input column. one could apply the other couldn't apply
         // The first expression that can accept a full rewrite. the second couldn't apply
@@ -954,9 +955,14 @@ public class LowCardinalityTest2 extends PlanTestBase {
         sql = "select count(*) from supplier where if(S_ADDRESS = 'kks',cast(S_COMMENT as boolean), false) " +
                 "and S_COMMENT not like '%kks%'";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan, plan.contains("PREDICATES: if(DictDecode(12: S_ADDRESS, [<place-holder> = 'kks']), " +
-                "DictDecode(13: S_COMMENT, [CAST(<place-holder> AS BOOLEAN)]), FALSE), " +
-                "DictDecode(13: S_COMMENT, [NOT (<place-holder> LIKE '%kks%')])"));
+        assertContains(plan, "  1:SELECT\n" +
+                "  |  predicates: if(DictDecode(12: S_ADDRESS, [<place-holder> = 'kks']), " +
+                "DictDecode(13: S_COMMENT, [CAST(<place-holder> AS BOOLEAN)]), FALSE)\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: supplier\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: DictDecode(13: S_COMMENT, [NOT (<place-holder> LIKE '%kks%')])");
 
     }
 

@@ -784,6 +784,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_REWRITE_UNNEST_BITMAP_TO_ARRAY = "enable_rewrite_unnest_bitmap_to_array";
 
+    public static final String ENABLE_SCAN_PREDICATE_EXPR_REUSE = "enable_scan_predicate_expr_reuse";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -1550,6 +1552,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // If we want to get the exactly matched result, we can disable this.
     @VarAttr(name = ENABLE_COUNT_DISTINCT_REWRITE_BY_HLL_BITMAP)
     private boolean enableCountDistinctRewriteByHllBitmap = true;
+
+    @VarAttr(name = ENABLE_SCAN_PREDICATE_EXPR_REUSE, flag = VariableMgr.INVISIBLE)
+    private boolean enableScanPredicateExprReuse = false;
 
     public int getCboPruneJsonSubfieldDepth() {
         return cboPruneJsonSubfieldDepth;
@@ -4122,6 +4127,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableCountDistinctRewriteByHllBitmap(boolean enableCountDistinctRewriteByHllBitmap) {
         this.enableCountDistinctRewriteByHllBitmap = enableCountDistinctRewriteByHllBitmap;
+    }
+
+    public void setEnableScanPredicateExprReuse(boolean enableScanPredicateExprReuse) {
+        this.enableScanPredicateExprReuse = enableScanPredicateExprReuse;
+    }
+
+    public boolean isEnableScanPredicateExprReuse() {
+        return enableScanPredicateExprReuse;
     }
 
     public boolean isEnableRewriteUnnestBitmapToArray() {
