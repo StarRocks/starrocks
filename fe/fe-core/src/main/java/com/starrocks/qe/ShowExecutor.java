@@ -576,7 +576,7 @@ public class ShowExecutor {
         @Override
         public ShowResultSet visitShowTableStatusStatement(ShowTableStatusStmt statement, ConnectContext context) {
             List<List<String>> rows = Lists.newArrayList();
-            Database db = context.getGlobalStateMgr().getLocalMetastore().getDb(statement.getDb());
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(statement.getDb());
             ZoneId currentTimeZoneId = TimeUtils.getTimeZone().toZoneId();
             if (db != null) {
                 Locker locker = new Locker();
@@ -593,8 +593,8 @@ public class ShowExecutor {
                         }
 
                         try {
-                            Authorizer.checkAnyActionOnTable(context.getCurrentUserIdentity(),
-                                    context.getCurrentRoleIds(), new TableName(db.getFullName(), table.getName()));
+                            Authorizer.checkAnyActionOnTableLikeObject(context.getCurrentUserIdentity(),
+                                    context.getCurrentRoleIds(), db.getFullName(), table);
                         } catch (AccessDeniedException e) {
                             continue;
                         }
@@ -1853,10 +1853,10 @@ public class ShowExecutor {
 
             // restore info for external catalog
             AbstractJob jobI = GlobalStateMgr.getCurrentState().getBackupHandler().getJob(-1L);
-            if (jobI != null && jobI instanceof RestoreJob) {  
+            if (jobI != null && jobI instanceof RestoreJob) {
                 RestoreJob restoreJob = (RestoreJob) jobI;
                 List<String> info = restoreJob.getInfo();
-                infos.add(info); 
+                infos.add(info);
             }
 
             return new ShowResultSet(statement.getMetaData(), infos);
