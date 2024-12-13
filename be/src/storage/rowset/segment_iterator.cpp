@@ -45,6 +45,7 @@
 #include "storage/index/vector/vector_index_reader_factory.h"
 #include "storage/index/vector/vector_search_option.h"
 #include "storage/lake/update_manager.h"
+#include "storage/olap_runtime_range_pruner.h"
 #include "storage/olap_runtime_range_pruner.hpp"
 #include "storage/projection_iterator.h"
 #include "storage/range.h"

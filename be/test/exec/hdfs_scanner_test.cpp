@@ -2720,6 +2720,7 @@ TEST_F(HdfsScannerTest, TestMinMaxFilterWhenContainsComplexTypes) {
         ExprContext* ctx = create_expr_context(&_pool, nodes);
         param->min_max_conjunct_ctxs.push_back(ctx);
         param->scanner_conjunct_ctxs.push_back(ctx);
+        param->all_conjunct_ctxs.push_back(ctx);
     }
     {
         std::vector<TExprNode> nodes;
@@ -2729,6 +2730,7 @@ TEST_F(HdfsScannerTest, TestMinMaxFilterWhenContainsComplexTypes) {
         ExprContext* ctx = create_expr_context(&_pool, nodes);
         param->min_max_conjunct_ctxs.push_back(ctx);
         param->scanner_conjunct_ctxs.push_back(ctx);
+        param->all_conjunct_ctxs.push_back(ctx);
     }
 
     ASSERT_OK(Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state));

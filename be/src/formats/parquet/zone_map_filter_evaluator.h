@@ -21,6 +21,19 @@ namespace starrocks::parquet {
 
 enum class FilterLevel { ROW_GROUP = 0, PAGE_INDEX };
 
+class ZoneMapEvaluatorUtils {
+public:
+    static bool is_satisfy(const std::vector<const ColumnPredicate*>& predicates, const ZoneMapDetail& detail,
+                           const CompoundNodeType pred_relation) {
+        if (pred_relation == CompoundNodeType::AND) {
+            return std::ranges::all_of(predicates, [&](const auto* pred) { return pred->zone_map_filter(detail); });
+        } else {
+            return predicates.empty() ||
+                   std::ranges::any_of(predicates, [&](const auto* pred) { return pred->zone_map_filter(detail); });
+        }
+    }
+};
+
 template <FilterLevel level>
 struct ZoneMapEvaluator {
     template <CompoundNodeType Type>
@@ -35,7 +48,7 @@ struct ZoneMapEvaluator {
         for (const auto& [cid, col_preds] : cid_to_col_preds) {
             SparseRange<uint64_t> cur_row_ranges;
 
-            const auto* column_reader = group_reader->get_column_reader(cid);
+            auto* column_reader = group_reader->get_column_reader(cid);
 
             if (column_reader == nullptr) {
                 // ColumnReader not found, select all by default
@@ -47,7 +60,14 @@ struct ZoneMapEvaluator {
                     cur_row_ranges.add({rg_first_row, rg_first_row + rg_num_rows});
                 }
             } else {
-                return Status::InternalError("not supported yet");
+                ASSIGN_OR_RETURN(bool has_filtered,
+                                 column_reader->page_index_zone_map_filter(
+                                         col_preds, &cur_row_ranges, Type, group_reader->get_row_group_first_row(),
+                                         group_reader->get_row_group_metadata()->num_rows));
+                if (!has_filtered) {
+                    // no filter happened, select the whole row group by default
+                    cur_row_ranges.add({rg_first_row, rg_first_row + rg_num_rows});
+                }
             }
 
             merge_row_ranges<Type>(row_ranges, cur_row_ranges);
