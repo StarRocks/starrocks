@@ -15,6 +15,7 @@ package com.starrocks.qe;
 
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.TableName;
+import com.starrocks.authorization.IdGenerator;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.MaterializedView;
@@ -23,7 +24,6 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.ConnectorTblMetaInfoMgr;
-import com.starrocks.privilege.IdGenerator;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.MetadataMgr;

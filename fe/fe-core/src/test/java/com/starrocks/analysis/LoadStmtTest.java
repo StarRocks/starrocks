@@ -35,8 +35,8 @@
 package com.starrocks.analysis;
 
 import com.starrocks.common.UserException;
-import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.LoadStmt;
 import org.junit.Assert;
