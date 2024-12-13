@@ -241,6 +241,9 @@ public class TableFunctionTable extends Table {
                     files.add(fileInfo);
                 }
             }
+            if (files.isEmpty()) {
+                ErrorReport.reportDdlException(ErrorCode.ERR_NO_FILES_FOUND, path);
+            }
             return files;
         } catch (StarRocksException e) {
             LOG.warn("failed to parse files", e);
