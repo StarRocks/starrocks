@@ -2547,8 +2547,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The time interval at which the FE retrieves tablet statistics from each BE.
 - Introduced in: -
 
-<<<<<<< HEAD
-=======
 ##### max_automatic_partition_number
 
 - Default: 4096
@@ -2558,43 +2556,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The maximum number of automatically created partitions.
 - Introduced in: v3.1
 
-##### auto_partition_max_creation_number_per_load
-
-- Default: 4096
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: The maximum number of partitions can be created in a table (with Expression Partitioning strategy) by a loading task.
-- Introduced in: v3.3.2
-
-##### max_partition_number_per_table
-
-- Default: 100000
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: The maximum number of partitions can be created in a table.
-- Introduced in: v3.3.2
-
-##### max_bucket_number_per_partition
-
-- Default: 1024
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: The maximum number of buckets can be created in a partition.
-- Introduced in: v3.3.2
-
-##### max_column_number_per_table
-
-- Default: 10000
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: The maximum number of columns can be created in a table.
-- Introduced in: v3.3.2
-
->>>>>>> e3e6a2a47e ([Doc] Add Desc of max_automatic_partition_number (#53574))
 ### Shared-data
 
 ##### run_mode
