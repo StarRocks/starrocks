@@ -94,6 +94,7 @@ struct GroupReaderParam {
 
     // used for pageIndex
     std::vector<ExprContext*> min_max_conjunct_ctxs;
+    const PredicateTree* predicate_tree = nullptr;
 
     // partition column
     const std::vector<HdfsScannerContext::ColumnInfo>* partition_columns = nullptr;
