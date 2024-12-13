@@ -190,7 +190,6 @@ TEST_F(ChunkPredicateBuilderTest, varchar_rt_has_no_null) {
 
     _opts.runtime_filters = ret1.value();
 
-    std::vector<BoxedExprContext> containers;
     ChunkPredicateBuilder<BoxedExprContext, CompoundNodeType::AND> builder(_opts, _expr_containers, true);
 
     auto ret2 = builder.parse_conjuncts();
@@ -291,7 +290,7 @@ TEST_F(ChunkPredicateBuilderTest, in_runtime_filter_has_null) {
 
     ExprContext* expr_ctx = builder.get_in_const_predicate();
 
-    containers.emplace_back(BoxedExprContext(expr_ctx));
+    _expr_containers.emplace_back(BoxedExprContext(expr_ctx));
 
     ChunkPredicateBuilder<BoxedExprContext, CompoundNodeType::AND> pred_builder(_opts, expr_containers, true);
     auto ret = pred_builder.parse_conjuncts();
@@ -322,7 +321,7 @@ TEST_F(ChunkPredicateBuilderTest, in_runtime_filter_has_no_null) {
 
     ExprContext* expr_ctx = builder.get_in_const_predicate();
 
-    containers.emplace_back(BoxedExprContext(expr_ctx));
+    _expr_containers.emplace_back(BoxedExprContext(expr_ctx));
 
     ChunkPredicateBuilder<BoxedExprContext, CompoundNodeType::AND> pred_builder(_opts, _expr_containers, true);
     auto ret = pred_builder.parse_conjuncts();
