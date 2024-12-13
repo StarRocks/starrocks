@@ -95,3 +95,8 @@ select * from t2;
 truncate table t2;
 
 shell: ossutil64 rm -rf oss://${oss_bucket}/test_files/csv_format/${uuid0}/ > /dev/null
+
+-- check insert_max_filter_ratio
+set insert_max_filter_ratio = xxx;
+set insert_max_filter_ratio = -1;
+set insert_max_filter_ratio = 1.2;
