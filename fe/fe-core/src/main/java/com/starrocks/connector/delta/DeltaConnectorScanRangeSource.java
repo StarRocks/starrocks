@@ -95,8 +95,8 @@ public class DeltaConnectorScanRangeSource implements ConnectorScanRangeSource {
         DescriptorTable.ReferencedPartitionInfo referencedPartitionInfo = referencedPartitions.get(partitionId);
         TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
         THdfsScanRange hdfsScanRange = new THdfsScanRange();
-        hdfsScanRange.setRelative_path("/" + Paths.get(table.getTableLocation()).
-                relativize(Paths.get(fileStatus.getPath())));
+        hdfsScanRange.setRelative_path(URLDecoder.decode("/" + Paths.get(table.getTableLocation()).
+                relativize(Paths.get(fileStatus.getPath())), StandardCharsets.UTF_8));
         hdfsScanRange.setOffset(0);
         hdfsScanRange.setLength(fileStatus.getSize());
         hdfsScanRange.setPartition_id(partitionId);
