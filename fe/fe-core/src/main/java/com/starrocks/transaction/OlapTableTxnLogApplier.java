@@ -20,7 +20,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Tablet;
@@ -108,9 +107,7 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
                 LOG.warn("partition {} is dropped, ignore", partitionId);
                 continue;
             }
-            PartitionInfo partitionInfo = table.getPartitionInfo();
-            short replicationNum = partitionInfo.getReplicationNum(partitionId);
-            int quorumReplicaNum = partitionInfo.getQuorumNum(partitionId, table.writeQuorum());
+            short replicationNum = table.getPartitionInfo().getReplicationNum(partitionId);
             long version = partitionCommitInfo.getVersion();
             List<MaterializedIndex> allIndices =
                     partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
@@ -119,8 +116,6 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
                 for (Tablet tablet : index.getTablets()) {
                     boolean hasFailedVersion = false;
                     List<Replica> replicas = ((LocalTablet) tablet).getImmutableReplicas();
-                    boolean isDependencyReplicasNotCommited = txnState.
-                            checkTransactionDependencyReplicasNotCommited((LocalTablet) tablet, quorumReplicaNum);
                     for (Replica replica : replicas) {
                         if (txnState.isNewFinish()) {
                             updateReplicaVersion(version, replica, txnState.getFinishState());
@@ -132,31 +127,25 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
                         if (!txnState.tabletCommitInfosContainsReplica(tablet.getId(), replica.getBackendId(),
                                 replica.getState())
                                 || errorReplicaIds.contains(replica.getId())) {
-                            if (isDependencyReplicasNotCommited && replica.getVersion() >= version) {
-                                // this means the replica is a normal replica
-                                // success version always move forward
-                                lastSucessVersion = version;
-                            } else {
-                                // There are 2 cases that we can't update version to visible version and need to
-                                // set lastFailedVersion.
-                                // 1. this replica doesn't have version publish yet. This maybe happen when clone concurrent
-                                //    with data loading.
-                                // 2. this replica has data loading failure.
-                                //
-                                // for example, A,B,C 3 replicas, B,C failed during publish version (Or never publish),
-                                // then B C will be set abnormal and all loadings will be failed, B,C will have to recover
-                                // by clone, it is very inefficient and may lose data.
-                                // Using this method, B,C will publish failed, and fe will publish again,
-                                // not update their last failed version.
-                                // if B is published successfully in next turn, then B is normal and C will be set
-                                // abnormal so that quorum is maintained and loading will go on.
-                                String combinedId = String.format("%d_%d", tablet.getId(), replica.getBackendId());
-                                skipUpdateReplicas.add(combinedId);
-                                newVersion = replica.getVersion();
-                                if (version > lastFailedVersion) {
-                                    lastFailedVersion = version;
-                                    hasFailedVersion = true;
-                                }
+                            // There are 2 cases that we can't update version to visible version and need to
+                            // set lastFailedVersion.
+                            // 1. this replica doesn't have version publish yet. This maybe happen when clone concurrent
+                            //    with data loading.
+                            // 2. this replica has data loading failure.
+                            //
+                            // for example, A,B,C 3 replicas, B,C failed during publish version (Or never publish),
+                            // then B C will be set abnormal and all loadings will be failed, B,C will have to recover
+                            // by clone, it is very inefficient and may lose data.
+                            // Using this method, B,C will publish failed, and fe will publish again,
+                            // not update their last failed version.
+                            // if B is published successfully in next turn, then B is normal and C will be set
+                            // abnormal so that quorum is maintained and loading will go on.
+                            String combinedId = String.format("%d_%d", tablet.getId(), replica.getBackendId());
+                            skipUpdateReplicas.add(combinedId);
+                            newVersion = replica.getVersion();
+                            if (version > lastFailedVersion) {
+                                lastFailedVersion = version;
+                                hasFailedVersion = true;
                             }
                         } else {
                             if (replica.getLastFailedVersion() > 0) {

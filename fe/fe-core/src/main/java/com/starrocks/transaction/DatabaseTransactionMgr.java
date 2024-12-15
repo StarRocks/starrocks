@@ -1081,8 +1081,6 @@ public class DatabaseTransactionMgr {
                         for (MaterializedIndex index : allIndices) {
                             for (Tablet tablet : index.getTablets()) {
                                 int healthReplicaNum = 0;
-                                boolean isDependencyReplicasNotCommited = transactionState.
-                                        checkTransactionDependencyReplicasNotCommited((LocalTablet) tablet, quorumReplicaNum);
                                 for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                                     if (transactionState.isVersionOverwrite()) {
                                         ++healthReplicaNum;
@@ -1095,12 +1093,8 @@ public class DatabaseTransactionMgr {
                                             continue;
                                         }
                                         // if replica not commit yet, skip it. This may happen when it's just create by clone.
-                                        if (!transactionState.tabletCommitInfosContainsReplica(tablet.getId(),
-                                                replica.getBackendId(), replica.getState())) {
-                                            if (!(isDependencyReplicasNotCommited
-                                                    && replica.getVersion() >= partitionCommitInfo.getVersion())) {
-                                                continue;
-                                            }
+                                        if (transactionState.checkReplicaNeedSkip(tablet, replica, partitionCommitInfo)) {
+                                            continue;
                                             //this means the replica is normal
                                         }
                                         // this means the replica is a healthy replica,
