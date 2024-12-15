@@ -452,7 +452,6 @@ public class TransactionState implements Writable {
         // With a high streamload frequency and too many tablets involved,
         // TabletCommitInfos will take up too much memory.
         tabletCommitInfos = null;
-
     }
 
     public boolean tabletCommitInfosContainsReplica(long tabletId, long backendId, ReplicaState state) {
