@@ -43,6 +43,11 @@ public:
     // Initializes the LoadSpillBlockManager.
     Status init();
 
+    // acquire Block from BlockManager
+    StatusOr<spill::BlockPtr> acquire_block(int64_t tablet_id, int64_t txn_id, size_t block_size);
+    // return Block to BlockManager
+    Status release_block(spill::BlockPtr block);
+
     spill::BlockManager* block_manager() { return _block_manager.get(); }
     LoadSpillBlockContainer* block_container() { return _block_container.get(); }
 

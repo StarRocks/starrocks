@@ -367,6 +367,7 @@ Status DeltaWriterImpl::write(const Chunk& chunk, const uint32_t* indexes, uint3
     if (_load_spill_block_mgr == nullptr) {
         _load_spill_block_mgr = std::make_unique<LoadSpillBlockManager>(
                 UniqueId(_load_id).to_thrift(), _tablet_manager->tablet_root_location(_tablet_id));
+        RETURN_IF_ERROR(_load_spill_block_mgr->init());
     }
     if (_mem_table == nullptr) {
         // When loading memory usage is larger than hard limit, we will reject new loading task.

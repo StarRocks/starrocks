@@ -51,4 +51,21 @@ Status LoadSpillBlockManager::init() {
     return Status::OK();
 }
 
+// acquire Block from BlockManager
+StatusOr<spill::BlockPtr> LoadSpillBlockManager::acquire_block(int64_t tablet_id, int64_t txn_id, size_t block_size) {
+    spill::AcquireBlockOptions opts;
+    opts.query_id = _load_id; // load id as query id
+    opts.fragment_instance_id =
+            UniqueId(tablet_id, txn_id).to_thrift(); // use tablet id + txn id to generate fragment instance id
+    opts.plan_node_id = 0;
+    opts.name = "load_spill";
+    opts.block_size = block_size;
+    return _block_manager->acquire_block(opts);
+}
+
+// return Block to BlockManager
+Status LoadSpillBlockManager::release_block(spill::BlockPtr block) {
+    return _block_manager->release_block(block);
+}
+
 } // namespace starrocks::lake
