@@ -303,12 +303,11 @@ public class Database extends MetaObject implements Writable {
             idToTable.put(tableId, table);
         } else {
             String tableName = table.getName();
-            long tableId = table.getId();
-            if (idToTable.containsKey(tableId)) {
+            if (nameToTable.containsKey(tableName)) {
                 return false;
             }
-            idToTable.put(tableId, table);
-            nameToTable.put(tableName, table);
+            idToTable.put(table.getId(), table);
+            nameToTable.put(table.getName(), table);
         }
         return true;
     }

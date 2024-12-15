@@ -1936,7 +1936,14 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         Locker locker = new Locker();
         locker.lockDatabase(db.getId(), LockType.WRITE);
         try {
-            db.registerTableUnlocked(table);
+            if (!db.registerTableUnlocked(table)) {
+                if (table != null && !table.isTemporaryTable()) {
+                    // In replay create table, there must not be a table
+                    // with the same name, unless there is a bug.
+                    db.dropTable(table.getName());
+                    db.registerTableUnlocked(table);
+                }
+            }
             if (table.isTemporaryTable()) {
                 TemporaryTableMgr temporaryTableMgr = GlobalStateMgr.getCurrentState().getTemporaryTableMgr();
                 UUID sessionId = ((OlapTable) table).getSessionId();
