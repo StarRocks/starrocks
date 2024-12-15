@@ -139,7 +139,6 @@ public class ShowStmtAnalyzer {
             return visitShowTableStatement(node, context);
         }
 
-
         @Override
         public Void visitShowTabletStatement(ShowTabletStmt node, ConnectContext context) {
             ShowTabletStmtAnalyzer.analyze(node, context);
@@ -498,8 +497,8 @@ public class ShowStmtAnalyzer {
                                 mysqlTable.getPort(),
                                 mysqlTable.getUserName(),
                                 mysqlTable.getPasswd(),
-                                mysqlTable.getMysqlDatabaseName(),
-                                mysqlTable.getMysqlTableName());
+                                mysqlTable.getCatalogDBName(),
+                                mysqlTable.getCatalogTableName());
                         node.getTotalRows().add(row);
                     } else {
                         ErrorReport.reportSemanticException(ErrorCode.ERR_UNKNOWN_STORAGE_ENGINE, table.getType());

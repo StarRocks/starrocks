@@ -100,7 +100,6 @@ public class RuntimeFilterTest {
                         "where d.k5 is null\n" +
                         ") tbl order by 1 desc limit 15";
         String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql);
-        System.out.println(plan);
         Assert.assertTrue(plan, plan.contains("7:Project\n" +
                 "  |  output columns:\n" +
                 "  |  39 <-> [39: k13, DECIMAL128(27,9), true]\n" +

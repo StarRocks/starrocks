@@ -15,11 +15,11 @@
 package com.starrocks.catalog.system.sys;
 
 import com.google.common.collect.ImmutableMap;
+import com.starrocks.authorization.AccessControlProvider;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.memory.MemoryStat;
 import com.starrocks.memory.MemoryUsageTracker;
-import com.starrocks.privilege.AccessControlProvider;
-import com.starrocks.privilege.AccessDeniedException;
-import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TAuthInfo;

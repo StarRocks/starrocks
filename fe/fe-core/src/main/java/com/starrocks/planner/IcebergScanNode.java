@@ -20,7 +20,7 @@ import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.GetRemoteFilesParams;
@@ -98,7 +98,7 @@ public class IcebergScanNode extends ScanNode {
         return scanRangeSource.getOutputs((int) maxScanRangeLength);
     }
 
-    public void setupScanRangeLocations(boolean enableIncrementalScanRanges) throws UserException {
+    public void setupScanRangeLocations(boolean enableIncrementalScanRanges) throws StarRocksException {
         Preconditions.checkNotNull(snapshotId, "snapshot id is null");
         if (snapshotId.isEmpty()) {
             LOG.warn(String.format("Table %s has no snapshot!", icebergTable.getCatalogTableName()));
@@ -144,11 +144,11 @@ public class IcebergScanNode extends ScanNode {
 
         // Hard coding here
         // Try to get tabular signed temporary credential
-        CloudConfiguration tabularTempCloudConfiguration = CloudConfigurationFactory.
-                buildCloudConfigurationForTabular(icebergTable.getNativeTable().io().properties());
-        if (tabularTempCloudConfiguration.getCloudType() != CloudType.DEFAULT) {
+        CloudConfiguration vendedCredentialsCloudConfiguration = CloudConfigurationFactory.
+                buildCloudConfigurationForVendedCredentials(icebergTable.getNativeTable().io().properties());
+        if (vendedCredentialsCloudConfiguration.getCloudType() != CloudType.DEFAULT) {
             // If we get CloudConfiguration succeed from iceberg FileIO's properties, we just using it.
-            cloudConfiguration = tabularTempCloudConfiguration;
+            cloudConfiguration = vendedCredentialsCloudConfiguration;
         } else {
             CatalogConnector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
             Preconditions.checkState(connector != null,

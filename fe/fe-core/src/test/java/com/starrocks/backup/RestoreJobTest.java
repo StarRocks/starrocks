@@ -61,7 +61,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.catalog.View;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -164,10 +164,6 @@ public class RestoreJobTest {
 
         new Expectations(globalStateMgr) {
             {
-                GlobalStateMgr.getCurrentState();
-                minTimes = 0;
-                result = globalStateMgr;
-
                 globalStateMgr.getEditLog();
                 minTimes = 0;
                 result = editLog;
@@ -221,6 +217,14 @@ public class RestoreJobTest {
                 systemInfoService.getNodeSelector().seqChooseBackendIds(anyInt, anyBoolean, anyBoolean, null);
                 minTimes = 0;
                 result = beIds;
+
+                systemInfoService.getBackend(anyLong);
+                minTimes = 0;
+                result = null;
+
+                systemInfoService.getComputeNode(anyLong);
+                minTimes = 0;
+                result = null;
 
                 systemInfoService.checkExceedDiskCapacityLimit((Multimap<Long, Long>) any, anyBoolean);
                 minTimes = 0;
@@ -398,6 +402,14 @@ public class RestoreJobTest {
                 minTimes = 0;
                 result = beIds;
 
+                systemInfoService.getBackend(anyLong);
+                minTimes = 0;
+                result = null;
+
+                systemInfoService.getComputeNode(anyLong);
+                minTimes = 0;
+                result = null;
+
                 systemInfoService.checkExceedDiskCapacityLimit((Multimap<Long, Long>) any, anyBoolean);
                 minTimes = 0;
                 result = com.starrocks.common.Status.OK;
@@ -560,6 +572,14 @@ public class RestoreJobTest {
                 systemInfoService.getNodeSelector().seqChooseBackendIds(anyInt, anyBoolean, anyBoolean, null);
                 minTimes = 0;
                 result = beIds;
+
+                systemInfoService.getBackend(anyLong);
+                minTimes = 0;
+                result = null;
+
+                systemInfoService.getComputeNode(anyLong);
+                minTimes = 0;
+                result = null;
 
                 systemInfoService.checkExceedDiskCapacityLimit((Multimap<Long, Long>) any, anyBoolean);
                 minTimes = 0;
@@ -822,7 +842,7 @@ public class RestoreJobTest {
 
         new MockUp<View>() {
             @Mock
-            public synchronized QueryStatement getQueryStatement() throws UserException {
+            public synchronized QueryStatement getQueryStatement() throws StarRocksException {
                 return null;
             }
         };
@@ -848,7 +868,7 @@ public class RestoreJobTest {
         {
             new MockUp<View>() {
                 @Mock
-                public synchronized QueryStatement init() throws UserException {
+                public synchronized QueryStatement init() throws StarRocksException {
                     return null;
                 }
             };
@@ -887,7 +907,7 @@ public class RestoreJobTest {
         {
             new MockUp<View>() {
                 @Mock
-                public synchronized QueryStatement init() throws UserException {
+                public synchronized QueryStatement init() throws StarRocksException {
                     return null;
                 }
             };

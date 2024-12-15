@@ -50,8 +50,8 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.ThreadPoolManager;
-import com.starrocks.common.UserException;
 import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.http.HttpMetricRegistry;
@@ -727,7 +727,7 @@ public final class MetricRepo {
             List<PKafkaOffsetProxyResult> offsetProxyResults;
             try {
                 offsetProxyResults = KafkaUtil.getBatchOffsets(requests);
-            } catch (UserException e) {
+            } catch (StarRocksException e) {
                 LOG.warn("get batch offsets failed", e);
                 return;
             }

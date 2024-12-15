@@ -27,7 +27,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
@@ -245,12 +245,12 @@ public class PseudoClusterTest {
 
         new MockUp<StarOSAgent>() {
             @Mock
-            public long getPrimaryComputeNodeIdByShard(long shardId) throws UserException {
+            public long getPrimaryComputeNodeIdByShard(long shardId) throws StarRocksException {
                 return GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(true).get(0);
             }
 
             @Mock
-            public long getPrimaryComputeNodeIdByShard(long shardId, long workerGroupId) throws UserException {
+            public long getPrimaryComputeNodeIdByShard(long shardId, long workerGroupId) throws StarRocksException {
                 return GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(true).get(0);
             }
 
@@ -260,7 +260,7 @@ public class PseudoClusterTest {
             }
 
             @Mock
-            public List<Long> getWorkersByWorkerGroup(long workerGroupId) throws UserException {
+            public List<Long> getWorkersByWorkerGroup(long workerGroupId) throws StarRocksException {
                 // the worker id is a random number
                 return new ArrayList<>(Arrays.asList(10001L));
             }

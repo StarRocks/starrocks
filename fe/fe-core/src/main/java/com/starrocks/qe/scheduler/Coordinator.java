@@ -15,8 +15,8 @@
 package com.starrocks.qe.scheduler;
 
 import com.starrocks.analysis.DescriptorTable;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
-import com.starrocks.common.UserException;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.datacache.DataCacheSelectMetrics;
 import com.starrocks.planner.PlanFragment;
@@ -89,9 +89,26 @@ public abstract class Coordinator {
     // ------------------------------------------------------------------------------------
     // Common methods for scheduling.
     // ------------------------------------------------------------------------------------
+    public static class ScheduleOption {
+        public boolean doDeploy = true;
+        public boolean useQueryDeployExecutor = false;
+    }
 
     public void exec() throws Exception {
-        startScheduling();
+        ScheduleOption option = new ScheduleOption();
+        startScheduling(option);
+    }
+
+    public void execWithoutDeploy() throws Exception {
+        ScheduleOption option = new ScheduleOption();
+        option.doDeploy = false;
+        startScheduling(option);
+    }
+
+    public void execWithQueryDeployExecutor() throws Exception {
+        ScheduleOption option = new ScheduleOption();
+        option.useQueryDeployExecutor = true;
+        startScheduling(option);
     }
 
     /**
@@ -102,21 +119,11 @@ public abstract class Coordinator {
      *     <li> Deploys them to the related workers, if the parameter {@code needDeploy} is true.
      * </ul>
      * <p>
-     *
-     * @param needDeploy Whether deploying fragment instances to workers.
      */
-    public abstract void startScheduling(boolean needDeploy) throws Exception;
+    public abstract void startScheduling(ScheduleOption option) throws Exception;
 
     public Status scheduleNextTurn(TUniqueId fragmentInstanceId) {
         return Status.OK;
-    }
-
-    public void startScheduling() throws Exception {
-        startScheduling(true);
-    }
-
-    public void startSchedulingWithoutDeploy() throws Exception {
-        startScheduling(false);
     }
 
     public abstract String getSchedulerExplain();
@@ -132,7 +139,7 @@ public abstract class Coordinator {
     public abstract void cancel(PPlanFragmentCancelReason reason, String message);
 
     public List<DeployState> assignIncrementalScanRangesToDeployStates(Deployer deployer, List<DeployState> deployStates)
-            throws UserException {
+            throws StarRocksException {
         return List.of();
     }
 

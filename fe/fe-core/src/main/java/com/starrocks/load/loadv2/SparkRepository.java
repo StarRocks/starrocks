@@ -42,7 +42,7 @@ import com.starrocks.StarRocksFE;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.common.Config;
 import com.starrocks.common.LoadException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.BrokerUtil;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.thrift.TBrokerFileStatus;
@@ -178,7 +178,7 @@ public class SparkRepository {
                 result = HdfsUtil.checkPathExist(remotePath, brokerDesc);
             }
             LOG.info("check archive exists in repository, {}", result);
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             LOG.warn("Failed to check remote archive exist, path={}, version={}", remotePath, currentDppVersion);
         }
         return result;
@@ -231,7 +231,7 @@ public class SparkRepository {
             }
             LOG.info("finished to upload archive to repository, currentDppVersion={}, path={}",
                     currentDppVersion, remoteArchivePath);
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             throw new LoadException(e.getMessage());
         }
     }
@@ -244,7 +244,7 @@ public class SparkRepository {
             } else {
                 HdfsUtil.parseFile(remoteArchivePath + "/*", brokerDesc, fileStatuses);
             }
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             throw new LoadException(e.getMessage());
         }
 
@@ -313,7 +313,7 @@ public class SparkRepository {
                 HdfsUtil.writeFile(srcFilePath, destFilePath, brokerDesc);
             }
             LOG.info("finished to upload file, localPath={}, remotePath={}", srcFilePath, destFilePath);
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             throw new LoadException("failed to upload lib to repository, srcPath=" + srcFilePath +
                     " destPath=" + destFilePath + " message=" + e.getMessage());
         }
@@ -327,7 +327,7 @@ public class SparkRepository {
                 HdfsUtil.rename(origFilePath, destFilePath, brokerDesc);
             }
             LOG.info("finished to rename file, originPath={}, destPath={}", origFilePath, destFilePath);
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             throw new LoadException("failed to rename file from " + origFilePath + " to " + destFilePath +
                     ", message=" + e.getMessage());
         }

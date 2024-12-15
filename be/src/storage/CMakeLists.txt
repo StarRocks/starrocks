@@ -99,8 +99,9 @@ set(STORAGE_FILES
     rowset/ordinal_page_index.cpp
     rowset/page_io.cpp
     rowset/binary_dict_page.cpp
-    rowset/dict_page.cpp
     rowset/binary_prefix_page.cpp
+    rowset/data_sample.cpp
+    rowset/dict_page.cpp
     rowset/segment.cpp
     rowset/segment_writer.cpp
     rowset/segment_rewriter.cpp
@@ -135,6 +136,7 @@ set(STORAGE_FILES
     column_not_in_predicate.cpp
     column_null_predicate.cpp
     column_or_predicate.cpp
+    column_and_predicate.cpp
     column_expr_predicate.cpp
     conjunctive_predicates.cpp
     predicate_tree/predicate_tree.cpp

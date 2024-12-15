@@ -14,6 +14,7 @@
 
 package com.starrocks.qe.feedback.skeleton;
 
+import com.starrocks.catalog.Table;
 import com.starrocks.qe.feedback.NodeExecStats;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
@@ -22,21 +23,27 @@ import java.util.Objects;
 
 public class ScanNode extends SkeletonNode {
 
+    // The tableId of the external table is monotonically increasing for each instance.
+    // There is no need to compare between hashcode and equals
     private final long tableId;
 
-    private final String tableName;
+    private final String tableIdentifier;
 
     public ScanNode(OptExpression optExpression,
                     NodeExecStats nodeExecStats, SkeletonNode parent) {
         super(optExpression, nodeExecStats, parent);
         PhysicalScanOperator scanOperator = (PhysicalScanOperator) optExpression.getOp();
-        tableId = scanOperator.getTable().getId();
-        tableName = scanOperator.getTable().getName();
+        Table table = scanOperator.getTable();
+        tableId = table.isExternalTableWithFileSystem() ? -1 : table.getId();
+        tableIdentifier = scanOperator.getTable().getTableIdentifier();
     }
 
-    @Override
-    public int hashCode() {
-        return Objects.hash(super.hashCode(), tableId);
+    public long getTableId() {
+        return tableId;
+    }
+
+    public String getTableIdentifier() {
+        return tableIdentifier;
     }
 
     @Override
@@ -45,14 +52,18 @@ public class ScanNode extends SkeletonNode {
             return true;
         }
 
-        if (!super.equals(o)) {
-            return false;
-        }
-
         if (o == null || getClass() != o.getClass()) {
             return false;
         }
+        if (!super.equals(o)) {
+            return false;
+        }
         ScanNode scanNode = (ScanNode) o;
-        return tableId == scanNode.tableId;
+        return tableId == scanNode.tableId && Objects.equals(tableIdentifier, scanNode.tableIdentifier);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(super.hashCode(), tableId, tableIdentifier);
     }
 }

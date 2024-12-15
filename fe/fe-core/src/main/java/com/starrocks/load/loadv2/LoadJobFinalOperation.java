@@ -25,7 +25,6 @@ import com.starrocks.load.FailMsg;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TxnCommitAttachment;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
@@ -108,20 +107,6 @@ public class LoadJobFinalOperation extends TxnCommitAttachment implements Writab
         } else {
             out.writeBoolean(true);
             failMsg.write(out);
-        }
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-        id = in.readLong();
-        loadingStatus.readFields(in);
-        progress = in.readInt();
-        loadStartTimestamp = in.readLong();
-        finishTimestamp = in.readLong();
-        jobState = JobState.valueOf(Text.readString(in));
-        if (in.readBoolean()) {
-            failMsg = new FailMsg();
-            failMsg.readFields(in);
         }
     }
 

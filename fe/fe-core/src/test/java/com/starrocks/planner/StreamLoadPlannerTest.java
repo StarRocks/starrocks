@@ -39,20 +39,20 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.Expr;
-import com.starrocks.lake.LakeTablet;
-import com.starrocks.load.streamload.StreamLoadKvParams;
-import com.starrocks.server.WarehouseManager;
-import com.starrocks.sql.ast.ImportColumnsStmt;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
+import com.starrocks.lake.LakeTablet;
 import com.starrocks.load.routineload.KafkaRoutineLoadJob;
 import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.streamload.StreamLoadInfo;
+import com.starrocks.load.streamload.StreamLoadKvParams;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.ast.ImportColumnsStmt;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TFileFormatType;
@@ -127,7 +127,7 @@ public class StreamLoadPlannerTest {
     }
 
     @Test
-    public void testNormalPlan() throws UserException {
+    public void testNormalPlan() throws StarRocksException {
         List<Column> columns = Lists.newArrayList();
         Column c1 = new Column("c1", Type.BIGINT, false);
         columns.add(c1);
@@ -168,7 +168,7 @@ public class StreamLoadPlannerTest {
     }
 
     @Test
-    public void testPartialUpdatePlan() throws UserException {
+    public void testPartialUpdatePlan() throws StarRocksException {
         List<Column> columns = Lists.newArrayList();
         Column c1 = new Column("c1", Type.BIGINT, false);
         columns.add(c1);
@@ -211,7 +211,7 @@ public class StreamLoadPlannerTest {
     }
 
     @Test
-    public void testPartialUpdateMode() throws UserException {
+    public void testPartialUpdateMode() throws StarRocksException {
         StreamLoadKvParams param = new StreamLoadKvParams(
                 Collections.singletonMap(HTTP_PARTIAL_UPDATE_MODE, "column"));
         UUID uuid = UUID.randomUUID();

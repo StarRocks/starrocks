@@ -15,7 +15,7 @@
 package com.starrocks.common.util;
 
 import com.starrocks.common.NoAliveBackendException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.server.RunMode;
 import mockit.Mock;
 import mockit.MockUp;
@@ -28,7 +28,7 @@ public class AutoInferUtilTest {
     public void testCalDefaultReplicationNum() throws Exception {
         try {
             AutoInferUtil.calDefaultReplicationNum();
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             Assert.assertTrue(e instanceof NoAliveBackendException
                     && e.getMessage().contains("No alive backend"));
         }

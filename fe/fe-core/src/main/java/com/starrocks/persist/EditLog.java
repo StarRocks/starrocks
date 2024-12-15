@@ -36,11 +36,14 @@ package com.starrocks.persist;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.gson.JsonParseException;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.BatchAlterJobPersistInfo;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.authentication.UserProperty;
 import com.starrocks.authentication.UserPropertyInfo;
+import com.starrocks.authorization.RolePrivilegeCollectionV2;
+import com.starrocks.authorization.UserPrivilegeCollectionV2;
 import com.starrocks.backup.BackupJob;
 import com.starrocks.backup.Repository;
 import com.starrocks.backup.RestoreJob;
@@ -63,6 +66,7 @@ import com.starrocks.ha.LeaderInfo;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
+import com.starrocks.journal.SerializeException;
 import com.starrocks.journal.bdbje.Timestamp;
 import com.starrocks.load.DeleteMgr;
 import com.starrocks.load.ExportFailMsg;
@@ -76,8 +80,6 @@ import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.plugin.PluginInfo;
-import com.starrocks.privilege.RolePrivilegeCollectionV2;
-import com.starrocks.privilege.UserPrivilegeCollectionV2;
 import com.starrocks.proto.EncryptionKeyPB;
 import com.starrocks.replication.ReplicationJob;
 import com.starrocks.scheduler.Task;
@@ -1150,9 +1152,10 @@ public class EditLog {
             entity.setOpCode(op);
             entity.setData(writable);
             entity.write(buffer);
-        } catch (IOException e) {
+        } catch (IOException | JsonParseException e) {
             // The old implementation swallow exception like this
-            LOG.info("failed to serialize, ", e);
+            LOG.info("failed to serialize journal data", e);
+            throw new SerializeException("failed to serialize journal data");
         }
         JournalTask task = new JournalTask(startTimeNano, buffer, maxWaitIntervalMs);
 

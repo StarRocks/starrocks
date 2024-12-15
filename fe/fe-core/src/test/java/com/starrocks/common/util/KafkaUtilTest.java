@@ -19,7 +19,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.LoadException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.proto.PProxyRequest;
 import com.starrocks.proto.PProxyResult;
@@ -123,7 +123,7 @@ public class KafkaUtilTest {
     }
 
     @Test
-    public void testNoAliveComputeNode() throws UserException {
+    public void testNoAliveComputeNode() throws StarRocksException {
         new Expectations() {
             {
                 service.getBackendOrComputeNode(anyLong);
@@ -138,7 +138,7 @@ public class KafkaUtilTest {
     }
 
     @Test
-    public void testGetInfoRpcException() throws UserException, RpcException {
+    public void testGetInfoRpcException() throws StarRocksException, RpcException {
         Backend backend = new Backend(1L, "127.0.0.1", 9050);
         backend.setBeRpcPort(8060);
         backend.setAlive(true);
@@ -158,7 +158,7 @@ public class KafkaUtilTest {
     }
 
     @Test
-    public void testGetInfoInterruptedException() throws UserException, RpcException {
+    public void testGetInfoInterruptedException() throws StarRocksException, RpcException {
         Backend backend = new Backend(1L, "127.0.0.1", 9050);
         backend.setBeRpcPort(8060);
         backend.setAlive(true);
@@ -179,7 +179,7 @@ public class KafkaUtilTest {
     }
 
     @Test
-    public void testGetInfoValidateObjectException() throws UserException, RpcException {
+    public void testGetInfoValidateObjectException() throws StarRocksException, RpcException {
         Backend backend = new Backend(1L, "127.0.0.1", 9050);
         backend.setBeRpcPort(8060);
         backend.setAlive(true);
@@ -199,7 +199,7 @@ public class KafkaUtilTest {
     }
 
     @Test
-    public void testGetInfoFailed() throws UserException, RpcException {
+    public void testGetInfoFailed() throws StarRocksException, RpcException {
         Backend backend = new Backend(1L, "127.0.0.1", 9050);
         backend.setBeRpcPort(8060);
         backend.setAlive(true);
@@ -252,7 +252,7 @@ public class KafkaUtilTest {
     }
 
     @Test
-    public void testWarehouseNotExist() throws UserException {
+    public void testWarehouseNotExist() throws StarRocksException {
         new MockUp<WarehouseManager>() {
             @Mock
             public List<Long> getAllComputeNodeIds(long warehouseId) {

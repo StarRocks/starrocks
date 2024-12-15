@@ -232,6 +232,8 @@ Kafka connector 会先在内存中缓存数据，然后通过 Stream Load 将其
 - 自上次落盘以来经过的时间达到 connector 限制 `bufferflush.intervalms`。
 - 达到了 Task 偏移量的提交间隔，由 Kafka Connect 配置项 [`offset.flush.interval.ms`](https://docs.confluent.io/platform/current/connect/references/allconfigs.html) 控制, 默认值是 `60000`。
 
+如需降低数据延迟，可在 Kafka Connector 设置文件中调整以上配置。但请注意，频繁的 Flush 会增加 CPU 和 I/O 的使用。
+
 ### 使用限制
 
 - 不支持将 Kafka topic 里的一条消息展开成多条导入到 StarRocks。
@@ -241,26 +243,482 @@ Kafka connector 会先在内存中缓存数据，然后通过 Stream Load 将其
 
 ### 导入 Debezium CDC 格式数据
 
-如果 Kafka 数据为 Debezium CDC 格式，并且 StarRocks 表为主键表，则在 StarRocks 提供的 Kafka connector 的配置文件 **connect-StarRocks-sink.properties** 中除了[配置基础参数](#配置-kafka-connector-和-kafka-connect然后启动-kafka-connect-导入数据)外，还需要配置 `transforms` 以及相关参数。
+Debezium 是一款 CDC 工具，可监控多种数据库的数据变更，并将变更流写入 Kafka。以下示例演示了如何配置和使用 Kafka Connector 将 PostgreSQL 的更改写入 StarRocks 中的**主键表**。
 
-:::info
+#### 步骤 1：安装启动 Kafka
 
-在本示例中，StarRocks 提供的 Kafka connector 是 sink connector，能够持续消费 Kafka 的数据并导入 StarRocks。
+> **说明**
+>
+> 如果您有自己的 Kafka 环境，可以跳过当前步骤。
 
-:::
+1. [下载](https://dlcdn.apache.org/kafka/)最新版本的 Kafka，并解压压缩包。
 
-```Properties
-transforms=addfield,unwrap
-transforms.addfield.type=com.starrocks.connector.kafka.transforms.AddOpFieldForDebeziumRecord
-transforms.unwrap.type=io.debezium.transforms.ExtractNewRecordState
-transforms.unwrap.drop.tombstones=true
-transforms.unwrap.delete.handling.mode=rewrite
+   ```Bash
+   tar -xzf kafka_2.13-3.7.0.tgz
+   cd kafka_2.13-3.7.0
+   ```
+
+2. 启动 Kafka 环境。
+
+   生成 Kafka 集群 UUID。
+
+   ```Bash
+   KAFKA_CLUSTER_ID="$(bin/kafka-storage.sh random-uuid)"
+   ```
+
+   格式化日志目录。
+
+   ```Bash
+   bin/kafka-storage.sh format -t $KAFKA_CLUSTER_ID -c config/kraft/server.properties
+   ```
+
+   启动 Kafka 服务。
+
+   ```Bash
+   bin/kafka-server-start.sh config/kraft/server.properties
+   ```
+
+#### 步骤 2：配置 PostgreSQL
+
+1. 确保 PostgreSQL 用户拥有 `REPLICATION` 权限。
+
+2. 修改 PostgreSQL 配置。
+
+   在 **postgresql.conf** 文件中，将 `wal_level` 设置为 `logical`。
+
+   ```Properties
+   wal_level = logical
+   ```
+
+   重启 PostgreSQL 服务以使更改生效。
+
+   ```Bash
+   pg_ctl restart
+   ```
+
+3. 准备数据集。
+
+   建表并插入测试数据。
+
+   ```SQL
+   CREATE TABLE customers (
+     id int primary key ,
+     first_name varchar(65533) NULL,
+     last_name varchar(65533) NULL ,
+     email varchar(65533) NULL 
+   );
+
+   INSERT INTO customers VALUES (1,'a','a','a@a.com');
+   ```
+
+4. 验证 Kafka 中的 CDC 日志消息。
+
+    ```Json
+    {
+        "schema": {
+            "type": "struct",
+            "fields": [
+                {
+                    "type": "struct",
+                    "fields": [
+                        {
+                            "type": "int32",
+                            "optional": false,
+                            "field": "id"
+                        },
+                        {
+                            "type": "string",
+                            "optional": true,
+                            "field": "first_name"
+                        },
+                        {
+                            "type": "string",
+                            "optional": true,
+                            "field": "last_name"
+                        },
+                        {
+                            "type": "string",
+                            "optional": true,
+                            "field": "email"
+                        }
+                    ],
+                    "optional": true,
+                    "name": "test.public.customers.Value",
+                    "field": "before"
+                },
+                {
+                    "type": "struct",
+                    "fields": [
+                        {
+                            "type": "int32",
+                            "optional": false,
+                            "field": "id"
+                        },
+                        {
+                            "type": "string",
+                            "optional": true,
+                            "field": "first_name"
+                        },
+                        {
+                            "type": "string",
+                            "optional": true,
+                            "field": "last_name"
+                        },
+                        {
+                            "type": "string",
+                            "optional": true,
+                            "field": "email"
+                        }
+                    ],
+                    "optional": true,
+                    "name": "test.public.customers.Value",
+                    "field": "after"
+                },
+                {
+                    "type": "struct",
+                    "fields": [
+                        {
+                            "type": "string",
+                            "optional": false,
+                            "field": "version"
+                        },
+                        {
+                            "type": "string",
+                            "optional": false,
+                            "field": "connector"
+                        },
+                        {
+                            "type": "string",
+                            "optional": false,
+                            "field": "name"
+                        },
+                        {
+                            "type": "int64",
+                            "optional": false,
+                            "field": "ts_ms"
+                        },
+                        {
+                            "type": "string",
+                            "optional": true,
+                            "name": "io.debezium.data.Enum",
+                            "version": 1,
+                            "parameters": {
+                                "allowed": "true,last,false,incremental"
+                            },
+                            "default": "false",
+                            "field": "snapshot"
+                        },
+                        {
+                            "type": "string",
+                            "optional": false,
+                            "field": "db"
+                        },
+                        {
+                            "type": "string",
+                            "optional": true,
+                            "field": "sequence"
+                        },
+                        {
+                            "type": "string",
+                            "optional": false,
+                            "field": "schema"
+                        },
+                        {
+                            "type": "string",
+                            "optional": false,
+                            "field": "table"
+                        },
+                        {
+                            "type": "int64",
+                            "optional": true,
+                            "field": "txId"
+                        },
+                        {
+                            "type": "int64",
+                            "optional": true,
+                            "field": "lsn"
+                        },
+                        {
+                            "type": "int64",
+                            "optional": true,
+                            "field": "xmin"
+                        }
+                    ],
+                    "optional": false,
+                    "name": "io.debezium.connector.postgresql.Source",
+                    "field": "source"
+                },
+                {
+                    "type": "string",
+                    "optional": false,
+                    "field": "op"
+                },
+                {
+                    "type": "int64",
+                    "optional": true,
+                    "field": "ts_ms"
+                },
+                {
+                    "type": "struct",
+                    "fields": [
+                        {
+                            "type": "string",
+                            "optional": false,
+                            "field": "id"
+                        },
+                        {
+                            "type": "int64",
+                            "optional": false,
+                            "field": "total_order"
+                        },
+                        {
+                            "type": "int64",
+                            "optional": false,
+                            "field": "data_collection_order"
+                        }
+                    ],
+                    "optional": true,
+                    "name": "event.block",
+                    "version": 1,
+                    "field": "transaction"
+                }
+            ],
+            "optional": false,
+            "name": "test.public.customers.Envelope",
+            "version": 1
+        },
+        "payload": {
+            "before": null,
+            "after": {
+                "id": 1,
+                "first_name": "a",
+                "last_name": "a",
+                "email": "a@a.com"
+            },
+            "source": {
+                "version": "2.5.3.Final",
+                "connector": "postgresql",
+                "name": "test",
+                "ts_ms": 1714283798721,
+                "snapshot": "false",
+                "db": "postgres",
+                "sequence": "[\"22910216\",\"22910504\"]",
+                "schema": "public",
+                "table": "customers",
+                "txId": 756,
+                "lsn": 22910504,
+                "xmin": null
+            },
+            "op": "c",
+            "ts_ms": 1714283798790,
+            "transaction": null
+        }
+    }
+    ```
+
+#### 步骤 3：配置 StarRocks
+
+在 StarRocks 中创建主键表，表结构需与 PostgreSQL 源表一致。
+
+```SQL
+CREATE TABLE `customers` (
+  `id` int(11) COMMENT "",
+  `first_name` varchar(65533) NULL COMMENT "",
+  `last_name` varchar(65533) NULL COMMENT "",
+  `email` varchar(65533) NULL COMMENT ""
+) ENGINE=OLAP 
+PRIMARY KEY(`id`) 
+DISTRIBUTED BY hash(id) buckets 1
+PROPERTIES (
+"bucket_size" = "4294967296",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"fast_schema_evolution" = "true"
+);
 ```
 
-在上述配置中，我们指定 `transforms=addfield,unwrap`。
+#### 步骤 4：安装 Connector
 
-- Debezium CDC 格式数据中 `op` 字段记录了来自上游数据库的数据对应的 SQL 操作，`c`、`u`、`d` 分别代表 create，update 和 delete。如果 StarRocks 表是主键表，则需要指定 addfield transform。addfield transform 会为每行数据增加一个 `__op` 字段，来标记数据对应的 SQL 操作，并且会根据 Debezium CDC 格式数据的 `op` 字段的值去 `before` 或者 `after` 字段中里取其它列的值，以拼成一个完整的一行数据。最终这些数据会转成 JSON 或 CSV 格式，写入 StarRocks 中。addfield transform 的类是 `com.Starrocks.Kafka.Transforms.AddOpFieldForDebeziumRecord`，已经包含在 Kafka connector JAR 文件中，您无需手动安装。
+1. 下载 connector 解压到 **plugins** 目录。
 
-  如果 StarRocks 表不是主键表，则无需指定 addfield transform。
+   ```Bash
+   mkdir plugins
+   tar -zxvf debezium-debezium-connector-postgresql-2.5.3.zip -C plugins
+   tar -zxvf starrocks-kafka-connector-1.0.3.tar.gz -C plugins
+   ```
 
-- unwrap transform 是指由 Debezium 提供的 unwrap，可以根据操作类型 unwrap Debezium 复杂的数据结构。更多信息，参见 [New Record State Extraction](https://debezium.io/documentation/reference/stable/transformations/event-flattening.html)。
+   该目录为 **config/connect-standalone.properties** 中设置项 `plugin.path` 的值。
+
+   ```Properties
+   plugin.path=/path/to/kafka_2.13-3.7.0/plugins
+   ```
+
+2. 在 **pg-source.properties** 中配置 PostgreSQL Source Connector。
+
+   ```Json
+   {
+     "name": "inventory-connector",
+     "config": {
+       "connector.class": "io.debezium.connector.postgresql.PostgresConnector", 
+       "plugin.name": "pgoutput",
+       "database.hostname": "localhost", 
+       "database.port": "5432", 
+       "database.user": "postgres", 
+       "database.password": "", 
+       "database.dbname" : "postgres", 
+       "topic.prefix": "test"
+     }
+   }
+   ```
+
+3. 在 **sr-sink.properties** 中配置 StarRocks Sink Connector。
+
+   ```Json
+   {
+       "name": "starrocks-kafka-connector",
+       "config": {
+           "connector.class": "com.starrocks.connector.kafka.StarRocksSinkConnector",
+           "tasks.max": "1",
+           "topics": "test.public.customers",
+           "starrocks.http.url": "172.26.195.69:28030",
+           "starrocks.database.name": "test",
+           "starrocks.username": "root",
+           "starrocks.password": "StarRocks@123",
+           "sink.properties.strip_outer_array": "true",
+           "connect.timeoutms": "3000",
+           "starrocks.topic2table.map": "test.public.customers:customers",
+           "transforms": "addfield,unwrap",
+           "transforms.addfield.type": "com.starrocks.connector.kafka.transforms.AddOpFieldForDebeziumRecord",
+           "transforms.unwrap.type": "io.debezium.transforms.ExtractNewRecordState",
+           "transforms.unwrap.drop.tombstones": "true",
+           "transforms.unwrap.delete.handling.mode": "rewrite"
+       }
+   }
+   ```
+
+   > **说明**
+   >
+   > - 如果 StarRocks 表不是主键表，则无需指定 addfield transform。
+   > - unwrap transform 是指由 Debezium 提供的 unwrap，可以根据操作类型 unwrap Debezium 复杂的数据结构。更多信息，参见 [New Record State Extraction](https://debezium.io/documentation/reference/stable/transformations/event-flattening.html)。
+
+4. 配置 Kafka Connect。
+
+   在 Kafka Connect 配置文件 **config/connect-standalone.properties** 中配置以下参数。
+
+   ```Properties
+   # Kafka Broker 的地址。多个 Kafka Broker 的地址需要用逗号（,）隔开。
+   # 请注意，本示例使用 PLAINTEXT 作为访问 Kafka 集群的安全协议。
+   # 如果使用其他安全协议访问 Kafka 集群，请在此处配置相关信息。
+
+   bootstrap.servers=<kafka_broker_ip>:9092
+   offset.storage.file.filename=/tmp/connect.offsets
+   key.converter=org.apache.kafka.connect.json.JsonConverter
+   value.converter=org.apache.kafka.connect.json.JsonConverter
+   key.converter.schemas.enable=true
+   value.converter.schemas.enable=false
+
+   # 解压后 starrocks-kafka-connector 的绝对路径。示例：
+   plugin.path=/home/kafka-connect/starrocks-kafka-connector-1.0.3
+
+   # 控制 Flush 策略的参数。更多信息，请参阅使用说明部分。
+   offset.flush.interval.ms=10000
+   bufferflush.maxbytes = xxx
+   bufferflush.intervalms = xxx
+   ```
+
+   更多配置详情请参阅 [Running Kafka Connect](https://kafka.apache.org/documentation.html#connect_running)。
+
+#### 步骤 5：以 Standalone 模式启动 Kafka Connect
+
+运行 Kafka Connect Standalone 模式以启动 Connector。
+
+```Bash
+bin/connect-standalone.sh config/connect-standalone.properties config/pg-source.properties config/sr-sink.properties 
+```
+
+#### 步骤 6：验证数据导入
+
+测试以下操作，确保数据正确导入到 StarRocks。
+
+##### INSERT
+
+- PostgreSQL:
+
+```Plain
+postgres=# insert into customers values (2,'b','b','b@b.com');
+INSERT 0 1
+postgres=# select * from customers;
+ id | first_name | last_name |  email  
+----+------------+-----------+---------
+  1 | a          | a         | a@a.com
+  2 | b          | b         | b@b.com
+(2 rows)
+```
+
+- StarRocks:
+
+```Plain
+MySQL [test]> select * from customers;
++------+------------+-----------+---------+
+| id   | first_name | last_name | email   |
++------+------------+-----------+---------+
+|    1 | a          | a         | a@a.com |
+|    2 | b          | b         | b@b.com |
++------+------------+-----------+---------+
+2 rows in set (0.01 sec)
+```
+
+##### UPDATE
+
+- PostgreSQL:
+
+```Plain
+postgres=# update customers set email='c@c.com';
+UPDATE 2
+postgres=# select * from customers;
+ id | first_name | last_name |  email  
+----+------------+-----------+---------
+  1 | a          | a         | c@c.com
+  2 | b          | b         | c@c.com
+(2 rows)
+```
+
+- StarRocks:
+
+```Plain
+MySQL [test]> select * from customers;
++------+------------+-----------+---------+
+| id   | first_name | last_name | email   |
++------+------------+-----------+---------+
+|    1 | a          | a         | c@c.com |
+|    2 | b          | b         | c@c.com |
++------+------------+-----------+---------+
+2 rows in set (0.00 sec)
+```
+
+##### DELETE
+
+- PostgreSQL:
+
+```Plain
+postgres=# delete from customers where id=1;
+DELETE 1
+postgres=# select * from customers;
+ id | first_name | last_name |  email  
+----+------------+-----------+---------
+  2 | b          | b         | c@c.com
+(1 row)
+```
+
+- StarRocks:
+
+```Plain
+MySQL [test]> select * from customers;
++------+------------+-----------+---------+
+| id   | first_name | last_name | email   |
++------+------------+-----------+---------+
+|    2 | b          | b         | c@c.com |
++------+------------+-----------+---------+
+1 row in set (0.00 sec)
+```

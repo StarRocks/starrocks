@@ -14,7 +14,6 @@
 
 package com.starrocks.transaction;
 
-import com.starrocks.transaction.GtidGenerator;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -34,8 +33,10 @@ public class GtidGeneratorTest {
         long secondGtid = gtidGenerator.nextGtid();
 
         Assertions.assertNotEquals(firstGtid, secondGtid, "GTIDs should be unique");
-        Assertions.assertEquals((firstGtid & GtidGenerator.MAX_SEQUENCE) + 1, secondGtid & GtidGenerator.MAX_SEQUENCE,
-                "Sequence should increment by 1 on the same millisecond");
+        if (firstGtid >> GtidGenerator.TIMESTAMP_SHIFT == secondGtid >> GtidGenerator.TIMESTAMP_SHIFT) {
+            Assertions.assertEquals((firstGtid & GtidGenerator.MAX_SEQUENCE) + 1, secondGtid & GtidGenerator.MAX_SEQUENCE,
+                    "Sequence should increment by 1 on the same millisecond");
+        }
     }
 
     @Test

@@ -25,7 +25,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PhysicalPartition;
-import com.starrocks.sql.common.PListCell;
+import com.starrocks.sql.common.PCell;
 import org.apache.commons.lang.NotImplementedException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -44,7 +44,7 @@ public class OlapPartitionTraits extends DefaultTraits {
     }
 
     @Override
-    public String getDbName() {
+    public String getCatalogDBName() {
         throw new NotImplementedException("not support olap table");
     }
 
@@ -62,8 +62,8 @@ public class OlapPartitionTraits extends DefaultTraits {
     }
 
     @Override
-    public Map<String, PListCell> getPartitionList(List<Column> partitionColumns) {
-        return ((OlapTable) table).getListPartitionItems(Optional.of(partitionColumns));
+    public Map<String, PCell> getPartitionCells(List<Column> partitionColumns) {
+        return ((OlapTable) table).getPartitionCells(Optional.of(partitionColumns));
     }
 
     @Override

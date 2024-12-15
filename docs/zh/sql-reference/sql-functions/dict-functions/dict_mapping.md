@@ -15,7 +15,7 @@ displayed_sidebar: docs
 ## 语法
 
 ```SQL
-dict_mapping([<db_name>.]<dict_table>, key_column_expr_list [, <value_column> ] [, <strict_mode>] )
+dict_mapping("[<db_name>.]<dict_table>", key_column_expr_list [, <value_column> ] [, <null_if_not_exist>] )
 
 key_column_expr_list ::= key_column_expr [, key_column_expr ... ]
 
@@ -31,13 +31,15 @@ key_column_expr ::= <column_name> | <expr>
     该表达式列表必须包括字典表的所有主键列，即表达式的个数必须和字典表中所有主键列的个数相同。所以如果字典表使用联合主键，则该表达式列表中的表达式和字典表表结构中定义的主键列必须按位置一一对应，多个表达式之间用英文逗号分隔（`,`）。并且如果 `key_column_expr`是一个具体的 key 或 key 表达式，则其类型必须和对应的字典表中的列的类型相同。
 - 可选参数：
   - `<value_column>`：value 列名，也就是映射列名。如果不指定，则默认为字典表的自增列。value 列也可以定义为字典表中除自增列和主键以外的列，并且对列的数据类型无限制。
-  - `<strict_mode>`：是否启用严格模式，即在未找到与该 key 呈映射关系的 value 时，是否返回报错。如果为 `TRUE`，则返回报错。如果为 `FALSE`（默认），则返回 `NULL`。
+  - `<null_if_not_exist>`（选填）：当字典表中不存在该 key 时，是否返回 NULL。
+    - `true`：Key 不存在时 返回 NULL。
+    - `false` (默认)：Key 不存在时返回错误。
 
 ## 返回值说明
 
 返回值的数据类型与 value 列的数据类型保持一致。如果 value 列为字典表的自增列，则返回值的数据类型为 BIGINT。
 
-然而当未找到与该 key 呈映射关系的 value 时，如果为 `strict_mode` 参数为默认的 `FALSE`，则返回 `NULL`。如果为 `TRUE`，则返回报错 `ERROR 1064 (HY000): In strict mode, query failed if record not exist in dict table.`。
+然而当未找到与该 key 呈映射关系的 value 时，如果为 `<null_if_not_exist>` 参数为 `true`，则返回 `NULL`。如果为默认的 `false`，则返回报错 `query failed if record not exist in dict table`。
 
 ## 示例
 
@@ -161,13 +163,13 @@ key_column_expr ::= <column_name> | <expr>
       1 row in set (0.02 sec)
       ```
 
-**示例四：启用严格模式**
+**示例四：启用 null_if_not_exist 模式**
 
-启用严格模式，并且使用字典表中不存在的 key，查询与其呈映射关系的 value，此时直接返回报错而不是 `NULL`。从而可以确保导入至数据表之前，相关 key 已经先导入至字典表并生成与其映射的value。
+禁用 `<null_if_not_exist>` 模式，并且使用字典表中不存在的 key，查询与其呈映射关系的 value，此时直接返回报错而不是 `NULL`。从而可以确保导入至数据表之前，相关 key 已经先导入至字典表并生成与其映射的 value。
 
 ```SQL
 MySQL [test]>  SELECT dict_mapping('dict', 'b1', true);
-ERROR 1064 (HY000): In strict mode, query failed if record not exist in dict table.
+ERROR 1064 (HY000): Query failed if record not exist in dict table.
 ```
 
 **示例五：如果字典表使用联合主键，则查询时候必须指定所有主键**

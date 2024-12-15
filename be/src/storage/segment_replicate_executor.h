@@ -19,7 +19,6 @@
 #include <vector>
 
 #include "common/status.h"
-#include "gen_cpp/doris_internal_service.pb.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "storage/olap_define.h"
 #include "util/internal_service_recoverable_stub.h"
@@ -72,6 +71,14 @@ private:
     Status _st = Status::OK();
 };
 
+struct SegmentReplicateStat {
+    std::atomic_int32_t num_pending_tasks{0};
+    std::atomic_int32_t num_running_tasks{0};
+    std::atomic_int32_t num_finished_tasks{0};
+    std::atomic_int64_t pending_time_ns{0};
+    std::atomic_int64_t execute_time_ns{0};
+};
+
 class ReplicateToken {
 public:
     ReplicateToken(std::unique_ptr<ThreadPoolToken> sync_pool_token, const DeltaWriterOptions* opt);
@@ -109,6 +116,8 @@ public:
 
     const std::vector<int64_t> replica_node_ids() const { return _replica_node_ids; }
 
+    const SegmentReplicateStat& get_stat() const { return _stat; }
+
 private:
     friend class SegmentReplicateTask;
 
@@ -133,6 +142,8 @@ private:
 
     int64_t _max_fail_replica_num;
     std::vector<int64_t> _replica_node_ids;
+
+    SegmentReplicateStat _stat;
 };
 
 class SegmentReplicateExecutor {

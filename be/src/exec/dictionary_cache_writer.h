@@ -17,7 +17,6 @@
 #include "column/chunk.h"
 #include "exec/pipeline/fragment_context.h"
 #include "gen_cpp/InternalService_types.h"
-#include "gen_cpp/doris_internal_service.pb.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/runtime_state.h"
 #include "util/reusable_closure.h"

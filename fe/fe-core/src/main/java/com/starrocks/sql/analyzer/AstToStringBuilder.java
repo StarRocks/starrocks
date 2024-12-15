@@ -54,6 +54,9 @@ import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.UserVariableExpr;
 import com.starrocks.analysis.VariableExpr;
+import com.starrocks.authorization.ObjectType;
+import com.starrocks.authorization.PEntryObject;
+import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.BrokerTable;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ConnectorView;
@@ -82,9 +85,6 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.credential.CredentialUtil;
-import com.starrocks.privilege.ObjectType;
-import com.starrocks.privilege.PEntryObject;
-import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.sql.ast.AlterStorageVolumeStmt;
 import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.sql.ast.ArrayExpr;
@@ -1711,8 +1711,8 @@ public class AstToStringBuilder {
             sb.append("\"port\" = \"").append(mysqlTable.getPort()).append("\",\n");
             sb.append("\"user\" = \"").append(mysqlTable.getUserName()).append("\",\n");
             sb.append("\"password\" = \"").append(hidePassword ? "" : mysqlTable.getPasswd()).append("\",\n");
-            sb.append("\"database\" = \"").append(mysqlTable.getMysqlDatabaseName()).append("\",\n");
-            sb.append("\"table\" = \"").append(mysqlTable.getMysqlTableName()).append("\"\n");
+            sb.append("\"database\" = \"").append(mysqlTable.getCatalogDBName()).append("\",\n");
+            sb.append("\"table\" = \"").append(mysqlTable.getCatalogTableName()).append("\"\n");
             sb.append(")");
         } else if (table.getType() == Table.TableType.BROKER) {
             BrokerTable brokerTable = (BrokerTable) table;
@@ -1816,7 +1816,7 @@ public class AstToStringBuilder {
             // properties
             sb.append("\nPROPERTIES (\n");
             sb.append("\"resource\" = \"").append(jdbcTable.getResourceName()).append("\",\n");
-            sb.append("\"table\" = \"").append(jdbcTable.getJdbcTable()).append("\"");
+            sb.append("\"table\" = \"").append(jdbcTable.getCatalogTableName()).append("\"");
             sb.append("\n)");
         }
         sb.append(";");

@@ -94,7 +94,8 @@ public class BasicStatsMetaTest extends PlanTestBase {
         {
             ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
             DataOutputStream dataOutputStream = new DataOutputStream(byteArrayOutputStream);
-            String s = "{\"dbId\":10001,\"tableId\":10177,\"columns\":[],\"type\":\"FULL\",\"updateTime\":1721650800," +
+            String s = "{\"dbId\":" + db.getId() +
+                    ",\"tableId\":" + tbl.getId() + ",\"columns\":[],\"type\":\"FULL\",\"updateTime\":1721650800," +
                     "\"properties\":{},\"updateRows\":10000}";
             Text.writeString(dataOutputStream, s);
 

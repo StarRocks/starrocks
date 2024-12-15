@@ -48,6 +48,7 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.UserVariableHint;
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.LocalTablet;
@@ -87,7 +88,6 @@ import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.planner.PlanFragment;
-import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
 import com.starrocks.qe.DefaultCoordinator;
@@ -306,6 +306,7 @@ public class UtFrameUtils {
                         retry++ < 600) {
                 Thread.sleep(100);
             }
+            FeConstants.enableUnitStatistics = true;
             CREATED_MIN_CLUSTER.set(true);
         } catch (Exception e) {
             e.printStackTrace();
@@ -584,7 +585,7 @@ public class UtFrameUtils {
                     (context, statementBase, execPlan) -> {
                         DefaultCoordinator scheduler = createScheduler(context, statementBase, execPlan);
 
-                        scheduler.startScheduling();
+                        scheduler.exec();
 
                         return scheduler;
                     });
@@ -596,7 +597,7 @@ public class UtFrameUtils {
                     (context, statementBase, execPlan) -> {
                         DefaultCoordinator scheduler = createScheduler(context, statementBase, execPlan);
 
-                        scheduler.startSchedulingWithoutDeploy();
+                        scheduler.execWithoutDeploy();
                         String plan = scheduler.getSchedulerExplain();
 
                         return Pair.create(plan, scheduler);

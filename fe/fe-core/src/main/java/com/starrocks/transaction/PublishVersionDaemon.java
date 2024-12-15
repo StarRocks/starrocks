@@ -43,8 +43,8 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.ThreadPoolManager;
-import com.starrocks.common.UserException;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -126,9 +126,11 @@ public class PublishVersionDaemon extends FrontendDaemon {
             }
 
             // TODO: need to refactor after be split into cn + dn
-            List<Long> allBackends = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(false);
+            List<Long> allBackends =
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(false);
             if (RunMode.isSharedDataMode()) {
-                allBackends.addAll(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNodeIds(false));
+                allBackends.addAll(
+                        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNodeIds(false));
             }
 
             if (allBackends.isEmpty()) {
@@ -266,7 +268,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
         return publishingLakeTransactionsBatchTableId;
     }
 
-    private void publishVersionForOlapTable(List<TransactionState> readyTransactionStates) throws UserException {
+    private void publishVersionForOlapTable(List<TransactionState> readyTransactionStates) throws StarRocksException {
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
 
         // every backend-transaction identified a single task
@@ -363,7 +365,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
                     // clear publish version tasks to reduce memory usage when state changed to visible.
                     transactionState.clearAfterPublished();
                 }
-            } catch (UserException e) {
+            } catch (StarRocksException e) {
                 LOG.error("errors while publish version to all backends", e);
             }
         }
@@ -378,8 +380,10 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 // When the `enable_lake_batch_publish_version` switch is just set to false,
                 // it is possible that the result of publish task has not been returned,
                 // we need to wait for the result to return if the same table is involved.
-                if (!txnState.getTableIdList().stream().allMatch(id -> !publishingLakeTransactionsBatchTableId.contains(id))) {
-                    LOG.info("maybe enable_lake_batch_publish_version is set to false just now, txn {} will be published later",
+                if (!txnState.getTableIdList().stream()
+                        .allMatch(id -> !publishingLakeTransactionsBatchTableId.contains(id))) {
+                    LOG.info(
+                            "maybe enable_lake_batch_publish_version is set to false just now, txn {} will be published later",
                             txnState.getTransactionId());
                     continue;
                 }
@@ -422,7 +426,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
             LOG.info("the database of transaction {} has been deleted", txnId);
             try {
                 globalTransactionMgr.finishTransaction(txnState.getDbId(), txnId, Sets.newHashSet());
-            } catch (UserException ex) {
+            } catch (StarRocksException ex) {
                 LOG.warn("Fail to finish txn " + txnId, ex);
             }
             return CompletableFuture.completedFuture(null);
@@ -447,7 +451,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
             if (success) {
                 try {
                     globalTransactionMgr.finishTransaction(dbId, txnId, null);
-                } catch (UserException e) {
+                } catch (StarRocksException e) {
                     throw new RuntimeException(e);
                 }
             }
@@ -472,7 +476,8 @@ public class PublishVersionDaemon extends FrontendDaemon {
         // version -> shadowTablets
         long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
         try {
-            OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+            OlapTable table =
+                    (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
             if (table == null) {
                 // table has been dropped
                 return true;
@@ -654,7 +659,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
                     globalTransactionMgr.finishTransaction(state.getDbId(), state.getTransactionId(),
                             Sets.newHashSet());
                 }
-            } catch (UserException ex) {
+            } catch (StarRocksException ex) {
                 LOG.warn("Fail to finish txn Batch " + txnStateBatch, ex);
             }
             return CompletableFuture.completedFuture(null);
@@ -691,7 +696,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
                     globalTransactionMgr.finishTransactionBatch(dbId, txnStateBatch, null);
                     // here create the job to drop txnLog, for the visibleVersion has been updated
                     submitDeleteTxnLogJob(txnStateBatch);
-                } catch (UserException e) {
+                } catch (StarRocksException e) {
                     throw new RuntimeException(e);
                 }
             }
@@ -758,7 +763,8 @@ public class PublishVersionDaemon extends FrontendDaemon {
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tableId), LockType.READ);
         try {
-            OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+            OlapTable table =
+                    (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
             if (table == null) {
                 txnState.removeTable(tableCommitInfo.getTableId());
                 LOG.info("Removed non-exist table {} from transaction {}. txn_id={}", tableId, txnLabel, txnId);
@@ -809,7 +815,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
             return true;
         } catch (Throwable e) {
             // prevent excessive logging
-            if (partitionCommitInfo.getVersionTime() < 0 && 
+            if (partitionCommitInfo.getVersionTime() < 0 &&
                     Math.abs(partitionCommitInfo.getVersionTime()) + 10000 < System.currentTimeMillis()) {
                 return false;
             }

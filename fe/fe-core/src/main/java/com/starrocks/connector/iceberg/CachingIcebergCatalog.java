@@ -20,14 +20,17 @@ import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
+import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorViewDefinition;
 import com.starrocks.connector.PlanMode;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DeleteFile;
@@ -87,13 +90,13 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                 enableCache ? DEFAULT_CACHE_NUM : NEVER_CACHE).build();
         this.partitionCache = newCacheBuilder(icebergProperties.getIcebergMetaCacheTtlSec(),
                 enableCache ? DEFAULT_CACHE_NUM : NEVER_CACHE).build(
-                CacheLoader.asyncReloading(new CacheLoader<>() {
-                    @Override
-                    public Map<String, Partition> load(IcebergTableName key) throws Exception {
-                        // use default executor service.
-                        return delegate.getPartitions(key.dbName, key.tableName, key.snapshotId, null);
-                    }
-                }, executorService));
+                CacheLoader.from(key -> {
+                    Table nativeTable = getTable(key.dbName, key.tableName);
+                    IcebergTable icebergTable =
+                            IcebergTable.builder().setCatalogDBName(key.dbName).setCatalogTableName(key.tableName)
+                                    .setNativeTable(nativeTable).build();
+                    return delegate.getPartitions(icebergTable, key.snapshotId, null);
+                }));
         this.dataFileCache = enableCache ?
                 newCacheBuilder(
                         icebergProperties.getIcebergMetaCacheTtlSec(), icebergProperties.getIcebergManifestCacheMaxNum()).build()
@@ -115,12 +118,12 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         return delegate.listAllDatabases();
     }
 
-    public void createDb(String dbName, Map<String, String> properties) {
-        delegate.createDb(dbName, properties);
+    public void createDB(String dbName, Map<String, String> properties) {
+        delegate.createDB(dbName, properties);
     }
 
-    public void dropDb(String dbName) throws MetaNotFoundException {
-        delegate.dropDb(dbName);
+    public void dropDB(String dbName) throws MetaNotFoundException {
+        delegate.dropDB(dbName);
         databases.invalidate(dbName);
     }
 
@@ -174,7 +177,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     @Override
     public boolean dropTable(String dbName, String tableName, boolean purge) {
         boolean dropped = delegate.dropTable(dbName, tableName, purge);
-        tables.invalidate(new IcebergTableName(dbName, tableName));
+        invalidateCache(new IcebergTableName(dbName, tableName));
         return dropped;
     }
 
@@ -198,10 +201,31 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     }
 
     @Override
-    public Map<String, Partition> getPartitions(String dbName, String tableName, long snapshotId,
+    public Map<String, Partition> getPartitions(IcebergTable icebergTable, long snapshotId,
                                                 ExecutorService executorService) {
-        IcebergTableName key = new IcebergTableName(dbName, tableName, snapshotId);
+        IcebergTableName key =
+                new IcebergTableName(icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(), snapshotId);
         return partitionCache.getUnchecked(key);
+    }
+
+    @Override
+    public List<String> listPartitionNames(IcebergTable icebergTable, ConnectorMetadatRequestContext requestContext,
+                                           ExecutorService executorService) {
+        SessionVariable sv = ConnectContext.getSessionVariableOrDefault();
+        // optimization for query mv rewrite, we can optionally return null to bypass it.
+        // if we don't have cache right now, which means it probably takes time to load it during query,
+        // so we can do load in background while return null to bypass this synchronous process.
+        if (requestContext.isQueryMVRewrite() && sv.isEnableConnectorAsyncListPartitions()) {
+            long snapshotId = requestContext.getSnapshotId();
+            IcebergTableName key =
+                    new IcebergTableName(icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(), snapshotId);
+            Map<String, Partition> cacheValue = partitionCache.getIfPresent(key);
+            if (cacheValue == null) {
+                backgroundExecutor.submit(() -> partitionCache.refresh(key));
+                return null;
+            }
+        }
+        return IcebergCatalog.super.listPartitionNames(icebergTable, requestContext, executorService);
     }
 
     @Override
@@ -307,13 +331,24 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         }
     }
 
-    public void invalidateCacheWithoutTable(IcebergTableName icebergTableName) {
-        partitionCache.invalidate(icebergTableName);
+    @Override
+    public void invalidatePartitionCache(String dbName, String tableName) {
+        // will invalidate all snapshots of this table
+        IcebergTableName key = new IcebergTableName(dbName, tableName);
+        partitionCache.invalidate(key);
     }
 
-    public void invalidateCache(IcebergTableName icebergTableName) {
-        tables.invalidate(icebergTableName);
-        partitionCache.invalidate(icebergTableName);
+    @Override
+    public void invalidateCache(String dbName, String tableName) {
+        IcebergTableName key = new IcebergTableName(dbName, tableName);
+        invalidateCache(key);
+
+    }
+
+    private void invalidateCache(IcebergTableName key) {
+        tables.invalidate(key);
+        // will invalidate all snapshots of this table
+        partitionCache.invalidate(key);
     }
 
     @Override
@@ -340,10 +375,15 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     public static class IcebergTableName {
         private final String dbName;
         private final String tableName;
+        // if as cache key for `getTable`, ignoreSnapshotId = true
+        // otherwise it's false
+        private boolean ignoreSnapshotId = false;
+        // -1 mean it's an empty table without any snapshot.
         private long snapshotId = -1;
 
         public IcebergTableName(String dbName, String tableName) {
             this(dbName, tableName, -1);
+            this.ignoreSnapshotId = true;
         }
 
         public IcebergTableName(String dbName, String tableName, long snapshotId) {
@@ -362,7 +402,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
             }
             IcebergTableName that = (IcebergTableName) o;
             return dbName.equalsIgnoreCase(that.dbName) && tableName.equalsIgnoreCase(that.tableName) &&
-                    (snapshotId == -1 || snapshotId == that.snapshotId);
+                    (ignoreSnapshotId || snapshotId == that.snapshotId);
         }
 
         @Override

@@ -181,6 +181,7 @@ GROUP BY order_id;
 > - 创建物化视图的查询语句不支持非确定性函数，其中包括 rand()、random()、uuid() 和 sleep()。
 > - 异步物化视图支持多种数据类型。有关详细信息，请参阅 [CREATE MATERIALIZED VIEW - 支持数据类型](../../sql-reference/sql-statements/materialized_view/CREATE_MATERIALIZED_VIEW.md#支持数据类型)。
 > - 默认情况下，执行 CREATE MATERIALIZED VIEW 语句后，StarRocks 将立即开始刷新任务，这将会占用一定系统资源。如需推迟刷新时间，请添加 REFRESH DEFERRED 参数。
+> - 仅支持在default_catalog中创建物化视图。你可以选择创建物化视图通过default_catalog.database.mv或者通过`set catalog <default_catalog>`切换到default_catalog。
 
 - **异步物化视图刷新机制**
 
@@ -206,7 +207,7 @@ GROUP BY order_id;
 
 - **External Catalog 物化视图**
 
-  StarRocks 支持基于 Hive Catalog（自 v2.5 起）、Hudi Catalog（自 v2.5 起）、Iceberg Catalog（自 v2.5 起）以及 JDBC Catalog（自 v3.0 起）构建异步物化视图。外部数据目录物化视图的创建方式与普通异步物化视图相同，但有使用限制。详细信息，请参阅 [使用物化视图加速数据湖查询](use_cases/data_lake_query_acceleration_with_materialized_views.md)。
+  StarRocks 异步物化视图支持[基于多种 External Catalog 构建](./feature-support-asynchronous-materialized-views.md#基于-external-catalog-的物化视图)。External Catalog 物化视图的创建方式与普通异步物化视图相同，但有使用限制。详细信息，请参阅 [使用物化视图加速数据湖查询](use_cases/data_lake_query_acceleration_with_materialized_views.md)。
 
 ## 手动刷新异步物化视图
 

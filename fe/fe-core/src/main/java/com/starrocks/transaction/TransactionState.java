@@ -48,8 +48,8 @@ import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.TraceManager;
-import com.starrocks.common.UserException;
 import com.starrocks.common.io.Writable;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.server.GlobalStateMgr;
@@ -347,15 +347,11 @@ public class TransactionState implements Writable {
     private final ReentrantReadWriteLock txnLock = new ReentrantReadWriteLock(true);
 
     public void writeLock() {
-        if (Config.lock_manager_enable_using_fine_granularity_lock) {
-            txnLock.writeLock().lock();
-        }
+        txnLock.writeLock().lock();
     }
 
     public void writeUnlock() {
-        if (Config.lock_manager_enable_using_fine_granularity_lock) {
-            txnLock.writeLock().unlock();
-        }
+        txnLock.writeLock().unlock();
     }
 
     public TransactionState() {
@@ -429,6 +425,7 @@ public class TransactionState implements Writable {
         this.tabletCommitInfos.addAll(infos);
     }
 
+
     public boolean checkReplicaNeedSkip(Tablet tablet, Replica replica, PartitionCommitInfo partitionCommitInfo) {
         boolean isContain = tabletCommitInfosContainsReplica(tablet.getId(), replica.getBackendId(), replica.getState());
         if (isContain) {
@@ -449,6 +446,13 @@ public class TransactionState implements Writable {
         }
 
         return true;
+    }
+  
+    public void resetTabletCommitInfos() {
+        // With a high streamload frequency and too many tablets involved,
+        // TabletCommitInfos will take up too much memory.
+        tabletCommitInfos = null;
+
     }
 
     public boolean tabletCommitInfosContainsReplica(long tabletId, long backendId, ReplicaState state) {
@@ -640,7 +644,7 @@ public class TransactionState implements Writable {
     public void afterStateTransform(TransactionStatus transactionStatus, boolean txnOperated,
                                     TxnStateChangeCallback callback,
                                     String txnStatusChangeReason)
-            throws UserException {
+            throws StarRocksException {
         // after status changed
         if (callback != null) {
             switch (transactionStatus) {
@@ -903,7 +907,8 @@ public class TransactionState implements Writable {
         if (publishBackends.isEmpty()) {
             // note: tasks are sent to all backends including dead ones, or else
             // transaction manager will treat it as success
-            List<Long> allBackends = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(false);
+            List<Long> allBackends =
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(false);
             if (!allBackends.isEmpty()) {
                 publishBackends = Sets.newHashSet();
                 publishBackends.addAll(allBackends);

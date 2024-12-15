@@ -38,6 +38,9 @@ import com.starrocks.StarRocksFE;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.Replica;
 
+import static java.lang.Math.max;
+import static java.lang.Runtime.getRuntime;
+
 public class Config extends ConfigBase {
 
     /**
@@ -2009,6 +2012,13 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long statistic_collect_interval_sec = 5L * 60L; // 5m
 
+    @ConfField(mutable = true, comment = "The interval to persist predicate columns state")
+    public static long statistic_predicate_columns_persist_interval_sec = 60L;
+
+    @ConfField(mutable = true, comment = "The TTL of predicate columns, it would not be considered as predicate " +
+            "columns after this period")
+    public static long statistic_predicate_columns_ttl_hours = 24;
+
     /**
      * Num of thread to handle statistic collect(analyze command)
      */
@@ -2111,6 +2121,9 @@ public class Config extends ConfigBase {
             "we would use sample statistics instead of full statistics")
     public static double statistic_sample_collect_ratio_threshold_of_first_load = 0.1;
 
+    @ConfField(mutable = true)
+    public static boolean statistic_use_meta_statistics = true;
+
     /**
      * default bucket size of histogram statistics
      */
@@ -2134,6 +2147,9 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long histogram_max_sample_row_count = 10000000;
+
+    @ConfField(mutable = true, comment = "Use table sample instead of row-level bernoulli sample")
+    public static boolean histogram_enable_table_sample = true;
 
     @ConfField(mutable = true)
     public static long connector_table_query_trigger_analyze_small_table_rows = 10000000; // 10M
@@ -2736,6 +2752,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static String lake_background_warehouse = "default_warehouse";
 
+    @ConfField(mutable = true)
+    public static int lake_warehouse_max_compute_replica = 3;
+
     // e.g. "tableId1;tableId2"
     @ConfField(mutable = true)
     public static String lake_compaction_disable_tables = "";
@@ -2864,10 +2883,11 @@ public class Config extends ConfigBase {
     public static int profile_info_reserved_num = 500;
 
     /**
+     * Deprecated
      * Number of stream load profile infos reserved by `ProfileManager` for recently executed stream load and routine load task.
      * Default value: 500
      */
-    @ConfField(mutable = true)
+    @ConfField(mutable = true, comment = "Deprecated")
     public static int load_profile_info_reserved_num = 500;
 
     /**
@@ -3204,12 +3224,6 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean lock_manager_enable_resolve_deadlock = false;
 
-    /**
-     * Whether to use table level lock
-     */
-    @ConfField
-    public static boolean lock_manager_enable_using_fine_granularity_lock = true;
-
     @ConfField(mutable = true)
     public static long routine_load_unstable_threshold_second = 3600;
     /**
@@ -3340,4 +3354,7 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "Defines the maximum balance factor allowed " +
             "between any two nodes before triggering a balance")
     public static double batch_write_be_assigner_balance_factor_threshold = 0.1;
+
+    @ConfField(mutable = false)
+    public static int query_deploy_threadpool_size = max(50, getRuntime().availableProcessors() * 10);
 }

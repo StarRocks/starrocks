@@ -302,9 +302,9 @@ statement
     | cancelRefreshDictionaryStatement
 
     // Plan advisor statement
-    | addPlanAdvisorStatement
-    | clearPlanAdvisorStatement
-    | delPlanAdvisorStatement
+    | alterPlanAdvisorAddStatement
+    | truncatePlanAdvisorStatement
+    | alterPlanAdvisorDropStatement
     | showPlanAdvisorStatement
 
     // Warehouse Statement
@@ -675,7 +675,7 @@ alterMaterializedViewStatement
     ;
 
 refreshMaterializedViewStatement
-    : REFRESH MATERIALIZED VIEW mvName=qualifiedName (PARTITION (partitionRangeDesc | listPartitionValues))? FORCE? (WITH (SYNC | ASYNC) MODE)?
+    : REFRESH MATERIALIZED VIEW mvName=qualifiedName (PARTITION (partitionRangeDesc | listPartitionValues))? FORCE? (WITH (SYNC | ASYNC) MODE)? (WITH PRIORITY priority=INTEGER_VALUE)?
     ;
 
 cancelRefreshMaterializedViewStatement
@@ -1133,6 +1133,7 @@ addPartitionClause
 dropPartitionClause
     : DROP TEMPORARY? (PARTITION (IF EXISTS)? identifier | PARTITIONS (IF EXISTS)? identifierList) FORCE?
     | DROP TEMPORARY? PARTITIONS (IF EXISTS)? multiRangePartition FORCE?
+    | DROP TEMPORARY? PARTITIONS (IF EXISTS)? WHERE where=expression FORCE?
     ;
 
 truncatePartitionClause
@@ -1264,9 +1265,16 @@ showStreamLoadStatement
 // ------------------------------------------- Analyze Statement -------------------------------------------------------
 
 analyzeStatement
-    : ANALYZE (FULL | SAMPLE)? TABLE qualifiedName ('(' qualifiedName  (',' qualifiedName)* ')')?
+    : ANALYZE (FULL | SAMPLE)? TABLE tableName analyzeColumnClause? partitionNames?
         (WITH (SYNC | ASYNC) MODE)?
         properties?
+    ;
+
+analyzeColumnClause
+    : '(' qualifiedName  (',' qualifiedName)* ')'               #regularColumns
+    | qualifiedName  (',' qualifiedName)*                       #regularColumns
+    | ALL COLUMNS                                               #allColumns
+    | PREDICATE COLUMNS                                         #predicateColumns
     ;
 
 dropStatsStatement
@@ -1274,7 +1282,7 @@ dropStatsStatement
     ;
 
 histogramStatement:
-    ANALYZE TABLE qualifiedName UPDATE HISTOGRAM ON qualifiedName (',' qualifiedName)*
+    ANALYZE TABLE tableName UPDATE HISTOGRAM ON analyzeColumnClause
         (WITH bucket=INTEGER_VALUE BUCKETS)?
         properties?
     ;
@@ -1990,14 +1998,14 @@ lock_type
     ;
 
 // ------------------------------------------- Plan Tuning Statement ---------------------------------------------------
-addPlanAdvisorStatement
-    : ADD INTO PLAN ADVISOR queryStatement;
+alterPlanAdvisorAddStatement
+    : ALTER PLAN ADVISOR ADD queryStatement;
 
-clearPlanAdvisorStatement
-    : CLEAR PLAN ADVISOR;
+truncatePlanAdvisorStatement
+    : TRUNCATE PLAN ADVISOR;
 
-delPlanAdvisorStatement
-    : DELETE PLAN ADVISOR string;
+alterPlanAdvisorDropStatement
+    : ALTER PLAN ADVISOR DROP string;
 
 showPlanAdvisorStatement
     : SHOW PLAN ADVISOR;
@@ -2145,7 +2153,7 @@ relation
     ;
 
 relationPrimary
-    : qualifiedName queryPeriod? partitionNames? tabletList? replicaList? (
+    : qualifiedName queryPeriod? partitionNames? tabletList? replicaList? sampleClause? (
         AS? alias=identifier)? bracketHint? (BEFORE ts=string)?                          #tableAtom
     | '(' VALUES rowConstructor (',' rowConstructor)* ')'
         (AS? alias=identifier columnAliases?)?                                          #inlineTable
@@ -2171,6 +2179,10 @@ pivotAggregationExpression
 
 pivotValue
     : (literalExpression | literalExpressionList) (AS? (identifier | string))?
+    ;
+
+sampleClause
+    : SAMPLE propertyList?
     ;
 
 argumentList
@@ -2810,6 +2822,10 @@ qualifiedName
     : identifier (DOT_IDENTIFIER | '.' identifier)*
     ;
 
+tableName
+    : qualifiedName
+    ;
+
 writeBranch
     : FOR? VERSION AS OF identifier
     ;
@@ -2890,7 +2906,7 @@ nonReserved
     | NAME | NAMES | NEGATIVE | NO | NODE | NODES | NONE | NULLS | NUMBER | NUMERIC
     | OBSERVER | OF | OFFSET | ONLY | OPTIMIZER | OPEN | OPERATE | OPTION | OVERWRITE
     | PARTITIONS | PASSWORD | PATH | PAUSE | PENDING | PERCENTILE_UNION | PIVOT | PLAN | PLUGIN | PLUGINS | POLICY | POLICIES
-    | PERCENT_RANK | PRECEDING | PRIORITY | PROC | PROCESSLIST | PROFILE | PROFILELIST | PRIVILEGES | PROBABILITY | PROPERTIES | PROPERTY | PIPE | PIPES
+    | PERCENT_RANK | PREDICATE | PRECEDING | PRIORITY | PROC | PROCESSLIST | PROFILE | PROFILELIST | PRIVILEGES | PROBABILITY | PROPERTIES | PROPERTY | PIPE | PIPES
     | QUARTER | QUERY | QUERIES | QUEUE | QUOTA | QUALIFY
     | REASON | REMOVE | REWRITE | RANDOM | RANK | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY
     | REPOSITORIES

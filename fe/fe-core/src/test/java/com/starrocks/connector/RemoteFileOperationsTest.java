@@ -16,6 +16,7 @@ package com.starrocks.connector;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HudiTable;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.FeConstants;
@@ -42,6 +43,7 @@ import org.junit.Test;
 import java.io.IOException;
 import java.net.URI;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -350,5 +352,81 @@ public class RemoteFileOperationsTest {
 
         RemoteFileScanContext scanContext1 = HudiRemoteFileIO.getScanContext(pathKey, "null");
         Assert.assertTrue(pathKey.getScanContext() == scanContext1);
+    }
+
+    @Test
+    public void testAsyncGetHiveRemoteFiles() {
+        HiveRemoteFileIO hiveRemoteFileIO = new HiveRemoteFileIO(new Configuration());
+        FileSystem fs = new MockedRemoteFileSystem(HDFS_HIVE_TABLE);
+        hiveRemoteFileIO.setFileSystem(fs);
+        FeConstants.runningUnitTest = true;
+        ExecutorService executorToRefresh = Executors.newFixedThreadPool(5);
+        ExecutorService executorToLoad = Executors.newFixedThreadPool(5);
+
+        CachingRemoteFileIO cachingFileIO = new CachingRemoteFileIO(hiveRemoteFileIO, executorToRefresh, 10, 10, 10);
+        RemoteFileOperations ops = new RemoteFileOperations(cachingFileIO, executorToLoad, executorToLoad,
+                false, true, new Configuration());
+
+        String tableLocation = "hdfs://127.0.0.1:10000/hive.db/hive_tbl";
+        // RemotePathKey pathKey = RemotePathKey.of(tableLocation, false);
+
+        HiveMetaClient client = new HiveMetastoreTest.MockedHiveMetaClient();
+        HiveMetastore metastore = new HiveMetastore(client, "hive_catalog", MetastoreType.HMS);
+        List<String> partitionNames = Lists.newArrayList("col1=1", "col1=2");
+        // Map<String, Partition> partitions = metastore.getPartitionsByNames("db1", "table1", partitionNames);
+
+        GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder().
+                setPartitionNames(partitionNames).build();
+
+        RemoteFileInfoSource remoteFileInfoSource = ops.getRemoteFilesAsync(new HiveTable(), params,
+                (p) -> {
+                    Map<String, Partition> map = metastore.getPartitionsByNames("db1", "table1", p.getPartitionNames());
+                    List<Partition> res = new ArrayList<>();
+                    for (String key : p.getPartitionNames()) {
+                        res.add(map.get(key));
+                    }
+                    return res;
+                });
+        List<RemoteFileInfo> remoteFileInfos = remoteFileInfoSource.getAllOutputs();
+        remoteFileInfos.sort(Comparator.comparing(RemoteFileInfo::getFullPath));
+        Assert.assertEquals(2, remoteFileInfos.size());
+        Assert.assertTrue(remoteFileInfos.get(0).toString().contains("emoteFileInfo{format=ORC, files=["));
+
+        RemoteFileInfo fileInfo = remoteFileInfos.get(0);
+        Assert.assertEquals(RemoteFileInputFormat.ORC, fileInfo.getFormat());
+        Assert.assertEquals("hdfs://127.0.0.1:10000/hive.db/hive_tbl/col1=1", fileInfo.getFullPath());
+
+        List<RemoteFileDesc> fileDescs = remoteFileInfos.get(0).getFiles();
+        Assert.assertNotNull(fileDescs);
+        Assert.assertEquals(1, fileDescs.size());
+
+        RemoteFileDesc fileDesc = fileDescs.get(0);
+        Assert.assertNotNull(fileDesc);
+        Assert.assertNotNull(fileDesc.getTextFileFormatDesc());
+        Assert.assertEquals("", fileDesc.getCompression());
+        Assert.assertEquals(20, fileDesc.getLength());
+        Assert.assertTrue(fileDesc.isSplittable());
+
+        List<RemoteFileBlockDesc> blockDescs = fileDesc.getBlockDescs();
+        Assert.assertEquals(1, blockDescs.size());
+        RemoteFileBlockDesc blockDesc = blockDescs.get(0);
+        Assert.assertEquals(0, blockDesc.getOffset());
+        Assert.assertEquals(20, blockDesc.getLength());
+        Assert.assertEquals(2, blockDesc.getReplicaHostIds().length);
+    }
+
+    @Test
+    public void testGetRemoteFilesParamsPartitionExponentially() {
+        List<String> partitionNames = new ArrayList<>();
+        for (int i = 0; i < 16; i++) {
+            partitionNames.add("partition" + i);
+        }
+        GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder().setPartitionNames(partitionNames).build();
+        List<GetRemoteFilesParams> result = params.partitionExponentially(2, 8);
+        Assert.assertEquals(4, result.size());
+        Assert.assertEquals(2, result.get(0).getPartitionNames().size());
+        Assert.assertEquals(4, result.get(1).getPartitionNames().size());
+        Assert.assertEquals(8, result.get(2).getPartitionNames().size());
+        Assert.assertEquals(2, result.get(3).getPartitionNames().size());
     }
 }

@@ -30,11 +30,12 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.common.PListCell;
+import com.starrocks.sql.common.PCell;
 import org.apache.commons.lang.NotImplementedException;
 
 import java.time.Clock;
@@ -46,7 +47,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-public abstract class DefaultTraits extends ConnectorPartitionTraits  {
+public abstract class DefaultTraits extends ConnectorPartitionTraits {
 
     @Override
     public PartitionKey createPartitionKeyWithType(List<String> values, List<Type> types) throws AnalysisException {
@@ -88,8 +89,10 @@ public abstract class DefaultTraits extends ConnectorPartitionTraits  {
             return Lists.newArrayList(table.getName());
         }
 
+        ConnectorMetadatRequestContext requestContext = new ConnectorMetadatRequestContext();
+        requestContext.setQueryMVRewrite(this.isQueryMVRewrite());
         return GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
-                table.getCatalogName(), getDbName(), getTableName());
+                table.getCatalogName(), getCatalogDBName(), getTableName(), requestContext);
     }
 
     @Override
@@ -105,8 +108,8 @@ public abstract class DefaultTraits extends ConnectorPartitionTraits  {
     }
 
     @Override
-    public Map<String, PListCell> getPartitionList(List<Column> partitionColumns) throws AnalysisException {
-        return PartitionUtil.getMVPartitionNameWithList(table, partitionColumns, getPartitionNames());
+    public Map<String, PCell> getPartitionCells(List<Column> partitionColumns) throws AnalysisException {
+        return PartitionUtil.getMVPartitionToCells(table, partitionColumns, getPartitionNames());
     }
 
     @Override

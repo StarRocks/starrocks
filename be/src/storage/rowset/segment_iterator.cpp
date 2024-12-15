@@ -16,10 +16,9 @@
 
 #include <algorithm>
 #include <memory>
-#include <stack>
 #include <unordered_map>
+#include <utility>
 
-#include "column/binary_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/datum_tuple.h"
@@ -46,6 +45,7 @@
 #include "storage/index/vector/vector_index_reader_factory.h"
 #include "storage/index/vector/vector_search_option.h"
 #include "storage/lake/update_manager.h"
+#include "storage/olap_runtime_range_pruner.h"
 #include "storage/olap_runtime_range_pruner.hpp"
 #include "storage/projection_iterator.h"
 #include "storage/range.h"
@@ -54,13 +54,13 @@
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/rowset/column_decoder.h"
 #include "storage/rowset/common.h"
+#include "storage/rowset/data_sample.h"
 #include "storage/rowset/default_value_column_iterator.h"
 #include "storage/rowset/dictcode_column_iterator.h"
 #include "storage/rowset/fill_subfield_iterator.h"
 #include "storage/rowset/rowid_column_iterator.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/short_key_range_option.h"
-#include "storage/storage_engine.h"
 #include "storage/types.h"
 #include "storage/update_manager.h"
 #include "types/array_type_info.h"
@@ -268,6 +268,11 @@ private:
 
     Status _apply_bitmap_index();
 
+    // Data sampling
+    Status _apply_data_sampling();
+    StatusOr<RowIdSparseRange> _sample_by_block();
+    StatusOr<RowIdSparseRange> _sample_by_page();
+
     Status _apply_del_vector();
 
     Status _init_inverted_index_iterators();
@@ -298,6 +303,8 @@ private:
     bool need_early_materialize_subfield(const FieldPtr& field);
 
     Status _init_ann_reader();
+
+    IndexReadOptions _index_read_options(ColumnId cid) const;
 
 private:
     using RawColumnIterators = std::vector<std::unique_ptr<ColumnIterator>>;
@@ -370,18 +377,18 @@ private:
     tenann::PrimitiveSeqView _query_view;
     std::shared_ptr<tenann::IndexMeta> _index_meta;
 #endif
+
+    bool _always_build_rowid() const { return _use_vector_index && !_use_ivfpq; }
+
     bool _use_vector_index;
     std::string _vector_distance_column_name;
     int _vector_column_id;
     SlotId _vector_slot_id;
     std::unordered_map<rowid_t, float> _id2distance_map;
-    std::vector<rowid_t> _first_rowids;
     std::map<std::string, std::string> _query_params;
     double _vector_range;
     int _result_order;
     bool _use_ivfpq;
-    Buffer<uint8_t> _filter_selection;
-    Buffer<uint8_t> _filter_by_expr_selection;
 
     Status _init_reader_from_file(const std::string& index_path, const std::shared_ptr<TabletIndex>& tablet_index_meta,
                                   const std::map<std::string, std::string>& query_params);
@@ -477,7 +484,7 @@ Status SegmentIterator::_init() {
             VLOG(2) << "seg_iter init delvec tablet:" << _opts.tablet_id << " rowset:" << _opts.rowset_id
                     << " seg:" << segment_id() << " version req:" << _opts.version << " actual:" << _del_vec->version()
                     << " " << _del_vec->cardinality() << "/" << _segment->num_rows();
-            roaring_init_iterator(&_del_vec->roaring()->roaring, &_roaring_iter);
+            roaring_iterator_init(&_del_vec->roaring()->roaring, &_roaring_iter);
         }
     }
 
@@ -512,6 +519,8 @@ Status SegmentIterator::_init() {
         RETURN_IF_ERROR(_apply_del_vector());
     }
     RETURN_IF_ERROR(_get_row_ranges_by_vector_index());
+    RETURN_IF_ERROR(_apply_data_sampling());
+
     // rewrite stage
     // Rewriting predicates using segment dictionary codes
     RETURN_IF_ERROR(_rewrite_predicates());
@@ -1316,12 +1325,6 @@ inline Status SegmentIterator::_read(Chunk* chunk, vector<rowid_t>* rowids, size
         chunk->check_or_die();
     }
 
-    if (_use_vector_index) {
-        for (uint32_t i = range.begin(); i < range.end(); i++) {
-            _first_rowids.push_back(i);
-        }
-    }
-
     if (rowids != nullptr) {
         rowids->reserve(rowids->size() + n);
         SparseRangeIterator<> iter = range.new_iterator();
@@ -1350,8 +1353,10 @@ Status SegmentIterator::do_get_next(Chunk* chunk) {
     DCHECK_EQ(0, chunk->num_rows());
 
     Status st;
+    std::vector<uint32_t> rowids;
+    std::vector<uint32_t>* p_rowids = _always_build_rowid() ? &rowids : nullptr;
     do {
-        st = _do_get_next(chunk, nullptr);
+        st = _do_get_next(chunk, p_rowids);
     } while (st.ok() && chunk->num_rows() == 0);
     return st;
 }
@@ -1504,26 +1509,25 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
     }
 
     if (_use_vector_index && !_use_ivfpq) {
+        DCHECK(rowid != nullptr);
         std::shared_ptr<FloatColumn> distance_column = FloatColumn::create();
         vector<rowid_t> rowids;
-        for (const auto& id : _first_rowids) {
-            auto it = _id2distance_map.find(id);
-            if (it != _id2distance_map.end()) {
+        for (const auto& rid : *rowid) {
+            auto it = _id2distance_map.find(rid);
+            if (LIKELY(it != _id2distance_map.end())) {
                 rowids.emplace_back(it->first);
+            } else {
+                DCHECK(false) << "not found row id:" << rid << " in distance map";
+                return Status::InternalError(fmt::format("not found row id:{} in distance map", rid));
             }
         }
-        if (!rowids.empty()) {
-            std::sort(rowids.begin(), rowids.end());
-            for (const auto& vrid : rowids) {
-                distance_column->append(_id2distance_map[vrid]);
-            }
+        for (const auto& vrid : rowids) {
+            distance_column->append(_id2distance_map[vrid]);
         }
-        if (has_non_expr_predicate && _filter_selection.size() == distance_column->size()) {
-            distance_column->filter_range(_filter_selection, 0, distance_column->size());
-        }
+
+        // TODO: plan vector column in FE Planner
         chunk->append_vector_column(distance_column, _make_field(_vector_column_id), _vector_slot_id);
     }
-    _first_rowids.clear();
 
     result->swap_chunk(*chunk);
 
@@ -1631,9 +1635,6 @@ StatusOr<uint16_t> SegmentIterator::_filter_by_non_expr_predicates(Chunk* chunk,
         }
     }
     _opts.stats->rows_vec_cond_filtered += (to - chunk_size);
-    for (int i = from; i < to; i++) {
-        _filter_selection.push_back(_selection[i]);
-    }
     return chunk_size;
 }
 
@@ -1659,9 +1660,6 @@ StatusOr<uint16_t> SegmentIterator::_filter_by_expr_predicates(Chunk* chunk, vec
             }
         }
         _opts.stats->rows_vec_cond_filtered += (chunk_size - new_size);
-        for (int i = 0; i < chunk_size; i++) {
-            _filter_by_expr_selection.push_back(_selection[i]);
-        }
         chunk_size = new_size;
     }
     return chunk_size;
@@ -2056,6 +2054,81 @@ static void erase_column_pred_from_pred_tree(PredicateTree& pred_tree,
             },
             &new_root, &useless_root);
     pred_tree = PredicateTree::create(std::move(new_root));
+}
+
+StatusOr<RowIdSparseRange> SegmentIterator::_sample_by_block() {
+    size_t rows_per_block = _segment->num_rows_per_block();
+    size_t total_rows = _segment->num_rows();
+    int64_t probability_percent = _opts.sample_options.probability_percent;
+    int64_t random_seed = _opts.sample_options.random_seed;
+
+    auto sampler = DataSample::make_block_sample(probability_percent, random_seed, rows_per_block, total_rows);
+    return sampler->sample(_opts.stats);
+}
+
+StatusOr<RowIdSparseRange> SegmentIterator::_sample_by_page() {
+    RETURN_IF(_schema.num_fields() > 1, Status::InvalidArgument("page sample can only support at most 1 column"));
+
+    ColumnId cid = _schema.field(0)->id();
+    auto& column_iterator = _column_iterators[cid];
+    ColumnReader* column_reader = column_iterator->get_column_reader();
+    RETURN_IF(column_reader == nullptr, Status::InvalidArgument("Not support page smaple: no column_reader"));
+    int32_t num_data_pages = column_reader->num_data_pages();
+    PageIndexer page_indexer = [&](size_t page_index) { return column_reader->get_page_range(page_index); };
+
+    int64_t probability_percent = _opts.sample_options.probability_percent;
+    int64_t random_seed = _opts.sample_options.random_seed;
+    auto sampler = DataSample::make_page_sample(probability_percent, random_seed, num_data_pages, page_indexer);
+
+    if (column_reader->has_zone_map() && SortableZoneMap::is_support_data_type(column_reader->column_type())) {
+        IndexReadOptions opts = _index_read_options(cid);
+        ASSIGN_OR_RETURN(auto zonemap, column_reader->get_raw_zone_map(opts));
+        auto sorted = std::make_shared<SortableZoneMap>(column_reader->column_type(), std::move(zonemap));
+        sampler->with_zonemap(sorted);
+    }
+
+    return sampler->sample(_opts.stats);
+}
+
+Status SegmentIterator::_apply_data_sampling() {
+    RETURN_IF(!_opts.sample_options.enable_sampling, Status::OK());
+    RETURN_IF(_scan_range.empty(), Status::OK());
+    RETURN_IF_ERROR(_segment->load_index(_opts.lake_io_opts));
+    RETURN_IF(_opts.sample_options.probability_percent <= 0, Status::InvalidArgument("probability_percent must > 0"));
+
+    DCHECK(_opts.sample_options.__isset.probability_percent);
+    DCHECK(_opts.sample_options.__isset.random_seed);
+    DCHECK(_opts.sample_options.__isset.sample_method);
+
+    SCOPED_RAW_TIMER(&_opts.stats->sample_time_ns);
+
+    SampleMethod::type sample_method = _opts.sample_options.sample_method;
+    RowIdSparseRange sampled_ranges;
+    switch (sample_method) {
+    case SampleMethod::type::BY_BLOCK: {
+        ASSIGN_OR_RETURN(sampled_ranges, _sample_by_block());
+        break;
+    }
+    case SampleMethod::type::BY_PAGE: {
+        ASSIGN_OR_RETURN(sampled_ranges, _sample_by_page());
+        break;
+    }
+    default:
+        return Status::InvalidArgument(fmt::format("unsupported sample_method: {}", sample_method));
+    }
+    _scan_range = _scan_range.intersection(sampled_ranges);
+
+    return {};
+}
+
+IndexReadOptions SegmentIterator::_index_read_options(ColumnId cid) const {
+    IndexReadOptions opts;
+    opts.use_page_cache = !_opts.temporary_data && _opts.use_page_cache && !config::disable_storage_page_cache;
+    opts.kept_in_memory = false;
+    opts.lake_io_opts = _opts.lake_io_opts;
+    opts.read_file = _column_files.at(cid).get();
+    opts.stats = _opts.stats;
+    return opts;
 }
 
 // filter rows by evaluating column predicates using bitmap indexes.

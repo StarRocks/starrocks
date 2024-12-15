@@ -42,6 +42,7 @@ import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.SnapshotSummary;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableProperties;
+import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.expressions.ManifestEvaluator;
 import org.apache.iceberg.expressions.Projections;
@@ -91,8 +92,8 @@ public class IcebergApiConverter {
                 .setSrTableName(remoteTableName)
                 .setCatalogName(catalogName)
                 .setResourceName(toResourceName(catalogName, "iceberg"))
-                .setRemoteDbName(remoteDbName)
-                .setRemoteTableName(remoteTableName)
+                .setCatalogDBName(remoteDbName)
+                .setCatalogTableName(remoteTableName)
                 .setComment(nativeTbl.properties().getOrDefault("common", ""))
                 .setNativeTable(nativeTbl)
                 .setFullSchema(toFullSchemas(nativeTbl.schema()))
@@ -419,5 +420,9 @@ public class IcebergApiConverter {
             partitionColumns.add(column);
         }
         return partitionColumns;
+    }
+
+    public static Namespace convertDbNameToNamespace(String dbName) {
+        return Namespace.of(dbName.split("\\."));
     }
 }

@@ -23,6 +23,7 @@
 #include "exprs/predicate.h"
 #include "exprs/runtime_filter_bank.h"
 #include "gen_cpp/Types_types.h"
+#include "util/defer_op.h"
 
 namespace starrocks::pipeline {
 class RuntimeFilterHolder;
@@ -145,11 +146,13 @@ public:
     }
 
     void set_collector(TPlanNodeId id, RuntimeFilterCollectorPtr&& collector) {
-        get_holder(id, -1)->set_collector(std::move(collector));
+        auto holder = get_holder(id, -1);
+        holder->set_collector(std::move(collector));
     }
 
     void set_collector(TPlanNodeId id, int32_t sequence_id, RuntimeFilterCollectorPtr&& collector) {
-        get_holder(id, sequence_id)->set_collector(std::move(collector));
+        auto holder = get_holder(id, sequence_id);
+        holder->set_collector(std::move(collector));
     }
 
     void close_all_in_filters(RuntimeState* state) {

@@ -175,6 +175,9 @@ enum TSchemaTableType {
     SCH_PARTITIONS_META,
     SYS_FE_MEMORY_USAGE,
     SCH_TEMP_TABLES,
+    
+    SCH_COLUMN_STATS_USAGE,
+    SCH_ANALYZE_STATUS,
 }
 
 enum THdfsCompression {
@@ -288,6 +291,7 @@ struct TOlapTableIndexSchema {
     5: optional Exprs.TExpr where_clause
     6: optional i64 schema_id // schema id
     7: optional map<string, string> column_to_expr_value
+    8: optional bool is_shadow
 }
 
 struct TOlapTableSchemaParam {

@@ -24,6 +24,7 @@ set(EXEC_FILES
         ./common/status_test.cpp
         ./common/tracer_test.cpp
         ./common/uri_test.cpp
+        ./connector/deletion_vector/deletion_vector_test.cpp
         ./connector_sink/hive_chunk_sink_test.cpp
         ./connector_sink/iceberg_chunk_sink_test.cpp
         ./connector_sink/file_chunk_sink_test.cpp
@@ -91,6 +92,7 @@ set(EXEC_FILES
         ./exec/repeat_node_test.cpp
         ./exec/sorting_test.cpp
         ./exec/table_function_node_test.cpp
+        ./exec/olap_scan_prepare_test.cpp
         ./exprs/agg/json_each_test.cpp
         ./exprs/agg/aggregate_test.cpp
         ./exprs/arithmetic_expr_test.cpp
@@ -154,6 +156,8 @@ set(EXEC_FILES
         ./exprs/runtime_filter_test.cpp
         ./exprs/subfield_expr_test.cpp
         ./exprs/vectorized_literal_test.cpp
+        ./exprs/min_max_predicate_test.cpp
+        ./exprs/in_const_predicate_test.cpp
         ./formats/csv/array_converter_test.cpp
         ./formats/csv/boolean_converter_test.cpp
         ./formats/csv/csv_file_writer_test.cpp
@@ -279,6 +283,7 @@ set(EXEC_FILES
         ./storage/rowset/bloom_filter_index_reader_writer_test.cpp
         ./storage/rowset/column_reader_writer_test.cpp
         ./storage/rowset/dict_page_test.cpp
+        ./storage/rowset/data_sample_test.cpp
         ./storage/rowset/encoding_info_test.cpp
         ./storage/rowset/frame_of_reference_page_test.cpp
         ./storage/rowset/map_column_rw_test.cpp
@@ -355,6 +360,9 @@ set(EXEC_FILES
         ./storage/persistent_index_consistency_test.cpp
         ./storage/meta_reader_test.cpp
         ./storage/dictionary_cache_manager_test.cpp
+        ./storage/column_or_predicate_test.cpp
+        ./storage/column_and_predicate_test.cpp
+        ./storage/olap_runtime_range_pruner_test.cpp
         ./runtime/agg_state_desc_test.cpp
         ./runtime/buffer_control_block_test.cpp
         ./runtime/data_stream_mgr_test.cpp
@@ -405,6 +413,7 @@ set(EXEC_FILES
         ./util/phmap_test.cpp
         ./util/aes_util_test.cpp
         ./util/await_test.cpp
+        ./util/base85_test.cpp
         ./util/bitmap_test.cpp
         ./util/bit_mask_test.cpp
         ./util/bit_stream_utils_test.cpp
@@ -424,6 +433,7 @@ set(EXEC_FILES
         ./util/core_local_test.cpp
         ./util/core_local_counter_test.cpp
         ./util/countdown_latch_test.cpp
+        ./util/cpu_info_test.cpp
         ./util/crc32c_test.cpp
         ./util/dynamic_cache_test.cpp
         ./util/exception_stack_test.cpp

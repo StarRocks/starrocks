@@ -362,6 +362,7 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     rs_opts.column_access_paths = params.column_access_paths;
     rs_opts.use_vector_index = params.use_vector_index;
     rs_opts.vector_search_option = params.vector_search_option;
+    rs_opts.sample_options = params.sample_options;
     if (keys_type == KeysType::PRIMARY_KEYS) {
         rs_opts.is_primary_keys = true;
         rs_opts.version = _version.second;
@@ -564,7 +565,7 @@ Status TabletReader::_init_predicates(const TabletReaderParams& params) {
 }
 
 Status TabletReader::_init_delete_predicates(const TabletReaderParams& params, DeletePredicates* dels) {
-    PredicateParser pred_parser(_tablet_schema);
+    OlapPredicateParser pred_parser(_tablet_schema);
 
     std::shared_lock header_lock(_tablet->get_header_lock());
     for (const DeletePredicatePB& pred_pb : _tablet->delete_predicates()) {
