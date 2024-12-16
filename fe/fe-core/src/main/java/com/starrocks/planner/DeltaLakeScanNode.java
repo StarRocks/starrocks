@@ -57,6 +57,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -187,7 +188,8 @@ public class DeltaLakeScanNode extends ScanNode {
 
         THdfsScanRange hdfsScanRange = new THdfsScanRange();
 
-        hdfsScanRange.setRelative_path(new Path(fileStatus.getPath()).getName());
+        hdfsScanRange.setRelative_path(URLDecoder.decode("/" + Paths.get(deltaLakeTable.getTableLocation()).
+                relativize(Paths.get(fileStatus.getPath())), StandardCharsets.UTF_8));
         hdfsScanRange.setOffset(0);
         hdfsScanRange.setLength(fileStatus.getSize());
         hdfsScanRange.setPartition_id(partitionId);
