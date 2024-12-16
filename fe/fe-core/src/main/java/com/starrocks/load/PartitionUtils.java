@@ -42,11 +42,14 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 public class PartitionUtils {
@@ -203,6 +206,34 @@ public class PartitionUtils {
         }
 
         return new RangePartitionBoundary(isMinPartition, isMaxPartition, startKeys, endKeys);
+    }
+
+    public static List<List<Object>> calListPartitionKeys(List<List<LiteralExpr>> multiLiteralExprs,
+                                                          List<LiteralExpr> literalExprs) {
+        List<List<Object>> keys = new ArrayList<>();
+        if (CollectionUtils.isNotEmpty(multiLiteralExprs)) {
+            for (List<LiteralExpr> exprs : multiLiteralExprs) {
+                keys.add(initItemOfInKeys(exprs));
+            }
+        }
+        if (CollectionUtils.isNotEmpty(literalExprs)) {
+            for (LiteralExpr expr : literalExprs) {
+                keys.add(initItemOfInKeys(Collections.singletonList(expr)));
+            }
+        }
+        return keys;
+    }
+
+    private static List<Object> initItemOfInKeys(List<LiteralExpr> exprs) {
+        return exprs.stream()
+                .filter(Objects::nonNull)
+                .map(PartitionUtils::exprValue)
+                .collect(Collectors.toList());
+    }
+
+    private static Object exprValue(LiteralExpr expr) {
+        return expr instanceof DateLiteral
+                ? convertDateLiteralToNumber((DateLiteral) expr) : expr.getRealObjectValue();
     }
 
     // This is to be compatible with Spark Load Job formats for Date type.
