@@ -401,6 +401,10 @@ public class JobSpec {
         this.loadJobId = loadJobId;
     }
 
+    public TLoadJobType getLoadJobType() {
+        return queryOptions.getLoad_job_type();
+    }
+
     public boolean isSetLoadJobId() {
         return loadJobId != UNINITIALIZED_LOAD_JOB_ID;
     }

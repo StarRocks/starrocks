@@ -85,14 +85,14 @@ public class InsertLoadJob extends LoadJob {
     }
 
     public InsertLoadJob(String label, long dbId, long tableId, long txnId, String loadId, String user, long createTimestamp,
-            TLoadJobType type, long timeout, Coordinator coordinator) throws MetaNotFoundException {
+                         long timeout, Coordinator coordinator) {
         super(dbId, label);
         this.tableId = tableId;
         this.createTimestamp = createTimestamp;
         this.loadStartTimestamp = createTimestamp;
         this.state = JobState.LOADING;
         this.jobType = EtlJobType.INSERT;
-        this.loadType = type;
+        this.loadType = coordinator.getLoadJobType();
         this.timeoutSecond = timeout;
         this.coordinator = coordinator;
         this.loadIds.add(loadId);
