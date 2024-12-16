@@ -282,6 +282,7 @@ public:
     DeltaLakeTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool);
     ~DeltaLakeTableDescriptor() override = default;
     bool has_partition() const override { return true; }
+    bool has_base_path() const override { return true; }
 };
 
 class HudiTableDescriptor : public HiveTableDescriptor {
