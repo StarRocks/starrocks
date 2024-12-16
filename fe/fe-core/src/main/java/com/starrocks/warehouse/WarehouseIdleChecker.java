@@ -114,22 +114,23 @@ public class WarehouseIdleChecker extends FrontendDaemon {
     public IdleStatus getIdleStatus() {
         runAfterCatalogReady();
 
-        List<Long> warehouseIds = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllWarehouseIds();
+        List<Warehouse> warehouses = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllWarehouses();
 
         boolean isClusterIdle = true;
-        List<IdleStatus.WarehouseStatus> warehouses = new ArrayList<>(warehouseIds.size());
+        List<IdleStatus.WarehouseStatus> statusList = new ArrayList<>(warehouses.size());
         long latestWarehouseIdleTime = -1L;
-        for (long wId : warehouseIds) {
-            Long wIdleTime = warehouseIdleTime.getOrDefault(wId, -1L);
+        for (Warehouse warehouse : warehouses) {
+            Long wIdleTime = warehouseIdleTime.getOrDefault(warehouse.getId(), -1L);
             if (wIdleTime == -1L) {
                 isClusterIdle = false;
             } else {
                 latestWarehouseIdleTime = Math.max(latestWarehouseIdleTime, wIdleTime);
             }
 
-            warehouses.add(new IdleStatus.WarehouseStatus(wId, wIdleTime != -1L, wIdleTime));
+            statusList.add(new IdleStatus.WarehouseStatus(
+                    warehouse.getId(), warehouse.getName(), wIdleTime != -1L, wIdleTime));
         }
 
-        return new IdleStatus(isClusterIdle, isClusterIdle ? latestWarehouseIdleTime : -1, warehouses);
+        return new IdleStatus(isClusterIdle, isClusterIdle ? latestWarehouseIdleTime : -1L, statusList);
     }
 }

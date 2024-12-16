@@ -38,13 +38,16 @@ public class IdleStatus {
     public static class WarehouseStatus {
         @SerializedName("id")
         long id;
+        @SerializedName("name")
+        String name;
         @SerializedName("isIdle")
         boolean isIdle;
         @SerializedName("idleTime")
         long idleTime;
 
-        public WarehouseStatus(long id, boolean isIdle, long idleTime) {
+        public WarehouseStatus(long id, String name, boolean isIdle, long idleTime) {
             this.id = id;
+            this.name = name;
             this.isIdle = isIdle;
             this.idleTime = idleTime;
         }

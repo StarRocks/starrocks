@@ -31,6 +31,7 @@ import io.netty.handler.codec.http.HttpMethod;
  *     "warehouses": [
  *         {
  *             "id": 0,
+ *             "name": "default_warehouse",
  *             "isIdle": true,
  *             "idleTime": 1734113878006
  *         }
