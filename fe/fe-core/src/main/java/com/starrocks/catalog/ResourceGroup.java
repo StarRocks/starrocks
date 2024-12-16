@@ -48,6 +48,7 @@ public class ResourceGroup {
     public static final String BIG_QUERY_SCAN_ROWS_LIMIT = "big_query_scan_rows_limit";
     public static final String BIG_QUERY_CPU_SECOND_LIMIT = "big_query_cpu_second_limit";
     public static final String CONCURRENCY_LIMIT = "concurrency_limit";
+    public static final String PARTITION_SCAN_NUMBER_LIMIT_RULE = "partition_scan_number_limit_rule";
     public static final String DEFAULT_RESOURCE_GROUP_NAME = "default_wg";
     public static final String DISABLE_RESOURCE_GROUP_NAME = "disable_resource_group";
     public static final String DEFAULT_MV_RESOURCE_GROUP_NAME = "default_mv_wg";
@@ -119,6 +120,9 @@ public class ResourceGroup {
                     (rg, classifier) -> new DecimalFormat("#.##").format(
                             Objects.requireNonNullElse(rg.getSpillMemLimitThreshold(), 1.0) * 100) + "%"),
             new ColumnMeta(
+                    new Column(PARTITION_SCAN_NUMBER_LIMIT_RULE, ScalarType.createVarchar(1024)),
+                    (rg, classifier) -> rg.getPartitionScanNumberLimitRule()),
+            new ColumnMeta(
                     new Column(GROUP_TYPE, ScalarType.createVarchar(200)),
                     (rg, classifier) -> rg.getResourceGroupType().name().substring("WG_".length()), false),
             new ColumnMeta(
@@ -172,6 +176,8 @@ public class ResourceGroup {
     private TWorkGroupType resourceGroupType;
     @SerializedName(value = "version")
     private long version;
+    @SerializedName(value = "partitionScanNumberLimitRule")
+    private String partitionScanNumberLimitRule;
 
     public ResourceGroup() {
     }
@@ -196,6 +202,14 @@ public class ResourceGroup {
 
     public void setVersion(long version) {
         this.version = version;
+    }
+
+    public String getPartitionScanNumberLimitRule() {
+        return partitionScanNumberLimitRule;
+    }
+
+    public void setPartitionScanNumberLimitRule(String partitionScanNumberLimitRule) {
+        this.partitionScanNumberLimitRule = partitionScanNumberLimitRule;
     }
 
     public List<List<String>> show(boolean verbose) {
@@ -259,6 +273,10 @@ public class ResourceGroup {
         }
         if (resourceGroupType != null) {
             twg.setWorkgroup_type(resourceGroupType);
+        }
+
+        if (partitionScanNumberLimitRule != null) {
+            twg.setPartition_scan_number_limit_rule(partitionScanNumberLimitRule);
         }
 
         twg.setExclusive_cpu_cores(getNormalizedExclusiveCpuCores());

@@ -42,6 +42,7 @@ struct TWorkGroup {
   15: optional i32 exclusive_cpu_cores
 
   100: optional i32 max_cpu_cores
+  200: optional string partition_scan_number_limit_rule
 }
 
 enum TWorkGroupOpType {

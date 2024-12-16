@@ -85,10 +85,11 @@ public class AlterResourceGroupStmt extends DdlStmt {
                     changedProperties.getBigQueryCpuSecondLimit() == null &&
                     changedProperties.getBigQueryMemLimit() == null &&
                     changedProperties.getBigQueryScanRowsLimit() == null &&
+                    changedProperties.getPartitionScanNumberLimitRule() == null &&
                     changedProperties.getSpillMemLimitThreshold() == null) {
                 throw new SemanticException("At least one of ('cpu_weight','exclusive_cpu_cores','mem_limit'," +
                         "'max_cpu_cores','concurrency_limit','big_query_mem_limit', 'big_query_scan_rows_limit'," +
-                        "'big_query_cpu_second_limit','spill_mem_limit_threshold') " +
+                        "'big_query_cpu_second_limit','spill_mem_limit_threshold','partition_scan_number_limit_rule') " +
                         "should be specified");
             }
         }
