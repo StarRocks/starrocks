@@ -351,6 +351,7 @@ StatusOr<AsyncDeltaWriterBuilder::AsyncDeltaWriterPtr> AsyncDeltaWriterBuilder::
                                           .set_schema_id(_schema_id)
                                           .set_partial_update_mode(_partial_update_mode)
                                           .set_column_to_expr_value(_column_to_expr_value)
+                                          .set_load_id(_load_id)
                                           .build());
     auto impl = new AsyncDeltaWriterImpl(std::move(writer));
     return std::make_unique<AsyncDeltaWriter>(impl);
