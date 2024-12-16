@@ -16,6 +16,8 @@ package com.starrocks.load;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.DateLiteral;
+import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.MaterializedIndex;
@@ -24,9 +26,12 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import org.junit.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 public class PartitionUtilsTest {
 
@@ -52,4 +57,43 @@ public class PartitionUtilsTest {
         partitions.add(p1);
         PartitionUtils.clearTabletsFromInvertedIndex(partitions);
     }
+
+    @Test
+    public void testCalListPartitionKeys() throws Exception {
+        {
+            List<List<Object>> partitionKeys = PartitionUtils.calListPartitionKeys(null, null);
+            assertTrue(partitionKeys.isEmpty());
+        }
+
+        {
+            List<List<LiteralExpr>> multiLiteralExprs = new ArrayList<>();
+            multiLiteralExprs.add(Lists.newArrayList(
+                    DateLiteral.create("2024-10-09", Type.DATE),
+                    DateLiteral.create("2024-10-10", Type.DATE)
+            ));
+            multiLiteralExprs.add(Lists.newArrayList(
+                    StringLiteral.create("hangzhou"),
+                    StringLiteral.create("shanghai")
+            ));
+
+            List<List<Object>> partitionKeys = PartitionUtils.calListPartitionKeys(multiLiteralExprs, null);
+            assertEquals(2, partitionKeys.size());
+            assertArrayEquals(new Long[] {1036617L, 1036618L}, partitionKeys.get(0).toArray(new Object[0]));
+            assertArrayEquals(new String[] {"hangzhou", "shanghai"}, partitionKeys.get(1).toArray(new Object[0]));
+        }
+
+        {
+            List<LiteralExpr> literalExprs = Lists.newArrayList(
+                    DateLiteral.create("2024-10-09", Type.DATE),
+                    DateLiteral.create("2024-10-10", Type.DATE)
+            );
+
+            List<List<Object>> partitionKeys = PartitionUtils.calListPartitionKeys(null, literalExprs);
+            assertEquals(2, partitionKeys.size());
+            assertArrayEquals(new Long[] {1036617L}, partitionKeys.get(0).toArray(new Object[0]));
+            assertArrayEquals(new Long[] {1036618L}, partitionKeys.get(1).toArray(new Object[0]));
+        }
+
+    }
+
 }
