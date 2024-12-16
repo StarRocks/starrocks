@@ -20,6 +20,7 @@ import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.catalog.ResourceGroupMgr;
 import com.starrocks.common.Config;
+import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.ha.FrontendNodeType;
@@ -594,14 +595,32 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         {
             // 2.1 The coming query pending timeout, query_timeout (300) > pending_timeout (2).
             DefaultCoordinator coord = getSchedulerWithQueryId("select count(1) from lineitem");
+<<<<<<< HEAD
             Assert.assertThrows("pending timeout", UserException.class, () -> manager.maybeWait(connectContext, coord));
+=======
+            Assert.assertThrows("pending timeout", StarRocksException.class,
+                    () -> manager.maybeWait(connectContext, coord));
+            ExceptionChecker.expectThrowsWithMsg(StarRocksException.class,
+                    "the session variable [query_queue_pending_timeout_second]",
+                    () -> manager.maybeWait(connectContext, coord));
+>>>>>>> 39956d5dd ([Enhancement] Improve query queue pending timeout error message (#53940))
         }
 
         {
             // 2.2 The coming query pending timeout, query_timeout (2) < pending_timeout (300).
             GlobalVariable.setQueryQueuePendingTimeoutSecond(300);
+<<<<<<< HEAD
             DefaultCoordinator coord = getSchedulerWithQueryId("select /*+SET_VAR(query_timeout=2)*/ count(1) from lineitem");
             Assert.assertThrows("pending timeout", UserException.class, () -> manager.maybeWait(connectContext, coord));
+=======
+            DefaultCoordinator coord =
+                    getSchedulerWithQueryId("select /*+SET_VAR(query_timeout=2)*/ count(1) from lineitem");
+            Assert.assertThrows("pending timeout", StarRocksException.class,
+                    () -> manager.maybeWait(connectContext, coord));
+            ExceptionChecker.expectThrowsWithMsg(StarRocksException.class,
+                    "query/insert timeout",
+                    () -> manager.maybeWait(connectContext, coord));
+>>>>>>> 39956d5dd ([Enhancement] Improve query queue pending timeout error message (#53940))
         }
 
         {
