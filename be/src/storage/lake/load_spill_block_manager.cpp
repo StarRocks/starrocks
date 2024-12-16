@@ -25,6 +25,16 @@
 
 namespace starrocks::lake {
 
+void LoadSpillBlockContainer::append_block(const spill::BlockPtr& block) {
+    std::lock_guard guard(_mutex);
+    _blocks.emplace_back(block);
+}
+
+size_t LoadSpillBlockContainer::block_count() {
+    std::lock_guard guard(_mutex);
+    return _blocks.size();
+}
+
 LoadSpillBlockManager::~LoadSpillBlockManager() {
     // release blocks before block manager
     _block_container.reset();
@@ -52,15 +62,20 @@ Status LoadSpillBlockManager::init() {
 }
 
 // acquire Block from BlockManager
-StatusOr<spill::BlockPtr> LoadSpillBlockManager::acquire_block(int64_t tablet_id, int64_t txn_id, size_t block_size) {
+StatusOr<spill::BlockPtr> LoadSpillBlockManager::acquire_block(size_t block_size) {
     spill::AcquireBlockOptions opts;
     opts.query_id = _load_id; // load id as query id
     opts.fragment_instance_id =
-            UniqueId(tablet_id, txn_id).to_thrift(); // use tablet id + txn id to generate fragment instance id
+            UniqueId(_tablet_id, _txn_id).to_thrift(); // use tablet id + txn id to generate fragment instance id
     opts.plan_node_id = 0;
     opts.name = "load_spill";
     opts.block_size = block_size;
-    return _block_manager->acquire_block(opts);
+    auto block = _block_manager->acquire_block(opts);
+    if (!block.ok()) {
+        return block.status();
+    }
+    _block_container->append_block(block.value());
+    return block.value();
 }
 
 // return Block to BlockManager

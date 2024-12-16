@@ -26,14 +26,22 @@ public:
     LoadSpillBlockContainer() {}
     ~LoadSpillBlockContainer() = default;
 
+    void append_block(const spill::BlockPtr& block);
+    size_t block_count();
+    // No thread safe, UT only
+    spill::BlockPtr get_block(size_t idx) { return _blocks[idx]; }
+
 private:
+    std::mutex _mutex;                    // Mutex for the container.
     std::vector<spill::BlockPtr> _blocks; // Blocks generated when loading.
 };
 
 class LoadSpillBlockManager {
 public:
     // Constructor that initializes the LoadSpillBlockManager with a query ID and remote spill path.
-    LoadSpillBlockManager(const TUniqueId& load_id, const std::string& remote_spill_path) : _load_id(load_id) {
+    LoadSpillBlockManager(const TUniqueId& load_id, int64_t tablet_id, int64_t txn_id,
+                          const std::string& remote_spill_path)
+            : _load_id(load_id), _tablet_id(tablet_id), _txn_id(txn_id) {
         _remote_spill_path = remote_spill_path + "/load_spill/";
     }
 
@@ -44,7 +52,7 @@ public:
     Status init();
 
     // acquire Block from BlockManager
-    StatusOr<spill::BlockPtr> acquire_block(int64_t tablet_id, int64_t txn_id, size_t block_size);
+    StatusOr<spill::BlockPtr> acquire_block(size_t block_size);
     // return Block to BlockManager
     Status release_block(spill::BlockPtr block);
 
@@ -53,6 +61,8 @@ public:
 
 private:
     TUniqueId _load_id;                                        // Unique ID for the load.
+    int64_t _tablet_id;                                        // ID for the tablet.
+    int64_t _txn_id;                                           // ID for the transaction.
     std::string _remote_spill_path;                            // Path for remote spill storage.
     std::unique_ptr<spill::DirManager> _remote_dir_manager;    // Manager for remote directories.
     std::unique_ptr<spill::BlockManager> _block_manager;       // Manager for blocks.
