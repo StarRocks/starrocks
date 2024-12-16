@@ -4,6 +4,24 @@ displayed_sidebar: docs
 
 # StarRocks version 3.1
 
+## 3.1.16
+
+Release date: December 16, 2024
+
+### Improvements
+
+- Optimized table-related statistics. [#50316](https://github.com/StarRocks/starrocks/pull/50316)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- Insufficient granularity in error code handling for disk full scenarios caused the BE to mistakenly identify disk errors and delete data. [#51411](https://github.com/StarRocks/starrocks/pull/51411)
+- Stream Load failures when submitted using HTTP 1.0. [#53010](https://github.com/StarRocks/starrocks/pull/53010) [#53008](https://github.com/StarRocks/starrocks/pull/53008)
+- Routine Load tasks were canceled due to expired transactions (now tasks are canceled only if the database or table no longer exists and paused when transactions expired). [#50334](https://github.com/StarRocks/starrocks/pull/50334)
+- Unloading data using `EXPORT` with Broker to `file://` resulted in a file rename error, causing the export to fail. [#52544](https://github.com/StarRocks/starrocks/pull/52544)
+- If the join condition in an equal-join is an expression based on a low-cardinality column, the system may incorrectly push down a Runtime Filter predicate, leading to a BE crash. [#50690](https://github.com/StarRocks/starrocks/pull/50690)
+
 ## 3.1.15
 
 Release date: September 4, 2024
