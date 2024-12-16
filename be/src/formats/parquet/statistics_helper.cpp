@@ -192,7 +192,8 @@ void translate_to_string_value(ColumnPtr col, size_t i, std::string& value) {
 }
 
 Status StatisticsHelper::in_filter_on_min_max_stat(const std::vector<std::string>& min_values,
-                                                   const std::vector<std::string>& max_values, ExprContext* ctx,
+                                                   const std::vector<std::string>& max_values,
+                                                   const std::vector<int64_t>& null_counts, ExprContext* ctx,
                                                    const ParquetField* field, const std::string& timezone,
                                                    Filter& selected) {
     const Expr* root_expr = ctx->root();
@@ -200,12 +201,16 @@ Status StatisticsHelper::in_filter_on_min_max_stat(const std::vector<std::string
     const Expr* c = root_expr->get_child(0);
     LogicalType ltype = c->type().type;
     ColumnPtr values;
+    bool is_runtime_filter = false;
+    bool has_null = false;
     switch (ltype) {
 #define M(NAME)                                                                                                \
     case LogicalType::NAME: {                                                                                  \
         const auto* in_filter = dynamic_cast<const VectorizedInConstPredicate<LogicalType::NAME>*>(root_expr); \
         if (in_filter != nullptr) {                                                                            \
             values = in_filter->get_all_values();                                                              \
+            has_null = in_filter->null_in_set();                                                               \
+            is_runtime_filter = in_filter->is_join_runtime_filter();                                           \
             break;                                                                                             \
         } else {                                                                                               \
             return Status::OK();                                                                               \
@@ -247,6 +252,10 @@ Status StatisticsHelper::in_filter_on_min_max_stat(const std::vector<std::string
     for (size_t i = 0; i < min_values.size(); i++) {
         // just skip the area that filtered
         if (!selected[i]) {
+            continue;
+        }
+        if (is_runtime_filter && has_null && null_counts[i] > 0) {
+            selected[i] = 1;
             continue;
         }
 
@@ -307,6 +316,15 @@ Status StatisticsHelper::get_has_nulls(const tparquet::ColumnMetaData* column_me
         return Status::Aborted("No null_count in column statistics");
     }
     has_nulls.emplace_back(column_meta->statistics.null_count > 0);
+    return Status::OK();
+}
+
+Status StatisticsHelper::get_null_counts(const tparquet::ColumnMetaData* column_meta,
+                                         std::vector<int64_t>& null_counts) {
+    if (!column_meta->statistics.__isset.null_count) {
+        return Status::Aborted("No null_count in column statistics");
+    }
+    null_counts.emplace_back(column_meta->statistics.null_count);
     return Status::OK();
 }
 
