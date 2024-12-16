@@ -1099,8 +1099,7 @@ public class DatabaseTransactionMgr {
                                             continue;
                                         }
                                         // if replica not commit yet, skip it. This may happen when it's just create by clone.
-                                        if (!transactionState.tabletCommitInfosContainsReplica(tablet.getId(),
-                                                replica.getBackendId(), replica.getState())) {
+                                        if (transactionState.checkReplicaNeedSkip(tablet, replica, partitionCommitInfo)) {
                                             continue;
                                         }
                                         // this means the replica is a healthy replica,
