@@ -6,12 +6,12 @@ displayed_sidebar: docs
 
 ## Description
 
-Cancels an ongoing BACKUP task in a specified database.
+Cancels an ongoing BACKUP task.
 
 ## Syntax
 
 ```SQL
-CANCEL BACKUP FROM <db_name>
+CANCEL BACKUP { FROM <db_name> | FOR EXTERNAL CATALOG }
 ```
 
 ## Parameters
@@ -19,6 +19,7 @@ CANCEL BACKUP FROM <db_name>
 | **Parameter** | **Description**                                       |
 | ------------- | ----------------------------------------------------- |
 | db_name       | Name of the database that the BACKUP task belongs to. |
+| FOR EXTERNAL CATALOG | Cancels the ongoing BACKUP task for the external catalog metadata. |
 
 ## Examples
 
