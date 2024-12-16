@@ -48,6 +48,8 @@ public:
     using FileSystem = staros::starlet::fslib::FileSystem;
     using Configuration = staros::starlet::fslib::Configuration;
 
+    typedef std::function<void(ShardId)> add_shard_listener;
+
     StarOSWorker();
 
     ~StarOSWorker() override;
@@ -71,6 +73,9 @@ public:
     // retrieve shard info from the worker. Unlike `get_shard_info`, if the shard info is not there in local cache,
     // the worker will try to fetch it back from starmgr.
     absl::StatusOr<ShardInfo> retrieve_shard_info(ShardId id);
+
+    // register the listener(callback) when new shard is added to the worker
+    void register_add_shard_listener(add_shard_listener listener) { _add_shard_listener = std::move(listener); }
 
 private:
     struct ShardInfoDetails {
@@ -96,6 +101,13 @@ private:
 
     static bool need_enable_cache(const ShardInfo& info);
 
+    void on_add_shard_event(ShardId shardId) {
+        // NOTE: not thread-safe
+        if (_add_shard_listener) {
+            _add_shard_listener(shardId);
+        }
+    }
+
     absl::StatusOr<std::shared_ptr<FileSystem>> build_filesystem_on_demand(ShardId id, const Configuration& conf);
     absl::StatusOr<std::shared_ptr<FileSystem>> build_filesystem_from_shard_info(const ShardInfo& info,
                                                                                  const Configuration& conf);
@@ -106,6 +118,7 @@ private:
     mutable std::shared_mutex _mtx;
     std::unordered_map<ShardId, ShardInfoDetails> _shards;
     std::unique_ptr<Cache> _fs_cache;
+    add_shard_listener _add_shard_listener;
 };
 
 extern std::shared_ptr<StarOSWorker> g_worker;
