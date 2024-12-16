@@ -44,6 +44,8 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.ToNumberPolicy;
 import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
 import com.starrocks.common.VectorSearchOptions;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -2905,6 +2907,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     public void setInsertMaxFilterRatio(double insertMaxFilterRatio) {
+        if (insertMaxFilterRatio < 0 || insertMaxFilterRatio > 1) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_VALUE, SessionVariable.INSERT_MAX_FILTER_RATIO,
+                    insertMaxFilterRatio, "between 0.0 and 1.0");
+        }
         this.insertMaxFilterRatio = insertMaxFilterRatio;
     }
 

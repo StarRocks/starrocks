@@ -148,3 +148,18 @@ truncate table t2;
 -- !result
 
 shell: ossutil64 rm -rf oss://${oss_bucket}/test_files/csv_format/${uuid0}/ > /dev/null
+
+set insert_max_filter_ratio = xxx;
+-- result:
+[REGEX].*Invalid insert_max_filter_ratio: 'xxx'\. Expected values should be between 0\.0 and 1\.0
+-- !result
+
+set insert_max_filter_ratio = -1;
+-- result:
+[REGEX].*Invalid insert_max_filter_ratio: '-1'\. Expected values should be between 0\.0 and 1\.0
+-- !result
+
+set insert_max_filter_ratio = 1.2;
+-- result:
+[REGEX].*Invalid insert_max_filter_ratio: '1\.2'\. Expected values should be between 0\.0 and 1\.0
+-- !result
