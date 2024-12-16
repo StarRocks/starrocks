@@ -43,7 +43,6 @@ import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.catalog.ResourceGroup;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -355,6 +354,11 @@ public class DefaultCoordinator extends Coordinator {
     }
 
     @Override
+    public TLoadJobType getLoadJobType() {
+        return jobSpec.getLoadJobType();
+    }
+
+    @Override
     public Status getExecStatus() {
         return queryStatus;
     }
@@ -467,7 +471,7 @@ public class DefaultCoordinator extends Coordinator {
     // 'Request' must contain at least a coordinator plan fragment (ie, can't
     // be for a query like 'SELECT 1').
     // A call to Exec() must precede all other member function calls.
-    public void prepareExec() throws Exception {
+    public void prepareExec() throws StarRocksException {
         if (LOG.isDebugEnabled()) {
             if (!jobSpec.getScanNodes().isEmpty()) {
                 LOG.debug("debug: in Coordinator::exec. query id: {}, planNode: {}",
@@ -528,7 +532,7 @@ public class DefaultCoordinator extends Coordinator {
     }
 
     @Override
-    public void startScheduling(ScheduleOption option) throws Exception {
+    public void startScheduling(ScheduleOption option) throws StarRocksException, InterruptedException, RpcException {
         try (Timer timer = Tracers.watchScope(Tracers.Module.SCHEDULER, "Pending")) {
             QueryQueueManager.getInstance().maybeWait(connectContext, this);
         }
@@ -603,7 +607,7 @@ public class DefaultCoordinator extends Coordinator {
         queryProfile.attachInstances(executionDAG.getInstanceIds());
     }
 
-    private void prepareResultSink() throws AnalysisException {
+    private void prepareResultSink() {
         ExecutionFragment rootExecFragment = executionDAG.getRootFragment();
         long workerId = rootExecFragment.getInstances().get(0).getWorkerId();
         ComputeNode worker = coordinatorPreprocessor.getWorkerProvider().getWorkerById(workerId);
@@ -1327,7 +1331,7 @@ public class DefaultCoordinator extends Coordinator {
                 jobSpec.getResourceGroup().getName();
     }
 
-    private void execShortCircuit() throws Exception {
+    private void execShortCircuit() throws StarRocksException {
         shortCircuitExecutor.exec();
     }
 

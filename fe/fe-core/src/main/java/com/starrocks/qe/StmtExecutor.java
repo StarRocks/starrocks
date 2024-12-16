@@ -2318,14 +2318,11 @@ public class StmtExecutor {
                 }
             }
 
-            TLoadJobType type;
             if (needQuery) {
                 coord.setLoadJobType(TLoadJobType.INSERT_QUERY);
-                type = TLoadJobType.INSERT_QUERY;
             } else {
                 estimateScanRows = execPlan.getFragments().get(0).getPlanRoot().getCardinality();
                 coord.setLoadJobType(TLoadJobType.INSERT_VALUES);
-                type = TLoadJobType.INSERT_VALUES;
             }
 
             context.setStatisticsJob(AnalyzerUtils.isStatisticsJob(context, parsedStmt));
@@ -2345,7 +2342,6 @@ public class StmtExecutor {
                         estimateScanRows,
                         estimateFileNum,
                         estimateScanFileSize,
-                        type,
                         getExecTimeout(),
                         coord);
                 loadJob.setJobProperties(stmt.getProperties());
@@ -2638,7 +2634,7 @@ public class StmtExecutor {
                 if (jobId != -1) {
                     Preconditions.checkNotNull(coord);
                     context.getGlobalStateMgr().getLoadMgr()
-                            .recordFinishedOrCacnelledLoadJob(jobId, EtlJobType.INSERT,
+                            .recordFinishedOrCancelledLoadJob(jobId, EtlJobType.INSERT,
                                     "Cancelled, msg: " + t.getMessage(), coord.getTrackingUrl());
                     jobId = -1;
                 }
@@ -2652,7 +2648,7 @@ public class StmtExecutor {
                 try {
                     if (jobId != -1) {
                         context.getGlobalStateMgr().getLoadMgr()
-                                .recordFinishedOrCacnelledLoadJob(jobId, EtlJobType.INSERT,
+                                .recordFinishedOrCancelledLoadJob(jobId, EtlJobType.INSERT,
                                         "Cancelled", coord.getTrackingUrl());
                         jobId = -1;
                     }
@@ -2676,7 +2672,7 @@ public class StmtExecutor {
         }
         try {
             if (jobId != -1) {
-                context.getGlobalStateMgr().getLoadMgr().recordFinishedOrCacnelledLoadJob(jobId,
+                context.getGlobalStateMgr().getLoadMgr().recordFinishedOrCancelledLoadJob(jobId,
                         EtlJobType.INSERT,
                         "",
                         coord.getTrackingUrl());
