@@ -2758,6 +2758,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "time interval to check whether warehouse is idle")
     public static long warehouse_idle_check_interval_seconds = 60;
 
+    @ConfField(mutable = true, comment = "True to start warehouse idle checker")
+    public static boolean warehouse_idle_check_enable = false;
+
     // e.g. "tableId1;tableId2"
     @ConfField(mutable = true)
     public static String lake_compaction_disable_tables = "";

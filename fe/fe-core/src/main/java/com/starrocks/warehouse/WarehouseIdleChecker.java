@@ -42,6 +42,14 @@ public class WarehouseIdleChecker extends FrontendDaemon {
 
     @Override
     protected void runAfterCatalogReady() {
+        if (!Config.warehouse_idle_check_enable) {
+            return;
+        }
+
+        if (getInterval() != Config.warehouse_idle_check_interval_seconds * 1000) {
+            setInterval(Config.warehouse_idle_check_interval_seconds * 1000);
+        }
+
         List<Long> warehouseIds = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllWarehouseIds();
         Map<Long, Long> runningStreamLoadCnt = GlobalStateMgr.getCurrentState().getStreamLoadMgr().getRunningTaskCount();
         Map<Long, Long> runningLoadCnt = GlobalStateMgr.getCurrentState().getLoadMgr()
@@ -55,22 +63,17 @@ public class WarehouseIdleChecker extends FrontendDaemon {
                 .getAllRunnableTaskCount();
 
         for (long wId : warehouseIds) {
-            AtomicLong runningSQL = getRunningSQLCount(wId);
-            Long lastFinishedJobTime = LAST_FINISHED_JOB_TIME.getOrDefault(wId, -1L);
-            Long runningStreamLoad = runningStreamLoadCnt.getOrDefault(wId, 0L);
-            Long runningBrokerSparkLoad = runningLoadCnt.getOrDefault(wId, 0L);
-            Long runningRoutineLoad = runningRoutineLoadCnt.getOrDefault(wId, 0L);
-            Long runningBackupRestore = runningBackupRestoreCnt.getOrDefault(wId, 0L);
-            Long runningAlterJob = runningAlterJobCnt.getOrDefault(wId, 0L);
-            Long runningTask = runningTaskCnt.getOrDefault(wId, 0L);
+            long lastFinishedJobTime = LAST_FINISHED_JOB_TIME.getOrDefault(wId, -1L);
+            long runningJobCnt = 0;
+            runningJobCnt += getRunningSQLCount(wId).get();
+            runningJobCnt += runningStreamLoadCnt.getOrDefault(wId, 0L);
+            runningJobCnt += runningLoadCnt.getOrDefault(wId, 0L);
+            runningJobCnt += runningRoutineLoadCnt.getOrDefault(wId, 0L);
+            runningJobCnt += runningBackupRestoreCnt.getOrDefault(wId, 0L);
+            runningJobCnt += runningAlterJobCnt.getOrDefault(wId, 0L);
+            runningJobCnt += runningTaskCnt.getOrDefault(wId, 0L);
 
-            if (runningSQL.get() == 0
-                    && runningStreamLoad == 0
-                    && runningBrokerSparkLoad == 0
-                    && runningRoutineLoad == 0
-                    && runningBackupRestore == 0
-                    && runningAlterJob == 0
-                    && runningTask == 0
+            if (runningJobCnt == 0
                     && lastFinishedJobTime <
                         System.currentTimeMillis() - Config.warehouse_idle_check_interval_seconds * 2000) {
                 warehouseIdleTime.putIfAbsent(wId, System.currentTimeMillis());
