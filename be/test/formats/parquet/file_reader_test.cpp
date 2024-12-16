@@ -264,8 +264,8 @@ protected:
             "./be/test/formats/parquet/test_data/file_read_test_filter_row_group_2.parquet";
 
     std::shared_ptr<RowDescriptor> _row_desc = nullptr;
-    ObjectPool _pool;
     RuntimeState* _runtime_state = nullptr;
+    ObjectPool _pool;
     const size_t _chunk_size = 4096;
     TypeDescriptor _type_int;
 };
