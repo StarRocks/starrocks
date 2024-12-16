@@ -18,11 +18,7 @@ import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
-<<<<<<< HEAD
-=======
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
->>>>>>> 884981f224 ([Enhancement] Optimize LoadsHistorySyncer (#53864))
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.load.pipe.filelist.RepoExecutor;
 import com.starrocks.scheduler.history.TableKeeper;

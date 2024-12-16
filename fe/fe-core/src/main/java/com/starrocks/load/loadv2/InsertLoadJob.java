@@ -304,10 +304,7 @@ public class InsertLoadJob extends LoadJob {
     public void replayOnVisible(TransactionState txnState) {
     }
 
-<<<<<<< HEAD
-=======
     public long getTableId() {
         return tableId;
     }
->>>>>>> 884981f224 ([Enhancement] Optimize LoadsHistorySyncer (#53864))
 }
