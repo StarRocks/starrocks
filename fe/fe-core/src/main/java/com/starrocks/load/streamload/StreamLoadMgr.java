@@ -700,4 +700,19 @@ public class StreamLoadMgr implements MemoryTrackable {
                 .collect(Collectors.toList());
         return Lists.newArrayList(Pair.create(samples, (long) idToStreamLoadTask.size()));
     }
+
+    public long getLatestFinishTime() {
+        long latestTime = -1L;
+        readLock();
+        try {
+            for (StreamLoadTask task : idToStreamLoadTask.values()) {
+                if (task.isFinal()) {
+                    latestTime = Math.max(latestTime, task.getFinishTimestampMs());
+                }
+            }
+        } finally {
+            readUnlock();
+        }
+        return latestTime;
+    }
 }
