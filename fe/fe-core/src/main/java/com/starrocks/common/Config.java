@@ -2084,13 +2084,19 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long statistic_auto_collect_small_table_rows = 10000000; // 10M
 
-    @ConfField(mutable = true)
+    @ConfField(mutable = true, comment = "If the number of columns of table exceeds it, use predicate-columns strategy")
+    public static int statistic_auto_collect_predicate_columns_threshold = 32;
+
+    @ConfField(mutable = true, comment = "The interval of auto stats for small tables")
     public static long statistic_auto_collect_small_table_interval = 0; // unit: second, default 0
 
-    @ConfField(mutable = true, comment = "The interval of auto collecting histogram statistics")
+    @ConfField(mutable = true, comment = "The interval of auto stats for predicate-columns strategy")
+    public static long statistic_auto_collect_predicate_columns_interval = 60L * 10; // unit: second, default 10 minutes
+
+    @ConfField(mutable = true, comment = "The interval of auto stats for histogram")
     public static long statistic_auto_collect_histogram_interval = 3600L * 1; // 1h
 
-    @ConfField(mutable = true)
+    @ConfField(mutable = true, comment = "The interval of auto stats for large tables")
     public static long statistic_auto_collect_large_table_interval = 3600L * 12; // unit: second, default 12h
 
     /**
