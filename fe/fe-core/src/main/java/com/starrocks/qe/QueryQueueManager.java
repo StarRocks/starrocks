@@ -40,8 +40,7 @@ public class QueryQueueManager {
     private static final Logger LOG = LogManager.getLogger(QueryQueueManager.class);
 
     private static final String PENDING_TIMEOUT_ERROR_MSG_FORMAT =
-            "Failed to allocate resource to query: pending timeout [%d], " +
-                    "you could modify the session variable [%s] to pending more time";
+            "Failed to allocate resource to query: pending timeout [%ds], you could modify %s to pending more time";
 
     private static class SingletonHolder {
         private static final QueryQueueManager INSTANCE = new QueryQueueManager();
@@ -73,9 +72,14 @@ public class QueryQueueManager {
                 if (slotRequirement.isPendingTimeout()) {
                     MetricRepo.COUNTER_QUERY_QUEUE_TIMEOUT.increase(1L);
                     slotProvider.cancelSlotRequirement(slotRequirement);
+                    int queryQueuePendingTimeout = GlobalVariable.getQueryQueuePendingTimeoutSecond();
+                    int queryTimeout = coord.getJobSpec().getQueryOptions().query_timeout;
+                    String timeoutVar = queryQueuePendingTimeout < queryTimeout ?
+                            String.format("the session variable [%s]", GlobalVariable.QUERY_QUEUE_PENDING_TIMEOUT_SECOND) :
+                            "query/insert timeout";
                     String errMsg = String.format(PENDING_TIMEOUT_ERROR_MSG_FORMAT,
-                            GlobalVariable.getQueryQueuePendingTimeoutSecond(),
-                            GlobalVariable.QUERY_QUEUE_PENDING_TIMEOUT_SECOND);
+                            Math.min(queryQueuePendingTimeout, queryTimeout),
+                            timeoutVar);
                     ResourceGroupMetricMgr.increaseTimeoutQueuedQuery(context, 1L);
                     throw new StarRocksException(errMsg);
                 }
