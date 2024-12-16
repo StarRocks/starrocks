@@ -78,6 +78,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         PlanTestNoneDBBase.beforeClass();
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         ConnectorPlanTestBase.mockAllCatalogs(connectContext, temp.newFolder().toURI().toString());
+        Config.statistic_auto_collect_predicate_columns_threshold = 0;
 
         String dbName = "test";
         starRocksAssert.withDatabase(dbName).useDatabase(dbName);
@@ -210,6 +211,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         OlapTable structTable = (OlapTable) globalStateMgr.getLocalMetastore().getDb("stats").getTable("struct_a");
         new ArrayList<>(structTable.getPartitions()).get(0).getDefaultPhysicalPartition().updateVisibleVersion(2);
         setTableStatistics(structTable, 20000000);
+
     }
 
     @Before
@@ -1362,7 +1364,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         new Expectations(execMeta2) {
             {
                 execMeta2.getHealthy();
-                times = 0;
+                times = 1;
             }
         };
 

@@ -204,17 +204,21 @@ class ColumnUsageTest extends PlanTestBase {
 
         // enable the predicate-columns strategy
         {
+            int defaultValue = Config.statistic_auto_collect_predicate_columns_threshold;
+            Config.statistic_auto_collect_predicate_columns_threshold = 32;
+
             List<StatisticsCollectJob> collectJobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(analyzeJob);
             Assertions.assertEquals(1, collectJobs.size());
             StatisticsCollectJob job0 = collectJobs.get(0);
             Assertions.assertEquals(StatsConstants.AnalyzeType.FULL, job0.getType());
             Assertions.assertEquals(List.of("v1"), job0.getColumnNames());
+
+            Config.statistic_auto_collect_predicate_columns_threshold = defaultValue;
         }
 
         // disable the strategy
         {
-            int defaultValue =
-                    Config.statistic_auto_collect_predicate_columns_threshold;
+            int defaultValue = Config.statistic_auto_collect_predicate_columns_threshold;
             Config.statistic_auto_collect_predicate_columns_threshold = 0;
             List<StatisticsCollectJob> collectJobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(analyzeJob);
             Assertions.assertEquals(1, collectJobs.size());
