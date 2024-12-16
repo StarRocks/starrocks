@@ -411,7 +411,6 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
         if (span != null) {
             span.end();
         }
-
         LOG.info("roll up job finished: {}", jobId);
     }
 
