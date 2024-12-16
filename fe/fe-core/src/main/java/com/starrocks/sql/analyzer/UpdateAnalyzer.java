@@ -72,7 +72,6 @@ public class UpdateAnalyzer {
         analyzeProperties(updateStmt, session);
 
         TableName tableName = updateStmt.getTableName();
-        tableName.normalization(session);
         Database db = GlobalStateMgr.getCurrentState().getMetadataMgr()
                 .getDb(tableName.getCatalog(), tableName.getDb());
         if (db == null) {
