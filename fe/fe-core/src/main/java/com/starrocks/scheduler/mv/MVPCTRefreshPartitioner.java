@@ -36,8 +36,11 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
 import com.starrocks.sql.ast.DropPartitionClause;
 import com.starrocks.sql.common.DmlException;
+import com.starrocks.sql.common.PCell;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.parquet.Strings;
 
 import java.util.HashMap;
 import java.util.List;
@@ -46,6 +49,7 @@ import java.util.Set;
 
 import static com.starrocks.catalog.MvRefreshArbiter.getMvBaseTableUpdateInfo;
 import static com.starrocks.catalog.MvRefreshArbiter.needsToRefreshTable;
+import static com.starrocks.sql.optimizer.rule.transformation.partition.PartitionSelector.getExpiredPartitionsByRetentionCondition;
 
 /**
  * MV PCT Refresh Partitioner for Partitioned Materialized View which provide utility methods associated partitions during mv
@@ -154,7 +158,8 @@ public abstract class MVPCTRefreshPartitioner {
             if (!refBaseTableMVPartitionMap.containsKey(basePartitionName)) {
                 LOG.warn("Cannot find need refreshed ref base table partition from synced partition info: {}, " +
                         "refBaseTableMVPartitionMaps: {}", basePartitionName, refBaseTableMVPartitionMaps);
-                return null;
+                // refBaseTableMVPartitionMap may not contain basePartitionName if it's filtered by ttl.
+                continue;
             }
             result.addAll(refBaseTableMVPartitionMap.get(basePartitionName));
         }
@@ -302,5 +307,29 @@ public abstract class MVPCTRefreshPartitioner {
             }
         }
         return result;
+    }
+
+    /**
+     * Filter partitions by ttl, save the kept partitions and return the next task run partition values.
+     * @param toRefreshPartitions the partitions to refresh/add
+     * @return the next task run partition list cells after the reserved partition_ttl_number
+     */
+    protected void filterPartitionsByTTL(Map<String, PCell> toRefreshPartitions,
+                                         boolean isMockPartitionIds) {
+        if (!CollectionUtils.sizeIsEmpty(toRefreshPartitions)) {
+            // filter partitions by partition_retention_condition
+            String ttlCondition = mv.getTableProperty().getPartitionRetentionCondition();
+            if (!Strings.isNullOrEmpty(ttlCondition)) {
+                List<String> expiredPartitionNames = getExpiredPartitionsByRetentionCondition(db, mv, ttlCondition,
+                        toRefreshPartitions, isMockPartitionIds);
+                // remove the expired partitions
+                if (CollectionUtils.isNotEmpty(expiredPartitionNames)) {
+                    LOG.info("Filter partitions by partition_retention_condition, ttl_condition:{}, expired:{}",
+                            ttlCondition, expiredPartitionNames);
+                    expiredPartitionNames.stream()
+                            .forEach(toRefreshPartitions::remove);
+                }
+            }
+        }
     }
 }
