@@ -500,7 +500,7 @@ StatusOr<ColumnPredicate*> StructColumnReader::_try_to_rewrite_subfield_expr(
 Status StructColumnReader::_rewrite_column_expr_predicate(ObjectPool* pool,
                                                           const std::vector<const ColumnPredicate*>& src_preds,
                                                           std::vector<const ColumnPredicate*>& dst_preds) const {
-    DCHECK_NOTNULL(pool);
+    DCHECK(pool != nullptr);
 
     for (const ColumnPredicate* src_pred : src_preds) {
         // it's not ColumnExprPredicate, don't need to rewrite it
