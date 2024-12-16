@@ -308,4 +308,8 @@ public class InsertLoadJob extends LoadJob {
     @Override
     public void replayOnVisible(TransactionState txnState) {
     }
+
+    public long getTableId() {
+        return tableId;
+    }
 }

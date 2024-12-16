@@ -15,11 +15,15 @@
 package com.starrocks.load.loadv2;
 
 import com.starrocks.catalog.CatalogUtils;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.load.pipe.filelist.RepoExecutor;
 import com.starrocks.scheduler.history.TableKeeper;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -83,6 +87,8 @@ public class LoadsHistorySyncer extends FrontendDaemon {
             new TableKeeper(LOADS_HISTORY_DB_NAME, LOADS_HISTORY_TABLE_NAME, LOADS_HISTORY_TABLE_CREATE,
                     () -> Math.max(1, Config.loads_history_retained_days));
 
+    private long syncedLoadFinishTime = -1L;
+
     public static TableKeeper createKeeper() {
         return KEEPER;
     }
@@ -114,7 +120,15 @@ public class LoadsHistorySyncer extends FrontendDaemon {
                 firstSync = false;
                 return;
             }
-            syncData();
+
+            long latestFinishTime = getLatestFinishTime();
+            if (syncedLoadFinishTime < latestFinishTime) {
+                // refer to SQL:LOADS_HISTORY_SYNC. Only sync loads that completed more than 1 minute ago
+                long oneMinAgo = System.currentTimeMillis() - 60000;
+                syncData();
+                // use (oneMinAgo - 10000) to cover the clock skew between FE and BE
+                syncedLoadFinishTime = Math.min(latestFinishTime, oneMinAgo - 10000);
+            }
         } catch (Throwable e) {
             LOG.warn("Failed to process one round of LoadJobScheduler with error message {}", e.getMessage(), e);
         }
@@ -131,4 +145,27 @@ public class LoadsHistorySyncer extends FrontendDaemon {
         }
     }
 
+    private Pair<Long, Long> getTargetDbTableId() {
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(LOADS_HISTORY_DB_NAME);
+        if (database == null) {
+            return null;
+        }
+        Table table = database.getTable(LOADS_HISTORY_TABLE_NAME);
+        if (table == null) {
+            return null;
+        }
+
+        return Pair.create(database.getId(), table.getId());
+    }
+
+    private long getLatestFinishTime() {
+        Pair<Long, Long> dbTableId = getTargetDbTableId();
+        if (dbTableId == null) {
+            LOG.warn("failed to get db: {}, table: {}", LOADS_HISTORY_DB_NAME, LOADS_HISTORY_TABLE_NAME);
+            return -1L;
+        }
+        GlobalStateMgr state = GlobalStateMgr.getCurrentState();
+        return Math.max(state.getLoadMgr().getLatestFinishTimeExcludeTable(dbTableId.first, dbTableId.second),
+                state.getStreamLoadMgr().getLatestFinishTime());
+    }
 }
