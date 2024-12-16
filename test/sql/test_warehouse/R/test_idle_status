@@ -2,5 +2,5 @@
 shell: curl ${url}/api/idle_status
 -- result:
 0
-*."isClusterIdle":false.*
+{"isClusterIdle":false,"clusterIdleTime":-1,"warehouses":[{"id":0,"name":"default_warehouse","isIdle":false,"idleTime":-1}]}
 -- !result
