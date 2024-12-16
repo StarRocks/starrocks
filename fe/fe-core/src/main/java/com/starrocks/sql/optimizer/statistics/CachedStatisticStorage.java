@@ -627,7 +627,11 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
         V value = null;
         try {
             value = next.getValue().getNow(null);
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            LOG.warn("sample load statistic cache failed", e);
+        }
+        if (value == null) {
+            return Pair.create(List.of(next.getKey()), cache.synchronous().estimatedSize());
         }
         return Pair.create(List.of(next.getKey(), value), cache.synchronous().estimatedSize());
     }
