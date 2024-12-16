@@ -51,6 +51,10 @@ import com.starrocks.analysis.SetVarHint;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.UserVariableHint;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.ObjectType;
+import com.starrocks.authorization.PrivilegeException;
+import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
@@ -112,10 +116,6 @@ import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.ScanNode;
-import com.starrocks.privilege.AccessDeniedException;
-import com.starrocks.privilege.ObjectType;
-import com.starrocks.privilege.PrivilegeException;
-import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.proto.PPlanFragmentCancelReason;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.proto.QueryStatisticsItemPB;
@@ -512,6 +512,7 @@ public class StmtExecutor {
         }
 
         try {
+            context.getState().setIsQuery(parsedStmt instanceof QueryStatement);
             if (parsedStmt.isExistQueryScopeHint()) {
                 processQueryScopeHint();
             }
@@ -685,7 +686,8 @@ public class StmtExecutor {
                                                     "you can set it off by using  set enable_short_circuit=false");
                                 }
                                 handleExplainStmt(ExplainAnalyzer.analyze(
-                                        ProfilingExecPlan.buildFrom(execPlan), profile, null));
+                                        ProfilingExecPlan.buildFrom(execPlan), profile, null,
+                                        context.getSessionVariable().getColorExplainOutput()));
                             }
                         }
 
@@ -1252,12 +1254,12 @@ public class StmtExecutor {
                 new QeProcessorImpl.QueryInfo(context, originStmt.originStmt, coord));
 
         if (isSchedulerExplain) {
-            coord.startSchedulingWithoutDeploy();
+            coord.execWithoutDeploy();
             handleExplainStmt(coord.getSchedulerExplain());
             return;
         }
 
-        coord.exec();
+        coord.execWithQueryDeployExecutor();
         coord.setTopProfileSupplier(this::buildTopLevelProfile);
         coord.setExecPlan(execPlan);
 
@@ -1325,11 +1327,14 @@ public class StmtExecutor {
                 context.getState().setOk(statisticsForAuditLog.returnedRows, 0, "");
             }
 
+            if (null != statisticsForAuditLog) {
+                analyzePlanWithExecStats(execPlan);
+            }
+
             if (null == statisticsForAuditLog || null == statisticsForAuditLog.statsItems ||
                     statisticsForAuditLog.statsItems.isEmpty()) {
                 return;
             }
-            analyzePlanWithExecStats(execPlan);
 
             // collect table-level metrics
             Set<Long> tableIds = Sets.newHashSet();
@@ -1366,6 +1371,9 @@ public class StmtExecutor {
                 PlanTuningAnalyzer.getInstance().analyzePlan(execPlan.getPhysicalPlan(), pair.second, tuningGuides);
                 PlanTuningAdvisor.getInstance()
                         .putTuningGuides(parsedStmt.getOrigStmt().getOrigStmt(), pair.first, tuningGuides);
+                if (!tuningGuides.isEmpty()) {
+                    Tracers.record(Tracers.Module.BASE, "BuildTuningGuides", tuningGuides.getFullTuneGuidesInfo());
+                }
             }
         }
     }
@@ -1468,7 +1476,7 @@ public class StmtExecutor {
         }
         handleExplainStmt(ExplainAnalyzer.analyze(profileElement.plan,
                 RuntimeProfileParser.parseFrom(CompressionUtils.gzipDecompressString(profileElement.profileContent)),
-                planNodeIds));
+                planNodeIds, context.getSessionVariable().getColorExplainOutput()));
     }
 
     private void executeAnalyze(AnalyzeStmt analyzeStmt, AnalyzeStatus analyzeStatus, Database db, Table table) {
@@ -2177,7 +2185,8 @@ public class StmtExecutor {
                 isAsync = tryProcessProfileAsync(execPlan, 0);
                 if (parsedStmt.isExplain() &&
                         StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
-                    handleExplainStmt(ExplainAnalyzer.analyze(ProfilingExecPlan.buildFrom(execPlan), profile, null));
+                    handleExplainStmt(ExplainAnalyzer.analyze(ProfilingExecPlan.buildFrom(execPlan),
+                            profile, null, context.getSessionVariable().getColorExplainOutput()));
                 }
             }
             if (isAsync) {
@@ -2353,7 +2362,7 @@ public class StmtExecutor {
             QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(), queryInfo);
 
             if (isSchedulerExplain) {
-                coord.startSchedulingWithoutDeploy();
+                coord.execWithoutDeploy();
                 handleExplainStmt(coord.getSchedulerExplain());
                 return;
             }

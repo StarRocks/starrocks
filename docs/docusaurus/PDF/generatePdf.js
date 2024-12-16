@@ -38,24 +38,40 @@ function getUrls(url) {
     }
 };
 
+
 async function callGotenberg(docusaurusUrl, fileName) {
-    //var util = require('util');
-    var execSync = require('child_process').execSync;
 
-    var command = `curl --request POST http://gotenberg:3000/forms/chromium/convert/url --form url=${docusaurusUrl} -o ${fileName}`
+    const path = require("path");
+    const FormData = require("form-data");
 
-    child = execSync(command, function(error, stdout, stderr){
+    try { 
+        // Convert URL content to PDF using Gotenberg
+        const form = new FormData();
+        form.append('url', `${docusaurusUrl}`)
 
-    //console.log('stdout: ' + stdout);
-    console.log('stderr: ' + stderr);
+        const response = await axios.post(
+          "http://gotenberg:3000/forms/chromium/convert/url",
+          form,
+          {
+            headers: form.getHeaders(),
+            responseType: "arraybuffer",
+          }
+        );
 
-    if(error !== null)
-    {
-        console.log('exec error: ' + error);
+        if (response.status !== 200) {
+          throw new Error(`Failed to convert file: ${response.statusText}`);
+        }
+
+        const buffer = await response.data;
+
+        // Save the converted file
+        fs.writeFileSync(fileName, buffer);
+        //console.log('wrote URL content from %s to PDF file %s', docusaurusUrl, fileName);
+      
+    } catch (err) {
+      console.error(err.message || err);
     }
-
-    });
-}
+};
 
 async function processLineByLine() {
   const fileStream = fs.createReadStream('URLs.txt');
@@ -64,7 +80,7 @@ async function processLineByLine() {
     input: fileStream,
     crlfDelay: Infinity
   });
-
+  console.log("Generating PDFs");
   for await (const line of rl) {
     // Each line in input.txt will be successively available here as `line`.
     //console.log(`URL: ${line}`);
@@ -74,6 +90,7 @@ async function processLineByLine() {
     console.log(err);
   });
   }
+  console.log(" done");
 }
 
 async function requestPage(url) {
@@ -95,20 +112,20 @@ async function requestPage(url) {
     }
   });
 
-  await callGotenberg(url, fileName);
-  i++;
+    await callGotenberg(url, fileName);
+    process.stdout.write(".");
+    i++;
 
 }
 
 
 
 
-function main(ms) {
+function main() {
     // startingUrl is the URL for the first page of the docs
     // Get all of the URLs and write to URLs.txt
+    console.log("Crawling from %s", startingUrl);
     getUrls(startingUrl);
-
-    console.log(startingUrl);
 
     const yamlHeader = 'files:\n';
 

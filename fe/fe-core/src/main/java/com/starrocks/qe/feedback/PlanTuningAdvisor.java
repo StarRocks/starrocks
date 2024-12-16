@@ -108,7 +108,7 @@ public class PlanTuningAdvisor {
             row.add(entry.getValue().getOriginalQueryId().toString());
             row.add(entry.getKey().getSql());
             row.add(String.valueOf(entry.getValue().getOriginalTimeCost()));
-            row.add(entry.getValue().getTuneGuidesInfo());
+            row.add(entry.getValue().getTuneGuidesInfo(false));
             row.add(String.valueOf(entry.getValue().getAvgTunedTimeCost()));
             row.add(String.valueOf(entry.getValue().optimizedQueryCount()));
             row.add(String.valueOf(entry.getValue().isUseful()));

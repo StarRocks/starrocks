@@ -290,6 +290,7 @@ vectorized_functions = [
     [30120, 'length', True, False, 'INT', ['VARCHAR'], 'StringFunctions::length'],
     [30130, 'char_length', True, False, 'INT', ['VARCHAR'], 'StringFunctions::utf8_length'],
     [30131, 'character_length', True, False, 'INT', ['VARCHAR'], 'StringFunctions::utf8_length'],
+    [30132, 'inet_aton', True, False, 'BIGINT', ['VARCHAR'], 'StringFunctions::inet_aton'],
 
     [30140, 'lower', True, False, 'VARCHAR', ['VARCHAR'], 'StringFunctions::lower'],
     [30141, 'lcase', True, False, 'VARCHAR', ['VARCHAR'], 'StringFunctions::lower'],
@@ -558,6 +559,7 @@ vectorized_functions = [
     [50403, 'last_day', True, False, 'DATE', ['DATETIME', 'VARCHAR'], 'TimeFunctions::last_day_with_format',
      'TimeFunctions::last_day_prepare', 'TimeFunctions::last_day_close'],
     [50501, 'makedate', True, False, 'DATE', ['INT', 'INT'], 'TimeFunctions::make_date'],
+    [50610, 'time_format', True, False, 'VARCHAR', ['TIME', 'VARCHAR'], 'TimeFunctions::time_format'],
 
     # 60xxx: like predicate
     # important ref: LikePredicate.java, must keep name equals LikePredicate.Operator

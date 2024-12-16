@@ -48,6 +48,9 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.analysis.TupleId;
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.PrivilegeBuiltinConstants;
+import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -67,6 +70,8 @@ import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.View;
+import com.starrocks.catalog.system.information.AnalyzeStatusSystemTable;
+import com.starrocks.catalog.system.information.ColumnStatsUsageSystemTable;
 import com.starrocks.catalog.system.information.TaskRunsSystemTable;
 import com.starrocks.catalog.system.information.TasksSystemTable;
 import com.starrocks.catalog.system.sys.GrantsTo;
@@ -131,9 +136,6 @@ import com.starrocks.metric.TableMetricsRegistry;
 import com.starrocks.persist.AutoIncrementInfo;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.StreamLoadPlanner;
-import com.starrocks.privilege.AccessDeniedException;
-import com.starrocks.privilege.PrivilegeBuiltinConstants;
-import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
 import com.starrocks.qe.DefaultCoordinator;
@@ -154,14 +156,17 @@ import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddPartitionClause;
+import com.starrocks.sql.ast.AdminSetConfigStmt;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
+import com.starrocks.sql.ast.Property;
 import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
@@ -173,6 +178,8 @@ import com.starrocks.thrift.TAbortRemoteTxnRequest;
 import com.starrocks.thrift.TAbortRemoteTxnResponse;
 import com.starrocks.thrift.TAllocateAutoIncrementIdParam;
 import com.starrocks.thrift.TAllocateAutoIncrementIdResult;
+import com.starrocks.thrift.TAnalyzeStatusReq;
+import com.starrocks.thrift.TAnalyzeStatusRes;
 import com.starrocks.thrift.TAuthenticateParams;
 import com.starrocks.thrift.TBatchReportExecStatusParams;
 import com.starrocks.thrift.TBatchReportExecStatusResult;
@@ -180,6 +187,8 @@ import com.starrocks.thrift.TBeginRemoteTxnRequest;
 import com.starrocks.thrift.TBeginRemoteTxnResponse;
 import com.starrocks.thrift.TColumnDef;
 import com.starrocks.thrift.TColumnDesc;
+import com.starrocks.thrift.TColumnStatsUsageReq;
+import com.starrocks.thrift.TColumnStatsUsageRes;
 import com.starrocks.thrift.TCommitRemoteTxnRequest;
 import com.starrocks.thrift.TCommitRemoteTxnResponse;
 import com.starrocks.thrift.TCreatePartitionRequest;
@@ -346,7 +355,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -705,6 +713,41 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TFeMemoryRes listFeMemoryUsage(TFeMemoryReq request) throws TException {
         return SysFeMemoryUsage.listFeMemoryUsage(request);
+    }
+
+    @Override
+    public TColumnStatsUsageRes getColumnStatsUsage(TColumnStatsUsageReq request) throws TException {
+        UserIdentity currentUser = UserIdentity.fromThrift(request.getAuth_info().getCurrent_user_ident());
+
+        TColumnStatsUsageRes result = ColumnStatsUsageSystemTable.query(request);
+        result.getItems().removeIf(item -> {
+            try {
+                Authorizer.checkTableAction(currentUser, null, item.getTable_database(), item.getTable_name(),
+                        PrivilegeType.SELECT);
+                return false;
+            } catch (AccessDeniedException e) {
+                return true;
+            }
+        });
+
+        return result;
+    }
+
+    @Override
+    public TAnalyzeStatusRes getAnalyzeStatus(TAnalyzeStatusReq request) throws TException {
+        TAnalyzeStatusRes res = AnalyzeStatusSystemTable.query(request);
+        UserIdentity currentUser = UserIdentity.fromThrift(request.getAuth_info().getCurrent_user_ident());
+        res.getItems().removeIf(item -> {
+            try {
+                Authorizer.checkTableAction(currentUser, null, item.getDatabase_name(), item.getTable_name(),
+                        PrivilegeType.SELECT);
+                return false;
+            } catch (AccessDeniedException e) {
+                return true;
+            }
+        });
+
+        return res;
     }
 
     // list MaterializedView table match pattern
@@ -1870,11 +1913,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     public TSetConfigResponse setConfig(TSetConfigRequest request) throws TException {
         try {
             Preconditions.checkState(request.getKeys().size() == request.getValues().size());
-            Map<String, String> configs = new HashMap<>();
             for (int i = 0; i < request.getKeys().size(); i++) {
                 String key = request.getKeys().get(i);
                 String value = request.getValues().get(i);
-                configs.put(key, value);
                 if ("mysql_server_version".equalsIgnoreCase(key)) {
                     if (!Strings.isNullOrEmpty(value)) {
                         GlobalVariable.version = value;
@@ -1882,7 +1923,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 }
             }
 
-            GlobalStateMgr.getCurrentState().getNodeMgr().setFrontendConfig(configs);
+            String key = request.getKeys().stream().findFirst().orElse("");
+            String value = request.getValues().stream().findFirst().orElse("");
+            AdminSetConfigStmt stmt = new AdminSetConfigStmt(AdminSetConfigStmt.ConfigType.FRONTEND,
+                    new Property(key, value), NodePosition.ZERO);
+            GlobalStateMgr.getCurrentState().getNodeMgr().setConfig(stmt);
             return new TSetConfigResponse(new TStatus(TStatusCode.OK));
         } catch (DdlException e) {
             TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);

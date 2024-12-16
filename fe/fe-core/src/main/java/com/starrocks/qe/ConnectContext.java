@@ -34,6 +34,7 @@
 
 package com.starrocks.qe;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -41,10 +42,15 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.VariableExpr;
 import com.starrocks.authentication.UserProperty;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.ObjectType;
+import com.starrocks.authorization.PrivilegeException;
+import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.util.SqlUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.http.HttpConnectContext;
@@ -55,10 +61,6 @@ import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.mysql.ssl.SSLChannel;
 import com.starrocks.mysql.ssl.SSLChannelImpClassLoader;
 import com.starrocks.plugin.AuditEvent.AuditEventBuilder;
-import com.starrocks.privilege.AccessDeniedException;
-import com.starrocks.privilege.ObjectType;
-import com.starrocks.privilege.PrivilegeException;
-import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
@@ -589,6 +591,12 @@ public class ConnectContext {
         returnRows = 0;
     }
 
+    @VisibleForTesting
+    public void setStartTime(Instant start) {
+        startTime = start;
+        returnRows = 0;
+    }
+
     public void updateReturnRows(int returnRows) {
         this.returnRows += returnRows;
     }
@@ -955,7 +963,7 @@ public class ConnectContext {
                     Thread.sleep(10);
                     times++;
                     if (times > 100) {
-                        LOG.warn("wait for close fail, break.");
+                        LOG.warn("kill queryId={} connectId={} wait for close fail, break.", queryId, connectionId);
                         break;
                     }
                 } catch (InterruptedException e) {
@@ -999,7 +1007,7 @@ public class ConnectContext {
             if (delta > waitTimeout * 1000L) {
                 // Need kill this connection.
                 LOG.warn("kill wait timeout connection, remote: {}, wait timeout: {}, query id: {}, sql: {}",
-                        getMysqlChannel().getRemoteHostPortString(), waitTimeout, queryId, sql);
+                        getMysqlChannel().getRemoteHostPortString(), waitTimeout, queryId, SqlUtils.sqlPrefix(sql));
 
                 killFlag = true;
                 killConnection = true;
@@ -1011,7 +1019,7 @@ public class ConnectContext {
             if (delta > timeoutSecond * 1000L) {
                 LOG.warn("kill timeout {}, remote: {}, execute timeout: {}, query id: {}, sql: {}",
                         getExecType().toLowerCase(), getMysqlChannel().getRemoteHostPortString(), timeoutSecond,
-                        queryId, sql);
+                        queryId, SqlUtils.sqlPrefix(sql));
 
                 // Only kill
                 killFlag = true;

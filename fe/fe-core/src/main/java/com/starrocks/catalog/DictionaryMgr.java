@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable;
+import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -45,7 +46,6 @@ import com.starrocks.planner.DataSink;
 import com.starrocks.planner.DictionaryCacheSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ScanNode;
-import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.proto.PProcessDictionaryCacheRequest;
 import com.starrocks.proto.PProcessDictionaryCacheRequestType;
 import com.starrocks.proto.PProcessDictionaryCacheResult;
@@ -501,7 +501,12 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
             try {
                 for (Dictionary dictionary : dictionaries) {
                     // update dictionary object state
-                    dictionariesMapById.put(dictionary.getDictionaryId(), dictionary);
+                    if (dictionariesMapById.containsKey(dictionary.getDictionaryId())) {
+                        dictionariesMapById.put(dictionary.getDictionaryId(), dictionary);
+                    } else {
+                        LOG.warn("dictionary {}, id {} has been deleted",
+                                dictionary.getDictionaryName(), dictionary.getDictionaryId());
+                    }
                 }
             } finally {
                 lock.unlock();

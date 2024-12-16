@@ -141,6 +141,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String QUERY_DELIVERY_TIMEOUT = "query_delivery_timeout";
     public static final String MAX_EXECUTION_TIME = "max_execution_time";
     public static final String IS_REPORT_SUCCESS = "is_report_success";
+    public static final String COLOR_EXPLAIN_OUTPUT = "enable_color_explain_output";
     public static final String ENABLE_PROFILE = "enable_profile";
 
     public static final String ENABLE_LOAD_PROFILE = "enable_load_profile";
@@ -969,6 +970,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_PROFILE, alias = IS_REPORT_SUCCESS)
     private boolean enableProfile = false;
 
+    // Toggle ANSI color in explain output
+    @VariableMgr.VarAttr(name = COLOR_EXPLAIN_OUTPUT)
+    private boolean colorExplainOutput = true;
+
     @VariableMgr.VarAttr(name = ENABLE_METADATA_PROFILE)
     private boolean enableMetadataProfile = false;
 
@@ -1150,7 +1155,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private int maxPipelineDop = 64;
 
     @VariableMgr.VarAttr(name = PROFILE_TIMEOUT, flag = VariableMgr.INVISIBLE)
-    private int profileTimeout = 2;
+    private int profileTimeout = 10;
 
     @VariableMgr.VarAttr(name = RUNTIME_PROFILE_REPORT_INTERVAL)
     private int runtimeProfileReportInterval = 10;
@@ -2705,6 +2710,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableProfile(boolean enableProfile) {
         this.enableProfile = enableProfile;
+    }
+
+    public boolean getColorExplainOutput() {
+        return colorExplainOutput;
     }
 
     public boolean isEnableLoadProfile() {

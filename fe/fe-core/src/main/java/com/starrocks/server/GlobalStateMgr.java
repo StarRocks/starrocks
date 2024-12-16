@@ -47,6 +47,12 @@ import com.starrocks.alter.SystemHandler;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.TableName;
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authorization.AccessControlProvider;
+import com.starrocks.authorization.AuthorizationMgr;
+import com.starrocks.authorization.DefaultAuthorizationProvider;
+import com.starrocks.authorization.NativeAccessController;
+import com.starrocks.authorization.PrivilegeException;
+import com.starrocks.authorization.ranger.starrocks.RangerStarRocksAccessController;
 import com.starrocks.backup.BackupHandler;
 import com.starrocks.binlog.BinlogManager;
 import com.starrocks.catalog.BrokerMgr;
@@ -175,12 +181,6 @@ import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockLoader;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.plugin.PluginMgr;
-import com.starrocks.privilege.AccessControlProvider;
-import com.starrocks.privilege.AuthorizationMgr;
-import com.starrocks.privilege.DefaultAuthorizationProvider;
-import com.starrocks.privilege.NativeAccessController;
-import com.starrocks.privilege.PrivilegeException;
-import com.starrocks.privilege.ranger.starrocks.RangerStarRocksAccessController;
 import com.starrocks.qe.AuditEventProcessor;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
@@ -216,6 +216,7 @@ import com.starrocks.staros.StarMgrServer;
 import com.starrocks.statistic.AnalyzeMgr;
 import com.starrocks.statistic.StatisticAutoCollector;
 import com.starrocks.statistic.StatisticsMetaManager;
+import com.starrocks.statistic.columns.PredicateColumnsMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
@@ -255,6 +256,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
@@ -509,6 +511,7 @@ public class GlobalStateMgr {
     private final Authorizer authorizer;
     private final DDLStmtExecutor ddlStmtExecutor;
     private final ShowExecutor showExecutor;
+    private final ExecutorService queryDeployExecutor;
 
     public NodeMgr getNodeMgr() {
         return nodeMgr;
@@ -807,6 +810,9 @@ public class GlobalStateMgr {
         this.ddlStmtExecutor = new DDLStmtExecutor(DDLStmtExecutor.StmtExecutorVisitor.getInstance());
         this.showExecutor = new ShowExecutor(ShowExecutor.ShowExecutorVisitor.getInstance());
         this.temporaryTableCleaner = new TemporaryTableCleaner();
+        this.queryDeployExecutor =
+                ThreadPoolManager.newDaemonFixedThreadPool(Config.query_deploy_threadpool_size, Integer.MAX_VALUE,
+                        "query-deploy", true);
     }
 
     public static void destroyCheckpoint() {
@@ -1035,6 +1041,10 @@ public class GlobalStateMgr {
 
     public ShowExecutor getShowExecutor() {
         return showExecutor;
+    }
+
+    public ExecutorService getQueryDeployExecutor() {
+        return queryDeployExecutor;
     }
 
     public GtidGenerator getGtidGenerator() {
@@ -1455,6 +1465,8 @@ public class GlobalStateMgr {
 
         // The memory tracker should be placed at the end
         memoryUsageTracker.start();
+
+        PredicateColumnsMgr.getInstance().startDaemon();
     }
 
     private void transferToNonLeader(FrontendNodeType newType) {

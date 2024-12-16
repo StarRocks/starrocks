@@ -101,8 +101,6 @@ insert into multi_level_expr_par_tbl select * from multi_level_expr_par_tbl;
 select * from multi_level_expr_par_tbl;
 
 -- name: test_ctas_from_normal_table
-create database test_ctas_from_normal_table;
-use test_ctas_from_normal_table;
 CREATE TABLE base_tbl_unix_ts (c1 bigint, c2 string, c3 date);
 insert into base_tbl_unix_ts values(1592841600, 'beijing', '2020-06-23');
 CREATE TABLE multi_level_expr_par_tbl_1 primary KEY(c1) PARTITION BY from_unixtime(c1) DISTRIBUTED BY HASH(c1) BUCKETS 3 as select * from base_tbl_unix_ts;
@@ -166,3 +164,51 @@ PROPERTIES (
 "replicated_storage" = "true",
 "replication_num" = "3"
 );
+
+-- name: test_delete
+CREATE TABLE test (
+    `k1`  date,
+    `k2`  datetime,
+    `k3`  varchar(20),
+    `k4`  varchar(20),
+    `k5`  boolean,
+    `k6`  tinyint
+)
+primary KEY(k1,k2,k3,k4,k5)
+COMMENT "OLAP"
+PARTITION BY substring(k4, 1, 5), k3, date_trunc("month", k1)
+DISTRIBUTED BY HASH(`k1`, `k2`, `k3`) BUCKETS 3;
+
+insert into test values('2020-01-01','2020-01-01',"abc","abc",true,1);
+insert into test values('2020-04-01','2020-01-01',"abc","abc",true,1);
+
+select * from test;
+delete from test where k1 = '2020-04-01';
+select * from test;
+
+-- name: test_create_table_like
+CREATE TABLE base_tbl (
+                    `k1`  date,
+                    `k2`  datetime,
+                    `k3`  varchar(20),
+                    `k4`  varchar(20),
+                    `k5`  boolean,
+                    `k6`  tinyint,
+                    `k7`  smallint,
+                    `k8`  int,
+                    `k9`  bigint,
+                    `k10` largeint,
+                    `k11` float,
+                    `k12` double,
+                    `k13` decimal(27,9)
+                )
+                duplicate KEY(k1,k2,k3,k4,k5)
+                COMMENT "OLAP"
+                PARTITION BY substring(k4, 1, 5), k3, date_trunc("month", k1)
+                DISTRIBUTED BY HASH(`k1`, `k2`, `k3`) BUCKETS 3
+                PROPERTIES (
+                    "replication_num" = "3"
+                );
+show create table base_tbl;
+create table t1 like base_tbl;
+show create table t1;

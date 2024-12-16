@@ -19,6 +19,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.persist.gson.GsonUtils;
 import io.delta.kernel.data.Row;
 import io.delta.kernel.internal.InternalScanFileUtils;
+import io.delta.kernel.internal.actions.DeletionVectorDescriptor;
 import io.delta.kernel.utils.FileStatus;
 
 import java.util.Map;
@@ -67,7 +68,7 @@ public class ScanFileUtils {
     }
 
     public static Pair<FileScanTask, DeltaLakeAddFileStatsSerDe> convertFromRowToFileScanTask(
-            boolean needStats, Row file, long estimateRowSize) {
+            boolean needStats, Row file, long estimateRowSize, DeletionVectorDescriptor dv) {
         FileStatus fileStatus = InternalScanFileUtils.getAddFileStatus(file);
         Map<String, String> partitionValues = InternalScanFileUtils.getPartitionValues(file);
         Row addFileRow = getAddFileEntry(file);
@@ -76,11 +77,11 @@ public class ScanFileUtils {
         if (needStats) {
             DeltaLakeAddFileStatsSerDe stats = ScanFileUtils.getColumnStatistics(
                     addFileRow, fileStatus, estimateRowSize);
-            fileScanTask = new FileScanTask(fileStatus, stats.numRecords, partitionValues);
+            fileScanTask = new FileScanTask(fileStatus, stats.numRecords, partitionValues, dv);
             return new Pair<>(fileScanTask, stats);
         } else {
             long records = ScanFileUtils.getFileRows(addFileRow, fileStatus, estimateRowSize);
-            fileScanTask = new FileScanTask(fileStatus, records, partitionValues);
+            fileScanTask = new FileScanTask(fileStatus, records, partitionValues, dv);
             return new Pair<>(fileScanTask, null);
         }
     }

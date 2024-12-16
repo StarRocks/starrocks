@@ -316,8 +316,9 @@ public class MaterializedViewAnalyzer {
             }
             Database db = context.getGlobalStateMgr().getLocalMetastore().getDb(statement.getTableName().getDb());
             if (db == null) {
-                throw new SemanticException("Can not find database:" + statement.getTableName().getDb(),
-                        statement.getTableName().getPos());
+                String catalog = statement.getTableName().getCatalog();
+                String errMsg = String.format("Can not find database:%s in %s", statement.getTableName().getDb(), catalog);
+                throw new SemanticException(errMsg, statement.getTableName().getPos());
             }
             Set<BaseTableInfo> baseTableInfos = getBaseTableInfos(queryStatement, true);
             // now do not support empty base tables

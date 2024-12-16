@@ -18,6 +18,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Stopwatch;
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
@@ -90,7 +91,6 @@ import com.starrocks.sql.plan.ExecPlan;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.parquet.Strings;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -711,12 +711,14 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             extraMessage.setNextPartitionValues(mvContext.getNextPartitionValues());
         });
 
-        // Partition refreshing task run should have the HIGHEST priority, and be scheduled before other tasks
+        // Partition refreshing task run should have the HIGHER priority, and be scheduled before other tasks
         // Otherwise this round of partition refreshing would be staved and never got finished
-        ExecuteOption option = new ExecuteOption(Constants.TaskRunPriority.HIGHEST.value(), true, newProperties);
-        LOG.info("[MV] Generate a task to refresh next batches of partitions for MV {}-{}, start={}, end={}",
-                materializedView.getName(), materializedView.getId(),
-                mvContext.getNextPartitionStart(), mvContext.getNextPartitionEnd());
+        int priority = mvContext.executeOption.getPriority() > Constants.TaskRunPriority.LOWEST.value() ?
+                mvContext.executeOption.getPriority() : Constants.TaskRunPriority.HIGHER.value();
+        ExecuteOption option = new ExecuteOption(priority, true, newProperties);
+        LOG.info("[MV] Generate a task to refresh next batches of partitions for MV {}-{}, start={}, end={}, " +
+                        "priority={}", materializedView.getName(), materializedView.getId(),
+                mvContext.getNextPartitionStart(), mvContext.getNextPartitionEnd(), priority);
 
         if (properties.containsKey(TaskRun.IS_TEST) && properties.get(TaskRun.IS_TEST).equalsIgnoreCase("true")) {
             // for testing
@@ -1009,8 +1011,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             throws AnalysisException {
         if (mvRefreshParams.isForceCompleteRefresh()) {
             // Force refresh
-            int partitionTTLNumber = mvContext.getPartitionTTLNumber();
-            return mvRefreshPartitioner.getMVPartitionsToRefreshWithForce(partitionTTLNumber);
+            return mvRefreshPartitioner.getMVPartitionsToRefreshWithForce();
         } else {
             return mvRefreshPartitioner.getMVPartitionsToRefresh(mvPartitionInfo, snapshotBaseTables,
                     mvRefreshParams, mvPotentialPartitionNames);
@@ -1311,7 +1312,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     public Map<TableSnapshotInfo, Set<String>> getRefTableRefreshPartitions(Set<String> mvToRefreshedPartitions) {
         Map<TableSnapshotInfo, Set<String>> refTableAndPartitionNames = Maps.newHashMap();
         Map<String, Map<Table, Set<String>>> mvToBaseNameRefs = mvContext.getMvRefBaseTableIntersectedPartitions();
-        if (mvToBaseNameRefs == null) {
+        if (mvToBaseNameRefs == null || mvToBaseNameRefs.isEmpty()) {
             return refTableAndPartitionNames;
         }
         for (TableSnapshotInfo snapshotInfo : snapshotBaseTables.values()) {

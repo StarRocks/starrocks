@@ -82,7 +82,7 @@ CONF_String(mem_limit, "90%");
 
 // Enable the jemalloc tracker, which is responsible for reserving memory
 CONF_Bool(enable_jemalloc_memory_tracker, "true");
-// Consider part of jemalloc memory as fragmentation: ratio * (RSS-allocated-metadata)
+// Alpha number of jemalloc memory fragmentation ratio, should in range (0, 1)
 CONF_mDouble(jemalloc_fragmentation_ratio, "0.3");
 
 // The port heartbeat service used.
@@ -914,6 +914,7 @@ CONF_mBool(parquet_coalesce_read_enable, "true");
 CONF_Bool(parquet_late_materialization_enable, "true");
 CONF_Bool(parquet_page_index_enable, "true");
 CONF_mBool(parquet_statistics_process_more_filter_enable, "true");
+CONF_mBool(parquet_advance_zonemap_filter, "true");
 
 CONF_Int32(io_coalesce_read_max_buffer_size, "8388608");
 CONF_Int32(io_coalesce_read_max_distance_size, "1048576");
@@ -1518,4 +1519,7 @@ CONF_mBool(batch_write_trace_log_enable, "false");
 // ignore union type tag in avro kafka routine load
 CONF_mBool(avro_ignore_union_type_tag, "false");
 
+// default batch size for simdjson lib
+CONF_mInt32(json_parse_many_batch_size, "1000000");
+CONF_mBool(enable_dynamic_batch_size_for_json_parse_many, "true");
 } // namespace starrocks::config

@@ -34,5 +34,12 @@ select path, size, is_dir from files(
     "aws.s3.secret_key" = "${oss_sk}",
     "aws.s3.endpoint" = "${oss_endpoint}");
 
+select path, size, is_dir from files(
+    "path" = "oss://${oss_bucket}/test_files/csv_format/${uuid0}/xxxxxx",
+    "list_files_only" = "true",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+
 -- clean
 shell: ossutil64 rm -rf oss://${oss_bucket}/test_files/csv_format/${uuid0}/ > /dev/null
