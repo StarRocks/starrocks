@@ -23,6 +23,20 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.warehouse.IdleStatus;
 import io.netty.handler.codec.http.HttpMethod;
 
+/**
+ * API to check whether the cluster is idle
+ * {
+ *     "isClusterIdle": true,
+ *     "clusterIdleTime": 1734113878006,
+ *     "warehouses": [
+ *         {
+ *             "id": 0,
+ *             "isIdle": true,
+ *             "idleTime": 1734113878006
+ *         }
+ *     ]
+ * }
+ */
 public class IdleAction extends RestBaseAction {
 
     public IdleAction(ActionController controller) {

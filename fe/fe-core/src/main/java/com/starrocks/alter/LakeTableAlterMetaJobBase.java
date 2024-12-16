@@ -46,7 +46,6 @@ import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.TabletMetadataUpdateAgentTask;
 import com.starrocks.thrift.TTaskType;
-import com.starrocks.warehouse.WarehouseIdleChecker;
 import io.opentelemetry.api.trace.StatusCode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -218,7 +217,6 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         }
 
         handleMVRepair(db, table);
-        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId);
         LOG.info("update meta job finished: {}", jobId);
     }
 
@@ -449,7 +447,6 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         this.errMsg = errMsg;
         this.finishedTimeMs = System.currentTimeMillis();
         GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
-        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId);
         return true;
     }
 

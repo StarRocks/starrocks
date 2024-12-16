@@ -58,7 +58,6 @@ import com.starrocks.sql.ast.OptimizeClause;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.parser.SqlParser;
-import com.starrocks.warehouse.WarehouseIdleChecker;
 import io.opentelemetry.api.trace.StatusCode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -411,7 +410,6 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
         this.finishedTimeMs = System.currentTimeMillis();
 
         GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
-        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId);
         LOG.info("optimize job finished: {}", jobId);
         this.span.end();
     }
@@ -511,7 +509,6 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
         this.finishedTimeMs = System.currentTimeMillis();
         LOG.info("cancel {} job {}, err: {}", this.type, jobId, errMsg);
         GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
-        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId);
         span.setStatus(StatusCode.ERROR, errMsg);
         span.end();
         return true;
