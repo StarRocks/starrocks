@@ -484,6 +484,7 @@ set(EXEC_FILES
         ./gutil/sysinfo-test.cc
         ./service/lake_service_test.cpp
         ./service/service_be/internal_service_test.cpp
+        ./service/staros_worker_test.cpp
         ./storage/metadata_util_test.cpp
         ./storage/delta_writer_test.cpp
         ./storage/compaction_parallelization_test.cpp
