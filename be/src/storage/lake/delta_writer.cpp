@@ -78,7 +78,7 @@ public:
                              bool miss_auto_increment_column, int64_t table_id, int64_t immutable_tablet_size,
                              MemTracker* mem_tracker, int64_t max_buffer_size, int64_t schema_id,
                              const PartialUpdateMode& partial_update_mode,
-                             const std::map<string, string>* column_to_expr_value, const PUniqueId& load_id)
+                             const std::map<string, string>* column_to_expr_value, PUniqueId load_id)
             : _tablet_manager(tablet_manager),
               _tablet_id(tablet_id),
               _txn_id(txn_id),
@@ -93,7 +93,7 @@ public:
               _miss_auto_increment_column(miss_auto_increment_column),
               _partial_update_mode(partial_update_mode),
               _column_to_expr_value(column_to_expr_value),
-              _load_id(load_id) {}
+              _load_id(std::move(load_id)) {}
 
     ~DeltaWriterImpl() = default;
 
