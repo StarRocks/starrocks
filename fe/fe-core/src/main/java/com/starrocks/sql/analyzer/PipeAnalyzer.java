@@ -167,7 +167,7 @@ public class PipeAnalyzer {
         stmt.setTargetTable(insertStmt.getTableName());
         String insertSql = stmt.getOrigStmt().originStmt.substring(stmt.getInsertSqlStartIndex());
         stmt.setInsertSql(insertSql);
-        InsertAnalyzer.analyze(insertStmt, context);
+        Analyzer.analyze(insertStmt, context);
 
         analyzePipeName(stmt.getPipeName(), insertStmt.getTableName().getDb());
 
