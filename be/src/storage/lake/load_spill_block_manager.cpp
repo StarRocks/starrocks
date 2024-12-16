@@ -65,7 +65,7 @@ StatusOr<spill::BlockPtr> LoadSpillBlockManager::acquire_block(int64_t tablet_id
 
 // return Block to BlockManager
 Status LoadSpillBlockManager::release_block(spill::BlockPtr block) {
-    return _block_manager->release_block(block);
+    return _block_manager->release_block(std::move(block));
 }
 
 } // namespace starrocks::lake

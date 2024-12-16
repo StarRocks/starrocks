@@ -22,7 +22,7 @@ class LoadSpillBlockManager;
 
 class SpillMemTableSink : public MemTableSink {
 public:
-    SpillMemTableSink(LoadSpillBlockManager* block_manager) : _block_manager(block_manager) {}
+    SpillMemTableSink() {}
     ~SpillMemTableSink() override = default;
 
     Status flush_chunk(const Chunk& chunk, starrocks::SegmentPB* segment = nullptr) override;
@@ -31,7 +31,7 @@ public:
                                     starrocks::SegmentPB* segment = nullptr) override;
 
 private:
-    LoadSpillBlockManager* _block_manager = nullptr;
+    //LoadSpillBlockManager* _block_manager = nullptr;
 };
 
 } // namespace starrocks::lake
