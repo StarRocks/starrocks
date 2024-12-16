@@ -304,4 +304,7 @@ public class InsertLoadJob extends LoadJob {
     public void replayOnVisible(TransactionState txnState) {
     }
 
+    public long getTableId() {
+        return tableId;
+    }
 }
