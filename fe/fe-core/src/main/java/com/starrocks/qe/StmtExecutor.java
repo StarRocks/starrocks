@@ -1245,7 +1245,7 @@ public class StmtExecutor {
         List<Expr> outputExprs = execPlan.getOutputExprs();
 
         if (executeInFe) {
-            coord = new FeExecuteCoordinator(context, execPlan);
+            coord = new FeExecuteCoordinator(context, execPlan, fragments, scanNodes, descTable);
         } else {
             coord = getCoordinatorFactory().createQueryScheduler(context, fragments, scanNodes, descTable);
         }
