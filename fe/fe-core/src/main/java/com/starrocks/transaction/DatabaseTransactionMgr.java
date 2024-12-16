@@ -1005,11 +1005,29 @@ public class DatabaseTransactionMgr {
                                             replica.getBackendId(), replica.getState())) {
                                         continue;
                                     }
+<<<<<<< HEAD
                                     // this means the replica is a healthy replica,
                                     // it is healthy in the past and does not have error in current load
                                     if (replica.checkVersionCatchUp(partition.getVisibleVersion(), true)) {
                                         // during rollup, the rollup replica's last failed version < 0,
                                         // it may be treated as a normal replica.
+=======
+                                    if (!errorReplicaIds.contains(replica.getId())
+                                            && replica.getLastFailedVersion() < 0) {
+                                        if (partitionCommitInfo.isDoubleWrite()) {
+                                            ++healthReplicaNum;
+                                            continue;
+                                        }
+                                        // if replica not commit yet, skip it. This may happen when it's just create by clone.
+                                        if (transactionState.checkReplicaNeedSkip(tablet, replica, partitionCommitInfo)) {
+                                            continue;
+                                        }
+                                        // this means the replica is a healthy replica,
+                                        // it is healthy in the past and does not have error in current load
+                                        if (replica.checkVersionCatchUp(physicalPartition.getVisibleVersion(), true)) {
+                                            // during rollup, the rollup replica's last failed version < 0,
+                                            // it may be treated as a normal replica.
+>>>>>>> 811c51d7f5 ([BugFix]  When replica enter decommission,  transaction will nerver complete. (#49349))
 
                                         // Here we still update the replica's info even if we failed to publish
                                         // this txn, for the following case:
