@@ -147,6 +147,7 @@ public class ScanPredicateExprReuseTest extends PlanTestBase {
     @Test
     public void testComplexType() throws Exception {
         starRocksAssert.getCtx().getSessionVariable().setEnableScanPredicateExprReuse(true);
+        starRocksAssert.getCtx().getSessionVariable().setCboPruneJsonSubfield(true);
         starRocksAssert.withTable("CREATE TABLE `complex_t` (\n" +
                 "  `k` bigint(20) NOT NULL COMMENT \"\",\n" +
                 "  `v1` array<bigint(20)> NULL COMMENT \"\",\n" +
