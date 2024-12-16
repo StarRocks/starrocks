@@ -318,6 +318,11 @@ statement
     | showNodesStatement
     | alterWarehouseStatement
 
+    // Transaction Statement
+    | beginStatement
+    | commitStatement
+    | rollbackStatement
+
     // Unsupported Statement
     | unsupportedStatement
     ;
@@ -1980,11 +1985,7 @@ executeScriptStatement
     ;
 
 unsupportedStatement
-    : START TRANSACTION (WITH CONSISTENT SNAPSHOT)?
-    | BEGIN WORK?
-    | COMMIT WORK? (AND NO? CHAIN)? (NO? RELEASE)?
-    | ROLLBACK WORK? (AND NO? CHAIN)? (NO? RELEASE)?
-    | LOCK TABLES lock_item (',' lock_item)*
+    : LOCK TABLES lock_item (',' lock_item)*
     | UNLOCK TABLES
     ;
 
@@ -2048,6 +2049,21 @@ showNodesStatement
 
 alterWarehouseStatement
     : ALTER WAREHOUSE warehouseName=identifierOrString modifyPropertiesClause
+    ;
+
+// ------------------------------------------- Transaction Statement ---------------------------------------------------
+
+beginStatement
+    : START TRANSACTION (WITH CONSISTENT SNAPSHOT)?
+    | BEGIN WORK?
+    ;
+
+commitStatement
+    : COMMIT WORK? (AND NO? CHAIN)? (NO? RELEASE)?
+    ;
+
+rollbackStatement
+    : ROLLBACK WORK? (AND NO? CHAIN)? (NO? RELEASE)?
     ;
 
 // ------------------------------------------- Query Statement ---------------------------------------------------------
