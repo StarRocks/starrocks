@@ -1270,12 +1270,11 @@ public class RefreshMaterializedViewTest extends MvRewriteTestBase {
                         "    v1 int\n" +
                         ")\n" +
                         "PROPERTIES('replication_num' = '1');");
-
         starRocksAssert.createDatabaseIfNotExists("mv_db")
                 .useDatabase("mv_db")
                 .withMaterializedView("CREATE MATERIALIZED VIEW test_mv\n"
                         + "DISTRIBUTED BY HASH(`k1`)\n"
-                        + "REFRESH ASYNC\n"
+                        + "REFRESH DEFERRED ASYNC\n"
                         + "AS SELECT k1 from trunc_db.t1;");
 
         executeInsertSql(connectContext, "insert into trunc_db.t1 values(2, 10)");
