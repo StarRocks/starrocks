@@ -69,6 +69,18 @@ public class ExtractAggregateColumn implements TreeRewriteRule {
             return false;
         }
 
+        private boolean hasCollectionTypeColumn(ScalarOperator operator) {
+            if (operator.isColumnRef() && operator.getType().isCollectionType()) {
+                return true;
+            }
+            for (ScalarOperator child : operator.getChildren()) {
+                if (hasCollectionTypeColumn(child)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         private void rewriteAggregateOperator(PhysicalHashAggregateOperator aggregateOperator, Projection projection) {
             Map<ColumnRefOperator, ScalarOperator> columnRefMap = projection.getColumnRefMap();
             Map<ColumnRefOperator, ScalarOperator> rewriteMap = Maps.newHashMap();
@@ -92,7 +104,8 @@ public class ExtractAggregateColumn implements TreeRewriteRule {
                             return;
                         }
                         if (!scalarOperator.isColumnRef() && !hasDictMappingOperator(scalarOperator) &&
-                                !(scalarOperator.getOpType() == OperatorType.SUBFIELD)) {
+                                !(scalarOperator.getOpType() == OperatorType.SUBFIELD) &&
+                                !hasCollectionTypeColumn(scalarOperator)) {
                             rewriteMap.put(childRef, scalarOperator);
                             extractedColumns.add(childRef);
                         }
