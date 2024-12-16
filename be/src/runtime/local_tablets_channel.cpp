@@ -1076,7 +1076,7 @@ void LocalTabletsChannel::_update_peer_replica_profile(DeltaWriter* writer, Runt
     ADD_AND_UPDATE_COUNTER(profile, "MemtableFlushedCount", TUnit::UNIT, flush_stat.flush_count);
     ADD_AND_UPDATE_COUNTER(profile, "MemtableFlushingCount", TUnit::UNIT, flush_stat.cur_flush_count);
     ADD_AND_UPDATE_COUNTER(profile, "MemtableQueueCount", TUnit::UNIT, flush_stat.queueing_memtable_num);
-    ADD_AND_UPDATE_COUNTER(profile, "FlushTaskPendingTime", TUnit::UNIT, flush_stat.pending_time_ns);
+    ADD_AND_UPDATE_TIMER(profile, "FlushTaskPendingTime", flush_stat.pending_time_ns);
     auto& memtable_stat = flush_stat.memtable_stats;
     ADD_AND_UPDATE_COUNTER(profile, "MemtableInsertCount", TUnit::UNIT, memtable_stat.insert_count);
     ADD_AND_UPDATE_TIMER(profile, "MemtableInsertTime", memtable_stat.insert_time_ns);
