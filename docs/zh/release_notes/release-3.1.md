@@ -4,6 +4,24 @@ displayed_sidebar: docs
 
 # StarRocks version 3.1
 
+## 3.1.16
+
+发布日期：2024 年 12 月 16 日
+
+### 功能优化
+
+- 优化了表相关统计信息。[#50316](https://github.com/StarRocks/starrocks/pull/50316)
+
+### 问题修复
+
+修复了如下问题：
+
+- 由于系统对磁盘写满时的错误码判断不够细化，导致 BE 认为磁盘有错误而误删数据。[#51411](https://github.com/StarRocks/starrocks/pull/51411)
+- 通过 HTTP 1.0 提交的 Stream Load 失败。[#53010](https://github.com/StarRocks/starrocks/pull/53010) [#53008](https://github.com/StarRocks/starrocks/pull/53008)
+- Routine Load 因事务过期而导致任务取消（当前仅有数据库或表不存在任务才会被取消，事务过期时任务会被暂停）。[#50334](https://github.com/StarRocks/starrocks/pull/50334)
+- 使用 EXPORT 命令通过  Broker 方式导出数据到 `file://` 时，系统会报文件 RENAME 错误进而导致导出失败。[#52544](https://github.com/StarRocks/starrocks/pull/52544)
+- Equal-join 中，如果 JOIN 的条件是基于一个低基数列的表达式，系统会错误地下推一个 Runtime Filter 谓词，导致 BE Crash。[#50690](https://github.com/StarRocks/starrocks/pull/50690)
+
 ## 3.1.15
 
 发布日期：2024 年 9 月 4 日
