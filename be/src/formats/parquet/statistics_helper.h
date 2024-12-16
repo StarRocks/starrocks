@@ -35,8 +35,7 @@ public:
 
     static Status in_filter_on_min_max_stat(const std::vector<std::string>& min_values,
                                             const std::vector<std::string>& max_values,
-                                            const std::vector<int64_t>& null_counts,
-                                            ExprContext* ctx,
+                                            const std::vector<int64_t>& null_counts, ExprContext* ctx,
                                             const ParquetField* field, const std::string& timezone, Filter& selected);
 
     // get min/max value from row group stats
