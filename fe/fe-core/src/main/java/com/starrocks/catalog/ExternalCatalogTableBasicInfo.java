@@ -41,6 +41,11 @@ public class ExternalCatalogTableBasicInfo implements BasicTable {
     }
 
     @Override
+    public String getDbName() {
+        return dbName;
+    }
+
+    @Override
     public String getName() {
         return tableName;
     }

@@ -16,6 +16,7 @@ package com.starrocks.authorization;
 
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.BasicTable;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
@@ -23,6 +24,7 @@ import com.starrocks.catalog.View;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.AstTraverser;
@@ -147,6 +149,18 @@ public class ColumnPrivilege {
                             Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                                     tableName, PrivilegeType.SELECT);
                         } else {
+                            View view = (View) table;
+                            if (view.isSecurity()) {
+                                List<TableName> allTables = view.getTableRefs();
+                                for (TableName t : allTables) {
+                                    BasicTable basicTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getBasicTable(
+                                            t.getCatalog(), t.getDb(), t.getTbl());
+
+                                    Authorizer.checkAnyActionOnTableLikeObject(context.getCurrentUserIdentity(),
+                                            null, t.getDb(), basicTable);
+                                }
+                            }
+
                             Authorizer.checkViewAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                                     tableName, PrivilegeType.SELECT);
                         }
