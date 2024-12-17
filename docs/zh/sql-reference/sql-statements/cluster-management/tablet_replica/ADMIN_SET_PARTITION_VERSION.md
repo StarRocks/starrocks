@@ -20,7 +20,7 @@ displayed_sidebar: docs
 
 ```sql
 ADMIN SET TABLE <table_name> PARTITION ( <partition_name> | <partition_id> ) 
-TO VERSION <version>
+VERSION TO <version>
 ```
 
 ## 参数说明
