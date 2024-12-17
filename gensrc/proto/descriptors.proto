@@ -76,6 +76,7 @@ message POlapTableIndexSchema {
     optional POlapTableColumnParam column_param = 4;
     optional int64 schema_id = 5;
     map<string, string> column_to_expr_value = 6;
+    optional bool is_shadow = 7;
 };
 
 message POlapTableSchemaParam {
