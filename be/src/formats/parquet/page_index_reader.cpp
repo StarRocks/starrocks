@@ -27,13 +27,9 @@
 #include "common/status.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
-#include "formats/parquet/column_converter.h"
 #include "formats/parquet/column_reader.h"
-#include "formats/parquet/encoding_plain.h"
-#include "formats/parquet/group_reader.h"
 #include "formats/parquet/schema.h"
 #include "formats/parquet/statistics_helper.h"
-#include "fs/fs.h"
 #include "gen_cpp/parquet_types.h"
 #include "gutil/stringprintf.h"
 #include "runtime/types.h"
@@ -183,6 +179,10 @@ Status PageIndexReader::_deal_with_more_conjunct(const std::vector<ExprContext*>
                 }
             } else if (filter_type == StatisticsHelper::StatSupportedFilter::FILTER_IN) {
                 RETURN_IF_ERROR(StatisticsHelper::in_filter_on_min_max_stat(
+                        column_index.min_values, column_index.max_values, column_index.null_counts, ctx, field,
+                        timezone, page_filter));
+            } else if (filter_type == StatisticsHelper::StatSupportedFilter::RF_MIN_MAX) {
+                RETURN_IF_ERROR(StatisticsHelper::min_max_filter_on_min_max_stat(
                         column_index.min_values, column_index.max_values, column_index.null_counts, ctx, field,
                         timezone, page_filter));
             }
