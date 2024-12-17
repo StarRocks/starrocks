@@ -76,12 +76,12 @@ public class DamengSchemaResolver extends JDBCSchemaResolver {
         PrimitiveType primitiveType;
         switch (dataType) {
             case Types.BOOLEAN:
+            case Types.BIT:
                 primitiveType = PrimitiveType.BOOLEAN;
                 break;
             case Types.TINYINT:
                 primitiveType = PrimitiveType.TINYINT;
                 break;
-            case Types.BIT:
             case Types.SMALLINT:
                 primitiveType = PrimitiveType.SMALLINT;
                 break;
