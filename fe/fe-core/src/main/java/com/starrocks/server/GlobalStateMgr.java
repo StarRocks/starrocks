@@ -1152,11 +1152,8 @@ public class GlobalStateMgr {
             createTaskCleaner();
             createTableKeeper();
 
-            // 7. init starosAgent
-            if (RunMode.isSharedDataMode() && !starOSAgent.init(null)) {
-                LOG.error("init starOSAgent failed");
-                System.exit(-1);
-            }
+            // There's no point intializing starOsAgent here since we don't have a StarManagerServer available yet.
+            // It will be called later when StarMgrServer is initialized.
         } catch (Exception e) {
             try {
                 if (isFirstTimeStart) {

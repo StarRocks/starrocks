@@ -99,11 +99,10 @@ public class StarOSAgent {
         return true;
     }
 
-    protected void prepare() {
-        if (!serviceId.isEmpty()) {
-            return;
-        }
-
+    // This method MUST be called before calling any other method which uses serviceId. Fulfill this prerequisite by calling
+    // `prepare` as soon as possible after the given StarManagerServer to which the `client` is connected is otherwise fully
+    // initialized. This is to minimize redundant calls to this method.
+    public void prepare() {
         try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
             if (!serviceId.isEmpty()) {
                 return;
@@ -301,7 +300,6 @@ public class StarOSAgent {
      * @param workerGroupId
      */
     public void addWorker(long nodeId, String workerIpPort, long workerGroupId) {
-        prepare();
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             if (serviceId.equals("")) {
                 LOG.warn("When addWorker serviceId is empty");
@@ -355,8 +353,6 @@ public class StarOSAgent {
     }
 
     public void removeWorker(String workerIpPort, long workerGroupId) throws DdlException {
-        prepare();
-
         long workerId = getWorker(workerIpPort);
 
         try {
@@ -416,7 +412,6 @@ public class StarOSAgent {
     }
 
     public long createShardGroup(long dbId, long tableId, long partitionId, long indexId) throws DdlException {
-        prepare();
         List<ShardGroupInfo> shardGroupInfos = null;
         try {
             List<CreateShardGroupInfo> createShardGroupInfos = new ArrayList<>();
@@ -438,7 +433,6 @@ public class StarOSAgent {
     }
 
     public void deleteShardGroup(List<Long> groupIds) {
-        prepare();
         try {
             client.deleteShardGroup(serviceId, groupIds, true);
         } catch (StarClientException e) {
@@ -447,7 +441,6 @@ public class StarOSAgent {
     }
 
     public List<ShardGroupInfo> listShardGroup() {
-        prepare();
         try {
             return client.listShardGroup(serviceId);
         } catch (StarClientException e) {
@@ -463,7 +456,6 @@ public class StarOSAgent {
         if (matchShardIds != null) {
             Preconditions.checkState(numShards == matchShardIds.size());
         }
-        prepare();
         List<ShardInfo> shardInfos = null;
         try {
             List<CreateShardInfo> createShardInfoList = new ArrayList<>(numShards);
@@ -500,8 +492,6 @@ public class StarOSAgent {
     }
 
     public List<Long> listShard(long groupId) throws DdlException {
-        prepare();
-
         List<List<ShardInfo>> shardInfo;
         try {
             shardInfo = client.listShard(serviceId, Arrays.asList(groupId), DEFAULT_WORKER_GROUP_ID,
@@ -516,7 +506,6 @@ public class StarOSAgent {
         if (shardIds.isEmpty()) {
             return;
         }
-        prepare();
         try {
             client.deleteShard(serviceId, shardIds);
         } catch (StarClientException e) {
@@ -632,8 +621,6 @@ public class StarOSAgent {
     }
 
     public void createMetaGroup(long metaGroupId, List<Long> shardGroupIds) throws DdlException {
-        prepare();
-
         try {
             CreateMetaGroupInfo createInfo = CreateMetaGroupInfo.newBuilder()
                     .setMetaGroupId(metaGroupId)
@@ -647,8 +634,6 @@ public class StarOSAgent {
     }
 
     public void updateMetaGroup(long metaGroupId, List<Long> shardGroupIds, boolean isJoin) throws DdlException {
-        prepare();
-
         try {
             UpdateMetaGroupInfo.Builder builder = UpdateMetaGroupInfo.newBuilder();
 
@@ -674,8 +659,6 @@ public class StarOSAgent {
     }
 
     public boolean queryMetaGroupStable(long metaGroupId) {
-        prepare();
-
         try {
             return client.queryMetaGroupStable(serviceId, metaGroupId);
         } catch (StarClientException e) {
@@ -686,7 +669,6 @@ public class StarOSAgent {
 
     public List<Long> getWorkersByWorkerGroup(long workerGroupId) throws StarRocksException {
         List<Long> nodeIds = new ArrayList<>();
-        prepare();
         try {
             List<WorkerGroupDetailInfo> workerGroupDetailInfos = client.
                     listWorkerGroup(serviceId, Collections.singletonList(workerGroupId), true);
@@ -702,7 +684,6 @@ public class StarOSAgent {
 
     public List<String> listWorkerGroupIpPort(long workerGroupId) throws StarRocksException {
         List<String> addresses = new ArrayList<>();
-        prepare();
         try {
             List<WorkerGroupDetailInfo> workerGroupDetailInfos = client.
                     listWorkerGroup(serviceId, Collections.singletonList(workerGroupId), true);
@@ -735,8 +716,6 @@ public class StarOSAgent {
     }
 
     public long createWorkerGroup(String size, int replicaNumber) throws DdlException {
-        prepare();
-
         // size should be x0, x1, x2, x4...
         WorkerGroupSpec spec = WorkerGroupSpec.newBuilder().setSize(size).build();
         // owner means tenant, now there is only one tenant, so pass "Starrocks" to starMgr
@@ -753,7 +732,6 @@ public class StarOSAgent {
     }
 
     public void updateWorkerGroup(long workerGroupId, int replicaNumber) throws DdlException {
-        prepare();
         try {
             client.updateWorkerGroup(serviceId, workerGroupId, null, null, replicaNumber);
         } catch (StarClientException e) {
@@ -763,7 +741,6 @@ public class StarOSAgent {
     }
 
     public void deleteWorkerGroup(long groupId) throws DdlException {
-        prepare();
         try {
             client.deleteWorkerGroup(serviceId, groupId);
         } catch (StarClientException e) {
@@ -776,8 +753,6 @@ public class StarOSAgent {
 
     // dump all starmgr meta, for DEBUG purpose
     public String dump() {
-        prepare();
-
         try {
             return client.dump();
         } catch (StarClientException e) {
@@ -787,7 +762,6 @@ public class StarOSAgent {
 
     @NotNull
     public ShardInfo getShardInfo(long shardId, long workerGroupId) throws StarClientException {
-        prepare();
         List<ShardInfo> shardInfos = client.getShardInfo(serviceId, Lists.newArrayList(shardId), workerGroupId);
         Preconditions.checkState(shardInfos.size() == 1);
         return shardInfos.get(0);
