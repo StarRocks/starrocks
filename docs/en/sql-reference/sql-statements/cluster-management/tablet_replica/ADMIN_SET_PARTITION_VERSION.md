@@ -20,7 +20,7 @@ This operation requires the SYSTEM-level OPERATE privilege. You can follow the i
 
 ```sql
 ADMIN SET TABLE <table_name> PARTITION ( <partition_name> | <partition_id> ) 
-TO VERSION <version>
+VERSION TO <version>
 ```
 
 ## Parameters
