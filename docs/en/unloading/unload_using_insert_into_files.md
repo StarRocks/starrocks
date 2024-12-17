@@ -12,7 +12,7 @@ Compared to other data export methods supported by StarRocks, unloading data wit
 
 > **NOTE**
 >
-> Please note that unloading data with INSERT INTO FILES does not support exporting data into local file systems.
+> Please note that unloading data with INSERT INTO FILES does not support directly exporting data into local file systems. However, you can export the data into local files by using NFS. See [Unload to local files using NFS](#unload-to-local-files-using-nfs).
 
 ## Preparation
 
@@ -197,6 +197,30 @@ FILES(
     "aws.s3.enable_ssl" = "false",
     "aws.s3.enable_path_style_access" = "true",
     "aws.s3.endpoint" = "http://minio:9000"
+)
+SELECT * FROM sales_records;
+```
+
+### Unload to local files using NFS
+
+To access the files in NFS via the `file://` protocol, you need to mount a NAS device as NFS under the same directory of each BE or CN node.
+
+Example:
+
+```SQL
+-- Unload data into CSV files.
+INSERT INTO FILES(
+  'path' = 'file:///home/ubuntu/csvfile/', 
+  'format' = 'csv', 
+  'csv.column_separator' = ',', 
+  'csv.row_delimitor' = '\n'
+)
+SELECT * FROM sales_records;
+
+-- Unload data into Parquet files.
+INSERT INTO FILES(
+  'path' = 'file:///home/ubuntu/parquetfile/',
+   'format' = 'parquet'
 )
 SELECT * FROM sales_records;
 ```
