@@ -505,11 +505,7 @@ public class GlobalStateMgr {
     private final Authorizer authorizer;
     private final DDLStmtExecutor ddlStmtExecutor;
     private final ShowExecutor showExecutor;
-<<<<<<< HEAD
-=======
-    private final ExecutorService queryDeployExecutor;
     private final WarehouseIdleChecker warehouseIdleChecker;
->>>>>>> 6cd9fbc95f ([Enhancement] Add cluster idle HTTP api (#53850))
 
     public NodeMgr getNodeMgr() {
         return nodeMgr;
@@ -809,13 +805,7 @@ public class GlobalStateMgr {
         this.ddlStmtExecutor = new DDLStmtExecutor(DDLStmtExecutor.StmtExecutorVisitor.getInstance());
         this.showExecutor = new ShowExecutor(ShowExecutor.ShowExecutorVisitor.getInstance());
         this.temporaryTableCleaner = new TemporaryTableCleaner();
-<<<<<<< HEAD
-=======
-        this.queryDeployExecutor =
-                ThreadPoolManager.newDaemonFixedThreadPool(Config.query_deploy_threadpool_size, Integer.MAX_VALUE,
-                        "query-deploy", true);
         this.warehouseIdleChecker = new WarehouseIdleChecker();
->>>>>>> 6cd9fbc95f ([Enhancement] Add cluster idle HTTP api (#53850))
     }
 
     public static void destroyCheckpoint() {
