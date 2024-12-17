@@ -46,6 +46,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class TaskRunHistoryTest {
 
@@ -158,18 +159,11 @@ public class TaskRunHistoryTest {
         assertEquals(TaskRunHistoryTable.TABLE_NAME, keeper.getTableName());
         assertEquals(TaskRunHistoryTable.CREATE_TABLE, keeper.getCreateTableSql());
 
-        // database not exists
-        new Expectations() {
-            {
-                keeper.checkDatabaseExists();
-                result = false;
-            }
-        };
         keeper.run();
-        assertFalse(keeper.isDatabaseExisted());
+        assertTrue(keeper.checkDatabaseExists());
+        assertFalse(keeper.checkTableExists());
 
         // create table
-        keeper.setDatabaseExisted(true);
         new Expectations() {
             {
                 repo.executeDDL("CREATE TABLE IF NOT EXISTS _statistics_.task_run_history (task_id bigint NOT NULL, " +
