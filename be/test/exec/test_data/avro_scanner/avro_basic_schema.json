@@ -7,6 +7,7 @@
         {"name": "longtype", "type": "long"},
         {"name": "doubletype", "type": "double"},
         {"name": "stringtype", "type": "string"},
+        {"name": "bytestype", "type": "bytes"},
         {"name": "enumtype", "type": {"type": "enum", "name": "ThirdEnum", "symbols" : ["SPADES", "HEARTS", "DIAMONDS", "CLUBS"]}}  
     ]
 }
