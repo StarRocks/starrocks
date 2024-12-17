@@ -83,6 +83,7 @@ import com.starrocks.transaction.RunningTxnExceedException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
+import com.starrocks.warehouse.WarehouseIdleChecker;
 import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -350,6 +351,7 @@ public class BrokerLoadJob extends BulkLoadJob {
                         .add("state", state)
                         .add("error_msg", "this task will be ignored when job is: " + state)
                         .build());
+                WarehouseIdleChecker.updateJobLastFinishTime(warehouseId, System.currentTimeMillis());
                 return;
             }
             boolean shouldRetry = retryTime > 0 && txnStatusChangeReason.contains("timeout")
@@ -375,6 +377,12 @@ public class BrokerLoadJob extends BulkLoadJob {
         } finally {
             writeUnlock();
         }
+    }
+
+    @Override
+    public void afterVisible(TransactionState txnState, boolean txnOperated) {
+        super.afterVisible(txnState, txnOperated);
+        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId);
     }
 
     /**
