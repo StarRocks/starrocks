@@ -692,8 +692,7 @@ DESC FILES(
 Unload all data rows in `sales_records` as multiple Parquet files under the path **/unload/partitioned/** in the HDFS cluster. These files are stored in different subpaths distinguished by the values in the column `sales_time`.
 
 ```SQL
-INSERT INTO 
-FILES(
+INSERT INTO FILES(
     "path" = "hdfs://xxx.xx.xxx.xx:9000/unload/partitioned/",
     "format" = "parquet",
     "hadoop.security.authentication" = "simple",
@@ -710,17 +709,17 @@ Unload the query results into CSV and Parquet files in NFS(NAS):
 ```SQL
 -- CSV
 INSERT INTO FILES(
-  'path' = 'file:///home/ubuntu/csvfile/', 
-  'format' = 'csv', 
-  'csv.column_separator' = ',', 
-  'csv.row_delimitor' = '\n'
+    'path' = 'file:///home/ubuntu/csvfile/', 
+    'format' = 'csv', 
+    'csv.column_separator' = ',', 
+    'csv.row_delimitor' = '\n'
 )
-SELECT 1 AS a, "csv" AS b;
+SELECT * FROM sales_records;
 
 -- Parquet
 INSERT INTO FILES(
-  'path' = 'file:///home/ubuntu/parquetfile/',
-   'format' = 'parquet'
+    'path' = 'file:///home/ubuntu/parquetfile/',
+    'format' = 'parquet'
 )
-SELECT 1 AS a, "parquet" AS b;
+SELECT * FROM sales_records;
 ```
