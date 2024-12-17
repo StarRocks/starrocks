@@ -37,7 +37,7 @@ This document outlines the features of various data loading and unloading method
     </tr>
     <tr>
         <td>INSERT from FILES</td>
-        <td rowspan="2">HDFS, S3, OSS, Azure, GCS</td>
+        <td rowspan="2">HDFS, S3, OSS, Azure, GCS, NFS(NAS) [5]</td>
         <td>Yes (v3.3+)</td>
         <td>To be supported</td>
         <td>Yes (v3.1+)</td>
@@ -104,6 +104,8 @@ This document outlines the features of various data loading and unloading method
 
 [4]\: Currently, only INSERT from FILES is supported for loading with PIPE.
 
+[5]\: You need to mount a NAS device as NFS under the same directory of each BE or CN node to access the files in NFS via the `file://` protocol.
+
 :::
 
 #### JSON CDC formats
@@ -159,7 +161,7 @@ This document outlines the features of various data loading and unloading method
     <tr>
         <td>INSERT INTO FILES</td>
         <td>N/A</td>
-        <td>HDFS, S3, OSS, Azure, GCS</td>
+        <td>HDFS, S3, OSS, Azure, GCS, NFS(NAS) [3]</td>
         <td>Yes (v3.3+)</td>
         <td>To be supported</td>
         <td>Yes (v3.2+)</td>
@@ -207,6 +209,8 @@ This document outlines the features of various data loading and unloading method
 [1]\: Configuring Broker process is supported.
 
 [2]\: Currently, unloading data using PIPE is not supported.
+
+[3]\: You need to mount a NAS device as NFS under the same directory of each BE or CN node to access the files in NFS via the `file://` protocol.
 
 :::
 

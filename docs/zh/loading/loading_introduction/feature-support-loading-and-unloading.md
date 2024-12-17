@@ -37,7 +37,7 @@ sidebar_label: "能力边界"
     </tr>
     <tr>
         <td>INSERT from FILES</td>
-        <td rowspan="2">HDFS, S3, OSS, Azure, GCS</td>
+        <td rowspan="2">HDFS, S3, OSS, Azure, GCS, NFS(NAS) [5]</td>
         <td>Yes (v3.3+)</td>
         <td>待支持</td>
         <td>Yes (v3.1+)</td>
@@ -104,6 +104,8 @@ sidebar_label: "能力边界"
 
 [4]：PIPE 当前只支持 INSERT from FILES。
 
+[5]：需要将同一 NAS 设备作为 NFS 挂载到每个 BE 或 CN 节点的相同目录下，才能通过 `file://` 协议访问 NFS 中的文件。
+
 :::
 
 #### JSON CDC 格式
@@ -159,7 +161,7 @@ sidebar_label: "能力边界"
     <tr>
         <td>INSERT INTO FILES</td>
         <td>N/A</td>
-        <td>HDFS, S3, OSS, Azure, GCS</td>
+        <td>HDFS, S3, OSS, Azure, GCS, NFS(NAS) [3]</td>
         <td>Yes (v3.3+)</td>
         <td>待支持</td>
         <td>Yes (v3.2+)</td>
@@ -207,6 +209,8 @@ sidebar_label: "能力边界"
 [1]：支持配置 Broker 进程。
 
 [2]：目前，不支持使用 PIPE 导出数据。
+
+[3]：需要将同一 NAS 设备作为 NFS 挂载到每个 BE 或 CN 节点的相同目录下，才能通过 `file://` 协议访问 NFS 中的文件。
 
 :::
 
