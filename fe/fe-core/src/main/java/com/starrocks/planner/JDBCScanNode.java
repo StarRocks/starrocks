@@ -118,13 +118,6 @@ public class JDBCScanNode extends ScanNode {
         return jdbcURI.startsWith("jdbc:mysql");
     }
 
-    private boolean isDameng() {
-        JDBCResource resource = (JDBCResource) GlobalStateMgr.getCurrentState().getResourceMgr()
-                .getResource(table.getResourceName());
-        String jdbcURI = resource != null ? resource.getProperty(JDBCResource.URI) : table.getProperty(JDBCResource.URI);
-        return jdbcURI.startsWith("jdbc:dm");
-    }
-
     private String getIdentifierSymbol() {
         //TODO: for other jdbc table we need different objectIdentifier to support reserved key words
         return isMysql() ? "`" : "";
@@ -147,10 +140,6 @@ public class JDBCScanNode extends ScanNode {
 
         ArrayList<Expr> jdbcConjuncts = Expr.cloneList(conjuncts, sMap);
         for (Expr p : jdbcConjuncts) {
-            // dameng view plan 问题临时处理
-            if (isDameng() && p instanceof SlotRef){
-                continue;
-            }
             filters.add(AstToStringBuilder.toString(p));
         }
     }
