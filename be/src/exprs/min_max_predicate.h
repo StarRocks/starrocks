@@ -43,6 +43,9 @@ public:
     bool is_bound(const std::vector<TupleId>& tuple_ids) const override { return false; }
     bool has_null() const { return _has_null; }
 
+    CppType get_min_value() const { return _min_value; }
+    CppType get_max_value() const { return _max_value; }
+
     StatusOr<ColumnPtr> evaluate_with_filter(ExprContext* context, Chunk* ptr, uint8_t* filter) override {
         const ColumnPtr col = ptr->get_column_by_slot_id(_slot_id);
         size_t size = col->size();
