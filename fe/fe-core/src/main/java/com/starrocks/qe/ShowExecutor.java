@@ -360,7 +360,7 @@ public class ShowExecutor {
                         }
 
                         materializedViews.add(mvTable);
-                    } else if (Table.TableType.OLAP == table.getType()) {
+                    } else if (table.isOlapOrCloudNativeTable()) {
                         OlapTable olapTable = (OlapTable) table;
                         List<MaterializedIndexMeta> visibleMaterializedViews = olapTable.getVisibleIndexMetas();
                         long baseIdx = olapTable.getBaseIndexId();
