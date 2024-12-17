@@ -72,8 +72,6 @@ public class JDBCMetadata implements ConnectorMetadata {
             schemaResolver = new OracleSchemaResolver();
         } else if (properties.get(JDBCResource.DRIVER_CLASS).toLowerCase().contains("sqlserver")) {
             schemaResolver = new SqlServerSchemaResolver();
-        } else if (properties.get(JDBCResource.DRIVER_CLASS).toLowerCase().contains("dm")) {
-            schemaResolver = new DamengSchemaResolver();
         } else {
             LOG.warn("{} not support yet", properties.get(JDBCResource.DRIVER_CLASS));
             throw new StarRocksConnectorException(properties.get(JDBCResource.DRIVER_CLASS) + " not support yet");
