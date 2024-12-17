@@ -19,7 +19,7 @@ displayed_sidebar: docs
 
 ```SQL
 ALTER STORAGE VOLUME [ IF EXISTS ] <storage_volume_name>
-{ COMMENT '<comment_string>'
+{ COMMENT = '<comment_string>'
 | SET ("key" = "value"[,...]) }
 ```
 
