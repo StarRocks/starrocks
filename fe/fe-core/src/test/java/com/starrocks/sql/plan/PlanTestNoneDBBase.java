@@ -890,7 +890,7 @@ public class PlanTestNoneDBBase {
         String sql = getFileContent(fileName);
         List<StatementBase> statements = SqlParser.parse(sql, connectContext.getSessionVariable().getSqlMode());
         for (StatementBase stmt : statements) {
-            StmtExecutor stmtExecutor = new StmtExecutor(connectContext, stmt);
+            StmtExecutor stmtExecutor = StmtExecutor.newInternalExecutor(connectContext, stmt);
             stmtExecutor.execute();
             Assert.assertEquals("", connectContext.getState().getErrorMessage());
         }

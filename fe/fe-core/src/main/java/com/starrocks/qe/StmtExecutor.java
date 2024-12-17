@@ -228,6 +228,7 @@ import com.starrocks.transaction.TransactionCommitFailedException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.transaction.VisibleStateWaiter;
+import com.starrocks.warehouse.WarehouseIdleChecker;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -291,13 +292,23 @@ public class StmtExecutor {
     private Optional<Boolean> isForwardToLeaderOpt = Optional.empty();
     private HttpResultSender httpResultSender;
     private PrepareStmtContext prepareStmtContext;
+    private boolean isInternalStmt = false;
 
     public StmtExecutor(ConnectContext ctx, StatementBase parsedStmt) {
+        this(ctx, parsedStmt, false);
+    }
+
+    public static StmtExecutor newInternalExecutor(ConnectContext ctx, StatementBase parsedStmt) {
+        return new StmtExecutor(ctx, parsedStmt, true);
+    }
+
+    private StmtExecutor(ConnectContext ctx, StatementBase parsedStmt, boolean isInternalStmt) {
         this.context = ctx;
         this.parsedStmt = Preconditions.checkNotNull(parsedStmt);
         this.originStmt = parsedStmt.getOrigStmt();
         this.serializer = context.getSerializer();
         this.isProxy = false;
+        this.isInternalStmt = isInternalStmt;
     }
 
     public void setProxy() {
@@ -511,6 +522,9 @@ public class StmtExecutor {
             httpResultSender = new HttpResultSender((HttpConnectContext) context);
         }
 
+        if (!isInternalStmt) {
+            WarehouseIdleChecker.increaseRunningSQL(context.getCurrentWarehouseId());
+        }
         try {
             context.getState().setIsQuery(parsedStmt instanceof QueryStatement);
             if (parsedStmt.isExistQueryScopeHint()) {
@@ -807,6 +821,10 @@ public class StmtExecutor {
 
             // restore session variable in connect context
             context.setSessionVariable(sessionVariableBackup);
+
+            if (!isInternalStmt) {
+                WarehouseIdleChecker.decreaseRunningSQL(context.getCurrentWarehouseId());
+            }
         }
     }
 

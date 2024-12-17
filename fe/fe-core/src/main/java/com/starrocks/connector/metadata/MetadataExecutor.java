@@ -44,7 +44,7 @@ public class MetadataExecutor {
             return;
         }
 
-        this.executor = new StmtExecutor(context, parsedStmt);
+        this.executor = StmtExecutor.newInternalExecutor(context, parsedStmt);
         context.setExecutor(executor);
         context.setQueryId(UUIDUtil.genUUID());
         context.getSessionVariable().setEnableMaterializedViewRewrite(false);

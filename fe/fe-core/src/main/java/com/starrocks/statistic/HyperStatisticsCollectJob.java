@@ -137,7 +137,7 @@ public class HyperStatisticsCollectJob extends StatisticsCollectJob {
         StatementBase insertStmt = createInsertStmt();
         do {
             LOG.debug("statistics insert sql size:" + rowsBuffer.size());
-            StmtExecutor executor = new StmtExecutor(context, insertStmt);
+            StmtExecutor executor = StmtExecutor.newInternalExecutor(context, insertStmt);
 
             context.setExecutor(executor);
             context.setQueryId(UUIDUtil.genUUID());

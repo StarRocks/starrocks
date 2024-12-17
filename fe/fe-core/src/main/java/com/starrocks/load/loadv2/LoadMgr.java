@@ -83,6 +83,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
@@ -824,5 +825,20 @@ public class LoadMgr implements MemoryTrackable {
                 .limit(MEMORY_JOB_SAMPLES)
                 .collect(Collectors.toList());
         return Lists.newArrayList(Pair.create(samples, (long) idToLoadJob.size()));
+    }
+
+    public Map<Long, Long> getRunningLoadCount() {
+        Map<Long, Long> result = new HashMap<>();
+        readLock();
+        try {
+            for (LoadJob loadJob : idToLoadJob.values()) {
+                if (!loadJob.isFinal() && loadJob.getJobType() != EtlJobType.INSERT) {
+                    result.compute(loadJob.getCurrentWarehouseId(), (key, value) -> value == null ? 1L : value + 1);
+                }
+            }
+        } finally {
+            readUnlock();
+        }
+        return result;
     }
 }

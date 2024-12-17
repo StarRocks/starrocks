@@ -242,7 +242,7 @@ public class MvRewriteTestBase {
     public static void executeInsertSql(ConnectContext connectContext, String sql) throws Exception {
         connectContext.setQueryId(UUIDUtil.genUUID());
         StatementBase statement = SqlParser.parseSingleStatement(sql, connectContext.getSessionVariable().getSqlMode());
-        new StmtExecutor(connectContext, statement).execute();
+        StmtExecutor.newInternalExecutor(connectContext, statement).execute();
     }
 
     /**
@@ -257,26 +257,7 @@ public class MvRewriteTestBase {
 
         StatementBase stmt = SqlParser.parseSingleStatement(addPartitionSql, connectContext.getSessionVariable().getSqlMode());
         try {
-            new StmtExecutor(connectContext, stmt).execute();
-        } catch (Exception e) {
-            Assert.fail("add partition failed:" + e);
-        }
-    }
-
-    /**
-     * Add list partition with two values
-     * @param tbl table name
-     * @param pName partition name
-     * @param pVal1 the first partition value
-     * @param pVal2 the second partition value
-     */
-    protected void addListPartition(String tbl, String pName, String pVal1, String pVal2) {
-        String addPartitionSql = String.format("ALTER TABLE %s ADD PARTITION %s VALUES IN (('%s', '%s'))", tbl, pName, pVal1,
-                pVal2);
-        System.out.println(addPartitionSql);
-        StatementBase stmt = SqlParser.parseSingleStatement(addPartitionSql, connectContext.getSessionVariable().getSqlMode());
-        try {
-            new StmtExecutor(connectContext, stmt).execute();
+            StmtExecutor.newInternalExecutor(connectContext, stmt).execute();
         } catch (Exception e) {
             Assert.fail("add partition failed:" + e);
         }

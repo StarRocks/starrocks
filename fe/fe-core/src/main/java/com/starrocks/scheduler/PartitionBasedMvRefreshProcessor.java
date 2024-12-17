@@ -1166,7 +1166,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             throw new StarRocksException("User Cancelled");
         }
 
-        StmtExecutor executor = new StmtExecutor(ctx, insertStmt);
+        StmtExecutor executor = StmtExecutor.newInternalExecutor(ctx, insertStmt);
         ctx.setExecutor(executor);
         if (ctx.getParent() != null && ctx.getParent().getExecutor() != null) {
             StmtExecutor parentStmtExecutor = ctx.getParent().getExecutor();

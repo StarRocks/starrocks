@@ -66,7 +66,7 @@ public class RepoExecutor {
             Preconditions.checkState(parsedStmt instanceof DmlStmt, "the statement should be dml");
             DmlStmt dmlStmt = (DmlStmt) parsedStmt;
             ExecPlan execPlan = StatementPlanner.plan(parsedStmt, context, TResultSinkType.HTTP_PROTOCAL);
-            StmtExecutor executor = new StmtExecutor(context, parsedStmt);
+            StmtExecutor executor = StmtExecutor.newInternalExecutor(context, parsedStmt);
             context.setExecutor(executor);
             context.setQueryId(UUIDUtil.genUUID());
             AuditLog.getInternalAudit().info("RepoExecutor execute SQL | Query_id {} | SQL {}",
@@ -90,7 +90,7 @@ public class RepoExecutor {
 
             StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
             ExecPlan execPlan = StatementPlanner.plan(parsedStmt, context, TResultSinkType.HTTP_PROTOCAL);
-            StmtExecutor executor = new StmtExecutor(context, parsedStmt);
+            StmtExecutor executor = StmtExecutor.newInternalExecutor(context, parsedStmt);
             context.setExecutor(executor);
             context.setQueryId(UUIDUtil.genUUID());
             AuditLog.getInternalAudit().info("RepoExecutor execute SQL | Query_id {} | SQL {}",

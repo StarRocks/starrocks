@@ -72,6 +72,7 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -84,6 +85,7 @@ import com.starrocks.thrift.TFinishTaskRequest;
 import com.starrocks.thrift.THdfsProperties;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTaskType;
+import com.starrocks.warehouse.WarehouseIdleChecker;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -799,6 +801,7 @@ public class BackupJob extends AbstractJob {
         LOG.info("job is finished. {}", this);
 
         MetricRepo.COUNTER_UNFINISHED_BACKUP_JOB.increase(-1L);
+        WarehouseIdleChecker.updateJobLastFinishTime(WarehouseManager.DEFAULT_WAREHOUSE_ID);
     }
 
     private boolean uploadFile(String localFilePath, String remoteFilePath) {
@@ -885,6 +888,7 @@ public class BackupJob extends AbstractJob {
 
         // log
         globalStateMgr.getEditLog().logBackupJob(this);
+        WarehouseIdleChecker.updateJobLastFinishTime(WarehouseManager.DEFAULT_WAREHOUSE_ID);
         LOG.info("finished to cancel backup job. current state: {}. {}", curState.name(), this);
     }
 

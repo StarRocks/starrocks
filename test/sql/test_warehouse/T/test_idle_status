@@ -1,0 +1,2 @@
+-- name: test_idle_status
+shell: curl ${url}/api/idle_status

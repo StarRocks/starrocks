@@ -56,7 +56,7 @@ public class SqlTaskRunProcessor extends BaseTaskRunProcessor {
                 }
             }.visit(sqlStmt);
 
-            executor = new StmtExecutor(ctx, sqlStmt);
+            executor = StmtExecutor.newInternalExecutor(ctx, sqlStmt);
             ctx.setExecutor(executor);
             ctx.setThreadLocalInfo();
             executor.addRunningQueryDetail(sqlStmt);
