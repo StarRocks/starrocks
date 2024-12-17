@@ -25,7 +25,7 @@ namespace starrocks::parquet {
 
 class StatisticsHelper {
 public:
-    enum StatSupportedFilter { FILTER_IN, IS_NULL, IS_NOT_NULL, RF_MIN_MAX};
+    enum StatSupportedFilter { FILTER_IN, IS_NULL, IS_NOT_NULL, RF_MIN_MAX };
 
     static Status decode_value_into_column(const ColumnPtr& column, const std::vector<std::string>& values,
                                            const TypeDescriptor& type, const ParquetField* field,
