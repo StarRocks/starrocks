@@ -44,7 +44,7 @@ struct UDFFunctionCallHelper {
     JavaMethodDescriptor* call_desc;
 
     // Now we don't support logical type function
-    ColumnPtr call(FunctionContext* ctx, Columns& columns, size_t size) {
+    StatusOr<ColumnPtr> call(FunctionContext* ctx, Columns& columns, size_t size) {
         auto& helper = JVMFunctionHelper::getInstance();
         JNIEnv* env = helper.getEnv();
         std::vector<DirectByteBuffer> buffers;
@@ -74,6 +74,13 @@ struct UDFFunctionCallHelper {
 
         // call UDF method
         jobject res = helper.batch_call(fn_desc->call_stub.get(), input_col_objs.data(), input_col_objs.size(), size);
+        // The ctx of the current function argument is not the same as the ctx of fn_desc->call_stub.
+        // The latter is created in JavaFunctionCallExpr::prepare and used in java udf, so we should
+        // use it to determine whether an exception has occurred.
+        FunctionContext* java_udf_ctx = fn_desc->call_stub.get()->ctx();
+        if (java_udf_ctx != nullptr && java_udf_ctx->has_error()) {
+            return Status::RuntimeError(java_udf_ctx->error_msg());
+        }
         RETURN_IF_UNLIKELY_NULL(res, ColumnHelper::create_const_null_column(size));
         // get result
         auto result_cols = get_boxed_result(ctx, res, size);
@@ -102,7 +109,7 @@ StatusOr<ColumnPtr> JavaFunctionCallExpr::evaluate_checked(ExprContext* context,
     for (int i = 0; i < _children.size(); ++i) {
         ASSIGN_OR_RETURN(columns[i], _children[i]->evaluate_checked(context, ptr));
     }
-    ColumnPtr res;
+    StatusOr<ColumnPtr> res;
     auto call_udf = [&]() {
         res = _call_helper->call(context->fn_context(_fn_context_index), columns, ptr != nullptr ? ptr->num_rows() : 1);
         return Status::OK();
