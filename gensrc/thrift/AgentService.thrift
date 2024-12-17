@@ -422,7 +422,8 @@ enum TTabletMetaType {
     STORAGE_TYPE,
     MUTABLE_BUCKET_NUM,
     ENABLE_LOAD_PROFILE,
-    BASE_COMPACTION_FORBIDDEN_TIME_RANGES
+    BASE_COMPACTION_FORBIDDEN_TIME_RANGES,
+    DROP_PERSISTENT_INDEX
 }
 
 struct TTabletMetaInfo {
@@ -438,6 +439,7 @@ struct TTabletMetaInfo {
     // |create_schema_file| only used when |tablet_schema| exists
     10: optional bool create_schema_file;
     11: optional TPersistentIndexType persistent_index_type;
+    12: optional i64 rebuild_pindex_version;
 }
 
 struct TUpdateTabletMetaInfoReq {

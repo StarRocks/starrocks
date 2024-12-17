@@ -153,6 +153,7 @@ message TabletMetadataPB {
     map<int64, TabletSchemaPB> historical_schemas = 17;
     // rowset_id -> schema_id
     map<uint32, int64> rowset_to_schema = 18;
+    optional int64 rebuild_pindex_version = 19;
 }
 
 message MetadataUpdateInfoPB {

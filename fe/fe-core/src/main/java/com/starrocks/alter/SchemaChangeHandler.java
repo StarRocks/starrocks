@@ -2131,6 +2131,101 @@ public class SchemaChangeHandler extends AlterHandler {
         return null;
     }
 
+    public void sendAndWaitAgentTaskFinished(AgentBatchTask batchTask, long timeoutMs, 
+                                             MarkedCountDownLatch<Long, Set<Long>> countDownLatch,
+                                             TTaskType type)
+            throws DdlException {
+        // send all tasks and wait them finished
+        AgentTaskQueue.addBatchTask(batchTask);
+        AgentTaskExecutor.submit(batchTask);
+        boolean ok = false;
+        try {
+            ok = countDownLatch.await(timeout, TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+            LOG.warn("InterruptedException: ", e);
+        }
+
+        if (!ok || !countDownLatch.getStatus().ok()) {
+            String errMsg = "";
+            // clear tasks
+            AgentTaskQueue.removeBatchTask(batchTask, type);
+
+            if (!countDownLatch.getStatus().ok()) {
+                errMsg += " Error: " + countDownLatch.getStatus().getErrorMsg();
+            } else {
+                List<Map.Entry<Long, Set<Long>>> unfinishedMarks = countDownLatch.getLeftMarks();
+                // only show at most 3 results
+                List<Map.Entry<Long, Set<Long>>> subList =
+                        unfinishedMarks.subList(0, Math.min(unfinishedMarks.size(), 3));
+                if (!subList.isEmpty()) {
+                    errMsg += " Unfinished mark: " + Joiner.on(", ").join(subList);
+                }
+            }
+            errMsg += ". This operation maybe partial successfully, You should retry until success.";
+            throw new DdlException(errMsg);
+        }
+    }
+
+    public void processLakeTableDropPersistentIndex(AlterClause alterClause, Database db, OlapTable olapTable)
+            throws StarRocksException {
+        if (!olapTable.enablePersistentIndex() || 
+                olapTable.getPersistentIndexType() != TPersistentIndexType.CLOUD_NATIVE) {
+            LOG.warn(String.format("drop persistent index on table %s failed, it must be" +
+                        " cloud_native persistent index", olapTable.getName()));
+            throw new DdlException("drop persistent index only support cloud native index");
+        
+        List<Long> dropPindexTablets = ((DropPersistentIndexClause) alterClause).getTableIds();
+        Map<Long, Set<Long>> beIdToTabletSet = Maps.newHashMap();
+        Map<Long, Long> tabletToVisibleVersion = Maps.newHashMap();
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+
+        for (Long tabletId : dropPindexTablets) {
+            for (Map.Entry<Long, Replica> entry : invertedIndex.getReplicaMetaTable.row(tabletId).entrySet()) {
+                Long backendId = entry.getKey();
+                beIdToTabletSet.computeIfAbsent(backendId, k -> new HashSet<>()).add(tabletId);
+            }
+            TabletMeta tabletMeta = invertedIndex.getTabletMeta(tabletId);
+            if (tabletMeta == null) {
+                throw new DdlException(String.format("tablet %d is not exist", tabletId));
+            }
+            long partitionId = tabletMeta.getPhysicalPartitionId();
+            PhysicalPartition partition = olapTable.getPhysicalPartition(partitionId);
+            if (partition == null) {
+                throw new DdlException(String.format("can not find partition of tablet %d", tabletId));
+            }
+            tabletToVisibleVersion.put(tabletId, partition.getVisibleVersion());
+        }
+
+        int totalTaskNum = beIdToTabletSet.keySet().size();
+        MarkedCountDownLatch<Long, Set<Long>> countDownLatch = new MarkedCountDownLatch<>(totalTaskNum);
+        AgentBatchTask batchTask = new AgentBatchTask();
+
+        for (Map.Entry<Long, Set<Long>> kv : beIdToTabletSet.entrySet()) {
+            countDownLatch.addMark(kv.getKey(), kv.getValue());
+            long backendId = kv.getKey();
+            Set<Long> tablets = kv.getValue();
+            TabletMetadataUpdateAgentTask task = TabletMetadataUpdateAgentTaskFactory
+                    .createLakeTableDropPindexTask(backendId, tablets, tabletToVisibleVersion);
+            Preconditions.checkState(task != null, "task is null");
+            task.setLatch(countDownLatch);
+            batchTask.addTask(task);
+        }
+
+        if (!FeConstants.runningUnitTest) {
+            // send all tasks and wait them finished
+            LOG.info("send drop lake tablet pindex task for table {}", olapTable.getName());
+            // estimate timeout
+            long timeout = Config.tablet_create_timeout_second * 1000L * totalTaskNum;
+            timeout = Math.min(timeout, Config.max_create_table_timeout_second * 1000L);
+            try {
+                sendAndWaitAgentTaskFinished(batchTask, timeout, countDownLatch, TTaskType.UPDATE_TABLET_META_INFO);
+            } catch (Exception e) {
+                LOG.warn(errMsg);
+                throw new DdlException(errMsg);
+            }
+        }
+    }
+
     public void updateTableMeta(Database db, String tableName, Map<String, String> properties,
                                 TTabletMetaType metaType)
             throws DdlException {
@@ -2502,38 +2597,15 @@ public class SchemaChangeHandler extends AlterHandler {
         }
         if (!FeConstants.runningUnitTest) {
             // send all tasks and wait them finished
-            AgentTaskQueue.addBatchTask(batchTask);
-            AgentTaskExecutor.submit(batchTask);
             LOG.info("send update tablet meta task for table {}, partitions {}, number: {}",
                     tableName, partitionName, batchTask.getTaskNum());
-
             // estimate timeout
             long timeout = Config.tablet_create_timeout_second * 1000L * totalTaskNum;
             timeout = Math.min(timeout, Config.max_create_table_timeout_second * 1000L);
-            boolean ok = false;
             try {
-                ok = countDownLatch.await(timeout, TimeUnit.MILLISECONDS);
-            } catch (InterruptedException e) {
-                LOG.warn("InterruptedException: ", e);
-            }
-
-            if (!ok || !countDownLatch.getStatus().ok()) {
-                String errMsg = "Failed to update partition[" + partitionName + "]. tablet meta.";
-                // clear tasks
-                AgentTaskQueue.removeBatchTask(batchTask, TTaskType.UPDATE_TABLET_META_INFO);
-
-                if (!countDownLatch.getStatus().ok()) {
-                    errMsg += " Error: " + countDownLatch.getStatus().getErrorMsg();
-                } else {
-                    List<Map.Entry<Long, Set<Long>>> unfinishedMarks = countDownLatch.getLeftMarks();
-                    // only show at most 3 results
-                    List<Map.Entry<Long, Set<Long>>> subList =
-                            unfinishedMarks.subList(0, Math.min(unfinishedMarks.size(), 3));
-                    if (!subList.isEmpty()) {
-                        errMsg += " Unfinished mark: " + Joiner.on(", ").join(subList);
-                    }
-                }
-                errMsg += ". This operation maybe partial successfully, You should retry until success.";
+                sendAndWaitAgentTaskFinished(batchTask, timeout, countDownLatch, TTaskType.UPDATE_TABLET_META_INFO);
+            } catch (Exception e) {
+                String errMsg = "Failed to update partition[" + partitionName + "]. tablet meta. " + e.getErrorMsg();
                 LOG.warn(errMsg);
                 throw new DdlException(errMsg);
             }

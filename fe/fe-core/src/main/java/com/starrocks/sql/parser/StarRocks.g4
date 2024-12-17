@@ -899,6 +899,7 @@ alterClause
     | dropBranchClause
     | dropTagClause
     | tableOperationClause
+    | dropPersistentIndexClause
 
     //Alter partition clause
     | addPartitionClause
@@ -1121,6 +1122,10 @@ timeUnit
     : DAYS
     | HOURS
     | MINUTES
+    ;
+
+dropPersistentIndexClause
+    : DROP PERSISTENT INDEX ON INTEGER_VALUE (',' INTEGER_VALUE)*
     ;
 
 // ---------Alter partition clause---------

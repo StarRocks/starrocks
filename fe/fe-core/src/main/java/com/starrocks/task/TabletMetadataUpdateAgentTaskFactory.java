@@ -45,6 +45,9 @@ public class TabletMetadataUpdateAgentTaskFactory {
         if (metaType == TTabletMetaType.ENABLE_PERSISTENT_INDEX) {
             return createEnablePersistentIndexUpdateTask(backendId, tablets, value);
         }
+        if (metaType == TTabletMetaType.DROP_PERSISTENT_INDEX) {
+            return createLakeDropPersistentIndexTask(backendId, tablets, value);
+        }
         return null;
     }
 
@@ -337,5 +340,36 @@ public class TabletMetadataUpdateAgentTaskFactory {
             }
             return metaInfos;
         }
+    }
+
+    private static class LakeTableDropPindexTask extends TabletMetadataUpdateAgentTask {
+        private final Set<Long> tablets;
+        private final Map<Long, Long> tabletToVersion;
+
+        private LakeTableDropPindexTask(long backendId, Set<Long> tablets, 
+                                        Map<Long, Long> tabletToVersion) {
+            super(backends, Objects.hash(tablets, tabletToVersion));
+            this.tablets = tablets;
+            this.tabletToVersion = tabletToVersion;
+        }
+
+        @Override
+        public Set<Long> getTablets() {
+            return tablets;
+        }
+
+        @Override
+        public List<TTabletMetaInfo> getTTabletMetaInfoList() {
+            List<TTabletMetaInfo> metaInfos = Lists.newArrayList();
+            for (Long tablet : tablets) {
+                TTabletMetaInfo metaInfo = new TTabletMetaInfo();
+                metaInfo.setTablet_id(tablet);
+                metaInfo.setRebuild_pindex_version(tabletToVersion[tablet]);
+                metaInfo.setMeta_type(TTabletMetaType.DROP_PERSISTENT_INDEX);
+                metaInfos.add(metaInfo);
+            }
+            return metaInfos;
+        }
+        
     }
 }
