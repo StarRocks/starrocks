@@ -23,6 +23,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -219,5 +220,23 @@ public class TaskRunScheduler {
     @Override
     public String toString() {
         return GsonUtils.GSON.toJson(this);
+    }
+
+    public Map<Long, Long> getAllRunnableTaskCount() {
+        Map<Long, Long> result = new HashMap<>();
+        for (TaskRun taskRun : runningTaskRunMap.values()) {
+            result.compute(taskRun.getRunCtx().getCurrentWarehouseId(),
+                    (key, value) -> value == null ? 1L : value + 1);
+        }
+        for (TaskRun taskRun : runningSyncTaskRunMap.values()) {
+            result.compute(taskRun.getRunCtx().getCurrentWarehouseId(),
+                    (key, value) -> value == null ? 1L : value + 1);
+        }
+
+        Map<Long, Long> pending = pendingTaskRunQueue.getTaskCount();
+
+        pending.forEach((key, value) -> result.merge(key, value, Long::sum));
+
+        return result;
     }
 }

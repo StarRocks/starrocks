@@ -75,7 +75,7 @@ public class WarehouseManager implements Writable {
 
     public void initDefaultWarehouse() {
         // gen a default warehouse
-        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+        try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
             Warehouse wh = new DefaultWarehouse(DEFAULT_WAREHOUSE_ID, DEFAULT_WAREHOUSE_NAME);
             nameToWh.put(wh.getName(), wh);
             idToWh.put(wh.getId(), wh);
@@ -83,7 +83,15 @@ public class WarehouseManager implements Writable {
     }
 
     public List<Warehouse> getAllWarehouses() {
-        return new ArrayList<>(nameToWh.values());
+        try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
+            return new ArrayList<>(nameToWh.values());
+        }
+    }
+
+    public List<Long> getAllWarehouseIds() {
+        try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
+            return new ArrayList<>(idToWh.keySet());
+        }
     }
 
     public Warehouse getWarehouse(String warehouseName) {
@@ -131,10 +139,7 @@ public class WarehouseManager implements Writable {
     }
 
     public List<Long> getAllComputeNodeIds(String warehouseName) {
-        Warehouse warehouse = nameToWh.get(warehouseName);
-        if (warehouse == null) {
-            throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("name: %s", warehouseName));
-        }
+        Warehouse warehouse = getWarehouse(warehouseName);
 
         return getAllComputeNodeIds(warehouse.getId());
     }
@@ -146,10 +151,7 @@ public class WarehouseManager implements Writable {
     }
 
     private List<Long> getAllComputeNodeIds(long warehouseId, long workerGroupId) {
-        Warehouse warehouse = idToWh.get(warehouseId);
-        if (warehouse == null) {
-            throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("name: %s", warehouse.getName()));
-        }
+        Warehouse warehouse = getWarehouse(warehouseId);
 
         try {
             return GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkersByWorkerGroup(workerGroupId);
@@ -177,11 +179,6 @@ public class WarehouseManager implements Writable {
     }
 
     public Long getComputeNodeId(Long warehouseId, LakeTablet tablet) {
-        Warehouse warehouse = idToWh.get(warehouseId);
-        if (warehouse == null) {
-            throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("id: %d", warehouseId));
-        }
-
         try {
             long workerGroupId = selectWorkerGroupInternal(warehouseId)
                     .orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
@@ -203,10 +200,7 @@ public class WarehouseManager implements Writable {
     }
 
     public Long getComputeNodeId(String warehouseName, LakeTablet tablet) {
-        Warehouse warehouse = nameToWh.get(warehouseName);
-        if (warehouse == null) {
-            throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("name: %s", warehouseName));
-        }
+        Warehouse warehouse = getWarehouse(warehouseName);
 
         try {
             long workerGroupId = selectWorkerGroupInternal(warehouse.getId()).orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
