@@ -932,6 +932,29 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
     }
 
     @Override
+<<<<<<< HEAD
+=======
+    public final boolean cancel(String errMsg) {
+        isCancelling.set(true);
+        try {
+            // If waitingCreatingReplica == false, we will assume that
+            // cancel thread will get the object lock very quickly.
+            if (waitingCreatingReplica.get()) {
+                Preconditions.checkState(createReplicaLatch != null);
+                createReplicaLatch.countDownToZero(new Status(TStatusCode.OK, ""));
+            }
+            synchronized (this) {
+                boolean cancelled = cancelImpl(errMsg);
+                cancelHook(cancelled);
+                return cancelled;
+            }
+        } finally {
+            isCancelling.set(false);
+        }
+    }
+
+    @Override
+>>>>>>> 6cd9fbc95f ([Enhancement] Add cluster idle HTTP api (#53850))
     protected boolean cancelImpl(String errMsg) {
         if (jobState == JobState.CANCELLED || jobState == JobState.FINISHED) {
             return false;

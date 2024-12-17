@@ -96,6 +96,12 @@ import com.starrocks.transaction.AbstractTxnStateChangeCallback;
 import com.starrocks.transaction.TransactionException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
+<<<<<<< HEAD
+=======
+import com.starrocks.warehouse.LoadJobWithWarehouse;
+import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.WarehouseIdleChecker;
+>>>>>>> 6cd9fbc95f ([Enhancement] Add cluster idle HTTP api (#53850))
 import org.apache.commons.text.StringEscapeUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -1336,6 +1342,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         state = JobState.STOPPED;
         clearTasks();
         endTimestamp = System.currentTimeMillis();
+        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId);
     }
 
     private void executeCancel(ErrorReason reason) {
@@ -1343,6 +1350,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         state = JobState.CANCELLED;
         clearTasks();
         endTimestamp = System.currentTimeMillis();
+        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId);
     }
 
     private void clearTasks() {

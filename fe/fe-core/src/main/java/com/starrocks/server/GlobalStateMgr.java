@@ -317,8 +317,12 @@ import com.starrocks.thrift.TWriteQuorumType;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.PublishVersionDaemon;
 import com.starrocks.transaction.UpdateDbUsedDataQuotaDaemon;
+<<<<<<< HEAD
 import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections.CollectionUtils;
+=======
+import com.starrocks.warehouse.WarehouseIdleChecker;
+>>>>>>> 6cd9fbc95f ([Enhancement] Add cluster idle HTTP api (#53850))
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -584,6 +588,19 @@ public class GlobalStateMgr {
 
     private final GlobalConstraintManager globalConstraintManager;
 
+<<<<<<< HEAD
+=======
+    private final VariableMgr variableMgr;
+
+    private final SqlParser sqlParser;
+    private final Analyzer analyzer;
+    private final Authorizer authorizer;
+    private final DDLStmtExecutor ddlStmtExecutor;
+    private final ShowExecutor showExecutor;
+    private final ExecutorService queryDeployExecutor;
+    private final WarehouseIdleChecker warehouseIdleChecker;
+
+>>>>>>> 6cd9fbc95f ([Enhancement] Add cluster idle HTTP api (#53850))
     public NodeMgr getNodeMgr() {
         return nodeMgr;
     }
@@ -865,6 +882,26 @@ public class GlobalStateMgr {
 
         this.memoryUsageTracker = new MemoryUsageTracker();
         this.procProfileCollector = new ProcProfileCollector();
+<<<<<<< HEAD
+=======
+
+        this.sqlParser = new SqlParser(AstBuilder.getInstance());
+        this.analyzer = new Analyzer(Analyzer.AnalyzerVisitor.getInstance());
+        AccessControlProvider accessControlProvider;
+        if (Config.access_control.equals("ranger")) {
+            accessControlProvider = new AccessControlProvider(new AuthorizerStmtVisitor(), new RangerStarRocksAccessController());
+        } else {
+            accessControlProvider = new AccessControlProvider(new AuthorizerStmtVisitor(), new NativeAccessController());
+        }
+        this.authorizer = new Authorizer(accessControlProvider);
+        this.ddlStmtExecutor = new DDLStmtExecutor(DDLStmtExecutor.StmtExecutorVisitor.getInstance());
+        this.showExecutor = new ShowExecutor(ShowExecutor.ShowExecutorVisitor.getInstance());
+        this.temporaryTableCleaner = new TemporaryTableCleaner();
+        this.queryDeployExecutor =
+                ThreadPoolManager.newDaemonFixedThreadPool(Config.query_deploy_threadpool_size, Integer.MAX_VALUE,
+                        "query-deploy", true);
+        this.warehouseIdleChecker = new WarehouseIdleChecker();
+>>>>>>> 6cd9fbc95f ([Enhancement] Add cluster idle HTTP api (#53850))
     }
 
     public static void destroyCheckpoint() {
@@ -1560,6 +1597,8 @@ public class GlobalStateMgr {
         lockChecker.start();
 
         procProfileCollector.start();
+
+        warehouseIdleChecker.start();
 
         // The memory tracker should be placed at the end
         memoryUsageTracker.start();
@@ -4368,4 +4407,15 @@ public class GlobalStateMgr {
     public MetaRecoveryDaemon getMetaRecoveryDaemon() {
         return metaRecoveryDaemon;
     }
+<<<<<<< HEAD
+=======
+
+    public VariableMgr getVariableMgr() {
+        return variableMgr;
+    }
+
+    public WarehouseIdleChecker getWarehouseIdleChecker() {
+        return warehouseIdleChecker;
+    }
+>>>>>>> 6cd9fbc95f ([Enhancement] Add cluster idle HTTP api (#53850))
 }

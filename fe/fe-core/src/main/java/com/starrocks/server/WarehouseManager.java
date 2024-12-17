@@ -56,17 +56,35 @@ public class WarehouseManager implements Writable {
 
     public void initDefaultWarehouse() {
         // gen a default warehouse
+<<<<<<< HEAD
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             Warehouse wh = new LocalWarehouse(DEFAULT_WAREHOUSE_ID,
                     DEFAULT_WAREHOUSE_NAME);
+=======
+        try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
+            Warehouse wh = new DefaultWarehouse(DEFAULT_WAREHOUSE_ID, DEFAULT_WAREHOUSE_NAME);
+>>>>>>> 6cd9fbc95f ([Enhancement] Add cluster idle HTTP api (#53850))
             nameToWh.put(wh.getName(), wh);
             idToWh.put(wh.getId(), wh);
             wh.setExist(true);
         }
     }
 
+<<<<<<< HEAD
     public Warehouse getDefaultWarehouse() {
         return getWarehouse(DEFAULT_WAREHOUSE_NAME);
+=======
+    public List<Warehouse> getAllWarehouses() {
+        try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
+            return new ArrayList<>(nameToWh.values());
+        }
+    }
+
+    public List<Long> getAllWarehouseIds() {
+        try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
+            return new ArrayList<>(idToWh.keySet());
+        }
+>>>>>>> 6cd9fbc95f ([Enhancement] Add cluster idle HTTP api (#53850))
     }
 
     public Warehouse getWarehouse(String warehouseName) {
@@ -101,6 +119,7 @@ public class WarehouseManager implements Writable {
         return builder.build();
     }
 
+<<<<<<< HEAD
     // not persist anything thereafter, so checksum ^= 0
     public long saveWarehouses(DataOutputStream out, long checksum) throws IOException {
         checksum ^= 0;
@@ -115,6 +134,63 @@ public class WarehouseManager implements Writable {
             WarehouseManager data = GsonUtils.GSON.fromJson(s, WarehouseManager.class);
             if (data != null && data.nameToWh != null) {
                 warehouseCount = data.nameToWh.size();
+=======
+    public List<Long> getAllComputeNodeIds(String warehouseName) {
+        Warehouse warehouse = getWarehouse(warehouseName);
+
+        return getAllComputeNodeIds(warehouse.getId());
+    }
+
+    public List<Long> getAllComputeNodeIds(long warehouseId) {
+        long workerGroupId = selectWorkerGroupInternal(warehouseId)
+                .orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+        return getAllComputeNodeIds(warehouseId, workerGroupId);
+    }
+
+    private List<Long> getAllComputeNodeIds(long warehouseId, long workerGroupId) {
+        Warehouse warehouse = getWarehouse(warehouseId);
+
+        try {
+            return GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkersByWorkerGroup(workerGroupId);
+        } catch (StarRocksException e) {
+            LOG.warn("Fail to get compute node ids from starMgr : {}", e.getMessage());
+            return new ArrayList<>();
+        }
+    }
+
+    public List<ComputeNode> getAliveComputeNodes(long warehouseId) {
+        Optional<Long> workerGroupId = selectWorkerGroupInternal(warehouseId);
+        if (workerGroupId.isEmpty()) {
+            return new ArrayList<>();
+        }
+        return getAliveComputeNodes(warehouseId, workerGroupId.get());
+    }
+
+    private List<ComputeNode> getAliveComputeNodes(long warehouseId, long workerGroupId) {
+        List<Long> computeNodeIds = getAllComputeNodeIds(warehouseId, workerGroupId);
+        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        List<ComputeNode> nodes = computeNodeIds.stream()
+                .map(id -> systemInfoService.getBackendOrComputeNode(id))
+                .filter(ComputeNode::isAlive).collect(Collectors.toList());
+        return nodes;
+    }
+
+    public Long getComputeNodeId(Long warehouseId, LakeTablet tablet) {
+        try {
+            long workerGroupId = selectWorkerGroupInternal(warehouseId)
+                    .orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+            ShardInfo shardInfo = GlobalStateMgr.getCurrentState().getStarOSAgent()
+                    .getShardInfo(tablet.getShardId(), workerGroupId);
+
+            Long nodeId;
+            Set<Long> ids = GlobalStateMgr.getCurrentState().getStarOSAgent()
+                    .getAllNodeIdsByShard(shardInfo, true);
+            if (!ids.isEmpty()) {
+                nodeId = ids.iterator().next();
+                return nodeId;
+            } else {
+                return null;
+>>>>>>> 6cd9fbc95f ([Enhancement] Add cluster idle HTTP api (#53850))
             }
             checksum ^= warehouseCount;
             LOG.info("finished replaying WarehouseMgr from image");
@@ -124,8 +200,66 @@ public class WarehouseManager implements Writable {
         return checksum;
     }
 
+<<<<<<< HEAD
     public List<List<String>> getWarehousesInfo() {
         return new WarehouseProcDir(this).fetchResult().getRows();
+=======
+    public Long getComputeNodeId(String warehouseName, LakeTablet tablet) {
+        Warehouse warehouse = getWarehouse(warehouseName);
+
+        try {
+            long workerGroupId = selectWorkerGroupInternal(warehouse.getId()).orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+            ShardInfo shardInfo = GlobalStateMgr.getCurrentState().getStarOSAgent()
+                    .getShardInfo(tablet.getShardId(), workerGroupId);
+
+            Long nodeId;
+            Set<Long> ids = GlobalStateMgr.getCurrentState().getStarOSAgent()
+                    .getAllNodeIdsByShard(shardInfo, true);
+            if (!ids.isEmpty()) {
+                nodeId = ids.iterator().next();
+                return nodeId;
+            } else {
+                return null;
+            }
+        } catch (StarClientException e) {
+            return null;
+        }
+    }
+
+    public Set<Long> getAllComputeNodeIdsAssignToTablet(Long warehouseId, LakeTablet tablet) {
+        try {
+            long workerGroupId = selectWorkerGroupInternal(warehouseId).orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+            ShardInfo shardInfo = GlobalStateMgr.getCurrentState().getStarOSAgent()
+                    .getShardInfo(tablet.getShardId(), workerGroupId);
+
+            return GlobalStateMgr.getCurrentState().getStarOSAgent()
+                    .getAllNodeIdsByShard(shardInfo, true);
+        } catch (StarClientException e) {
+            return null;
+        }
+    }
+
+    public ComputeNode getComputeNodeAssignedToTablet(String warehouseName, LakeTablet tablet) {
+        Warehouse warehouse = getWarehouse(warehouseName);
+        return getComputeNodeAssignedToTablet(warehouse.getId(), tablet);
+    }
+
+    public ComputeNode getComputeNodeAssignedToTablet(Long warehouseId, LakeTablet tablet) {
+        Long computeNodeId = getComputeNodeId(warehouseId, tablet);
+        if (computeNodeId == null) {
+            Warehouse warehouse = idToWh.get(warehouseId);
+            throw ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE,
+                    String.format("name: %s", warehouse.getName()));
+        }
+        Preconditions.checkNotNull(computeNodeId);
+        return GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(computeNodeId);
+    }
+
+    private final AtomicInteger nextComputeNodeIndex = new AtomicInteger(0);
+
+    public AtomicInteger getNextComputeNodeIndexFromWarehouse(long warehouseId) {
+        return nextComputeNodeIndex;
+>>>>>>> 6cd9fbc95f ([Enhancement] Add cluster idle HTTP api (#53850))
     }
 
     @Override

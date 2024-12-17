@@ -901,7 +901,7 @@ public class ConnectContext {
     public StmtExecutor executeSql(String sql) throws Exception {
         StatementBase sqlStmt = SqlParser.parse(sql, getSessionVariable()).get(0);
         sqlStmt.setOrigStmt(new OriginStatement(sql, 0));
-        StmtExecutor executor = new StmtExecutor(this, sqlStmt);
+        StmtExecutor executor = StmtExecutor.newInternalExecutor(this, sqlStmt);
         setExecutor(executor);
         setThreadLocalInfo();
         executor.execute();
@@ -912,6 +912,151 @@ public class ConnectContext {
         return ScopeGuard.setIfNotExists(this);
     }
 
+<<<<<<< HEAD
+=======
+    // Change current catalog of this session, and reset current database.
+    // We can support "use 'catalog <catalog_name>'" from mysql client or "use catalog <catalog_name>" from jdbc.
+    public void changeCatalog(String newCatalogName) throws DdlException {
+        CatalogMgr catalogMgr = GlobalStateMgr.getCurrentState().getCatalogMgr();
+        if (!catalogMgr.catalogExists(newCatalogName)) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_ERROR, newCatalogName);
+        }
+        if (!CatalogMgr.isInternalCatalog(newCatalogName)) {
+            try {
+                Authorizer.checkAnyActionOnCatalog(this.getCurrentUserIdentity(),
+                        this.getCurrentRoleIds(), newCatalogName);
+            } catch (AccessDeniedException e) {
+                AccessDeniedException.reportAccessDenied(newCatalogName, this.getCurrentUserIdentity(), this.getCurrentRoleIds(),
+                        PrivilegeType.ANY.name(), ObjectType.CATALOG.name(), newCatalogName);
+            }
+        }
+        this.setCurrentCatalog(newCatalogName);
+        this.setDatabase("");
+    }
+
+    // Change current catalog and database of this session.
+    // identifier could be "CATALOG.DB" or "DB".
+    // For "CATALOG.DB", we change the current catalog database.
+    // For "DB", we keep the current catalog and change the current database.
+    public void changeCatalogDb(String identifier) throws DdlException {
+        CatalogMgr catalogMgr = GlobalStateMgr.getCurrentState().getCatalogMgr();
+        MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
+
+        String dbName;
+
+        String[] parts = identifier.split("\\.", 2); // at most 2 parts
+        if (parts.length != 1 && parts.length != 2) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_AND_DB_ERROR, identifier);
+        }
+
+        if (parts.length == 1) { // use database
+            dbName = identifier;
+        } else { // use catalog.database
+            String newCatalogName = parts[0];
+            if (!catalogMgr.catalogExists(newCatalogName)) {
+                ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_ERROR, newCatalogName);
+            }
+            if (!CatalogMgr.isInternalCatalog(newCatalogName)) {
+                try {
+                    Authorizer.checkAnyActionOnCatalog(this.getCurrentUserIdentity(),
+                            this.getCurrentRoleIds(), newCatalogName);
+                } catch (AccessDeniedException e) {
+                    AccessDeniedException.reportAccessDenied(newCatalogName,
+                            this.getCurrentUserIdentity(), this.getCurrentRoleIds(),
+                            PrivilegeType.ANY.name(), ObjectType.CATALOG.name(), newCatalogName);
+                }
+            }
+            this.setCurrentCatalog(newCatalogName);
+            dbName = parts[1];
+        }
+
+        if (!Strings.isNullOrEmpty(dbName) && metadataMgr.getDb(this.getCurrentCatalog(), dbName) == null) {
+            LOG.debug("Unknown catalog {} and db {}", this.getCurrentCatalog(), dbName);
+            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+        }
+
+        // Here we check the request permission that sent by the mysql client or jdbc.
+        // So we didn't check UseDbStmt permission in PrivilegeCheckerV2.
+        try {
+            Authorizer.checkAnyActionOnOrInDb(this.getCurrentUserIdentity(),
+                    this.getCurrentRoleIds(), this.getCurrentCatalog(), dbName);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(this.getCurrentCatalog(),
+                    this.getCurrentUserIdentity(), this.getCurrentRoleIds(),
+                    PrivilegeType.ANY.name(), ObjectType.DATABASE.name(), dbName);
+        }
+
+        this.setDatabase(dbName);
+    }
+
+    public void cleanTemporaryTable() {
+        if (sessionId == null) {
+            return;
+        }
+        if (!GlobalStateMgr.getCurrentState().getTemporaryTableMgr().sessionExists(sessionId)) {
+            return;
+        }
+        LOG.debug("clean temporary table on session {}", sessionId);
+        try {
+            setQueryId(UUIDUtil.genUUID());
+            CleanTemporaryTableStmt cleanTemporaryTableStmt = new CleanTemporaryTableStmt(sessionId);
+            cleanTemporaryTableStmt.setOrigStmt(
+                    new OriginStatement("clean temporary table on session '" + sessionId.toString() + "'"));
+            executor = StmtExecutor.newInternalExecutor(this, cleanTemporaryTableStmt);
+            executor.execute();
+        } catch (Throwable e) {
+            LOG.warn("Failed to clean temporary table on session {}, {}", sessionId, e);
+        }
+    }
+
+    // We can not make sure the set variables are all valid. Even if some variables are invalid, we should let user continue
+    // to execute SQL.
+    public void updateByUserProperty(UserProperty userProperty) {
+        try {
+            // set session variables
+            Map<String, String> sessionVariables = userProperty.getSessionVariables();
+            for (Map.Entry<String, String> entry : sessionVariables.entrySet()) {
+                String currentValue = GlobalStateMgr.getCurrentState().getVariableMgr().getValue(
+                        sessionVariable, new VariableExpr(entry.getKey()));
+                if (!currentValue.equalsIgnoreCase(
+                        GlobalStateMgr.getCurrentState().getVariableMgr().getDefaultValue(entry.getKey()))) {
+                    // If the current session variable is not default value, we should respect it.
+                    continue;
+                }
+                SystemVariable variable = new SystemVariable(entry.getKey(), new StringLiteral(entry.getValue()));
+                modifySystemVariable(variable, true);
+            }
+
+            // set catalog and database
+            boolean dbHasBeenSetByUser = !getCurrentCatalog().equals(
+                    GlobalStateMgr.getCurrentState().getVariableMgr().getDefaultValue(SessionVariable.CATALOG))
+                    || !getDatabase().isEmpty();
+            if (!dbHasBeenSetByUser) {
+                String catalog = userProperty.getCatalog();
+                String database = userProperty.getDatabase();
+                if (catalog.equals(UserProperty.CATALOG_DEFAULT_VALUE)) {
+                    if (!database.equals(UserProperty.DATABASE_DEFAULT_VALUE)) {
+                        changeCatalogDb(userProperty.getCatalogDbName());
+                    }
+                } else {
+                    if (database.equals(UserProperty.DATABASE_DEFAULT_VALUE)) {
+                        changeCatalog(catalog);
+                    } else {
+                        changeCatalogDb(userProperty.getCatalogDbName());
+                    }
+                    SystemVariable variable = new SystemVariable(SessionVariable.CATALOG, new StringLiteral(catalog));
+                    modifySystemVariable(variable, true);
+                }
+            }
+        } catch (Exception e) {
+            LOG.warn("set session env failed: ", e);
+            // In handshake, we will send error message to client. But it seems that client will ignore it.
+            getState().setOk(0L, 0,
+                    String.format("set session variables from user property failed: %s", e.getMessage()));
+        }
+    }
+
+>>>>>>> 6cd9fbc95f ([Enhancement] Add cluster idle HTTP api (#53850))
     /**
      * Set thread-local context for the scope, and remove it after leaving the scope
      */

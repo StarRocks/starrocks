@@ -915,6 +915,29 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         tbl.lastSchemaUpdateTime.set(System.nanoTime());
     }
 
+<<<<<<< HEAD
+=======
+    @Override
+    public final boolean cancel(String errMsg) {
+        isCancelling.set(true);
+        try {
+            // If waitingCreatingReplica == false, we will assume that
+            // cancel thread will get the object lock very quickly.
+            if (waitingCreatingReplica.get()) {
+                Preconditions.checkState(createReplicaLatch != null);
+                createReplicaLatch.countDownToZero(new Status(TStatusCode.OK, ""));
+            }
+            synchronized (this) {
+                boolean cancelled = cancelImpl(errMsg);
+                cancelHook(cancelled);
+                return cancelled;
+            }
+        } finally {
+            isCancelling.set(false);
+        }
+    }
+
+>>>>>>> 6cd9fbc95f ([Enhancement] Add cluster idle HTTP api (#53850))
     /*
      * cancelImpl() can be called any time any place.
      * We need to clean any possible residual of this job.

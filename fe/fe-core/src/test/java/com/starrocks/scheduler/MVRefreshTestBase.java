@@ -78,7 +78,12 @@ public class MVRefreshTestBase {
 
     public void executeInsertSql(ConnectContext connectContext, String sql) throws Exception {
         connectContext.setQueryId(UUIDUtil.genUUID());
+<<<<<<< HEAD
         new StmtExecutor(connectContext, sql).execute();
+=======
+        StatementBase statement = SqlParser.parseSingleStatement(sql, connectContext.getSessionVariable().getSqlMode());
+        StmtExecutor.newInternalExecutor(connectContext, statement).execute();
+>>>>>>> 6cd9fbc95f ([Enhancement] Add cluster idle HTTP api (#53850))
     }
 
     protected MaterializedView getMv(String dbName, String mvName) {

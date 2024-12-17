@@ -195,6 +195,11 @@ import com.starrocks.transaction.TransactionCommitFailedException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.transaction.VisibleStateWaiter;
+<<<<<<< HEAD
+=======
+import com.starrocks.warehouse.WarehouseIdleChecker;
+import org.apache.commons.collections4.CollectionUtils;
+>>>>>>> 6cd9fbc95f ([Enhancement] Add cluster idle HTTP api (#53850))
 import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -252,6 +257,7 @@ public class StmtExecutor {
     private HttpResultSender httpResultSender;
 
     private PrepareStmtContext prepareStmtContext;
+    private boolean isInternalStmt = false;
 
     // this constructor is mainly for proxy
     public StmtExecutor(ConnectContext context, OriginStatement originStmt, boolean isProxy) {
@@ -270,11 +276,20 @@ public class StmtExecutor {
 
     // constructor for receiving parsed stmt from connect processor
     public StmtExecutor(ConnectContext ctx, StatementBase parsedStmt) {
+        this(ctx, parsedStmt, false);
+    }
+
+    public static StmtExecutor newInternalExecutor(ConnectContext ctx, StatementBase parsedStmt) {
+        return new StmtExecutor(ctx, parsedStmt, true);
+    }
+
+    private StmtExecutor(ConnectContext ctx, StatementBase parsedStmt, boolean isInternalStmt) {
         this.context = ctx;
         this.parsedStmt = parsedStmt;
         this.originStmt = parsedStmt.getOrigStmt();
         this.serializer = context.getSerializer();
         this.isProxy = false;
+        this.isInternalStmt = isInternalStmt;
     }
 
     public void setProxy() {
@@ -468,6 +483,9 @@ public class StmtExecutor {
             httpResultSender = new HttpResultSender((HttpConnectContext) context);
         }
 
+        if (!isInternalStmt) {
+            WarehouseIdleChecker.increaseRunningSQL(context.getCurrentWarehouseId());
+        }
         try {
             // parsedStmt may already by set when constructing this StmtExecutor();
             resolveParseStmtForForward();
@@ -758,6 +776,16 @@ public class StmtExecutor {
             if (parsedStmt != null && parsedStmt.isExistQueryScopeHint()) {
                 clearQueryScopeHintContext(sessionVariableBackup);
             }
+<<<<<<< HEAD
+=======
+
+            // restore session variable in connect context
+            context.setSessionVariable(sessionVariableBackup);
+
+            if (!isInternalStmt) {
+                WarehouseIdleChecker.decreaseRunningSQL(context.getCurrentWarehouseId());
+            }
+>>>>>>> 6cd9fbc95f ([Enhancement] Add cluster idle HTTP api (#53850))
         }
     }
 
