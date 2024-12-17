@@ -951,6 +951,7 @@ DEFINE_FAIL_POINT(tablet_apply_tablet_drop);
 DEFINE_FAIL_POINT(tablet_apply_load_compaction_state_failed);
 DEFINE_FAIL_POINT(tablet_apply_load_segments_failed);
 DEFINE_FAIL_POINT(tablet_delvec_inconsistent);
+DEFINE_FAIL_POINT(tablet_internal_error_code_but_memory_limit);
 
 void TabletUpdates::do_apply() {
     SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(true);
@@ -1322,6 +1323,8 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
         auto st = index.load(&_tablet);
         FAIL_POINT_TRIGGER_EXECUTE(tablet_apply_load_index_failed,
                                    { st = Status::InternalError("inject tablet_apply_load_index_failed"); });
+        FAIL_POINT_TRIGGER_EXECUTE(tablet_internal_error_code_but_memory_limit,
+                                   { st = Status::InternalError("load index faile because Memory exceed Limit"); });
         manager->index_cache().update_object_size(index_entry, index.memory_usage());
         if (!st.ok()) {
             std::string msg = strings::Substitute("_apply_rowset_commit error: load primary index failed: $0 $1",
