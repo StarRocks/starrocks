@@ -370,7 +370,8 @@ static const TypeDescriptor TYPE_TIME_DESC = TypeDescriptor(LogicalType::TYPE_TI
 static const TypeDescriptor TYPE_DATETIME_DESC = TypeDescriptor(LogicalType::TYPE_DATETIME);
 static const TypeDescriptor TYPE_CHAR_DESC = TypeDescriptor::create_char_type(TypeDescriptor::MAX_CHAR_LENGTH);
 static const TypeDescriptor TYPE_VARCHAR_DESC = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
-static const TypeDescriptor TYPE_VARBINARY_DESC = TypeDescriptor::create_varbinary_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+static const TypeDescriptor TYPE_VARBINARY_DESC =
+        TypeDescriptor::create_varbinary_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
 
 static const TypeDescriptor TYPE_INT_ARRAY_DESC = TypeDescriptor::create_array_type(TYPE_INT_DESC);
 
