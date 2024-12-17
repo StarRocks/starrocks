@@ -86,6 +86,8 @@ public:
     StatusOr<TabletMetadataPtr> get_tablet_metadata(std::shared_ptr<FileSystem> fs, const std::string& path,
                                                     bool fill_cache = true);
 
+    Status update_tablet_meta_rebuild_pindex_version(int64_t tablet_id, int64_t version);
+
     TabletMetadataPtr get_latest_cached_tablet_metadata(int64_t tablet_id);
 
     StatusOr<TabletMetadataIter> list_tablet_metadata(int64_t tablet_id);

@@ -284,6 +284,15 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(std::shared_ptr<F
     return ptr;
 }
 
+Status TabletManager::update_tablet_meta_rebuild_pindex_version(int64_t tablet_id, int64_t rebuild_pindex_version) {
+    ASSIGN_OR_RETURN(auto ptr, get_tablet_metadata(tablet_id, rebuild_pindex_version, false));
+    MutableTabletMetadataPtr new_metadata = std::make_shared<TabletMetadataPB>(*ptr);
+    new_metadata->set_rebuild_pindex_version(rebuild_pindex_version);
+    auto path = tablet_metadata_location(tablet_id, rebuild_pindex_version);
+    _metacache->cache_tablet_metadata(path, new_metadata);
+    return Status::OK();
+}
+
 Status TabletManager::delete_tablet_metadata(int64_t tablet_id, int64_t version) {
     auto location = tablet_metadata_location(tablet_id, version);
     _metacache->erase(location);
