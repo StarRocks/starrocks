@@ -218,8 +218,8 @@ static Status avro_value_to_rapidjson(const avro_value_t& value, rapidjson::Docu
     case AVRO_BYTES: {
         const char* in;
         size_t size;
-        if (avro_value_get_fixed(&value, (const void**)&in, &size) != 0) {
-            return Status::InvalidArgument(strings::Substitute("Get string value error $0", avro_strerror()));
+        if (avro_value_get_bytes(&value, (const void**)&in, &size) != 0) {
+            return Status::InvalidArgument(strings::Substitute("Get bytes value error $0", avro_strerror()));
         }
         out.SetString(in, allocator);
         return Status::OK();
@@ -420,6 +420,7 @@ static Status add_column_with_array_object_value(BinaryColumn* column, const Typ
         std::string json_str;
         auto st = avro_value_to_json_str(value, &json_str);
         if (!st.ok()) {
+            LOG(WARNING) << "avro to json failed. column=" << name << ", err=" << st;
             return Status::InternalError(
                     strings::Substitute("avro to json failed. column=$0, err=$1", name, st.message()));
         }
@@ -428,7 +429,7 @@ static Status add_column_with_array_object_value(BinaryColumn* column, const Typ
     } else {
         char* as_json;
         if (avro_value_to_json(&value, 1, &as_json)) {
-            LOG(WARNING) << "avro to json failed: %s" << avro_strerror();
+            LOG(WARNING) << "avro to json failed. column=" << name << ", err=" << avro_strerror();
             return Status::InternalError(
                     strings::Substitute("avro to json failed. column=$0, err=$1", name, avro_strerror()));
         }
@@ -484,6 +485,7 @@ Status add_native_json_column(Column* column, const TypeDescriptor& type_desc, c
         std::string json_str;
         st = avro_value_to_json_str(value, &json_str);
         if (!st.ok()) {
+            LOG(WARNING) << "avro to json failed. column=" << name << ", err=" << st;
             return Status::InternalError(
                     strings::Substitute("avro to json failed. column=$0, err=$1", name, st.message()));
         }
@@ -492,7 +494,7 @@ Status add_native_json_column(Column* column, const TypeDescriptor& type_desc, c
     } else {
         char* as_json;
         if (avro_value_to_json(&value, 1, &as_json)) {
-            LOG(WARNING) << "avro to json failed: %s" << avro_strerror();
+            LOG(WARNING) << "avro to json failed. column=" << name << ", err=" << avro_strerror();
             return Status::InternalError(
                     strings::Substitute("avro to json failed. column=$0, err=$1", name, avro_strerror()));
         }
