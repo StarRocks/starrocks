@@ -63,7 +63,7 @@ GRANT
 ```SQL
 GRANT
     { USAGE | DROP | ALL [PRIVILEGES]} 
-    ON { GLOBAL FUNCTION <function_name>(input_data_type) [, < function_name >(input_data_type),...]    
+    ON { GLOBAL FUNCTION <function_name>(input_data_type) [, <function_name>(input_data_type),...]    
        | ALL GLOBAL FUNCTIONS }
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 ```
@@ -176,7 +176,7 @@ GRANT
 - You can also use `<db_name>.<function_name>` to represent a function.
 
   ```SQL
-  GRANT <priv> ON FUNCTION <db_name>.<function_name> TO {ROLE <role_name> | USER <user_name>}
+  GRANT <priv> ON FUNCTION <db_name>.<function_name>(input_data_type) TO {ROLE <role_name> | USER <user_name>}
   ```
 
 #### User
