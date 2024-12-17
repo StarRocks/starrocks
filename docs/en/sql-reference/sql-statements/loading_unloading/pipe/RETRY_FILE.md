@@ -7,7 +7,7 @@ Retries to load all data files or a specific data file in a pipe. This command i
 ## Syntax
 
 ```SQL
-ALTER PIPE [ IF EXISTS ] <pipe_name> { RETRY ALL | RETRY FILE '<file_name>' }
+ALTER PIPE <pipe_name> { RETRY ALL | RETRY FILE '<file_name>' }
 ```
 
 ## Parameters
