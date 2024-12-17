@@ -44,11 +44,6 @@ RUN apt-get update -y && apt-get install -y --no-install-recommends \
 RUN touch /.dockerenv
 ENV JAVA_HOME=/lib/jvm/default-java
 
-RUN apt-get update && apt-get install -yq tzdata && \
-    ln -nfs /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
-    dpkg-reconfigure -f noninteractive tzdata
-ENV TZ="Asia/Shanghai"
-
 WORKDIR $STARROCKS_ROOT
 
 RUN groupadd --gid 1000 $GROUP && \
