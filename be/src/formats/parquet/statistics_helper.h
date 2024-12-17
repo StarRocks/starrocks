@@ -26,7 +26,7 @@ namespace starrocks::parquet {
 
 class StatisticsHelper {
 public:
-    enum StatSupportedFilter { FILTER_IN, IS_NULL, IS_NOT_NULL };
+    enum StatSupportedFilter { FILTER_IN, IS_NULL, IS_NOT_NULL, RF_MIN_MAX };
 
     static Status decode_value_into_column(ColumnPtr column, const std::vector<std::string>& values,
                                            const TypeDescriptor& type, const ParquetField* field,
@@ -38,6 +38,19 @@ public:
                                             const std::vector<std::string>& max_values,
                                             const std::vector<int64_t>& null_counts, ExprContext* ctx,
                                             const ParquetField* field, const std::string& timezone, Filter& selected);
+
+    static Status min_max_filter_on_min_max_stat(const std::vector<std::string>& min_values,
+                                                 const std::vector<std::string>& max_values,
+                                                 const std::vector<int64_t>& null_counts, ExprContext* ctx,
+                                                 const ParquetField* field, const std::string& timezone,
+                                                 Filter& selected);
+
+    template <LogicalType LType>
+    static Status min_max_filter_on_min_max_stat_t(const std::vector<std::string>& min_values,
+                                                   const std::vector<std::string>& max_values,
+                                                   const std::vector<int64_t>& null_counts, ExprContext* ctx,
+                                                   const ParquetField* field, const std::string& timezone,
+                                                   Filter& selected);
 
     // get min/max value from row group stats
     static Status get_min_max_value(const FileMetaData* file_meta_data, const TypeDescriptor& type,

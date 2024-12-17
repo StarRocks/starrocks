@@ -313,6 +313,8 @@ bool FileReader::_filter_group_with_more_filter(const GroupReaderPtr& group_read
                     if (!selected[0]) {
                         return true;
                     }
+                } else if (filter_type == StatisticsHelper::StatSupportedFilter::RF_MIN_MAX) {
+                    // already process in `_filter_group_with_bloom_filter_min_max_conjuncts`.
                 }
             }
         }
