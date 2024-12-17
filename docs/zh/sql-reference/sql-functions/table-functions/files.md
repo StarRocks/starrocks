@@ -691,8 +691,7 @@ DESC FILES(
 将 `sales_records` 中的所有数据行导出为多个 Parquet 文件，存储在 HDFS 集群的路径 **/unload/partitioned/** 下。这些文件存储在不同的子路径中，这些子路径根据列 `sales_time` 中的值来区分。
 
 ```SQL
-INSERT INTO 
-FILES(
+INSERT INTO FILES(
     "path" = "hdfs://xxx.xx.xxx.xx:9000/unload/partitioned/",
     "format" = "parquet",
     "hadoop.security.authentication" = "simple",
@@ -709,17 +708,17 @@ SELECT * FROM sales_records;
 ```SQL
 -- CSV
 INSERT INTO FILES(
-  'path' = 'file:///home/ubuntu/csvfile/', 
-  'format' = 'csv', 
-  'csv.column_separator' = ',', 
-  'csv.row_delimitor' = '\n'
+    'path' = 'file:///home/ubuntu/csvfile/', 
+    'format' = 'csv', 
+    'csv.column_separator' = ',', 
+    'csv.row_delimitor' = '\n'
 )
-SELECT 1 AS a, "csv" AS b;
+SELECT * FROM sales_records;
 
 -- Parquet
 INSERT INTO FILES(
-  'path' = 'file:///home/ubuntu/parquetfile/',
-   'format' = 'parquet'
+    'path' = 'file:///home/ubuntu/parquetfile/',
+    'format' = 'parquet'
 )
-SELECT 1 AS a, "parquet" AS b;
+SELECT * FROM sales_records;
 ```
