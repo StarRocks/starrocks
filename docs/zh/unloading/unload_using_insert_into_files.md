@@ -211,14 +211,14 @@ INSERT INTO FILES(
   'csv.column_separator' = ',', 
   'csv.row_delimitor' = '\n'
 )
-SELECT 1 AS a, "csv" AS b;
+SELECT * FROM sales_records;
 
 -- 导出为 Parquet 文件。
 INSERT INTO FILES(
   'path' = 'file:///home/ubuntu/parquetfile/',
    'format' = 'parquet'
 )
-SELECT 1 AS a, "parquet" AS b;
+SELECT * FROM sales_records;
 ```
 
 ## 另请参阅
