@@ -1070,11 +1070,21 @@ public class TransactionState implements Writable {
     }
 
     public List<String> getCreatedPartitionNames() {
-        return createdPartitionNames;
+        writeLock();
+        try {
+            return createdPartitionNames;
+        } finally {
+            writeUnlock();
+        }
     }
 
     public void clearAutomaticPartitionSnapshot() {
-        createdPartitionNames = partitionNameToTPartition.keySet().stream().collect(Collectors.toList());
+        writeLock();
+        try {
+            createdPartitionNames = partitionNameToTPartition.keySet().stream().collect(Collectors.toList());
+        } finally {
+            writeUnlock();
+        }
         partitionNameToTPartition.clear();
         tabletIdToTTabletLocation.clear();
     }
