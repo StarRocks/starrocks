@@ -20,7 +20,6 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
-import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -69,6 +68,18 @@ public class ExtractAggregateColumn implements TreeRewriteRule {
             return false;
         }
 
+        private boolean hasComplexOrJsonTypeColumn(ScalarOperator operator) {
+            if (operator.isColumnRef() && (operator.getType().isComplexType() || operator.getType().isJsonType())) {
+                return true;
+            }
+            for (ScalarOperator child : operator.getChildren()) {
+                if (hasComplexOrJsonTypeColumn(child)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         private void rewriteAggregateOperator(PhysicalHashAggregateOperator aggregateOperator, Projection projection) {
             Map<ColumnRefOperator, ScalarOperator> columnRefMap = projection.getColumnRefMap();
             Map<ColumnRefOperator, ScalarOperator> rewriteMap = Maps.newHashMap();
@@ -92,7 +103,7 @@ public class ExtractAggregateColumn implements TreeRewriteRule {
                             return;
                         }
                         if (!scalarOperator.isColumnRef() && !hasDictMappingOperator(scalarOperator) &&
-                                !(scalarOperator.getOpType() == OperatorType.SUBFIELD)) {
+                                !hasComplexOrJsonTypeColumn(scalarOperator)) {
                             rewriteMap.put(childRef, scalarOperator);
                             extractedColumns.add(childRef);
                         }
