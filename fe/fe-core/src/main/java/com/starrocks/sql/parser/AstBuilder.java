@@ -475,6 +475,9 @@ import com.starrocks.sql.ast.pipe.DescPipeStmt;
 import com.starrocks.sql.ast.pipe.DropPipeStmt;
 import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.sql.ast.pipe.ShowPipeStmt;
+import com.starrocks.sql.ast.txn.BeginStmt;
+import com.starrocks.sql.ast.txn.CommitStmt;
+import com.starrocks.sql.ast.txn.RollbackStmt;
 import com.starrocks.sql.ast.warehouse.AlterWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.CreateWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.DropWarehouseStmt;
@@ -5057,6 +5060,23 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             properties = clause.getProperties();
         }
         return new AlterWarehouseStmt(whName, properties, createPos(context));
+    }
+
+    // ------------------------------------------- Transaction Statement ---------------------------------------------------
+
+    @Override
+    public ParseNode visitBeginStatement(StarRocksParser.BeginStatementContext context) {
+        return new BeginStmt(createPos(context));
+    }
+
+    @Override
+    public ParseNode visitCommitStatement(StarRocksParser.CommitStatementContext context) {
+        return new CommitStmt(createPos(context));
+    }
+
+    @Override
+    public ParseNode visitRollbackStatement(StarRocksParser.RollbackStatementContext context) {
+        return new RollbackStmt(createPos(context));
     }
 
     // ------------------------------------------- Query Statement -----------------------------------------------------
