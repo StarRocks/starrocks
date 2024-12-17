@@ -53,6 +53,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.warehouse.WarehouseIdleChecker;
 import io.opentelemetry.api.trace.Span;
 import org.apache.hadoop.util.Lists;
 import org.apache.logging.log4j.LogManager;
@@ -203,6 +204,10 @@ public abstract class AlterJobV2 implements Writable {
         }
     }
 
+    public long getWarehouseId() {
+        return warehouseId;
+    }
+
     /**
      * The keyword 'synchronized' only protects 2 methods:
      * run() and cancel()
@@ -215,7 +220,7 @@ public abstract class AlterJobV2 implements Writable {
      */
     public synchronized void run() {
         if (isTimeout()) {
-            cancelImpl("Timeout");
+            cancelHook(cancelImpl("Timeout"));
             return;
         }
 
@@ -237,6 +242,7 @@ public abstract class AlterJobV2 implements Writable {
                         break;
                     case FINISHED_REWRITING:
                         runFinishedRewritingJob();
+                        finishHook();
                         break;
                     default:
                         break;
@@ -246,13 +252,15 @@ public abstract class AlterJobV2 implements Writable {
                 } // else: handle the new state
             }
         } catch (AlterCancelException e) {
-            cancelImpl(e.getMessage());
+            cancelHook(cancelImpl(e.getMessage()));
         }
     }
 
     public boolean cancel(String errMsg) {
         synchronized (this) {
-            return cancelImpl(errMsg);
+            boolean cancelled = cancelImpl(errMsg);
+            cancelHook(cancelled);
+            return cancelled;
         }
     }
 
@@ -315,6 +323,16 @@ public abstract class AlterJobV2 implements Writable {
     protected abstract void getInfo(List<List<Comparable>> infos);
 
     public abstract void replay(AlterJobV2 replayedJob);
+
+    public void finishHook() {
+        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId);
+    }
+
+    public void cancelHook(boolean cancelled) {
+        if (cancelled) {
+            WarehouseIdleChecker.updateJobLastFinishTime(warehouseId);
+        }
+    }
 
     public static AlterJobV2 read(DataInput in) throws IOException {
         String json = Text.readString(in);

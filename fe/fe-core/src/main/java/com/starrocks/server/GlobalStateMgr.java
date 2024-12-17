@@ -233,6 +233,7 @@ import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.GtidGenerator;
 import com.starrocks.transaction.PublishVersionDaemon;
 import com.starrocks.transaction.UpdateDbUsedDataQuotaDaemon;
+import com.starrocks.warehouse.WarehouseIdleChecker;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -504,6 +505,7 @@ public class GlobalStateMgr {
     private final Authorizer authorizer;
     private final DDLStmtExecutor ddlStmtExecutor;
     private final ShowExecutor showExecutor;
+    private final WarehouseIdleChecker warehouseIdleChecker;
 
     public NodeMgr getNodeMgr() {
         return nodeMgr;
@@ -803,6 +805,7 @@ public class GlobalStateMgr {
         this.ddlStmtExecutor = new DDLStmtExecutor(DDLStmtExecutor.StmtExecutorVisitor.getInstance());
         this.showExecutor = new ShowExecutor(ShowExecutor.ShowExecutorVisitor.getInstance());
         this.temporaryTableCleaner = new TemporaryTableCleaner();
+        this.warehouseIdleChecker = new WarehouseIdleChecker();
     }
 
     public static void destroyCheckpoint() {
@@ -1459,6 +1462,8 @@ public class GlobalStateMgr {
         refreshDictionaryCacheTaskDaemon.start();
 
         procProfileCollector.start();
+
+        warehouseIdleChecker.start();
 
         // The memory tracker should be placed at the end
         memoryUsageTracker.start();
@@ -2664,5 +2669,9 @@ public class GlobalStateMgr {
 
     public VariableMgr getVariableMgr() {
         return variableMgr;
+    }
+
+    public WarehouseIdleChecker getWarehouseIdleChecker() {
+        return warehouseIdleChecker;
     }
 }

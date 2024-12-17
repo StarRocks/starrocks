@@ -93,7 +93,7 @@ public class MVRefreshTestBase {
     public static void executeInsertSql(ConnectContext connectContext, String sql) throws Exception {
         connectContext.setQueryId(UUIDUtil.genUUID());
         StatementBase statement = SqlParser.parseSingleStatement(sql, connectContext.getSessionVariable().getSqlMode());
-        new StmtExecutor(connectContext, statement).execute();
+        StmtExecutor.newInternalExecutor(connectContext, statement).execute();
     }
 
     protected MaterializedView getMv(String dbName, String mvName) {
