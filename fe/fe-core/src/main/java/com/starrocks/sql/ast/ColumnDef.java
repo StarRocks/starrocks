@@ -145,6 +145,7 @@ public class ColumnDef implements ParseNode {
     private DefaultValueDef defaultValueDef;
     private final String comment;
     private WithColumnMaskingPolicy withColumnMaskingPolicy;
+    private boolean isPartitionColumn = false;
 
     private final NodePosition pos;
 
@@ -277,6 +278,10 @@ public class ColumnDef implements ParseNode {
         this.isKey = isKey;
     }
 
+    public void setIsPartitionColumn(boolean isPartitionColumn) {
+        this.isPartitionColumn = isPartitionColumn;
+    }
+
     public TypeDef getTypeDef() {
         return typeDef;
     }
@@ -301,7 +306,7 @@ public class ColumnDef implements ParseNode {
         if (name == null || typeDef == null) {
             throw new AnalysisException("No column name or column type in column definition");
         }
-        FeNameFormat.checkColumnName(name);
+        FeNameFormat.checkColumnName(name, isPartitionColumn);
 
         // When string type length is not assigned, it needs to be assigned to 1.
         if (typeDef.getType().isScalarType()) {

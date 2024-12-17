@@ -21,6 +21,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.FeConstants;
 import com.starrocks.server.RunMode;
 
 import java.util.Set;
@@ -98,6 +99,10 @@ public class FeNameFormat {
     }
 
     public static void checkColumnName(String columnName) {
+        checkColumnName(columnName, false);
+    }
+
+    public static void checkColumnName(String columnName, boolean isPartitionColumn) {
         if (Strings.isNullOrEmpty(columnName)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_COLUMN_NAME, columnName);
         }
@@ -122,6 +127,11 @@ public class FeNameFormat {
                 throw new SemanticException(
                         "Column name [" + columnName + "] is a system reserved name. " +
                                 "Please choose a different one.");
+            }
+            if (!isPartitionColumn && columnName.startsWith(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX)) {
+                throw new SemanticException(
+                        "Column name [" + columnName + "] starts with " + FeConstants.GENERATED_PARTITION_COLUMN_PREFIX +
+                                " is a system reserved name. Please choose a different one.");
             }
         }
     }

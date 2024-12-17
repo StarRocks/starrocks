@@ -11,8 +11,19 @@ show partitions from t;
 -- !result
 select * from t;
 -- result:
-2020-01-01 00:00:00	2020-02-02 00:00:00	1	2020-01-01 00:00:00	2020-02-01 00:00:00
+2020-01-01 00:00:00	2020-02-02 00:00:00	1
 -- !result
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -76,6 +87,17 @@ explain select * from t where k2='2020-01-03';
 
 
 
+
+
+
+
+
+
+
+
+
+
+
 -- name: test_mulit_timestamp_function
 create table t(k1 int, k2 bigint, v int) partition by from_unixtime(k2),k1;
 -- result:
@@ -91,9 +113,9 @@ insert into t values(1,UNIX_TIMESTAMP('2007-11-30 10:30:19'),1);
 -- !result
 select * from t;
 -- result:
-1	1577811661	1	2020-01-01 01:01:01
-2	1577811661	1	2020-01-01 01:01:01
-1	1196389819	1	2007-11-30 10:30:19
+1	1577811661	1
+2	1577811661	1
+1	1196389819	1
 -- !result
 explain select * from t where k2=UNIX_TIMESTAMP('2007-11-30 10:30:19');
 -- result:
@@ -130,6 +152,17 @@ explain select * from t1 where k2=1196389819;
 
 
 
+
+
+
+
+
+
+
+
+
+
+
 -- name: test_single_column_partition
 create table t(k1 int, k2 bigint, v int) partition by from_unixtime(k2, '%Y-%m-%d');
 -- result:
@@ -142,13 +175,24 @@ insert into t values(1,UNIX_TIMESTAMP('2007-11-30 10:30:19'),1);
 -- !result
 select * from t;
 -- result:
-1	1577811661	1	2020-01-01
-1	1196389819	1	2007-11-30
+1	1577811661	1
+1	1196389819	1
 -- !result
 explain select * from t where k2=UNIX_TIMESTAMP('2007-11-30 10:30:19');
 -- result:
 [REGEX].*partitions=1/2.*
 -- !result
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -173,17 +217,17 @@ insert into t values(1,UNIX_TIMESTAMP('2007-11-30 10:30:19'),2);
 -- !result
 select * from t;
 -- result:
-1	1577811661	1	2020-01-01
-2	1577811661	2	2020-01-01
-1	1196389819	2	2007-11-30
+1	1577811661	1
+2	1577811661	2
+1	1196389819	2
 -- !result
 select * from t where k2=UNIX_TIMESTAMP('2007-11-30 10:30:19');
 -- result:
-1	1196389819	2	2007-11-30
+1	1196389819	2
 -- !result
 select * from t where k2=1196389819;
 -- result:
-1	1196389819	2	2007-11-30
+1	1196389819	2
 -- !result
 explain select * from t where k2=UNIX_TIMESTAMP('2007-11-30 10:30:19');
 -- result:
@@ -213,17 +257,17 @@ insert into t1 values(1,UNIX_TIMESTAMP('2007-11-30 10:30:19'),2);
 -- !result
 select * from t1;
 -- result:
-1	1577811661	1	2020-01-01
-1	1196389819	2	2007-11-30
-2	1577811661	2	2020-01-01
+1	1577811661	1
+1	1196389819	2
+2	1577811661	2
 -- !result
 select * from t1 where k2=UNIX_TIMESTAMP('2007-11-30 10:30:19');
 -- result:
-1	1196389819	2	2007-11-30
+1	1196389819	2
 -- !result
 select * from t1 where k2=1196389819;
 -- result:
-1	1196389819	2	2007-11-30
+1	1196389819	2
 -- !result
 explain select * from t1 where k2=UNIX_TIMESTAMP('2007-11-30 10:30:19');
 -- result:
@@ -233,6 +277,17 @@ explain select * from t1 where k2=1196389819;
 -- result:
 [REGEX].*partitions=1/3.*
 -- !result
+
+
+
+
+
+
+
+
+
+
+
 -- name: test_create_error
 create table t(k1 int, k2 bigint, v int sum) AGGREGATE KEY(k1,k2) partition by from_unixtime(k2, '%Y-%m-%d');
 -- result:
@@ -241,4 +296,200 @@ E: (1064, 'Getting analyzing error. Detail message: AGG_KEYS table should specif
 create table t(k1 int, k2 bigint, v int) PRIMARY KEY(k1) partition by from_unixtime(k2, '%Y-%m-%d');
 -- result:
 E: (1064, 'Getting analyzing error. Detail message: The partition expr should base on key column.')
+-- !result
+
+
+
+
+
+
+
+
+
+
+
+-- name: test_insert_into_select
+CREATE TABLE multi_level_expr_par_tbl (
+                    `k1`  date,
+                    `k2`  datetime,
+                    `k3`  char(20),
+                    `k4`  varchar(20),
+                    `k5`  boolean,
+                    `k6`  tinyint,
+                    `k7`  smallint,
+                    `k8`  int,
+                    `k9`  bigint,
+                    `k10` largeint,
+                    `k11` float,
+                    `k12` double,
+                    `k13` decimal(27,9)
+                )
+                DUPLICATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`)
+                COMMENT "OLAP"
+                PARTITION BY mod(k6, 5), k3, date_trunc("month", k1)
+                DISTRIBUTED BY HASH(`k1`, `k2`, `k3`) BUCKETS 3
+                PROPERTIES (
+                    "replication_num" = "3"
+                );
+-- result:
+-- !result
+insert into multi_level_expr_par_tbl(k1,k2,k3) values('2020-01-01','2020-01-01', "123");
+-- result:
+-- !result
+insert into multi_level_expr_par_tbl select * from multi_level_expr_par_tbl;
+-- result:
+-- !result
+select * from multi_level_expr_par_tbl;
+-- result:
+2020-01-01	2020-01-01 00:00:00	123	None	None	None	None	None	None	None	None	None	None
+2020-01-01	2020-01-01 00:00:00	123	None	None	None	None	None	None	None	None	None	None
+-- !result
+
+
+
+
+
+
+-- name: test_ctas_from_normal_table
+create database test_ctas_from_normal_table;
+-- result:
+-- !result
+use test_ctas_from_normal_table;
+-- result:
+-- !result
+CREATE TABLE base_tbl_unix_ts (c1 bigint, c2 string, c3 date);
+-- result:
+-- !result
+insert into base_tbl_unix_ts values(1592841600, 'beijing', '2020-06-23');
+-- result:
+-- !result
+CREATE TABLE multi_level_expr_par_tbl_1 primary KEY(c1) PARTITION BY from_unixtime(c1) DISTRIBUTED BY HASH(c1) BUCKETS 3 as select * from base_tbl_unix_ts;
+-- result:
+-- !result
+select * from multi_level_expr_par_tbl_1;
+-- result:
+1592841600	beijing	2020-06-23
+-- !result
+show create table multi_level_expr_par_tbl_1;
+-- result:
+multi_level_expr_par_tbl_1	CREATE TABLE `multi_level_expr_par_tbl_1` (
+  `c1` bigint(20) NOT NULL COMMENT "",
+  `c2` varchar(65533) NULL COMMENT "",
+  `c3` date NULL COMMENT "",
+  `__generated_partition_column_0` varchar(1048576) NULL AS from_unixtime(`test_ctas_from_normal_table`.`multi_level_expr_par_tbl_1`.`c1`) COMMENT ""
+) ENGINE=OLAP 
+PRIMARY KEY(`c1`)
+PARTITION BY (`__generated_partition_column_0`)
+DISTRIBUTED BY HASH(`c1`) BUCKETS 3 
+PROPERTIES (
+"compression" = "LZ4",
+"enable_persistent_index" = "true",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "3"
+);
+-- !result
+CREATE TABLE base_tbl (
+                    `k1`  date,
+                    `k2`  datetime,
+                    `k3`  varchar(20),
+                    `k4`  varchar(20),
+                    `k5`  boolean,
+                    `k6`  tinyint,
+                    `k7`  smallint,
+                    `k8`  int,
+                    `k9`  bigint,
+                    `k10` largeint,
+                    `k11` float,
+                    `k12` double,
+                    `k13` decimal(27,9)
+                );
+-- result:
+-- !result
+CREATE TABLE multi_level_expr_par_tbl_2
+                primary KEY(k1,k2,k3,k4,k5)
+                COMMENT "OLAP"
+                PARTITION BY substring(k4, 1, 5), k3, date_trunc("month", k1)
+                DISTRIBUTED BY HASH(`k1`, `k2`, `k3`) BUCKETS 3
+                PROPERTIES ("replication_num" = "3")
+                as select * from base_tbl;
+-- result:
+-- !result
+show create table multi_level_expr_par_tbl_2;
+-- result:
+multi_level_expr_par_tbl_2	CREATE TABLE `multi_level_expr_par_tbl_2` (
+  `k1` date NOT NULL COMMENT "",
+  `k2` datetime NOT NULL COMMENT "",
+  `k3` varchar(20) NOT NULL COMMENT "",
+  `k4` varchar(20) NOT NULL COMMENT "",
+  `k5` boolean NOT NULL COMMENT "",
+  `k6` tinyint(4) NULL COMMENT "",
+  `k7` smallint(6) NULL COMMENT "",
+  `k8` int(11) NULL COMMENT "",
+  `k9` bigint(20) NULL COMMENT "",
+  `k10` largeint(40) NULL COMMENT "",
+  `k11` decimal(38, 9) NULL COMMENT "",
+  `k12` decimal(38, 9) NULL COMMENT "",
+  `k13` decimal(27, 9) NULL COMMENT "",
+  `__generated_partition_column_0` varchar(1048576) NULL AS substring(`test_ctas_from_normal_table`.`multi_level_expr_par_tbl_2`.`k4`, 1, 5) COMMENT "",
+  `__generated_partition_column_1` date NULL AS date_trunc('month', `test_ctas_from_normal_table`.`multi_level_expr_par_tbl_2`.`k1`) COMMENT ""
+) ENGINE=OLAP 
+PRIMARY KEY(`k1`, `k2`, `k3`, `k4`, `k5`)
+COMMENT "OLAP"
+PARTITION BY (`__generated_partition_column_0`,`k3`,`__generated_partition_column_1`)
+DISTRIBUTED BY HASH(`k1`, `k2`, `k3`) BUCKETS 3 
+PROPERTIES (
+"compression" = "LZ4",
+"enable_persistent_index" = "true",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "3"
+);
+-- !result
+
+
+
+
+-- name: test_create_reserved_column
+create table t(k1 int, k2 bigint, __generated_partition_column_ int);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Column name [__generated_partition_column_] starts with __generated_partition_column_ is a system reserved name. Please choose a different one..')
+-- !result
+create table t(k1 int, k2 bigint, __generated_partition_column_0 int);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Column name [__generated_partition_column_0] starts with __generated_partition_column_ is a system reserved name. Please choose a different one..')
+-- !result
+create table t(k1 int, k2 bigint, __generated_partition_column_a int);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Column name [__generated_partition_column_a] starts with __generated_partition_column_ is a system reserved name. Please choose a different one..')
+-- !result
+CREATE TABLE `multi_level_expr_par_tbl_2` (
+  `k1` date NOT NULL COMMENT "",
+  `k2` datetime NOT NULL COMMENT "",
+  `k3` varchar(20) NOT NULL COMMENT "",
+  `k4` varchar(20) NOT NULL COMMENT "",
+  `k5` boolean NOT NULL COMMENT "",
+  `k6` tinyint(4) NULL COMMENT "",
+  `k7` smallint(6) NULL COMMENT "",
+  `k8` int(11) NULL COMMENT "",
+  `k9` bigint(20) NULL COMMENT "",
+  `k10` largeint(40) NULL COMMENT "",
+  `k11` decimal(38, 9) NULL COMMENT "",
+  `k12` decimal(38, 9) NULL COMMENT "",
+  `k13` decimal(27, 9) NULL COMMENT "",
+  `__generated_partition_column_0` varchar(1048576) NULL AS substring(`multi_level_expr_par_tbl_2`.`k4`, 1, 5) COMMENT "",
+  `__generated_partition_column_1` date NULL AS date_trunc('month', `multi_level_expr_par_tbl_2`.`k1`) COMMENT ""
+) ENGINE=OLAP
+PRIMARY KEY(`k1`, `k2`, `k3`, `k4`, `k5`)
+COMMENT "OLAP"
+PARTITION BY (`__generated_partition_column_0`,`k3`,`__generated_partition_column_1`)
+DISTRIBUTED BY HASH(`k1`, `k2`, `k3`) BUCKETS 3
+PROPERTIES (
+"compression" = "LZ4",
+"enable_persistent_index" = "true",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "3"
+);
+-- result:
 -- !result

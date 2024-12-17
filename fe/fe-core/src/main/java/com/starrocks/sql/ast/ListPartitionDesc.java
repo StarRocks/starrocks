@@ -18,6 +18,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
@@ -54,32 +55,32 @@ public class ListPartitionDesc extends PartitionDesc {
     // for automatic partition table is ture. otherwise is false
     protected boolean isAutoPartitionTable = false;
 
-    protected List<Expr> partitionExprs = Lists.newArrayList();
+    private final List<ParseNode> multiDescList;
+
+    private List<Expr> partitionExprs = null;
+
+    // for multi expr partition
+    public ListPartitionDesc(List<ParseNode> multiDescList, NodePosition pos) {
+        super(pos);
+        this.multiDescList = multiDescList;
+        this.singleListPartitionDescs = Lists.newArrayList();
+        this.multiListPartitionDescs = Lists.newArrayList();
+        this.partitionColNames = Lists.newArrayList();
+    }
 
     public ListPartitionDesc(List<String> partitionColNames,
                              List<PartitionDesc> partitionDescs) {
-        this(partitionColNames, partitionDescs, Lists.newArrayList(), NodePosition.ZERO);
+        this(partitionColNames, partitionDescs, NodePosition.ZERO);
     }
 
     public ListPartitionDesc(List<String> partitionColNames,
                              List<PartitionDesc> partitionDescs, NodePosition pos) {
-        this(partitionColNames, partitionDescs, Lists.newArrayList(), pos);
-    }
-
-    public ListPartitionDesc(List<String> partitionColNames,
-                             List<PartitionDesc> partitionDescs,
-                             List<Expr> partitionExprs) {
-        this(partitionColNames, partitionDescs, partitionExprs, NodePosition.ZERO);
-    }
-
-    public ListPartitionDesc(List<String> partitionColNames,
-                             List<PartitionDesc> partitionDescs, List<Expr> partitionExprs, NodePosition pos) {
         super(pos);
         super.type = PartitionType.LIST;
         this.partitionColNames = partitionColNames;
-        this.partitionExprs = partitionExprs;
         this.singleListPartitionDescs = Lists.newArrayList();
         this.multiListPartitionDescs = Lists.newArrayList();
+        this.multiDescList = null;
         if (partitionDescs != null) {
             for (PartitionDesc partitionDesc : partitionDescs) {
                 if (partitionDesc instanceof SingleItemListPartitionDesc) {
@@ -89,6 +90,10 @@ public class ListPartitionDesc extends PartitionDesc {
                 }
             }
         }
+    }
+
+    public List<ParseNode> getMultiDescList() {
+        return multiDescList;
     }
 
     public List<PartitionDesc> getPartitionDescs() {
@@ -104,10 +109,6 @@ public class ListPartitionDesc extends PartitionDesc {
 
     public List<String> getPartitionColNames() {
         return partitionColNames;
-    }
-
-    public List<Expr> getPartitionExprs() {
-        return partitionExprs;
     }
 
     public List<String> findAllPartitionNames() {
@@ -132,6 +133,9 @@ public class ListPartitionDesc extends PartitionDesc {
     }
 
     public void analyzePartitionExprs(List<ColumnDef> columnDefs) throws AnalysisException {
+        if (partitionExprs == null) {
+            return;
+        }
         List<String> slotRefs = partitionExprs.stream()
                 .flatMap(e -> e.collectAllSlotRefs().stream())
                 .map(SlotRef::getColumnName)
@@ -168,6 +172,7 @@ public class ListPartitionDesc extends PartitionDesc {
                                 + " and unique table's partition column must be key column");
                     }
                     found = true;
+                    columnDef.setIsPartitionColumn(true);
                     partitionColumns.add(columnDef);
                     break;
                 }
@@ -399,7 +404,13 @@ public class ListPartitionDesc extends PartitionDesc {
         return partitionColumns;
     }
 
+    public List<Expr> getPartitionExprs() {
+        return partitionExprs;
+    }
 
+    public void setPartitionExprs(List<Expr> partitionExprs) {
+        this.partitionExprs = partitionExprs;
+    }
 
     public boolean isAutoPartitionTable() {
         return isAutoPartitionTable;
