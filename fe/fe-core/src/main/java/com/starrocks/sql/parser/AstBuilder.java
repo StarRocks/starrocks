@@ -1902,7 +1902,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
         }
         return new RefreshMaterializedViewStatement(mvName, new EitherOr(rangePartitionDesc, cells),
-                context.FORCE() != null, context.SYNC() != null, createPos(context));
+                context.FORCE() != null, context.SYNC() != null,
+                context.priority != null ? Integer.parseInt(context.priority.getText()) : null,
+                createPos(context));
     }
 
     @Override

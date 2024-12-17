@@ -3531,7 +3531,9 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         String mvName = refreshMaterializedViewStatement.getMvName().getTbl();
         boolean force = refreshMaterializedViewStatement.isForceRefresh();
         EitherOr<PartitionRangeDesc, Set<PListCell>> partitionDesc = refreshMaterializedViewStatement.getPartitionDesc();
-        return refreshMaterializedView(dbName, mvName, force, partitionDesc, Constants.TaskRunPriority.HIGH.value(),
+        int priority = refreshMaterializedViewStatement.getPriority() != null ?
+                refreshMaterializedViewStatement.getPriority() : Constants.TaskRunPriority.HIGH.value();
+        return refreshMaterializedView(dbName, mvName, force, partitionDesc, priority,
                 Config.enable_mv_refresh_sync_refresh_mergeable, true, refreshMaterializedViewStatement.isSync());
     }
 

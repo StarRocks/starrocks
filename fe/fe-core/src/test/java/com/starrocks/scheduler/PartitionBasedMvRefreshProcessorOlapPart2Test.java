@@ -408,7 +408,8 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVRefreshTest
                     }
                     Assert.assertEquals(1, statuses.size());
                     TaskRunStatus status = statuses.get(0);
-                    Assert.assertEquals(Constants.TaskRunPriority.HIGHEST.value(), status.getPriority());
+                    // default priority for next refresh batch is Constants.TaskRunPriority.HIGHER.value()
+                    Assert.assertEquals(Constants.TaskRunPriority.HIGHER.value(), status.getPriority());
                     starRocksAssert.dropMaterializedView("mv_refresh_priority");
                 }
         );
@@ -449,16 +450,31 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVRefreshTest
                                 MaterializedView mv = ((MaterializedView) testDb.getTable(mvName));
                                 executeInsertSql(connectContext,
                                         "insert into tbl6 partition(p1) values('2022-01-02',2,10);");
+                                executeInsertSql(connectContext, "insert into tbl6 partition(p2) values('2022-02-02',2,10);");
 
                                 HashMap<String, String> taskRunProperties = new HashMap<>();
                                 taskRunProperties.put(TaskRun.FORCE, Boolean.toString(true));
                                 Task task = TaskBuilder.buildMvTask(mv, testDb.getFullName());
-                                TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+                                ExecuteOption executeOption = new ExecuteOption(70, false, new HashMap<>());
+                                TaskRun taskRun = TaskRunBuilder.newBuilder(task).setExecuteOption(executeOption).build();
                                 initAndExecuteTaskRun(taskRun);
+                                TGetTasksParams params = new TGetTasksParams();
+                                params.setTask_name(task.getName());
+                                TaskManager tm = GlobalStateMgr.getCurrentState().getTaskManager();
+                                List<TaskRunStatus> statuses = tm.getMatchedTaskRunStatus(params);
+                                while (statuses.size() != 1) {
+                                    statuses = tm.getMatchedTaskRunStatus(params);
+                                    Thread.sleep(100);
+                                }
+                                Assert.assertEquals(1, statuses.size());
+                                TaskRunStatus status = statuses.get(0);
+                                // the priority for next refresh batch is 70 which is specified in executeOption
+                                Assert.assertEquals(70, status.getPriority());
 
                                 PartitionBasedMvRefreshProcessor processor =
                                         (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
                                 MvTaskRunContext mvTaskRunContext = processor.getMvContext();
+                                Assert.assertEquals(70, mvTaskRunContext.getExecuteOption().getPriority());
                                 Map<String, String> properties = mvTaskRunContext.getProperties();
                                 System.out.println(properties);
                                 Assert.assertEquals(1, properties.size());
@@ -471,6 +487,7 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVRefreshTest
                                 // Ensure that session properties are set
                                 Assert.assertTrue(sessionVariable.isEnableMaterializedViewRewrite());
                                 Assert.assertTrue(sessionVariable.isEnableMaterializedViewRewriteForInsert());
+                                starRocksAssert.dropMaterializedView(mvName);
                             });
                 }
         );
