@@ -49,6 +49,7 @@ public class CreateInsertOverwriteJobLog implements Writable {
         this.dbId = dbId;
         this.tableId = tableId;
         this.targetPartitionIds = targetPartitionIds;
+        this.dynamicOverwrite = dynamicOverwrite;
     }
 
     public long getJobId() {
@@ -78,6 +79,7 @@ public class CreateInsertOverwriteJobLog implements Writable {
                 ", dbId=" + dbId +
                 ", tableId=" + tableId +
                 ", targetPartitionIds=" + targetPartitionIds +
+                ", dynamicOverwrite=" + dynamicOverwrite +
                 '}';
     }
 
