@@ -151,6 +151,9 @@ import com.starrocks.sql.ast.pipe.CreatePipeStmt;
 import com.starrocks.sql.ast.pipe.DescPipeStmt;
 import com.starrocks.sql.ast.pipe.DropPipeStmt;
 import com.starrocks.sql.ast.pipe.ShowPipeStmt;
+import com.starrocks.sql.ast.txn.BeginStmt;
+import com.starrocks.sql.ast.txn.CommitStmt;
+import com.starrocks.sql.ast.txn.RollbackStmt;
 import com.starrocks.sql.ast.warehouse.AlterWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.CreateWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.DropWarehouseStmt;
@@ -1078,6 +1081,26 @@ public class Analyzer {
         @Override
         public Void visitAlterWarehouseStatement(AlterWarehouseStmt statement, ConnectContext context) {
             WarehouseAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        // ---------------------------------------- Transaction Statement --------------------------------------------------
+
+        @Override
+        public Void visitBeginStatement(BeginStmt statement, ConnectContext context) {
+            TransactionAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitCommitStatement(CommitStmt statement, ConnectContext context) {
+            TransactionAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitRollbackStatement(RollbackStmt statement, ConnectContext context) {
+            TransactionAnalyzer.analyze(statement, context);
             return null;
         }
     }
