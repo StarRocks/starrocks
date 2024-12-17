@@ -177,7 +177,8 @@ public class DDLStmtExecutor {
             } else if (re.getCause() instanceof IOException) {
                 throw (IOException) re.getCause();
             } else if (re.getCause() != null) {
-                throw new DdlException(re.getCause().getMessage(), re);
+                throw new DdlException(re.getCause().getMessage() != null ?
+                        re.getCause().getMessage() : re.getMessage(), re);
             } else {
                 throw re;
             }
