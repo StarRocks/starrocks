@@ -18,6 +18,7 @@ displayed_sidebar: docs
   - AWS S3
   - Google Cloud Storage
   - Microsoft Azure Blob Storage
+  - NFS(NAS)
 - **文件格式：**
   - Parquet
   - ORC
@@ -88,6 +89,19 @@ FILES( data_location , data_format [, schema_detect ] [, StorageCredentialParams
     "path" = "wasbs://<container>@<storage_account>.blob.core.windows.net/<blob_path>"
     -- 示例： "path" = "wasbs://testcontainer@testaccount.blob.core.windows.net/path/file.parquet"
     ```
+
+- 要访问 NFS(NAS)，您需要将此参数指定为：
+
+  ```SQL
+  "path" = "file:///<absolute_path>"
+  -- 示例： "path" = "file:///home/ubuntu/parquetfile/file.parquet"
+  ```
+
+  :::note
+
+  如需通过 `file://` 协议访问 NFS 中的文件，需要将同一 NAS 设备作为 NFS 挂载到每个 BE 或 CN 节点的相同目录下。
+
+  :::
 
 #### data_format
 
@@ -447,6 +461,15 @@ SELECT * FROM FILES(
 2 rows in set (22.335 sec)
 ```
 
+查询 NFS(NAS) 中的 Parquet 文件：
+
+```SQL
+SELECT * FROM FILES(
+  'path' = 'file:///home/ubuntu/parquetfile/*.parquet', 
+  'format' = 'parquet'
+);
+```
+
 #### 示例二：导入文件中的数据
 
 将 AWS S3 存储桶 `inserttest` 内 Parquet 文件 **parquet/insert_wiki_edit_append.parquet** 中的数据插入至表 `insert_wiki_edit` 中：
@@ -462,6 +485,18 @@ INSERT INTO insert_wiki_edit
 );
 Query OK, 2 rows affected (23.03 sec)
 {'label':'insert_d8d4b2ee-ac5c-11ed-a2cf-4e1110a8f63b', 'status':'VISIBLE', 'txnId':'2440'}
+```
+
+将 NFS(NAS) 中 CSV 文件的数据插入至表 `insert_wiki_edit` 中：
+
+```SQL
+INSERT INTO insert_wiki_edit
+  SELECT * FROM FILES(
+    'path' = 'file:///home/ubuntu/csvfile/*.csv', 
+    'format' = 'csv', 
+    'csv.column_separator' = ',', 
+    'csv.row_delimiter' = '\n'
+  );
 ```
 
 #### 示例三：使用文件中的数据建表
@@ -656,8 +691,7 @@ DESC FILES(
 将 `sales_records` 中的所有数据行导出为多个 Parquet 文件，存储在 HDFS 集群的路径 **/unload/partitioned/** 下。这些文件存储在不同的子路径中，这些子路径根据列 `sales_time` 中的值来区分。
 
 ```SQL
-INSERT INTO 
-FILES(
+INSERT INTO FILES(
     "path" = "hdfs://xxx.xx.xxx.xx:9000/unload/partitioned/",
     "format" = "parquet",
     "hadoop.security.authentication" = "simple",
@@ -665,6 +699,26 @@ FILES(
     "password" = "xxxxx",
     "compression" = "lz4",
     "partition_by" = "sales_time"
+)
+SELECT * FROM sales_records;
+```
+
+将查询结果导出至 NFS(NAS) 中的 CSV 或 Parquet 文件中：
+
+```SQL
+-- CSV
+INSERT INTO FILES(
+    'path' = 'file:///home/ubuntu/csvfile/', 
+    'format' = 'csv', 
+    'csv.column_separator' = ',', 
+    'csv.row_delimitor' = '\n'
+)
+SELECT * FROM sales_records;
+
+-- Parquet
+INSERT INTO FILES(
+    'path' = 'file:///home/ubuntu/parquetfile/',
+    'format' = 'parquet'
 )
 SELECT * FROM sales_records;
 ```
