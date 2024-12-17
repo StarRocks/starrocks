@@ -802,11 +802,6 @@ under the License.
             <artifactId>postgresql</artifactId>
         </dependency>
 
-        <dependency>
-            <groupId>com.dameng</groupId>
-            <artifactId>DmJdbcDriver18</artifactId>
-        </dependency>
-
         <!-- https://mvnrepository.com/artifact/com.oracle.database.jdbc/ojdbc8 -->
         <dependency>
             <groupId>com.oracle.database.jdbc</groupId>

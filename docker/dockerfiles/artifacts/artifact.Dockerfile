@@ -46,7 +46,6 @@ RUN --mount=type=cache,target=/root/.m2/ STARROCKS_VERSION=${RELEASE_VERSION} BU
 
 FROM ubuntu:22.04 as downloader
 
-RUN sed -i 's#http://archive.ubuntu.com/#http://mirrors.tuna.tsinghua.edu.cn/#' /etc/apt/sources.list
 RUN apt-get update -y && apt-get install -y --no-install-recommends wget tar xz-utils
 
 # download the latest dd-java-agent

@@ -32,9 +32,6 @@ ARG USER
 ARG RUN_AS_USER
 ARG GROUP=starrocks
 
-RUN sed -i 's/archive.ubuntu.com/mirrors.aliyun.com/g' /etc/apt/sources.list
-RUN sed -i 's/security.ubuntu.com/mirrors.aliyun.com/g' /etc/apt/sources.list
-
 RUN apt-get update -y && apt-get install -y --no-install-recommends \
         default-jdk mysql-client curl vim tree net-tools less tzdata locales netcat && \
         ln -fs /usr/share/zoneinfo/UTC /etc/localtime && \
