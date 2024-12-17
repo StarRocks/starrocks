@@ -26,10 +26,12 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
+import com.starrocks.sql.ast.ShowMaterializedViewsStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
@@ -209,9 +211,29 @@ public class LakeSyncMaterializedViewTest {
     }
 
     @Test
+    public void testMaterializedViews() throws Exception {
+        String sql = "create materialized view sync_mv1 as select k1, sum(v1) from tbl1 group by k1;";
+        CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
+                parseStmtWithNewParser(sql, connectContext);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createTableStmt);
+
+        waitingRollupJobV2Finish();
+
+        String showMVSql = "show materialized views;";
+        ShowMaterializedViewsStmt showMaterializedViewsStmt = (ShowMaterializedViewsStmt) UtFrameUtils.
+                parseStmtWithNewParser(showMVSql, connectContext);
+        ShowResultSet result = GlobalStateMgr.
+                getCurrentState().
+                getShowExecutor().
+                execute(showMaterializedViewsStmt, connectContext);
+
+        Assert.assertEquals(1, result.getResultRows().size());
+        starRocksAssert.dropMaterializedView("sync_mv1");
+    }
+
+    @Test
     public void testSelectFromSyncMV() throws Exception {
         // `tbl1`'s distribution keys is k2, sync_mv1 no `k2` in its outputs.
-        RunMode mode = RunMode.getCurrentRunMode();
         String sql = "create materialized view sync_mv1 as select k1, sum(v1) from tbl1 group by k1;";
         CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
                 parseStmtWithNewParser(sql, connectContext);
