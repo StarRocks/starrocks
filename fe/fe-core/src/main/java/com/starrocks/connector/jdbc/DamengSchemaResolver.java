@@ -104,7 +104,6 @@ public class DamengSchemaResolver extends JDBCSchemaResolver {
                 break;
             case Types.CHAR:
                 return ScalarType.createCharType(columnSize);
-            case Types.CLOB:
             case Types.LONGVARCHAR:
                 return ScalarType.createVarcharType(columnSize);
             case Types.VARCHAR:
