@@ -574,4 +574,48 @@ public class CachedStatisticStorage implements StatisticStorage {
         return connectorTableColumnStatsList;
     }
 
+<<<<<<< HEAD
+=======
+    @Override
+    public Map<String, Long> estimateCount() {
+        return ImmutableMap.<String, Long>builder()
+                .put("TableStats", tableStatsCache.synchronous().estimatedSize())
+                .put("ColumnStats", columnStatistics.synchronous().estimatedSize())
+                .put("PartitionStats", partitionStatistics.synchronous().estimatedSize())
+                .put("HistogramStats", histogramCache.synchronous().estimatedSize())
+                .put("ConnectorTableStats", connectorTableCachedStatistics.synchronous().estimatedSize())
+                .put("ConnectorHistogramStats", connectorHistogramCache.synchronous().estimatedSize())
+                .build();
+    }
+
+    private <K, V> Pair<List<Object>, Long> sampleFromCache(AsyncLoadingCache<K, V> cache) {
+        Map<K, CompletableFuture<V>> map = cache.asMap();
+        if (map.isEmpty()) {
+            return Pair.create(List.of(), 0L);
+        }
+        Map.Entry<K, CompletableFuture<V>> next = map.entrySet().iterator().next();
+        V value = null;
+        try {
+            value = next.getValue().getNow(null);
+        } catch (Exception e) {
+            LOG.warn("sample load statistic cache failed", e);
+        }
+        if (value == null) {
+            return Pair.create(List.of(next.getKey()), cache.synchronous().estimatedSize());
+        }
+        return Pair.create(List.of(next.getKey(), value), cache.synchronous().estimatedSize());
+    }
+
+    @Override
+    public List<Pair<List<Object>, Long>> getSamples() {
+        return List.of(
+                sampleFromCache(tableStatsCache),
+                sampleFromCache(columnStatistics),
+                sampleFromCache(partitionStatistics),
+                sampleFromCache(histogramCache),
+                sampleFromCache(connectorHistogramCache),
+                sampleFromCache(connectorTableCachedStatistics)
+        );
+    }
+>>>>>>> c2837ba7d7 ([BugFix] fix NPE of statistics cache load (#53961))
 }
