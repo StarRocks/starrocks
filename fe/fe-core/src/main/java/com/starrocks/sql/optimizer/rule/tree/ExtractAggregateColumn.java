@@ -69,12 +69,12 @@ public class ExtractAggregateColumn implements TreeRewriteRule {
             return false;
         }
 
-        private boolean hasCollectionTypeColumn(ScalarOperator operator) {
-            if (operator.isColumnRef() && operator.getType().isCollectionType()) {
+        private boolean hasComplexOrJsonTypeColumn(ScalarOperator operator) {
+            if (operator.isColumnRef() && (operator.getType().isComplexType() || operator.getType().isJsonType())) {
                 return true;
             }
             for (ScalarOperator child : operator.getChildren()) {
-                if (hasCollectionTypeColumn(child)) {
+                if (hasComplexOrJsonTypeColumn(child)) {
                     return true;
                 }
             }
@@ -104,8 +104,7 @@ public class ExtractAggregateColumn implements TreeRewriteRule {
                             return;
                         }
                         if (!scalarOperator.isColumnRef() && !hasDictMappingOperator(scalarOperator) &&
-                                !(scalarOperator.getOpType() == OperatorType.SUBFIELD) &&
-                                !hasCollectionTypeColumn(scalarOperator)) {
+                                !hasComplexOrJsonTypeColumn(scalarOperator)) {
                             rewriteMap.put(childRef, scalarOperator);
                             extractedColumns.add(childRef);
                         }
