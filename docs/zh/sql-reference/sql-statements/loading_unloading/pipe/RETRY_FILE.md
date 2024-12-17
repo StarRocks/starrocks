@@ -7,7 +7,7 @@
 ## 语法
 
 ```SQL
-ALTER PIPE [ IF EXISTS ] <pipe_name> { RETRY ALL | RETRY FILE '<file_name>' }
+ALTER PIPE <pipe_name> { RETRY ALL | RETRY FILE '<file_name>' }
 ```
 
 ## 参数说明
