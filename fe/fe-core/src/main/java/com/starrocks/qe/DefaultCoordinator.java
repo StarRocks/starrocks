@@ -506,9 +506,16 @@ public class DefaultCoordinator extends Coordinator {
     }
 
     @Override
+    public void onReleaseSlots() {
+        if (slot != null) {
+            jobSpec.getSlotProvider().cancelSlotRequirement(slot);
+            jobSpec.getSlotProvider().releaseSlot(slot);
+        }
+    }
+
+    @Override
     public void onFinished() {
-        jobSpec.getSlotProvider().cancelSlotRequirement(slot);
-        jobSpec.getSlotProvider().releaseSlot(slot);
+        onReleaseSlots();
         // for async profile, if Be doesn't report profile in time, we upload the most complete profile
         // into profile Manager here. IN other case, queryProfile.finishAllInstances just do nothing here
         queryProfile.finishAllInstances(Status.OK);
