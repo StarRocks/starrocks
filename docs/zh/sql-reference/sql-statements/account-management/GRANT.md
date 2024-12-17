@@ -176,7 +176,7 @@ GRANT
 *注意：需要执行 SET CATALOG 之后才能使用。function 还可以用 `<db_name>.<function_name>` 的方式来进行表示。
 
 ```SQL
-GRANT <priv> ON FUNCTION <db_name>.<function_name> TO {ROLE <role_name> | USER <user_name>}
+GRANT <priv> ON FUNCTION <db_name>.<function_name>(input_data_type) TO {ROLE <role_name> | USER <user_name>}
 ```
 
 #### User 相关
