@@ -464,19 +464,6 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
 
     if (!_scan_ctx->not_push_down_conjuncts().empty() || !_not_push_down_predicates.empty()) {
         _expr_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "ExprFilterTime", IO_TASK_EXEC_TIMER_NAME);
-<<<<<<< HEAD
-=======
-
-        _non_pushdown_predicates_counter = ADD_COUNTER_SKIP_MERGE(_runtime_profile, "NonPushdownPredicates",
-                                                                  TUnit::UNIT, TCounterMergeType::SKIP_ALL);
-        COUNTER_SET(_non_pushdown_predicates_counter,
-                    static_cast<int64_t>(_scan_ctx->not_push_down_conjuncts().size() + _non_pushdown_pred_tree.size()));
-        if (runtime_state->fragment_ctx()->pred_tree_params().enable_show_in_profile) {
-            _runtime_profile->add_info_string(
-                    "NonPushdownPredicateTree",
-                    _non_pushdown_pred_tree.visit([](const auto& node) { return node.debug_string(); }));
-        }
->>>>>>> 2719242e5c ([BugFix] Revert [Enhancement] make connector scan operator profile less skew (#53465))
     }
 
     DCHECK(_params.global_dictmaps != nullptr);
