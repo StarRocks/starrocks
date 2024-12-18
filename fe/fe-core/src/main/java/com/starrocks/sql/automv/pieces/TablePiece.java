@@ -18,6 +18,7 @@ import com.starrocks.sql.automv.column.GenericColumn;
 import com.starrocks.sql.automv.pn.Op;
 import com.starrocks.sql.automv.util.TieredList;
 import com.starrocks.sql.automv.util.TieredMap;
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
 
 import java.util.Collections;
 import java.util.List;
@@ -25,15 +26,22 @@ import java.util.Objects;
 
 public class TablePiece extends PlanPiece {
     private final FQTable table;
+    // Only used in 11MV
+    private final ColumnRefSet usedColumns;
 
-    private TablePiece(TieredMap<Integer, GenericColumn> columns, TieredList<Op> conjuncts,
+    private TablePiece(TieredMap<Integer, GenericColumn> columns, ColumnRefSet usedColumns, TieredList<Op> conjuncts,
                        PieceCommonState commonState, PieceAuxState auxState, FQTable table) {
         super(Collections.emptyList(), columns, conjuncts, commonState, auxState);
         this.table = Objects.requireNonNull(table);
+        this.usedColumns = Objects.requireNonNull(usedColumns);
     }
 
     public static Builder newBuilder() {
         return new Builder();
+    }
+
+    public ColumnRefSet getUsedColumns() {
+        return usedColumns;
     }
 
     public String getTableName() {
@@ -61,15 +69,26 @@ public class TablePiece extends PlanPiece {
 
     public static class Builder extends PlanPiece.Builder<TablePiece> {
         private FQTable table;
+        private ColumnRefSet usedColumns;
 
         private Builder(TablePiece piece) {
             super(Collections.emptyList(), piece.getColumns(), piece.getConjuncts(), piece.getCommonState(),
                     piece.getAuxState());
             this.table = piece.table;
+            this.usedColumns = piece.usedColumns;
         }
 
         private Builder() {
             super();
+        }
+
+        public ColumnRefSet getUsedColumns() {
+            return usedColumns;
+        }
+
+        public Builder setUsedColumns(ColumnRefSet usedColumns) {
+            this.usedColumns = usedColumns;
+            return this;
         }
 
         public FQTable getTable() {
@@ -83,8 +102,8 @@ public class TablePiece extends PlanPiece {
 
         @Override
         public TablePiece build() {
-            return new TablePiece(getColumns(), getConjuncts(), getCommonState(), getAuxState(), table);
+            return new TablePiece(getColumns(), getUsedColumns(), getConjuncts(), getCommonState(), getAuxState(),
+                    table);
         }
     }
-
 }

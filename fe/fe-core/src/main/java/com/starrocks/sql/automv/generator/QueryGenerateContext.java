@@ -50,6 +50,10 @@ public final class QueryGenerateContext {
                 ColumnRefSet.of());
     }
 
+    public static QueryGenerateContext of11MV(ColumnRefSet inputColumnIds) {
+        return new QueryGenerateContext(false, true, true, false, Collections.emptyList(), inputColumnIds);
+    }
+
     public static QueryGenerateContext ofNoTopAlias() {
         return new QueryGenerateContext(false, false, false, false,
                 Collections.emptyList(), ColumnRefSet.of());

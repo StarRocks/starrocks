@@ -40,9 +40,11 @@ import com.starrocks.sql.automv.lifecycle.MVChangeLog;
 import com.starrocks.sql.automv.lifecycle.MVHitCountEntry;
 import com.starrocks.sql.automv.lifecycle.QueryAuditEntry;
 import com.starrocks.sql.automv.options.AutoMVOptions;
+import com.starrocks.sql.automv.pattern.PlanPiecePattern;
 import com.starrocks.sql.automv.pattern.PlanPiecePatterns;
 import com.starrocks.sql.automv.pieces.AggregatePiece;
 import com.starrocks.sql.automv.pieces.FQTable;
+import com.starrocks.sql.automv.pieces.PlanPiece;
 import com.starrocks.sql.automv.pieces.PlanPieceBuilder;
 import com.starrocks.sql.automv.pieces.PlanPieceNormalizer;
 import com.starrocks.sql.automv.pn.TimeGranule;
@@ -311,6 +313,22 @@ public class AutoMVUtil {
     }
 
     public static List<Pair<String, AggregatePiece>> getPieces(ConnectContext ctx, List<Pair<String, String>> queryList,
+                                                               java.util.function.Predicate<String> filter) {
+        return getPieces(ctx, PlanPiecePatterns.getSPJG(), queryList, filter);
+    }
+
+    public static List<Pair<String, PlanPiece>> get11MVPieces(ConnectContext ctx, List<Pair<String, String>> queryList,
+                                                              java.util.function.Predicate<String> filter) {
+        return queryList.stream()
+                .filter(p -> filter.test(p.first))
+                .flatMap(p -> RboOptimizer.get11MVPlanPieces(p.first, p.second, ctx)
+                        .stream()
+                        .map(piece -> Pair.create(p.first, piece)))
+                .collect(Collectors.toList());
+    }
+
+    public static List<Pair<String, AggregatePiece>> getPieces(ConnectContext ctx, PlanPiecePattern piecePattern,
+                                                               List<Pair<String, String>> queryList,
                                                                java.util.function.Predicate<String> filter) {
         AutoMVOptions options = AutoMVOptions.of(new PartitionExtractor(), ctx.getSessionVariable());
         AggregatePolicy policy = AggregatePolicies.defaultPolicies(options);

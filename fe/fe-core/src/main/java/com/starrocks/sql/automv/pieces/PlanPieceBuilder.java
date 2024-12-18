@@ -138,6 +138,12 @@ public final class PlanPieceBuilder extends OptExpressionVisitor<PlanPiece, Plan
                         .collect(TieredMap.toMap(e -> idConverter.getId(e.getValue()),
                                 e -> columnConverter.apply(e.getKey())));
 
+        ColumnRefSet usedColumns = ColumnRefSet.of();
+        tableScan.getColRefToColumnMetaMap().keySet()
+                .stream()
+                .map(idConverter::getId)
+                .forEach(usedColumns::union);
+
         TieredMap<Integer, GenericColumn> derivedColumns =
                 handleProject(optExpression.getOp(), originColumns, idConverter);
         TieredMap<Integer, GenericColumn> columns = originColumns.merge(derivedColumns);
@@ -147,6 +153,7 @@ public final class PlanPieceBuilder extends OptExpressionVisitor<PlanPiece, Plan
         TieredList<Op> conjuncts = handlePredicate(optExpression.getOp().getPredicate(), columns, idConverter);
         return TablePiece.newBuilder()
                 .setTable(args.getFqTableMap().get(tableScan.getTable().getUUID()))
+                .setUsedColumns(usedColumns)
                 .setColumns(columns)
                 .setCommonState(args.getCommonState())
                 .setConjuncts(conjuncts).build();

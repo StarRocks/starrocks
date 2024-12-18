@@ -187,6 +187,15 @@ public class RboOptimizer {
         };
     }
 
+    private static Function<OptExpression, PlanPiece> subPlanTo11MVPiece(AutoMVOptions options,
+                                                                         String name,
+                                                                         Map<String, FQTable> fqTableMap) {
+        return subPlan -> {
+            ColumnRefToIdConverter idConverter = new ColumnRefToIdConverter();
+            return PlanPieceBuilder.createPlanPiece(name, subPlan, idConverter, fqTableMap);
+        };
+    }
+
     public static Optional<PlanPiece> getPlanPieceFromLegacyMV(MaterializedViewPlus mvPlus, ConnectContext context) {
         String createMvSql = mvPlus.getCreateMaterializedViewSql();
         StatementBase stmt = RboOptimizer.parseAndAnalyze(context, createMvSql);
@@ -210,15 +219,7 @@ public class RboOptimizer {
 
     @VisibleForTesting
     public static List<PlanPiece> getPlanPieces(String sql, ConnectContext ctx) {
-        QueryStatementPlus stmt = RboOptimizer.getQueryStatement(ctx, sql);
-        QueryStatement queryStmt = stmt.getQueryStatement();
-        Map<String, FQTable> fqTableMap = stmt.getFqTableMap();
-        AutoMVOptions options = AutoMVOptions.of(new PartitionExtractor(), ctx.getSessionVariable());
-        Function<OptExpression, PlanPiece> subPlanToPieceConverter = subPlanToPiece(options, "Q", fqTableMap);
-        return RboOptimizer.getSubPlans(queryStmt, ctx, PlanPiecePatterns.getSPJG())
-                .stream()
-                .map(subPlanToPieceConverter)
-                .collect(Collectors.toList());
+        return getPlanPieces("Q", sql, ctx);
     }
 
     public static List<PlanPiece> getPlanPieces(String name, String sql, ConnectContext ctx) {
@@ -228,6 +229,18 @@ public class RboOptimizer {
         AutoMVOptions options = AutoMVOptions.of(new PartitionExtractor(), ctx.getSessionVariable());
         Function<OptExpression, PlanPiece> subPlanToPieceConverter = subPlanToPiece(options, name, fqTableMap);
         return RboOptimizer.getSubPlans(queryStmt, ctx, PlanPiecePatterns.getSPJG())
+                .stream()
+                .map(subPlanToPieceConverter)
+                .collect(Collectors.toList());
+    }
+
+    public static List<PlanPiece> get11MVPlanPieces(String name, String sql, ConnectContext ctx) {
+        QueryStatementPlus stmt = RboOptimizer.getQueryStatement(ctx, sql);
+        QueryStatement queryStmt = stmt.getQueryStatement();
+        Map<String, FQTable> fqTableMap = stmt.getFqTableMap();
+        AutoMVOptions options = AutoMVOptions.of(new PartitionExtractor(), ctx.getSessionVariable());
+        Function<OptExpression, PlanPiece> subPlanToPieceConverter = subPlanTo11MVPiece(options, name, fqTableMap);
+        return RboOptimizer.getSubPlans(queryStmt, ctx, PlanPiecePatterns.get11MV())
                 .stream()
                 .map(subPlanToPieceConverter)
                 .collect(Collectors.toList());

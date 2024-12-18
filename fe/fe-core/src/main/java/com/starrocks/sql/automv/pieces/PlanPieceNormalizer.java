@@ -82,9 +82,17 @@ public class PlanPieceNormalizer extends PlanPieceVisitor<PlanPiece, ColumnUnfol
     }
 
     public static PlanPiece normalize(PlanPiece piece) {
+        return normalize(piece, true);
+    }
+
+    public static PlanPiece normalize(PlanPiece piece, boolean aliasingDuplicateTables) {
         List<TablePiece> unorderedPieces = PlanPiece.collect(piece, TablePiece.class);
         TieredMap<Integer, GenericColumn> columnNorms = normalizeOriginalColumns(unorderedPieces);
         PlanPiece normalizedPiece = INSTANCE.normalize(piece, new ColumnUnfolder(columnNorms));
+
+        if (!aliasingDuplicateTables) {
+            return normalizedPiece;
+        }
 
         List<TablePiece> orderedTablePieces = PlanPiece.collect(normalizedPiece, TablePiece.class);
         Map<String, List<TablePiece>> fqNameToTablePieces = orderedTablePieces.stream()

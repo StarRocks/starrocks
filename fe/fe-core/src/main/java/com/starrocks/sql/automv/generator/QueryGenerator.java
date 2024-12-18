@@ -482,6 +482,21 @@ public class QueryGenerator {
         QueryGenerateResult generate(PlanPiece piece, QueryGenerateContext context) {
             piece.assignPieceIds();
             ColumnRefSet outputColumnIds = ColumnRefSet.createByIds(piece.getColumns().keySet());
+            // for 11MV, the output columns is determined by QueryGenerateContext.inputColumnIds.
+            // for SPJG MV, the output columns is determined by the top AggregatePiece.
+            if (piece.isTableScan() && context.getInputColumnIds()
+                    .equals(piece.mustCast(TablePiece.class).getUsedColumns())) {
+                // TODO(by satanson): in future, 11MV would support derived columns that
+                //  extracts and transforms complex types(such as JSON, STRUCT, MAP and etc.),
+                //  at present, derived columns is neglected.
+                //  List<Integer> derivedColumnIds = piece.getColumns().entrySet()
+                //          .stream()
+                //          .filter(e -> e.getValue().isDerived())
+                //          .map(Map.Entry::getKey)
+                //          .collect(Collectors.toList());
+                //  outputColumnIds = ColumnRefSet.createByIds(derivedColumnIds);
+                outputColumnIds = context.getInputColumnIds();
+            }
             if (piece.isAggregate()) {
                 AggregatePiece aggPiece = piece.cast();
                 outputColumnIds = ColumnRefSet.createByIds(aggPiece.getDimensions().keySet());

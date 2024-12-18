@@ -661,6 +661,45 @@ public class OpUtil {
         }
     }
 
+    public static Op substId(Op op, Map<Integer, Integer> idToId) {
+        if (!op.getIds().isIntersect(ColumnRefSet.createByIds(idToId.keySet()))) {
+            return op;
+        } else {
+            return substIdImpl(op, idToId).orElse(op);
+        }
+    }
+
+    public static TieredList<Op> substId(Collection<Op> ops, Map<Integer, Integer> idToId) {
+        return ops.stream().map(op -> substId(op, idToId)).collect(TieredList.<Op>toList());
+    }
+
+    public static Optional<Op> substIdImpl(Op op, Map<Integer, Integer> idToId) {
+        if (op.isVal()) {
+            return Optional.empty();
+        }
+
+        if (op.isVar()) {
+            return Optional.ofNullable(idToId.get(op.getId())).map(id -> Op.var(op.getType(), id));
+        }
+
+        Apply apply = op.cast();
+        List<Pair<Op, Optional<Op>>> argPairs = apply.getArgs()
+                .stream()
+                .map(arg -> Pair.create(arg, substIdImpl(arg, idToId)))
+                .collect(Collectors.toList());
+
+        if (argPairs.stream().noneMatch(ap -> ap.second.isPresent())) {
+            return Optional.empty();
+        } else {
+            List<Op> newArgs = argPairs
+                    .stream()
+                    .map(p -> p.second.orElse(p.first))
+                    .collect(Collectors.toList());
+            Op newOp = Op.apply(apply.getType(), apply.getKind(), apply.isOrdered(), newArgs);
+            return Optional.of(newOp);
+        }
+    }
+
     private static Optional<Op> subst(Op op, Map<Integer, Op> opMap, ColumnRefSet columnIds) {
         if (!columnIds.isIntersect(op.getIds())) {
             return Optional.empty();

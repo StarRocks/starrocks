@@ -14,11 +14,15 @@
 
 package com.starrocks.sql.automv.pieces;
 
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.automv.generator.QueryGenerateContext;
+import com.starrocks.sql.automv.generator.QueryGenerator;
 import com.starrocks.sql.automv.policies.AggregatePolicy;
 import com.starrocks.sql.automv.policies.EliminateSemiAntiJoinPolicy;
 import com.starrocks.sql.automv.qe.QueryStatementPlus;
@@ -34,6 +38,7 @@ import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -286,6 +291,77 @@ public class PlanPieceTest {
             AggregatePolicy notPolicy = AggregatePolicy.not(policy);
             Assert.assertFalse(policy.convert(aggPiece).isPresent());
             Assert.assertTrue(notPolicy.convert(aggPiece).isPresent());
+        }
+    }
+
+    @Test
+    public void test11MVPieces() {
+        ConnectContext ctx = getStarRocksAssert().getCtx();
+        List<Pair<String, String>> queryList = TestUtil.getTPCDSQueryList();
+        List<Pair<String, PlanPiece>> pieces =
+                AutoMVUtil.get11MVPieces(ctx, queryList, name -> true);
+
+        Map<String, List<PlanPiece>> pieceGroups = pieces.stream().map(p -> p.second)
+                .collect(Collectors.groupingBy(p -> p.getClass().getSimpleName()));
+        Map<String, Integer> expectResults = ImmutableMap.<String, Integer>builder()
+                .put("AggregatePiece", 128)
+                .put("TablePiece", 55)
+                .put("StarJoinPiece", 122)
+                .build();
+        Map<String, Integer> actualResults =
+                pieceGroups.entrySet().stream().collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().size()));
+        Assert.assertEquals(expectResults, actualResults);
+    }
+
+    @Test
+    public void test11MVTablePieceUsage() {
+        ConnectContext ctx = getStarRocksAssert().getCtx();
+        String q = TestUtil.getTPCDSQuery("query01");
+        List<Pair<String, PlanPiece>> pieces =
+                AutoMVUtil.get11MVPieces(ctx, ImmutableList.of(Pair.create("query01", q)), name -> true);
+
+        List<TableUsage> tableUsages = pieces.stream()
+                .map(p -> p.second)
+                .map(TableUsage::analyzeUsage)
+                .flatMap(Collection::stream)
+                .collect(Collectors.toList());
+        Assert.assertEquals(tableUsages.size(), 6);
+        List<TableUsage> mergedTableUsages = TableUsage.mergeUsages(tableUsages);
+        Assert.assertEquals(mergedTableUsages.size(), 4);
+        String[] expectResults = new String[] {
+                "SELECT\n" +
+                        "  `tpcds`.`customer`.c_customer_sk\n" +
+                        "  ,`tpcds`.`customer`.c_customer_id\n" +
+                        "FROM\n" +
+                        "  `tpcds`.`customer`",
+                "SELECT\n" +
+                        "  `tpcds`.`store`.s_store_sk\n" +
+                        "  ,`tpcds`.`store`.s_state\n" +
+                        "FROM\n" +
+                        "  `tpcds`.`store`",
+                "SELECT\n" +
+                        "  `tpcds`.`date_dim`.d_date_sk\n" +
+                        "  ,`tpcds`.`date_dim`.d_year\n" +
+                        "FROM\n" +
+                        "  `tpcds`.`date_dim`\n" +
+                        "WHERE\n" +
+                        "  (`tpcds`.`date_dim`.d_year = 2000)",
+                "SELECT\n" +
+                        "  `tpcds`.`store_returns`.sr_returned_date_sk\n" +
+                        "  ,`tpcds`.`store_returns`.sr_customer_sk\n" +
+                        "  ,`tpcds`.`store_returns`.sr_store_sk\n" +
+                        "  ,`tpcds`.`store_returns`.sr_return_amt\n" +
+                        "FROM\n" +
+                        "  `tpcds`.`store_returns`\n" +
+                        "WHERE\n" +
+                        "  (`tpcds`.`store_returns`.sr_store_sk IS NOT NULL)",
+        };
+
+        for (int i = 0; i < mergedTableUsages.size(); ++i) {
+            TablePiece tablePiece = mergedTableUsages.get(i).getTablePiece();
+            QueryGenerateContext queryGenContext = QueryGenerateContext.of11MV(tablePiece.getUsedColumns());
+            String s = QueryGenerator.generate(tablePiece, queryGenContext).getSubquery().getResult();
+            Assert.assertEquals(expectResults[i], s);
         }
     }
 }
