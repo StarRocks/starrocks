@@ -293,12 +293,8 @@ public class StreamLoadManagerTest {
         int channelId = 0;
 
         TransactionResult resp = new TransactionResult();
-<<<<<<< HEAD
-        streamLoadManager.beginLoadTask(dbName, tableName, labelName, "", "", timeoutMillis, channelNum, channelId, resp);
-=======
-        streamLoadManager.beginLoadTaskFromBackend(
-                dbName, tableName, labelName, null, "", "", timeoutMillis, resp, false, warehouseId);
->>>>>>> fb125e1508 ([BugFix] Fix stream load backend/frontend streaming (#53893))
+        streamLoadManager.beginLoadTaskFromFrontend(
+                dbName, tableName, labelName, "", "", timeoutMillis, channelNum, channelId, resp);
 
         Map<String, StreamLoadTask> idToStreamLoadTask =
                 Deencapsulation.getField(streamLoadManager, "idToStreamLoadTask");
