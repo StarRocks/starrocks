@@ -112,8 +112,7 @@ public class MysqlSchemaResolverTest {
             JDBCSchemaResolver schemaResolver = new MysqlSchemaResolver();
             Assert.assertFalse(schemaResolver.checkAndSetSupportPartitionInformation(connection));
         } catch (Exception e) {
-            System.out.println(e.getMessage());
-            Assert.fail();
+            Assert.fail(e.getMessage());
         }
     }
 
@@ -141,8 +140,7 @@ public class MysqlSchemaResolverTest {
             JDBCSchemaResolver schemaResolver = new MysqlSchemaResolver();
             Assert.assertTrue(schemaResolver.checkAndSetSupportPartitionInformation(connection));
         } catch (Exception e) {
-            System.out.println(e.getMessage());
-            Assert.fail();
+            Assert.fail(e.getMessage());
         }
     }
 
@@ -153,8 +151,7 @@ public class MysqlSchemaResolverTest {
             List<String> partitionNames = jdbcMetadata.listPartitionNames("test", "tbl1", ConnectorMetadatRequestContext.DEFAULT);
             Assert.assertFalse(partitionNames.isEmpty());
         } catch (Exception e) {
-            System.out.println(e.getMessage());
-            Assert.fail();
+            Assert.fail(e.getMessage());
         }
     }
 
@@ -176,8 +173,7 @@ public class MysqlSchemaResolverTest {
                     jdbcMetadata.listPartitionNames("test", "tbl1", ConnectorMetadatRequestContext.DEFAULT);
             Assert.assertTrue(partitionNamesWithOutCache.isEmpty());
         } catch (Exception e) {
-            System.out.println(e.getMessage());
-            Assert.fail();
+            Assert.fail(e.getMessage());
         }
     }
 
@@ -195,8 +191,7 @@ public class MysqlSchemaResolverTest {
             List<String> partitionNames = jdbcMetadata.listPartitionNames("test", "tbl1", ConnectorMetadatRequestContext.DEFAULT);
             Assert.assertTrue(partitionNames.size() == 0);
         } catch (Exception e) {
-            System.out.println(e.getMessage());
-            Assert.fail();
+            Assert.fail(e.getMessage());
         }
     }
 
@@ -208,8 +203,7 @@ public class MysqlSchemaResolverTest {
                     Arrays.asList(new Column("d", Type.VARCHAR))).size();
             Assert.assertTrue(size > 0);
         } catch (Exception e) {
-            System.out.println(e.getMessage());
-            Assert.fail();
+            Assert.fail(e.getMessage());
         }
     }
 
@@ -228,8 +222,7 @@ public class MysqlSchemaResolverTest {
                     Arrays.asList(new Column("d", Type.VARCHAR))).size();
             Assert.assertTrue(size == 0);
         } catch (Exception e) {
-            System.out.println(e.getMessage());
-            Assert.fail();
+            Assert.fail(e.getMessage());
         }
     }
 
@@ -242,8 +235,7 @@ public class MysqlSchemaResolverTest {
             Integer size = jdbcMetadata.getPartitions(jdbcTable, Arrays.asList("20230810")).size();
             Assert.assertTrue(size > 0);
         } catch (Exception e) {
-            System.out.println(e.getMessage());
-            Assert.fail();
+            Assert.fail(e.getMessage());
         }
     }
 
@@ -264,8 +256,7 @@ public class MysqlSchemaResolverTest {
             int sizeWithOutCache = jdbcMetadata.getPartitions(jdbcTable, Arrays.asList("20230810")).size();
             Assert.assertEquals(0, sizeWithOutCache);
         } catch (Exception e) {
-            System.out.println(e.getMessage());
-            Assert.fail();
+            Assert.fail(e.getMessage());
         }
     }
 
@@ -297,8 +288,7 @@ public class MysqlSchemaResolverTest {
             Integer size = jdbcMetadata.getPartitions(jdbcTable, Arrays.asList("20230810")).size();
             Assert.assertTrue(size == 0);
         } catch (Exception e) {
-            System.out.println(e.getMessage());
-            Assert.fail();
+            Assert.fail(e.getMessage());
         }
     }
 

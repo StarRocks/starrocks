@@ -162,7 +162,6 @@ public class MVRefreshTestBase {
         Map<String, String> infoStrings = profile.getInfoStrings();
         Assert.assertTrue(infoStrings.containsKey("MVQueryCacheStats"));
         String cacheStats = infoStrings.get("MVQueryCacheStats");
-        System.out.println(cacheStats);
         return GsonUtils.GSON.fromJson(cacheStats,
                 QueryMaterializationContext.QueryCacheStats.class);
     }

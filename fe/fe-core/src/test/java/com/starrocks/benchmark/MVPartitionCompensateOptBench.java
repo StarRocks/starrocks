@@ -65,7 +65,6 @@ public class MVPartitionCompensateOptBench extends MvRewriteTestBase {
         while (i < MV_NUMS) {
             for (String mvPartitionExpr : mvPartitionExprs) {
                 String mvName = "mv_partition_compensate_" + i;
-                System.out.println(mvName);
                 String mvSQL = String.format("CREATE MATERIALIZED VIEW if not exists %s \n" +
                         "PARTITION BY %s \n" +
                         "REFRESH DEFERRED MANUAL " +
@@ -117,8 +116,7 @@ public class MVPartitionCompensateOptBench extends MvRewriteTestBase {
                 PlanTestBase.assertNotContains(plan, "mv_partition_compensate_");
             }
         } catch (Exception e) {
-            e.printStackTrace();
-            Assert.fail();
+            Assert.fail(e.getMessage());
         }
     }
 

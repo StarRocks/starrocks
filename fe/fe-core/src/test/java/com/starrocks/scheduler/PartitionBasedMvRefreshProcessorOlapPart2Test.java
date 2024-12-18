@@ -134,7 +134,6 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVRefreshTest
         ExecPlan execPlan = processor.getMvContext().getExecPlan();
         Assert.assertTrue(execPlan != null);
         String plan = execPlan.getExplainString(StatementBase.ExplainLevel.NORMAL);
-        System.out.println(plan);
         PlanTestBase.assertContains(plan, "     TABLE: tt1\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 1: k1 > 1\n" +
@@ -216,7 +215,6 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVRefreshTest
         ExecPlan execPlan = processor.getMvContext().getExecPlan();
         Assert.assertTrue(execPlan != null);
         String plan = execPlan.getExplainString(StatementBase.ExplainLevel.NORMAL);
-        System.out.println(plan);
         PlanTestBase.assertContains(plan, "     TABLE: tt1\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 1: k1 > 1\n" +
@@ -274,12 +272,9 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVRefreshTest
                     executeInsertSql(connectContext, "insert into tbl1 values(\"2022-02-20\", 2, 10)");
                     Partition p2 = table.getPartition("p2");
                     while (p2.getDefaultPhysicalPartition().getVisibleVersion() != 3) {
-                        System.out.println("waiting for partition p2 to be visible:" +
-                                p2.getDefaultPhysicalPartition().getVisibleVersion());
                         Thread.sleep(1000);
                     }
                     MvUpdateInfo mvUpdateInfo = getMvUpdateInfo(mv);
-                    System.out.println(mvUpdateInfo);
                     Assert.assertTrue(mvUpdateInfo.getMvToRefreshType() == MvUpdateInfo.MvToRefreshType.PARTIAL);
                     Assert.assertTrue(mvUpdateInfo.isValidRewrite());
                     partitionsToRefresh1 = getPartitionNamesToRefreshForMv(mv);
@@ -465,7 +460,6 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVRefreshTest
                                         (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
                                 MvTaskRunContext mvTaskRunContext = processor.getMvContext();
                                 Map<String, String> properties = mvTaskRunContext.getProperties();
-                                System.out.println(properties);
                                 Assert.assertEquals(1, properties.size());
                                 Assert.assertTrue(properties.containsKey(MV_ID));
                                 // Ensure that table properties are not passed to the task run
