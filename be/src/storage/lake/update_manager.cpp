@@ -189,12 +189,11 @@ void UpdateManager::unload_and_remove_primary_index(int64_t tablet_id) {
     }
 }
 
-Status UpdateManager::rebuild_primary_index(const TabletMetadataPtr& metadata, MetaFileBuilder* builder,
-                                            int64_t base_version, int64_t new_version,
-                                            std::unique_ptr<std::lock_guard<std::shared_timed_mutex>>& guard) {
+StatusOr<IndexEntry*> UpdateManager::rebuild_primary_index(
+        const TabletMetadataPtr& metadata, MetaFileBuilder* builder, int64_t base_version, int64_t new_version,
+        std::unique_ptr<std::lock_guard<std::shared_timed_mutex>>& guard) {
     unload_and_remove_primary_index(metadata->id());
-    RETURN_IF_ERROR(prepare_primary_index(metadata, builder, base_version, new_version, guard));
-    return Status::OK();
+    return prepare_primary_index(metadata, builder, base_version, new_version, guard);
 }
 
 DEFINE_FAIL_POINT(hook_publish_primary_key_tablet);

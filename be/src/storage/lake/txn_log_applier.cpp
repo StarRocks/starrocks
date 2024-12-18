@@ -126,22 +126,31 @@ public:
         _index_entry = nullptr;
     }
 
-    Status check_rebuild_index() {
-        if (_metadata->has_rebuild_pindex_version() && _metadata->has_rebuild_pindex_version() == _base_version &&
-            _base_version != 0) {
-            RETURN_IF_ERROR(_tablet.update_mgr()->rebuild_primary_index(_metadata, &_builder, _base_version,
-                                                                        _new_version, _guard));
-            _metadata->set_rebuild_pindex_version(0);
+    Status check_rebuild_index(bool rebuild_pindex) {
+        if (!_has_rebuild_pindex && rebuild_pindex) {
+            for (const auto& sstable : _metadata->sstable_meta().sstables()) {
+                FileMetaPB file_meta;
+                file_meta.set_name(sstable.filename());
+                file_meta.set_size(sstable.filesize());
+                _metadata->mutable_orphan_files()->Add(std::move(file_meta));
+            }
+            _metadata->clear_sstable_meta();
+            _guard.reset(nullptr);
+            _index_entry = nullptr;
+            ASSIGN_OR_RETURN(_index_entry, _tablet.update_mgr()->rebuild_primary_index(
+                                                   _metadata, &_builder, _base_version, _new_version, _guard));
+            _has_rebuild_pindex = true;
+            LOG(INFO) << "tablet: " << _metadata->id() << " rebuild pindex, version: " << _base_version;
         }
         return Status::OK();
     }
 
-    Status apply(const TxnLogPB& log) override {
+    Status apply(const TxnLogPB& log, bool rebuild_pindex) override {
         SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(true);
         SCOPED_THREAD_LOCAL_SINGLETON_CHECK_MEM_TRACKER_SETTER(
                 config::enable_pk_strict_memcheck ? _tablet.update_mgr()->mem_tracker() : nullptr);
         _max_txn_id = std::max(_max_txn_id, log.txn_id());
-        RETURN_IF_ERROR(check_rebuild_index());
+        RETURN_IF_ERROR(check_rebuild_index(rebuild_pindex));
         if (log.has_op_write()) {
             RETURN_IF_ERROR(check_and_recover([&]() { return apply_write_log(log.op_write(), log.txn_id()); }));
         }
@@ -166,7 +175,6 @@ public:
         SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(true);
         SCOPED_THREAD_LOCAL_SINGLETON_CHECK_MEM_TRACKER_SETTER(
                 config::enable_pk_strict_memcheck ? _tablet.update_mgr()->mem_tracker() : nullptr);
-        RETURN_IF_ERROR(check_rebuild_index());
         // still need prepre primary index even there is an empty compaction
         if (_index_entry == nullptr && _has_empty_compaction) {
             // get lock to avoid gc
@@ -371,6 +379,7 @@ private:
     std::unique_ptr<std::lock_guard<std::shared_timed_mutex>> _guard{nullptr};
     // True when finalize meta file success.
     bool _has_finalized = false;
+    bool _has_rebuild_pindex = false;
 };
 
 class NonPrimaryKeyTxnLogApplier : public TxnLogApplier {
@@ -378,7 +387,7 @@ public:
     NonPrimaryKeyTxnLogApplier(const Tablet& tablet, MutableTabletMetadataPtr metadata, int64_t new_version)
             : _tablet(tablet), _metadata(std::move(metadata)), _new_version(new_version) {}
 
-    Status apply(const TxnLogPB& log) override {
+    Status apply(const TxnLogPB& log, bool rebuild_pindex) override {
         if (log.has_op_write()) {
             RETURN_IF_ERROR(apply_write_log(log.op_write()));
         }

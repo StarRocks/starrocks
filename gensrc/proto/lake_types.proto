@@ -153,7 +153,6 @@ message TabletMetadataPB {
     map<int64, TabletSchemaPB> historical_schemas = 17;
     // rowset_id -> schema_id
     map<uint32, int64> rowset_to_schema = 18;
-    optional int64 rebuild_pindex_version = 19;
 }
 
 message MetadataUpdateInfoPB {
@@ -233,5 +232,6 @@ message TxnInfoPB {
     optional bool combined_txn_log = 3;
     optional TxnTypePB txn_type = 4;
     optional bool force_publish = 5; // only used for compaction
+    optional bool rebuild_pindex = 6;
 };
 

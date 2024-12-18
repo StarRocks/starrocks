@@ -35,7 +35,7 @@ public:
 
     virtual Status init() { return Status::OK(); }
 
-    virtual Status apply(const TxnLogPB& tnx_log) = 0;
+    virtual Status apply(const TxnLogPB& tnx_log, bool rebuild_pindex) = 0;
 
     virtual Status finish() = 0;
 

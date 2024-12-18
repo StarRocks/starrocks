@@ -345,7 +345,7 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
             alter_version = txn_log->op_schema_change().alter_version();
         }
 
-        auto st = log_applier->apply(*txn_log);
+        auto st = log_applier->apply(*txn_log, txns[i].rebuild_pindex());
         if (!st.ok()) {
             LOG(WARNING) << "Fail to apply txn log : " << st << " tablet_id=" << tablet_id
                          << " txn=" << txns[i].DebugString();
@@ -382,7 +382,7 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
                 return txn_vlog.status();
             }
 
-            auto st = log_applier->apply(**txn_vlog);
+            auto st = log_applier->apply(**txn_vlog, false);
             if (!st.ok()) {
                 LOG(WARNING) << "Fail to apply " << vlog_path << ": " << st;
                 return st;

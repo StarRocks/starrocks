@@ -20,9 +20,9 @@ import com.starrocks.sql.parser.NodePosition;
 import java.util.Set;
 
 public class DropPersistentIndexClause extends AlterTableClause {
-    private final List<Long> tabletIds;
+    private final Set<Long> tabletIds;
 
-    public DropPersistentIndexClause(List<Long> tabletIds) {
+    public DropPersistentIndexClause(Set<Long> tabletIds) {
         this(tabletIds, NodePosition.ZERO);
     }
 
@@ -31,7 +31,7 @@ public class DropPersistentIndexClause extends AlterTableClause {
         this.tabletIds = tabletIds;
     }
 
-    public List<Long> getTabletIds() {
+    public Set<Long> getTabletIds() {
         return tabletIds;
     }
 
