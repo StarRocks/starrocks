@@ -95,7 +95,7 @@ public class StatisticsMetaManager extends FrontendDaemon {
     }
 
     // Add collection_size field to `column_statistics` table to collect array/map type columns
-    private boolean checkTableCompatible(String tableName) {
+    public boolean checkTableCompatible(String tableName) {
         if (!tableName.equalsIgnoreCase(FULL_STATISTICS_TABLE_NAME)) {
             return true;
         }
@@ -339,7 +339,7 @@ public class StatisticsMetaManager extends FrontendDaemon {
         }
     }
 
-    private boolean alterTable(String tableName) {
+    public boolean alterTable(String tableName) {
         ConnectContext context = StatisticUtils.buildConnectContext();
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(STATISTICS_DB_NAME);
         Table table =  GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
@@ -352,7 +352,7 @@ public class StatisticsMetaManager extends FrontendDaemon {
         }
     }
 
-    private boolean alterFullStatisticsTable(ConnectContext context, Table table) {
+    public boolean alterFullStatisticsTable(ConnectContext context, Table table) {
         for (String columnName : FULL_STATISTICS_COMPATIBLE_COLUMNS) {
             if (table.getColumn(columnName) == null) {
                 if (columnName.equalsIgnoreCase("collection_size")) {
@@ -361,7 +361,7 @@ public class StatisticsMetaManager extends FrontendDaemon {
                             false, null, null, true, defaultValueDef, "");
                     AddColumnClause addColumnClause = new AddColumnClause(columnDef, null, null, new HashMap<>());
                     AlterTableStmt alterTableStmt = new AlterTableStmt(
-                            new TableName(DEFAULT_INTERNAL_CATALOG_NAME, STATISTICS_DB_NAME, FULL_STATISTICS_TABLE_NAME),
+                            new TableName(DEFAULT_INTERNAL_CATALOG_NAME, STATISTICS_DB_NAME, table.getName()),
                             Lists.newArrayList(addColumnClause));
 
                     try {
@@ -467,4 +467,5 @@ public class StatisticsMetaManager extends FrontendDaemon {
             trySleep(1);
         }
     }
+
 }

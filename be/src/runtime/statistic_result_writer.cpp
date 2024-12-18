@@ -424,7 +424,6 @@ Status StatisticResultWriter::_fill_full_statistic_data_v4(int version, const Co
     return Status::OK();
 }
 
-
 Status StatisticResultWriter::_fill_full_statistic_data_v5(int version, const Columns& columns, const Chunk* chunk,
                                                            TFetchDataResult* result) {
     SCOPED_TIMER(_serialize_timer);

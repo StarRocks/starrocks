@@ -357,9 +357,10 @@ public class StatisticsSQLTest extends PlanTestBase {
                         Type.DATE));
         assertContains(sql, "table_id = 2 and column_name in (\"col1\", \"col2\")");
         assertContains(sql, "table_id = 2 and column_name in (\"col3\")");
-        assertContains(sql, "table_id = 2 and column_name in (\"col4\", \"col5\", \"col6\")");
+        assertContains(sql, "table_id = 2 and column_name in (\"col4\", \"col5\")");
         assertContains(sql, "table_id = 2 and column_name in (\"col7\")");
-        Assert.assertEquals(3, StringUtils.countMatches(sql, "UNION ALL"));
+        assertContains(sql, "table_id = 2 and column_name in (\"col6\")");
+        Assert.assertEquals(4, StringUtils.countMatches(sql, "UNION ALL"));
 
         sql = StatisticSQLBuilder.buildQueryFullStatisticsSQL(2L,
                 Lists.newArrayList("col1", "col2", "col3", "col4", "col5", "col6", "col7"),
@@ -395,9 +396,10 @@ public class StatisticsSQLTest extends PlanTestBase {
                         Type.DATE));
         assertContains(sql, "column_name in (\"col1\", \"col2\")");
         assertContains(sql, "column_name in (\"col3\")");
-        assertContains(sql, "column_name in (\"col4\", \"col5\", \"col6\")");
+        assertContains(sql, "column_name in (\"col4\", \"col5\")");
         assertContains(sql, "column_name in (\"col7\")");
-        Assert.assertEquals(3, StringUtils.countMatches(sql, "UNION ALL"));
+        assertContains(sql, "column_name in (\"col6\")");
+        Assert.assertEquals(4, StringUtils.countMatches(sql, "UNION ALL"));
 
         sql = StatisticSQLBuilder.buildQueryExternalFullStatisticsSQL("a",
                 Lists.newArrayList("col1", "col2", "col3", "col4", "col5", "col6", "col7"),

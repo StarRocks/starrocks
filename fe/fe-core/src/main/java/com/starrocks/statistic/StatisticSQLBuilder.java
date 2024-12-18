@@ -64,7 +64,7 @@ public class StatisticSQLBuilder {
     private static final String QUERY_FULL_STATISTIC_TEMPLATE =
             "SELECT cast(" + STATISTIC_DATA_VERSION_V2 + " as INT), $updateTime, db_id, table_id, column_name,"
                     + " sum(row_count), cast(sum(data_size) as bigint), hll_union_agg(ndv), sum(null_count), "
-                    + " cast(max(cast(max as $type)) as string), cast(min(cast(min as $type)) as string), "
+                    + " cast(max(cast(max as $type)) as string), cast(min(cast(min as $type)) as string),"
                     + " cast(avg(collection_size) as bigint)"
                     + " FROM " + StatsConstants.FULL_STATISTICS_TABLE_NAME
                     + " WHERE $predicate"

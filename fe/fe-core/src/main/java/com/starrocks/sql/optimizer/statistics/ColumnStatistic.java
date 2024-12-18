@@ -177,8 +177,8 @@ public class ColumnStatistic {
                 + maxValue + separator
                 + nullsFraction + separator
                 + averageRowSize + separator
-                + distinctValuesCount + separator
-                + collectionSize + "] "
+                + distinctValuesCount + "] "
+                + (collectionSize == DEFAULT_COLLECTION_SIZE ? "" : "COS: " + collectionSize + " ")
                 + (histogram == null ? "" : histogram.getMcvString() + " ")
                 + type;
     }

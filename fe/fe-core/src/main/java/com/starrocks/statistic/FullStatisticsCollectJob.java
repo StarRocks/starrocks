@@ -90,7 +90,7 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
                     .collect(Collectors.joining(", ")) + ") " + "\n" +
                     "SELECT " +
                     "   table_id, $targetPartitionId, column_name, db_id, table_name, \n" +
-                    "   partition_name, row_count, data_size, ndv, null_count, max, min, update_time \n" +
+                    "   partition_name, row_count, data_size, ndv, null_count, max, min, update_time, collection_size \n" +
                     "FROM " + TABLE_NAME + "\n" +
                     "WHERE `table_id`=$tableId AND `partition_id`=$sourcePartitionId";
     private static final String DELETE_PARTITION_TEMPLATE =

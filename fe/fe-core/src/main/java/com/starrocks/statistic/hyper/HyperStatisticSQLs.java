@@ -63,7 +63,7 @@ public class HyperStatisticSQLs {
             ", $hllFunction" + // VARBINARY
             ", cast($countNullFunction as BIGINT)" + // BIGINT
             ", $maxFunction" + // VARCHAR
-            ", $minFunction " + // VARCHAR
+            ", $minFunction" + // VARCHAR
             ", cast($collectionSizeFunction as BIGINT)" + // BIGINT
             " FROM `$dbName`.`$tableName` partition `$partitionName`";
 
@@ -99,7 +99,7 @@ public class HyperStatisticSQLs {
             ", $hllFunction" + // VARBINARY
             ", cast($countNullFunction as BIGINT)" + // BIGINT
             ", $maxFunction" + // VARCHAR
-            ", $minFunction " + // VARCHAR
+            ", $minFunction" + // VARCHAR
             ", cast($collectionSizeFunction as BIGINT)" + // BIGINT, collection_size
             " FROM base_cte_table ";
 
