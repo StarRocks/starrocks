@@ -2898,6 +2898,8 @@ public class StmtExecutor {
             queryDetail.setScanRows(statistics.scanRows);
             queryDetail.setCpuCostNs(statistics.cpuCostNs == null ? -1 : statistics.cpuCostNs);
             queryDetail.setMemCostBytes(statistics.memCostBytes == null ? -1 : statistics.memCostBytes);
+            queryDetail.setPeakMemBytes(statistics.peakMemBytes == null ? -1 : statistics.peakMemBytes);
+            queryDetail.setPeakMemBytesByNode(statistics.peakMemBytesByNode == null ? -1 : statistics.peakMemBytesByNode);
             queryDetail.setSpillBytes(statistics.spillBytes == null ? -1 : statistics.spillBytes);
         }
         queryDetail.setCatalog(ctx.getCurrentCatalog());

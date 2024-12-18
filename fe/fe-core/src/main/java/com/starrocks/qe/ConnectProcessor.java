@@ -205,6 +205,9 @@ public class ConnectProcessor {
             ctx.getAuditEventBuilder().setScanRows(statistics.scanRows);
             ctx.getAuditEventBuilder().setCpuCostNs(statistics.cpuCostNs == null ? -1 : statistics.cpuCostNs);
             ctx.getAuditEventBuilder().setMemCostBytes(statistics.memCostBytes == null ? -1 : statistics.memCostBytes);
+            ctx.getAuditEventBuilder().setPeakMemBytes(statistics.peakMemBytes == null ? -1 : statistics.peakMemBytes);
+            ctx.getAuditEventBuilder().setPeakMemBytesByNode(statistics.peakMemBytesByNode == null
+                    ? -1 : statistics.peakMemBytesByNode);
             ctx.getAuditEventBuilder().setSpilledBytes(statistics.spillBytes == null ? -1 : statistics.spillBytes);
             ctx.getAuditEventBuilder().setReturnRows(statistics.returnedRows == null ? 0 : statistics.returnedRows);
         }

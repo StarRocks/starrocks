@@ -55,9 +55,11 @@ QueryContext::~QueryContext() noexcept {
     // segmentation fault.
     if (_mem_tracker != nullptr) {
         LOG(INFO) << fmt::format(
-                "finished query_id:{} context life time:{} cpu costs:{} peak memusage:{} scan_bytes:{} spilled "
+                "finished query_id:{} context life time:{} cpu costs:{} total memusage:{} peak memusage:{} "
+                "scan_bytes:{} spilled "
                 "bytes:{}",
-                print_id(query_id()), lifetime(), cpu_cost(), mem_cost_bytes(), get_scan_bytes(), get_spill_bytes());
+                print_id(query_id()), lifetime(), cpu_cost(), current_mem_usage_bytes(), mem_cost_bytes(),
+                get_scan_bytes(), get_spill_bytes());
     }
 
     {
@@ -210,7 +212,8 @@ std::shared_ptr<QueryStatistics> QueryContext::intermediate_query_statistic() {
     }
 
     query_statistic->add_cpu_costs(_delta_cpu_cost_ns.exchange(0));
-    query_statistic->add_mem_costs(mem_cost_bytes());
+    query_statistic->add_mem_costs(current_mem_usage_bytes());
+    query_statistic->add_peak_mem_costs(mem_cost_bytes());
     {
         std::lock_guard l(_scan_stats_lock);
         for (const auto& [table_id, scan_stats] : _scan_stats) {
@@ -235,7 +238,8 @@ std::shared_ptr<QueryStatistics> QueryContext::final_query_statistic() {
     DCHECK(_is_final_sink) << "must be final sink";
     auto res = std::make_shared<QueryStatistics>();
     res->add_cpu_costs(cpu_cost());
-    res->add_mem_costs(mem_cost_bytes());
+    res->add_mem_costs(current_mem_usage_bytes());
+    res->add_peak_mem_costs(mem_cost_bytes());
     res->add_spill_bytes(get_spill_bytes());
 
     {
