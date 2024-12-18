@@ -618,7 +618,7 @@ StatusOr<size_t> HdfsOrcScanner::_do_get_next(ChunkPtr* chunk) {
             SCOPED_RAW_TIMER(&_app_stats.column_read_ns);
             RETURN_IF_ERROR(_orc_reader->read_next(&position));
             {
-                SCOPED_RAW_TIMER(&_app_stats.iceberg_delete_file_build_filter_ns);
+                SCOPED_RAW_TIMER(&_app_stats.build_rowid_filter_ns);
                 row_delete_filter = _orc_reader->get_row_delete_filter(_need_skip_rowids);
             }
             // read num values is how many rows actually read before doing dict filtering.

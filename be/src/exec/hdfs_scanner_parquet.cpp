@@ -47,8 +47,10 @@ Status HdfsParquetScanner::do_init(RuntimeState* runtime_state, const HdfsScanne
                 new PaimonDeleteFileBuilder(scanner_params.fs, &_need_skip_rowids));
         RETURN_IF_ERROR(paimon_delete_file_builder->build(scanner_params.paimon_deletion_file.get()));
     } else if (scanner_params.deletion_vector_descriptor != nullptr) {
+        SCOPED_RAW_TIMER(&_app_stats.deletion_vector_build_ns);
         std::unique_ptr<DeletionVector> dv = std::make_unique<DeletionVector>(scanner_params);
         RETURN_IF_ERROR(dv->fill_row_indexes(&_need_skip_rowids));
+        _app_stats.deletion_vector_build_count += 1;
     }
     return Status::OK();
 }
@@ -161,6 +163,7 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     COUNTER_UPDATE(page_skip, _app_stats.page_skip);
     group_min_round_cost->set(_app_stats.group_min_round_cost);
     do_update_iceberg_v2_counter(root, kParquetProfileSectionPrefix);
+    do_update_deletion_vector_counter(root);
     COUNTER_UPDATE(rows_before_page_index, _app_stats.rows_before_page_index);
     COUNTER_UPDATE(page_index_timer, _app_stats.page_index_ns);
     COUNTER_UPDATE(total_row_groups, _app_stats.parquet_total_row_groups);
