@@ -187,9 +187,12 @@ public class DeltaLakeScanNode extends ScanNode {
         TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
 
         THdfsScanRange hdfsScanRange = new THdfsScanRange();
-
-        hdfsScanRange.setRelative_path(URLDecoder.decode("/" + Paths.get(deltaLakeTable.getTableLocation()).
-                relativize(Paths.get(fileStatus.getPath())), StandardCharsets.UTF_8));
+        if (fileStatus.getPath().contains(deltaLakeTable.getTableLocation())) {
+            hdfsScanRange.setRelative_path(URLDecoder.decode("/" + Paths.get(deltaLakeTable.getTableLocation()).
+                    relativize(Paths.get(fileStatus.getPath())), StandardCharsets.UTF_8));
+        } else {
+            hdfsScanRange.setFull_path(URLDecoder.decode(fileStatus.getPath(), StandardCharsets.UTF_8));
+        }
         hdfsScanRange.setOffset(0);
         hdfsScanRange.setLength(fileStatus.getSize());
         hdfsScanRange.setPartition_id(partitionId);
