@@ -49,12 +49,14 @@ set(STARROCKS_LIBS
 add_library(hdfs_so SHARED IMPORTED GLOBAL)
 set_target_properties(hdfs_so PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/hadoop/lib/native/libhdfs.so)
 
-set(STARROCKS_THIRDPARTY_DEPENDENCIES
+SET(STARROCKS_FORMAT_LIBS
+    ${STARROCKS_LIBS}
     ${STARROCKS_DEPENDENCIES}
-    ${STARROCKS_STD_DEPENDENCIES}
-    ${STARROCKS_MEMORY_DEPENDENCIES_LIBS}
-    ${STARROCKS_DYNAMIC_DEPENDENCIES_LIBS}
+    -static-libstdc++ -static-libgcc -lbfd
+    -lresolv -liberty -lc -lm -ldl -rdynamic -pthread -Wl,-wrap=__cxa_throw
+    hdfs_so
 )
+message(STATUS "STARROCKS_FORMAT_LIBS is ${STARROCKS_FORMAT_LIBS}")
 
 # only build starrocks_be when TEST is off
 if (NOT ${MAKE_TEST} STREQUAL "ON")
@@ -64,15 +66,7 @@ if (NOT ${MAKE_TEST} STREQUAL "ON")
         )
 
     # This permits libraries loaded by dlopen to link to the symbols in the program.
-    target_link_libraries(starrocks_format
-        # -Wl,--whole-archive
-         ${STARROCKS_LIBS}
-        #   -Wl,--no-whole-archive
-        ${STARROCKS_DEPENDENCIES}
-        ${STARROCKS_STD_DEPENDENCIES}
-        ${STARROCKS_DYNAMIC_DEPENDENCIES_LIBS}
-        hdfs_so
-    )
+    target_link_libraries(starrocks_format ${STARROCKS_FORMAT_LIBS})
 
     install(DIRECTORY DESTINATION ${OUTPUT_DIR}/format-lib/)
 
