@@ -49,6 +49,10 @@ public class AuditStatisticsUtil {
         return pb;
     }
 
+    /**
+     * NOTE: it must be exactly same as BE logic:
+     * void QueryStatistics::merge_pb(const PQueryStatistics& statistics);
+     */
     public static void mergeProtobuf(PQueryStatistics from, PQueryStatistics to) {
         if (from == null || to == null) {
             return;
@@ -81,7 +85,7 @@ public class AuditStatisticsUtil {
             if (to.memCostBytes == null) {
                 to.memCostBytes = 0L;
             }
-            to.memCostBytes += from.memCostBytes;
+            to.memCostBytes = Math.max(to.memCostBytes, from.memCostBytes);
         }
         if (from.spillBytes != null) {
             if (to.spillBytes == null) {
