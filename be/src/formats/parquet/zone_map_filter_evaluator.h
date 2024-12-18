@@ -32,6 +32,19 @@ public:
                    std::ranges::any_of(predicates, [&](const auto* pred) { return pred->zone_map_filter(detail); });
         }
     }
+
+    template <CompoundNodeType Type>
+    static void merge_row_ranges(std::optional<SparseRange<uint64_t>>& dest, SparseRange<uint64_t>& source) {
+        if (!dest.has_value()) {
+            dest = std::move(source);
+        } else {
+            if constexpr (Type == CompoundNodeType::AND) {
+                dest.value() &= source;
+            } else {
+                dest.value() |= source;
+            }
+        }
+    }
 };
 
 template <FilterLevel level>
@@ -70,29 +83,16 @@ struct ZoneMapEvaluator {
                 }
             }
 
-            merge_row_ranges<Type>(row_ranges, cur_row_ranges);
+            ZoneMapEvaluatorUtils::merge_row_ranges<Type>(row_ranges, cur_row_ranges);
         }
 
         for (const auto& child : node.compound_children()) {
             ASSIGN_OR_RETURN(auto cur_row_ranges_opt, child.visit(*this));
             if (cur_row_ranges_opt.has_value()) {
-                merge_row_ranges<Type>(row_ranges, cur_row_ranges_opt.value());
+                ZoneMapEvaluatorUtils::merge_row_ranges<Type>(row_ranges, cur_row_ranges_opt.value());
             }
         }
         return row_ranges;
-    }
-
-    template <CompoundNodeType Type>
-    static void merge_row_ranges(std::optional<SparseRange<uint64_t>>& dest, SparseRange<uint64_t>& source) {
-        if (!dest.has_value()) {
-            dest = std::move(source);
-        } else {
-            if constexpr (Type == CompoundNodeType::AND) {
-                dest.value() &= source;
-            } else {
-                dest.value() |= source;
-            }
-        }
     }
 
     const PredicateTree& pred_tree;
