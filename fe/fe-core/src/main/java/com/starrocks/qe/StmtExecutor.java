@@ -690,7 +690,9 @@ public class StmtExecutor {
                         } else {
                             // Release all resources after the query finish as soon as possible, as query profile is
                             // asynchronous which can be delayed a long time.
-                            coord.onReleaseSlots();
+                            if (coord != null) {
+                                coord.onReleaseSlots();
+                            }
 
                             if (context instanceof ArrowFlightSqlConnectContext) {
                                 isAsync = true;
