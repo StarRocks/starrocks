@@ -247,13 +247,13 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
         {
             new Expectations() {
                 {
-                    streamLoadMgr.beginLoadTask(
+                    streamLoadMgr.beginLoadTaskFromFrontend(
                             anyString, anyString, anyString, anyString, anyString,
                             anyLong, anyInt, anyInt, (TransactionResult) any);
                     times = 1;
                     result = new Delegate<Void>() {
 
-                        public void beginLoadTask(String dbName,
+                        public void beginLoadTaskFromFrontend(String dbName,
                                                   String tableName,
                                                   String label,
                                                   String user,
@@ -287,7 +287,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
         {
             new Expectations() {
                 {
-                    streamLoadMgr.beginLoadTask(
+                    streamLoadMgr.beginLoadTaskFromFrontend(
                             anyString, anyString, anyString, anyString, anyString,
                             anyLong, anyInt, anyInt, (TransactionResult) any);
                     times = 1;
