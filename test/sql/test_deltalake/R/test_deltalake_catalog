@@ -281,6 +281,14 @@ select task_id, request_id, parent_request_id from delta_test_${uuid0}.delta_oss
 -- result:
 UW-33393	111A893698524BD68886AD339701DAAA	111259989C2845BAAEF898D81951B6A1
 -- !result
+select col_tinyint,col_array,col_map,col_struct from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type_shallow_clone where col_tinyint < 6 order by col_tinyint;
+-- result:
+1	[1,2,3]	{"key1":"value1","key2":"value2"}	{"name":"Alice","sex":"female","age":30}
+2	[4,5,6]	{"key3":"value3","key4":"value4"}	{"name":"Bob","sex":"male","age":25}
+3	[7,8,9]	{"key5":"value5","key6":"value6"}	{"name":"Charlie","sex":"male","age":35}
+4	[10,11,12]	{"key7":"value7","key8":"value8"}	{"name":"Diana","sex":"female","age":28}
+5	[13,14,15]	{"key9":"value9","key10":"value10"}	{"name":"Edward","sex":"male","age":40}
+-- !result
 drop catalog delta_test_${uuid0}
 -- result:
 -- !result
