@@ -15,6 +15,7 @@
 package com.starrocks.epack.warehouse;
 
 import com.google.common.collect.Maps;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.ExceptionChecker;
@@ -79,6 +80,14 @@ public class WarehouseManagerEPackTest {
         DropWarehouseStmt dropStmt = new DropWarehouseStmt(false, "wh2");
         ExceptionChecker.expectThrowsWithMsg(DdlException.class, "Warehouse name: wh2 not exist.",
                 () -> mgr.dropWarehouse(dropStmt));
+
+        // warehouse used by compaction
+        Config.lake_compaction_warehouse = "wh1";
+        DropWarehouseStmt dropStmt2 = new DropWarehouseStmt(false, "wh1");
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class, "warehouse wh1 is used by compaction or background job," +
+                " adjust lake_compaction_warehouse or lake_background_warehouse first",
+                () -> mgr.dropWarehouse(dropStmt2));
+        Config.lake_compaction_warehouse = "default_warehouse";
     }
 
     @Test

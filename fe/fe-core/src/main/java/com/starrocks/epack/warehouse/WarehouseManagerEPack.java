@@ -273,6 +273,11 @@ public class WarehouseManagerEPack extends WarehouseManager {
                 }
                 ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("name: %s", warehouseName));
             }
+            if (warehouseName.equals(Config.lake_compaction_warehouse) ||
+                    warehouseName.equals(Config.lake_background_warehouse)) {
+                ErrorReport.reportDdlException(String.format("warehouse %s is used by compaction or background job, adjust " +
+                        "lake_compaction_warehouse or lake_background_warehouse first", warehouseName));
+            }
 
             nameToWh.remove(warehouseName);
             idToWh.remove(warehouse.getId());
