@@ -870,6 +870,7 @@ void FileReaderTest::_create_struct_subfield_predicate_conjunct_ctxs(TExprOpcode
     node0.__isset.opcode = true;
     node0.__isset.child_type = true;
     node0.type = gen_type_desc(TPrimitiveType::BOOLEAN);
+    node0.__set_is_monotonic(true);
     nodes.emplace_back(node0);
 
     TExprNode node1;
@@ -879,6 +880,7 @@ void FileReaderTest::_create_struct_subfield_predicate_conjunct_ctxs(TExprOpcode
     node1.num_children = 1;
     node1.used_subfield_names = subfiled_path;
     node1.__isset.used_subfield_names = true;
+    node1.__set_is_monotonic(true);
     nodes.emplace_back(node1);
 
     TExprNode node2;
@@ -890,6 +892,7 @@ void FileReaderTest::_create_struct_subfield_predicate_conjunct_ctxs(TExprOpcode
     t_slot_ref.tuple_id = 0;
     node2.__set_slot_ref(t_slot_ref);
     node2.is_nullable = true;
+    node2.__set_is_monotonic(true);
     nodes.emplace_back(node2);
 
     TExprNode node3;
@@ -900,6 +903,7 @@ void FileReaderTest::_create_struct_subfield_predicate_conjunct_ctxs(TExprOpcode
     string_literal.value = value;
     node3.__set_string_literal(string_literal);
     node3.is_nullable = false;
+    node3.__set_is_monotonic(true);
     nodes.emplace_back(node3);
 
     TExpr t_expr;
@@ -3103,6 +3107,87 @@ TEST_F(FileReaderTest, TestStructSubfieldDictFilter) {
         }
     }
     EXPECT_EQ(100, total_row_nums);
+}
+
+TEST_F(FileReaderTest, TestStructSubfieldZonemap) {
+    const std::string struct_in_struct_file_path =
+            "./be/test/formats/parquet/test_data/test_parquet_struct_in_struct.parquet";
+    auto ctx = _create_file_struct_in_struct_read_context(struct_in_struct_file_path);
+
+    auto file = _create_file(struct_in_struct_file_path);
+
+    TypeDescriptor type_struct = TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT);
+    type_struct.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR));
+    type_struct.field_names.emplace_back("c0");
+
+    type_struct.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR));
+    type_struct.field_names.emplace_back("c1");
+
+    TypeDescriptor type_struct_in_struct = TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT);
+    type_struct_in_struct.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR));
+    type_struct_in_struct.field_names.emplace_back("c0");
+
+    type_struct_in_struct.children.emplace_back(type_struct);
+    type_struct_in_struct.field_names.emplace_back("c_struct");
+
+    std::vector<std::string> subfield_path({"c_struct", "c0"});
+
+    _create_struct_subfield_predicate_conjunct_ctxs(TExprOpcode::EQ, 3, type_struct_in_struct, subfield_path, "0",
+                                                    &ctx->conjunct_ctxs_by_slot[3]);
+
+    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
+                                                    std::filesystem::file_size(struct_in_struct_file_path));
+
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT), true),
+                         chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT), true),
+                         chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(type_struct, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(type_struct_in_struct, true), chunk->num_columns());
+
+    // setup OlapScanConjunctsManager
+    // TypeDescriptor type_struct = TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT);
+    // type_struct.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR));
+    // type_struct.field_names.emplace_back("c0");
+    //
+    // type_struct.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR));
+    // type_struct.field_names.emplace_back("c1");
+    //
+    // TypeDescriptor type_struct_in_struct = TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT);
+    // type_struct_in_struct.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR));
+    // type_struct_in_struct.field_names.emplace_back("c0");
+    //
+    // type_struct_in_struct.children.emplace_back(type_struct);
+    // type_struct_in_struct.field_names.emplace_back("c_struct");
+
+    // tuple desc
+    Utils::SlotDesc slot_descs[] = {
+            {"c0", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
+            {"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
+            {"c_struct", type_struct},
+            {"c_struct_struct", type_struct_in_struct},
+            {""},
+    };
+    TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    // RETURN_IF_ERROR(Expr::clone_if_not_exists(state, &_pool, _min_max_conjunct_ctxs, &cloned_conjunct_ctxs));
+    ParquetUTBase::setup_conjuncts_manager(ctx->conjunct_ctxs_by_slot[3], tuple_desc, _runtime_state, ctx);
+
+    Status status = file_reader->init(ctx);
+    ASSERT_TRUE(status.ok());
+    EXPECT_EQ(1, file_reader->_group_reader_param.stats->parquet_filtered_row_groups);
+    EXPECT_EQ(0, file_reader->_row_group_readers.size());
+    size_t total_row_nums = 0;
+    while (!status.is_end_of_file()) {
+        chunk->reset();
+        status = file_reader->get_next(&chunk);
+        chunk->check_or_die();
+        total_row_nums += chunk->num_rows();
+    }
+    EXPECT_EQ(0, total_row_nums);
+
+    ctx->predicate_free_pool.clear();
+    ctx->conjuncts_manager = nullptr;
 }
 
 TEST_F(FileReaderTest, TestReadRoundByRound) {
