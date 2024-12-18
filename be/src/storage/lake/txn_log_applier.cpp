@@ -128,7 +128,6 @@ public:
 
     Status check_rebuild_index(bool rebuild_pindex) {
         if (!_has_rebuild_pindex && rebuild_pindex) {
-            LOG(INFO) << "tablet: " << _metadata->id() << " rebuild pindex";
             for (const auto& sstable : _metadata->sstable_meta().sstables()) {
                 FileMetaPB file_meta;
                 file_meta.set_name(sstable.filename());
@@ -141,7 +140,6 @@ public:
             ASSIGN_OR_RETURN(_index_entry, _tablet.update_mgr()->rebuild_primary_index(
                                                    _metadata, &_builder, _base_version, _new_version, _guard));
             _has_rebuild_pindex = true;
-            LOG(INFO) << "tablet: " << _metadata->id() << " rebuild pindex, version: " << _base_version;
         }
         return Status::OK();
     }

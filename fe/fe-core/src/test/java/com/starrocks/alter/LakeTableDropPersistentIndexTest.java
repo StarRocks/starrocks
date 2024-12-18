@@ -29,7 +29,10 @@ import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.utframe.UtFrameUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -37,6 +40,8 @@ import org.junit.Test;
 import java.util.List;
 
 public class LakeTableDropPersistentIndexTest {
+    private static final Logger LOG = LogManager.getLogger(LakeTableDropPersistentIndexTest.class);
+
     private static ConnectContext connectContext;
     private static final String DB_NAME = "test_lake_drop_pindex";
 
@@ -94,6 +99,17 @@ public class LakeTableDropPersistentIndexTest {
         }
 
         {
+            table.setPersistentIndexType(TPersistentIndexType.CLOUD_NATIVE);
+            String sql = "ALTER TABLE t0 DROP PERSISTENT INDEX ON 2333";
+            AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            try {
+                GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(connectContext, stmt);
+            } catch (Exception e) {
+                // do nothing
+            }
+        }
+
+        {
             String sql = "ALTER TABLE t0 DROP PERSISTENT INDEX ON " + String.valueOf(tablets.get(0).getId());
             AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             try {
@@ -104,12 +120,17 @@ public class LakeTableDropPersistentIndexTest {
 
                 physicalPartitions.get(0).setVisibleVersion(10, 1000);
                 sql = "ALTER TABLE t0 DROP PERSISTENT INDEX ON " + String.valueOf(tablets.get(1).getId());
+                stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
                 GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(connectContext, stmt);
+                long rebuildVersion = ((LakeTablet) tablets.get(0)).rebuildPindexVersion();
+                LOG.info("tablet {} rebuildPindexVersion: {}, visible version: {}", tablets.get(0).getId(),
+                        rebuildVersion, visibleVersion);
                 Assert.assertTrue(((LakeTablet) tablets.get(0)).rebuildPindexVersion() == visibleVersion);
                 Assert.assertTrue(((LakeTablet) tablets.get(1)).rebuildPindexVersion() == 10);
 
             } catch (Exception e) {
                 // do nothing
+                Assert.assertTrue(false);
             }
         }
 

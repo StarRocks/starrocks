@@ -528,7 +528,7 @@ TEST_F(AlterTabletMetaTest, test_alter_persistent_index_type) {
         op_write->mutable_rowset()->set_overlapped(false);
         ASSERT_OK(_tablet_mgr->put_txn_log(txn_log));
         writer->close();
-        ASSERT_OK(publish_single_version(_tablet_metadata->id(), version++, txn_id).status());
+        ASSERT_OK(publish_single_version(_tablet_metadata->id(), version++, txn_id, rebuild_pindex).status());
     };
 
     // 1. change to local index
@@ -549,14 +549,12 @@ TEST_F(AlterTabletMetaTest, test_alter_persistent_index_type) {
     for (int i = 0; i < 10; i++) {
         write_data_fn(false);
     }
-    config::l0_max_mem_usage = old_val;
     ASSIGN_OR_ABORT(auto tablet_meta3, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version - 1));
     ASSERT_TRUE(tablet_meta3->sstable_meta().sstables_size() > 0);
-    
+
     // 4. rebuild pindex
-    {
-        write_data_fn(true);
-    }
+    { write_data_fn(true); }
+    config::l0_max_mem_usage = old_val;
 
     // 5. change back to local
     change_index_fn(true, TPersistentIndexType::LOCAL);
