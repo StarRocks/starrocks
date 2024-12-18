@@ -927,11 +927,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         return null;
     }
 
-<<<<<<< HEAD
-    public void unprotectedBeginTxn(boolean replay) throws UserException {
-=======
-    public void unprotectedBeginTxn(boolean replay, boolean isBackendTxn, TUniqueId requestId) throws StarRocksException {
->>>>>>> fb125e1508 ([BugFix] Fix stream load backend/frontend streaming (#53893))
+    public void unprotectedBeginTxn(boolean replay, boolean isBackendTxn, TUniqueId requestId) throws UserException {
         this.txnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().beginTransaction(
                 dbId, Lists.newArrayList(tableId), label, requestId,
                 new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
