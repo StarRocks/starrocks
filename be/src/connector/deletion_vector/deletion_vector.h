@@ -52,10 +52,10 @@ private:
     std::string assemble_deletion_vector_path(const std::string& table_location, std::string&& uuid,
                                               std::string& prefix) const;
 
-    void update_dv_file_io_counter(
-            RuntimeProfile* parent_profile, const HdfsScanStats& app_stats, const HdfsScanStats& fs_stats,
-            const std::shared_ptr<io::CacheInputStream>& cache_input_stream,
-            const std::shared_ptr<io::SharedBufferedInputStream>& shared_buffered_input_stream);
+    void update_dv_file_io_counter(RuntimeProfile* parent_profile, const HdfsScanStats& app_stats,
+                                   const HdfsScanStats& fs_stats,
+                                   const std::shared_ptr<io::CacheInputStream>& cache_input_stream,
+                                   const std::shared_ptr<io::SharedBufferedInputStream>& shared_buffered_input_stream);
 
     const std::shared_ptr<TDeletionVectorDescriptor> _deletion_vector_descriptor;
     const HdfsScannerParams& _params;
