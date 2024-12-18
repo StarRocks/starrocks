@@ -202,7 +202,7 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
         // row id filter
         if ((nullptr != _need_skip_rowids) && !_need_skip_rowids->empty()) {
             {
-                SCOPED_RAW_TIMER(&_param.stats->iceberg_delete_file_build_filter_ns);
+                SCOPED_RAW_TIMER(&_param.stats->build_rowid_filter_ns);
                 auto start_str = _need_skip_rowids->lower_bound(r.begin());
                 auto end_str = _need_skip_rowids->upper_bound(r.end() - 1);
 

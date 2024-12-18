@@ -38,6 +38,7 @@ public:
     static const uint32_t MAGIC_NUMBER = 1681511377;
     // UUIDs always encode into 20 characters.
     static const uint32_t ENCODED_UUID_LENGTH = 20;
+    static const std::string DELETION_VECTOR;
 
 private:
     StatusOr<std::unique_ptr<RandomAccessFile>> open_random_access_file(
@@ -50,6 +51,11 @@ private:
 
     std::string assemble_deletion_vector_path(const std::string& table_location, std::string&& uuid,
                                               std::string& prefix) const;
+
+    void update_dv_file_io_counter(RuntimeProfile* parent_profile, const HdfsScanStats& app_stats,
+                                   const HdfsScanStats& fs_stats,
+                                   const std::shared_ptr<io::CacheInputStream>& cache_input_stream,
+                                   const std::shared_ptr<io::SharedBufferedInputStream>& shared_buffered_input_stream);
 
     const std::shared_ptr<TDeletionVectorDescriptor> _deletion_vector_descriptor;
     const HdfsScannerParams& _params;
