@@ -438,7 +438,6 @@ struct TTabletMetaInfo {
     // |create_schema_file| only used when |tablet_schema| exists
     10: optional bool create_schema_file;
     11: optional TPersistentIndexType persistent_index_type;
-    12: optional i64 rebuild_pindex_version;
 }
 
 struct TUpdateTabletMetaInfoReq {

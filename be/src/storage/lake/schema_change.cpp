@@ -410,16 +410,7 @@ Status SchemaChangeHandler::process_update_tablet_meta(const TUpdateTabletMetaIn
     return Status::OK();
 }
 
-Status SchemaChangeHandler::do_drop_persistent_index(const TTabletMetaInfo& tablet_meta_info, int64_t txn_id) {
-    auto tablet_id = tablet_meta_info.tablet_id;
-    auto version = tablet_meta_info.rebuild_pindex_version;
-    return _tablet_manager->update_tablet_meta_rebuild_pindex_version(tablet_id, version);
-}
-
 Status SchemaChangeHandler::do_process_update_tablet_meta(const TTabletMetaInfo& tablet_meta_info, int64_t txn_id) {
-    if (tablet_meta_info.__isset.meta_type && tablet_meta_info.meta_type == TTabletMetaType::DROP_PERSISTENT_INDEX) {
-        return do_drop_persistent_index(tablet_meta_info, txn_id);
-    }
     auto timer = MonotonicStopWatch{};
     timer.start();
     LOG(INFO) << "Updating tablet metadata: " << ThriftDebugString(tablet_meta_info);

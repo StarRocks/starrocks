@@ -45,7 +45,6 @@ private:
     Status convert_historical_rowsets(const SchemaChangeParams& sc_params, TxnLogPB_OpSchemaChange* op_schema_change);
 
     Status do_process_update_tablet_meta(const TTabletMetaInfo& request, int64_t txn_id);
-    Status do_drop_persistent_index(const TTabletMetaInfo& request, int64_t txn_id);
 
     TabletManager* _tablet_manager;
 };
