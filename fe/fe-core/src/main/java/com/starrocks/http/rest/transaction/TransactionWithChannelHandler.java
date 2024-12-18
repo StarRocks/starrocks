@@ -58,7 +58,7 @@ public class TransactionWithChannelHandler implements TransactionOperationHandle
                             "Channel ID should be between [0, %d].", (channel.getNum() - 1)));
                 }
 
-                GlobalStateMgr.getCurrentState().getStreamLoadMgr().beginLoadTask(
+                GlobalStateMgr.getCurrentState().getStreamLoadMgr().beginLoadTaskFromFrontend(
                         dbName, tableName, label, "", "", timeoutMillis, channel.getNum(), channel.getId(), result);
                 return new ResultWrapper(result);
             case TXN_PREPARE:

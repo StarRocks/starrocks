@@ -76,10 +76,10 @@ public class ShowStreamLoadTest {
 
         String labelName = "label_stream_load";
         TransactionResult resp = new TransactionResult();
-        streamLoadManager.beginLoadTask(dbName, tableName, labelName, "", "", timeoutMillis, resp, false,
+        streamLoadManager.beginLoadTaskFromBackend(dbName, tableName, labelName, null, "", "", timeoutMillis, resp, false,
                 WarehouseManager.DEFAULT_WAREHOUSE_ID);
         labelName = "label_routine_load";
-        streamLoadManager.beginLoadTask(dbName, tableName, labelName, "", "", timeoutMillis, resp, true,
+        streamLoadManager.beginLoadTaskFromBackend(dbName, tableName, labelName, null, "", "", timeoutMillis, resp, true,
                 WarehouseManager.DEFAULT_WAREHOUSE_ID);
 
         String sql = "show all stream load";
