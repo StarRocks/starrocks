@@ -67,6 +67,9 @@ public:
 
     // Build a equi-width histogram
     DEFINE_VECTORIZED_FN(equiwidth_bucket);
+
+    // Allocate memory to simulate the large memory usage
+    DEFINE_VECTORIZED_FN(mock_memory_usage);
 };
 
 } // namespace starrocks

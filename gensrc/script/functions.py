@@ -733,6 +733,7 @@ vectorized_functions = [
     [100019, 'assert_true', True, False, 'BOOLEAN', ['BOOLEAN', "VARCHAR"], 'UtilityFunctions::assert_true'],
     [100018, 'host_name', True, False, 'VARCHAR', [], "UtilityFunctions::host_name"],
     [100020, 'get_query_profile', True, False, 'VARCHAR', ['VARCHAR'], "UtilityFunctions::get_query_profile"],
+    [100023, 'mock_memory_usage', True, False, 'BOOLEAN', ['BIGINT'], "UtilityFunctions::mock_memory_usage"],
 
     # json string function
     [110022, "get_json_int", False, False, "BIGINT", ["VARCHAR", "VARCHAR"], "JsonFunctions::get_json_bigint",

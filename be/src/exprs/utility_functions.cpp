@@ -370,4 +370,25 @@ StatusOr<ColumnPtr> UtilityFunctions::equiwidth_bucket(FunctionContext* context,
     return builder.build(false);
 }
 
+StatusOr<ColumnPtr> UtilityFunctions::mock_memory_usage(FunctionContext* context, const Columns& columns) {
+    ColumnViewer<TYPE_BIGINT> viewer_bytes(columns[0]);
+
+    size_t rows = columns[0]->size();
+    ColumnBuilder<TYPE_BOOLEAN> builder(rows);
+    for (size_t i = 0; i < rows; i++) {
+        size_t bytes = viewer_bytes.value(i);
+        void* p = malloc(bytes);
+        if (p != nullptr) {
+            // touch it to make page fault
+            memset(p, 1, bytes);
+            free(p);
+        } else {
+            return Status::MemoryAllocFailed("malloc failed");
+        }
+        builder.append(true);
+    }
+
+    return builder.build(true);
+}
+
 } // namespace starrocks
