@@ -121,6 +121,7 @@ public:
 
     int64_t to_unix_second() const;
     int64_t to_unixtime() const;
+    int64_t to_unixtime(const cctz::time_zone& ctz) const;
 
     bool from_unixtime(int64_t second, const std::string& timezone);
     void from_unixtime(int64_t second, const cctz::time_zone& ctz);

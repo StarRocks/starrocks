@@ -294,7 +294,7 @@ if [ ${BUILD_BE} -eq 1 ] && [ ${BUILD_FORMAT_LIB} -eq 1 ]; then
     exit 1
 fi
 if [ ${BUILD_FORMAT_LIB} -eq 1 ]; then
-    echo "do not build java extendsions when build format-lib."
+    echo "do not build java extensions when build format-lib."
     BUILD_JAVA_EXT=OFF
 fi
 
@@ -373,9 +373,11 @@ if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
         echo "Error: cmake is not found"
         exit 1
     fi
+
     # When build starrocks format lib, USE_STAROS must be ON
     if [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
         USE_STAROS=ON
+        WITH_TENANN=OFF
     fi
 
     CMAKE_BUILD_TYPE=$BUILD_TYPE
