@@ -1,0 +1,35 @@
+-- name: test_mock_memory_usage@sequential
+
+admin set frontend config('profile_info_format'='json');
+set enable_async_profile=false;
+
+create view inspect_last_query_memory_2digit as 
+select 
+    left(get_json_string(get_query_profile(last_query_id()), 'Query.Execution.QueryPeakMemoryUsagePerNode'), 2) as max_per_node,
+    left(get_json_string(get_query_profile(last_query_id()), 'Query.Execution.QuerySumMemoryUsage'), 2) as sum_all_node;
+
+
+-- all nodes use same memory
+select mock_memory_usage(20 * 1024 * 1024);
+select  * from inspect_last_query_memory_2digit;
+
+-- skew
+create table t1 (
+    id int,
+    bytes bigint
+)
+distributed by random;
+
+insert into t1 values
+    (1, 20 * 1024 * 1024),
+    (2, 30 * 1024 * 1024),
+    (3, 40 * 1024 * 1024);
+
+select mock_memory_usage(bytes) from t1;
+select  * from inspect_last_query_memory_2digit;
+
+-- complex query
+select count(*), mock_memory_usage(20 * 1024*1024) from t1 a join t1 b;
+select  * from inspect_last_query_memory_2digit;
+
+admin set frontend config('profile_info_format'='default');

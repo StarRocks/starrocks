@@ -1,0 +1,63 @@
+-- name: test_mock_memory_usage@sequential
+admin set frontend config('profile_info_format'='json');
+-- result:
+-- !result
+set enable_async_profile=false;
+-- result:
+-- !result
+create view inspect_last_query_memory_2digit as 
+select 
+    left(get_json_string(get_query_profile(last_query_id()), 'Query.Execution.QueryPeakMemoryUsagePerNode'), 2) as max_per_node,
+    left(get_json_string(get_query_profile(last_query_id()), 'Query.Execution.QuerySumMemoryUsage'), 2) as sum_all_node;
+-- result:
+-- !result
+select mock_memory_usage(20 * 1024 * 1024);
+-- result:
+1
+-- !result
+select  * from inspect_last_query_memory_2digit;
+-- result:
+20	20
+-- !result
+create table t1 (
+    id int,
+    bytes bigint
+)
+distributed by random;
+-- result:
+-- !result
+insert into t1 values
+    (1, 20 * 1024 * 1024),
+    (2, 30 * 1024 * 1024),
+    (3, 40 * 1024 * 1024);
+-- result:
+-- !result
+select mock_memory_usage(bytes) from t1;
+-- result:
+1
+1
+1
+-- !result
+select  * from inspect_last_query_memory_2digit;
+-- result:
+40	40
+-- !result
+select count(*), mock_memory_usage(20 * 1024*1024) from t1 a join t1 b;
+-- result:
+9	1
+-- !result
+select  * from inspect_last_query_memory_2digit;
+-- result:
+20	20
+-- !result
+select mock_memory_usage(20 * 1024*1024), * from t1 limit 1;
+-- result:
+1	1	20971520
+-- !result
+select  * from inspect_last_query_memory_2digit;
+-- result:
+20	20
+-- !result
+admin set frontend config('profile_info_format'='default');
+-- result:
+-- !result
