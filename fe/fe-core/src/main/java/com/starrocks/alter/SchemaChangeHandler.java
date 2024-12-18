@@ -2147,26 +2147,23 @@ public class SchemaChangeHandler extends AlterHandler {
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
 
         for (Long tabletId : dropPindexTablets) {
-            TabletMeta tabletMeta = invertedIndex.getTabletMeta(tabletId);
-            if (tabletMeta == null) {
-                throw new DdlException(String.format("tablet %d is not exist", tabletId));
+            try {
+                TabletMeta tabletMeta = invertedIndex.getTabletMeta(tabletId);
+                if (tabletMeta == null) {
+                    throw new DdlException(String.format("tablet %d is not exist", tabletId));
+                }
+                long partitionId = tabletMeta.getPhysicalPartitionId();
+                PhysicalPartition partition = olapTable.getPhysicalPartition(partitionId);
+                MaterializedIndex index = partition.getIndex(tabletMeta.getIndexId());
+                Tablet tablet = index.getTablet(tabletId);
+                LakeTablet lakeTablet = (LakeTablet) tablet;
+                lakeTablet.setRebuildPindexVersion(partition.getVisibleVersion());
+            } catch (Exception e) {
+                LOG.warn(String.format("drop persistent index on tablet %d failed, error: %s",
+                        tabletId, e.getMessage()));
+                throw new DdlException(String.format("drop persistent index on tablet %d failed, error: %s",
+                    tabletId, e.getMessage()));
             }
-            long partitionId = tabletMeta.getPhysicalPartitionId();
-            PhysicalPartition partition = olapTable.getPhysicalPartition(partitionId);
-            if (partition == null) {
-                throw new DdlException(String.format("can not find partition of tablet %d", tabletId));
-            }
-
-            MaterializedIndex index = partition.getIndex(tabletMeta.getIndexId());
-            if (index == null) {
-                throw new DdlException(String.format("can not find index of tablet %d", tabletId));
-            }
-            Tablet tablet = index.getTablet(tabletId);
-            if (tablet == null) {
-                throw new DdlException(String.format("tablet %d does not exist", tabletId));
-            }
-            LakeTablet lakeTablet = (LakeTablet) tablet;
-            lakeTablet.setRebuildPindexVersion(partition.getVisibleVersion());
         }
     }
 

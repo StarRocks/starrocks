@@ -128,6 +128,7 @@ public:
 
     Status check_rebuild_index(bool rebuild_pindex) {
         if (!_has_rebuild_pindex && rebuild_pindex) {
+            LOG(INFO) << "tablet: " << _metadata->id() << " rebuild pindex";
             for (const auto& sstable : _metadata->sstable_meta().sstables()) {
                 FileMetaPB file_meta;
                 file_meta.set_name(sstable.filename());
