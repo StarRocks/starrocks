@@ -201,6 +201,7 @@ public class TabletInvertedIndex implements MemoryTrackable {
         if (tablet instanceof LakeTablet) {
             return;
         }
+        // for LocalTablet, the cleanup is done in `ReportHandler`
         markTabletForceDelete(tablet.getId(), tablet.getBackendIds());
     }
 

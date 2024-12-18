@@ -27,6 +27,7 @@ import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.RecyclePartitionInfo;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.proto.DropTableRequest;
@@ -45,6 +46,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 public class LakeTableHelper {
     private static final Logger LOG = LogManager.getLogger(LakeTableHelper.class);
@@ -73,6 +75,18 @@ public class LakeTableHelper {
             table.removeTabletsFromInvertedIndex();
         }
         return succ;
+    }
+
+    // for lake table, send the partition to recycle bin
+    public static void addPartitionToRecycleBin(OlapTable table, long dbId, Set<Partition> recycleLakePartitions) {
+        if (!(table instanceof LakeTable)) {
+            return;
+        }
+        recycleLakePartitions.forEach(partition -> {
+            RecyclePartitionInfo recyclePartitionInfo = table.buildRecyclePartitionInfo(dbId, partition);
+            recyclePartitionInfo.setRecoverable(false);
+            GlobalStateMgr.getCurrentState().getRecycleBin().recyclePartition(recyclePartitionInfo);
+        });
     }
 
     static AlterJobV2Builder alterTable(OlapTable table) {

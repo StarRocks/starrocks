@@ -40,6 +40,8 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.lake.LakeTable;
+import com.starrocks.lake.LakeTableHelper;
 import com.starrocks.load.PartitionUtils;
 import com.starrocks.persist.ReplacePartitionOperationLog;
 import com.starrocks.persist.gson.GsonPostProcessable;
@@ -472,11 +474,19 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
             }
 
             Set<Tablet> sourceTablets = Sets.newHashSet();
+            Set<Partition> recycleLakePartitions = Sets.newHashSet();
             sourcePartitionNames.forEach(name -> {
                 Partition partition = targetTable.getPartition(name);
-                for (MaterializedIndex index
-                        : partition.getDefaultPhysicalPartition().getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
-                    sourceTablets.addAll(index.getTablets());
+                if (partition != null) {
+                    if (targetTable instanceof LakeTable) {
+                        recycleLakePartitions.add(partition);
+                    } else {
+                        for (MaterializedIndex index
+                                : partition.getDefaultPhysicalPartition()
+                                .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                            sourceTablets.addAll(index.getTablets());
+                        }
+                    }
                 }
             });
 
@@ -496,6 +506,7 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
             // mark all source tablet ids force delete to drop it directly on BE,
             // not to move it to trash
             sourceTablets.forEach(GlobalStateMgr.getCurrentState().getTabletInvertedIndex()::markTabletForceDelete);
+            LakeTableHelper.addPartitionToRecycleBin(targetTable, dbId, recycleLakePartitions);
 
             try {
                 GlobalStateMgr.getCurrentState().getColocateTableIndex().updateLakeTableColocationInfo(targetTable,
@@ -569,16 +580,21 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
             Preconditions.checkState(table instanceof OlapTable);
             OlapTable targetTable = (OlapTable) table;
             Set<Tablet> sourceTablets = Sets.newHashSet();
+            Set<Partition> recycleLakePartitions = Sets.newHashSet();
             if (getTmpPartitionIds() != null) {
                 for (long pid : getTmpPartitionIds()) {
                     LOG.info("optimize job {} drop temp partition:{}", jobId, pid);
 
                     Partition partition = targetTable.getPartition(pid);
                     if (partition != null) {
-                        for (MaterializedIndex index : partition.getDefaultPhysicalPartition()
-                                .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
-                            // hash set is able to deduplicate the elements
-                            sourceTablets.addAll(index.getTablets());
+                        if (targetTable instanceof LakeTable) {
+                            recycleLakePartitions.add(partition);
+                        } else {
+                            for (MaterializedIndex index : partition.getDefaultPhysicalPartition()
+                                    .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                                // hash set is able to deduplicate the elements
+                                sourceTablets.addAll(index.getTablets());
+                            }
                         }
                         targetTable.dropTempPartition(partition.getName(), true);
                     } else {
@@ -589,6 +605,7 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
             // mark all source tablet ids force delete to drop it directly on BE,
             // not to move it to trash
             sourceTablets.forEach(GlobalStateMgr.getCurrentState().getTabletInvertedIndex()::markTabletForceDelete);
+            LakeTableHelper.addPartitionToRecycleBin(targetTable, dbId, recycleLakePartitions);
             targetTable.setState(OlapTableState.NORMAL);
         } catch (Exception e) {
             LOG.warn("exception when cancel optimize job.", e);
@@ -666,17 +683,24 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
         this.optimizeOperation = replayedJob.optimizeOperation;
 
         Set<Tablet> sourceTablets = Sets.newHashSet();
+        Set<Partition> recycleLakePartitions = Sets.newHashSet();
         for (long id : replayedJob.getTmpPartitionIds()) {
             Partition partition = targetTable.getPartition(id);
             if (partition != null) {
-                for (MaterializedIndex index
-                        : partition.getDefaultPhysicalPartition().getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
-                    sourceTablets.addAll(index.getTablets());
+                if (targetTable instanceof LakeTable) {
+                    recycleLakePartitions.add(partition);
+                } else {
+                    for (MaterializedIndex index
+                            : partition.getDefaultPhysicalPartition()
+                            .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                        sourceTablets.addAll(index.getTablets());
+                    }
                 }
                 targetTable.dropTempPartition(partition.getName(), true);
             }
         }
         sourceTablets.forEach(GlobalStateMgr.getCurrentState().getTabletInvertedIndex()::markTabletForceDelete);
+        LakeTableHelper.addPartitionToRecycleBin(targetTable, dbId, recycleLakePartitions);
 
         if (allPartitionOptimized) {
             this.distributionInfo = replayedJob.distributionInfo;

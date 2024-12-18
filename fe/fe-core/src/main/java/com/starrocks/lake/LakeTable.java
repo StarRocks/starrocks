@@ -236,7 +236,7 @@ public class LakeTable extends OlapTable {
     }
 
     @Override
-    protected RecyclePartitionInfo buildRecyclePartitionInfo(long dbId, Partition partition) {
+    public RecyclePartitionInfo buildRecyclePartitionInfo(long dbId, Partition partition) {
         if (partitionInfo.isRangePartition()) {
             Range<PartitionKey> range = ((RangePartitionInfo) partitionInfo).getRange(partition.getId());
             return new RecycleLakeRangePartitionInfo(dbId, id, partition, range,

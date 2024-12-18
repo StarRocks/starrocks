@@ -34,6 +34,8 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.lake.LakeTable;
+import com.starrocks.lake.LakeTableHelper;
 import com.starrocks.persist.InsertOverwriteStateChangeInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
@@ -408,16 +410,21 @@ public class InsertOverwriteJobRunner {
             Preconditions.checkState(table instanceof OlapTable);
             OlapTable targetTable = (OlapTable) table;
             Set<Tablet> sourceTablets = Sets.newHashSet();
+            Set<Partition> recycleLakePartitions = Sets.newHashSet();
             if (job.getTmpPartitionIds() != null) {
                 for (long pid : job.getTmpPartitionIds()) {
                     LOG.info("drop temp partition:{}", pid);
 
                     Partition partition = targetTable.getPartition(pid);
                     if (partition != null) {
-                        for (PhysicalPartition subPartition : partition.getSubPartitions()) {
-                            for (MaterializedIndex index : subPartition.getMaterializedIndices(
-                                    MaterializedIndex.IndexExtState.ALL)) {
-                                sourceTablets.addAll(index.getTablets());
+                        if (targetTable instanceof LakeTable) {
+                            recycleLakePartitions.add(partition);
+                        } else {
+                            for (PhysicalPartition subPartition : partition.getSubPartitions()) {
+                                for (MaterializedIndex index : subPartition.getMaterializedIndices(
+                                        MaterializedIndex.IndexExtState.ALL)) {
+                                    sourceTablets.addAll(index.getTablets());
+                                }
                             }
                         }
                         targetTable.dropTempPartition(partition.getName(), true);
@@ -437,9 +444,13 @@ public class InsertOverwriteJobRunner {
                 for (String partitionName : tmpPartitionNames) {
                     Partition partition = targetTable.getPartition(partitionName, true);
                     if (partition != null) {
-                        for (MaterializedIndex index : partition.getDefaultPhysicalPartition()
-                                .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
-                            sourceTablets.addAll(index.getTablets());
+                        if (targetTable instanceof LakeTable) {
+                            recycleLakePartitions.add(partition);
+                        } else {
+                            for (MaterializedIndex index : partition.getDefaultPhysicalPartition()
+                                    .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                                sourceTablets.addAll(index.getTablets());
+                            }
                         }
                         targetTable.dropTempPartition(partitionName, true);
                     }
@@ -449,6 +460,7 @@ public class InsertOverwriteJobRunner {
                 // mark all source tablet ids force delete to drop it directly on BE,
                 // not to move it to trash
                 sourceTablets.forEach(GlobalStateMgr.getCurrentState().getTabletInvertedIndex()::markTabletForceDelete);
+                LakeTableHelper.addPartitionToRecycleBin(targetTable, dbId, recycleLakePartitions);
 
                 InsertOverwriteStateChangeInfo info = new InsertOverwriteStateChangeInfo(job.getJobId(), job.getJobState(),
                         OVERWRITE_FAILED, job.getSourcePartitionIds(), job.getSourcePartitionNames(),
@@ -495,11 +507,17 @@ public class InsertOverwriteJobRunner {
                     .map(partitionId -> targetTable.getPartition(partitionId).getName())
                     .collect(Collectors.toList());
             Set<Tablet> sourceTablets = Sets.newHashSet();
+            Set<Partition> recycleLakePartitions = Sets.newHashSet();
             sourcePartitionNames.forEach(name -> {
                 Partition partition = targetTable.getPartition(name);
-                for (PhysicalPartition subPartition : partition.getSubPartitions()) {
-                    for (MaterializedIndex index : subPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
-                        sourceTablets.addAll(index.getTablets());
+                if (targetTable instanceof LakeTable) {
+                    recycleLakePartitions.add(partition);
+                } else {
+                    for (PhysicalPartition subPartition : partition.getSubPartitions()) {
+                        for (MaterializedIndex index : subPartition.getMaterializedIndices(
+                                MaterializedIndex.IndexExtState.ALL)) {
+                            sourceTablets.addAll(index.getTablets());
+                        }
                     }
                 }
             });
@@ -535,6 +553,7 @@ public class InsertOverwriteJobRunner {
                 // mark all source tablet ids force delete to drop it directly on BE,
                 // not to move it to trash
                 sourceTablets.forEach(GlobalStateMgr.getCurrentState().getTabletInvertedIndex()::markTabletForceDelete);
+                LakeTableHelper.addPartitionToRecycleBin(targetTable, dbId, recycleLakePartitions);
 
                 InsertOverwriteStateChangeInfo info = new InsertOverwriteStateChangeInfo(job.getJobId(), job.getJobState(),
                         InsertOverwriteJobState.OVERWRITE_SUCCESS, job.getSourcePartitionIds(), job.getSourcePartitionNames(),

@@ -123,7 +123,8 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         idToDatabase = Maps.newHashMap();
         idToTableInfo = HashBasedTable.create();
         nameToTableInfo = HashBasedTable.create();
-        idToPartition = Maps.newHashMap();
+        // use concurrent map, because `idToPartition` might be accessed by multiple threads, such as `StarMgrMetaSyncer`
+        idToPartition = Maps.newConcurrentMap();
         idToRecycleTime = Maps.newHashMap();
         enableEraseLater = new HashSet<>();
         asyncDeleteForPartitions = Maps.newHashMap();

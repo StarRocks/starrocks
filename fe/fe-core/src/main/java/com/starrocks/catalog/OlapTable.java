@@ -1421,7 +1421,7 @@ public class OlapTable extends Table {
                 .collect(Collectors.toList()));
     }
 
-    protected RecyclePartitionInfo buildRecyclePartitionInfo(long dbId, Partition partition) {
+    public RecyclePartitionInfo buildRecyclePartitionInfo(long dbId, Partition partition) {
         if (partitionInfo.isRangePartition()) {
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
             return new RecycleRangePartitionInfo(dbId, id, partition,
