@@ -180,14 +180,6 @@ public class StarMgrServer {
 
         // load meta
         loadImage(imageDir);
-
-        // Fully set up the starOsAgent so that we don't need to call `StarOSAgent.prepare` elsewhere
-        LOG.info("Waiting for starMgrServer to start");
-        starMgrServer.blockUntilStart();
-        LOG.info("Done waiting for starMgrServer to start");
-        if (starOsAgent != null) {
-            starOsAgent.prepare();
-        }
     }
 
     private void becomeLeader() {

@@ -101,7 +101,8 @@ public class StarOSAgent {
 
     // This method MUST be called before calling any other method which uses serviceId. Fulfill this prerequisite by calling
     // `prepare` as soon as possible after the given StarManagerServer to which the `client` is connected is otherwise fully
-    // initialized. This is to minimize redundant calls to this method.
+    // initialized (this means waiting until we're sure that the leader has registered and bootstrapped the service with StarMgr).
+    // This is to minimize redundant calls to this method.
     public void prepare() {
         try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
             if (!serviceId.isEmpty()) {
