@@ -158,15 +158,10 @@ public class StreamLoadMgr implements MemoryTrackable {
     }
 
     // for sync stream load task
-<<<<<<< HEAD
-    public void beginLoadTask(String dbName, String tableName, String label, String user, String clientIp, long timeoutMillis,
-                              TransactionResult resp, boolean isRoutineLoad, long warehouseId) throws UserException {
-=======
     public void beginLoadTaskFromBackend(String dbName, String tableName, String label, TUniqueId requestId,
                                          String user, String clientIp, long timeoutMillis,
                                          TransactionResult resp, boolean isRoutineLoad, long warehouseId) throws
-            StarRocksException {
->>>>>>> fb125e150 ([BugFix] Fix stream load backend/frontend streaming (#53893))
+            UserException {
         StreamLoadTask task = null;
         Database db = checkDbName(dbName);
         long dbId = db.getId();
