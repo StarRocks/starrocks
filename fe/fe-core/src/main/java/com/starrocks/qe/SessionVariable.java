@@ -734,6 +734,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String CONSISTENT_HASH_VIRTUAL_NUMBER = "consistent_hash_virtual_number";
 
+    public static final String SCAN_DISTRIBUTE_BACKEND_CANDICATE_NUM = "scan_distribute_backend_candicate_num";
+
+    public static final String ENABLE_SCAN_DISTRIBUTE_RANDOM = "enable_scan_distribute_random";
+
     public static final String ENABLE_COLLECT_TABLE_LEVEL_SCAN_STATS = "enable_collect_table_level_scan_stats";
 
     public static final String HIVE_TEMP_STAGING_DIR = "hive_temp_staging_dir";
@@ -1600,6 +1604,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = CONSISTENT_HASH_VIRTUAL_NUMBER, flag = VariableMgr.INVISIBLE)
     private int consistentHashVirtualNodeNum = 256;
+
+    @VariableMgr.VarAttr(name = SCAN_DISTRIBUTE_BACKEND_CANDICATE_NUM, flag = VariableMgr.INVISIBLE)
+    private int scanDistributeBackendCandicateNum = 3;
+
+    @VariableMgr.VarAttr(name = ENABLE_SCAN_DISTRIBUTE_RANDOM, flag = VariableMgr.INVISIBLE)
+    private boolean enableScanDistributeRandom = false;
 
     // binary, json, compact,
     @VarAttr(name = THRIFT_PLAN_PROTOCOL)
@@ -2834,6 +2844,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setConsistentHashVirtualNodeNum(int consistentHashVirtualNodeNum) {
         this.consistentHashVirtualNodeNum = consistentHashVirtualNodeNum;
+    }
+
+    public int getScanDistributeBackendCandicateNum() {
+        return scanDistributeBackendCandicateNum;
+    }
+
+    public boolean isEnableScanDistributeRandom() {
+        return enableScanDistributeRandom;
     }
 
     // when pipeline engine is enabled

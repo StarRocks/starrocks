@@ -28,4 +28,8 @@ create table t02 as select * from hive_sql_test_${uuid0}.hive_oss_db.string_par_
 
 select * from t02 order by id;
 
+set enable_scan_distribute_random = true;
+
+select * from t01 order by id;
+
 drop catalog hive_sql_test_${uuid0}

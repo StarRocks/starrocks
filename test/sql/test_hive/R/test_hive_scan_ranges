@@ -60,6 +60,15 @@ select * from t02 order by id;
 2	Bob	bj
 3	David	None
 -- !result
+set enable_scan_distribute_random = true;
+-- result:
+-- !result
+select * from t01 order by id;
+-- result:
+1	Alice	bj
+2	Bob	bj
+3	David	None
+-- !result
 drop catalog hive_sql_test_${uuid0}
 -- result:
 -- !result

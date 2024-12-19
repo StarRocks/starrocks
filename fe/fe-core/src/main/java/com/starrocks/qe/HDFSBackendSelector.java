@@ -56,6 +56,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.Set;
 
 /**
@@ -88,6 +89,9 @@ public class HDFSBackendSelector implements BackendSelector {
     // and the largest scan data is not more than 1.1 times of the average value
     private final double kMaxImbalanceRatio = 1.1;
     public static final int CONSISTENT_HASH_RING_VIRTUAL_NUMBER = 256;
+
+    private int candidateNumber = 3;
+    private boolean enableRandom = false;
 
     class HdfsScanRangeHasher {
         String basePath;
@@ -162,6 +166,10 @@ public class HDFSBackendSelector implements BackendSelector {
         this.hdfsScanRangeHasher = new HdfsScanRangeHasher();
         this.shuffleScanRange = shuffleScanRange;
         this.useIncrementalScanRanges = useIncrementalScanRanges;
+        this.candidateNumber = ConnectContext.get() != null ? ConnectContext.get().getSessionVariable().
+                getScanDistributeBackendCandicateNum() : kCandidateNumber;
+        this.enableRandom = ConnectContext.get() != null && ConnectContext.get().getSessionVariable().
+                isEnableScanDistributeRandom();
     }
 
     // re-balance scan ranges for compute node if needed, return the compute node which scan range is assigned to
@@ -176,21 +184,39 @@ public class HDFSBackendSelector implements BackendSelector {
         boolean enableDataCache = ConnectContext.get() != null ? ConnectContext.get().getSessionVariable().
                 isEnableScanDataCache() : false;
         // If force-rebalancing is not specified and cache is used, skip the rebalancing directly.
-        if (!forceReBalance && enableDataCache) {
+        if (!forceReBalance && enableDataCache && !enableRandom) {
             return backends.get(0);
         }
 
         ComputeNode node = null;
         long addedScans = scanRangeLocations.scan_range.hdfs_scan_range.length;
-        for (ComputeNode backend : backends) {
-            long assignedScanRanges = assignedScansPerComputeNode.get(backend);
-            if (assignedScanRanges + addedScans < avgNodeScanRangeBytes * kMaxImbalanceRatio) {
-                node = backend;
-                break;
+        if (!enableRandom) {
+            for (ComputeNode backend : backends) {
+                long assignedScanRanges = assignedScansPerComputeNode.get(backend);
+                if (assignedScanRanges + addedScans < avgNodeScanRangeBytes * kMaxImbalanceRatio) {
+                    node = backend;
+                    break;
+                }
             }
-        }
-        if (node == null) {
-            node = backends.get(0);
+            if (node == null) {
+                node = backends.get(0);
+            }
+        } else {
+            List<ComputeNode> candidateNodes = new ArrayList<>();
+            for (ComputeNode backend : backends) {
+                long assignedScanRanges = assignedScansPerComputeNode.get(backend);
+                if (assignedScanRanges + addedScans < avgNodeScanRangeBytes * kMaxImbalanceRatio) {
+                    candidateNodes.add(backend);
+                }
+            }
+            Random rand = new Random(System.currentTimeMillis());
+            if (candidateNodes.isEmpty()) {
+                int i = rand.nextInt(backends.size());
+                node = backends.get(i);
+            } else {
+                int i = rand.nextInt(candidateNodes.size());
+                node = candidateNodes.get(i);
+            }
         }
         return node;
     }
@@ -312,7 +338,7 @@ public class HDFSBackendSelector implements BackendSelector {
         // assign scan ranges.
         for (int i = 0; i < remoteScanRangeLocations.size(); ++i) {
             TScanRangeLocations scanRangeLocations = remoteScanRangeLocations.get(i);
-            List<ComputeNode> backends = hashRing.get(scanRangeLocations, kCandidateNumber);
+            List<ComputeNode> backends = hashRing.get(scanRangeLocations, candidateNumber);
             ComputeNode node = reBalanceScanRangeForComputeNode(backends, avgNodeScanRangeBytes, scanRangeLocations);
             if (node == null) {
                 throw new StarRocksException("Failed to find backend to execute");
