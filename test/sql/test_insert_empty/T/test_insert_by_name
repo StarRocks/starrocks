@@ -13,7 +13,7 @@ insert into t1 (k2, k1) by name select 2 as k1, "b" as k2;
 select * from t1;
 truncate table t1;
 
-insert into t1 (k2, k1) by name select "d" as k1, 4 as k2;
+insert into t1 (k2, k1) select "d" as k1, 4 as k2;
 select * from t1;
 truncate table t1;
 

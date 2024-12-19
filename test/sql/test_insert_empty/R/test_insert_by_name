@@ -31,7 +31,7 @@ truncate table t1;
 -- result:
 -- !result
 
-insert into t1 (k2, k1) by name select "d" as k1, 4 as k2;
+insert into t1 (k2, k1) select "d" as k1, 4 as k2;
 -- result:
 -- !result
 
