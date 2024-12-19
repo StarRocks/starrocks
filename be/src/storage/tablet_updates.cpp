@@ -875,22 +875,15 @@ bool TabletUpdates::_check_status_msg(std::string_view msg) {
 }
 
 bool TabletUpdates::_is_tolerable(Status& status) {
-    bool res = true;
     switch (status.code()) {
     case TStatusCode::OK:
     case TStatusCode::MEM_LIMIT_EXCEEDED:
     case TStatusCode::MEM_ALLOC_FAILED:
     case TStatusCode::TIMEOUT:
-        res = true;
-        break;
+        return true;
     default:
-        res = false;
+        return _check_status_msg(status.message());
     }
-    if (!res) {
-        res = _check_status_msg(status.message());
-    }
-
-    return res;
 }
 
 class ApplyCommitTask : public Runnable {
@@ -2531,7 +2524,7 @@ Status TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_in
                 max_rowset_id, max_src_rssid, _debug_compaction_stats(info->inputs, rowset_id),
                 st.ok() ? "" : st.message());
         LOG(ERROR) << msg << debug_string();
-        failure_handler(msg + _debug_version_info(true), st.code());
+        failure_handler(msg + _debug_version_info(true), TStatusCode::INTERNAL_ERROR);
         DCHECK(st.ok()) << msg;
     }
     return apply_st;
