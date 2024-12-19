@@ -4050,7 +4050,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Type: String
 - Unit: -
 - Is mutable: No
-- Description: The eviction policy of Data Cache. Valid values: `lru` and `slru`.
+- Description: The eviction policy of Data Cache. Valid values: `lru` (least recently used) and `slru` (Segmented LRU).
 - Introduced in: v3.4.0
 
 ##### query_max_memory_limit_percent
