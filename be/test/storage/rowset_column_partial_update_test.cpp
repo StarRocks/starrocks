@@ -758,7 +758,7 @@ TEST_P(RowsetColumnPartialUpdateTest, TEST_Pull_clone2) {
 
 TEST_P(RowsetColumnPartialUpdateTest, test_dcg_gc) {
     // Only run one parameter here
-    if (GetParam() != 104857600) return;
+    if (GetParam().primary_key_batch_get_index_memory_limit != 104857600) return;
     fs::remove_all(get_stores()->path());
     const int N = 100;
     auto tablet = create_tablet(rand(), rand());
