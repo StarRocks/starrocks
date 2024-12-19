@@ -187,13 +187,13 @@ CSV 格式示例：
 >
 > 单个批次中的所有数据文件必须为相同的文件格式。
 
-##### 严格类型检查下推
+##### Target Table Schema 检查下推
 
-从 v3.4.0 版本开始，系统支持将目标表 Schema 的严格类型检查下推到 FILES() 的扫描阶段。
+从 v3.4.0 版本开始，系统支持将 Target Table Schema 检查下推到 FILES() 的扫描阶段。
 
-FILES() 的架构检测并不是完全严格的。例如，在读取 CSV 文件时，任何整数列都会被推断为 BIGINT 类型，并按照此类型检查。在这种情况下，如果目标表中的相应列是 TINYINT 类型，则超出 BIGINT 类型范围的 CSV 数据行不会被过滤。
+FILES() 的 Schema 检测并不是完全严格的。例如，在读取 CSV 文件时，任何整数列都会被推断为 BIGINT 类型，并按照此类型检查。在这种情况下，如果目标表中的相应列是 TINYINT 类型，则超出 BIGINT 类型范围的 CSV 数据行不会被过滤。
 
-为了解决这个问题，系统引入了动态 FE 配置项 `files_enable_insert_push_down_schema`，用于控制是否将严格类型检查下推到 FILES() 的扫描阶段。通过将 `files_enable_insert_push_down_schema` 设置为 `true`，系统将在读取文件时过滤掉未通过严格类型检查的数据行。
+为了解决这个问题，系统引入了动态 FE 配置项 `files_enable_insert_push_down_schema`，用于控制是否将 Target Table Schema 检查下推到 FILES() 的扫描阶段。通过将 `files_enable_insert_push_down_schema` 设置为 `true`，系统将在读取文件时过滤掉未通过 Target Table Schema 检查的数据行。
 
 ##### 合并具有不同 Schema 的文件
 

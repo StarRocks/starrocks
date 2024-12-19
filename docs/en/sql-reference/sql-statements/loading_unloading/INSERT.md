@@ -56,13 +56,14 @@ INSERT statements support configuring PROPERTIES from v3.4.0 onwards.
 | Property         | Description                                                  |
 | ---------------- | ------------------------------------------------------------ |
 | timeout          | The timeout duration of the INSERT job. Unit: Seconds. You can also set the timeout duration for INSERT within the session or globally using the variable `insert_timeout`. |
-| strict_mode      | Whether to enable strict mode while loading data using INSERT from files(). Valid values: `true` and `false` (Default). When strict mode is enabled, the system loads only qualified rows. It filters out unqualified rows and returns details about the unqualified rows. For more information, see [Strict mode](../../../loading/load_concept/strict_mode.md). You can also enable strict mode for INSERT from files() within the session or globally using the variable `enable_insert_strict`. |
-| max_filter_ratio | The maximum error tolerance of INSERT from files(). It's the maximum ratio of data records that can be filtered out due to inadequate data quality. When the ratio of unqualified data records reaches this threshold, the job fails. Default value: `0`. Range: [0, 1]. You can also set the maximum error tolerance for INSERT from files() within the session or globally using the variable `insert_max_filter_ratio`. |
+| strict_mode      | Whether to enable strict mode while loading data using INSERT from FILES(). Valid values: `true` (Default) and `false`. When strict mode is enabled, the system loads only qualified rows. It filters out unqualified rows and returns details about the unqualified rows. For more information, see [Strict mode](../../../loading/load_concept/strict_mode.md). You can also enable strict mode for INSERT from FILES() within the session or globally using the variable `enable_insert_strict`. |
+| max_filter_ratio | The maximum error tolerance of INSERT from FILES(). It's the maximum ratio of data records that can be filtered out due to inadequate data quality. When the ratio of unqualified data records reaches this threshold, the job fails. Default value: `0`. Range: [0, 1]. You can also set the maximum error tolerance for INSERT from FILES() within the session or globally using the variable `insert_max_filter_ratio`. |
 | match_column_by  | The mode how the system matches the columns in the source and target tables. Valid values:<ul><li>`position` (Default): The system matches the columns by the position of the columns in the column clause and the SELECT statement.</li><li>`name`: The system matches the columns with the same name.</li></ul> |
 
 :::note
 
-`strict_mode` and `max_filter_ratio` are supported only for INSERT from files(). INSERT from tables does not support these properties.
+- `strict_mode` and `max_filter_ratio` are supported only for INSERT from FILES(). INSERT from tables does not support these properties.
+- From v3.4.0 onwards, when `enable_insert_strict` is set to `true`, the system loads only qualified rows. It filters out unqualified rows and returns details about the unqualified rows. Instead, in versions earlier than v3.4.0, when `enable_insert_strict` is set to `true`, the INSERT jobs fails when there is an unqualified rows.
 
 :::
 
@@ -164,6 +165,8 @@ PROPERTIES(
 SELECT * FROM source_wiki_edit;
 ```
 
+If you want to ingest large a dataset, you can set a larger value for `timeout`, or for the session variable `insert_timeout`.
+
 ### Example 4: INSERT strict mode and max filter ratio
 
 The following example inserts data rows from the Parquet file **parquet/insert_wiki_edit_append.parquet** within the AWS S3 bucket `inserttest` into the table `insert_wiki_edit`, enables strict mode to filter the unqualified data records, and tolerates at most 10% of error data:
@@ -174,12 +177,12 @@ PROPERTIES(
     "strict_mode" = "true",
     "max_filter_ratio" = "0.1"
 )
-    SELECT * FROM FILES(
-        "path" = "s3://inserttest/parquet/insert_wiki_edit_append.parquet",
-        "format" = "parquet",
-        "aws.s3.access_key" = "XXXXXXXXXX",
-        "aws.s3.secret_key" = "YYYYYYYYYY",
-        "aws.s3.region" = "us-west-2"
+SELECT * FROM FILES(
+    "path" = "s3://inserttest/parquet/insert_wiki_edit_append.parquet",
+    "format" = "parquet",
+    "aws.s3.access_key" = "XXXXXXXXXX",
+    "aws.s3.secret_key" = "YYYYYYYYYY",
+    "aws.s3.region" = "us-west-2"
 );
 ```
 

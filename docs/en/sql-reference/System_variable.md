@@ -444,7 +444,7 @@ Default value: `true`.
 ### enable_insert_strict
 
 * **Description**: Whether to enable strict mode while loading data using INSERT from files(). Valid values: `true` and `false` (Default). When strict mode is enabled, the system loads only qualified rows. It filters out unqualified rows and returns details about the unqualified rows. For more information, see [Strict mode](../loading/load_concept/strict_mode.md). In versions earlier than v3.4.0, when `enable_insert_strict` is set to `true`, the INSERT jobs fails when there is an unqualified rows.
-* **Default**: false
+* **Default**: true
 
 ### insert_max_filter_ratio
 

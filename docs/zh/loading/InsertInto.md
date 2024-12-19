@@ -383,10 +383,14 @@ mysql> SELECT * FROM insert_generated_columns;
 
 从 v3.4.0 版本开始，INSERT 语句支持配置 PROPERTIES，可用于多种功能。当同时指定 PROPERTIES 和其对应的系统变量时，PROPERTIES 优先生效。
 
-### INSERT 严格模式和 max filter ratio
+### 启用严格模式
 
-- `strict_mode`：是否在使用 INSERT from FILES() 导入数据时启用严格模式。有效值：`true` 和 `false`（默认值）。启用严格模式时，系统仅导入合格的数据行，过滤掉不合格的行，并返回不合格行的详细信息。更多信息请参见 [严格模式](./load_concept/strict_mode.md)。您也可以通过变量 `enable_insert_strict` 在当前 Session 中或全局启用 INSERT 的严格模式。
-- `max_filter_ratio`：INSERT 导入作业的最大容忍率，即导入作业能够容忍的因数据质量不合格而过滤掉的数据行所占的最大比例。当不合格行数比例超过该限制时，导入作业失败。默认值：`0`。范围：[0, 1]。您也可以通过变量 `insert_max_filter_ratio` 在当前 Session 中或全局设置 INSERT 的最大错误容忍度。
+从 v3.4.0 起，您可以为 INSERT from FILES() 启用严格模式并设置 `max_filter_ratio`。INSERT from FILES() 的严格模式与其他导入方法的行为相同。
+
+如果要导入包含某些不合格行的数据集，您可以选择过滤这些不合格行，或导入该数据行并为其中不合格的列赋 NULL 值。您可以使用 `strict_mode` 和 `max_filter_ratio` 属性实现这两种方式。
+
+- 如需过滤不合格行，需将 `strict_mode` 设置为 `true`，并将 `max_filter_ratio` 设置为所需值。
+- 如需导入不合格行并赋予 NULL 值，需将 `strict_mode` 设置为 `false`。
 
 以下示例将 AWS S3 存储桶 `inserttest` 内 Parquet 文件 **parquet/insert_wiki_edit_append.parquet** 中的数据插入至表 `insert_wiki_edit` 中，启用严格模式以过滤不合格的数据行，并且设置最大容错比为 10%：
 
@@ -396,12 +400,12 @@ PROPERTIES(
     "strict_mode" = "true",
     "max_filter_ratio" = "0.1"
 )
-    SELECT * FROM FILES(
-        "path" = "s3://inserttest/parquet/insert_wiki_edit_append.parquet",
-        "format" = "parquet",
-        "aws.s3.access_key" = "XXXXXXXXXX",
-        "aws.s3.secret_key" = "YYYYYYYYYY",
-        "aws.s3.region" = "us-west-2"
+SELECT * FROM FILES(
+    "path" = "s3://inserttest/parquet/insert_wiki_edit_append.parquet",
+    "format" = "parquet",
+    "aws.s3.access_key" = "XXXXXXXXXX",
+    "aws.s3.secret_key" = "YYYYYYYYYY",
+    "aws.s3.region" = "us-west-2"
 );
 ```
 
@@ -411,9 +415,9 @@ PROPERTIES(
 
 :::
 
-### INSERT 超时时间
+### 设置超时时间
 
-`timeout`：INSERT 作业的超时时间。单位：秒。您也可以通过变量 `insert_timeout` 在当前 Session 中或全局设置 INSERT 的超时时间。
+从 v3.4.0 开始，您可以设置 INSERT 语句的超时时间。在 v3.4.0 之前的版本中，INSERT 语句的超时时间由系统变量 `query_timeout` 控制。
 
 以下示例将源表 `source_wiki_edit` 中的数据插入到目标表 `insert_wiki_edit`，并将超时时间设置为 `2` 秒：
 
@@ -427,7 +431,7 @@ SELECT * FROM source_wiki_edit;
 
 :::note
 
-从 v3.4.0 版本开始，`insert_timeout` 作用于所有涉及 INSERT 的操作（例如，UPDATE、DELETE、CTAS、物化视图刷新、统计信息收集和 PIPE），替代原本的 `query_timeout`。
+从 v3.4.0 版本开始，系统变量 `insert_timeout` 作用于所有涉及 INSERT 的操作（例如，UPDATE、DELETE、CTAS、物化视图刷新、统计信息收集和 PIPE），替代原本的 `query_timeout`。
 
 :::
 
@@ -447,6 +451,17 @@ SELECT event_time, channel, user FROM source_wiki_edit;
 ```
 
 如果您在 Column 子句或 SELECT 语句中改变了 `channel` 和 `user` 的顺序，列的映射关系将发生变化。
+
+```SQL
+INSERT INTO insert_wiki_edit (
+    event_time,
+    channel,
+    user
+)
+SELECT event_time, user, channel FROM source_wiki_edit;
+```
+
+此处，由于目标表 `insert_wiki_edit` 中的 `channel` 列被源表 `source_wiki_edit` 中的 `user` 的数据所填满，导入的数据可能并不是所需的结果。
 
 通过在 INSERT 语句中将属性 match_column_by 设置为 name，系统将根据源表和目标表中的列名进行匹配，匹配同名的列。
 

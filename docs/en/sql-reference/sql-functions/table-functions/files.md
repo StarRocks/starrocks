@@ -188,15 +188,15 @@ If StarRocks fails to unionize all the columns, it generates a schema error repo
 >
 > All data files in a single batch must be of the same file format.
 
-##### Push down strict type check
+##### Push down target table schema check
 
-From v3.4.0 onwards, the system supports pushing down the strict type check of target table schema to the Scan stage of FILES().
+From v3.4.0 onwards, the system supports pushing down the target table schema check to the Scan stage of FILES().
 
-Schema detection of FILES() is not fully strict. For example, any integer column in CSV files is inferred and checked as the BIGINT type when the function is reading the files. In this case, if the corresponding column in the target table is the TINYINT type, the CSV data records that exceed the BIGINT type will not be filtered.
+Schema detection of FILES() is not fully strict. For example, any integer column in CSV files is inferred and checked as the BIGINT type when the function is reading the files. In this case, if the corresponding column in the target table is the TINYINT type, the CSV data records that exceed the BIGINT type will not be filtered. Instead, they will be filled with NULL implicitly.
 
-To address this issue, the system introduces the dynamic FE configuration item `files_enable_insert_push_down_schema` to control whether to push down the strict type check to the Scan stage of FILES(). By setting `files_enable_insert_push_down_schema` to `true`, the system will filter the data records which fail the strict type check at the file reading.
+To address this issue, the system introduces the dynamic FE configuration item `files_enable_insert_push_down_schema` to control whether to push down the target table schema check to the Scan stage of FILES(). By setting `files_enable_insert_push_down_schema` to `true`, the system will filter the data records which fail the target table schema check at the file reading.
 
-##### Unionize files with different schema
+##### Union files with different schema
 
 From v3.4.0 onwards, the system supports unionizing files with different schema, and assigning NULL values to the non-existent columns.
 

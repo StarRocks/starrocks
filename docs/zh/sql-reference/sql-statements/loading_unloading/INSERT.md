@@ -57,12 +57,13 @@ INSERT statements support configuring PROPERTIES from v3.4.0 onwards.
 | ---------------- | ------------------------------------------------------------ |
 | timeout          | INSERT 作业的超时时间。单位：秒。您也可以通过变量 `insert_timeout` 在当前 Session 中或全局设置 INSERT 的超时时间。 |
 | strict_mode      | 是否在使用 INSERT from FILES() 导入数据时启用严格模式。有效值：`true` 和 `false`（默认值）。启用严格模式时，系统仅导入合格的数据行，过滤掉不合格的行，并返回不合格行的详细信息。更多信息请参见 [严格模式](../../../loading/load_concept/strict_mode.md)。您也可以通过变量 `enable_insert_strict` 在当前 Session 中或全局启用 INSERT 的严格模式。 |
-| max_filter_ratio | INSERT 导入作业的最大容忍率，即导入作业能够容忍的因数据质量不合格而过滤掉的数据行所占的最大比例。当不合格行数比例超过该限制时，导入作业失败。默认值：`0`。范围：[0, 1]。您也可以通过变量 `insert_max_filter_ratio` 在当前 Session 中或全局设置 INSERT 的最大错误容忍度。 |
+| max_filter_ratio | INSERT from FILES() 导入作业的最大容忍率，即导入作业能够容忍的因数据质量不合格而过滤掉的数据行所占的最大比例。当不合格行数比例超过该限制时，导入作业失败。默认值：`0`。范围：[0, 1]。您也可以通过变量 `insert_max_filter_ratio` 在当前 Session 中或全局设置 INSERT 的最大错误容忍度。 |
 | match_column_by  | 系统匹配源表和目标表中的列的方式。有效值：<ul><li>`position`（默认值）：系统根据 Column 子句和 SELECT 语句中列的位置来匹配列。</li><li>`name`：系统根据列名匹配相同名称的列。</li></ul> |
 
 :::note
 
-`strict_mode` 和 `max_filter_ratio` 仅支持 INSERT from FILES() 导入方式。INSERT from Table 导入方式不支持以上属性。
+- `strict_mode` 和 `max_filter_ratio` 仅支持 INSERT from FILES() 导入方式。INSERT from Table 导入方式不支持以上属性。
+- 从 v3.4.0 起，当 `enable_insert_strict` 设置为 `true` 时，系统只导入合格的数据行，过滤掉不合格行，并返回不合格行的详细信息。在早于 v3.4.0 的版本中，当 `enable_insert_strict` 设置为 `true` 时，INSERT 作业会在出现不合格行时失败。
 
 :::
 
@@ -150,6 +151,8 @@ PROPERTIES(
 SELECT * FROM source_wiki_edit;
 ```
 
+如果要导入大量数据，可以为 `timeout` 或会话变量 `insert_timeout` 设置较大的值。
+
 ### 示例四：INSERT 严格模式和 max filter ratio
 
 以下示例将 AWS S3 存储桶 `inserttest` 内 Parquet 文件 **parquet/insert_wiki_edit_append.parquet** 中的数据插入至表 `insert_wiki_edit` 中，启用严格模式以过滤不合格的数据行，并且设置最大容错比为 10%：
@@ -160,12 +163,12 @@ PROPERTIES(
     "strict_mode" = "true",
     "max_filter_ratio" = "0.1"
 )
-    SELECT * FROM FILES(
-        "path" = "s3://inserttest/parquet/insert_wiki_edit_append.parquet",
-        "format" = "parquet",
-        "aws.s3.access_key" = "XXXXXXXXXX",
-        "aws.s3.secret_key" = "YYYYYYYYYY",
-        "aws.s3.region" = "us-west-2"
+SELECT * FROM FILES(
+    "path" = "s3://inserttest/parquet/insert_wiki_edit_append.parquet",
+    "format" = "parquet",
+    "aws.s3.access_key" = "XXXXXXXXXX",
+    "aws.s3.secret_key" = "YYYYYYYYYY",
+    "aws.s3.region" = "us-west-2"
 );
 ```
 
