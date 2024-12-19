@@ -175,9 +175,7 @@ public class PseudoFrontend {
 
             try {
                 // init config
-                Config config = new Config();
-                config.init(frontend.getRunningDir() + "/conf/fe.conf");
-                config.initMutable(frontend.getRunningDir() + "/conf/fe_mutable.conf");
+                new Config().init(frontend.getRunningDir() + "/conf/fe.conf");
                 Config.statistic_collect_query_timeout = 60;
 
                 Log4jConfig.initLogging();

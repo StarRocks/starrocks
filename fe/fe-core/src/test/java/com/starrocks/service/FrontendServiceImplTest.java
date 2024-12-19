@@ -27,7 +27,6 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.ha.FrontendNodeType;
@@ -1141,7 +1140,7 @@ public class FrontendServiceImplTest {
     }
 
     @Test
-    public void testSetFrontendConfig() throws Exception {
+    public void testSetFrontendConfig() throws TException {
         FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
         TSetConfigRequest request = new TSetConfigRequest();
         request.keys = Lists.newArrayList("mysql_server_version");
@@ -1149,15 +1148,6 @@ public class FrontendServiceImplTest {
 
         TSetConfigResponse result = impl.setConfig(request);
         Assert.assertEquals("5.1.1", GlobalVariable.version);
-
-        request.keys = Lists.newArrayList("adaptive_choose_instances_threshold");
-        request.values = Lists.newArrayList("98");
-        impl.setConfig(request);
-
-        PatternMatcher matcher = PatternMatcher.createMysqlPattern("adaptive_choose_instances_threshold", false);
-        List<List<String>> configs = Config.getConfigInfo(matcher);
-        Assert.assertEquals("98", configs.get(0).get(2));
-        Assert.assertEquals(98, Config.adaptive_choose_instances_threshold);
     }
 
     @Test
