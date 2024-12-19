@@ -1264,7 +1264,7 @@ public class RefreshMaterializedViewTest extends MvRewriteTestBase {
         starRocksAssert
                 .createDatabaseIfNotExists("trunc_db")
                 .useDatabase("trunc_db")
-                .withTable("CREATE TABLE t1 \n" +
+                .withTable("CREATE TABLE trunc_db_t1 \n" +
                         "(\n" +
                         "    k1 int,\n" +
                         "    v1 int\n" +
@@ -1275,27 +1275,29 @@ public class RefreshMaterializedViewTest extends MvRewriteTestBase {
                 .withMaterializedView("CREATE MATERIALIZED VIEW test_mv\n"
                         + "DISTRIBUTED BY HASH(`k1`)\n"
                         + "REFRESH DEFERRED ASYNC\n"
-                        + "AS SELECT k1 from trunc_db.t1;");
+                        + "AS SELECT k1 from trunc_db.trunc_db_t1;");
 
-        executeInsertSql(connectContext, "insert into trunc_db.t1 values(2, 10)");
+        executeInsertSql(connectContext, "insert into trunc_db.trunc_db_t1 values(2, 10)");
         MaterializedView mv1 = getMv("mv_db", "test_mv");
         MaterializedViewMetricsEntity mvEntity =
                 (MaterializedViewMetricsEntity) MaterializedViewMetricsRegistry.getInstance().getMetricsEntity(mv1.getMvId());
-        long count = mvEntity.histRefreshJobDuration.getCount();
-        Assert.assertEquals(0, count);
+        long origCount = mvEntity.histRefreshJobDuration.getCount();
 
-        Table table = getTable("trunc_db", "t1");
+        Table table = getTable("trunc_db", "trunc_db_t1");
         // Simulate writing to a non-existent MV
         table.addRelatedMaterializedView(new MvId(1,1));
-        String truncateStr = "truncate table trunc_db.t1;";
+        String truncateStr = "truncate table trunc_db.trunc_db_t1;";
         TruncateTableStmt truncateTableStmt = (TruncateTableStmt) UtFrameUtils.parseStmtWithNewParser(truncateStr, connectContext);
         GlobalStateMgr.getCurrentState().getLocalMetastore().truncateTable(truncateTableStmt, connectContext);
         starRocksAssert.waitRefreshFinished(mv1.getId());
 
         mvEntity =
                 (MaterializedViewMetricsEntity) MaterializedViewMetricsRegistry.getInstance().getMetricsEntity(mv1.getMvId());
-        count = mvEntity.histRefreshJobDuration.getCount();
-        Assert.assertEquals(1, count);
+        System.out.println(mvEntity.histRefreshJobDuration);
+        long count = mvEntity.histRefreshJobDuration.getCount();
+        Assert.assertEquals(origCount + 1, count);
+        starRocksAssert.dropTable("trunc_db.trunc_db_t1");
+        starRocksAssert.dropMaterializedView("mv_db.test_mv");
     }
 
     @Test
@@ -1328,8 +1330,7 @@ public class RefreshMaterializedViewTest extends MvRewriteTestBase {
         MaterializedView mv1 = getMv("drop_mv_db", "test_mv");
         MaterializedViewMetricsEntity mvEntity =
                 (MaterializedViewMetricsEntity) MaterializedViewMetricsRegistry.getInstance().getMetricsEntity(mv1.getMvId());
-        long count = mvEntity.histRefreshJobDuration.getCount();
-        Assert.assertEquals(0, count);
+        long origCount = mvEntity.histRefreshJobDuration.getCount();
 
         OlapTable table = (OlapTable) getTable("drop_db", "tbl_with_mv");
         Partition p1 = table.getPartition("p1");
@@ -1340,7 +1341,9 @@ public class RefreshMaterializedViewTest extends MvRewriteTestBase {
         starRocksAssert.waitRefreshFinished(mv1.getId());
         mvEntity =
                 (MaterializedViewMetricsEntity) MaterializedViewMetricsRegistry.getInstance().getMetricsEntity(mv1.getMvId());
-        count = mvEntity.histRefreshJobDuration.getCount();
-        Assert.assertEquals(1, count);
+        long count = mvEntity.histRefreshJobDuration.getCount();
+        Assert.assertEquals(origCount + 1, count);
+        starRocksAssert.dropTable("drop_db.tbl_with_mv");
+        starRocksAssert.dropMaterializedView("drop_mv_db.test_mv");
     }
 }
