@@ -36,6 +36,7 @@ import com.staros.proto.PlacementRelationship;
 import com.staros.proto.QuitMetaGroupInfo;
 import com.staros.proto.ReplicaInfo;
 import com.staros.proto.ReplicaRole;
+import com.staros.proto.ReplicationType;
 import com.staros.proto.ServiceInfo;
 import com.staros.proto.ShardGroupInfo;
 import com.staros.proto.ShardInfo;
@@ -743,8 +744,13 @@ public class StarOSAgent {
         String owner = "Starrocks";
         WorkerGroupDetailInfo result = null;
         try {
+<<<<<<< HEAD
             result = client.createWorkerGroup(serviceId, owner, spec, Collections.emptyMap(),
                     Collections.emptyMap());
+=======
+            result = client.createWorkerGroup(serviceId, owner, spec, Collections.emptyMap(), Collections.emptyMap(),
+                    replicaNumber, ReplicationType.NO_REPLICATION);
+>>>>>>> 03803b2eb ([Enhancement] update staros to 3.4-rc2 (#54075))
         } catch (StarClientException e) {
             LOG.warn("Failed to create worker group. error: {}", e.getMessage());
             throw new DdlException("Failed to create worker group. error: " + e.getMessage());
