@@ -107,9 +107,7 @@ public class StarRocksFE {
             }
 
             // init config
-            Config config = new Config();
-            config.init(starRocksDir + "/conf/fe.conf");
-            config.initMutable(starRocksDir + "/conf/fe_mutable.conf");
+            new Config().init(starRocksDir + "/conf/fe.conf");
 
             // check command line options
             // NOTE: do it before init log4jConfig to avoid unnecessary stdout messages

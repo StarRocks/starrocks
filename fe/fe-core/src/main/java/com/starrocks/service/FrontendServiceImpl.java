@@ -156,17 +156,14 @@ import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddPartitionClause;
-import com.starrocks.sql.ast.AdminSetConfigStmt;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
-import com.starrocks.sql.ast.Property;
 import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.common.StarRocksPlannerException;
-import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
@@ -355,6 +352,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -1913,9 +1911,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     public TSetConfigResponse setConfig(TSetConfigRequest request) throws TException {
         try {
             Preconditions.checkState(request.getKeys().size() == request.getValues().size());
+            Map<String, String> configs = new HashMap<>();
             for (int i = 0; i < request.getKeys().size(); i++) {
                 String key = request.getKeys().get(i);
                 String value = request.getValues().get(i);
+                configs.put(key, value);
                 if ("mysql_server_version".equalsIgnoreCase(key)) {
                     if (!Strings.isNullOrEmpty(value)) {
                         GlobalVariable.version = value;
@@ -1923,11 +1923,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 }
             }
 
-            String key = request.getKeys().stream().findFirst().orElse("");
-            String value = request.getValues().stream().findFirst().orElse("");
-            AdminSetConfigStmt stmt = new AdminSetConfigStmt(AdminSetConfigStmt.ConfigType.FRONTEND,
-                    new Property(key, value), NodePosition.ZERO);
-            GlobalStateMgr.getCurrentState().getNodeMgr().setConfig(stmt);
+            GlobalStateMgr.getCurrentState().getNodeMgr().setFrontendConfig(configs);
             return new TSetConfigResponse(new TStatus(TStatusCode.OK));
         } catch (DdlException e) {
             TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
