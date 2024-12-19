@@ -3609,7 +3609,35 @@ TEST_F(TabletUpdatesTest, test_normal_apply_retry) {
     // 14. get del_vec failed
     test_fail_point("tablet_apply_get_del_vec_failed", 15, N / 2);
 
-    // 15. delvec inconsistent
+    // 15. InternalError code, but memory limit exceed error message
+    {
+        // Enable fail point
+        trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
+        auto fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get(
+                "tablet_internal_error_code_but_memory_limit");
+        fp->setMode(trigger_mode);
+
+        auto old_val = config::retry_apply_interval_second;
+        config::retry_apply_interval_second = 2;
+        // Create and commit rowset
+        auto rs = create_rowset(_tablet, keys, &deletes);
+        ASSERT_TRUE(_tablet->rowset_commit(16, rs).ok());
+        ASSERT_EQ(16, _tablet->updates()->max_version());
+
+        // Wait for a short duration and check error state
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        ASSERT_TRUE(!_tablet->updates()->is_error());
+        trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
+        fp->setMode(trigger_mode);
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(2000));
+        ASSERT_TRUE(!_tablet->updates()->is_error());
+        // Verify the read result
+        ASSERT_EQ(N / 2, read_tablet(_tablet, 16));
+        config::retry_apply_interval_second = old_val;
+    }
+
+    // 16. delvec inconsistent
     {
         // Enable fail point
         trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
@@ -3618,8 +3646,8 @@ TEST_F(TabletUpdatesTest, test_normal_apply_retry) {
 
         // Create and commit rowset
         auto rs = create_rowset(_tablet, keys, &deletes);
-        ASSERT_TRUE(_tablet->rowset_commit(16, rs).ok());
-        ASSERT_EQ(16, _tablet->updates()->max_version());
+        ASSERT_TRUE(_tablet->rowset_commit(17, rs).ok());
+        ASSERT_EQ(17, _tablet->updates()->max_version());
 
         // Wait for a short duration and check error state
         std::this_thread::sleep_for(std::chrono::milliseconds(200));
