@@ -4044,6 +4044,15 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: Whether to enable tiered cache mode for Data Cache. When tiered cache mode is enabled, Data Cache is configured with two layers of caching, memory and disk. When disk data becomes hot data, it is automatically loaded into the memory cache, and when the data in the memory cache becomes cold, it is automatically flushed to disk. When tiered cache mode is not enabled, the memory and disk configured for Data Cache form two separate cache spaces and cache different types of data, with no data flow between them.
 - Introduced in: v3.2.5
 
+##### datacache_eviction_policy
+
+- Default: slru
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The eviction policy of Data Cache. Valid values: `lru` (least recently used) and `slru` (Segmented LRU).
+- Introduced in: v3.4.0
+
 ##### query_max_memory_limit_percent
 
 - Default: 90
