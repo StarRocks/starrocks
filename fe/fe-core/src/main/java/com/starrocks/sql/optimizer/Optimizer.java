@@ -674,6 +674,7 @@ public class Optimizer {
         // After this rule, we shouldn't generate logical project operator
         ruleRewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
 
+
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownTopNBelowOuterJoinRule());
         // intersect rewrite depend on statistics
         Utils.calculateStatistics(tree, rootTaskContext.getOptimizerContext());
