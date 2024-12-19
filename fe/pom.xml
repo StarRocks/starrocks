@@ -296,11 +296,7 @@ under the License.
             <dependency>
                 <groupId>com.starrocks</groupId>
                 <artifactId>starrocks-bdb-je</artifactId>
-<<<<<<< HEAD
-                <version>18.3.16</version>
-=======
                 <version>18.3.19</version>
->>>>>>> 5986a70bf3 ([BugFix] Fix BDBJE handshake bug (#50412))
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/de.jflex/jflex -->
