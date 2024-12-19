@@ -330,7 +330,7 @@ StatusOr<bool> StructColumnReader::row_group_zone_map_filter(const std::vector<c
         auto ret = column_reader->row_group_zone_map_filter({rewritten_subfield_predicate}, pred_relation, rg_first_row,
                                                             rg_num_rows);
         // row_group_zone_map_filter failed, always return true, select all
-        RETURN_IF(!res.ok(), true);
+        RETURN_IF(!ret.ok(), true);
 
         return ret.value();
     };
