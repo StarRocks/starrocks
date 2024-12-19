@@ -4009,7 +4009,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型：String
 - 单位：-
 - 是否动态：否
-- 描述：缓存淘汰策略，当前支持: lru和slru。
+- 描述：缓存淘汰策略。有效值：`lru` (least recently used) 和 `slru` (Segmented LRU)。
 - 引入版本：v3.4.0
 
 ##### query_max_memory_limit_percent
