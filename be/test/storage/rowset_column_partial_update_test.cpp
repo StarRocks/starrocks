@@ -41,12 +41,13 @@
 
 namespace starrocks {
 
-struct Param {
+struct RowsetColumnPartialUpdateParam {
     int64_t primary_key_batch_get_index_memory_limit;
     bool skip_pk_preload;
 };
 
-class RowsetColumnPartialUpdateTest : public ::testing::Test, testing::WithParamInterface<Param> {
+class RowsetColumnPartialUpdateTest : public ::testing::Test,
+                                      testing::WithParamInterface<RowsetColumnPartialUpdateParam> {
 public:
     void SetUp() override {
         _compaction_mem_tracker = std::make_unique<MemTracker>(-1);
@@ -1236,6 +1237,8 @@ TEST_P(RowsetColumnPartialUpdateTest, partial_update_with_source_chunk_limit) {
 }
 
 INSTANTIATE_TEST_SUITE_P(RowsetColumnPartialUpdateTest, RowsetColumnPartialUpdateTest,
-                         ::testing::Values(Param{1, false}, Param{1024, true}, Param{104857600, false}));
+                         ::testing::Values(RowsetColumnPartialUpdateParam{1, false},
+                                           RowsetColumnPartialUpdateParam{1024, true},
+                                           RowsetColumnPartialUpdateParam{104857600, false}));
 
 } // namespace starrocks
