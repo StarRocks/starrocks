@@ -15,6 +15,8 @@
 package com.starrocks.statistic.sample;
 
 import com.starrocks.common.Config;
+import com.starrocks.sql.ast.ColumnDef;
+import com.starrocks.statistic.StatisticUtils;
 import org.apache.commons.lang.StringEscapeUtils;
 
 import java.util.List;
@@ -91,7 +93,12 @@ public class SampleInfo {
     public String generateComplexTypeColumnTask(long tableId, long dbId, String tableName, String dbName,
                                                 List<ColumnStats> complexTypeStats) {
         String sep = ", ";
-        String prefix = "INSERT INTO " + STATISTICS_DB_NAME + "." + SAMPLE_STATISTICS_TABLE_NAME + " VALUES ";
+        List<String> targetColumnNames = StatisticUtils.buildStatsColumnDef(SAMPLE_STATISTICS_TABLE_NAME).stream()
+                .map(ColumnDef::getName)
+                .collect(Collectors.toList());
+        String columnNames = "(" + String.join(", ", targetColumnNames) + ")";
+
+        String prefix = "INSERT INTO " + STATISTICS_DB_NAME + "." + SAMPLE_STATISTICS_TABLE_NAME + columnNames + " VALUES ";
         StringJoiner joiner = new StringJoiner(sep, prefix, ";");
 
         for (ColumnStats columnStats : complexTypeStats) {
@@ -122,8 +129,12 @@ public class SampleInfo {
                                                   List<ColumnStats> primitiveTypeStats,
                                                   TabletSampleManager manager) {
         String prefix = "INSERT INTO " + STATISTICS_DB_NAME + "." + SAMPLE_STATISTICS_TABLE_NAME;
+        List<String> targetColumnNames = StatisticUtils.buildStatsColumnDef(SAMPLE_STATISTICS_TABLE_NAME).stream()
+                .map(ColumnDef::getName)
+                .collect(Collectors.toList());
+        String columnNames = "(" + String.join(", ", targetColumnNames) + ")";
         StringBuilder builder = new StringBuilder();
-        builder.append(prefix).append(" ");
+        builder.append(prefix).append(columnNames).append(" ");
         builder.append("WITH base_cte_table as (");
         String queryDataSql = generateQueryDataSql(tableName, dbName, primitiveTypeStats, manager);
         builder.append(queryDataSql).append(") ");
