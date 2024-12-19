@@ -739,7 +739,7 @@ Status DeltaWriter::commit() {
     auto rowset_build_ts = watch.elapsed_time();
 
     if (_tablet->keys_type() == KeysType::PRIMARY_KEYS &&
-        !_storage_engine->update_manager()->mem_tracker()->limit_exceeded_by_ratio(70)) {
+        !_storage_engine->update_manager()->mem_tracker()->limit_exceeded_by_ratio(config::memory_high_level)) {
         auto st = _storage_engine->update_manager()->on_rowset_finished(_tablet.get(), _cur_rowset.get());
         if (!st.ok()) {
             _set_state(kAborted, st);
