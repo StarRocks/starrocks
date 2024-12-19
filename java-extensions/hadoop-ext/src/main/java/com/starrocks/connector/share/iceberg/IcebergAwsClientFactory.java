@@ -14,7 +14,6 @@
 
 package com.starrocks.connector.share.iceberg;
 
-import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import org.apache.iceberg.aws.AwsClientFactory;
 import org.apache.iceberg.aws.AwsProperties;
 import org.slf4j.Logger;
@@ -46,6 +45,7 @@ import java.util.Map;
 import java.util.UUID;
 
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_GLUE_ACCESS_KEY;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_GLUE_CATALOG_ID;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_GLUE_ENDPOINT;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_GLUE_EXTERNAL_ID;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_GLUE_IAM_ROLE_ARN;
@@ -69,7 +69,6 @@ import static com.starrocks.connector.share.credential.CloudConfigurationConstan
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_USE_INSTANCE_PROFILE;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.DEFAULT_AWS_REGION;
-import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_GLUE_CATALOG_ID;
 
 public class IcebergAwsClientFactory implements AwsClientFactory {
     private static final Logger LOG = LoggerFactory.getLogger(IcebergAwsClientFactory.class);
