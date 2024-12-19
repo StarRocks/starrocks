@@ -192,6 +192,8 @@ public:
         return to_status(res);
     }
 
+    void set_stream_item_type(StreamItemType type) override { _file_ptr->set_stream_item_type(static_cast<int>(type)); }
+
     StatusOr<std::unique_ptr<io::NumericStatistics>> get_numeric_statistics() override {
         auto stream_st = _file_ptr->stream();
         if (!stream_st.ok()) {
@@ -200,7 +202,7 @@ public:
 
         const auto& read_stats = (*stream_st)->get_io_stats();
         auto stats = std::make_unique<io::NumericStatistics>();
-        stats->reserve(11);
+        stats->reserve(22);
         stats->append(kBytesReadLocalDisk, read_stats.bytes_read_local_disk);
         stats->append(kBytesWriteLocalDisk, read_stats.bytes_write_local_disk);
         stats->append(kBytesReadRemote, read_stats.bytes_read_remote);
@@ -212,6 +214,17 @@ public:
         stats->append(kPrefetchHitCount, read_stats.prefetch_hit_count);
         stats->append(kPrefetchWaitFinishNs, read_stats.prefetch_wait_finish_ns);
         stats->append(kPrefetchPendingNs, read_stats.prefetch_pending_ns);
+
+        const auto& index_read_stats = (*stream_st)->get_index_io_stats();
+
+        stats->append(kBytesReadLocalDiskIndex, index_read_stats.bytes_read_local_disk);
+        stats->append(kBytesWriteLocalDiskIndex, index_read_stats.bytes_write_local_disk);
+        stats->append(kBytesReadRemoteIndex, index_read_stats.bytes_read_remote);
+        stats->append(kIOCountLocalDiskIndex, index_read_stats.io_count_local_disk);
+        stats->append(kIOCountRemoteIndex, index_read_stats.io_count_remote);
+        stats->append(kIONsReadLocalDiskIndex, index_read_stats.io_ns_read_local_disk);
+        stats->append(kIONsWriteLocalDiskIndex, index_read_stats.io_ns_write_local_disk);
+        stats->append(kIONsRemoteIndex, index_read_stats.io_ns_remote);
         return std::move(stats);
     }
 
@@ -316,7 +329,8 @@ public:
     StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
                                                                        const FileInfo& info) override {
         ASSIGN_OR_RETURN(auto pair, parse_starlet_uri(info.path));
-        auto fs_st = get_shard_filesystem(pair.second);
+        bool enable_datacache;
+        auto fs_st = get_shard_filesystem(pair.second, &enable_datacache);
         if (!fs_st.ok()) {
             return to_status(fs_st.status());
         }
@@ -324,6 +338,7 @@ public:
         opt.skip_fill_local_cache = opts.skip_fill_local_cache;
         opt.buffer_size = opts.buffer_size;
         opt.skip_read_local_cache = opts.skip_disk_cache;
+        opt.enable_data_cache = enable_datacache;
         if (info.size.has_value()) {
             opt.file_size = info.size.value();
         }
@@ -345,14 +360,15 @@ public:
     StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const SequentialFileOptions& opts,
                                                                   const std::string& path) override {
         ASSIGN_OR_RETURN(auto pair, parse_starlet_uri(path));
-
-        auto fs_st = get_shard_filesystem(pair.second);
+        bool enable_datacache;
+        auto fs_st = get_shard_filesystem(pair.second, &enable_datacache);
         if (!fs_st.ok()) {
             return to_status(fs_st.status());
         }
         auto opt = ReadOptions();
         opt.skip_fill_local_cache = opts.skip_fill_local_cache;
         opt.buffer_size = opts.buffer_size;
+        opt.enable_data_cache = enable_datacache;
         auto file_st = (*fs_st)->open(pair.first, std::move(opt));
 
         if (!file_st.ok()) {
@@ -369,7 +385,8 @@ public:
     StatusOr<std::unique_ptr<WritableFile>> new_writable_file(const WritableFileOptions& opts,
                                                               const std::string& path) override {
         ASSIGN_OR_RETURN(auto pair, parse_starlet_uri(path));
-        auto fs_st = get_shard_filesystem(pair.second);
+        bool enable_datacache;
+        auto fs_st = get_shard_filesystem(pair.second, &enable_datacache);
         if (!fs_st.ok()) {
             return to_status(fs_st.status());
         }
@@ -385,6 +402,7 @@ public:
                 fslib_opts.tags[kFileTagType] = kFileTagTypeTxnLog;
             }
         }
+        fslib_opts.enable_data_cache = enable_datacache;
         auto file_st = (*fs_st)->create(pair.first, fslib_opts);
         if (!file_st.ok()) {
             return to_status(file_st.status());
@@ -612,8 +630,9 @@ public:
     }
 
 private:
-    absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>> get_shard_filesystem(int64_t shard_id) {
-        return g_worker->get_shard_filesystem(shard_id, _conf);
+    absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>> get_shard_filesystem(
+            int64_t shard_id, bool* enable_datacache = nullptr) {
+        return g_worker->get_shard_filesystem(shard_id, _conf, enable_datacache);
     }
 
 private:

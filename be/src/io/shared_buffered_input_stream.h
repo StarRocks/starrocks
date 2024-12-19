@@ -64,6 +64,7 @@ public:
     StatusOr<int64_t> position() override { return _offset; }
     StatusOr<int64_t> read(void* data, int64_t count) override;
     Status read_at_fully(int64_t offset, void* out, int64_t count) override;
+    void set_stream_item_type(StreamItemType type) override { _stream->set_stream_item_type(type); };
     StatusOr<int64_t> get_size() override;
     Status skip(int64_t count) override {
         _offset += count;

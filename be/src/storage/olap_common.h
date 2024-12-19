@@ -302,6 +302,20 @@ struct OlapReaderStatistics {
     int64_t io_ns_write_local_disk = 0;
     int64_t io_ns_remote = 0;
 
+    int64_t compressed_bytes_read_local_disk_index = 0;
+    int64_t compressed_bytes_write_local_disk_index = 0;
+    int64_t compressed_bytes_read_remote_index = 0;
+    int64_t compressed_bytes_read_request_index = 0;
+
+    int64_t io_count_local_disk_index = 0;
+    int64_t io_count_remote_index = 0;
+    int64_t io_count_request_index = 0;
+
+    // int64_t io_ns_index = 0;
+    int64_t io_ns_read_local_disk_index = 0;
+    int64_t io_ns_write_local_disk_index = 0;
+    int64_t io_ns_remote_index = 0;
+
     int64_t prefetch_hit_count = 0;
     int64_t prefetch_wait_finish_ns = 0;
     int64_t prefetch_pending_ns = 0;
@@ -364,6 +378,17 @@ const char* const kIONsReadLocalDisk = "io_ns_read_local_disk";
 const char* const kIONsWriteLocalDisk = "io_ns_write_local_disk";
 const char* const kIONsReadRemote = "io_ns_read_remote";
 const char* const kIONsWriteRemote = "io_ns_write_remote";
+const char* const kIONsRemote = "io_ns_remote";
+// io stats for index starcache
+const char* const kBytesReadLocalDiskIndex = "bytes_read_local_disk_index";
+const char* const kBytesWriteLocalDiskIndex = "bytes_write_local_disk_index";
+const char* const kBytesReadRemoteIndex = "bytes_read_remote_index";
+const char* const kIOCountLocalDiskIndex = "io_count_local_disk_index";
+const char* const kIOCountRemoteIndex = "io_count_remote_index";
+const char* const kIONsReadLocalDiskIndex = "io_ns_read_local_disk_index";
+const char* const kIONsWriteLocalDiskIndex = "io_ns_write_local_disk_index";
+const char* const kIONsRemoteIndex = "io_ns_remote_index";
+
 const char* const kPrefetchHitCount = "prefetch_hit_count";
 const char* const kPrefetchWaitFinishNs = "prefetch_wait_finish_ns";
 const char* const kPrefetchPendingNs = "prefetch_pending_ns";

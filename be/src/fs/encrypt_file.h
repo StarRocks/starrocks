@@ -59,6 +59,8 @@ public:
 
     bool is_encrypted() const override { return true; };
 
+    void set_stream_item_type(StreamItemType type) override { return _stream->set_stream_item_type(type); };
+
 private:
     std::unique_ptr<io::SeekableInputStream> _stream;
     FileEncryptionInfo _encryption_info;

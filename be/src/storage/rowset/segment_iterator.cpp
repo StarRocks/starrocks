@@ -840,6 +840,7 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
                     // read the entire file at once by set range{0, file_size}
                     std::vector<io::SharedBufferedInputStream::IORange> ranges = {{0, file_size}};
                     RETURN_IF_ERROR(_shared_buffered_input_stream->set_io_ranges(ranges));
+                    _shared_buffered_input_stream->set_stream_item_type(StreamItemType::IO_COALESCE);
                 } else {
                     _shared_buffered_input_stream->increase_hold_count();
                 }
@@ -2564,6 +2565,22 @@ void SegmentIterator::_update_stats(io::SeekableInputStream* rfile) {
             _opts.stats->prefetch_wait_finish_ns += value;
         } else if (name == kPrefetchPendingNs) {
             _opts.stats->prefetch_pending_ns += value;
+        } else if (name == kBytesReadLocalDiskIndex) {
+            _opts.stats->compressed_bytes_read_local_disk_index += value;
+        } else if (name == kBytesWriteLocalDiskIndex) {
+            _opts.stats->compressed_bytes_write_local_disk_index += value;
+        } else if (name == kBytesReadRemoteIndex) {
+            _opts.stats->compressed_bytes_read_remote_index += value;
+        } else if (name == kIOCountLocalDiskIndex) {
+            _opts.stats->io_count_local_disk_index += value;
+        } else if (name == kIOCountRemoteIndex) {
+            _opts.stats->io_count_remote_index += value;
+        } else if (name == kIONsReadLocalDiskIndex) {
+            _opts.stats->io_ns_read_local_disk_index += value;
+        } else if (name == kIONsWriteLocalDiskIndex) {
+            _opts.stats->io_ns_write_local_disk_index += value;
+        } else if (name == kIONsRemoteIndex) {
+            _opts.stats->io_ns_remote_index += value;
         } else if (name == kSharedIoCount) {
             _opts.stats->shared_buffered_shared_io_count += value;
         } else if (name == kSharedIoBytes) {

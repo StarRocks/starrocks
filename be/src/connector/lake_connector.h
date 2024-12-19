@@ -180,6 +180,17 @@ private:
     RuntimeProfile::Counter* _io_ns_total_timer = nullptr;
     // IO write time
     RuntimeProfile::Counter* _io_ns_write_local_disk_timer = nullptr;
+    // IO for index starcache
+    RuntimeProfile::Counter* _compressed_bytes_read_local_disk_index_counter = nullptr;
+    RuntimeProfile::Counter* _compressed_bytes_read_remote_index_counter = nullptr;
+    RuntimeProfile::Counter* _compressed_bytes_write_local_disk_index_counter = nullptr;
+    RuntimeProfile::Counter* _compressed_bytes_read_request_index_counter = nullptr;
+    RuntimeProfile::Counter* _io_count_local_disk_index_counter = nullptr;
+    RuntimeProfile::Counter* _io_count_remote_index_counter = nullptr;
+    RuntimeProfile::Counter* _io_count_request_index_counter = nullptr;
+    RuntimeProfile::Counter* _io_ns_read_local_disk_index_timer = nullptr;
+    RuntimeProfile::Counter* _io_ns_remote_index_timer = nullptr;
+    RuntimeProfile::Counter* _io_ns_write_local_disk_index_timer = nullptr;
     // Prefetch
     RuntimeProfile::Counter* _prefetch_hit_counter = nullptr;
     RuntimeProfile::Counter* _prefetch_wait_finish_timer = nullptr;

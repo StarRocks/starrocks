@@ -190,6 +190,7 @@ Status read_and_decompress_page_internal(const PageReadOptions& opts, PageHandle
     std::unique_ptr<char[]> page(new char[page_size + Column::APPEND_OVERFLOW_MAX_SIZE]);
     Slice page_slice(page.get(), page_size);
     {
+        opts.read_file->set_stream_item_type(opts.is_index ? StreamItemType::INDEX : StreamItemType::DATA);
         SCOPED_RAW_TIMER(&opts.stats->io_ns);
         // todo override is_cache_hit
         if (opts.read_file->is_cache_hit()) {
@@ -198,8 +199,13 @@ Status read_and_decompress_page_internal(const PageReadOptions& opts, PageHandle
         } else {
             RETURN_IF_ERROR(opts.read_file->read_at_fully(opts.page_pointer.offset, page_slice.data, page_slice.size));
         }
-        opts.stats->compressed_bytes_read_request += page_size;
+        if (opts.is_index) {
+            ++opts.stats->io_count_request_index;
+            opts.stats->compressed_bytes_read_request_index += page_size;
+        }
         ++opts.stats->io_count_request;
+        opts.stats->compressed_bytes_read_request += page_size;
+        opts.read_file->set_stream_item_type(StreamItemType::DATA);
     }
 
     if (opts.verify_checksum) {
@@ -207,8 +213,10 @@ Status read_and_decompress_page_internal(const PageReadOptions& opts, PageHandle
         uint32_t actual = crc32c::Value(page_slice.data, page_slice.size - 4);
         if (expect != actual) {
             return Status::Corruption(
-                    strings::Substitute("Bad page: checksum mismatch (actual=$0 vs expect=$1), file=$2 encrypted=$3",
-                                        actual, expect, opts.read_file->filename(), opts.read_file->is_encrypted()));
+                    strings::Substitute("Bad page: checksum mismatch (actual=$0 vs expect=$1), "
+                                        "file=$2 encrypted=$3, offset=$3",
+                                        actual, expect, opts.read_file->filename(), opts.read_file->is_encrypted(),
+                                        opts.page_pointer.offset));
         }
     }
 

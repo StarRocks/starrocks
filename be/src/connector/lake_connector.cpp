@@ -608,6 +608,29 @@ void LakeDataSource::init_counter(RuntimeState* state) {
     _prefetch_wait_finish_timer = ADD_CHILD_TIMER(_runtime_profile, "PrefetchWaitFinishTime", io_statistics_name);
     _prefetch_pending_timer = ADD_CHILD_TIMER(_runtime_profile, "PrefetchPendingTime", io_statistics_name);
 
+    // Index starcache statistics
+    const std::string index_statistics_name = "IndexIOStatistics";
+    ADD_COUNTER(_runtime_profile, index_statistics_name, TUnit::NONE);
+    _compressed_bytes_read_local_disk_index_counter = ADD_CHILD_COUNTER(
+            _runtime_profile, "CompressedBytesReadLocalDiskIndex", TUnit::BYTES, index_statistics_name);
+    _compressed_bytes_read_remote_index_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "CompressedBytesReadRemoteIndex", TUnit::BYTES, index_statistics_name);
+    _compressed_bytes_read_request_index_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "CompressedBytesReadRequestIndex", TUnit::BYTES, index_statistics_name);
+    _compressed_bytes_write_local_disk_index_counter = ADD_CHILD_COUNTER(
+            _runtime_profile, "CompressedBytesWriteLocalDiskIndex", TUnit::BYTES, index_statistics_name);
+    _io_count_local_disk_index_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "IOCountLocalDiskIndex", TUnit::UNIT, index_statistics_name);
+    _io_count_remote_index_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "IOCountRemoteIndex", TUnit::UNIT, index_statistics_name);
+    _io_count_request_index_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "IOCountRequestIndex", TUnit::UNIT, index_statistics_name);
+    _io_ns_read_local_disk_index_timer =
+            ADD_CHILD_TIMER(_runtime_profile, "IOTimeReadLocalDiskIndex", index_statistics_name);
+    _io_ns_remote_index_timer = ADD_CHILD_TIMER(_runtime_profile, "IOTimeRemoteIndex", index_statistics_name);
+    _io_ns_write_local_disk_index_timer =
+            ADD_CHILD_TIMER(_runtime_profile, "IOTimeWriteLocalDiskIndex", index_statistics_name);
+
     const std::string shared_buffered_name = "SharedBuffered";
     ADD_COUNTER(_runtime_profile, shared_buffered_name, TUnit::NONE);
     // shared_buffer_stream
@@ -757,6 +780,21 @@ void LakeDataSource::update_counter() {
     COUNTER_UPDATE(_io_ns_total_timer, _reader->stats().io_ns);
 
     COUNTER_UPDATE(_io_ns_write_local_disk_timer, _reader->stats().io_ns_write_local_disk);
+
+    COUNTER_UPDATE(_compressed_bytes_read_local_disk_index_counter,
+                   _reader->stats().compressed_bytes_read_local_disk_index);
+    COUNTER_UPDATE(_compressed_bytes_read_remote_index_counter, _reader->stats().compressed_bytes_read_remote_index);
+    COUNTER_UPDATE(_compressed_bytes_read_request_index_counter, _reader->stats().compressed_bytes_read_request_index);
+    COUNTER_UPDATE(_compressed_bytes_write_local_disk_index_counter,
+                   _reader->stats().compressed_bytes_write_local_disk_index);
+
+    COUNTER_UPDATE(_io_count_local_disk_index_counter, _reader->stats().io_count_local_disk_index);
+    COUNTER_UPDATE(_io_count_remote_index_counter, _reader->stats().io_count_remote_index);
+    COUNTER_UPDATE(_io_count_request_index_counter, _reader->stats().io_count_request_index);
+
+    COUNTER_UPDATE(_io_ns_read_local_disk_index_timer, _reader->stats().io_ns_read_local_disk_index);
+    COUNTER_UPDATE(_io_ns_remote_index_timer, _reader->stats().io_ns_remote_index);
+    COUNTER_UPDATE(_io_ns_write_local_disk_index_timer, _reader->stats().io_ns_write_local_disk_index);
 
     COUNTER_UPDATE(_prefetch_hit_counter, _reader->stats().prefetch_hit_count);
     COUNTER_UPDATE(_prefetch_wait_finish_timer, _reader->stats().prefetch_wait_finish_ns);

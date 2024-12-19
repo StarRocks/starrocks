@@ -89,6 +89,7 @@ Status IndexedColumnReader::load_index_page(const IndexReadOptions& opts, const 
 
 Status IndexedColumnReader::read_page(const IndexReadOptions& opts, const PagePointer& pp, PageHandle* handle,
                                       Slice* body, PageFooterPB* footer) const {
+    VLOG(11) << "indexreader read page, length=" << pp.size << ",offset=" << pp.offset;
     PageReadOptions page_opts;
     page_opts.read_file = opts.read_file;
     page_opts.page_pointer = pp;
@@ -97,6 +98,7 @@ Status IndexedColumnReader::read_page(const IndexReadOptions& opts, const PagePo
     page_opts.use_page_cache = opts.use_page_cache;
     page_opts.kept_in_memory = opts.kept_in_memory;
     page_opts.encoding_type = _encoding_info->encoding();
+    page_opts.is_index = true;
     return PageIO::read_and_decompress_page(page_opts, handle, body, footer);
 }
 

@@ -199,7 +199,8 @@ absl::Status StarOSWorker::update_worker_info(const staros::starlet::WorkerInfo&
 }
 
 absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::get_shard_filesystem(ShardId id,
-                                                                                      const Configuration& conf) {
+                                                                                      const Configuration& conf,
+                                                                                      bool* enable_datacache) {
     ShardInfo shard_info;
     { // shared_lock, check if the filesystem already created
         std::shared_lock l(_mtx);
@@ -207,7 +208,10 @@ absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::get_shard_files
         if (it == _shards.end()) {
             // unlock the lock and try best to build the filesystem with remote rpc call
             l.unlock();
-            return build_filesystem_on_demand(id, conf);
+            return build_filesystem_on_demand(id, conf, enable_datacache);
+        }
+        if (enable_datacache) {
+            *enable_datacache = need_enable_cache(it->second.shard_info);
         }
 
         auto fs = lookup_fs_cache(it->second.fs_cache_key);
@@ -219,6 +223,9 @@ absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::get_shard_files
 
     // Build the filesystem under no lock, so the op won't hold the lock for a long time.
     // It is possible that multiple filesystems are built for the same shard from multiple threads under no lock here.
+    if (enable_datacache) {
+        *enable_datacache = need_enable_cache(it->second.shard_info);
+    }
     auto fs_or = build_filesystem_from_shard_info(shard_info, conf);
     if (!fs_or.ok()) {
         return fs_or.status();
@@ -256,11 +263,17 @@ absl::StatusOr<staros::starlet::ShardInfo> StarOSWorker::_fetch_shard_info_from_
 }
 
 absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::build_filesystem_on_demand(ShardId id,
-                                                                                            const Configuration& conf) {
+                                                                                            const Configuration& conf,
+                                                                                            bool* enable_datacache) {
     auto info_or = _fetch_shard_info_from_remote(id);
     if (!info_or.ok()) {
         return info_or.status();
     }
+
+    if (enable_datacache) {
+        *enable_datacache = need_enable_cache(info_or.value());
+    }
+
     auto fs_or = build_filesystem_from_shard_info(info_or.value(), conf);
     if (!fs_or.ok()) {
         return fs_or.status();
@@ -281,6 +294,10 @@ StarOSWorker::build_filesystem_from_shard_info(const ShardInfo& info, const Conf
         return scheme.status();
     }
 
+    if (need_enable_cache(info) || fslib::FLAGS_enable_index_cache) {
+        // set environ variable to cachefs directory
+        setenv(fslib::kFslibCacheDir.c_str(), config::starlet_cache_dir.c_str(), 0 /*overwrite*/);
+    }
     return new_shared_filesystem(*scheme, *localconf);
 }
 
@@ -290,7 +307,7 @@ bool StarOSWorker::need_enable_cache(const ShardInfo& info) {
 }
 
 absl::StatusOr<std::string> StarOSWorker::build_scheme_from_shard_info(const ShardInfo& info) {
-    if (need_enable_cache(info)) {
+    if (need_enable_cache(info) || fslib::FLAGS_enable_index_cache) {
         return "cachefs://";
     }
 
@@ -321,7 +338,7 @@ absl::StatusOr<std::string> StarOSWorker::build_scheme_from_shard_info(const Sha
 
 absl::StatusOr<fslib::Configuration> StarOSWorker::build_conf_from_shard_info(const ShardInfo& info) {
     // use the remote fsroot as the default cache identifier
-    return info.fslib_conf_from_this(need_enable_cache(info), "");
+    return info.fslib_conf_from_this(need_enable_cache(info) || fslib::FLAGS_enable_index_cache, "");
 }
 
 absl::StatusOr<std::pair<std::shared_ptr<std::string>, std::shared_ptr<fslib::FileSystem>>>
@@ -504,6 +521,10 @@ void init_staros_worker(const std::shared_ptr<starcache::StarCache>& star_cache)
     fslib::FLAGS_star_cache_disk_size_percent = config::starlet_star_cache_disk_size_percent;
     fslib::FLAGS_star_cache_disk_size_bytes = config::starlet_star_cache_disk_size_bytes;
     fslib::FLAGS_star_cache_block_size_bytes = config::starlet_star_cache_block_size_bytes;
+    fslib::FLAGS_enable_index_cache = config::starlet_enable_index_cache;
+    fslib::FLAGS_index_cache_disk_size_percent = config::starlet_index_cache_disk_size_percent;
+    fslib::FLAGS_index_cache_disk_size_bytes = config::starlet_index_cache_disk_size_bytes;
+    fslib::FLAGS_index_cache_block_size_bytes = config::starlet_index_cache_block_size_bytes;
 
     staros::starlet::StarletConfig starlet_config;
     starlet_config.rpc_port = config::starlet_port;
@@ -537,6 +558,18 @@ void update_staros_starcache() {
     if (fslib::FLAGS_star_cache_mem_size_bytes != config::starlet_star_cache_mem_size_bytes) {
         fslib::FLAGS_star_cache_mem_size_bytes = config::starlet_star_cache_mem_size_bytes;
         (void)fslib::star_cache_update_memory_quota_bytes(fslib::FLAGS_star_cache_mem_size_bytes);
+    }
+
+    if (fslib::FLAGS_enable_index_cache != config::starlet_enable_index_cache) {
+        if (config::starlet_enable_index_cache) {
+            absl::Status status = fslib::index_cache_init();
+            if (status.ok()) {
+                // flag should not be set before init successfully
+                fslib::FLAGS_enable_index_cache = config::starlet_enable_index_cache;
+            }
+        } else {
+            fslib::FLAGS_enable_index_cache = config::starlet_enable_index_cache;
+        }
     }
 }
 

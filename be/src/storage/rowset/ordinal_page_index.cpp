@@ -119,9 +119,12 @@ Status OrdinalIndexReader::_do_load(const IndexReadOptions& opts, const OrdinalI
     page_opts.stats = opts.stats;
     page_opts.use_page_cache = opts.use_page_cache;
     page_opts.kept_in_memory = opts.kept_in_memory;
+    page_opts.is_index = true;
 
     opts.stats->ordinal_index_page_io_count += 1;
     opts.stats->ordinal_index_page_bytes += page_opts.page_pointer.size;
+    VLOG(11) << "load ordinalindex length=" << page_opts.page_pointer.size
+             << ",offset=" << page_opts.page_pointer.offset;
 
     // read index page
     PageHandle page_handle;

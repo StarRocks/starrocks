@@ -67,6 +67,8 @@ struct PageReadOptions {
     // if true, use DURABLE CachePriority in page cache
     // currently used for in memory olap table
     bool kept_in_memory = false;
+    // distinguish index from data for observability
+    bool is_index = false;
     // page encoding type
     EncodingTypePB encoding_type = UNKNOWN_ENCODING;
 

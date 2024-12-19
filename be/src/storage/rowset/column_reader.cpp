@@ -354,6 +354,7 @@ Status ColumnReader::read_page(const ColumnIteratorOptions& iter_opts, const Pag
     opts.use_page_cache = iter_opts.use_page_cache;
     opts.encoding_type = _encoding_info->encoding();
     opts.kept_in_memory = false;
+    opts.is_index = false;
 
     return PageIO::read_and_decompress_page(opts, handle, page_body, footer);
 }

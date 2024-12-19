@@ -269,9 +269,9 @@ Status Segment::_open(size_t* footer_length_hint, const FooterPointerPB* partial
             Segment::parse_segment_footer(read_file.get(), &footer, footer_length_hint, partial_rowset_footer));
     RETURN_IF_ERROR(_create_column_readers(&footer));
     int64_t end = MonotonicNanos();
-    auto cost = (end - start) / 1000;
-    LOG(INFO) << "load segment footer " << file_name() << ", cost " << cost << "ms"
-              << ", length " << length;
+    auto cost = (end - start) / 1000000;
+    VLOG(9) << "load segment footer " << file_name() << ", cost " << cost << "ms"
+            << ", length " << length;
     _num_rows = footer.num_rows();
     _short_key_index_page = PagePointer(footer.short_key_index_page());
     return Status::OK();
@@ -400,6 +400,7 @@ Status Segment::_load_index(const LakeIOOptions& lake_io_opts) {
     opts.codec = nullptr; // short key index page uses NO_COMPRESSION for now
     OlapReaderStatistics tmp_stats;
     opts.stats = &tmp_stats;
+    opts.is_index = true;
 
     int64_t start = MonotonicNanos();
     Slice body;
@@ -407,12 +408,13 @@ Status Segment::_load_index(const LakeIOOptions& lake_io_opts) {
     RETURN_IF_ERROR(PageIO::read_and_decompress_page(opts, &_sk_index_handle, &body, &footer));
     int64_t end = MonotonicNanos();
 
-    auto cost = (end - start) / 1000;
+    auto cost = (end - start) / 1000000;
     DCHECK_EQ(footer.type(), SHORT_KEY_PAGE);
     DCHECK(footer.has_short_key_page_footer());
 
     _sk_index_decoder = std::make_unique<ShortKeyIndexDecoder>();
-    LOG(INFO) << "load short key index " << file_name() << "cost " << cost << "ms";
+    VLOG(9) << "load short key index " << file_name() << ", cost " << cost << "ms, "
+            << "length " << _short_key_index_page.size;
     return _sk_index_decoder->parse(body, footer.short_key_page_footer());
 }
 
