@@ -379,6 +379,97 @@ mysql> SELECT * FROM insert_generated_columns;
 1 row in set (0.02 sec)
 ```
 
+## 插入数据时配置 PROPERTIES
+
+从 v3.4.0 版本开始，INSERT 语句支持配置 PROPERTIES，可用于多种功能。当同时指定 PROPERTIES 和其对应的系统变量时，PROPERTIES 优先生效。
+
+### INSERT 严格模式和 max filter ratio
+
+- `strict_mode`：是否在使用 INSERT from FILES() 导入数据时启用严格模式。有效值：`true` 和 `false`（默认值）。启用严格模式时，系统仅导入合格的数据行，过滤掉不合格的行，并返回不合格行的详细信息。更多信息请参见 [严格模式](./load_concept/strict_mode.md)。您也可以通过变量 `enable_insert_strict` 在当前 Session 中或全局启用 INSERT 的严格模式。
+- `max_filter_ratio`：INSERT 导入作业的最大容忍率，即导入作业能够容忍的因数据质量不合格而过滤掉的数据行所占的最大比例。当不合格行数比例超过该限制时，导入作业失败。默认值：`0`。范围：[0, 1]。您也可以通过变量 `insert_max_filter_ratio` 在当前 Session 中或全局设置 INSERT 的最大错误容忍度。
+
+以下示例将 AWS S3 存储桶 `inserttest` 内 Parquet 文件 **parquet/insert_wiki_edit_append.parquet** 中的数据插入至表 `insert_wiki_edit` 中，启用严格模式以过滤不合格的数据行，并且设置最大容错比为 10%：
+
+```SQL
+INSERT INTO insert_wiki_edit
+PROPERTIES(
+    "strict_mode" = "true",
+    "max_filter_ratio" = "0.1"
+)
+    SELECT * FROM FILES(
+        "path" = "s3://inserttest/parquet/insert_wiki_edit_append.parquet",
+        "format" = "parquet",
+        "aws.s3.access_key" = "XXXXXXXXXX",
+        "aws.s3.secret_key" = "YYYYYYYYYY",
+        "aws.s3.region" = "us-west-2"
+);
+```
+
+:::note
+
+`strict_mode` 和 `max_filter_ratio` 仅支持 INSERT from FILES() 导入方式。INSERT from Table 导入方式不支持以上属性。
+
+:::
+
+### INSERT 超时时间
+
+`timeout`：INSERT 作业的超时时间。单位：秒。您也可以通过变量 `insert_timeout` 在当前 Session 中或全局设置 INSERT 的超时时间。
+
+以下示例将源表 `source_wiki_edit` 中的数据插入到目标表 `insert_wiki_edit`，并将超时时间设置为 `2` 秒：
+
+```SQL
+INSERT INTO insert_wiki_edit
+PROPERTIES(
+    "timeout" = "2"
+)
+SELECT * FROM source_wiki_edit;
+```
+
+:::note
+
+从 v3.4.0 版本开始，`insert_timeout` 作用于所有涉及 INSERT 的操作（例如，UPDATE、DELETE、CTAS、物化视图刷新、统计信息收集和 PIPE），替代原本的 `query_timeout`。
+
+:::
+
+### INSERT 按名称匹配列
+
+默认情况下，INSERT 根据源表和目标表中列的位置（即语句中列的映射关系）来匹配列。
+
+以下示例通过指定位置的方式显式匹配源表和目标表中的列：
+
+```SQL
+INSERT INTO insert_wiki_edit (
+    event_time,
+    channel,
+    user
+)
+SELECT event_time, channel, user FROM source_wiki_edit;
+```
+
+如果您在 Column 子句或 SELECT 语句中改变了 `channel` 和 `user` 的顺序，列的映射关系将发生变化。
+
+通过在 INSERT 语句中将属性 match_column_by 设置为 name，系统将根据源表和目标表中的列名进行匹配，匹配同名的列。
+
+`match_column_by`：系统匹配源表和目标表中的列的方式。有效值：
+- `position`（默认值）：系统根据 Column 子句和 SELECT 语句中列的位置来匹配列。
+- `name`：系统根据列名匹配相同名称的列。
+
+以下示例通过列名匹配源表和目标表中的列：
+
+```SQL
+INSERT INTO insert_wiki_edit (
+    event_time,
+    channel,
+    user
+)
+PROPERTIES(
+    "match_column_by" = "name"
+)
+SELECT event_time, user, channel FROM source_wiki_edit;
+```
+
+在这种情况下，改变 `channel` 和 `user` 的顺序不会改变列的映射关系。
+
 ## 通过 INSERT 语句异步导入数据
 
 使用 INSERT 语句创建的同步导入任务，可能会因为会话中断或超时而失败。您可以使用 [SUBMIT TASK](../sql-reference/sql-statements/loading_unloading/ETL/SUBMIT_TASK.md) 语句提交异步 INSERT 任务。此功能自 StarRocks v2.5 起支持。

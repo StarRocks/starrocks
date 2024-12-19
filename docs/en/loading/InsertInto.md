@@ -397,6 +397,97 @@ mysql> SELECT * FROM insert_generated_columns;
 1 row in set (0.02 sec)
 ```
 
+## INSERT data with PROPERTIES
+
+From v3.4.0 onwards, INSERT statements support configuring PROPERTIES, which can serve a wide variety of purposes. PROPERTIES overrides their corresponding variables.
+
+### INSERT strict mode and max filter ratio
+
+- `strict_mode`: Whether to enable strict mode while loading data using INSERT from files(). Valid values: `true` and `false` (Default). When strict mode is enabled, the system loads only qualified rows. It filters out unqualified rows and returns details about the unqualified rows. For more information, see [Strict mode](./load_concept/strict_mode.md). You can also enable strict mode for INSERT from files() within the session or globally using the variable `enable_insert_strict`.
+- `max_filter_ratio`: The maximum error tolerance of INSERT from files(). It's the maximum ratio of data records that can be filtered out due to inadequate data quality. When the ratio of unqualified data records reaches this threshold, the job fails. Default value: `0`. Range: [0, 1]. You can also set the maximum error tolerance for INSERT from files() within the session or globally using the variable `insert_max_filter_ratio`.
+
+The following example inserts data rows from the Parquet file **parquet/insert_wiki_edit_append.parquet** within the AWS S3 bucket `inserttest` into the table `insert_wiki_edit`, enables strict mode to filter the unqualified data records, and tolerates at most 10% of error data:
+
+```SQL
+INSERT INTO insert_wiki_edit
+PROPERTIES(
+    "strict_mode" = "true",
+    "max_filter_ratio" = "0.1"
+)
+    SELECT * FROM FILES(
+        "path" = "s3://inserttest/parquet/insert_wiki_edit_append.parquet",
+        "format" = "parquet",
+        "aws.s3.access_key" = "XXXXXXXXXX",
+        "aws.s3.secret_key" = "YYYYYYYYYY",
+        "aws.s3.region" = "us-west-2"
+);
+```
+
+:::note
+
+`strict_mode` and `max_filter_ratio` are supported only for INSERT from files(). INSERT from tables does not support these properties.
+
+:::
+
+### INSERT timeout
+
+`timeout`: The timeout duration of the INSERT job. Unit: Seconds. You can also set the timeout duration for INSERT within the session or globally using the variable `insert_timeout`.
+
+The following example inserts the data from the source table `source_wiki_edit` to the target table `insert_wiki_edit` with the timeout duration set to `2` seconds.
+
+```SQL
+INSERT INTO insert_wiki_edit
+PROPERTIES(
+    "timeout" = "2"
+)
+SELECT * FROM source_wiki_edit;
+```
+
+:::note
+
+From v3.4.0 onwards, `insert_timeout` applies to operations involved INSERT (for example, UPDATE, DELETE, CTAS, materialized view refresh, statistics collection, and PIPE), replacing `query_timeout`.
+
+:::
+
+### INSERT match column by name
+
+By default, INSERT matches the columns in the source and the target tables by their positions, that is, the mapping of the columns in the statement.
+
+The following example explicitly matches each column in the source and target tables by their positions:
+
+```SQL
+INSERT INTO insert_wiki_edit (
+    event_time,
+    channel,
+    user
+)
+SELECT event_time, channel, user FROM source_wiki_edit;
+```
+
+The column mapping will change if you changed the order of `channel` and `user` in either the column clause or the SELECT statement.
+
+By setting the property `match_column_by` to `name` in the INSERT statement, the system will detect the column names in the source and the target tables, and match the columns with the same name.
+
+`match_column_by`: The mode how the system matches the columns in the source and target tables. Valid values:
+- `position` (Default): The system matches the columns by the position of the columns in the column clause and the SELECT statement.
+- `name`: The system matches the columns with the same name.
+
+The following example matches each column in the source and target tables by their names:
+
+```SQL
+INSERT INTO insert_wiki_edit (
+    event_time,
+    channel,
+    user
+)
+PROPERTIES(
+    "match_column_by" = "name"
+)
+SELECT event_time, user, channel FROM source_wiki_edit;
+```
+
+In this case, changing the order of `channel` and `user` will not change the column mapping.
+
 ## Load data asynchronously using INSERT
 
 Loading data with INSERT submits a synchronous transaction, which may fail because of session interruption or timeout. You can submit an asynchronous INSERT transaction using [SUBMIT TASK](../sql-reference/sql-statements/loading_unloading/ETL/SUBMIT_TASK.md). This feature is supported since StarRocks v2.5.

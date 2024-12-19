@@ -33,7 +33,7 @@ displayed_sidebar: docs
 ### 语法
 
 ```SQL
-FILES( data_location , data_format [, schema_detect ] [, StorageCredentialParams ] [, columns_from_path ] )
+FILES( data_location , [data_format] [, schema_detect ] [, StorageCredentialParams ] [, columns_from_path ] [, list_files_only ])
 ```
 
 ### 参数说明
@@ -108,6 +108,8 @@ FILES( data_location , data_format [, schema_detect ] [, StorageCredentialParams
 数据文件的格式。有效值：`parquet`、`orc` 和 `csv`。
 
 特定数据文件格式需要额外参数指定细节选项。
+
+`list_files_only` 设置为 `true` 时，无需指定 `data_format`。
 
 ##### CSV
 
@@ -185,6 +187,26 @@ CSV 格式示例：
 >
 > 单个批次中的所有数据文件必须为相同的文件格式。
 
+##### 严格类型检查下推
+
+从 v3.4.0 版本开始，系统支持将目标表 Schema 的严格类型检查下推到 FILES() 的扫描阶段。
+
+FILES() 的架构检测并不是完全严格的。例如，在读取 CSV 文件时，任何整数列都会被推断为 BIGINT 类型，并按照此类型检查。在这种情况下，如果目标表中的相应列是 TINYINT 类型，则超出 BIGINT 类型范围的 CSV 数据行不会被过滤。
+
+为了解决这个问题，系统引入了动态 FE 配置项 `files_enable_insert_push_down_schema`，用于控制是否将严格类型检查下推到 FILES() 的扫描阶段。通过将 `files_enable_insert_push_down_schema` 设置为 `true`，系统将在读取文件时过滤掉未通过严格类型检查的数据行。
+
+##### 合并具有不同 Schema 的文件
+
+从 v3.4.0 版本开始，系统支持合并具有不同 Schema 的文件，并为不存在的列赋予 NULL 值。
+
+例如，读取的文件来自 Hive 表的不同分区，且较新的分区进行了 Schema Change。当同时读取新旧分区时，系统将合并新旧分区文件的 Schema ，并为不存在的列赋值为 NULL。
+
+对于 Parquet 和 ORC 文件，系统根据列名合并其 Schema。而对于 CSV 文件，系统根据列的顺序（位置）合并 Schema。
+
+##### 推断 Parquet 文件中的 STRUCT 类型
+
+从 v3.4.0 版本开始，FILES() 支持从 Parquet 文件中推断 STRUCT 类型的数据。尽管 Parquet 文件本身不支持 STRUCT 类型，但系统可以从文件中的 STRING 类型列推断 STRUCT 及嵌套 STRUCT 值。
+
 #### StorageCredentialParams
 
 StarRocks 访问存储系统的认证配置。
@@ -254,6 +276,18 @@ StarRocks 当前仅支持通过简单认证访问 HDFS 集群，通过 IAM User 
 ```
 
 假设数据文件 **file1** 存储在路径 `/geo/country=US/city=LA/` 下。您可以将 `columns_from_path` 参数指定为 `"columns_from_path" = "country, city"`，以提取文件路径中的地理信息作为返回的列的值。详细使用方法请见以下示例四。
+
+#### list_files_only
+
+自 v3.4.0 起，FILES() 支持在读取文件时只列出文件。
+
+```SQL
+"list_files_only" = "true"
+```
+
+当 `list_files_only` 设置为 `true` 时，无需指定 `data_format` 。
+
+更多信息，参考 [返回](#返回)。
 
 ### 返回
 
@@ -358,6 +392,26 @@ StarRocks 当前仅支持通过简单认证访问 HDFS 集群，通过 IAM User 
   10 rows in set (0.55 sec)
   ```
 
+- 在查询文件时将 `list_files_only` 设置为 `true`，系统将返回 `PATH`、`SIZE`、`IS_DIR`（给定路径是否为目录）和 `MODIFICATION_TIME`。
+
+  ```SQL
+  SELECT * FROM FILES(
+      "path" = "s3://bucket/*.parquet",
+      "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+      "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+      "list_files_only" = "true"
+  );
+  +-----------------------+------+--------+---------------------+
+  | PATH                  | SIZE | IS_DIR | MODIFICATION_TIME   |
+  +-----------------------+------+--------+---------------------+
+  | s3://bucket/1.parquet | 5221 |      0 | 2024-08-15 20:47:02 |
+  | s3://bucket/2.parquet | 5222 |      0 | 2024-08-15 20:54:57 |
+  | s3://bucket/3.parquet | 5223 |      0 | 2024-08-20 15:21:00 |
+  | s3://bucket/4.parquet | 5224 |      0 | 2024-08-15 11:32:14 |
+  +-----------------------+------+--------+---------------------+
+  4 rows in set (0.03 sec)
+  ```
+
 #### DESC FILES()
 
 当与 DESC 语句一同使用时，FILES() 函数会返回远端存储文件的 Schema 信息。
@@ -394,6 +448,27 @@ DESC FILES(
 +------------------+------------------+------+
 17 rows in set (0.05 sec)
 ```
+
+在查看文件时将 `list_files_only` 设置为 `true`，系统将返回 `PATH`、`SIZE`、`IS_DIR`（给定路径是否为目录）和 `MODIFICATION_TIME` 的 `Type` 和 `Null` 属性。
+
+```Plain
+DESC FILES(
+    "path" = "s3://bucket/*.parquet",
+    "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+    "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+    "list_files_only" = "true"
+);
++-------------------+------------------+------+
+| Field             | Type             | Null |
++-------------------+------------------+------+
+| PATH              | varchar(1048576) | YES  |
+| SIZE              | bigint           | YES  |
+| IS_DIR            | boolean          | YES  |
+| MODIFICATION_TIME | datetime         | YES  |
++-------------------+------------------+------+
+4 rows in set (0.00 sec)
+```
+
 
 ## 使用 FILES 导出数据
 
