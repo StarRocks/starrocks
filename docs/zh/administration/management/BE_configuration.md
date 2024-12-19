@@ -3317,6 +3317,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 引入版本：v3.0
 -->
   
+
 <!--  
 ##### starlet_cache_evict_high_water
 
@@ -3901,25 +3902,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型：String
 - 单位：-
 - 是否动态：否
-- 描述：单个磁盘缓存数据量的上限，可设为比例上限（如 `80%`）或物理上限（如 `2T`, `500G` 等）。举例：在 `datacache_disk_path` 中配置了 2 个磁盘，并设置 `datacache_disk_size` 参数值为 `21474836480`，即 20 GB，那么最多可缓存 40 GB 的磁盘数据。默认值为 `0`，即仅使用内存作为缓存介质，不使用磁盘。
-- 引入版本：-
-
-##### datacache_disk_path
-
-- 默认值：`${STARROCKS_HOME}/datacache/`
-- 类型：String
-- 单位：-
-- 是否动态：否
-- 描述：磁盘路径。支持添加多个路径，多个路径之间使用分号(;) 隔开。建议 BE 机器有几个磁盘即添加几个路径。
-- 引入版本：-
-
-##### datacache_meta_path
-
-- 默认值：`${STARROCKS_HOME}/datacache/`
-- 类型：String
-- 单位：-
-- 是否动态：否
-- 描述：Block 的元数据存储目录，可自定义。推荐创建在 `$STARROCKS_HOME` 路径下。
+- 描述：单个磁盘缓存数据量的上限，可设为比例上限（如 `80%`）或物理上限（如 `2T`, `500G` 等）。举例：用户使用了2块磁盘进行缓存，并设置 `datacache_disk_size` 参数值为 `21474836480`，即 20 GB，那么最多可缓存 40 GB 的磁盘数据。默认值为 `0`，即仅使用内存作为缓存介质，不使用磁盘。
 - 引入版本：-
 
 ##### datacache_auto_adjust_enable
@@ -3933,7 +3916,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### datacache_disk_high_level
 
-- 默认值：80
+- 默认值：90
 - 类型：Int
 - 单位：-
 - 是否动态：是
@@ -3942,7 +3925,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### datacache_disk_safe_level
 
-- 默认值：70
+- 默认值：80
 - 类型：Int
 - 单位：-
 - 是否动态：是
@@ -4010,6 +3993,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 单位：-
 - 是否动态：否
 - 描述：缓存淘汰策略。有效值：`lru` (least recently used) 和 `slru` (Segmented LRU)。
+- 引入版本：v3.4.0
+
+##### datacache_inline_item_count_limit
+
+- 默认值：130172
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：Data Cache内联对象数量上限。当缓存的block对象特别小时，datacache会选择使用内联方式将block数据和元数据一起缓存在内存中。
 - 引入版本：v3.4.0
 
 ##### query_max_memory_limit_percent

@@ -6,6 +6,10 @@ displayed_sidebar: docs
 
 早期版本中 Data Cache 特性缺少相关监控指标和有效的监控手段。3.3 版本对 Data Cache 的可观测性做了提升，支持通过以下几种方式来观测 Data Cache 相关指标，帮助用户清晰了解 Data Cache 的整体磁盘和内存用量，以及详细的指标。
 
+> **注意**
+>
+> 从3.4版本开始，数据湖外表和Cloud Native查询使用了统一的Data Cache实例，因此，除特殊说明外，以下可视化方式中默认展示的是Data Cache实例自身的指标，即同时包含了数据湖外表和Cloud Native的缓存使用情况。
+
 ## SQL 查询
 
 通过 SQL 语句，可以查询集群中每个 BE 节点的 Data Cache 容量指标信息。
