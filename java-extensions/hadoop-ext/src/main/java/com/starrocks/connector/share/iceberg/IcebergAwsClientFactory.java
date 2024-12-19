@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.share.iceberg;
 
+import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import org.apache.iceberg.aws.AwsClientFactory;
 import org.apache.iceberg.aws.AwsProperties;
 import org.slf4j.Logger;
@@ -68,6 +69,7 @@ import static com.starrocks.connector.share.credential.CloudConfigurationConstan
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_USE_INSTANCE_PROFILE;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.DEFAULT_AWS_REGION;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_GLUE_CATALOG_ID;
 
 public class IcebergAwsClientFactory implements AwsClientFactory {
     private static final Logger LOG = LoggerFactory.getLogger(IcebergAwsClientFactory.class);
@@ -129,6 +131,10 @@ public class IcebergAwsClientFactory implements AwsClientFactory {
         glueExternalId = properties.getOrDefault(AWS_GLUE_EXTERNAL_ID, "");
         glueRegion = properties.getOrDefault(AWS_GLUE_REGION, "");
         glueEndpoint = properties.getOrDefault(AWS_GLUE_ENDPOINT, "");
+        String glueCatalogId = properties.get(AWS_GLUE_CATALOG_ID);
+        if (glueCatalogId != null) {
+            this.awsProperties.setGlueCatalogId(glueCatalogId);
+        }
     }
 
     private StsAssumeRoleCredentialsProvider getAssumeRoleCredentialsProvider(AwsCredentialsProvider baseCredentials,
