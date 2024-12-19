@@ -3327,7 +3327,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：在存算分离模式下启用 file data cache，如果当前剩余磁盘空间（百分比）高于此配置项中指定的值，将会停止缓存淘汰。
 - 引入版本：v3.0
 -->
-  
+
 <!--
 ##### starlet_cache_dir_allocate_policy
 
@@ -4002,6 +4002,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 是否动态：否
 - 描述：是否为 Data Cache 启用分层模式。当启用分层模式时，Data Cache 配置的的内存和磁盘构成两级缓存，磁盘数据变为热数据时会自动载入到内存缓存，内存缓存中的数据变冷时自动落至磁盘。当不启用分层模式时，为 Data Cache 配置的内存和磁盘构成两个独立的缓存空间，并分别缓存不同类型数据，两者之间不进行数据流动。
 - 引入版本：v3.2.5
+
+##### datacache_eviction_policy
+
+- 默认值：slru
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：缓存淘汰策略。有效值：`lru` (least recently used) 和 `slru` (Segmented LRU)。
+- 引入版本：v3.4.0
 
 ##### query_max_memory_limit_percent
 
