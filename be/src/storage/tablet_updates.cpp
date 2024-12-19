@@ -935,11 +935,8 @@ DEFINE_FAIL_POINT(tablet_apply_cache_del_vec_failed);
 DEFINE_FAIL_POINT(tablet_apply_tablet_drop);
 DEFINE_FAIL_POINT(tablet_apply_load_compaction_state_failed);
 DEFINE_FAIL_POINT(tablet_apply_load_segments_failed);
-<<<<<<< HEAD
-=======
 DEFINE_FAIL_POINT(tablet_delvec_inconsistent);
 DEFINE_FAIL_POINT(tablet_internal_error_code_but_memory_limit);
->>>>>>> e04de47d31 ([BugFix] Add more checks for pk table apply retry (#54029))
 
 void TabletUpdates::do_apply() {
     SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(true);
@@ -1623,17 +1620,14 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
             size_t cur_new = new_del_vecs[idx].second->cardinality();
             if (cur_old + cur_add != cur_new) {
                 // should not happen, data inconsistent
-                LOG(FATAL) << strings::Substitute(
+                std::string msg = strings::Substitute(
                         "delvec inconsistent tablet:$0 rssid:$1 #old:$2 #add:$3 #new:$4 old_v:$5 "
                         "v:$6",
                         _tablet.tablet_id(), rssid, cur_old, cur_add, cur_new, old_del_vec->version(),
                         version.major_number());
-<<<<<<< HEAD
-=======
                 LOG(ERROR) << msg;
                 failure_handler(msg, TStatusCode::INTERNAL_ERROR, false);
                 return apply_st;
->>>>>>> e04de47d31 ([BugFix] Add more checks for pk table apply retry (#54029))
             }
             if (VLOG_IS_ON(1)) {
                 StringAppendF(&delvec_change_info, " %u:%zu(%ld)+%zu=%zu", rssid, cur_old, old_del_vec->version(),
@@ -2509,13 +2503,8 @@ Status TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_in
                 max_rowset_id, max_src_rssid, _debug_compaction_stats(info->inputs, rowset_id),
                 st.ok() ? "" : st.get_error_msg());
         LOG(ERROR) << msg << debug_string();
-<<<<<<< HEAD
-        _set_error(msg + _debug_version_info(true));
-        CHECK(st.ok()) << msg;
-=======
         failure_handler(msg + _debug_version_info(true), st.code());
         DCHECK(st.ok()) << msg;
->>>>>>> e04de47d31 ([BugFix] Add more checks for pk table apply retry (#54029))
     }
     return apply_st;
 }

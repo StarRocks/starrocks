@@ -3617,8 +3617,6 @@ TEST_F(TabletUpdatesTest, test_normal_apply_retry) {
 
     // 14. get del_vec failed
     test_fail_point("tablet_apply_get_del_vec_failed", 15, N / 2);
-<<<<<<< HEAD
-=======
 
     // 15. InternalError code, but memory limit exceed error message
     {
@@ -3647,27 +3645,6 @@ TEST_F(TabletUpdatesTest, test_normal_apply_retry) {
         ASSERT_EQ(N / 2, read_tablet(_tablet, 16));
         config::retry_apply_interval_second = old_val;
     }
-
-    // 16. delvec inconsistent
-    {
-        // Enable fail point
-        trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
-        auto fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get("tablet_delvec_inconsistent");
-        fp->setMode(trigger_mode);
-
-        // Create and commit rowset
-        auto rs = create_rowset(_tablet, keys, &deletes);
-        ASSERT_TRUE(_tablet->rowset_commit(17, rs).ok());
-        ASSERT_EQ(17, _tablet->updates()->max_version());
-
-        // Wait for a short duration and check error state
-        std::this_thread::sleep_for(std::chrono::milliseconds(200));
-        ASSERT_TRUE(_tablet->updates()->is_error());
-
-        trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
-        fp->setMode(trigger_mode);
-    }
->>>>>>> e04de47d31 ([BugFix] Add more checks for pk table apply retry (#54029))
 }
 
 TEST_F(TabletUpdatesTest, test_column_mode_partial_update_apply_retry) {}
