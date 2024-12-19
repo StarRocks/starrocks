@@ -35,6 +35,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
@@ -826,13 +827,17 @@ public class ReplicationJob implements GsonPostProcessable {
         }
         ReplicationTxnCommitAttachment attachment = new ReplicationTxnCommitAttachment(partitionVersions);
 
-        Locker locker = new Locker();
-        locker.lockTableWithIntensiveDbLock(databaseId, tableId, LockType.WRITE);
+        Database db = GlobalStateMgr.getCurrentState().getDb(databaseId);
+        if (db == null) {
+            throw new MetaNotFoundException("Database " + databaseId + " not found");
+        }
+
+        db.writeLock();
         try {
             GlobalStateMgr.getServingState().getGlobalTransactionMgr().commitTransaction(databaseId,
                     transactionId, tabletsCommitInfo.first, tabletsCommitInfo.second, attachment);
         } finally {
-            locker.unLockTableWithIntensiveDbLock(databaseId, tableId, LockType.WRITE);
+            db.writeUnlock();
         }
     }
 
