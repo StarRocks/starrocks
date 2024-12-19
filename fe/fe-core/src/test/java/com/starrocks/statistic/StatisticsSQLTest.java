@@ -142,7 +142,8 @@ public class StatisticsSQLTest extends PlanTestBase {
                 columnSampleManager.getComplexTypeStats());
         String complexSql = sampleInfo.generateComplexTypeColumnTask(t0.getId(), db.getId(), t0.getName(), db.getFullName(),
                 columnSampleManager.getComplexTypeStats());
-        assertCContains(complexSql, "INSERT INTO _statistics_.table_statistic_v1 VALUES");
+        assertCContains(complexSql, "INSERT INTO _statistics_.table_statistic_v1(table_id, column_name, db_id, table_name," +
+                " db_name, row_count, data_size, distinct_count, null_count, max, min, update_time) VALUES");
 
         String simpleSql = sampleInfo.generatePrimitiveTypeColumnTask(t0.getId(), db.getId(), t0.getName(),
                 db.getFullName(), columnSampleManager.splitPrimitiveTypeStats().get(0), tabletSampleManager);
