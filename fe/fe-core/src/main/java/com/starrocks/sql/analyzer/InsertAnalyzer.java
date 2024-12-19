@@ -46,7 +46,6 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DefaultValueExpr;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.InsertStmt;
-import com.starrocks.sql.ast.InsertStmt.ColumnMatchPolicy;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.QueryRelation;
@@ -343,19 +342,6 @@ public class InsertAnalyzer {
 
     private static void analyzeProperties(InsertStmt insertStmt, ConnectContext session) {
         Map<String, String> properties = insertStmt.getProperties();
-
-        // column match by related properties
-        // parse the property and remove it for 'LoadStmt.checkProperties' validation
-        if (properties.containsKey(InsertStmt.PROPERTY_MATCH_COLUMN_BY)) {
-            String property = properties.remove(InsertStmt.PROPERTY_MATCH_COLUMN_BY);
-            ColumnMatchPolicy columnMatchPolicy = ColumnMatchPolicy.fromString(property);
-            if (columnMatchPolicy == null) {
-                String msg = String.format("%s (case insensitive)", String.join(", ", ColumnMatchPolicy.getCandidates()));
-                ErrorReport.reportSemanticException(
-                        ErrorCode.ERR_INVALID_VALUE, InsertStmt.PROPERTY_MATCH_COLUMN_BY, property, msg);
-            }
-            insertStmt.setColumnMatchPolicy(columnMatchPolicy);
-        }
 
         // check common properties
         // use session variable if not set max_filter_ratio, strict_mode, timeout property

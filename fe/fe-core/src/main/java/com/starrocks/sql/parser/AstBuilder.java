@@ -2235,6 +2235,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     context.OVERWRITE() != null, getProperties(context.properties()), createPos(context));
             stmt.setHintNodes(hintMap.get(context));
             stmt.setTargetBranch(targetBranch);
+            stmt.setColumnMatchPolicy(context.BY() != null && context.NAME() != null ?
+                    InsertStmt.ColumnMatchPolicy.NAME : InsertStmt.ColumnMatchPolicy.POSITION);
             return stmt;
         }
 

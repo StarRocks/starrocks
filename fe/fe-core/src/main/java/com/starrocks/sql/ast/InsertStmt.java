@@ -29,7 +29,6 @@ import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -54,7 +53,6 @@ import static com.google.common.base.Preconditions.checkState;
  */
 public class InsertStmt extends DmlStmt {
     public static final String STREAMING = "STREAMING";
-    public static final String PROPERTY_MATCH_COLUMN_BY = "match_column_by";
 
     private final TableName tblName;
     private PartitionNames targetPartitionNames;
@@ -352,20 +350,7 @@ public class InsertStmt extends DmlStmt {
 
     public enum ColumnMatchPolicy {
         POSITION,
-        NAME;
-
-        public static ColumnMatchPolicy fromString(String value) {
-            for (ColumnMatchPolicy policy : values()) {
-                if (policy.name().equalsIgnoreCase(value)) {
-                    return policy;
-                }
-            }
-            return null;
-        }
-
-        public static List<String> getCandidates() {
-            return Arrays.stream(values()).map(p -> p.name().toLowerCase()).collect(Collectors.toList());
-        }
+        NAME
     }
 
     public boolean isColumnMatchByPosition() {
