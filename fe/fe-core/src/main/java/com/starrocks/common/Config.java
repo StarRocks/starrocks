@@ -2745,18 +2745,12 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static String lake_background_warehouse = "default_warehouse";
 
-<<<<<<< HEAD
-=======
-    @ConfField(mutable = true)
-    public static int lake_warehouse_max_compute_replica = 3;
-
     @ConfField(mutable = true, comment = "time interval to check whether warehouse is idle")
     public static long warehouse_idle_check_interval_seconds = 60;
 
     @ConfField(mutable = true, comment = "True to start warehouse idle checker")
     public static boolean warehouse_idle_check_enable = false;
 
->>>>>>> 6cd9fbc95 ([Enhancement] Add cluster idle HTTP api (#53850))
     // e.g. "tableId1;tableId2"
     @ConfField(mutable = true)
     public static String lake_compaction_disable_tables = "";
