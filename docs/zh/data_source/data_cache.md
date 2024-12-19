@@ -40,16 +40,16 @@ StarRocks 以 BE 节点的内存和磁盘作为缓存的存储介质，支持全
 
 ## 缓存淘汰机制
 
-在 Data Cache 中，支持内存和磁盘的两级缓存，用户也可以根据实际需要配置全内存或者全磁盘的一级缓存。
+Data Cache 支持内存和磁盘的两级缓存。您也可以根据实际需要配置全内存或者全磁盘的一级缓存。
 
 当使用内存+磁盘的两级缓存时：
 
 - 优先从内存读取数据，如果在内存中没有找到再从磁盘上读取。从磁盘上读取的数据，会尝试加载到内存中。
 - 从内存中淘汰的数据，会尝试写入磁盘；从磁盘上淘汰的数据，会被废弃。
 
-内存和磁盘分别按照自己的淘汰策略进行数据淘汰。StarRocks Data Cache当前支持[LRU](https://baike.baidu.com/item/LRU/1269842) (least recently used)和SLRU（Segmented LRU） 策略来缓存和淘汰数据，默认使用SLRU淘汰策略。
+内存和磁盘分别按照自己的淘汰策略进行数据淘汰。StarRocks Data Cache当前支持 [LRU](https://baike.baidu.com/item/LRU/1269842) (least recently used) 和 SLRU（Segmented LRU）策略来缓存和淘汰数据，默认使用 SLRU 淘汰策略。
 
-当使用SLRU策略时，缓存空间会被分成淘汰段和保护段，两个段都是普通的LRU。数据第一次被访问时，进入淘汰段，只有处于淘汰段的数据再次被访问时才会进入保护段。保护段的数据如果被淘汰将再次进入淘汰段，而淘汰段的数据被淘汰时则会被移出缓存。和LRU相比，SLRU能够更好的抵御突发的稀疏流量，避免保护段的数据不会被只访问过一次的元素直接淘汰。
+当使用 SLRU 策略时，缓存空间会被分成淘汰段和保护段，两段都均采用 LRU 策略。数据第一次被访问时，进入淘汰段。处于淘汰段的数据只有再次被访问时才会进入保护段。保护段的数据如果被淘汰将再次进入淘汰段，而淘汰段的数据被淘汰时则会被移出缓存。和 LRU 相比，SLRU 能够更好的抵御突发的稀疏流量，避免保护段的数据不会被只访问过一次的元素直接淘汰。
 
 ## 开启 Data Cache
 
@@ -118,7 +118,7 @@ Data Cache 支持以同步或异步的方式进行缓存填充。
 
 ## 查看 Data Cache 命中情况
 
-您可以在 query profile 里观测当前 query 的 cache 命中情况。观测下述三个指标查看 Data Cache 的命中情况：
+您可以在 Query Profile 里观测当前查询的 Cache 命中情况。观测下述三个指标查看 Data Cache 的命中情况：
 
 - `DataCacheReadBytes`：从内存和磁盘中读取的数据量。
 - `DataCacheWriteBytes`：从外部存储系统加载到内存和磁盘的数据量。
@@ -152,7 +152,7 @@ Data Cache 支持以同步或异步的方式进行缓存填充。
    - __MIN_OF_BytesRead: 0.00
 ```
 
-示例二：StarRocks 从 data cache 读取了 46.08 GB 数据，从外部存储系统直接读取的数据量为 0，即代表 data cache 完全命中。
+示例二：StarRocks 从 Data Cache 读取了 46.08 GB 数据，从外部存储系统直接读取的数据量为 0，即代表 Data Cache 完全命中。
 
 ```Plain
  Table: lineitem
