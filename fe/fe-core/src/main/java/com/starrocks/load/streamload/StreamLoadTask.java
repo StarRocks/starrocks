@@ -71,6 +71,7 @@ import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
 import com.starrocks.transaction.TxnCommitAttachment;
 import com.starrocks.warehouse.LoadJobWithWarehouse;
+import com.starrocks.warehouse.WarehouseIdleChecker;
 import io.netty.handler.codec.http.HttpHeaders;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -1177,6 +1178,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
             // sync stream load related query info should unregister here
             QeProcessorImpl.INSTANCE.unregisterQuery(loadId);
         }
+        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId);
     }
 
     @Override
@@ -1214,6 +1216,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         } finally {
             writeUnlock();
         }
+        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId);
     }
 
     @Override

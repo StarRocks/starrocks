@@ -72,6 +72,7 @@ import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.AbstractBackupStmt;
 import com.starrocks.sql.ast.BackupStmt;
 import com.starrocks.sql.ast.BackupStmt.BackupType;
@@ -98,6 +99,7 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -928,5 +930,12 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
     public List<Pair<List<Object>, Long>> getSamples() {
         List<Object> jobSamples = new ArrayList<>(dbIdToBackupOrRestoreJob.values());
         return Lists.newArrayList(Pair.create(jobSamples, (long) dbIdToBackupOrRestoreJob.size()));
+    }
+
+    public Map<Long, Long> getRunningBackupRestoreCount() {
+        long count = dbIdToBackupOrRestoreJob.values().stream().filter(job -> !job.isDone()).count();
+        Map<Long, Long> result = new HashMap<>();
+        result.put(WarehouseManager.DEFAULT_WAREHOUSE_ID, count);
+        return result;
     }
 }

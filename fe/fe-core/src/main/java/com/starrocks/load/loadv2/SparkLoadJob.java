@@ -119,6 +119,7 @@ import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.LoadJobSourceType;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
+import com.starrocks.warehouse.WarehouseIdleChecker;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -840,6 +841,13 @@ public class SparkLoadJob extends BulkLoadJob {
             }
         });
         clearJob();
+        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId);
+    }
+
+    @Override
+    public void afterAborted(TransactionState txnState, boolean txnOperated, String txnStatusChangeReason) {
+        super.afterAborted(txnState, txnOperated, txnStatusChangeReason);
+        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId);
     }
 
     @Override
