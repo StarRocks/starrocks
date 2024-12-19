@@ -43,16 +43,16 @@ If you use disks as the storage media, the cache speed is directly affected by t
 
 ## Cache replacement policies
 
-StarRocks supports memory and disk tiered cache, and users can also choose to configure only full memory or full disk cache according to the actual scenario.
+StarRocks supports the tiered cache of memory and disk. You can also configure full memory cache only or full disk cache only according to your business requirements.
 
-When using memory and disk tiered cache:
+When both memory cache and disk cache are used:
 
 - StarRocks first reads data from memory. If the data is not found in memory, StarRocks will read the data from disks and try to load the data read from disks into memory.
 - Data discarded from memory will be written to disks. Data discarded from disks will be deleted.
 
-Memory cache and disk cache evict cache items based on their own eviction policies. StarRocks now supports the [LRU](https://en.wikipedia.org/wiki/Cache_replacement_policies#Least_recently_used) (least recently used) and SLRU(Segmented LRU) policies to cache and evict data.
+Memory cache and disk cache evict cache items based on their own eviction policies. StarRocks now supports the [LRU](https://en.wikipedia.org/wiki/Cache_replacement_policies#Least_recently_used) (least recently used) and SLRU (Segmented LRU) policies to cache and evict data. The default policy is SLRU.
 
-When using the SLRU policy, the cache space is divided into an eviction segment and a protection segment, both of which are regular LRUs. When data is accessed for the first time, it enters the eviction segment, and only data in the eviction segment will enter the protection segment when it is accessed again. If the data in the protected segment is evicted, it will enter the eviction segment again, and when the data in the eviction segment is evicted, it will be removed from the cache. Compared to LRU, SLRU can better resist sudden sparse traffic and avoid protecting segment data from being directly evicted by elements that have only been accessed once.
+When the SLRU policy is used, the cache space is divided into an eviction segment and a protection segment, both of which are controlled by the LRU policy. When data is accessed for the first time, it enters the eviction segment. The data in the eviction segment will enter the protection segment only when it is accessed again. If the data in the protection segment is evicted, it will enter the eviction segment again. If the data in the eviction segment is evicted, it will be removed from the cache. Compared to LRU, SLRU can better resist sudden sparse traffic and avoid protection segment data from being directly evicted by data that have only been accessed once.
 
 ## Enable Data Cache
 
@@ -123,9 +123,9 @@ From v3.3.0, asynchronous cache population is enabled by default. You can change
 
 You can check whether a query hits data cache by analyzing the following metrics in the query profile:
 
-- `DataCacheReadBytes`: the amount of data that StarRocks reads directly from its memory and disks.
-- `DataCacheWriteBytes`: the amount of data loaded from an external storage system to StarRocks' memory and disks.
-- `BytesRead`: the total amount of data that is read, including data that StarRocks reads from an external storage system, its memory, and disks.
+- `DataCacheReadBytes`: the size of data that StarRocks reads directly from its memory and disks.
+- `DataCacheWriteBytes`: the size of data loaded from an external storage system to StarRocks' memory and disks.
+- `BytesRead`: the total amount of data that is read, including data that StarRocks reads from an external storage system, and its memory and disks.
 
 Example 1: In this example, StarRocks reads a large amount of data (7.65 GB) from the external storage system and only a few data (518.73 MB) from the memory and disks. This means that few data caches were hit.
 
