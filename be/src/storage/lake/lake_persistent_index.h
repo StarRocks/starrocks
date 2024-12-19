@@ -135,7 +135,7 @@ public:
     // |version|: version of values
     Status insert(size_t n, const Slice* keys, const IndexValue* values, int64_t version);
 
-    Status minor_compact();
+    Status minor_compact(PersistentIndexMemtable* memtable);
 
     static Status major_compact(TabletManager* tablet_mgr, const TabletMetadata& metadata, TxnLogPB* txn_log);
 

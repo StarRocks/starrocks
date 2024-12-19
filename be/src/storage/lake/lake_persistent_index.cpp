@@ -181,7 +181,7 @@ bool LakePersistentIndex::is_memtable_full() const {
     return mem_size_exceed || mem_tracker_exceed;
 }
 
-Status LakePersistentIndex::minor_compact() {
+Status LakePersistentIndex::minor_compact(PersistentIndexMemtable* memtable) {
     TRACE_COUNTER_SCOPE_LATENCY_US("minor_compact_latency_us");
     auto filename = gen_sst_filename();
     auto location = _tablet_mgr->sst_location(_tablet_id, filename);
@@ -194,7 +194,7 @@ Status LakePersistentIndex::minor_compact() {
     }
     ASSIGN_OR_RETURN(auto wf, fs::new_writable_file(wopts, location));
     uint64_t filesize = 0;
-    RETURN_IF_ERROR(_immutable_memtable->flush(wf.get(), &filesize));
+    RETURN_IF_ERROR(memtable->flush(wf.get(), &filesize));
     RETURN_IF_ERROR(wf->close());
 
     auto sstable = std::make_unique<PersistentIndexSstable>();
@@ -206,7 +206,7 @@ Status LakePersistentIndex::minor_compact() {
     PersistentIndexSstablePB sstable_pb;
     sstable_pb.set_filename(filename);
     sstable_pb.set_filesize(filesize);
-    sstable_pb.set_max_rss_rowid(_immutable_memtable->max_rss_rowid());
+    sstable_pb.set_max_rss_rowid(memtable->max_rss_rowid());
     sstable_pb.set_encryption_meta(encryption_meta);
     auto* block_cache = _tablet_mgr->update_mgr()->block_cache();
     if (block_cache == nullptr) {
@@ -219,11 +219,22 @@ Status LakePersistentIndex::minor_compact() {
 }
 
 Status LakePersistentIndex::flush_memtable() {
-    if (_immutable_memtable != nullptr) {
-        RETURN_IF_ERROR(minor_compact());
+    if (config::enable_multiple_memtable_for_lake_pindex) {
+        if (_immutable_memtable != nullptr) {
+            RETURN_IF_ERROR(minor_compact(_immutable_memtable.get()));
+        }
+        _immutable_memtable = std::make_unique<PersistentIndexMemtable>(_memtable->max_rss_rowid());
+        _memtable.swap(_immutable_memtable);
+    } else {
+        if (_immutable_memtable != nullptr) {
+            RETURN_IF_ERROR(minor_compact(_immutable_memtable.get()));
+            _immutable_memtable.reset();
+        }
+        RETURN_IF_ERROR(minor_compact(_memtable.get()));
+        auto max_rss_rowid = _memtable->max_rss_rowid();
+        _memtable.reset();
+        _memtable = std::make_unique<PersistentIndexMemtable>(max_rss_rowid);
     }
-    _immutable_memtable = std::make_unique<PersistentIndexMemtable>(_memtable->max_rss_rowid());
-    _memtable.swap(_immutable_memtable);
     return Status::OK();
 }
 
