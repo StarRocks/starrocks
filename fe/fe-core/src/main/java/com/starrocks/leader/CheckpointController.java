@@ -44,6 +44,7 @@ import com.starrocks.http.meta.MetaService;
 import com.starrocks.journal.CheckpointException;
 import com.starrocks.journal.CheckpointWorker;
 import com.starrocks.journal.Journal;
+import com.starrocks.lake.snapshot.ClusterSnapshotCheckpointContext;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.ImageFormatVersion;
 import com.starrocks.persist.MetaCleaner;
@@ -51,6 +52,7 @@ import com.starrocks.persist.Storage;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.Frontend;
 import com.starrocks.thrift.TNetworkAddress;
@@ -86,6 +88,7 @@ public class CheckpointController extends FrontendDaemon {
     private static final int PUT_TIMEOUT_SECOND = 3600;
     private static final int CONNECT_TIMEOUT_SECOND = 1;
     private static final int READ_TIMEOUT_SECOND = 1;
+    private static final ClusterSnapshotCheckpointContext SNAPSHOT_CONTEXT = new ClusterSnapshotCheckpointContext();
 
     private String imageDir;
     private final Journal journal;
@@ -126,7 +129,28 @@ public class CheckpointController extends FrontendDaemon {
             return;
         }
 
-        // Step 1: create image
+        boolean enableCoordination = RunMode.isSharedDataMode() &&
+                    GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().containAutomatedSnapshotRequest();
+
+        // Step 1: synchronize checkpoint id for both FE and StarMgr in clould native mode if
+        // snapshot backup is needed
+        if (enableCoordination) {
+            /* make sure checkpoint is triggered by the original logic */
+            boolean allowToAcquireNewId = imageJournalId < maxJournalId;
+            long consistentId = SNAPSHOT_CONTEXT.tryToAcquireCheckpointId(belongToGlobalStateMgr, allowToAcquireNewId);
+            if (consistentId == ClusterSnapshotCheckpointContext.INVALID_JOURANL_ID) {
+                // retry in next loop
+                LOG.info("retry in next round");
+                return;
+            }
+
+            maxJournalId = consistentId;
+            LOG.info("Successfully get consistent snapshot checkpoint id, for {} {}, current image id: {}",
+                     belongToGlobalStateMgr ? "FE image checkpoint id:" : "StarMgr image checkpoint id:",
+                     maxJournalId, imageJournalId);
+        }
+
+        // Step 2: create image
         Pair<Boolean, String> createImageRet = Pair.create(false, "");
         if (imageJournalId < maxJournalId) {
             this.journalId = maxJournalId;
@@ -143,14 +167,26 @@ public class CheckpointController extends FrontendDaemon {
             }
         }
 
-        // Step2: push image
+        // Step 3: push image
         int needToPushCnt = nodesToPushImage.size();
         long newImageVersion = createImageRet.first ? maxJournalId : imageJournalId;
         if (needToPushCnt > 0) {
             pushImage(newImageVersion);
         }
 
-        // Step3: Delete old journals
+        // Step 4: upload image for cloud native snapshot
+        if (enableCoordination) {
+            if (!createImageRet.first && imageJournalId < maxJournalId /* checkpoint failure */) {
+                SNAPSHOT_CONTEXT.setCurErrMsg(createImageRet.second);
+            } else if (createImageRet.first || imageJournalId == maxJournalId) {
+                boolean success = SNAPSHOT_CONTEXT.uploadImageForSnapshot(belongToGlobalStateMgr);
+                if (success) {
+                    SNAPSHOT_CONTEXT.updateRoundIdAndMarkJobFinishedFromLaggard(belongToGlobalStateMgr);
+                }
+            }
+        }
+
+        // Step 5: Delete old journals
         // conditions: 1. new image created and no others node to push, this means there is only one FE in the cluster,
         //                delete the old journals immediately.
         //             2. needToPushCnt > 0 means there are other nodes in the cluster,
@@ -163,6 +199,8 @@ public class CheckpointController extends FrontendDaemon {
 
     private void init() {
         this.imageDir = GlobalStateMgr.getServingState().getImageDir() + subDir;
+        SNAPSHOT_CONTEXT.setImageDir(this.imageDir, this.belongToGlobalStateMgr);
+        SNAPSHOT_CONTEXT.setJournal(this.journal, this.belongToGlobalStateMgr);
     }
 
     private Pair<Boolean, String> createImage() {

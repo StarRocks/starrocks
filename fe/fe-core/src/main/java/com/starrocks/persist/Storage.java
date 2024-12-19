@@ -254,6 +254,10 @@ public class Storage {
         return getImageFile(new File(metaDir), version);
     }
 
+    public File getCurrentChecksumFile() {
+        return getChecksumFile(new File(metaDir), imageJournalId);
+    }
+
     public static File getImageFile(File dir, long version) {
         return new File(dir, IMAGE + "." + version);
     }

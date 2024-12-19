@@ -21,7 +21,9 @@ import com.starrocks.sql.ast.AddSqlBlackListStmt;
 import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
 import com.starrocks.sql.ast.AdminRepairTableStmt;
+import com.starrocks.sql.ast.AdminSetAutomatedSnapshotStmt;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
+import com.starrocks.sql.ast.AdminSetOffAutomatedSnapshotStmt;
 import com.starrocks.sql.ast.AdminSetPartitionVersionStmt;
 import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
@@ -575,6 +577,19 @@ public class Analyzer {
         @Override
         public Void visitPauseRoutineLoadStatement(PauseRoutineLoadStmt statement, ConnectContext session) {
             PauseRoutineLoadAnalyzer.analyze(statement, session);
+            return null;
+        }
+
+        @Override
+        public Void visitAdminSetAutomatedSnapshotStatement(AdminSetAutomatedSnapshotStmt statement, ConnectContext context) {
+            ClusterSnapshotAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitAdminSetOffAutomatedSnapshotStatement(AdminSetOffAutomatedSnapshotStmt statement,
+                                                               ConnectContext context) {
+            ClusterSnapshotAnalyzer.analyze(statement, context);
             return null;
         }
 

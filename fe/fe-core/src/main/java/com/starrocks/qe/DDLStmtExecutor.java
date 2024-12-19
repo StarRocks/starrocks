@@ -41,7 +41,9 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
 import com.starrocks.sql.ast.AdminRepairTableStmt;
+import com.starrocks.sql.ast.AdminSetAutomatedSnapshotStmt;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
+import com.starrocks.sql.ast.AdminSetOffAutomatedSnapshotStmt;
 import com.starrocks.sql.ast.AdminSetPartitionVersionStmt;
 import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
 import com.starrocks.sql.ast.AlterCatalogStmt;
@@ -1182,6 +1184,25 @@ public class DDLStmtExecutor {
             ErrorReport.wrapWithRuntimeException(() -> {
                 WarehouseManager warehouseMgr = context.getGlobalStateMgr().getWarehouseMgr();
                 warehouseMgr.alterWarehouse(stmt);
+            });
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitAdminSetAutomatedSnapshotStatement(AdminSetAutomatedSnapshotStmt stmt,
+                                                                     ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getClusterSnapshotMgr().addAutomatedSnapshotRequest(
+                        stmt.getStorageVolumeName(), false);
+            });
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitAdminSetOffAutomatedSnapshotStatement(AdminSetOffAutomatedSnapshotStmt stmt,
+                                                                        ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getClusterSnapshotMgr().dropAutomatedSnapshotRequest(false);
             });
             return null;
         }
