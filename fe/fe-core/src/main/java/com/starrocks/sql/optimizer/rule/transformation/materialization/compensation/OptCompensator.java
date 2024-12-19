@@ -210,10 +210,10 @@ public class OptCompensator extends OptExpressionVisitor<OptExpression, Void> {
                                     optimizerContext.getColumnRefFactory());
                             predicates.add(predicate);
                         }
-                        externalPredicates.add(Utils.compoundAnd(predicates));
                     }
-                    externalExtraPredicate = Utils.compoundOr(externalPredicates);
+                    externalPredicates.add(Utils.compoundAnd(predicates));
                 }
+                externalExtraPredicate = Utils.compoundOr(externalPredicates);
             }
         }
         if (externalExtraPredicate == null) {

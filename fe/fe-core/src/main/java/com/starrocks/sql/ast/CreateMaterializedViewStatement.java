@@ -53,7 +53,7 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     private RefreshSchemeClause refreshSchemeDesc;
 
     // partition by clause which may be list or range partition expr.
-    private final List<Expr> partitionByExprs;
+    private List<Expr> partitionByExprs;
     // partition type of the mv which is deduced by its referred base table.
     private PartitionType partitionType;
 
@@ -92,6 +92,7 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     private List<Integer> queryOutputIndices = Lists.newArrayList();
     // Generated partition columns for mv's partition by expressions, partition expression index to generated column.
     private Map<Integer, Column> generatedPartitionCols = Maps.newHashMap();
+    private Map<Expr, Expr> partitionByExprToAdjustExprMap = Maps.newHashMap();
 
     public CreateMaterializedViewStatement(TableName tableName, boolean ifNotExists,
                                            List<ColWithComment> colWithComments,
@@ -164,6 +165,10 @@ public class CreateMaterializedViewStatement extends DdlStmt {
      */
     public List<Expr> getPartitionByExprs() {
         return partitionByExprs;
+    }
+
+    public void setPartitionByExprs(List<Expr> partitionByExprs) {
+        this.partitionByExprs = partitionByExprs;
     }
 
     /**
@@ -305,6 +310,10 @@ public class CreateMaterializedViewStatement extends DdlStmt {
 
     public Map<Integer, Column> getGeneratedPartitionCols() {
         return generatedPartitionCols;
+    }
+
+    public Map<Expr, Expr> getPartitionByExprToAdjustExprMap() {
+        return partitionByExprToAdjustExprMap;
     }
 
     @Override
