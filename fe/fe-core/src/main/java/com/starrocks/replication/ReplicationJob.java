@@ -841,13 +841,18 @@ public class ReplicationJob implements GsonPostProcessable {
         ReplicationTxnCommitAttachment attachment = new ReplicationTxnCommitAttachment(
                 partitionVersions, partitionVersionEpochs);
 
+        Database db = GlobalStateMgr.getCurrentState().getDb(databaseId);
+        if (db == null) {
+            throw new MetaNotFoundException("Database " + databaseId + " not found");
+        }
+
         Locker locker = new Locker();
-        locker.lockTableWithIntensiveDbLock(databaseId, tableId, LockType.WRITE);
+        locker.lockTableWithIntensiveDbLock(db, tableId, LockType.WRITE);
         try {
             GlobalStateMgr.getServingState().getGlobalTransactionMgr().commitTransaction(databaseId,
                     transactionId, tabletsCommitInfo.first, tabletsCommitInfo.second, attachment);
         } finally {
-            locker.unLockTableWithIntensiveDbLock(databaseId, tableId, LockType.WRITE);
+            locker.unLockTableWithIntensiveDbLock(db, tableId, LockType.WRITE);
         }
     }
 
