@@ -1598,7 +1598,6 @@ void StorageEngine::decommission_disks(const std::vector<string>& decommission_d
 }
 
 void StorageEngine::add_schedule_apply_task(int64_t tablet_id, std::chrono::steady_clock::time_point time_point) {
-    LOG(INFO) << "add tablet:" << tablet_id << ", next apply time:";
     {
         std::unique_lock<std::mutex> wl(_schedule_apply_mutex);
         _schedule_apply_tasks.emplace(std::make_pair(time_point, tablet_id));
