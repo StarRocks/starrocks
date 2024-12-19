@@ -16,6 +16,7 @@ package com.starrocks.alter;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
@@ -49,6 +50,7 @@ import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.SetStmtAnalyzer;
 import com.starrocks.sql.ast.AlterMaterializedViewStatusClause;
@@ -119,8 +121,11 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         String ttlRetentionCondition = null;
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION)) {
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(materializedView.getDbId());
+            TableName mvTableName = new TableName(db.getFullName(), materializedView.getName());
+            Map<Expr, Expr> mvPartitionByExprToAdjustMap =
+                    MaterializedViewAnalyzer.getMVPartitionByExprToAdjustMap(mvTableName, materializedView);
             ttlRetentionCondition = PropertyAnalyzer.analyzePartitionRetentionCondition(db,
-                    materializedView, properties, true);
+                    materializedView, properties, true, mvPartitionByExprToAdjustMap);
         }
         int partitionRefreshNumber = INVALID;
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER)) {

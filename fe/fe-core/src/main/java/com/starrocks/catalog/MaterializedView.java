@@ -2100,6 +2100,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         }
         return this.defineQueryParseNode;
     }
+<<<<<<< HEAD
 
     /**
      * Get mv's ordered columns if the mv has defined its output columns order.
@@ -2143,4 +2144,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
 
+=======
+>>>>>>> 43f125ec5 ([BugFix] (Part 6) Fix partition_retention_condition for iceberg with partition transforms (#53869))
 }

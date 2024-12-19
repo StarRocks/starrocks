@@ -20,6 +20,7 @@ import com.google.common.collect.ImmutableSet;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Partition;
+import com.starrocks.clone.DynamicPartitionScheduler;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.connector.iceberg.MockIcebergMetadata;
 import com.starrocks.server.GlobalStateMgr;
@@ -462,5 +463,124 @@ public class PartitionBasedMvRefreshProcessorIcebergTest extends MVTestBase {
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage().contains("Unsupported expr 'date_trunc('bucket', ts)' in PARTITION BY clause"));
         }
+    }
+
+    @Test
+    public void testCreateMVForIcebergWithRetentionCondition1() throws Exception {
+        // test partition by day(ts)
+        String mvName = "iceberg_day_mv1";
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `test`.`iceberg_day_mv1`\n" +
+                "PARTITION BY date_trunc('day', ts)\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"partition_retention_condition\" = \"date_trunc('day', ts) >= current_date() - interval 1 year\"" +
+                ")\n" +
+                "AS SELECT id, data, ts  FROM `iceberg0`.`partitioned_transforms_db`.`t0_day` as a;");
+
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        MaterializedView partitionedMaterializedView =
+                ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .getTable(testDb.getFullName(), "iceberg_day_mv1"));
+        triggerRefreshMv(testDb, partitionedMaterializedView);
+
+        Collection<Partition> partitions = partitionedMaterializedView.getPartitions();
+        Assert.assertEquals(0, partitions.size());
+        starRocksAssert.dropMaterializedView(mvName);
+    }
+
+    @Test
+    public void testCreateMVForIcebergWithRetentionCondition2() throws Exception {
+        // test partition by day(ts)
+        String mvName = "iceberg_day_mv1";
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `test`.`iceberg_day_mv1`\n" +
+                "PARTITION BY (id, data, date_trunc('day', ts))\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"partition_retention_condition\" = \"date_trunc('day', ts) >= current_date() - interval 1 year\"" +
+                ")\n" +
+                "AS SELECT id, data, ts  FROM `iceberg0`.`partitioned_transforms_db`.`t0_multi_day` as a;");
+
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        MaterializedView partitionedMaterializedView =
+                ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .getTable(testDb.getFullName(), "iceberg_day_mv1"));
+        triggerRefreshMv(testDb, partitionedMaterializedView);
+
+        Collection<Partition> partitions = partitionedMaterializedView.getPartitions();
+        Assert.assertEquals(0, partitions.size());
+        starRocksAssert.query("SELECT id, data, ts  FROM `iceberg0`.`partitioned_transforms_db`.`t0_day`")
+                .explainWithout(mvName);
+        starRocksAssert.dropMaterializedView(mvName);
+    }
+
+    @Test
+    public void testCreateMVForIcebergWithRetentionCondition3() throws Exception {
+        // test partition by day(ts)
+        String mvName = "iceberg_day_tz_mv1";
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `test`.`iceberg_day_tz_mv1`\n" +
+                "PARTITION BY (id, data, date_trunc('day', ts))\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"partition_retention_condition\" = \"date_trunc('day', ts) >= current_date() - interval 1 year\"" +
+                ")\n" +
+                "AS SELECT id, data, ts  FROM `iceberg0`.`partitioned_transforms_db`.`t0_multi_day_tz` as a;");
+
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        MaterializedView partitionedMaterializedView =
+                ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .getTable(testDb.getFullName(), "iceberg_day_tz_mv1"));
+        triggerRefreshMv(testDb, partitionedMaterializedView);
+
+        Collection<Partition> partitions = partitionedMaterializedView.getPartitions();
+        Assert.assertEquals(0, partitions.size());
+        starRocksAssert.query("SELECT id, data, ts  FROM `iceberg0`.`partitioned_transforms_db`.`t0_multi_day_tz`")
+                .explainContains(mvName);
+        starRocksAssert.dropMaterializedView(mvName);
+    }
+
+    @Test
+    public void testCreateMVForIcebergWithRetentionCondition4() throws Exception {
+        // test partition by day(ts)
+        String mvName = "iceberg_day_tz_mv1";
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `test`.`iceberg_day_tz_mv1`\n" +
+                "PARTITION BY (id, data, date_trunc('day', ts))\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")\n" +
+                "AS SELECT id, data, ts  FROM `iceberg0`.`partitioned_transforms_db`.`t0_multi_day_tz` as a;");
+
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        MaterializedView partitionedMaterializedView =
+                ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .getTable(testDb.getFullName(), "iceberg_day_tz_mv1"));
+        triggerRefreshMv(testDb, partitionedMaterializedView);
+        Collection<Partition> partitions = partitionedMaterializedView.getPartitions();
+        Assert.assertEquals(2, partitions.size());
+        starRocksAssert.query("SELECT id, data, ts  FROM `iceberg0`.`partitioned_transforms_db`.`t0_multi_day_tz`")
+                .explainContains(mvName);
+        String alterTableSql = String.format("alter materialized view %s set (" +
+                "\"partition_retention_condition\" = \"date_trunc('day', ts) >= current_date() - interval 1 year\")",
+                mvName);
+        starRocksAssert.alterMvProperties(alterTableSql);
+        triggerRefreshMv(testDb, partitionedMaterializedView);
+
+        // trigger ttl
+        DynamicPartitionScheduler scheduler = GlobalStateMgr.getCurrentState()
+                .getDynamicPartitionScheduler();
+        scheduler.runOnceForTest();
+
+        partitions = partitionedMaterializedView.getPartitions();
+        Assert.assertEquals(0, partitions.size());
+        starRocksAssert.query("SELECT id, data, ts  FROM `iceberg0`.`partitioned_transforms_db`.`t0_multi_day_tz`")
+                .explainWithout(mvName);
+        starRocksAssert.dropMaterializedView(mvName);
     }
 }

@@ -302,6 +302,7 @@ public abstract class MVTimelinessArbiter {
                     mvUpdateInfo.getMvToRefreshPartitionNames().add(mvPartitionName));
         }
         addEmptyPartitionsToRefresh(mvUpdateInfo);
+        collectBaseTableUpdatePartitionNamesInLoose(mvUpdateInfo);
         collectMVToBaseTablePartitionNames(refBaseTablePartitionMap, diff, mvUpdateInfo);
         return mvUpdateInfo;
     }
@@ -323,6 +324,28 @@ public abstract class MVTimelinessArbiter {
             return null;
         }
         return Sets.newHashSet(retentionPartitionNames);
+    }
+
+    /**
+     * TODO: Optimize performance in loos/force_mv mode
+     */
+    protected void collectBaseTableUpdatePartitionNamesInLoose(MvUpdateInfo mvUpdateInfo) {
+        Map<Table, List<Column>> refBaseTableAndColumns = mv.getRefBaseTablePartitionColumns();
+        // collect & update mv's to refresh partitions based on base table's partition changes
+        collectBaseTableUpdatePartitionNames(refBaseTableAndColumns, mvUpdateInfo);
+        Set<Table> refBaseTables = mv.getRefBaseTablePartitionColumns().keySet();
+        MaterializedView.AsyncRefreshContext context = mv.getRefreshScheme().getAsyncRefreshContext();
+        for (Table table : refBaseTables) {
+            Map<String, MaterializedView.BasePartitionInfo> mvBaseTableVisibleVersionMap =
+                    context.getBaseTableVisibleVersionMap()
+                            .computeIfAbsent(table.getId(), k -> Maps.newHashMap());
+            for (String partitionName : mvBaseTableVisibleVersionMap.keySet()) {
+                if (mvUpdateInfo.getBaseTableToRefreshPartitionNames(table) != null) {
+                    // in loose mode, ignore partition that both exists in baseTable and mv
+                    mvUpdateInfo.getBaseTableToRefreshPartitionNames(table).remove(partitionName);
+                }
+            }
+        }
     }
 
     /**
@@ -366,6 +389,7 @@ public abstract class MVTimelinessArbiter {
         if (CollectionUtils.isEmpty(mvUpdateInfo.getMvToRefreshPartitionNames())) {
             return mvUpdateInfo;
         }
+        collectBaseTableUpdatePartitionNamesInLoose(mvUpdateInfo);
         // collect base table's partition infos
         collectMVToBaseTablePartitionNames(refBaseTablePartitionMap, diff, mvUpdateInfo);
         return mvUpdateInfo;
