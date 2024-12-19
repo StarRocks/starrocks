@@ -841,8 +841,14 @@ public class ReplicationJob implements GsonPostProcessable {
         ReplicationTxnCommitAttachment attachment = new ReplicationTxnCommitAttachment(
                 partitionVersions, partitionVersionEpochs);
 
-        GlobalStateMgr.getServingState().getGlobalTransactionMgr().commitTransaction(databaseId,
-                transactionId, tabletsCommitInfo.first, tabletsCommitInfo.second, attachment);
+        Locker locker = new Locker();
+        locker.lockTableWithIntensiveDbLock(databaseId, tableId, LockType.WRITE);
+        try {
+            GlobalStateMgr.getServingState().getGlobalTransactionMgr().commitTransaction(databaseId,
+                    transactionId, tabletsCommitInfo.first, tabletsCommitInfo.second, attachment);
+        } finally {
+            locker.unLockTableWithIntensiveDbLock(databaseId, tableId, LockType.WRITE);
+        }
     }
 
     private void abortTransaction(String reason) {
