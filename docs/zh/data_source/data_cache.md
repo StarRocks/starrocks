@@ -53,10 +53,10 @@ Data Cache 支持内存和磁盘的两级缓存。您也可以根据实际需要
 
 ## 开启 Data Cache
 
-当前，Data Cache 功能默认开启。默认情况下，系统会通过以下方式缓存数据：
+Data Cache 功能默认开启。默认情况下，系统会通过以下方式缓存数据：
 
 - 系统变量 `enable_scan_datacache` 和 BE 参数 `datacache_enable` 默认设置为 `true`。
-- 在 `storage_root_path` 目录下创建 **datacache** 目录作为磁盘缓存目录，从3.4.0起，不再支持手动更改磁盘缓存路径，如需使用其他路径，可通过Linux目录链接的形式进行处理。
+- 系统在 `storage_root_path` 目录下创建 **datacache** 目录作为磁盘缓存目录，从 v3.4.0 起，不再支持手动更改磁盘缓存路径。如需使用其他路径，可创建 Linux Symbolic Link。
 - 如未手动配置内存以及磁盘上限，系统会根据磁盘容量自动设置磁盘上限：
   - 开启磁盘空间自动调整功能。根据缓存磁盘当前使用情况自动设置上限，保证当前缓存盘整体磁盘使用率在 80% 左右，并根据后续磁盘使用情况动态调整。（您可以通过 BE 参数 `datacache_disk_high_level`、`datacache_disk_safe_level` 以及 `datacache_disk_low_level` 调整该行为。）
   - 默认配置缓存数据的内存上限为 `0`。（您可以通过 BE 参数 `datacache_mem_size` 修改。）
@@ -116,7 +116,7 @@ Data Cache 支持以同步或异步的方式进行缓存填充。
 
 ### 持久化
 
-Data Cache 当前默认会持久化磁盘缓存数据，BE进程重启后，可直接复用早期磁盘缓存数据。
+Data Cache 当前默认会持久化磁盘缓存数据，BE 进程重启后，可直接复用先前磁盘缓存数据。
 
 ## 查看 Data Cache 命中情况
 
