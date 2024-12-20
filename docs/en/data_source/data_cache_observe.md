@@ -8,6 +8,10 @@ In earlier versions, there are no rich metrics or efficient methods to monitor t
 
 In v3.3, StarRocks improves the observability of Data Cache by offering efficient monitoring methods and more metrics. Users can now check the overall disk and memory usage of the data cache, and related metrics, enhancing monitoring of cache usage.
 
+> **NOTE**
+>
+> From v3.4.0 onwards, queries against external catalogs and cloud-native tables (in shared-data clusters) use a unified Data Cache instance. Therefore, unless otherwise specified, the following methods default to displaying the metrics of the Data Cache instance itself, which includes the cache usage of queries against both external catalogs and cloud-native tables.
+
 ## SQL commands
 
 You can run SQL commands to view the capacity and usage of Data Cache on each BE node.

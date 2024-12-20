@@ -3942,25 +3942,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Type: String
 - Unit: -
 - Is mutable: No
-- Description: The maximum amount of data that can be cached on a single disk. You can set it as a percentage (for example, `80%`) or a physical limit (for example, `2T`, `500G`). For example, if you configure two disk paths for the `datacache_disk_path` parameter and set the value of the `datacache_disk_size` parameter as `21474836480` (20 GB), a maximum of 40 GB data can be cached on these two disks. The default value is `0`, which indicates that only memory is used to cache data.
-- Introduced in: -
-
-##### datacache_disk_path
-
-- Default: `${STARROCKS_HOME}/datacache/`
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description: The paths of disks. We recommend that the number of paths you configure for this parameter is the same as the number of disks on your BE machine. Multiple paths need to be separated with semicolons (;).
-- Introduced in: -
-
-##### datacache_meta_path
-
-- Default: `${STARROCKS_HOME}/datacache/`
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description: The storage path of block metadata. You can customize the storage path. We recommend that you store the metadata under the `$STARROCKS_HOME` path.
+- Description: The maximum amount of data that can be cached on a single disk. You can set it as a percentage (for example, `80%`) or a physical limit (for example, `2T`, `500G`). For example, if you use two disks and set the value of the `datacache_disk_size` parameter as `21474836480` (20 GB), a maximum of 40 GB data can be cached on these two disks. The default value is `0`, which indicates that only memory is used to cache data.
 - Introduced in: -
 
 ##### datacache_auto_adjust_enable
@@ -3974,20 +3956,20 @@ When this value is set to less than `0`, the system uses the product of its abso
 
 ##### datacache_disk_high_level
 
-- Default: 80
+- Default: 90
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The upper limit of disk usage (in percentage) that triggers the automatic scaling up of the cache capacity. When the disk usage exceeds this value, the system automatically evicts cache data from the Data Cache.
+- Description: The upper limit of disk usage (in percentage) that triggers the automatic scaling up of the cache capacity. When the disk usage exceeds this value, the system automatically evicts cache data from the Data Cache. From v3.4.0 onwards, the default value is changed from `80` to `90`.
 - Introduced in: v3.3.0
 
 ##### datacache_disk_safe_level
 
-- Default: 70
+- Default: 80
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The safe level of disk usage (in percentage) for Data Cache. When Data Cache performs automatic scaling, the system adjusts the cache capacity with the goal of maintaining disk usage as close to this value as possible.
+- Description: The safe level of disk usage (in percentage) for Data Cache. When Data Cache performs automatic scaling, the system adjusts the cache capacity with the goal of maintaining disk usage as close to this value as possible. From v3.4.0 onwards, the default value is changed from `70` to `80`.
 - Introduced in: v3.3.0
 
 ##### datacache_disk_low_level
@@ -4051,6 +4033,15 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Unit: -
 - Is mutable: No
 - Description: The eviction policy of Data Cache. Valid values: `lru` (least recently used) and `slru` (Segmented LRU).
+- Introduced in: v3.4.0
+
+##### datacache_inline_item_count_limit
+
+- Default: 130172
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: The maximum number of inline cache items in Data Cache. For some particularly small cache blocks, Data Cache stores them in `inline` mode, which caches the block data and metadata together in memory.
 - Introduced in: v3.4.0
 
 ##### query_max_memory_limit_percent
