@@ -758,10 +758,10 @@ vectorized_functions = [
     [120160, "sha2", False, False, "VARCHAR", ["VARCHAR", "INT"], "EncryptionFunctions::sha2",
      "EncryptionFunctions::sha2_prepare", "EncryptionFunctions::sha2_close"],
     [120161, "to_base64", False, True, "VARCHAR", ["VARBINARY"], "EncryptionFunctions::to_base64"],
-    [120170, "fpe_ff1_encrypt", "VARCHAR", ["VARCHAR", "VARCHAR", "INT"], "EncryptionFunctions::fpe_ff1_encrypt", False],
-    [120171, "fpe_encrypt", "VARCHAR", ["VARCHAR", "VARCHAR"], "EncryptionFunctions::fpe_encrypt", False],
-    [120172, "fpe_ff1_decrypt", "VARCHAR", ["VARCHAR", "VARCHAR", "INT"], "EncryptionFunctions::fpe_ff1_decrypt", False],
-    [120173, "fpe_decrypt", "VARCHAR", ["VARCHAR", "VARCHAR",], "EncryptionFunctions::fpe_decrypt", False],
+    [120170, "fpe_ff1_encrypt", False, False, "VARCHAR", ["VARCHAR", "VARCHAR", "INT"], "EncryptionFunctions::fpe_ff1_encrypt"],
+    [120171, "fpe_encrypt", False, False, "VARCHAR", ["VARCHAR", "VARCHAR"], "EncryptionFunctions::fpe_encrypt"],
+    [120172, "fpe_ff1_decrypt", False, False, "VARCHAR", ["VARCHAR", "VARCHAR", "INT"], "EncryptionFunctions::fpe_ff1_decrypt"],
+    [120173, "fpe_decrypt", False, False, "VARCHAR", ["VARCHAR", "VARCHAR",], "EncryptionFunctions::fpe_decrypt"],
 
     # geo function
     [120000, "ST_Point", False, False, "VARCHAR", ["DOUBLE", "DOUBLE"], "GeoFunctions::st_point"],
