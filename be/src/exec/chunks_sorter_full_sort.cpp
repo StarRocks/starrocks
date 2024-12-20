@@ -117,7 +117,8 @@ Status ChunksSorterFullSort::_partial_sort(RuntimeState* state, bool done) {
     if (!_staging_unsorted_rows) {
         return Status::OK();
     }
-    bool reach_limit = _staging_unsorted_rows >= max_buffered_rows || _staging_unsorted_bytes >= max_buffered_bytes;
+    bool reach_limit = _staging_unsorted_rows >= kDefaultMinBufferRows &&
+                       (_staging_unsorted_rows >= max_buffered_rows || _staging_unsorted_bytes >= max_buffered_bytes);
     if (done || reach_limit) {
         _max_num_rows = std::max<int>(_max_num_rows, _staging_unsorted_rows);
         _profiler->input_required_memory->update(_staging_unsorted_bytes);
@@ -147,6 +148,7 @@ Status ChunksSorterFullSort::_partial_sort(RuntimeState* state, bool done) {
 Status ChunksSorterFullSort::_merge_sorted(RuntimeState* state) {
     SCOPED_TIMER(_merge_timer);
     _profiler->num_sorted_runs->set((int64_t)_sorted_chunks.size());
+    // TODO: introduce an extra merge before cascading merge to handle the case that has a lot of sortruns
     // In cascading merging phase, the height of merging tree is ceiling(log2(num_sorted_runs)) + 1,
     // so when num_sorted_runs is 1 or 2, the height merging tree is less than 2, the sorted runs just be processed
     // in at most one pass. there is no need to enable lazy materialization which eliminates non-order-by output
