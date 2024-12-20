@@ -35,6 +35,8 @@ public class AuditStatisticsUtil {
         pb.returnedRows = tb.getReturned_rows();
         pb.cpuCostNs = tb.getCpu_cost_ns();
         pb.memCostBytes = tb.getMem_cost_bytes();
+        pb.peakMemBytesPerNode = tb.getPeak_mem_bytes_per_node();
+        pb.peakMemBytes = tb.getPeak_mem_bytes();
         pb.spillBytes = tb.getSpill_bytes();
         if (tb.isSetStats_items()) {
             pb.statsItems = Lists.newArrayList();
@@ -81,7 +83,19 @@ public class AuditStatisticsUtil {
             if (to.memCostBytes == null) {
                 to.memCostBytes = 0L;
             }
-            to.memCostBytes += from.memCostBytes;
+            to.memCostBytes = Math.max(from.memCostBytes, to.memCostBytes);
+        }
+        if (from.peakMemBytesPerNode != null) {
+            if (to.peakMemBytesPerNode == null) {
+                to.peakMemBytesPerNode = 0L;
+            }
+            to.peakMemBytesPerNode = Math.max(from.peakMemBytesPerNode, to.peakMemBytesPerNode);
+        }
+        if (from.peakMemBytes != null) {
+            if (to.peakMemBytes == null) {
+                to.peakMemBytes = 0L;
+            }
+            to.peakMemBytes = Math.max(from.peakMemBytes, to.peakMemBytes);
         }
         if (from.spillBytes != null) {
             if (to.spillBytes == null) {
@@ -140,6 +154,12 @@ public class AuditStatisticsUtil {
         }
         if (pb.memCostBytes != null) {
             tb.setMem_cost_bytes(pb.memCostBytes);
+        }
+        if (pb.peakMemBytesPerNode != null) {
+            tb.setPeak_mem_bytes_per_node(pb.peakMemBytesPerNode);
+        }
+        if (pb.peakMemBytes != null) {
+            tb.setPeak_mem_bytes(pb.peakMemBytes);
         }
         if (pb.spillBytes != null) {
             tb.setSpill_bytes(pb.spillBytes);

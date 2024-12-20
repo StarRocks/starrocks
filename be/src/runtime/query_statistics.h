@@ -34,6 +34,7 @@
 
 #pragma once
 
+#include <algorithm> // For std::max
 #include <mutex>
 
 #include "gen_cpp/FrontendService.h"
@@ -59,6 +60,10 @@ public:
     void add_scan_stats(int64_t scan_rows, int64_t scan_bytes);
     void add_cpu_costs(int64_t cpu_ns) { this->cpu_ns += cpu_ns; }
     void add_mem_costs(int64_t bytes) { mem_cost_bytes += bytes; }
+    void add_peak_mem_costs(int64_t bytes) {
+        peak_mem_bytes += bytes;
+        peak_mem_bytes_per_node = std::max(peak_mem_bytes_per_node.load(), bytes);
+    }
     void add_spill_bytes(int64_t bytes) { spill_bytes += bytes; }
 
     void to_pb(PQueryStatistics* statistics);
@@ -82,6 +87,8 @@ private:
     std::atomic_int64_t scan_bytes{0};
     std::atomic_int64_t cpu_ns{0};
     std::atomic_int64_t mem_cost_bytes{0};
+    std::atomic_int64_t peak_mem_bytes_per_node{0};
+    std::atomic_int64_t peak_mem_bytes{0};
     std::atomic_int64_t spill_bytes{0};
 
     // number rows returned by query.

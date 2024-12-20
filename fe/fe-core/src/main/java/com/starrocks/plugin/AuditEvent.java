@@ -103,6 +103,10 @@ public class AuditEvent {
     public long cpuCostNs = -1;
     @AuditField(value = "MemCostBytes", ignore_zero = true)
     public long memCostBytes = -1;
+    @AuditField(value = "PeakMemBytes", ignore_zero = true)
+    public long peakMemBytes = -1;
+    @AuditField(value = "PeakMemBytesByNode", ignore_zero = true)
+    public long peakMemBytesByNode = -1;
     @AuditField(value = "StmtId")
     public long stmtId = -1;
     @AuditField(value = "QueryId")
@@ -234,6 +238,14 @@ public class AuditEvent {
 
         public AuditEventBuilder setMemCostBytes(long memCostBytes) {
             auditEvent.memCostBytes = memCostBytes;
+            return this;
+        }
+        public AuditEventBuilder setPeakMemBytes(long peakMemBytes) {
+            auditEvent.peakMemBytes = peakMemBytes;
+            return this;
+        }
+        public AuditEventBuilder setPeakMemBytesByNode(long peakMemBytesByNode) {
+            auditEvent.peakMemBytesByNode = peakMemBytesByNode;
             return this;
         }
 
