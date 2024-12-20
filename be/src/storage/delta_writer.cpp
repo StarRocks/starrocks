@@ -722,7 +722,8 @@ Status DeltaWriter::commit() {
         return res.status();
     }
 
-    if (_tablet->keys_type() == KeysType::PRIMARY_KEYS) {
+    if (_tablet->keys_type() == KeysType::PRIMARY_KEYS && !config::skip_pk_preload &&
+        !_storage_engine->update_manager()->mem_tracker()->limit_exceeded_by_ratio(config::memory_high_level)) {
         auto st = _storage_engine->update_manager()->on_rowset_finished(_tablet.get(), _cur_rowset.get());
         if (!st.ok()) {
             _set_state(kAborted, st);
