@@ -607,4 +607,206 @@ public class BackupHandlerTest {
 
         UtFrameUtils.tearDownForPersisTest();
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testCreateDbInRestore(
+                @Mocked GlobalStateMgr globalStateMgr, @Mocked BrokerMgr brokerMgr, @Mocked EditLog editLog) throws Exception {
+        setUpMocker(globalStateMgr, brokerMgr, editLog);
+
+        new Expectations() {
+            {
+                editLog.logCreateRepository((Repository) any);
+                minTimes = 0;
+                result = new Delegate() {
+                    public void logCreateRepository(Repository repo) {
+
+                    }
+                };
+
+                editLog.logDropRepository(anyString);
+                minTimes = 0;
+                result = new Delegate() {
+                    public void logDropRepository(String repoName) {
+
+                    }
+                };
+
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
+                minTimes = 0;
+                result = db;
+            }
+        };
+
+        new MockUp<Repository>() {
+            @Mock
+            public Status initRepository() {
+                return Status.OK;
+            }
+
+            @Mock
+            public Status listSnapshots(List<String> snapshotNames) {
+                snapshotNames.add("ss2");
+                return Status.OK;
+            }
+
+            @Mock
+            public Status getSnapshotInfoFile(String label, String backupTimestamp, List<BackupJobInfo> infos) {
+                OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .getTable(db.getFullName(), CatalogMocker.TEST_TBL_NAME);
+                List<Table> tbls = Lists.newArrayList();
+                tbls.add(tbl);
+                Map<Long, SnapshotInfo> snapshotInfos = Maps.newHashMap();
+                for (Partition part : tbl.getPartitions()) {
+                    for (MaterializedIndex idx : part.getDefaultPhysicalPartition()
+                            .getMaterializedIndices(IndexExtState.VISIBLE)) {
+                        for (Tablet tablet : idx.getTablets()) {
+                            List<String> files = Lists.newArrayList();
+                            SnapshotInfo sinfo = new SnapshotInfo(db.getId(), tbl.getId(), part.getId(), idx.getId(),
+                                        tablet.getId(), -1, 0, "./path", files);
+                            snapshotInfos.put(tablet.getId(), sinfo);
+                        }
+                    }
+                }
+
+                BackupJobInfo info = BackupJobInfo.fromCatalog(System.currentTimeMillis(),
+                            "ss2", "xxxxx",
+                            CatalogMocker.TEST_DB_ID, tbls, snapshotInfos);
+                infos.add(info);
+                return Status.OK;
+            }
+        };
+
+        new Expectations() {
+            {
+                brokerMgr.containsBroker(anyString);
+                minTimes = 0;
+                result = true;
+            }
+        };
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+
+                globalStateMgr.getBrokerMgr();
+                minTimes = 0;
+                result = brokerMgr;
+
+                globalStateMgr.getNextId();
+                minTimes = 0;
+                result = idGen++;
+
+                globalStateMgr.getEditLog();
+                minTimes = 0;
+                result = editLog;
+
+                globalStateMgr.getTabletInvertedIndex();
+                minTimes = 0;
+                result = invertedIndex;
+            }
+        };
+
+        new MockUp<LocalMetastore>() {
+            Database database = CatalogMocker.mockDb();
+
+            @Mock
+            public Database getDb(String dbName) {
+                return dbName.equals(CatalogMocker.TEST_DB_NAME) ? database : null;
+            }
+
+            @Mock
+            public Table getTable(String dbName, String tblName) {
+                return database.getTable(tblName);
+            }
+        };
+
+        new MockUp<BackupHandler>() {
+            @Mock
+            protected BackupMeta downloadAndDeserializeMetaInfo(BackupJobInfo jobInfo, Repository repo, RestoreStmt stmt) {
+                return new BackupMeta(Lists.newArrayList());
+            }
+        };
+
+        BackupHandler handler = new BackupHandler(globalStateMgr);
+        CreateRepositoryStmt stmt = new CreateRepositoryStmt(false, "repo", "broker", "bos://location",
+                    Maps.newHashMap());
+        try {
+            handler.createRepository(stmt);
+        } catch (DdlException e) {
+            e.printStackTrace();
+            Assert.fail();
+        }
+
+        // process restore
+        List<TableRef> tblRefs2 = Lists.newArrayList();
+        tblRefs2.add(new TableRef(new TableName(CatalogMocker.TEST_DB_NAME, CatalogMocker.TEST_TBL_NAME), null));
+        Map<String, String> properties = Maps.newHashMap();
+        properties.put("backup_timestamp", "2018-08-08-08-08-08");
+        RestoreStmt restoreStmt = new RestoreStmt(new LabelName(null, "ss2"), "repo", tblRefs2,
+                    Lists.newArrayList(), null, null, false, "", properties);
+        try {
+            BackupRestoreAnalyzer.analyze(restoreStmt, new ConnectContext());
+        } catch (SemanticException e2) {
+            e2.printStackTrace();
+            Assert.fail();
+        }
+
+        try {
+            handler.process(restoreStmt);
+        } catch (DdlException e1) {
+        }
+
+        Set<AbstractBackupStmt.BackupObjectType> allMarker = Sets.newHashSet();
+        allMarker.add(AbstractBackupStmt.BackupObjectType.TABLE);
+        allMarker.add(AbstractBackupStmt.BackupObjectType.MV);
+        allMarker.add(AbstractBackupStmt.BackupObjectType.VIEW);
+        restoreStmt = new RestoreStmt(new LabelName(CatalogMocker.TEST_DB_NAME, "ss2"), "repo", tblRefs2,
+                          Lists.newArrayList(), null, allMarker, true, "", properties);
+        try {
+            BackupRestoreAnalyzer.analyze(restoreStmt, new ConnectContext());
+        } catch (SemanticException e2) {
+            e2.printStackTrace();
+            Assert.fail();
+        }
+
+        try {
+            handler.process(restoreStmt);
+        } catch (Exception e1) {
+        }
+    }
+
+    @Test
+    public void testGetRunningBackupRestoreCount() {
+        handler = new BackupHandler();
+
+        BackupJob backupJob = new BackupJob("l1", 20000, "test1", null, 3600000, null, 1);
+        handler.replayAddJob(backupJob);
+        RestoreJob restoreJob = new RestoreJob("l2", "", 20001, "test2", null, true, 3, 3600000, null, 1, null, null);
+        handler.replayAddJob(restoreJob);
+
+        Map<Long, Long> result = handler.getRunningBackupRestoreCount();
+        Assert.assertEquals(1, result.size());
+        Assert.assertEquals(Long.valueOf(2), result.get(0L));
+
+        backupJob.setState(BackupJob.BackupJobState.CANCELLED);
+        result = handler.getRunningBackupRestoreCount();
+        Assert.assertEquals(Long.valueOf(1), result.get(0L));
+
+        backupJob.setState(BackupJob.BackupJobState.FINISHED);
+        result = handler.getRunningBackupRestoreCount();
+        Assert.assertEquals(Long.valueOf(1), result.get(0L));
+
+        restoreJob.setState(RestoreJob.RestoreJobState.CANCELLED);
+        result = handler.getRunningBackupRestoreCount();
+        Assert.assertEquals(Long.valueOf(0), result.get(0L));
+
+        restoreJob.setState(RestoreJob.RestoreJobState.FINISHED);
+        result = handler.getRunningBackupRestoreCount();
+        Assert.assertEquals(Long.valueOf(0), result.get(0L));
+    }
+>>>>>>> c1c530daaf ([UT] Add test for warehouse idle checker (#54121))
 }

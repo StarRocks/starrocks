@@ -1626,4 +1626,8 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
             readUnlock();
         }
     }
+
+    protected void setState(State state) {
+        this.state = state;
+    }
 }
