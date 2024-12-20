@@ -687,21 +687,29 @@ public class StmtExecutor {
                             // to this failed execution.
                             String queryId = DebugUtil.printId(context.getExecutionId());
                             ProfileManager.getInstance().removeProfile(queryId);
-                        } else if (context instanceof ArrowFlightSqlConnectContext) {
-                            isAsync = true;
-                            tryProcessProfileAsync(execPlan, i);
-                        } else if (context.isProfileEnabled()) {
-                            isAsync = tryProcessProfileAsync(execPlan, i);
-                            if (parsedStmt.isExplain() &&
-                                    StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
-                                if (coord != null && coord.isShortCircuit()) {
-                                    throw new StarRocksException(
-                                            "short circuit point query doesn't suppot explain analyze stmt, " +
-                                                    "you can set it off by using  set enable_short_circuit=false");
+                        } else {
+                            // Release all resources after the query finish as soon as possible, as query profile is
+                            // asynchronous which can be delayed a long time.
+                            if (coord != null) {
+                                coord.onReleaseSlots();
+                            }
+
+                            if (context instanceof ArrowFlightSqlConnectContext) {
+                                isAsync = true;
+                                tryProcessProfileAsync(execPlan, i);
+                            } else if (context.isProfileEnabled()) {
+                                isAsync = tryProcessProfileAsync(execPlan, i);
+                                if (parsedStmt.isExplain() &&
+                                        StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
+                                    if (coord != null && coord.isShortCircuit()) {
+                                        throw new StarRocksException(
+                                                "short circuit point query doesn't suppot explain analyze stmt, " +
+                                                        "you can set it off by using  set enable_short_circuit=false");
+                                    }
+                                    handleExplainStmt(ExplainAnalyzer.analyze(
+                                            ProfilingExecPlan.buildFrom(execPlan), profile, null,
+                                            context.getSessionVariable().getColorExplainOutput()));
                                 }
-                                handleExplainStmt(ExplainAnalyzer.analyze(
-                                        ProfilingExecPlan.buildFrom(execPlan), profile, null,
-                                        context.getSessionVariable().getColorExplainOutput()));
                             }
                         }
 
