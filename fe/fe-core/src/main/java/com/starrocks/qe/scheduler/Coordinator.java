@@ -29,6 +29,7 @@ import com.starrocks.qe.QueryStatisticsItem;
 import com.starrocks.qe.RowBatch;
 import com.starrocks.qe.scheduler.slot.DeployState;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
+import com.starrocks.rpc.RpcException;
 import com.starrocks.sql.LoadPlanner;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TDescriptorTable;
@@ -94,7 +95,7 @@ public abstract class Coordinator {
         public boolean useQueryDeployExecutor = false;
     }
 
-    public void exec() throws Exception {
+    public void exec() throws StarRocksException, RpcException, InterruptedException {
         ScheduleOption option = new ScheduleOption();
         startScheduling(option);
     }
@@ -120,7 +121,7 @@ public abstract class Coordinator {
      * </ul>
      * <p>
      */
-    public abstract void startScheduling(ScheduleOption option) throws Exception;
+    public abstract void startScheduling(ScheduleOption option) throws StarRocksException, InterruptedException, RpcException;
 
     public Status scheduleNextTurn(TUniqueId fragmentInstanceId) {
         return Status.OK;
@@ -164,6 +165,8 @@ public abstract class Coordinator {
     public abstract boolean isThriftServerHighLoad();
 
     public abstract void setLoadJobType(TLoadJobType type);
+
+    public abstract TLoadJobType getLoadJobType();
 
     public abstract long getLoadJobId();
 

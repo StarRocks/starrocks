@@ -201,7 +201,7 @@ public class CoordinatorPreprocessor {
         return jobSpec.getResourceGroup();
     }
 
-    public void prepareExec() throws Exception {
+    public void prepareExec() throws StarRocksException {
         resetExec();
         computeFragmentInstances();
         traceInstance();

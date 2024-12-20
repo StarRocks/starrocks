@@ -54,7 +54,6 @@ import com.starrocks.system.Frontend;
 import com.starrocks.thrift.FrontendService;
 import com.starrocks.thrift.TGetWarehousesRequest;
 import com.starrocks.thrift.TGetWarehousesResponse;
-import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
@@ -551,7 +550,6 @@ public class WarehouseActionTest extends StarRocksHttpTestCase {
                     0L,
                     0,
                     0L,
-                    TLoadJobType.INSERT_QUERY,
                     0L,
                     whId,
                     isStatisticsJob,
