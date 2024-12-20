@@ -395,7 +395,8 @@ public class StmtExecutor {
             return false;
         }
 
-        // If this node is transferring to the leader, we should wait for it to complete to avoid forwarding to its own node.
+        // If this node is transferring to the leader, we should wait for it to complete to avoid forwarding to its
+        // own node.
         if (GlobalStateMgr.getCurrentState().isInTransferringToLeader()) {
             long lastPrintTime = -1L;
             while (true) {
@@ -485,7 +486,6 @@ public class StmtExecutor {
         UUID uuid = context.getQueryId();
         context.setExecutionId(UUIDUtil.toTUniqueId(uuid));
         SessionVariable sessionVariableBackup = context.getSessionVariable();
-
 
         // if use http protocal, use httpResultSender to send result to netty channel
         if (context instanceof HttpConnectContext) {
@@ -591,7 +591,8 @@ public class StmtExecutor {
             }
 
             // For follower: verify sql in BlackList before forward to leader
-            // For leader: if this is a proxy sql, no need to verify sql in BlackList because every fe has its own blacklist
+            // For leader: if this is a proxy sql, no need to verify sql in BlackList because every fe has its own
+            // blacklist
             if ((parsedStmt instanceof QueryStatement || parsedStmt instanceof InsertStmt)
                     && Config.enable_sql_blacklist && !parsedStmt.isExplain() && !isProxy) {
                 OriginStatement origStmt = parsedStmt.getOrigStmt();
@@ -661,17 +662,25 @@ public class StmtExecutor {
                             // to this failed execution.
                             String queryId = DebugUtil.printId(context.getExecutionId());
                             ProfileManager.getInstance().removeProfile(queryId);
-                        } else if (context.isProfileEnabled()) {
-                            isAsync = tryProcessProfileAsync(execPlan, i);
-                            if (parsedStmt.isExplain() &&
-                                    StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
-                                if (coord != null && coord.isShortCircuit()) {
-                                    throw new UserException(
-                                            "short circuit point query doesn't suppot explain analyze stmt, " +
-                                                    "you can set it off by using  set enable_short_circuit=false");
+                        } else {
+                            // Release all resources after the query finish as soon as possible, as query profile is
+                            // asynchronous which can be delayed a long time.
+                            if (coord != null) {
+                                coord.onReleaseSlots();
+                            }
+
+                            if (context.isProfileEnabled()) {
+                                isAsync = tryProcessProfileAsync(execPlan, i);
+                                if (parsedStmt.isExplain() &&
+                                        StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
+                                    if (coord != null && coord.isShortCircuit()) {
+                                        throw new UserException(
+                                                "short circuit point query doesn't suppot explain analyze stmt, " +
+                                                        "you can set it off by using  set enable_short_circuit=false");
+                                    }
+                                    handleExplainStmt(ExplainAnalyzer.analyze(
+                                            ProfilingExecPlan.buildFrom(execPlan), profile, null));
                                 }
-                                handleExplainStmt(ExplainAnalyzer.analyze(
-                                        ProfilingExecPlan.buildFrom(execPlan), profile, null));
                             }
                         }
 
@@ -881,7 +890,8 @@ public class StmtExecutor {
     private boolean createTableCreatedByCTAS(CreateTableAsSelectStmt stmt) throws Exception {
         try {
             if (stmt instanceof CreateTemporaryTableAsSelectStmt) {
-                CreateTemporaryTableStmt createTemporaryTableStmt = (CreateTemporaryTableStmt) stmt.getCreateTableStmt();
+                CreateTemporaryTableStmt createTemporaryTableStmt =
+                        (CreateTemporaryTableStmt) stmt.getCreateTableStmt();
                 createTemporaryTableStmt.setSessionId(context.getSessionId());
                 return context.getGlobalStateMgr().getMetadataMgr().createTemporaryTable(createTemporaryTableStmt);
             } else {
@@ -1183,7 +1193,8 @@ public class StmtExecutor {
                 && StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel());
         boolean isSchedulerExplain = parsedStmt.isExplain()
                 && StatementBase.ExplainLevel.SCHEDULER.equals(parsedStmt.getExplainLevel());
-        boolean isOutfileQuery = (parsedStmt instanceof QueryStatement) && ((QueryStatement) parsedStmt).hasOutFileClause();
+        boolean isOutfileQuery =
+                (parsedStmt instanceof QueryStatement) && ((QueryStatement) parsedStmt).hasOutFileClause();
         if (isOutfileQuery) {
             Map<TableName, Table> tables = AnalyzerUtils.collectAllTable(parsedStmt);
             boolean hasTemporaryTable = tables.values().stream().anyMatch(t -> t.isTemporaryTable());
@@ -1266,7 +1277,8 @@ public class StmtExecutor {
                 batch = coord.getNext();
                 // for outfile query, there will be only one empty batch send back with eos flag
                 if (batch.getBatch() != null && !isOutfileQuery && !isExplainAnalyze) {
-                    // For some language driver, getting error packet after fields packet will be recognized as a success result
+                    // For some language driver, getting error packet after fields packet will be recognized as a
+                    // success result
                     // so We need to send fields after first batch arrived
                     if (!isSendFields) {
                         sendFields(colNames, outputExprs);
@@ -1435,10 +1447,10 @@ public class StmtExecutor {
         if (analyzeStmt.isExternal()) {
             if (analyzeStmt.getAnalyzeTypeDesc().isHistogram()) {
                 statisticExecutor.collectStatistics(statsConnectCtx,
-                    new ExternalHistogramStatisticsCollectJob(analyzeStmt.getTableName().getCatalog(),
-                            db, table, analyzeStmt.getColumnNames(), analyzeStmt.getColumnTypes(),
-                            StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE,
-                            analyzeStmt.getProperties()),
+                        new ExternalHistogramStatisticsCollectJob(analyzeStmt.getTableName().getCatalog(),
+                                db, table, analyzeStmt.getColumnNames(), analyzeStmt.getColumnTypes(),
+                                StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE,
+                                analyzeStmt.getProperties()),
                         analyzeStatus,
                         false);
             } else {
@@ -1765,7 +1777,8 @@ public class StmtExecutor {
 
     // Process show statement
     private void handleShow() throws IOException, AnalysisException, DdlException {
-        ShowResultSet resultSet = GlobalStateMgr.getCurrentState().getShowExecutor().execute((ShowStmt) parsedStmt, context);
+        ShowResultSet resultSet =
+                GlobalStateMgr.getCurrentState().getShowExecutor().execute((ShowStmt) parsedStmt, context);
         if (resultSet == null) {
             // state changed in execute
             return;
@@ -1839,7 +1852,6 @@ public class StmtExecutor {
         }
         return explainString;
     }
-
 
     private void handleDdlStmt() throws DdlException {
         try {
@@ -2270,7 +2282,8 @@ public class StmtExecutor {
                  * So we should distinguish these two factors.
                  */
                 if (!coord.checkBackendState()) {
-                    // When enable_collect_query_detail_info is set to true, the plan will be recorded in the query detail,
+                    // When enable_collect_query_detail_info is set to true, the plan will be recorded in the query
+                    // detail,
                     // and hence there is no need to log it here.
                     if (Config.log_plan_cancelled_by_crash_be && context.getQueryDetail() == null) {
                         LOG.warn("Query cancelled by crash of backends [QueryId={}] [SQL={}] [Plan={}]",
@@ -2288,7 +2301,8 @@ public class StmtExecutor {
                                 "Please check the thrift-server-pool metrics, " +
                                         "if the pool size reaches thrift_server_max_worker_threads(default is 4096), " +
                                         "you can set the config to a higher value in fe.conf, " +
-                                        "or set parallel_fragment_exec_instance_num to a lower value in session variable");
+                                        "or set parallel_fragment_exec_instance_num to a lower value in session " +
+                                        "variable");
                     } else {
                         ErrorReport.reportTimeoutException(ErrorCode.ERR_QUERY_TIMEOUT,
                                 "Increase the query_timeout session variable and retry");
@@ -2362,7 +2376,8 @@ public class StmtExecutor {
                             targetTable.isHiveTable() || targetTable.isTableFunctionTable() ||
                             targetTable.isBlackHoleTable())) {
                         // schema table and iceberg table does not need txn
-                        mgr.abortTransaction(database.getId(), transactionId, ERR_NO_PARTITIONS_HAVE_DATA_LOAD.formatErrorMsg(),
+                        mgr.abortTransaction(database.getId(), transactionId,
+                                ERR_NO_PARTITIONS_HAVE_DATA_LOAD.formatErrorMsg(),
                                 Coordinator.getCommitInfos(coord), Coordinator.getFailInfos(coord), null);
                     }
                     context.getState().setOk();
@@ -2444,7 +2459,8 @@ public class StmtExecutor {
                         } else if (partitionVersionMap.size() == 0) {
                             attachment = new InsertTxnCommitAttachment(loadedRows);
                         }
-                        LOG.debug("insert overwrite txn {} with partition version map {}", transactionId, partitionVersionMap);
+                        LOG.debug("insert overwrite txn {} with partition version map {}", transactionId,
+                                partitionVersionMap);
                     } else {
                         attachment = new InsertTxnCommitAttachment(loadedRows);
                     }
@@ -2621,7 +2637,6 @@ public class StmtExecutor {
     public List<ByteBuffer> getProxyResultBuffer() {
         return proxyResultBuffer;
     }
-
 
     // scenes can execute in FE should meet all these requirements:
     // 1. enable_constant_execute_in_fe = true
