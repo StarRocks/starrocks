@@ -187,6 +187,10 @@ public class BackupJob extends AbstractJob {
         return state;
     }
 
+    protected void setState(BackupJobState state) {
+        this.state = state;
+    }
+
     public BackupMeta getBackupMeta() {
         return backupMeta;
     }

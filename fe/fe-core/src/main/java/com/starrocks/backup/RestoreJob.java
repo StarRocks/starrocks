@@ -225,6 +225,10 @@ public class RestoreJob extends AbstractJob {
         return state;
     }
 
+    protected void setState(RestoreJobState state) {
+        this.state = state;
+    }
+
     public RestoreFileMapping getFileMapping() {
         return fileMapping;
     }
