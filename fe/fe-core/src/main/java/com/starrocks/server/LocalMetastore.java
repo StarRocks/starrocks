@@ -4055,6 +4055,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                         IDictManager.getInstance().enableGlobalDict(olapTable.getId());
                     }
                 }
+            } else if (opCode == OperationType.OP_SET_HAS_DELETE) {
+                olapTable.setHasDelete();
             } else {
                 TableProperty tableProperty = olapTable.getTableProperty();
                 if (tableProperty == null) {

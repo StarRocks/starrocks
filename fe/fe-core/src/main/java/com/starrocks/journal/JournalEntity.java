@@ -524,6 +524,7 @@ public class JournalEntity implements Writable {
             case OperationType.OP_DYNAMIC_PARTITION:
             case OperationType.OP_MODIFY_IN_MEMORY:
             case OperationType.OP_SET_FORBIDDEN_GLOBAL_DICT:
+            case OperationType.OP_SET_HAS_DELETE:
             case OperationType.OP_MODIFY_REPLICATION_NUM:
             case OperationType.OP_MODIFY_WRITE_QUORUM:
             case OperationType.OP_MODIFY_REPLICATED_STORAGE:
