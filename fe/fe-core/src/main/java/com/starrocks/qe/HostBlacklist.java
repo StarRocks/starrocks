@@ -39,6 +39,7 @@ import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
+// NOTE: unit tests are all in SimpleSchedulerTest
 public class HostBlacklist {
     private static final Logger LOG = LogManager.getLogger(SimpleScheduler.class);
     private static final int HISTORY_SIZE = 1000;
@@ -47,10 +48,10 @@ public class HostBlacklist {
     private final AtomicBoolean enableUpdateBlacklistThread = new AtomicBoolean(true);
 
     // hostId -> current DisconnectEvent
-    public final Map<Long, DisconnectEvent> hostBlacklist = Maps.newConcurrentMap();
+    private final Map<Long, DisconnectEvent> hostBlacklist = Maps.newConcurrentMap();
 
     // by timeline, thread unsafe
-    public final LinkedList<DisconnectEvent> eventHistory = new LinkedList<>();
+    private final LinkedList<DisconnectEvent> eventHistory = new LinkedList<>();
     // lock history
     private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
 
@@ -105,6 +106,12 @@ public class HostBlacklist {
             return true;
         }
         return false;
+    }
+
+    // Mostly for TEST purpose
+    public void clear() {
+        hostBlacklist.clear();
+        eventHistory.clear();
     }
 
     public List<List<String>> getShowData() {
