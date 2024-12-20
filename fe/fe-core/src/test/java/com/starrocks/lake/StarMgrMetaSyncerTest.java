@@ -606,6 +606,7 @@ public class StarMgrMetaSyncerTest {
             Deencapsulation.invoke(starMgrMetaSyncer, "deleteUnusedShardAndShardGroup");
             Assert.assertEquals(0, allShardIds.size());
         }
+        Config.meta_sync_force_delete_shard_meta = oldValue;
     }
 
     @Test
