@@ -125,6 +125,7 @@ import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.SetStmtAnalyzer;
 import com.starrocks.sql.ast.AddSqlBlackListStmt;
+import com.starrocks.sql.ast.AdminSetConfigStmt;
 import com.starrocks.sql.ast.AnalyzeHistogramDesc;
 import com.starrocks.sql.ast.AnalyzeProfileStmt;
 import com.starrocks.sql.ast.AnalyzeStmt;
@@ -468,6 +469,12 @@ public class StmtExecutor {
             httpResultSender = new HttpResultSender((HttpConnectContext) context);
         }
 
+<<<<<<< HEAD
+=======
+        if (shouldMarkIdleCheck(parsedStmt)) {
+            WarehouseIdleChecker.increaseRunningSQL(context.getCurrentWarehouseId());
+        }
+>>>>>>> 9f07976966 ([Enhancement] Ignore ShowStmt for idle check (#54173))
         try {
             // parsedStmt may already by set when constructing this StmtExecutor();
             resolveParseStmtForForward();
@@ -764,7 +771,18 @@ public class StmtExecutor {
             }
 
             if (parsedStmt != null && parsedStmt.isExistQueryScopeHint()) {
+<<<<<<< HEAD
                 clearQueryScopeHintContext(sessionVariableBackup);
+=======
+                clearQueryScopeHintContext();
+            }
+
+            // restore session variable in connect context
+            context.setSessionVariable(sessionVariableBackup);
+
+            if (shouldMarkIdleCheck(parsedStmt)) {
+                WarehouseIdleChecker.decreaseRunningSQL(context.getCurrentWarehouseId());
+>>>>>>> 9f07976966 ([Enhancement] Ignore ShowStmt for idle check (#54173))
             }
         }
     }
@@ -2426,4 +2444,12 @@ public class StmtExecutor {
         QueryDetailQueue.addQueryDetail(queryDetail);
     }
 
+<<<<<<< HEAD
+=======
+    private boolean shouldMarkIdleCheck(StatementBase parsedStmt) {
+        return !isInternalStmt
+                && !(parsedStmt instanceof ShowStmt)
+                && !(parsedStmt instanceof AdminSetConfigStmt);
+    }
+>>>>>>> 9f07976966 ([Enhancement] Ignore ShowStmt for idle check (#54173))
 }
