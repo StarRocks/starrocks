@@ -766,13 +766,9 @@ public:
         return {};
     }
 
-    Status do_visit(const ConstColumn& column) {
-        return Status::NotSupported("SegmentedColumnVisitor");
-    }
+    Status do_visit(const ConstColumn& column) { return Status::NotSupported("SegmentedColumnVisitor"); }
 
-    ColumnPtr result() {
-        return _result;
-    }
+    ColumnPtr result() { return _result; }
 
 private:
     __attribute__((always_inline)) std::pair<size_t, size_t> _segment_address(size_t idx, size_t segment_size) {
