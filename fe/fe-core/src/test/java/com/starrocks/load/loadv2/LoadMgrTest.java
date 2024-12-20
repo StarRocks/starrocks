@@ -351,4 +351,35 @@ public class LoadMgrTest {
         Assert.assertTrue(loadMgr.getLoadJobsByDb(2L, "job1", true).isEmpty());
         Assert.assertEquals(1, loadMgr.getLoadJobsByDb(1L, "job1", true).size());
     }
+
+    @Test
+    public void testGetRunningLoadCount() {
+        BrokerLoadJob brokerLoadJob = new BrokerLoadJob();
+        brokerLoadJob.setId(1);
+        brokerLoadJob.setLabel("label1");
+        brokerLoadJob.setState(JobState.LOADING);
+        brokerLoadJob.setWarehouseId(1);
+
+        InsertLoadJob insertLoadJob = new InsertLoadJob();
+        insertLoadJob.setId(2);
+        insertLoadJob.setLabel("label2");
+        insertLoadJob.setState(JobState.LOADING);
+        insertLoadJob.setWarehouseId(2);
+
+        SparkLoadJob sparkLoadJob = new SparkLoadJob();
+        sparkLoadJob.setId(3);
+        sparkLoadJob.setLabel("label3");
+        sparkLoadJob.setState(JobState.LOADING);
+        sparkLoadJob.setWarehouseId(3);
+
+        LoadMgr loadMgr = new LoadMgr(null);
+        loadMgr.addLoadJob(brokerLoadJob);
+        loadMgr.addLoadJob(insertLoadJob);
+        loadMgr.addLoadJob(sparkLoadJob);
+
+        Map<Long, Long> result = loadMgr.getRunningLoadCount();
+        Assert.assertEquals(2, result.size());
+        Assert.assertEquals(Long.valueOf(1), result.get(1L));
+        Assert.assertEquals(Long.valueOf(1), result.get(3L));
+    }
 }
