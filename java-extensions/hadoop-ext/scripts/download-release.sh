@@ -7,6 +7,12 @@ version=$1
 TAG="rel/release-${version}"
 basedir="release-${version}"
 
+# if we already have a local copy, use it.
+if [ -d offline/${basedir} ]; then
+    rm -rf ${basedir}
+    cp -r -p offline/${basedir} ${basedir}
+fi
+
 function download {
     for f in "${FILES[@]}"
     do
