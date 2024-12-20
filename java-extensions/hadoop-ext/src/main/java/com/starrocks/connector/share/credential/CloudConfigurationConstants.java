@@ -72,6 +72,8 @@ public class CloudConfigurationConstants {
     public static final String AWS_GLUE_EXTERNAL_ID = "aws.glue.external_id";
     public static final String AWS_GLUE_REGION = "aws.glue.region";
     public static final String AWS_GLUE_ENDPOINT = "aws.glue.endpoint";
+    // https://docs.aws.amazon.com/glue/latest/dg/aws-glue-api-catalog-databases.html
+    public static final String AWS_GLUE_CATALOG_ID = "aws.glue.catalog_id";
 
     // Credential for Azure storage
     // For Azure Blob Storage

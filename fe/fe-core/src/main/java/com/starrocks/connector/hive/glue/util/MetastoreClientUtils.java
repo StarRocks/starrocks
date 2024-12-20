@@ -17,6 +17,7 @@ package com.starrocks.connector.hive.glue.util;
 
 import com.google.common.collect.Maps;
 import com.starrocks.connector.hive.glue.metastore.GlueMetastoreClientDelegate;
+import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
@@ -122,8 +123,13 @@ public final class MetastoreClientUtils {
     }
 
     public static String getCatalogId(Configuration conf) {
-        if (StringUtils.isNotEmpty(conf.get(GlueMetastoreClientDelegate.CATALOG_ID_CONF))) {
-            return conf.get(GlueMetastoreClientDelegate.CATALOG_ID_CONF);
+        String catalogId = conf.get(GlueMetastoreClientDelegate.CATALOG_ID_CONF);
+        if (StringUtils.isNotEmpty(catalogId)) {
+            return catalogId;
+        }
+        catalogId = conf.get(CloudConfigurationConstants.AWS_GLUE_CATALOG_ID);
+        if (StringUtils.isNotEmpty(catalogId)) {
+            return catalogId;
         }
         // This case defaults to using the caller's account Id as Catalog Id.
         return null;
