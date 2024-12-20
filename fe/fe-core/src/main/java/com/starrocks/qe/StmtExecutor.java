@@ -2785,12 +2785,9 @@ public class StmtExecutor {
         QueryDetailQueue.addQueryDetail(queryDetail);
     }
 
-<<<<<<< HEAD
-=======
     private boolean shouldMarkIdleCheck(StatementBase parsedStmt) {
         return !isInternalStmt
                 && !(parsedStmt instanceof ShowStmt)
                 && !(parsedStmt instanceof AdminSetConfigStmt);
     }
->>>>>>> 9f07976966 ([Enhancement] Ignore ShowStmt for idle check (#54173))
 }
