@@ -146,6 +146,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.SetStmtAnalyzer;
 import com.starrocks.sql.ast.AddBackendBlackListStmt;
 import com.starrocks.sql.ast.AddSqlBlackListStmt;
+import com.starrocks.sql.ast.AdminSetConfigStmt;
 import com.starrocks.sql.ast.AnalyzeHistogramDesc;
 import com.starrocks.sql.ast.AnalyzeProfileStmt;
 import com.starrocks.sql.ast.AnalyzeStmt;
@@ -525,7 +526,7 @@ public class StmtExecutor {
             httpResultSender = new HttpResultSender((HttpConnectContext) context);
         }
 
-        if (!isInternalStmt) {
+        if (shouldMarkIdleCheck(parsedStmt)) {
             WarehouseIdleChecker.increaseRunningSQL(context.getCurrentWarehouseId());
         }
         try {
@@ -844,7 +845,7 @@ public class StmtExecutor {
             // restore session variable in connect context
             context.setSessionVariable(sessionVariableBackup);
 
-            if (!isInternalStmt) {
+            if (shouldMarkIdleCheck(parsedStmt)) {
                 WarehouseIdleChecker.decreaseRunningSQL(context.getCurrentWarehouseId());
             }
         }
@@ -2951,5 +2952,11 @@ public class StmtExecutor {
         queryDetail.setCatalog(ctx.getCurrentCatalog());
 
         QueryDetailQueue.addQueryDetail(queryDetail);
+    }
+
+    private boolean shouldMarkIdleCheck(StatementBase parsedStmt) {
+        return !isInternalStmt
+                && !(parsedStmt instanceof ShowStmt)
+                && !(parsedStmt instanceof AdminSetConfigStmt);
     }
 }
