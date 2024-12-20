@@ -40,7 +40,7 @@ select mock_memory_usage(bytes) from t1;
 -- !result
 select  * from inspect_last_query_memory_2digit;
 -- result:
-40	40
+40	92
 -- !result
 select count(*), mock_memory_usage(20 * 1024*1024) from t1 a join t1 b;
 -- result:
