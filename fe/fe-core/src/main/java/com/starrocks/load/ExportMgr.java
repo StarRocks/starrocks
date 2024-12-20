@@ -129,7 +129,7 @@ public class ExportMgr implements MemoryTrackable {
     }
 
     private ExportJob createJob(long jobId, UUID queryId, ExportStmt stmt) throws Exception {
-        ExportJob job = new ExportJob(jobId, queryId);
+        ExportJob job = new ExportJob(jobId, queryId, ConnectContext.get().getCurrentWarehouseId());
         job.setJob(stmt);
         return job;
     }
