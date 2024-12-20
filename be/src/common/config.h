@@ -1401,12 +1401,16 @@ CONF_mDouble(connector_sink_mem_urgent_space_ratio, "0.1");
 CONF_mInt32(unused_crm_file_threshold_second, "86400" /** 1day **/);
 
 CONF_mBool(enable_pk_strict_memcheck, "true");
+<<<<<<< HEAD
 
 CONF_mBool(apply_del_vec_after_all_index_filter, "true");
 
 CONF_mBool(skip_lake_pk_preload, "false");
 // Experimental feature, this configuration will be removed after testing is complete.
 CONF_mBool(lake_enable_alter_struct, "false");
+=======
+CONF_mBool(skip_pk_preload, "false");
+>>>>>>> 98ea99cf70 ([Enhancement] skip on_rowset_finished when memory usage high in PK table (#54069))
 // Reduce core file size by not dumping jemalloc retain pages
 CONF_mBool(enable_core_file_size_optimization, "true");
 // Current supported modules:
