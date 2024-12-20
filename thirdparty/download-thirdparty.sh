@@ -254,6 +254,7 @@ fi
 if [ ! -f $PATCHED_MARK ] && [ $GLOG_SOURCE == "glog-0.7.1" ]; then
     patch -p1 < $TP_PATCH_DIR/glog-0.7.1.patch
     patch -p1 < $TP_PATCH_DIR/glog-0.7.1-add-handler-after-output-log.patch
+    patch -p1 < $TP_PATCH_DIR/glog-0.7.1-lwp.patch
     touch $PATCHED_MARK
 fi
 cd -
