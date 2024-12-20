@@ -21,6 +21,7 @@ import com.starrocks.connector.PartitionUtil;
 import com.starrocks.sql.automv.column.ColumnAlias;
 import com.starrocks.sql.automv.column.GenericColumn;
 import com.starrocks.sql.automv.pieces.AggregatePiece;
+import com.starrocks.sql.automv.pieces.PlanPiece;
 import com.starrocks.sql.automv.pn.Op;
 import com.starrocks.sql.automv.pn.OpUtil;
 import com.starrocks.sql.automv.pn.TimeGranule;
@@ -28,12 +29,13 @@ import com.starrocks.sql.automv.qe.PartitionExtractor;
 import com.starrocks.sql.automv.qe.PartitionPlus;
 import com.starrocks.sql.automv.util.PrettyPrinter;
 import com.starrocks.sql.automv.util.TieredMap;
-import com.starrocks.sql.optimizer.base.ColumnRefSet;
 
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
@@ -44,6 +46,22 @@ import java.util.stream.Collectors;
 // 2. partition by str2date(dt, '%Y-%m-%d');
 public class PartitionPolicy {
 
+    public static Predicate<Op> getIsPartitionExprPredicate(PlanPiece aggPiece, PartitionExtractor extractor) {
+        Map<Integer, PartitionPlus> partitionColumnIdToPartition = aggPiece.getPartitionColumns(extractor)
+                .stream()
+                .flatMap(pp -> pp.getPartitionColumns().stream().map(pc -> Pair.create(pc.first, pp)))
+                .collect(Collectors.toMap(p -> p.first, p -> p.second));
+        return op -> {
+            if (op.getIds().size() != 1) {
+                return false;
+            }
+            int columnId = op.getIds().getFirstId();
+            return Optional.ofNullable(partitionColumnIdToPartition.get(columnId))
+                    .map(pp -> !pp.isListPartitionOlapTable() || op.isVar())
+                    .orElse(false);
+        };
+    }
+
     public static Optional<Integer> getPartitionColumnId(AggregatePiece aggPiece, PartitionExtractor extractor) {
         if (aggPiece.getDimensions().isEmpty()) {
             return Optional.empty();
@@ -51,17 +69,12 @@ public class PartitionPolicy {
 
         TieredMap<Integer, GenericColumn> dimensions = aggPiece.getDimensions().merge(aggPiece.getRollupDimensions());
 
-        ColumnRefSet partitionColumnIds = ColumnRefSet.of();
-        aggPiece.getPartitionColumns(extractor).stream()
-                .map(PartitionPlus::getPartitionColumns)
-                .map(partColumns -> partColumns.stream().map(p -> p.first).collect(Collectors.toList()))
-                .map(ColumnRefSet::createByIds)
-                .forEach(partitionColumnIds::union);
-
         TieredMap<Integer, Op> dimensionOps = OpUtil.columnsToOpMap(dimensions);
 
-        List<Pair<Integer, Op>> candidatePartitionOp = dimensionOps.entrySet().stream()
-                .filter(e -> partitionColumnIds.containsAll(e.getValue().getIds()))
+        Predicate<Op> isPartitionExpr = getIsPartitionExprPredicate(aggPiece, extractor);
+        List<Pair<Integer, Op>> candidatePartitionOp = dimensionOps.entrySet()
+                .stream()
+                .filter(e -> isPartitionExpr.test(e.getValue()))
                 .map(e -> Pair.create(e.getKey(), e.getValue()))
                 .collect(Collectors.toList());
 

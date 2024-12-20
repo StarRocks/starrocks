@@ -134,16 +134,24 @@ public class PartitionPlus {
         return dateOp -> Result.wrap(() -> ScalarOperatorFunctions.str2Date(dateOp, fmtOp)).unwrap().isPresent();
     }
 
+    public boolean isRangePartitionOlapTable() {
+        return Util.downcast(tablePiece.getTable().getTable(), OlapTable.class)
+                .map(olapTable -> olapTable.getPartitionInfo().isRangePartition())
+                .orElse(false);
+    }
+
+    public boolean isListPartitionOlapTable() {
+        return Util.downcast(tablePiece.getTable().getTable(), OlapTable.class)
+                .map(olapTable -> olapTable.getPartitionInfo().isListPartition())
+                .orElse(false);
+    }
+
     // timeFormat as follows:
     // "%Y%m%d": 20240101
     // "%Y-%m-%d": 2024-01-01
     Optional<Op> inferTimeFormat(List<String> timeFormats) {
-        boolean rangePartitionedOlapTable = Util.downcast(tablePiece.getTable().getTable(), OlapTable.class)
-                .map(olapTable -> olapTable.getPartitionInfo().isRangePartition())
-                .orElse(false);
-
-        // range-partition olap table need not infer str2date fmt
-        if (rangePartitionedOlapTable) {
+        boolean isOlapTable = Util.downcast(tablePiece.getTable().getTable(), OlapTable.class).isPresent();
+        if (isOlapTable) {
             return Optional.empty();
         }
 

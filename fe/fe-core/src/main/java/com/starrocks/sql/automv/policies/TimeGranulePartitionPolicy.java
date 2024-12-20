@@ -19,6 +19,7 @@ import com.google.common.collect.ImmutableSet;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.automv.column.ColumnRefToIdConverter;
 import com.starrocks.sql.automv.column.GenericColumn;
+import com.starrocks.sql.automv.generator.PartitionPolicy;
 import com.starrocks.sql.automv.pieces.AggregatePiece;
 import com.starrocks.sql.automv.pieces.PieceCommonState;
 import com.starrocks.sql.automv.pieces.PlanPiece;
@@ -38,6 +39,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 // TimeGranulePartitionPolicy is used to pick up a partition-by column for MV. At
@@ -91,6 +93,7 @@ public class TimeGranulePartitionPolicy extends AggregatePolicy.SimplePolicy {
         List<PartitionPlus> ppList = aggPiece.getPartitionColumns(partitionExtractor).stream()
                 .filter(p -> !p.getPartitionColumns().isEmpty())
                 .collect(Collectors.toList());
+        Predicate<Op> isPartitionExpr = PartitionPolicy.getIsPartitionExprPredicate(aggPiece, partitionExtractor);
 
         // At first, try to use already-exists time granule which reside in dimensions and rollupDimensions
         // of the AggregatePiece, these granule is never turned into coarse-grained one;
@@ -100,11 +103,13 @@ public class TimeGranulePartitionPolicy extends AggregatePolicy.SimplePolicy {
                 aggPiece,
                 aggPiece.getDimensions().merge(aggPiece.getRollupDimensions()),
                 ppList,
+                isPartitionExpr,
                 true
         ).or(() -> addCoarseTimeGranuleAsPartitionByColumn(
                 aggPiece,
                 flatTablePiece.getColumns(),
                 ppList,
+                isPartitionExpr,
                 false)
         );
     }
@@ -113,20 +118,17 @@ public class TimeGranulePartitionPolicy extends AggregatePolicy.SimplePolicy {
             AggregatePiece aggPiece,
             TieredMap<Integer, GenericColumn> columns,
             List<PartitionPlus> ppList,
+            Predicate<Op> isPartitionExpr,
             boolean columnsFromAgg) {
 
         ColumnRefSet columnIds = ColumnRefSet.createByIds(columns.keySet());
-        ColumnRefSet partitionColumnIds = ColumnRefSet.of();
-        ppList.stream()
-                .map(pp -> pp.getPartitionColumns().stream().map(p -> p.first).collect(Collectors.toList()))
-                .map(ColumnRefSet::createByIds)
-                .forEach(partitionColumnIds::union);
 
         TieredList<Op> dimPartOps = OpUtil.columnsToStrictOpMap(columns).keySet()
                 .stream()
                 .map(StrictOp::getOp)
-                .filter(op -> partitionColumnIds.containsAll(op.getIds()))
+                .filter(isPartitionExpr)
                 .collect(TieredList.<Op>toList());
+
         TieredList<Op> baseTablePartOps = ppList.stream()
                 .map(PartitionPlus::chosePartitionOp)
                 .filter(Optional::isPresent)

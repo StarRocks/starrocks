@@ -505,26 +505,20 @@ public class AutoMVPartitionPolicyTest {
         }
     }
 
-    // @Test
+    @Test
     public void testMVPreferRangePartition() {
-        String q0 = "select UserId, sum(M0) from hits_daily_list " +
-                " group by UserId";
+        String q0 = "select str2date(EventDateS, '%Y-%m-%d'), UserId, sum(M0) from hits_daily_list " +
+                " group by str2date(EventDateS, '%Y-%m-%d'), UserId";
 
         Object[][] testCases = new Object[][] {
                 {q0, TimeGranule.Unit.DAY,
                         new String[] {
-                                "PARTITION BY _ca0002",
-                                "(str2date(`db0`.`hits_daily_list`.EventDateS, \"%Y-%m-%d\")) AS _ca0002",
-                                "GROUP BY\n" +
-                                        "  str2date(`db0`.`hits_daily_list`.EventDateS, \"%Y-%m-%d\")"
+                                "PARTITION BY EventDateS"
                         }
                 },
                 {q0, TimeGranule.Unit.MONTH,
                         new String[] {
-                                "PARTITION BY _ca0002",
-                                "(str2date(`db0`.`hits_daily_list`.EventDateS, \"%Y-%m-%d\")) AS _ca0002",
-                                "GROUP BY\n" +
-                                        "  str2date(`db0`.`hits_daily_list`.EventDateS, \"%Y-%m-%d\")"
+                                "PARTITION BY EventDateS"
                         }
                 }
         };
