@@ -17,12 +17,9 @@
 #include "exec/sorting/merge.h"
 #include "exec/sorting/sort_permute.h"
 #include "exec/sorting/sorting.h"
-#include "exprs/column_ref.h"
 #include "exprs/expr.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
-#include "util/stopwatch.hpp"
 
 namespace starrocks {
 
@@ -34,7 +31,14 @@ ChunksSorterFullSort::ChunksSorterFullSort(RuntimeState* state, const std::vecto
         : ChunksSorter(state, sort_exprs, is_asc_order, is_null_first, sort_keys, false),
           max_buffered_rows(static_cast<size_t>(max_buffered_rows)),
           max_buffered_bytes(max_buffered_bytes),
-          _early_materialized_slots(early_materialized_slots.begin(), early_materialized_slots.end()) {}
+          _early_materialized_slots(early_materialized_slots.begin(), early_materialized_slots.end()) {
+    // initialize _sort_slots
+    for (auto& expr : *sort_exprs) {
+        std::vector<SlotId> slots;
+        expr->root()->get_slot_ids(&slots);
+        _sort_slots.insert(slots.begin(), slots.end());
+    }
+}
 
 ChunksSorterFullSort::~ChunksSorterFullSort() = default;
 
@@ -43,8 +47,8 @@ void ChunksSorterFullSort::setup_runtime(RuntimeState* state, RuntimeProfile* pr
     _runtime_profile = profile;
     _parent_mem_tracker = parent_mem_tracker;
     _object_pool = std::make_unique<ObjectPool>();
-    _runtime_profile->add_info_string("MaxBufferedRows", strings::Substitute("$0", max_buffered_rows));
-    _runtime_profile->add_info_string("MaxBufferedBytes", strings::Substitute("$0", max_buffered_bytes));
+    _runtime_profile->add_info_string("MaxBufferedRows", std::to_string(max_buffered_rows));
+    _runtime_profile->add_info_string("MaxBufferedBytes", std::to_string(max_buffered_bytes));
     _profiler = _object_pool->add(new ChunksSorterFullSortProfiler(profile, parent_mem_tracker));
 }
 
@@ -60,7 +64,20 @@ Status ChunksSorterFullSort::_merge_unsorted(RuntimeState* state, const ChunkPtr
     SCOPED_TIMER(_build_timer);
     _staging_unsorted_chunks.push_back(std::move(chunk));
     _staging_unsorted_rows += chunk->num_rows();
-    _staging_unsorted_bytes += chunk->bytes_usage();
+
+    // Only consider the memory usage of columns used as SORT_KEY, as they are more critical for CPU-cache
+    if (!_sort_slots.empty()) {
+        size_t mem_usage = 0;
+        auto& slot_map = chunk->get_slot_id_to_index_map();
+        for (auto [slot_id, index] : slot_map) {
+            if (_sort_slots.contains(slot_id)) {
+                mem_usage += chunk->get_column_by_slot_id(slot_id)->byte_size();
+            }
+        }
+        _staging_unsorted_bytes += mem_usage;
+    } else {
+        _staging_unsorted_bytes += chunk->memory_usage();
+    }
     return Status::OK();
 }
 

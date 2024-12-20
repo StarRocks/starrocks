@@ -17,7 +17,6 @@
 #include "column/vectorized_fwd.h"
 #include "exec/chunks_sorter.h"
 #include "exec/sorting/merge.h"
-#include "gtest/gtest_prod.h"
 
 namespace starrocks {
 class ExprContext;
@@ -90,9 +89,11 @@ protected:
     std::unique_ptr<ObjectPool> _object_pool = nullptr;
     ChunksSorterFullSortProfiler* _profiler = nullptr;
 
+    // Parameters to control the buffering behavior: buffering some chunks before partial-sort to reduce memory random access
     // TODO: further tunning the buffer parameter
     const size_t max_buffered_rows;  // Max buffer 1024000 rows
     const size_t max_buffered_bytes; // Max buffer 16MB bytes
+    std::set<SlotId> _sort_slots;    // Slots participating in the sorting procedure
 
     // only when order-by columns(_sort_exprs) are all ColumnRefs and the cost of eager-materialization of
     // other columns is large than ordinal column, then we materialize order-by columns and ordinal columns eagerly,
