@@ -56,14 +56,12 @@ When the SLRU policy is used, the cache space is divided into an eviction segmen
 
 ## Enable Data Cache
 
-From v3.3.0, Data Cache is enabled by default.
-
-By default, the system caches data in the following ways:
+Now, Data Cache is enabled by default, and the system caches data in the following ways:
 
 - The system variables `enable_scan_datacache` and the BE parameter `datacache_enable` are set to `true` by default.
-- If the cache disk path, memory size, and disk capacity are not configured, the system will automatically select a path and set memory and disk limits by following these rules:
-  - A **datacache** directory is created as the cache directory under `storage_root_path`. (You can modify this with the BE parameter `datacache_disk_path`.)
-  - The system enables automatic disk space adjustment for Data Cache. It sets the limit to ensure that the overall disk usage is around 70%, and dynamically adjusts according to subsequent disk usage. (You can modify this behavior with the BE parameters `datacache_disk_high_level`, `datacache_disk_safe_level`, and `datacache_disk_low_level`.)
+- A **datacache** directory is created as the cache directory under `storage_root_path`. From v3.4.0 onwards, directly changing the disk cache path is no longer supported. If you want to set a path, you can create a Symbolic Link.
+- If the memory and disk limits are not configured, the system will automatically set memory and disk limits by following these rules:
+  - The system enables automatic disk space adjustment for Data Cache. It sets the limit to ensure that the overall disk usage is around 80%, and dynamically adjusts according to subsequent disk usage. (You can modify this behavior with the BE parameters `datacache_disk_high_level`, `datacache_disk_safe_level`, and `datacache_disk_low_level`.)
   - The default memory limit for Data Cache is `0`. (You can modify this with the BE parameter `datacache_mem_size`.)
 - The system adopts asynchronous cache population by default to minimize its impact on data read operations.
 - The I/O adaptor feature is enabled by default. When the disk I/O load is high, the system will automatically route some requests to remote storage to reduce disk pressure.
@@ -118,6 +116,10 @@ StarRocks supports populating Data Cache in synchronous or asynchronous mode.
   In asynchronous population mode, the system tries to cache the accessed data in the background, in order to minimize the impact on read performance. Asynchronous population can reduce the performance impact of cache population on initial reads, but the population efficiency is lower than synchronous population. Typically, a single query cannot guarantee that all the accessed data can be cached. Multiple attempts may be needed to cache all the accessed data.
 
 From v3.3.0, asynchronous cache population is enabled by default. You can change the population mode by setting the session variable [enable_datacache_async_populate_mode](../sql-reference/System_variable.md).
+
+### Persistence
+
+The cached data in disks can be persistent by default, and these data can be reused after BE restarts.
 
 ## Check whether a query hits data cache
 
@@ -261,8 +263,6 @@ You can configure Data Cache using the following system variables and BE paramet
 ### BE Parameters
 
 - [datacache_enable](../administration/management/BE_configuration.md#datacache_enable)
-- [datacache_disk_path](../administration/management/BE_configuration.md#datacache_disk_path)
-- [datacache_meta_path](../administration/management/BE_configuration.md#datacache_meta_path)
 - [datacache_mem_size](../administration/management/BE_configuration.md#datacache_mem_size)
 - [datacache_disk_size](../administration/management/BE_configuration.md#datacache_disk_size)
 - [datacache_auto_adjust_enable](../administration/management/BE_configuration.md#datacache_auto_adjust_enable)
@@ -273,3 +273,4 @@ You can configure Data Cache using the following system variables and BE paramet
 - [datacache_disk_idle_seconds_for_expansion](../administration/management/BE_configuration.md#datacache_disk_idle_seconds_for_expansion)
 - [datacache_min_disk_quota_for_adjustment](../administration/management/BE_configuration.md#datacache_min_disk_quota_for_adjustment)
 - [datacache_eviction_policy](../administration/management/BE_configuration.md#datacache_eviction_policy)
+- [datacache_inline_item_count_limit](../administration/management/BE_configuration.md#datacache_inline_item_count_limit)
