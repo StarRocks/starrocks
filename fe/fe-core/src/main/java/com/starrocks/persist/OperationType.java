@@ -576,6 +576,10 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_DELETE_REPLICATION_JOB = 13501;
 
+    // has delete
+    @IgnorableOnReplayFailed
+    public static final short OP_SET_HAS_DELETE = 13506;
+
     @IgnorableOnReplayFailed
     public static final short OP_DISABLE_TABLE_RECOVERY = 13510;
     @IgnorableOnReplayFailed
