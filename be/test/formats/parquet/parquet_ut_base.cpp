@@ -81,7 +81,7 @@ void ParquetUTBase::append_int_conjunct(TExprOpcode::type opcode, SlotId slot_id
 }
 
 void ParquetUTBase::append_bigint_conjunct(TExprOpcode::type opcode, SlotId slot_id, int64_t value,
-                                          std::vector<TExpr>* tExprs) {
+                                           std::vector<TExpr>* tExprs) {
     TTypeDesc int_type = ExprsTestHelper::create_scalar_type_desc(TPrimitiveType::BIGINT);
 
     TExprNode pred_node = ExprsTestHelper::create_binary_pred_node(TPrimitiveType::BIGINT, opcode);
@@ -97,7 +97,7 @@ void ParquetUTBase::append_bigint_conjunct(TExprOpcode::type opcode, SlotId slot
 }
 
 void ParquetUTBase::append_datetime_conjunct(TExprOpcode::type opcode, SlotId slot_id, const std::string& value,
-                                     std::vector<TExpr>* tExprs) {
+                                             std::vector<TExpr>* tExprs) {
     TTypeDesc datetime_type = ExprsTestHelper::create_scalar_type_desc(TPrimitiveType::DATETIME);
 
     TExprNode pred_node = ExprsTestHelper::create_binary_pred_node(TPrimitiveType::DATETIME, opcode);
