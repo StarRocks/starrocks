@@ -4492,6 +4492,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitOptimizeClause(StarRocksParser.OptimizeClauseContext context) {
+        if (context.partitionDesc() != null) {
+            throw new ParsingException("Partition clause is not supported in optimize statement", createPos(context));
+        }
         return new OptimizeClause(
                 context.keyDesc() == null ? null : getKeysDesc(context.keyDesc()),
                 context.partitionDesc() == null ? null : getPartitionDesc(context.partitionDesc(), null),
