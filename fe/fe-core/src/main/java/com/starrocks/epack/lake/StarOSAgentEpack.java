@@ -3,6 +3,7 @@
 package com.starrocks.epack.lake;
 
 import com.staros.client.StarClientException;
+import com.staros.proto.ReplicationType;
 import com.staros.proto.WorkerGroupDetailInfo;
 import com.staros.proto.WorkerGroupSpec;
 import com.staros.util.LockCloseable;
@@ -47,7 +48,7 @@ public class StarOSAgentEpack extends StarOSAgent {
         WorkerGroupDetailInfo result = null;
         try {
             result = client.createWorkerGroup(serviceId, owner, spec, Collections.emptyMap(),
-                    Collections.emptyMap(), replicaNumber);
+                    Collections.emptyMap(), replicaNumber, ReplicationType.NO_REPLICATION);
         } catch (StarClientException e) {
             LOG.warn("Failed to create worker group. error: {}", e.getMessage());
             throw new DdlException("Failed to create worker group. error: " + e.getMessage());
