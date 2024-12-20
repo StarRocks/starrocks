@@ -323,6 +323,9 @@ statement
     | commitStatement
     | rollbackStatement
 
+    // Translate Statement
+    | translateStatement
+
     // Unsupported Statement
     | unsupportedStatement
     ;
@@ -2069,6 +2072,20 @@ commitStatement
 
 rollbackStatement
     : ROLLBACK WORK? (AND NO? CHAIN)? (NO? RELEASE)?
+    ;
+
+
+// ------------------------------------------- Translate Statement -----------------------------------------------------
+translateStatement
+    : TRANSLATE dialect translateSQL
+    ;
+
+dialect
+    : identifier
+    ;
+
+translateSQL
+    : .+
     ;
 
 // ------------------------------------------- Query Statement ---------------------------------------------------------
