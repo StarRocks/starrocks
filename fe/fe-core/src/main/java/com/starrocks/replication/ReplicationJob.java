@@ -35,6 +35,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
@@ -611,24 +612,26 @@ public class ReplicationJob implements GsonPostProcessable {
         Table.TableType tableType;
         long tableDataSize;
         Map<Long, PartitionInfo> partitionInfos = Maps.newHashMap();
+        boolean needSetHasDelete = false;
 
         Database db = GlobalStateMgr.getCurrentState().getDb(request.database_id);
         if (db == null) {
             throw new MetaNotFoundException("Database " + request.database_id + " not found");
         }
 
+        Table table = db.getTable(request.table_id);
+        if (table == null) {
+            throw new MetaNotFoundException(
+                    "Table " + request.table_id + " in database " + db.getFullName() + " not found");
+        }
+        if (!(table instanceof OlapTable)) {
+            throw new MetaNotFoundException(
+                    "Table " + request.table_id + " in database " + db.getFullName() + " is not olap table");
+        }
+        OlapTable olapTable = (OlapTable) table;
+
         db.readLock();
         try {
-            Table table = db.getTable(request.table_id);
-            if (table == null) {
-                throw new MetaNotFoundException(
-                        "Table " + request.table_id + " in database " + db.getFullName() + " not found");
-            }
-            if (!(table instanceof OlapTable)) {
-                throw new MetaNotFoundException(
-                        "Table " + request.table_id + " in database " + db.getFullName() + " is not olap table");
-            }
-            OlapTable olapTable = (OlapTable) table;
             tableType = olapTable.getType();
             tableDataSize = olapTable.getDataSize();
 
@@ -650,8 +653,31 @@ public class ReplicationJob implements GsonPostProcessable {
                 PartitionInfo partitionInfo = initPartitionInfo(olapTable, tPartitionInfo, partition);
                 partitionInfos.put(partitionInfo.getPartitionId(), partitionInfo);
             }
+
+            if (!olapTable.hasDelete()) {
+                needSetHasDelete = true;
+            }
         } finally {
             db.readUnlock();
+        }
+
+        if (needSetHasDelete) {
+            db.writeLock();
+            try {
+                if (olapTable.hasDelete()) {
+                    needSetHasDelete = false;
+                } else {
+                    // Set has delete for tables replicated by starrocks data migration tool
+                    olapTable.setHasDelete();
+                }
+            } finally {
+                db.writeUnlock();
+            }
+
+            if (needSetHasDelete) {
+                ModifyTablePropertyOperationLog log = new ModifyTablePropertyOperationLog(db.getId(), table.getId());
+                GlobalStateMgr.getCurrentState().getEditLog().logSetHasDelete(log);
+            }
         }
 
         return new TableInfo(request.table_id, tableType, Table.TableType.OLAP, tableDataSize,
