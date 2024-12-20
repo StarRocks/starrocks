@@ -49,7 +49,7 @@ public class ShowAnalyzeStatusStmt extends ShowStmt {
         this.predicate = predicate;
     }
 
-    private static final ShowResultSetMetaData META_DATA =
+    public static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
                     .addColumn(new Column("Id", ScalarType.createVarchar(60)))
                     .addColumn(new Column("Database", ScalarType.createVarchar(60)))

@@ -40,7 +40,15 @@ public interface AnalyzeStatus {
 
     String getCatalogName() throws MetaNotFoundException;
 
+    default long getDbId() throws MetaNotFoundException {
+        throw new MetaNotFoundException("dbId not exists");
+    }
+
     String getDbName() throws MetaNotFoundException;
+
+    default long getTableId() throws MetaNotFoundException {
+        throw new MetaNotFoundException("dbId not exists");
+    }
 
     String getTableName() throws MetaNotFoundException;
 

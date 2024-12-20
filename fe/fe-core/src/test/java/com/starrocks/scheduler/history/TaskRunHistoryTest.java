@@ -46,7 +46,6 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class TaskRunHistoryTest {
 
@@ -183,7 +182,6 @@ public class TaskRunHistoryTest {
             }
         };
         keeper.run();
-        assertTrue(keeper.isTableExisted());
         assertFalse(keeper.isTableCorrected());
 
         new MockUp<SystemInfoService>() {

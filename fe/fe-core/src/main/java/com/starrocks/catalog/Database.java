@@ -771,6 +771,19 @@ public class Database extends MetaObject implements Writable {
         return fullQualifiedName.equalsIgnoreCase(StatsConstants.STATISTICS_DB_NAME);
     }
 
+    public static boolean isSystemDatabase(String fullQualifiedName) {
+        return fullQualifiedName.equalsIgnoreCase(InfoSchemaDb.DATABASE_NAME) ||
+                fullQualifiedName.equalsIgnoreCase(SysDb.DATABASE_NAME);
+    }
+
+    public static boolean isStatisticsDatabase(String fullQualifiedName) {
+        return fullQualifiedName.equalsIgnoreCase(StatsConstants.STATISTICS_DB_NAME);
+    }
+
+    public static boolean isSystemOrInternalDatabase(String dbName) {
+        return isSystemDatabase(dbName) || isStatisticsDatabase(dbName);
+    }
+
     // the invoker should hold db's writeLock
     public void setExist(boolean exist) {
         this.exist = exist;

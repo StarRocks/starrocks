@@ -81,6 +81,13 @@ public class Projection {
         return usedColumns;
     }
 
+    public ScalarOperator resolveColumnRef(ColumnRefOperator ref) {
+        if (columnRefMap.containsKey(ref)) {
+            return columnRefMap.get(ref);
+        }
+        return commonSubOperatorMap.get(ref);
+    }
+
     public Map<ColumnRefOperator, ScalarOperator> getColumnRefMap() {
         return columnRefMap;
     }
