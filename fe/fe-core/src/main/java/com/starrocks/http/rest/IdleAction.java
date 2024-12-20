@@ -14,6 +14,7 @@
 
 package com.starrocks.http.rest;
 
+import com.starrocks.common.Config;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
@@ -50,9 +51,13 @@ public class IdleAction extends RestBaseAction {
 
     @Override
     public void execute(BaseRequest request, BaseResponse response) {
-        IdleStatus idleStatus = GlobalStateMgr.getCurrentState().getWarehouseIdleChecker().getIdleStatus();
-        String content = GsonUtils.GSON.toJson(idleStatus);
-        response.getContent().append(content);
+        if (Config.warehouse_idle_check_enable) {
+            IdleStatus idleStatus = GlobalStateMgr.getCurrentState().getWarehouseIdleChecker().getIdleStatus();
+            String content = GsonUtils.GSON.toJson(idleStatus);
+            response.getContent().append(content);
+        } else {
+            response.getContent().append("warehouse idle check is not enabled");
+        }
         sendResult(request, response);
     }
 }

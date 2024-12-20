@@ -344,4 +344,11 @@ public class WarehouseManager implements Writable {
     public void load(SRMetaBlockReader reader)
             throws SRMetaBlockEOFException, IOException, SRMetaBlockException {
     }
+
+    public void addWarehouse(Warehouse warehouse) {
+        try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
+            nameToWh.put(warehouse.getName(), warehouse);
+            idToWh.put(warehouse.getId(), warehouse);
+        }
+    }
 }

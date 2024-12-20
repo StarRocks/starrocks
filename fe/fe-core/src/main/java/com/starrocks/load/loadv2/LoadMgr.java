@@ -202,7 +202,7 @@ public class LoadMgr implements MemoryTrackable {
         }
     }
 
-    private void addLoadJob(LoadJob loadJob) {
+    protected void addLoadJob(LoadJob loadJob) {
         idToLoadJob.put(loadJob.getId(), loadJob);
         long dbId = loadJob.getDbId();
         if (!dbIdToLabelToLoadJobs.containsKey(dbId)) {
