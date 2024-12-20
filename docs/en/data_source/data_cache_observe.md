@@ -10,7 +10,7 @@ In v3.3, StarRocks improves the observability of Data Cache by offering efficien
 
 > **NOTE**
 >
-> Starting from version 3.4, the Datalake and Cloud Native queries use a unified Data Cache instance. Therefore, unless otherwise specified, the following methods default to displaying the metrics of the Data Cache instance itself, which includes the cache usage of both the DataLake and Cloud Native queries.
+> From v3.4.0 onwards, queries against external catalogs and cloud-native tables (in shared-data clusters) use a unified Data Cache instance. Therefore, unless otherwise specified, the following methods default to displaying the metrics of the Data Cache instance itself, which includes the cache usage of queries against both external catalogs and cloud-native tables.
 
 ## SQL commands
 
