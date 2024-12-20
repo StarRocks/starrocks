@@ -2,11 +2,11 @@
 
 package com.starrocks.epack.authorization;
 
+import com.starrocks.authorization.AccessControlProvider;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.epack.sql.ast.PolicyType;
-import com.starrocks.privilege.AccessControlProvider;
-import com.starrocks.privilege.AccessDeniedException;
-import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.UserIdentity;

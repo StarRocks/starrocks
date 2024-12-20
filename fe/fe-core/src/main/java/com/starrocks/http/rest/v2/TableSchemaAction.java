@@ -14,12 +14,12 @@
 
 package com.starrocks.http.rest.v2;
 
+import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.http.rest.v2.vo.TableSchemaView;
-import com.starrocks.privilege.AccessDeniedException;
 import io.netty.handler.codec.http.HttpMethod;
 
 import java.util.function.Function;

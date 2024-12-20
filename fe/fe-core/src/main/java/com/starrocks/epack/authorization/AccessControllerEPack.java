@@ -2,10 +2,10 @@
 
 package com.starrocks.epack.authorization;
 
+import com.starrocks.authorization.AccessController;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.epack.sql.ast.PolicyType;
-import com.starrocks.privilege.AccessController;
-import com.starrocks.privilege.AccessDeniedException;
-import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.sql.ast.UserIdentity;
 
 import java.util.Set;

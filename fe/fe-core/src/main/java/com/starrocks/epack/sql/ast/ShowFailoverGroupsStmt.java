@@ -3,6 +3,7 @@
 package com.starrocks.epack.sql.ast;
 
 import com.google.common.collect.Lists;
+import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.AnalysisException;
@@ -12,7 +13,6 @@ import com.starrocks.common.proc.ProcResult;
 import com.starrocks.epack.authorization.AuthorizerEPack;
 import com.starrocks.epack.failover.FailoverGroup;
 import com.starrocks.epack.failover.FailoverGroupProcNode;
-import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;

@@ -22,7 +22,6 @@ import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.epack.warehouse.LocalWarehouse;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
-import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;

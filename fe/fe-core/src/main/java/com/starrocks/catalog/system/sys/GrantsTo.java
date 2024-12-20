@@ -15,6 +15,22 @@ package com.starrocks.catalog.system.sys;
 
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
+import com.starrocks.authorization.ActionSet;
+import com.starrocks.authorization.AuthorizationMgr;
+import com.starrocks.authorization.CatalogPEntryObject;
+import com.starrocks.authorization.DbPEntryObject;
+import com.starrocks.authorization.FunctionPEntryObject;
+import com.starrocks.authorization.ObjectType;
+import com.starrocks.authorization.PipePEntryObject;
+import com.starrocks.authorization.PrivilegeBuiltinConstants;
+import com.starrocks.authorization.PrivilegeEntry;
+import com.starrocks.authorization.PrivilegeType;
+import com.starrocks.authorization.ResourceGroupPEntryObject;
+import com.starrocks.authorization.ResourcePEntryObject;
+import com.starrocks.authorization.StorageVolumePEntryObject;
+import com.starrocks.authorization.TablePEntryObject;
+import com.starrocks.authorization.UserPEntryObject;
+import com.starrocks.authorization.WarehousePEntryObject;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalCatalog;
@@ -34,24 +50,8 @@ import com.starrocks.epack.authorization.ObjectTypeEPack;
 import com.starrocks.epack.authorization.Policy;
 import com.starrocks.epack.authorization.PolicyPEntryObject;
 import com.starrocks.epack.authorization.PrivilegeBuiltinConstantsEPack;
-import com.starrocks.epack.authorization.WarehousePEntryObject;
 import com.starrocks.epack.failover.FailoverGroup;
 import com.starrocks.epack.sql.ast.PolicyType;
-import com.starrocks.privilege.ActionSet;
-import com.starrocks.privilege.AuthorizationMgr;
-import com.starrocks.privilege.CatalogPEntryObject;
-import com.starrocks.privilege.DbPEntryObject;
-import com.starrocks.privilege.FunctionPEntryObject;
-import com.starrocks.privilege.ObjectType;
-import com.starrocks.privilege.PipePEntryObject;
-import com.starrocks.privilege.PrivilegeBuiltinConstants;
-import com.starrocks.privilege.PrivilegeEntry;
-import com.starrocks.privilege.PrivilegeType;
-import com.starrocks.privilege.ResourceGroupPEntryObject;
-import com.starrocks.privilege.ResourcePEntryObject;
-import com.starrocks.privilege.StorageVolumePEntryObject;
-import com.starrocks.privilege.TablePEntryObject;
-import com.starrocks.privilege.UserPEntryObject;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
@@ -329,7 +329,7 @@ public class GrantsTo {
                         }
                         objects.add(Lists.newArrayList(null, null, resourceGroup.getName()));
                     }
-                } else if (ObjectTypeEPack.WAREHOUSE.equals(privEntry.getKey())) {
+                } else if (ObjectType.WAREHOUSE.equals(privEntry.getKey())) {
                     WarehousePEntryObject warehousePEntryObject =
                             (WarehousePEntryObject) privilegeEntry.getObject();
                     long warehouseId = warehousePEntryObject.getId();

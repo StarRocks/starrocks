@@ -11,11 +11,12 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
 package com.starrocks.epack.authorization.ranger.hive;
 
+import com.starrocks.authorization.ranger.hive.RangerHiveAccessController;
 import com.starrocks.epack.authorization.AccessControllerEPack;
 import com.starrocks.epack.authorization.ranger.RangerKerberosAuth;
-import com.starrocks.privilege.ranger.hive.RangerHiveAccessController;
 import org.apache.ranger.authorization.hadoop.config.RangerPluginConfig;
 
 public class RangerHiveAccessControllerEPack extends RangerHiveAccessController implements AccessControllerEPack {

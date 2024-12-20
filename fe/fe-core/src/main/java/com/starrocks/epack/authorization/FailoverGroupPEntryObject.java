@@ -3,10 +3,10 @@
 package com.starrocks.epack.authorization;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.authorization.PEntryObject;
+import com.starrocks.authorization.PrivObjNotFoundException;
+import com.starrocks.authorization.PrivilegeException;
 import com.starrocks.epack.failover.FailoverGroup;
-import com.starrocks.privilege.PEntryObject;
-import com.starrocks.privilege.PrivObjNotFoundException;
-import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.MetaNotFoundException;
 

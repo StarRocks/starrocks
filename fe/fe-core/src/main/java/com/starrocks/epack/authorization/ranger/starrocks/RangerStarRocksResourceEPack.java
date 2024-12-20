@@ -13,9 +13,9 @@
 // limitations under the License.
 package com.starrocks.epack.authorization.ranger.starrocks;
 
+import com.starrocks.authorization.ObjectType;
 import com.starrocks.epack.authorization.ObjectTypeEPack;
 import com.starrocks.epack.sql.ast.PolicyType;
-import com.starrocks.privilege.ObjectType;
 import org.apache.ranger.plugin.policyengine.RangerAccessResourceImpl;
 
 public class RangerStarRocksResourceEPack extends RangerAccessResourceImpl {

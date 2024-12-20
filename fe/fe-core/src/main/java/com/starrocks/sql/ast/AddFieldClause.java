@@ -17,7 +17,6 @@ package com.starrocks.sql.ast;
 import com.starrocks.alter.AlterOpType;
 import com.starrocks.analysis.ColumnPosition;
 import com.starrocks.catalog.Type;
-import com.starrocks.sql.ast.StructFieldDesc;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;

@@ -17,17 +17,17 @@ package com.starrocks.catalog;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authorization.AuthorizationMgr;
+import com.starrocks.authorization.ObjectType;
+import com.starrocks.authorization.PrivilegeEntry;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.catalog.system.sys.GrantsTo;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.connector.hive.HiveMetastore;
-import com.starrocks.epack.authorization.AuthorizationMgrEpack;
+import com.starrocks.epack.authorization.AuthorizationMgrEPack;
 import com.starrocks.epack.authorization.AuthorizationProviderEPack;
-import com.starrocks.privilege.AuthorizationMgr;
-import com.starrocks.privilege.ObjectType;
-import com.starrocks.privilege.PrivilegeEntry;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
@@ -85,7 +85,7 @@ public class InfoSchemaDbTest {
                 "create materialized view db.mv distributed by hash(k4) buckets 10 REFRESH ASYNC as select * from db.tbl");
 
         GlobalStateMgr.getCurrentState().setAuthenticationMgr(new AuthenticationMgr());
-        GlobalStateMgr.getCurrentState().setAuthorizationMgr(new AuthorizationMgrEpack(GlobalStateMgr.getCurrentState(),
+        GlobalStateMgr.getCurrentState().setAuthorizationMgr(new AuthorizationMgrEPack(GlobalStateMgr.getCurrentState(),
                 new AuthorizationProviderEPack()));
         CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(
                 "create user test_user", ctx);

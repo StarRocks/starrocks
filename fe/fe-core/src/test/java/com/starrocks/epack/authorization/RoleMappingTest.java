@@ -17,6 +17,7 @@ package com.starrocks.epack.authorization;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.common.DdlException;
 import com.starrocks.epack.authentication.AuthenticationMgrEPack;
 import com.starrocks.epack.authentication.LDAPGroupCacheMgr;
@@ -29,7 +30,6 @@ import com.starrocks.epack.sql.ast.CreateRoleMappingStatement;
 import com.starrocks.epack.sql.ast.CreateSecurityIntegrationStatement;
 import com.starrocks.epack.sql.ast.DropRoleMappingStatement;
 import com.starrocks.epack.sql.ast.ShowRoleMappingStatement;
-import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.ShowExecutor;
@@ -232,7 +232,7 @@ public class RoleMappingTest {
 
     @Test
     public void testRoleMappingDdlPersist() throws Exception {
-        AuthorizationMgr masterManager = new AuthorizationMgrEpack(GlobalStateMgr.getCurrentState(),
+        AuthorizationMgr masterManager = new AuthorizationMgrEPack(GlobalStateMgr.getCurrentState(),
                 new AuthorizationProviderEPack());
         UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
         UtFrameUtils.PseudoImage emptyImage = new UtFrameUtils.PseudoImage();
@@ -327,7 +327,7 @@ public class RoleMappingTest {
         Assert.assertTrue(mappedRoleIds.contains(22L));
 
         // test replay OP_CREATE_ROLE_MAPPING edit log
-        AuthorizationMgr followerManager = new AuthorizationMgrEpack(GlobalStateMgr.getCurrentState(),
+        AuthorizationMgr followerManager = new AuthorizationMgrEPack(GlobalStateMgr.getCurrentState(),
                 new AuthorizationProviderEPack());
         followerManager.loadV2(emptyImage.getMetaBlockReader());
         Assert.assertNull(followerManager.getRoleMappingMetaMgr().getRoleMapping("rm3"));
@@ -360,7 +360,7 @@ public class RoleMappingTest {
         Assert.assertNull(followerManager.getRoleMappingMetaMgr().getRoleMapping("rm5"));
 
         // simulate restart (load from image)
-        AuthorizationMgr imageManager = new AuthorizationMgrEpack(GlobalStateMgr.getCurrentState(),
+        AuthorizationMgr imageManager = new AuthorizationMgrEPack(GlobalStateMgr.getCurrentState(),
                 new AuthorizationProviderEPack());
         imageManager.loadV2(finalImage.getMetaBlockReader());
         Assert.assertNotNull(imageManager.getRoleMappingMetaMgr().getRoleMapping("rm4"));

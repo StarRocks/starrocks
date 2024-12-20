@@ -22,7 +22,6 @@ import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.ModifyBrokerClause;
 import com.starrocks.utframe.UtFrameUtils;
-
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;

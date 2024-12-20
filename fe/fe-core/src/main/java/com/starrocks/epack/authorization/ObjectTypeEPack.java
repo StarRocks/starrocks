@@ -3,7 +3,7 @@
 package com.starrocks.epack.authorization;
 
 import com.google.common.collect.ImmutableMap;
-import com.starrocks.privilege.ObjectType;
+import com.starrocks.authorization.ObjectType;
 
 import java.util.Map;
 

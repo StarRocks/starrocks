@@ -3,7 +3,7 @@
 package com.starrocks.epack.authorization;
 
 import com.google.common.collect.ImmutableSet;
-import com.starrocks.privilege.PrivilegeBuiltinConstants;
+import com.starrocks.authorization.PrivilegeBuiltinConstants;
 
 import java.util.Set;
 

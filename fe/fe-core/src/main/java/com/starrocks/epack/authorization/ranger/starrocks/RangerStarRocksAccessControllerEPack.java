@@ -14,16 +14,16 @@
 
 package com.starrocks.epack.authorization.ranger.starrocks;
 
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.PrivilegeType;
+import com.starrocks.authorization.ranger.RangerStarRocksAccessRequest;
+import com.starrocks.authorization.ranger.starrocks.RangerStarRocksAccessController;
 import com.starrocks.epack.authorization.AccessControllerEPack;
 import com.starrocks.epack.authorization.DbUID;
 import com.starrocks.epack.authorization.Policy;
 import com.starrocks.epack.authorization.SecurityPolicyMgr;
 import com.starrocks.epack.authorization.ranger.RangerKerberosAuth;
 import com.starrocks.epack.sql.ast.PolicyType;
-import com.starrocks.privilege.AccessDeniedException;
-import com.starrocks.privilege.PrivilegeType;
-import com.starrocks.privilege.ranger.RangerStarRocksAccessRequest;
-import com.starrocks.privilege.ranger.starrocks.RangerStarRocksAccessController;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;
 import org.apache.ranger.authorization.hadoop.config.RangerPluginConfig;

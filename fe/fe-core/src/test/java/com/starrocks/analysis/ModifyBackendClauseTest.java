@@ -16,7 +16,6 @@
 package com.starrocks.analysis;
 
 import com.starrocks.common.AnalysisException;
-
 import com.starrocks.sql.ast.ModifyBackendClause;
 import org.junit.Assert;
 import org.junit.Test;

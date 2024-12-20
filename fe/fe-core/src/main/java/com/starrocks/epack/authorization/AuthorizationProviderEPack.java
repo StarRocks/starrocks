@@ -2,12 +2,12 @@
 
 package com.starrocks.epack.authorization;
 
+import com.starrocks.authorization.DefaultAuthorizationProvider;
+import com.starrocks.authorization.ObjectType;
+import com.starrocks.authorization.PEntryObject;
+import com.starrocks.authorization.PrivilegeException;
+import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.epack.sql.ast.PolicyType;
-import com.starrocks.privilege.DefaultAuthorizationProvider;
-import com.starrocks.privilege.ObjectType;
-import com.starrocks.privilege.PEntryObject;
-import com.starrocks.privilege.PrivilegeException;
-import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import org.apache.hadoop.util.Lists;
@@ -38,7 +38,7 @@ public class AuthorizationProviderEPack extends DefaultAuthorizationProvider {
                 PrivilegeType.DROP,
                 PrivilegeType.ALTER));
 
-        typeToActionList.put(ObjectTypeEPack.WAREHOUSE, Lists.newArrayList(
+        typeToActionList.put(ObjectType.WAREHOUSE, Lists.newArrayList(
                 PrivilegeType.USAGE,
                 PrivilegeType.ALTER,
                 PrivilegeType.DROP));
@@ -75,7 +75,7 @@ public class AuthorizationProviderEPack extends DefaultAuthorizationProvider {
             return PolicyPEntryObject.generate(mgr, PolicyType.ROW_ACCESS, objectTokens);
         } else if (ObjectTypeEPack.MASKING_POLICY.equals(objectType)) {
             return PolicyPEntryObject.generate(mgr, PolicyType.MASKING, objectTokens);
-        } else if (ObjectTypeEPack.WAREHOUSE.equals(objectType)) {
+        } else if (ObjectType.WAREHOUSE.equals(objectType)) {
             return WarehousePEntryObject.generate(mgr, objectTokens);
         } else if (ObjectTypeEPack.FAILOVER_GROUP.equals(objectType)) {
             return FailoverGroupPEntryObject.generate(mgr, objectTokens);
