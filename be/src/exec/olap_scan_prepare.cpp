@@ -821,7 +821,9 @@ Status ChunkPredicateBuilder<E, Type>::normalize_predicate(const SlotDescriptor&
     RETURN_IF_ERROR((normalize_not_in_or_not_equal_predicate<SlotType, RangeValueType, Negative>(slot, range)));
     RETURN_IF_ERROR(normalize_is_null_predicate(slot));
     // Must handle join runtime filter last
-    RETURN_IF_ERROR((normalize_join_runtime_filter<SlotType, RangeValueType, Negative>(slot, range)));
+    if (nullptr != _opts.runtime_filters) {
+        RETURN_IF_ERROR((normalize_join_runtime_filter<SlotType, RangeValueType, Negative>(slot, range)));
+    }
 
     return Status::OK();
 }
