@@ -297,6 +297,19 @@ public abstract class AlterJobV2 implements Writable {
 
     public abstract void replay(AlterJobV2 replayedJob);
 
+<<<<<<< HEAD
+=======
+    private void finishHook() {
+        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId);
+    }
+
+    protected void cancelHook(boolean cancelled) {
+        if (cancelled) {
+            WarehouseIdleChecker.updateJobLastFinishTime(warehouseId);
+        }
+    }
+
+>>>>>>> c1c530daaf ([UT] Add test for warehouse idle checker (#54121))
     public static AlterJobV2 read(DataInput in) throws IOException {
         String json = Text.readString(in);
         return GsonUtils.GSON.fromJson(json, AlterJobV2.class);

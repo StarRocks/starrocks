@@ -133,4 +133,97 @@ public class WarehouseManager implements Writable {
         String json = GsonUtils.GSON.toJson(this);
         Text.writeString(out, json);
     }
+<<<<<<< HEAD
+=======
+
+    public Warehouse getCompactionWarehouse() {
+        return getWarehouse(DEFAULT_WAREHOUSE_ID);
+    }
+
+    public Warehouse getBackgroundWarehouse() {
+        return getWarehouse(DEFAULT_WAREHOUSE_ID);
+    }
+
+    public Optional<Long> selectWorkerGroupByWarehouseId(long warehouseId) {
+        Optional<Long> workerGroupId = selectWorkerGroupInternal(warehouseId);
+        if (workerGroupId.isEmpty()) {
+            return workerGroupId;
+        }
+
+        List<ComputeNode> aliveNodes = getAliveComputeNodes(warehouseId, workerGroupId.get());
+        if (CollectionUtils.isEmpty(aliveNodes)) {
+            Warehouse warehouse = getWarehouse(warehouseId);
+            LOG.warn("there is no alive workers in warehouse: " + warehouse.getName());
+            return Optional.empty();
+        }
+
+        return workerGroupId;
+    }
+
+    private Optional<Long> selectWorkerGroupInternal(long warehouseId) {
+        Warehouse warehouse = getWarehouse(warehouseId);
+        if (warehouse == null) {
+            LOG.warn("failed to get warehouse by id {}", warehouseId);
+            return Optional.empty();
+        }
+
+        List<Long> ids = warehouse.getWorkerGroupIds();
+        if (CollectionUtils.isEmpty(ids)) {
+            LOG.warn("failed to get worker group id from warehouse {}", warehouse);
+            return Optional.empty();
+        }
+
+        return Optional.of(ids.get(0));
+    }
+
+    public void createWarehouse(CreateWarehouseStmt stmt) throws DdlException {
+        throw new DdlException("Multi-Warehouse is not implemented");
+    }
+
+    public void dropWarehouse(DropWarehouseStmt stmt) throws DdlException {
+        throw new DdlException("Multi-Warehouse is not implemented");
+    }
+
+    public void suspendWarehouse(SuspendWarehouseStmt stmt) throws DdlException {
+        throw new DdlException("Multi-Warehouse is not implemented");
+    }
+
+    public void resumeWarehouse(ResumeWarehouseStmt stmt) throws DdlException {
+        throw new DdlException("Multi-Warehouse is not implemented");
+    }
+
+    public void alterWarehouse(AlterWarehouseStmt stmt) throws DdlException {
+        throw new DdlException("Multi-Warehouse is not implemented");
+    }
+
+    public Set<String> getAllWarehouseNames() {
+        return Sets.newHashSet(DEFAULT_WAREHOUSE_NAME);
+    }
+
+    public void replayCreateWarehouse(Warehouse warehouse) {
+
+    }
+
+    public void replayDropWarehouse(DropWarehouseLog log) {
+
+    }
+
+    public void replayAlterWarehouse(Warehouse warehouse) {
+
+    }
+
+    public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
+    }
+
+    public void load(SRMetaBlockReader reader)
+            throws SRMetaBlockEOFException, IOException, SRMetaBlockException {
+    }
+
+    public void addWarehouse(Warehouse warehouse) {
+        try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
+            nameToWh.put(warehouse.getName(), warehouse);
+            idToWh.put(warehouse.getId(), warehouse);
+        }
+    }
+>>>>>>> c1c530daaf ([UT] Add test for warehouse idle checker (#54121))
 }

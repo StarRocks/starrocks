@@ -268,6 +268,10 @@ public class TaskRun implements Comparable<TaskRun> {
         return runCtx;
     }
 
+    protected void setRunCtx(ConnectContext runCtx) {
+        this.runCtx = runCtx;
+    }
+
     public TaskRunStatus getStatus() {
         if (status == null) {
             return null;
