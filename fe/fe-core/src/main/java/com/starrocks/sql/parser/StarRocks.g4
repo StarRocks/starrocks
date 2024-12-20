@@ -1157,14 +1157,19 @@ partitionRenameClause
 
 insertStatement
     : explainDesc? INSERT (INTO | OVERWRITE) (qualifiedName writeBranch? partitionNames? | (FILES propertyList) | (BLACKHOLE '(' ')'))
-        insertLabelOrColumnAliases* (BY NAME)? properties?
+        insertLabelOrColumnAliases* properties?
         (queryStatement | (VALUES expressionsWithDefault (',' expressionsWithDefault)*))
     ;
 
 // for compatibility with the case 'LABEL before columnAliases'
 insertLabelOrColumnAliases
-    : WITH LABEL label=identifier
-    | columnAliases
+    : columnAliasesOrByName
+    | WITH LABEL label=identifier
+    ;
+
+columnAliasesOrByName
+    : columnAliases
+    | BY NAME
     ;
 
 updateStatement

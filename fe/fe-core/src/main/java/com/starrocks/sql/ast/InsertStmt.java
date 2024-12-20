@@ -97,6 +97,11 @@ public class InsertStmt extends DmlStmt {
     private boolean isVersionOverwrite = false;
 
     // column match by position or name
+    public enum ColumnMatchPolicy {
+        POSITION,
+        NAME
+    }
+
     private ColumnMatchPolicy columnMatchPolicy = ColumnMatchPolicy.POSITION;
 
     // create partition if not exists
@@ -346,15 +351,6 @@ public class InsertStmt extends DmlStmt {
         checkState(tableFunctionAsTargetTable, "tableFunctionAsTargetTable is false");
         List<Column> columns = collectSelectedFieldsFromQueryStatement();
         return new TableFunctionTable(columns, getTableFunctionProperties(), sessionVariable);
-    }
-
-    public enum ColumnMatchPolicy {
-        POSITION,
-        NAME
-    }
-
-    public boolean isColumnMatchByPosition() {
-        return columnMatchPolicy == ColumnMatchPolicy.POSITION;
     }
 
     public boolean isColumnMatchByName() {

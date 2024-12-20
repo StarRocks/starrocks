@@ -18,19 +18,6 @@ truncate table t1;
 -- result:
 -- !result
 
-insert into t1 (k2, k1) by name select 2 as k1, "b" as k2;
--- result:
--- !result
-
-select * from t1;
--- result:
-2	b
--- !result
-
-truncate table t1;
--- result:
--- !result
-
 insert into t1 (k2, k1) select "d" as k1, 4 as k2;
 -- result:
 -- !result
@@ -44,6 +31,20 @@ truncate table t1;
 -- result:
 -- !result
 
+insert into t1 by name select 2 as k1;
+-- result:
+-- !result
+
+select * from t1;
+-- result:
+2	None
+-- !result
+
+truncate table t1;
+-- result:
+-- !result
+
+
 insert into t1 by name values(1, "a");
 -- result:
 [REGEX].*Insert match column by name does not support values\(\).
@@ -51,12 +52,12 @@ insert into t1 by name values(1, "a");
 
 insert into t1 by name select "a" as k2, 1 as k1, 2 as k3;
 -- result:
-[REGEX].*Source column: k3 has no matching target column.
+[REGEX].*Unknown column 'k3' in 't1'.
 -- !result
 
-insert into t1 by name select 1 as k1;
+insert into t1 (k1) by name select 2 as k1;
 -- result:
-[REGEX].*Target column: k2 has no matching source column.
+[REGEX].*Cannot use COLUMN LIST and BY NAME clause together in insert.
 -- !result
 
 
@@ -71,7 +72,7 @@ select * from t1;
 3	c
 -- !result
 
-insert into t2 (k1, k2) by name select * from t1;
+insert into t2 by name select * from t1;
 -- result:
 -- !result
 
@@ -110,10 +111,6 @@ truncate table t2;
 -- result:
 -- !result
 
-insert into t2 by name select * from t1;
--- result:
-[REGEX].*Target column: k3 has no matching source column.
--- !result
 
 insert into t2 by name select k1 + 1 as k1, k1, 12 as k3 from t1;
 -- result:
