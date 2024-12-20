@@ -744,13 +744,8 @@ public class StarOSAgent {
         String owner = "Starrocks";
         WorkerGroupDetailInfo result = null;
         try {
-<<<<<<< HEAD
-            result = client.createWorkerGroup(serviceId, owner, spec, Collections.emptyMap(),
-                    Collections.emptyMap());
-=======
             result = client.createWorkerGroup(serviceId, owner, spec, Collections.emptyMap(), Collections.emptyMap(),
-                    replicaNumber, ReplicationType.NO_REPLICATION);
->>>>>>> 03803b2eb ([Enhancement] update staros to 3.4-rc2 (#54075))
+                    0, ReplicationType.NO_REPLICATION);
         } catch (StarClientException e) {
             LOG.warn("Failed to create worker group. error: {}", e.getMessage());
             throw new DdlException("Failed to create worker group. error: " + e.getMessage());
