@@ -33,8 +33,8 @@ ALTER SYSTEM MODIFY BACKEND "172.xx.xx.51:9050" SET ("labels.location" = "rack:r
 
 :::note
 
-- 为表指定的标签所包含的 BE 节点数必须大于副本数，否则会报错 `Table replication num should be less than of equal to the number of available BE nodes`.
-- 为表指定的标签必须已经存在，否则会报错 `Getting analyzing error. Detail message: Cannot find any backend with location: rack:xxx`.
+- 为表指定的标签所包含的 BE 节点数如果小于副本数，将会优先保证数据的副本数满足要求，这种情况下并不能保证副本按照标签进行分布。
+- 为表指定的标签必须已经存在，否则会报错 `Getting analyzing error. Detail message: Cannot find any backend with location: rack:xxx`。
 
 :::
 
@@ -87,8 +87,8 @@ ALTER TABLE example_table1
 
 :::note
 
-- 为物化视图指定的标签所包含的 BE 节点数必须大于副本数，否则会报错 `Table replication num should be less than of equal to the number of available BE nodes`.
-- 为物化视图指定的标签必须已经存在，否则会报错  `Getting analyzing error. Detail message: Cannot find any backend with location: rack:xxx`.
+- 为物化视图指定的标签所包含的 BE 节点数如果小于副本数，将会优先保证数据的副本数满足要求，这种情况下并不能保证副本按照标签进行分布。
+- 为物化视图指定的标签必须已经存在，否则会报错  `Getting analyzing error. Detail message: Cannot find any backend with location: rack:xxx`。
 
 :::
 
