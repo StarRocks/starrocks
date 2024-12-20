@@ -41,12 +41,19 @@
 
 namespace starrocks {
 
-class RowsetColumnPartialUpdateTest : public ::testing::Test, testing::WithParamInterface<int64_t> {
+struct RowsetColumnPartialUpdateParam {
+    int64_t primary_key_batch_get_index_memory_limit;
+    bool skip_pk_preload;
+};
+
+class RowsetColumnPartialUpdateTest : public ::testing::Test,
+                                      testing::WithParamInterface<RowsetColumnPartialUpdateParam> {
 public:
     void SetUp() override {
         _compaction_mem_tracker = std::make_unique<MemTracker>(-1);
         _update_mem_tracker = std::make_unique<MemTracker>();
-        config::primary_key_batch_get_index_memory_limit = GetParam();
+        config::primary_key_batch_get_index_memory_limit = GetParam().primary_key_batch_get_index_memory_limit;
+        config::skip_pk_preload = GetParam().skip_pk_preload;
         config::enable_pk_size_tiered_compaction_strategy = false;
     }
 
@@ -58,6 +65,7 @@ public:
             }
         }
         config::enable_pk_size_tiered_compaction_strategy = true;
+        config::skip_pk_preload = false;
     }
 
     RowsetSharedPtr create_rowset(const TabletSharedPtr& tablet, const vector<int64_t>& keys, bool add_v3 = false) {
@@ -751,7 +759,7 @@ TEST_P(RowsetColumnPartialUpdateTest, TEST_Pull_clone2) {
 
 TEST_P(RowsetColumnPartialUpdateTest, test_dcg_gc) {
     // Only run one parameter here
-    if (GetParam() != 104857600) return;
+    if (GetParam().primary_key_batch_get_index_memory_limit != 104857600) return;
     fs::remove_all(get_stores()->path());
     const int N = 100;
     auto tablet = create_tablet(rand(), rand());
@@ -1229,6 +1237,8 @@ TEST_P(RowsetColumnPartialUpdateTest, partial_update_with_source_chunk_limit) {
 }
 
 INSTANTIATE_TEST_SUITE_P(RowsetColumnPartialUpdateTest, RowsetColumnPartialUpdateTest,
-                         ::testing::Values(1, 1024, 104857600));
+                         ::testing::Values(RowsetColumnPartialUpdateParam{1, false},
+                                           RowsetColumnPartialUpdateParam{1024, true},
+                                           RowsetColumnPartialUpdateParam{104857600, false}));
 
 } // namespace starrocks
