@@ -35,12 +35,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.UUIDUtil;
-<<<<<<< HEAD
-=======
-import com.starrocks.common.util.concurrent.lock.LockType;
-import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
->>>>>>> d89bd1bc79 ([BugFix] Set has delete for tables replicated by the starrocks data migration tool (#54081))
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
@@ -624,20 +619,6 @@ public class ReplicationJob implements GsonPostProcessable {
             throw new MetaNotFoundException("Database " + request.database_id + " not found");
         }
 
-<<<<<<< HEAD
-        db.readLock();
-        try {
-            Table table = db.getTable(request.table_id);
-            if (table == null) {
-                throw new MetaNotFoundException(
-                        "Table " + request.table_id + " in database " + db.getFullName() + " not found");
-            }
-            if (!(table instanceof OlapTable)) {
-                throw new MetaNotFoundException(
-                        "Table " + request.table_id + " in database " + db.getFullName() + " is not olap table");
-            }
-            OlapTable olapTable = (OlapTable) table;
-=======
         Table table = db.getTable(request.table_id);
         if (table == null) {
             throw new MetaNotFoundException(
@@ -649,10 +630,8 @@ public class ReplicationJob implements GsonPostProcessable {
         }
         OlapTable olapTable = (OlapTable) table;
 
-        Locker locker = new Locker();
-        locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
+        db.readLock();
         try {
->>>>>>> d89bd1bc79 ([BugFix] Set has delete for tables replicated by the starrocks data migration tool (#54081))
             tableType = olapTable.getType();
             tableDataSize = olapTable.getDataSize();
 
@@ -679,14 +658,11 @@ public class ReplicationJob implements GsonPostProcessable {
                 needSetHasDelete = true;
             }
         } finally {
-<<<<<<< HEAD
             db.readUnlock();
-=======
-            locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
         }
 
         if (needSetHasDelete) {
-            locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.WRITE);
+            db.writeLock();
             try {
                 if (olapTable.hasDelete()) {
                     needSetHasDelete = false;
@@ -695,14 +671,13 @@ public class ReplicationJob implements GsonPostProcessable {
                     olapTable.setHasDelete();
                 }
             } finally {
-                locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.WRITE);
+                db.writeUnlock();
             }
 
             if (needSetHasDelete) {
                 ModifyTablePropertyOperationLog log = new ModifyTablePropertyOperationLog(db.getId(), table.getId());
                 GlobalStateMgr.getCurrentState().getEditLog().logSetHasDelete(log);
             }
->>>>>>> d89bd1bc79 ([BugFix] Set has delete for tables replicated by the starrocks data migration tool (#54081))
         }
 
         return new TableInfo(request.table_id, tableType, Table.TableType.OLAP, tableDataSize,
