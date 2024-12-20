@@ -59,7 +59,7 @@ When the SLRU policy is used, the cache space is divided into an eviction segmen
 Now, Data Cache is enabled by default, and the system caches data in the following ways:
 
 - The system variables `enable_scan_datacache` and the BE parameter `datacache_enable` are set to `true` by default.
-- A **datacache** directory is created as the cache directory under `storage_root_path`. From v3.4.0, it is no longer supported to directly change the disk cache path. If other paths needed, they can be processed through Linux symbol links.
+- A **datacache** directory is created as the cache directory under `storage_root_path`. From v3.4.0 onwards, directly changing the disk cache path is no longer supported. If you want to set a path, you can create a Symbolic Link.
 - If the memory and disk limits are not configured, the system will automatically set memory and disk limits by following these rules:
   - The system enables automatic disk space adjustment for Data Cache. It sets the limit to ensure that the overall disk usage is around 80%, and dynamically adjusts according to subsequent disk usage. (You can modify this behavior with the BE parameters `datacache_disk_high_level`, `datacache_disk_safe_level`, and `datacache_disk_low_level`.)
   - The default memory limit for Data Cache is `0`. (You can modify this with the BE parameter `datacache_mem_size`.)
@@ -119,7 +119,7 @@ From v3.3.0, asynchronous cache population is enabled by default. You can change
 
 ### Persistence
 
-The cache data in disks can be persistent by default, and these data can be reused after BE restarts.
+The cached data in disks can be persistent by default, and these data can be reused after BE restarts.
 
 ## Check whether a query hits data cache
 
