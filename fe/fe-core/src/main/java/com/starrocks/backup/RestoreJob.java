@@ -95,6 +95,7 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.WarehouseMetricMgr;
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -111,6 +112,7 @@ import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletSchema;
 import com.starrocks.thrift.TTaskType;
+import com.starrocks.warehouse.WarehouseIdleChecker;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -1547,6 +1549,7 @@ public class RestoreJob extends AbstractJob {
             }
             MetricRepo.COUNTER_UNFINISHED_RESTORE_JOB.increase(-1L);
             WarehouseMetricMgr.increaseUnfinishedRestoreJobs(getCurrentWarehouseId(), -1L);
+            WarehouseIdleChecker.updateJobLastFinishTime(WarehouseManager.DEFAULT_WAREHOUSE_ID);
             return;
         }
         LOG.info("waiting {} tablets to commit. {}", unfinishedSignatureToId.size(), this);
@@ -1868,6 +1871,7 @@ public class RestoreJob extends AbstractJob {
             return;
         }
 
+        WarehouseIdleChecker.updateJobLastFinishTime(WarehouseManager.DEFAULT_WAREHOUSE_ID);
         LOG.info("finished to cancel restore job. is replay: {}. {}", isReplay, this);
     }
 

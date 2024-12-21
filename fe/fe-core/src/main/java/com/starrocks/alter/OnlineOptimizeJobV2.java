@@ -780,7 +780,7 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
         if (parsedStmt instanceof InsertStmt) {
             ((InsertStmt) parsedStmt).setIsVersionOverwrite(true);
         }
-        StmtExecutor executor = new StmtExecutor(context, parsedStmt);
+        StmtExecutor executor = StmtExecutor.newInternalExecutor(context, parsedStmt);
 
         // set default session variables for stats context
         SessionVariable sessionVariable = context.getSessionVariable();

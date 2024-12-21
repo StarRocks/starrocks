@@ -624,4 +624,11 @@ public class AlterJobMgr {
             }
         });
     }
+
+    public Map<Long, Long> getRunningAlterJobCount() {
+        Map<Long, Long> mv = materializedViewHandler.getRunningAlterJobCount();
+        Map<Long, Long> sc = schemaChangeHandler.getRunningAlterJobCount();
+        sc.forEach((key, value) -> mv.merge(key, value, Long::sum));
+        return mv;
+    }
 }

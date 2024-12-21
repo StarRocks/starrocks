@@ -53,6 +53,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -203,5 +204,15 @@ public abstract class AlterHandler extends FrontendDaemon {
         } else {
             existingJob.replay(alterJob);
         }
+    }
+
+    public Map<Long, Long> getRunningAlterJobCount() {
+        Map<Long, Long> result = new HashMap<>();
+        for (AlterJobV2 alterJobV2 : alterJobsV2.values()) {
+            if (!alterJobV2.isDone()) {
+                result.compute(alterJobV2.getWarehouseId(), (key, value) -> value == null ? 1L : value + 1);
+            }
+        }
+        return result;
     }
 }
