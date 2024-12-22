@@ -130,23 +130,9 @@ public class StatisticsSQLTest extends PlanTestBase {
         SampleStatisticsCollectJob job = new SampleStatisticsCollectJob(db, t0, columnNames,
                 StatsConstants.AnalyzeType.SAMPLE, StatsConstants.ScheduleType.ONCE, Maps.newHashMap());
 
-<<<<<<< HEAD
         String sql = job.buildSampleInsertSQL(db.getId(), t0StatsTableId, columnNames, job.columnTypes, 200);
         starRocksAssert.useDatabase("_statistics_");
-=======
-        ColumnSampleManager columnSampleManager = ColumnSampleManager.init(columnNames, columnTypes, t0,
-                sampleInfo);
 
-        sampleInfo.generateComplexTypeColumnTask(t0.getId(), db.getId(), t0.getName(), db.getFullName(),
-                columnSampleManager.getComplexTypeStats());
-        String complexSql = sampleInfo.generateComplexTypeColumnTask(t0.getId(), db.getId(), t0.getName(), db.getFullName(),
-                columnSampleManager.getComplexTypeStats());
-        assertCContains(complexSql, "INSERT INTO _statistics_.table_statistic_v1(table_id, column_name, db_id, table_name," +
-                " db_name, row_count, data_size, distinct_count, null_count, max, min, update_time) VALUES");
-
-        String simpleSql = sampleInfo.generatePrimitiveTypeColumnTask(t0.getId(), db.getId(), t0.getName(),
-                db.getFullName(), columnSampleManager.splitPrimitiveTypeStats().get(0), tabletSampleManager);
->>>>>>> 8449b9aeb0 ([Enhancement] Use insert into target colum when collecting statistics (#54058))
         String except = String.format("SELECT %s, '%s', %s, '%s', '%s'",
                 t0.getId(), "v3", db.getId(), "test.stat0", "test");
         assertCContains(sql, except);
