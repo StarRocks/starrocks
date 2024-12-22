@@ -70,22 +70,7 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
             ", cast($countNullFunction as BIGINT)" + // BIGINT
             ", $maxFunction" + // VARCHAR
             ", $minFunction " + // VARCHAR
-<<<<<<< HEAD
             " FROM `$dbName`.`$tableName` partition `$partitionName`";
-=======
-            " FROM (select $quoteColumnName as column_key from `$dbName`.`$tableName` partition `$partitionName`) tt";
-    private static final String OVERWRITE_PARTITION_TEMPLATE =
-            "INSERT INTO " + TABLE_NAME + "(" + StatisticUtils.buildStatsColumnDef(TABLE_NAME).stream().map(ColumnDef::getName)
-                    .collect(Collectors.joining(", ")) + ") " + "\n" +
-                    "SELECT " +
-                    "   table_id, $targetPartitionId, column_name, db_id, table_name, \n" +
-                    "   partition_name, row_count, data_size, ndv, null_count, max, min, update_time \n" +
-                    "FROM " + TABLE_NAME + "\n" +
-                    "WHERE `table_id`=$tableId AND `partition_id`=$sourcePartitionId";
-    private static final String DELETE_PARTITION_TEMPLATE =
-            "DELETE FROM " + TABLE_NAME + "\n" +
-                    "WHERE `table_id`=$tableId AND `partition_id`=$sourcePartitionId";
->>>>>>> 8449b9aeb0 ([Enhancement] Use insert into target colum when collecting statistics (#54058))
 
     private final List<Long> partitionIdList;
 

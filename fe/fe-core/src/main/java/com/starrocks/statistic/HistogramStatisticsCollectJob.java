@@ -105,20 +105,13 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
     }
 
     private String buildCollectHistogram(Database database, Table table, double sampleRatio,
-<<<<<<< HEAD
                                          Long bucketNum, Map<String, String> mostCommonValues, String columnName) {
-        StringBuilder builder = new StringBuilder("INSERT INTO ").append(HISTOGRAM_STATISTICS_TABLE_NAME).append(" ");
-=======
-                                         Long bucketNum, Map<String, String> mostCommonValues, String columnName,
-                                         Type columnType) {
         List<String> targetColumnNames = StatisticUtils.buildStatsColumnDef(HISTOGRAM_STATISTICS_TABLE_NAME).stream()
                 .map(ColumnDef::getName)
                 .collect(Collectors.toList());
         String columnNames = "(" + String.join(", ", targetColumnNames) + ")";
         StringBuilder builder = new StringBuilder("INSERT INTO ").append(HISTOGRAM_STATISTICS_TABLE_NAME)
                 .append(columnNames).append(" ");
-        String quoteColumName = StatisticUtils.quoting(table, columnName);
->>>>>>> 8449b9aeb0 ([Enhancement] Use insert into target colum when collecting statistics (#54058))
 
         VelocityContext context = new VelocityContext();
         context.put("tableId", table.getId());
