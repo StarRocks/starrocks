@@ -132,6 +132,7 @@ public class StatisticsSQLTest extends PlanTestBase {
 
         String sql = job.buildSampleInsertSQL(db.getId(), t0StatsTableId, columnNames, job.columnTypes, 200);
         starRocksAssert.useDatabase("_statistics_");
+
         String except = String.format("SELECT %s, '%s', %s, '%s', '%s'",
                 t0.getId(), "v3", db.getId(), "test.stat0", "test");
         assertCContains(sql, except);
