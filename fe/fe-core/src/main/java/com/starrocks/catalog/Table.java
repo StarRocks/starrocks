@@ -158,6 +158,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
                     .add(TableType.HUDI)
                     .add(TableType.ODPS)
                     .add(TableType.DELTALAKE)
+                    .add(TableType.PAIMON)
                     .build();
 
     @SerializedName(value = "id")
