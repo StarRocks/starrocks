@@ -85,7 +85,7 @@ public class InsertLoadJob extends LoadJob {
     }
 
     public InsertLoadJob(String label, long dbId, long tableId, long txnId, String loadId, String user, long createTimestamp,
-                         long timeout, Coordinator coordinator) {
+                         long timeout, long warehouseId, Coordinator coordinator) {
         super(dbId, label);
         this.tableId = tableId;
         this.createTimestamp = createTimestamp;
@@ -94,6 +94,7 @@ public class InsertLoadJob extends LoadJob {
         this.jobType = EtlJobType.INSERT;
         this.loadType = coordinator.getLoadJobType();
         this.timeoutSecond = timeout;
+        this.warehouseId = warehouseId;
         this.coordinator = coordinator;
         this.loadIds.add(loadId);
         this.transactionId = txnId;
