@@ -2373,6 +2373,7 @@ public class StmtExecutor {
                         estimateScanFileSize,
                         type,
                         getExecTimeout(),
+                        context.getCurrentWarehouseId(),
                         coord);
                 loadJob.setJobProperties(stmt.getProperties());
                 jobId = loadJob.getId();
