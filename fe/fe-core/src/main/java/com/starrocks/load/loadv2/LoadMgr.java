@@ -243,9 +243,8 @@ public class LoadMgr implements Writable, MemoryTrackable {
     public long registerLoadJob(String label, String dbName, long tableId, long txnId, String loadId, String user,
                                 EtlJobType jobType, long createTimestamp, long estimateScanRows,
                                 int estimateFileNum, long estimateFileSize,
-                                TLoadJobType type, long timeout, Coordinator coordinator)
+                                TLoadJobType type, long timeout, long warehouseId, Coordinator coordinator)
             throws UserException {
-
         // get db id
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         if (db == null) {
@@ -255,7 +254,7 @@ public class LoadMgr implements Writable, MemoryTrackable {
         InsertLoadJob loadJob;
         if (Objects.requireNonNull(jobType) == EtlJobType.INSERT) {
             loadJob = new InsertLoadJob(label, db.getId(), tableId, txnId, loadId, user,
-                    createTimestamp, type, timeout, coordinator);
+                    createTimestamp, type, timeout, warehouseId, coordinator);
             loadJob.setLoadFileInfo(estimateFileNum, estimateFileSize);
             loadJob.setEstimateScanRow(estimateScanRows);
             loadJob.setTransactionId(txnId);
