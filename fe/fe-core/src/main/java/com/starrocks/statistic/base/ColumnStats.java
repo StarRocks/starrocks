@@ -18,6 +18,8 @@ import com.starrocks.catalog.Type;
 import com.starrocks.statistic.sample.SampleInfo;
 import org.apache.commons.lang.StringEscapeUtils;
 
+import static com.starrocks.sql.optimizer.statistics.ColumnStatistic.DEFAULT_COLLECTION_SIZE;
+
 /*
  * For describe how to collect statistics on different column type
  */
@@ -55,6 +57,10 @@ public abstract class ColumnStats {
     public abstract String getMax();
 
     public abstract String getMin();
+
+    public String getCollectionSize() {
+        return String.valueOf(DEFAULT_COLLECTION_SIZE);
+    }
 
     public abstract String getFullDateSize();
 
