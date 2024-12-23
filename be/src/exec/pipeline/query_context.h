@@ -252,8 +252,6 @@ private:
     TPipelineProfileLevel::type _profile_level;
     std::shared_ptr<MemTracker> _mem_tracker;
     std::shared_ptr<MemTracker> _connector_scan_mem_tracker;
-    std::mutex _operator_mem_trackers_lock;
-    std::unordered_map<int32_t, std::shared_ptr<MemTracker>> _operator_mem_trackers;
     ObjectPool _object_pool;
     DescriptorTbl* _desc_tbl = nullptr;
     std::once_flag _query_trace_init_flag;
