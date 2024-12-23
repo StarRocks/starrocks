@@ -58,7 +58,7 @@ public:
             segment = std::make_unique<SegmentPB>();
 
             _flush_token->_stats.cur_flush_count++;
-            _flush_token->_flush_memtable(_memtable.get(), segment.get());
+            _flush_token->_flush_memtable(_memtable.get(), segment.get(), _eos);
             _flush_token->_stats.cur_flush_count--;
             _memtable.reset();
 
@@ -125,7 +125,7 @@ Status FlushToken::wait() {
     return _status;
 }
 
-void FlushToken::_flush_memtable(MemTable* memtable, SegmentPB* segment) {
+void FlushToken::_flush_memtable(MemTable* memtable, SegmentPB* segment, bool eos) {
     // If previous flush has failed, return directly
     if (!status().ok()) {
         return;
@@ -133,7 +133,7 @@ void FlushToken::_flush_memtable(MemTable* memtable, SegmentPB* segment) {
 
     MonotonicStopWatch timer;
     timer.start();
-    set_status(memtable->flush(segment));
+    set_status(memtable->flush(segment, eos));
     _stats.flush_time_ns += timer.elapsed_time();
     _stats.flush_count++;
     _stats.flush_size_bytes += memtable->memory_usage();
