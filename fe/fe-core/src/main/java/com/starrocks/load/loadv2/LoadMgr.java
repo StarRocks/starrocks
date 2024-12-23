@@ -242,8 +242,14 @@ public class LoadMgr implements Writable, MemoryTrackable {
 
     public InsertLoadJob registerInsertLoadJob(String label, String dbName, long tableId, long txnId, String loadId, String user,
                                                EtlJobType jobType, long createTimestamp, long estimateScanRows,
+<<<<<<< HEAD
                                                int estimateFileNum, long estimateFileSize, TLoadJobType type, long timeout,
                                                Coordinator coordinator) throws UserException {
+=======
+                                               int estimateFileNum, long estimateFileSize, long timeout,
+                                               long warehouseId,
+                                               Coordinator coordinator) throws StarRocksException {
+>>>>>>> fd7627325 ([Enhancement] Load and Export add warehouse parameter (#54190))
         // get db id
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
         if (db == null) {
@@ -253,7 +259,11 @@ public class LoadMgr implements Writable, MemoryTrackable {
         InsertLoadJob loadJob;
         if (Objects.requireNonNull(jobType) == EtlJobType.INSERT) {
             loadJob = new InsertLoadJob(label, db.getId(), tableId, txnId, loadId, user,
+<<<<<<< HEAD
                     createTimestamp, type, timeout, coordinator);
+=======
+                    createTimestamp, timeout, warehouseId, coordinator);
+>>>>>>> fd7627325 ([Enhancement] Load and Export add warehouse parameter (#54190))
             loadJob.setLoadFileInfo(estimateFileNum, estimateFileSize);
             loadJob.setEstimateScanRow(estimateScanRows);
             loadJob.setTransactionId(txnId);

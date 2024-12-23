@@ -89,7 +89,11 @@ public class InsertLoadJob extends LoadJob {
     }
 
     public InsertLoadJob(String label, long dbId, long tableId, long txnId, String loadId, String user, long createTimestamp,
+<<<<<<< HEAD
             TLoadJobType type, long timeout, Coordinator coordinator) throws MetaNotFoundException {
+=======
+                         long timeout, long warehouseId, Coordinator coordinator) {
+>>>>>>> fd7627325 ([Enhancement] Load and Export add warehouse parameter (#54190))
         super(dbId, label);
         this.tableId = tableId;
         this.createTimestamp = createTimestamp;
@@ -98,6 +102,7 @@ public class InsertLoadJob extends LoadJob {
         this.jobType = EtlJobType.INSERT;
         this.loadType = type;
         this.timeoutSecond = timeout;
+        this.warehouseId = warehouseId;
         this.coordinator = coordinator;
         this.loadIds.add(loadId);
         this.transactionId = txnId;
