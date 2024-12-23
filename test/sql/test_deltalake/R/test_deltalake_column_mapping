@@ -132,6 +132,12 @@ select * from delta_test_${uuid0}.delta_oss_db.column_mapping_test order by c_in
 None	2006-01-01	0	{"c_int":6,"c_date":"2006-01-02"}	{6:null}	{"c_array":[null],"c_struct_new":{"c_int":600},"c_struct":{"c_bool":0,"c_string":"Chongqing"},"c_map":{1:550}}	50.50	None
 None	None	None	None	None	None	None	None
 -- !result
+select `key`, name from delta_test_${uuid0}.delta_oss_db.column_mapping_test_id_par order by `key`;
+-- result:
+1	name1
+2	name2
+3	name3
+-- !result
 drop catalog delta_test_${uuid0}
 -- result:
 -- !result

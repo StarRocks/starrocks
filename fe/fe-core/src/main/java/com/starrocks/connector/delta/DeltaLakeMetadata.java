@@ -235,7 +235,7 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
                 Row scanFileRow = scanFileRows.next();
 
                 DeletionVectorDescriptor dv = InternalScanFileUtils.getDeletionVectorDescriptorFromRow(scanFileRow);
-                return ScanFileUtils.convertFromRowToFileScanTask(enableCollectColumnStats, scanFileRow,
+                return ScanFileUtils.convertFromRowToFileScanTask(enableCollectColumnStats, scanFileRow, metadata,
                                 estimateRowSize, dv);
             }
 
