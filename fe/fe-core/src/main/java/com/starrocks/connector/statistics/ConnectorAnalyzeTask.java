@@ -17,7 +17,6 @@ package com.starrocks.connector.statistics;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
@@ -154,11 +153,8 @@ public class ConnectorAnalyzeTask {
         statsConnectCtx.setThreadLocalInfo();
         // init column names and types
         List<String> columnNames = Lists.newArrayList(columns);
-        List<Type> columnTypes = columnNames.stream().map(col -> {
-            Column column = table.getColumn(col);
-            Preconditions.checkNotNull(column, "Column " + col + " does not exist in table " + table.getName());
-            return column.getType();
-        }).collect(Collectors.toList());
+        List<Type> columnTypes = columnNames.stream().map(col ->
+                StatisticUtils.getQueryStatisticsColumnType(table, col)).collect(Collectors.toList());
         // init partition names
         List<String> partitionNames = ConnectorPartitionTraits.build(table).getPartitionNames();
         Set<String> updatedPartitions = StatisticUtils.getUpdatedPartitionNames(table, lastAnalyzedTime);
@@ -168,7 +164,7 @@ public class ConnectorAnalyzeTask {
         }
 
         StatsConstants.AnalyzeType analyzeType = StatsConstants.AnalyzeType.FULL;
-        if (partitionNames.size() >  Config.statistic_sample_collect_partition_size) {
+        if (partitionNames.size() > Config.statistic_sample_collect_partition_size) {
             analyzeType = StatsConstants.AnalyzeType.SAMPLE;
         }
         // only collect updated partitions
