@@ -71,6 +71,7 @@ public class ConstQueryJob extends HyperQueryJob {
                 data.setDataSize(column.getTypeSize() * rowCount);
                 data.setMax("");
                 data.setMin("");
+                data.setCollectionSize(-1);
                 sqlBuffer.add(createInsertValueSQL(data, tableName, partitionName));
                 rowsBuffer.add(createInsertValueExpr(data, tableName, partitionName));
             }

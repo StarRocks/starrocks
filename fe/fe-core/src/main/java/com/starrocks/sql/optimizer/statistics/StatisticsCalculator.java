@@ -1464,6 +1464,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         Statistics.Builder builder = Statistics.builder();
 
         Statistics inputStatistics = context.getChildStatistics(0);
+        double rowCount = inputStatistics.getOutputRowCount();
         Map<ColumnRefOperator, ColumnStatistic> columnStats = inputStatistics.getColumnStatistics();
 
         for (ColumnRefOperator col : outputColumns) {
@@ -1474,7 +1475,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             }
         }
 
-        builder.setOutputRowCount(inputStatistics.getOutputRowCount());
+        builder.setOutputRowCount(rowCount);
 
         context.setStatistics(builder.build());
         return visitOperator(context.getOp(), context);

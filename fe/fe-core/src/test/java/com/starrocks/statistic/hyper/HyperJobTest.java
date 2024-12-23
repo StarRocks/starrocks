@@ -132,7 +132,7 @@ public class HyperJobTest extends DistributedEnvPlanTestBase {
                 .collect(Collectors.toList());
         String sql = HyperStatisticSQLs.buildSampleSQL(db, table, table.getPartition(pid), columnStat, sampler,
                 HyperStatisticSQLs.BATCH_SAMPLE_STATISTIC_SELECT_TEMPLATE);
-        Assert.assertEquals(1, columnStat.size());
+        Assert.assertEquals(2, columnStat.size());
         List<StatementBase> stmt = SqlParser.parse(sql, connectContext.getSessionVariable());
         Assert.assertTrue(stmt.get(0) instanceof QueryStatement);
     }
@@ -206,7 +206,7 @@ public class HyperJobTest extends DistributedEnvPlanTestBase {
         assertContains(sql.get(0), "cast(IFNULL(SUM(CHAR_LENGTH(`c2`)) * 0/ COUNT(*), 0) as BIGINT), " +
                 "hex(hll_serialize(IFNULL(hll_raw(`c2`), hll_empty())))," +
                 " cast((COUNT(*) - COUNT(`c2`)) * 0 / COUNT(*) as BIGINT), " +
-                "IFNULL(MAX(LEFT(`c2`, 200)), ''), IFNULL(MIN(LEFT(`c2`, 200)), '')  " +
+                "IFNULL(MAX(LEFT(`c2`, 200)), ''), IFNULL(MIN(LEFT(`c2`, 200)), ''), cast(-1.0 as BIGINT) " +
                 "FROM base_cte_table ");
     }
 
@@ -218,17 +218,17 @@ public class HyperJobTest extends DistributedEnvPlanTestBase {
         List<HyperQueryJob> jobs = HyperQueryJob.createSampleQueryJobs(connectContext, db, table, columnNames,
                 columnTypes, List.of(pid), 1, sampler);
 
-        Assert.assertEquals(2, jobs.size());
+        Assert.assertEquals(1, jobs.size());
         Assert.assertTrue(jobs.get(0) instanceof SampleQueryJob);
 
         List<String> sql = jobs.get(0).buildQuerySQL();
-        Assert.assertEquals(1, sql.size());
+        Assert.assertEquals(2, sql.size());
 
-        assertContains(sql.get(0), "with base_cte_table as (SELECT * FROM `test`.`t_struct` LIMIT 200000) ");
-        assertContains(sql.get(0), "'c6.c.b', cast(0 as BIGINT), cast(4 * 0 as BIGINT), ");
-        assertContains(sql.get(0), "hex(hll_serialize(IFNULL(hll_raw(`c6`.`c`.`b`), hll_empty()))), ");
-        assertContains(sql.get(0), "cast((COUNT(*) - COUNT(`c6`.`c`.`b`)) * 0 / COUNT(*) as BIGINT), " +
-                "IFNULL(MAX(`c6`.`c`.`b`), ''), IFNULL(MIN(`c6`.`c`.`b`), '')  FROM base_cte_table ");
+        assertContains(sql.get(1), "with base_cte_table as (SELECT * FROM `test`.`t_struct` LIMIT 200000) ");
+        assertContains(sql.get(1), "'c6.c.b', cast(0 as BIGINT), cast(4 * 0 as BIGINT), ");
+        assertContains(sql.get(1), "hex(hll_serialize(IFNULL(hll_raw(`c6`.`c`.`b`), hll_empty()))), ");
+        assertContains(sql.get(1), "cast((COUNT(*) - COUNT(`c6`.`c`.`b`)) * 0 / COUNT(*) as BIGINT), " +
+                "IFNULL(MAX(`c6`.`c`.`b`), ''), IFNULL(MIN(`c6`.`c`.`b`), ''), cast(-1.0 as BIGINT) FROM base_cte_table");
     }
 
     @AfterClass

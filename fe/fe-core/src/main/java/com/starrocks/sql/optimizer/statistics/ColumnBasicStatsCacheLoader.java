@@ -47,6 +47,7 @@ import java.util.concurrent.Executor;
 
 import static com.starrocks.catalog.InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
 import static com.starrocks.sql.optimizer.Utils.getLongFromDateTime;
+import static com.starrocks.sql.optimizer.statistics.ColumnStatistic.DEFAULT_COLLECTION_SIZE;
 
 public class ColumnBasicStatsCacheLoader implements AsyncCacheLoader<ColumnStatsCacheKey, Optional<ColumnStatistic>> {
     private static final Logger LOG = LogManager.getLogger(ColumnBasicStatsCacheLoader.class);
@@ -201,10 +202,15 @@ public class ColumnBasicStatsCacheLoader implements AsyncCacheLoader<ColumnStats
             distinctValues = 1;
         }
 
+        double collectionSize = statisticData.isSetCollectionSize() ? statisticData.getCollectionSize() :
+                DEFAULT_COLLECTION_SIZE;
+
         return builder.setMinValue(minValue).
                 setMaxValue(maxValue).
                 setDistinctValuesCount(distinctValues).
                 setAverageRowSize(statisticData.dataSize / Math.max(statisticData.rowCount, 1)).
-                setNullsFraction(statisticData.nullCount * 1.0 / Math.max(statisticData.rowCount, 1)).build();
+                setNullsFraction(statisticData.nullCount * 1.0 / Math.max(statisticData.rowCount, 1))
+                .setCollectionSize(collectionSize)
+                .build();
     }
 }

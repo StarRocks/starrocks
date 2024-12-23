@@ -148,8 +148,7 @@ public class StatisticExecutor {
                             .map(x -> StatisticUtils.getQueryStatisticsColumnType(table, x.getColumnName()))
                             .collect(Collectors.toList());
 
-            String statsSql = StatisticSQLBuilder.buildQueryFullStatisticsSQL(
-                    dbId, tableId, columnNamesForStats, columnTypesForStats);
+            String statsSql = StatisticSQLBuilder.buildQueryFullStatisticsSQL(tableId, columnNamesForStats, columnTypesForStats);
             List<TStatisticData> tStatisticData = executeStatisticDQL(context, statsSql);
             columnStats.addAll(tStatisticData);
         }
@@ -161,7 +160,7 @@ public class StatisticExecutor {
                         .map(x -> StatisticUtils.getQueryStatisticsColumnType(table, x.getColumnName()))
                         .collect(Collectors.toList());
                 String statsSql = StatisticSQLBuilder.buildQueryFullStatisticsSQL(
-                        dbId, tableId, columnNamesForStats, columnTypesForStats);
+                        tableId, columnNamesForStats, columnTypesForStats);
                 List<TStatisticData> tStatisticData = executeStatisticDQL(context, statsSql);
                 columnStats.addAll(tStatisticData);
             } else {

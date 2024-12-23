@@ -31,6 +31,8 @@ public class ColumnStatistic {
     private static final ColumnStatistic UNKNOWN =
             new ColumnStatistic(NEGATIVE_INFINITY, POSITIVE_INFINITY, 0, 1, 1, null, StatisticType.UNKNOWN);
 
+    public static final double DEFAULT_COLLECTION_SIZE = -1.0;
+
     // For time types, including Date, DateTime, Timestamp. They all represented as timestamp in ColumnStatistic,
     // regardless of their different storage format
     private final double minValue;
@@ -45,6 +47,28 @@ public class ColumnStatistic {
     // @todo refactor this!
     private String minString = null;
     private String maxString = null;
+
+
+    private double collectionSize = DEFAULT_COLLECTION_SIZE;
+
+    public ColumnStatistic(
+            double minValue,
+            double maxValue,
+            double nullsFraction,
+            double averageRowSize,
+            double distinctValuesCount,
+            double collectionSize,
+            Histogram histogram,
+            StatisticType type) {
+        this.minValue = minValue;
+        this.maxValue = maxValue;
+        this.nullsFraction = nullsFraction;
+        this.averageRowSize = averageRowSize;
+        this.distinctValuesCount = distinctValuesCount;
+        this.histogram = histogram;
+        this.collectionSize = collectionSize;
+        this.type = type;
+    }
 
     // TODO deal with string max, min
     public ColumnStatistic(
@@ -108,6 +132,10 @@ public class ColumnStatistic {
         return distinctValuesCount;
     }
 
+    public double getCollectionSize() {
+        return collectionSize;
+    }
+
     public Histogram getHistogram() {
         return histogram;
     }
@@ -150,13 +178,15 @@ public class ColumnStatistic {
                 + nullsFraction + separator
                 + averageRowSize + separator
                 + distinctValuesCount + "] "
+                + (collectionSize == DEFAULT_COLLECTION_SIZE ? "" : "COS: " + collectionSize + " ")
                 + (histogram == null ? "" : histogram.getMcvString() + " ")
                 + type;
     }
 
     public static Builder buildFrom(ColumnStatistic other) {
         return new Builder(other.minString, other.maxString, other.minValue, other.maxValue,
-                other.nullsFraction, other.averageRowSize, other.distinctValuesCount, other.histogram, other.type);
+                other.nullsFraction, other.averageRowSize, other.distinctValuesCount, other.histogram,
+                other.collectionSize, other.type);
     }
 
     public static Builder buildFrom(String columnStatistic) {
@@ -206,20 +236,20 @@ public class ColumnStatistic {
         private StatisticType type = StatisticType.ESTIMATE;
         private String minString = null;
         private String maxString = null;
+        private double collectionSize = DEFAULT_COLLECTION_SIZE;
 
         private Builder() {
         }
 
         private Builder(double minValue, double maxValue, double nullsFraction, double averageRowSize,
-                        double distinctValuesCount, Histogram histogram,
-                        StatisticType type) {
+                        double distinctValuesCount, double collectionSize, Histogram histogram, StatisticType type) {
             this(null, null, minValue, maxValue, nullsFraction,
-                    averageRowSize, distinctValuesCount, histogram, type);
+                    averageRowSize, distinctValuesCount, histogram, collectionSize, type);
         }
 
         private Builder(String minString, String maxString, double minValue, double maxValue,
                         double nullsFraction, double averageRowSize,
-                        double distinctValuesCount, Histogram histogram,
+                        double distinctValuesCount, Histogram histogram, double collectionSize,
                         StatisticType type) {
             this.minString = minString;
             this.maxString = maxString;
@@ -230,11 +260,13 @@ public class ColumnStatistic {
             this.distinctValuesCount = distinctValuesCount;
             this.histogram = histogram;
             this.type = type;
+            this.collectionSize = collectionSize;
         }
 
         private Builder(double minValue, double maxValue, double nullsFraction, double averageRowSize,
                         double distinctValuesCount) {
-            this(minValue, maxValue, nullsFraction, averageRowSize, distinctValuesCount, null, StatisticType.ESTIMATE);
+            this(minValue, maxValue, nullsFraction, averageRowSize, distinctValuesCount,
+                    DEFAULT_COLLECTION_SIZE, null, StatisticType.ESTIMATE);
         }
 
         public Builder setMinValue(double minValue) {
@@ -262,6 +294,11 @@ public class ColumnStatistic {
             return this;
         }
 
+        public Builder setCollectionSize(double collectionSize) {
+            this.collectionSize = collectionSize;
+            return this;
+        }
+
         public Builder setHistogram(Histogram histogram) {
             this.histogram = histogram;
             return this;
@@ -284,7 +321,7 @@ public class ColumnStatistic {
 
         public ColumnStatistic build() {
             ColumnStatistic columnStatistic = new ColumnStatistic(
-                    minValue, maxValue, nullsFraction, averageRowSize, distinctValuesCount, histogram, type);
+                    minValue, maxValue, nullsFraction, averageRowSize, distinctValuesCount, collectionSize, histogram, type);
             columnStatistic.setMaxString(maxString);
             columnStatistic.setMinString(minString);
             return columnStatistic;
