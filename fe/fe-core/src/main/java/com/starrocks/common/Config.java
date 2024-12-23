@@ -3000,7 +3000,7 @@ public class Config extends ConfigBase {
      * Using cloud native persistent index in primary key table by default when creating table.
      */
     @ConfField(mutable = true)
-    public static boolean enable_cloud_native_persistent_index_by_default = false;
+    public static boolean enable_cloud_native_persistent_index_by_default = true;
 
     /**
      * timeout for external table commit
