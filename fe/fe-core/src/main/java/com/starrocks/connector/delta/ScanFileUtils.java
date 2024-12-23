@@ -24,9 +24,11 @@ import io.delta.kernel.internal.InternalScanFileUtils;
 import io.delta.kernel.internal.actions.DeletionVectorDescriptor;
 import io.delta.kernel.internal.actions.Metadata;
 import io.delta.kernel.internal.util.ColumnMapping;
-import io.delta.kernel.types.StructType;
+import io.delta.kernel.types.StructField;
 import io.delta.kernel.utils.FileStatus;
+import org.apache.commons.collections4.map.CaseInsensitiveMap;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -73,10 +75,18 @@ public class ScanFileUtils {
         return scanFileInfo.getStruct(ADD_FILE_ORDINAL);
     }
 
+    private static Map<String, StructField> buildCaseInsensitiveSchema(List<StructField> fields) {
+        Map<String, StructField> caseInsensitiveMap = new CaseInsensitiveMap<>();
+        for (StructField field : fields) {
+            caseInsensitiveMap.put(field.getName(), field);
+        }
+        return caseInsensitiveMap;
+    }
+
     public static Pair<FileScanTask, DeltaLakeAddFileStatsSerDe> convertFromRowToFileScanTask(
             boolean needStats, Row file, Metadata metadata, long estimateRowSize, DeletionVectorDescriptor dv) {
-        StructType schema = metadata.getSchema();
         Set<String> partitionColumns = metadata.getPartitionColNames();
+        Map<String, StructField> schema = buildCaseInsensitiveSchema(metadata.getSchema().fields());
 
         FileStatus fileStatus = InternalScanFileUtils.getAddFileStatus(file);
         Map<String, String> partitionValues = InternalScanFileUtils.getPartitionValues(file);
