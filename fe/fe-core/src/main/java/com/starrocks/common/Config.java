@@ -1017,6 +1017,7 @@ public class Config extends ConfigBase {
     /**
      * Default insert load timeout
      */
+    @Deprecated
     @ConfField(mutable = true)
     public static int insert_load_default_timeout_second = 3600; // 1 hour
 
