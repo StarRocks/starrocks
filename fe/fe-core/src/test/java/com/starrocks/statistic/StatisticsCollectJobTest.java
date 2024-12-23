@@ -347,7 +347,8 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
         String sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
                 db, olapTable, 0.1, 64L, Maps.newHashMap(), "v2");
-        Assert.assertEquals(String.format("INSERT INTO histogram_statistics SELECT %d, 'v2', %d, 'test.t0_stats', " +
+        Assert.assertEquals(String.format("INSERT INTO histogram_statistics(table_id, column_name, db_id, table_name," +
+                        " buckets, mcv, update_time) SELECT %d, 'v2', %d, 'test.t0_stats', " +
                         "histogram(`v2`, cast(64 as int), cast(0.1 as double)),  NULL, NOW() FROM " +
                         "(SELECT `v2` FROM `test`.`t0_stats` where rand() <= 0.1 and `v2` is not null  " +
                         "ORDER BY `v2` LIMIT 10000000) t",
@@ -358,7 +359,8 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         mostCommonValues.put("2", "20");
         sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
                 db, olapTable, 0.1, 64L, mostCommonValues, "v2");
-        Assert.assertEquals(String.format("INSERT INTO histogram_statistics SELECT %s, 'v2', %d, 'test.t0_stats', " +
+        Assert.assertEquals(String.format("INSERT INTO histogram_statistics(table_id, column_name, db_id, table_name, " +
+                "buckets, mcv, update_time) SELECT %s, 'v2', %d, 'test.t0_stats', " +
                 "histogram(`v2`, cast(64 as int), cast(0.1 as double)),  '[[\"1\",\"10\"],[\"2\",\"20\"]]', NOW() " +
                 "FROM (SELECT `v2` FROM `test`.`t0_stats` where rand() <= 0.1 and `v2` is not null  and `v2` not in (1,2) " +
                 "ORDER BY `v2` LIMIT 10000000) t", t0StatsTableId, dbid), sql);
@@ -368,7 +370,8 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         mostCommonValues.put("1991-01-01", "20");
         sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
                 db, olapTable, 0.1, 64L, mostCommonValues, "v4");
-        Assert.assertEquals(String.format("INSERT INTO histogram_statistics SELECT %s, 'v4', %d, 'test.t0_stats', " +
+        Assert.assertEquals(String.format("INSERT INTO histogram_statistics(table_id, column_name, db_id, table_name, " +
+                "buckets, mcv, update_time) SELECT %s, 'v4', %d, 'test.t0_stats', " +
                 "histogram(`v4`, cast(64 as int), cast(0.1 as double)),  '[[\"0000-01-01\",\"10\"],[\"1991-01-01\",\"20\"]]', " +
                 "NOW() FROM (SELECT `v4` FROM `test`.`t0_stats` where rand() <= 0.1 and `v4` is not null  and `v4` not in " +
                 "(\"0000-01-01\",\"1991-01-01\") ORDER BY `v4` LIMIT 10000000) t", t0StatsTableId, dbid), sql);
@@ -378,7 +381,8 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         mostCommonValues.put("1991-01-01 00:00:00", "20");
         sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
                 db, olapTable, 0.1, 64L, mostCommonValues, "v5");
-        Assert.assertEquals("INSERT INTO histogram_statistics SELECT " + t0StatsTableId + ", 'v5', " + dbid +
+        Assert.assertEquals("INSERT INTO histogram_statistics(table_id, column_name, db_id, table_name, " +
+                        "buckets, mcv, update_time) SELECT " + t0StatsTableId + ", 'v5', " + dbid +
                         ", 'test" +
                         ".t0_stats', " +
                         "histogram(`v5`, cast(64 as int), cast(0.1 as double)),  " +
