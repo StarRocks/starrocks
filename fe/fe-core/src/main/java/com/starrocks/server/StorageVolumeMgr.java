@@ -71,6 +71,8 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
 
     private static final String AZBLOB = "azblob";
 
+    private static final String ADLS2 = "adls2";
+
     private static final String HDFS = "hdfs";
 
     @SerializedName("defaultSVId")
@@ -353,6 +355,7 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
                 switch (svType.toLowerCase()) {
                     case S3:
                     case AZBLOB:
+                    case ADLS2:
                         if (!scheme.equalsIgnoreCase(svType)) {
                             throw new DdlException("Invalid location " + location);
                         }

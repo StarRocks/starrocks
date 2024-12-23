@@ -25,11 +25,13 @@ import static com.starrocks.connector.share.credential.CloudConfigurationConstan
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS1_OAUTH2_CREDENTIAL;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS1_OAUTH2_ENDPOINT;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS1_USE_MANAGED_SERVICE_IDENTITY;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS2_ENDPOINT;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_ENDPOINT;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_ID;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_SECRET;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_TENANT_ID;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_USE_MANAGED_IDENTITY;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS2_SAS_TOKEN;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS2_SHARED_KEY;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS2_STORAGE_ACCOUNT;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_BLOB_CONTAINER;
@@ -77,11 +79,13 @@ public class AzureCloudConfigurationProvider implements CloudConfigurationProvid
 
         // Try to build azure data lake gen2
         AzureADLS2CloudCredential adls2 = new AzureADLS2CloudCredential(
+                properties.getOrDefault(AZURE_ADLS2_ENDPOINT, ""),
                 Boolean.parseBoolean(properties.getOrDefault(AZURE_ADLS2_OAUTH2_USE_MANAGED_IDENTITY, "false")),
                 properties.getOrDefault(AZURE_ADLS2_OAUTH2_TENANT_ID, ""),
                 properties.getOrDefault(AZURE_ADLS2_OAUTH2_CLIENT_ID, ""),
                 properties.getOrDefault(AZURE_ADLS2_STORAGE_ACCOUNT, storageAccount),
                 properties.getOrDefault(AZURE_ADLS2_SHARED_KEY, ""),
+                properties.getOrDefault(AZURE_ADLS2_SAS_TOKEN, ""),
                 properties.getOrDefault(AZURE_ADLS2_OAUTH2_CLIENT_SECRET, ""),
                 properties.getOrDefault(AZURE_ADLS2_OAUTH2_CLIENT_ENDPOINT, "")
         );

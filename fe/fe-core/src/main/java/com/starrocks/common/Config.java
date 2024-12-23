@@ -2568,7 +2568,8 @@ public class Config extends ConfigBase {
     @ConfField
     public static boolean enable_load_volume_from_conf = true;
     // remote storage related configuration
-    @ConfField(comment = "storage type for cloud native table. Available options: \"S3\", \"HDFS\", \"AZBLOB\". case-insensitive")
+    @ConfField(comment = "storage type for cloud native table. Available options: " +
+            "\"S3\", \"HDFS\", \"AZBLOB\", \"ADLS2\". case-insensitive")
     public static String cloud_native_storage_type = "S3";
 
     // HDFS storage configuration
@@ -2611,11 +2612,21 @@ public class Config extends ConfigBase {
     public static String azure_blob_endpoint = "";
     @ConfField
     public static String azure_blob_path = "";
-
     @ConfField
     public static String azure_blob_shared_key = "";
     @ConfField
     public static String azure_blob_sas_token = "";
+
+    // azure adls2
+    @ConfField
+    public static String azure_adls2_endpoint = "";
+    @ConfField
+    public static String azure_adls2_path = "";
+    @ConfField
+    public static String azure_adls2_shared_key = "";
+    @ConfField
+    public static String azure_adls2_sas_token = "";
+
     @ConfField(mutable = true)
     public static int starmgr_grpc_timeout_seconds = 5;
 

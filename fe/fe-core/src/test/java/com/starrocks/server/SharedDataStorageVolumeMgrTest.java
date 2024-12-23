@@ -499,6 +499,20 @@ public class SharedDataStorageVolumeMgrTest {
                 sv.getCloudConfiguration().toFileStoreInfo().getAzblobFsInfo().getCredential().getSharedKey());
         Assert.assertEquals("sas_token",
                 sv.getCloudConfiguration().toFileStoreInfo().getAzblobFsInfo().getCredential().getSasToken());
+
+        Config.cloud_native_storage_type = "adls2";
+        Config.azure_adls2_shared_key = "shared_key";
+        Config.azure_adls2_sas_token = "sas_token";
+        Config.azure_adls2_endpoint = "endpoint";
+        Config.azure_adls2_path = "path";
+        sdsvm.removeStorageVolume(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME);
+        sdsvm.createBuiltinStorageVolume();
+        sv = sdsvm.getStorageVolumeByName(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME);
+        Assert.assertEquals("endpoint", sv.getCloudConfiguration().toFileStoreInfo().getAdls2FsInfo().getEndpoint());
+        Assert.assertEquals("shared_key",
+                sv.getCloudConfiguration().toFileStoreInfo().getAdls2FsInfo().getCredential().getSharedKey());
+        Assert.assertEquals("sas_token",
+                sv.getCloudConfiguration().toFileStoreInfo().getAdls2FsInfo().getCredential().getSasToken());
     }
 
     @Test
@@ -752,6 +766,14 @@ public class SharedDataStorageVolumeMgrTest {
 
         Config.azure_blob_path = "blob";
         Config.azure_blob_endpoint = "";
+        Assert.assertThrows(InvalidConfException.class, sdsvm::validateStorageVolumeConfig);
+
+        Config.cloud_native_storage_type = "adls2";
+        Config.azure_adls2_path = "";
+        Assert.assertThrows(InvalidConfException.class, sdsvm::validateStorageVolumeConfig);
+
+        Config.azure_adls2_path = "adls2";
+        Config.azure_adls2_endpoint = "";
         Assert.assertThrows(InvalidConfException.class, sdsvm::validateStorageVolumeConfig);
     }
 

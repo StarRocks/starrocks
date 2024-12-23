@@ -14,6 +14,7 @@
 
 package com.starrocks.storagevolume;
 
+import com.staros.proto.ADLS2FileStoreInfo;
 import com.staros.proto.AwsAssumeIamRoleCredentialInfo;
 import com.staros.proto.AwsCredentialInfo;
 import com.staros.proto.AwsDefaultCredentialInfo;
@@ -64,6 +65,9 @@ import static com.starrocks.connector.share.credential.CloudConfigurationConstan
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_SECRET_KEY;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_USE_INSTANCE_PROFILE;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS2_ENDPOINT;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS2_SAS_TOKEN;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS2_SHARED_KEY;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_BLOB_ENDPOINT;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_BLOB_SHARED_KEY;
@@ -373,7 +377,7 @@ public class StorageVolumeTest {
     }
 
     @Test
-    public void testAzureSharedKeyCredential() throws DdlException {
+    public void testAzureBlobSharedKeyCredential() throws DdlException {
         Map<String, String> storageParams = new HashMap<>();
         storageParams.put(AZURE_BLOB_ENDPOINT, "endpoint");
         storageParams.put(AZURE_BLOB_SHARED_KEY, "shared_key");
@@ -399,7 +403,7 @@ public class StorageVolumeTest {
     }
 
     @Test
-    public void testAzureSasTokenCredential() throws DdlException {
+    public void testAzureBlobSasTokenCredential() throws DdlException {
         Map<String, String> storageParams = new HashMap<>();
         storageParams.put(AZURE_BLOB_ENDPOINT, "endpoint");
         storageParams.put(AZURE_BLOB_SAS_TOKEN, "sas_token");
@@ -425,10 +429,69 @@ public class StorageVolumeTest {
     }
 
     @Test
-    public void testAzureInvalidCredential() {
+    public void testAzureBlobInvalidCredential() {
         Map<String, String> storageParams = new HashMap<>();
         Assert.assertThrows(SemanticException.class, () ->
                 new StorageVolume("1", "test", "azblob", Arrays.asList("azblob://aaa"), storageParams, true, ""));
+    }
+
+    @Test
+    public void testAzureADLS2SharedKeyCredential() throws DdlException {
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(AZURE_ADLS2_ENDPOINT, "endpoint");
+        storageParams.put(AZURE_ADLS2_SHARED_KEY, "shared_key");
+        StorageVolume sv = new StorageVolume("1", "test", "adls2", Arrays.asList("adls2://aaa"),
+                storageParams, true, "");
+        CloudConfiguration cloudConfiguration = sv.getCloudConfiguration();
+        Assert.assertEquals(CloudType.AZURE, cloudConfiguration.getCloudType());
+        FileStoreInfo fileStore = cloudConfiguration.toFileStoreInfo();
+        Assert.assertTrue(fileStore.hasAdls2FsInfo());
+        ADLS2FileStoreInfo adls2FileStoreInfo = fileStore.getAdls2FsInfo();
+        Assert.assertEquals("endpoint", adls2FileStoreInfo.getEndpoint());
+        Assert.assertEquals("shared_key", adls2FileStoreInfo.getCredential().getSharedKey());
+
+        sv = new StorageVolume("1", "test", "adls2", Arrays.asList("adls2://aaa/bbb"),
+                storageParams, true, "");
+        cloudConfiguration = sv.getCloudConfiguration();
+        Assert.assertEquals(CloudType.AZURE, cloudConfiguration.getCloudType());
+        fileStore = cloudConfiguration.toFileStoreInfo();
+        Assert.assertTrue(fileStore.hasAdls2FsInfo());
+        adls2FileStoreInfo = fileStore.getAdls2FsInfo();
+        Assert.assertEquals("endpoint", adls2FileStoreInfo.getEndpoint());
+        Assert.assertEquals("shared_key", adls2FileStoreInfo.getCredential().getSharedKey());
+    }
+
+    @Test
+    public void testAzureADLS2SasTokenCredential() throws DdlException {
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(AZURE_ADLS2_ENDPOINT, "endpoint");
+        storageParams.put(AZURE_ADLS2_SAS_TOKEN, "sas_token");
+        StorageVolume sv = new StorageVolume("1", "test", "adls2", Arrays.asList("adls2://aaa"),
+                storageParams, true, "");
+        CloudConfiguration cloudConfiguration = sv.getCloudConfiguration();
+        Assert.assertEquals(CloudType.AZURE, cloudConfiguration.getCloudType());
+        FileStoreInfo fileStore = cloudConfiguration.toFileStoreInfo();
+        Assert.assertTrue(fileStore.hasAdls2FsInfo());
+        ADLS2FileStoreInfo adls2FileStoreInfo = fileStore.getAdls2FsInfo();
+        Assert.assertEquals("endpoint", adls2FileStoreInfo.getEndpoint());
+        Assert.assertEquals("sas_token", adls2FileStoreInfo.getCredential().getSasToken());
+
+        sv = new StorageVolume("1", "test", "adls2", Arrays.asList("adls2://aaa/bbb"),
+                storageParams, true, "");
+        cloudConfiguration = sv.getCloudConfiguration();
+        Assert.assertEquals(CloudType.AZURE, cloudConfiguration.getCloudType());
+        fileStore = cloudConfiguration.toFileStoreInfo();
+        Assert.assertTrue(fileStore.hasAdls2FsInfo());
+        adls2FileStoreInfo = fileStore.getAdls2FsInfo();
+        Assert.assertEquals("endpoint", adls2FileStoreInfo.getEndpoint());
+        Assert.assertEquals("sas_token", adls2FileStoreInfo.getCredential().getSasToken());
+    }
+
+    @Test
+    public void testAzureADLS2InvalidCredential() {
+        Map<String, String> storageParams = new HashMap<>();
+        Assert.assertThrows(SemanticException.class, () ->
+                new StorageVolume("1", "test", "adls2", Arrays.asList("adls2://aaa"), storageParams, true, ""));
     }
 
     @Test
@@ -575,11 +638,15 @@ public class StorageVolumeTest {
         storageParams.put(AWS_S3_SECRET_KEY, "secretKey");
         storageParams.put(AZURE_BLOB_SAS_TOKEN, "sasToken");
         storageParams.put(AZURE_BLOB_SHARED_KEY, "sharedKey");
+        storageParams.put(AZURE_ADLS2_SAS_TOKEN, "sasToken");
+        storageParams.put(AZURE_ADLS2_SHARED_KEY, "sharedKey");
         Deencapsulation.invoke(StorageVolume.class, "addMaskForCredential", storageParams);
         Assert.assertEquals(StorageVolume.CREDENTIAL_MASK, storageParams.get(AWS_S3_ACCESS_KEY));
         Assert.assertEquals(StorageVolume.CREDENTIAL_MASK, storageParams.get(AWS_S3_SECRET_KEY));
         Assert.assertEquals(StorageVolume.CREDENTIAL_MASK, storageParams.get(AZURE_BLOB_SAS_TOKEN));
         Assert.assertEquals(StorageVolume.CREDENTIAL_MASK, storageParams.get(AZURE_BLOB_SHARED_KEY));
+        Assert.assertEquals(StorageVolume.CREDENTIAL_MASK, storageParams.get(AZURE_ADLS2_SAS_TOKEN));
+        Assert.assertEquals(StorageVolume.CREDENTIAL_MASK, storageParams.get(AZURE_ADLS2_SHARED_KEY));
     }
 
     @Test
