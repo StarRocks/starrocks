@@ -594,12 +594,12 @@ public class TransactionState implements Writable {
         return txnCommitAttachment;
     }
 
-    public Set<Long> getCallbackId() {
-        Set<Long> callbackIdCopy = Sets.newHashSet(callbackIdList);
+    public List<Long> getCallbackId() {
         if (callbackId != -1) {
-            callbackIdCopy.add(callbackId);
+            return Lists.newArrayList(callbackId);
+        } else {
+            return new ArrayList<>(callbackIdList);
         }
-        return callbackIdCopy;
     }
 
     public long getTimeoutMs() {

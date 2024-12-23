@@ -14,14 +14,23 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.UpdateStmt;
+import com.starrocks.transaction.ExplicitTxnState;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.List;
 
 public class DMLStmtAnalyzer {
+    private static final Logger LOGGER = LoggerFactory.getLogger(DMLStmtAnalyzer.DMLStmtAnalyzerVisitor.class);
+
     public static void analyze(DmlStmt stmt, ConnectContext context) {
         new DMLStmtAnalyzer.DMLStmtAnalyzerVisitor().analyze(stmt, context);
     }
@@ -29,6 +38,24 @@ public class DMLStmtAnalyzer {
     static class DMLStmtAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
         public void analyze(DmlStmt dmlStmt, ConnectContext context) {
             dmlStmt.getTableName().normalization(context);
+
+            if (context.getExplicitTxnState() != null) {
+                ExplicitTxnState globalTransactionState = context.getExplicitTxnState();
+                List<ExplicitTxnState.ExplicitTxnStateItem> transactionStateItemList =
+                        globalTransactionState.getTransactionStateItems();
+
+                for (ExplicitTxnState.ExplicitTxnStateItem transactionStateItem : transactionStateItemList) {
+                    DmlStmt ds = transactionStateItem.getDmlStmt();
+                    if (ds.getTableName().equals(dmlStmt.getTableName())) {
+                        throw ErrorReportException.report(ErrorCode.ERR_TXN_IMPORT_SAME_TABLE);
+                    }
+
+                    if (!ds.getTableName().getDb().equals(dmlStmt.getTableName().getDb())) {
+                        throw ErrorReportException.report(ErrorCode.ERR_TXN_FORBID_CROSS_DB);
+                    }
+                }
+            }
+
             visit(dmlStmt, context);
         }
 

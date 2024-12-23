@@ -99,6 +99,7 @@ import com.starrocks.load.InsertOverwriteJob;
 import com.starrocks.load.InsertOverwriteJobMgr;
 import com.starrocks.load.loadv2.InsertLoadJob;
 import com.starrocks.load.loadv2.LoadJob;
+import com.starrocks.load.loadv2.LoadMgr;
 import com.starrocks.meta.SqlBlackList;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.TableMetricsEntity;
@@ -521,7 +522,7 @@ public class StmtExecutor {
         context.setExecutionId(UUIDUtil.toTUniqueId(uuid));
         SessionVariable sessionVariableBackup = context.getSessionVariable();
 
-        // if use http protocal, use httpResultSender to send result to netty channel
+        // if use http protocol, use httpResultSender to send result to netty channel
         if (context instanceof HttpConnectContext) {
             httpResultSender = new HttpResultSender((HttpConnectContext) context);
         }
@@ -810,7 +811,7 @@ public class StmtExecutor {
             } else if (e instanceof NoAliveBackendException) {
                 context.getState().setErrType(QueryState.ErrType.INTERNAL_ERR);
             } else {
-                // TODO: some UserException doesn't belong to analysis error
+                // TODO: some StarRocksException doesn't belong to analysis error
                 // we should set such error type to internal error
                 context.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
             }
@@ -2295,6 +2296,12 @@ public class StmtExecutor {
         }
 
         MetricRepo.COUNTER_LOAD_ADD.increase(1L);
+
+        if (context.getExplicitTxnState() != null) {
+            TransactionStmtExecutor.loadData(database, targetTable, execPlan, stmt, originStmt, context);
+            return;
+        }
+
         long transactionId = stmt.getTxnId();
         TransactionState txnState = null;
         String label = DebugUtil.printId(context.getExecutionId());
@@ -2327,6 +2334,7 @@ public class StmtExecutor {
         TransactionStatus txnStatus = TransactionStatus.ABORTED;
         boolean insertError = false;
         String trackingSql = "";
+
         try {
             coord = getCoordinatorFactory().createInsertScheduler(
                     context, execPlan.getFragments(), execPlan.getScanNodes(), execPlan.getDescTbl().toThrift());
@@ -2367,9 +2375,7 @@ public class StmtExecutor {
                         context.getQualifiedUser(),
                         EtlJobType.INSERT,
                         createTime,
-                        estimateScanRows,
-                        estimateFileNum,
-                        estimateScanFileSize,
+                        new LoadMgr.EstimateStats(estimateScanRows, estimateFileNum, estimateScanFileSize),
                         getExecTimeout(),
                         coord);
                 loadJob.setJobProperties(stmt.getProperties());
@@ -2415,8 +2421,8 @@ public class StmtExecutor {
                                 execPlan.getExplainString(TExplainLevel.COSTS));
                     }
 
-                    coord.cancel(ErrorCode.ERR_QUERY_EXCEPTION.formatErrorMsg());
-                    ErrorReport.reportNoAliveBackendException(ErrorCode.ERR_QUERY_EXCEPTION);
+                    coord.cancel(ErrorCode.ERR_QUERY_CANCELLED_BY_CRASH.formatErrorMsg());
+                    ErrorReport.reportNoAliveBackendException(ErrorCode.ERR_QUERY_CANCELLED_BY_CRASH);
                 } else {
                     coord.cancel(ErrorCode.ERR_TIMEOUT.formatErrorMsg(getExecType(), timeout, ""));
                     if (coord.isThriftServerHighLoad()) {
@@ -2705,7 +2711,7 @@ public class StmtExecutor {
                         "",
                         coord.getTrackingUrl());
             }
-        } catch (MetaNotFoundException e) {
+        } catch (StarRocksException e) {
             LOG.warn("Record info of insert load with error {}", e.getMessage(), e);
             errMsg = "Record info of insert load with error " + e.getMessage();
         }

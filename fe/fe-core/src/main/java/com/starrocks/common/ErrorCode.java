@@ -151,8 +151,7 @@ public enum ErrorCode {
     ERR_INVALID_VALUE(5018, new byte[] {'H', 'Y', '0', '0', '0'}, "Invalid %s: '%s'. Expected values should be %s"),
     ERR_NO_ALTER_OPERATION(5023, new byte[] {'H', 'Y', '0', '0', '0'},
             "No operation in alter statement"),
-    ERR_TIMEOUT(5024, new byte[] {'H', 'Y', '0', '0', '0'}, "%s reached its timeout of %d seconds, %s"),
-    ERR_FAILED_WHEN_INSERT(5025, new byte[] {'H', 'Y', '0', '0', '0'}, "Failed when INSERT execute"),
+    ERR_TIMEOUT(5024, new byte[] {'5', '3', '4', '0', '0'}, "%s reached its timeout of %d seconds, %s"),
     ERR_UNSUPPORTED_TYPE_IN_CTAS(5026, new byte[] {'H', 'Y', '0', '0', '0'},
             "Unsupported type '%s' in create table as select statement"),
     ERR_MISSING_PARAM(5027, new byte[] {'H', 'Y', '0', '0', '0'}, "Missing param: %s "),
@@ -208,7 +207,7 @@ public enum ErrorCode {
             "Create table like does not support create view."),
     ERROR_SET_CONFIG_FAILED(5076, new byte[] {'4', '2', '0', '0', '0'},
             "set config failed: %s"),
-    ERR_QUERY_EXCEPTION(5077, new byte[] {'4', '2', '0', '0', '0'},
+    ERR_QUERY_CANCELLED_BY_CRASH(5077, new byte[] {'X', 'X', '0', '0', '0'},
             "Query cancelled by crash of backends."),
     ERR_BAD_CATALOG_ERROR(5078, new byte[] {'4', '2', '0', '0', '0'},
             "Unknown catalog '%s'"),
@@ -274,6 +273,11 @@ public enum ErrorCode {
      */
     ERR_LOCK_ERROR(5300, new byte[] {'5', '5', 'P', '0', '3'}, "Failed to acquire lock: %s"),
     ERR_BEGIN_TXN_FAILED(5301, new byte[] {'5', '5', 'P', '0', '3'}, "Failed to begin transaction: %s"),
+    ERR_TXN_NOT_EXIST(5302, new byte[] {'2', '5', '0', 'P', '1'}, "Transaction %s does not exist"),
+    ERR_TXN_IMPORT_SAME_TABLE(5303, new byte[] {'2', '5', '0', 'P', '1'},
+            "NOT allowed to read or write tables that have been subjected to DML operations before"),
+    ERR_TXN_FORBID_CROSS_DB(5304, new byte[] {'2', '5', '0', 'P', '1'},
+            "Cannot execute cross-database transactions. All DML target tables must belong to the same db"),
 
     /**
      * 5400 - 5499: Internal error
@@ -339,6 +343,8 @@ public enum ErrorCode {
                     "You can modify 'kafka_offsets' property through ALTER ROUTINE LOAD and RESUME the job"),
     ERR_INSERT_COLUMN_NAME_MISMATCH(5608, new byte[] {'4', '2', '6', '0', '1'},
             "%s column: %s has no matching %s column"),
+    ERR_FAILED_WHEN_INSERT(5609, new byte[] {'H', 'Y', '0', '0', '0'}, "Failed when INSERT execute： '%s'"),
+    ERR_LOAD_HAS_FILTERED_DATA(5610, new byte[] {'H', 'Y', '0', '0', '0'}, "Insert has filtered data : %s"),
 
     /**
      * 5700 - 5799: Partition
