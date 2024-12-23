@@ -36,6 +36,7 @@ import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.TableSampleClause;
 import com.starrocks.sql.ast.ViewRelation;
+import com.starrocks.sql.ast.Relation;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -169,6 +170,14 @@ public class AstToSQLBuilder {
 
             if (selectList.isDistinct()) {
                 sqlBuilder.append("DISTINCT ");
+            }
+
+            //get catalog. database, tablename
+            Relation selectRelation = stmt.getRelation();
+            if (selectRelation instanceof TableRelation) {
+                TableRelation tableRelation = (TableRelation) stmt.getRelation();
+                QueryContext queryContext = new QueryContext(tableRelation.getName().getCatalog(), tableRelation.getName().getDb(), tableRelation.getName().getTbl());
+                QueryContext.setContext(queryContext);
             }
 
             List<String> selectListString = new ArrayList<>();
