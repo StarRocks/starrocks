@@ -40,6 +40,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalHudiScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalPaimonScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTreeAnchorOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
@@ -416,6 +417,13 @@ public class Utils {
                 return true;
             } else if (operator instanceof LogicalIcebergScanOperator) {
                 return ((LogicalIcebergScanOperator) operator).hasUnknownColumn();
+<<<<<<< HEAD
+=======
+            } else if (operator instanceof LogicalDeltaLakeScanOperator)  {
+                return ((LogicalDeltaLakeScanOperator) operator).hasUnknownColumn();
+            } else if (operator instanceof LogicalPaimonScanOperator) {
+                return ((LogicalPaimonScanOperator) operator).hasUnknownColumn();
+>>>>>>> ce4b5248a7 ([Enhancement] Support analyze paimon table and optimize query execution (#52858))
             } else {
                 // For other scan operators, we do not know the column statistics.
                 return true;

@@ -144,6 +144,19 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         }
     }
 
+<<<<<<< HEAD
+=======
+    public static final ImmutableSet<TableType> IS_ANALYZABLE_EXTERNAL_TABLE =
+            new ImmutableSet.Builder<TableType>()
+                    .add(TableType.HIVE)
+                    .add(TableType.ICEBERG)
+                    .add(TableType.HUDI)
+                    .add(TableType.ODPS)
+                    .add(TableType.DELTALAKE)
+                    .add(TableType.PAIMON)
+                    .build();
+
+>>>>>>> ce4b5248a7 ([Enhancement] Support analyze paimon table and optimize query execution (#52858))
     @SerializedName(value = "id")
     protected long id;
     @SerializedName(value = "name")

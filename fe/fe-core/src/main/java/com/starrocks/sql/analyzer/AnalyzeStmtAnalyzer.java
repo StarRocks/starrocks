@@ -138,7 +138,11 @@ public class AnalyzeStmtAnalyzer {
                 if (!analyzeTable.isHiveTable() && !analyzeTable.isIcebergTable() && !analyzeTable.isHudiTable() &&
                         !analyzeTable.isOdpsTable()) {
                     throw new SemanticException(
+<<<<<<< HEAD
                             "Analyze external table only support hive, iceberg and odps table",
+=======
+                            "Analyze external table only support hive, iceberg, deltalake, paimon and odps table",
+>>>>>>> ce4b5248a7 ([Enhancement] Support analyze paimon table and optimize query execution (#52858))
                             statement.getTableName().toString());
                 }
                 statement.setExternal(true);
@@ -171,11 +175,18 @@ public class AnalyzeStmtAnalyzer {
                     String dbName = Strings.isNullOrEmpty(tbl.getDb()) ?
                             session.getDatabase() : tbl.getDb();
                     tbl.setDb(dbName);
+<<<<<<< HEAD
                     Table analyzeTable = MetaUtils.getTable(session, statement.getTableName());
                     if (!analyzeTable.isHiveTable() && !analyzeTable.isIcebergTable() && !analyzeTable.isHudiTable() &&
                             !analyzeTable.isOdpsTable()) {
                         throw new SemanticException("Analyze external table only support hive, iceberg and odps table",
                                 statement.getTableName().toString());
+=======
+                    Table analyzeTable = MetaUtils.getSessionAwareTable(session, null, statement.getTableName());
+                    if (!analyzeTable.isAnalyzableExternalTable()) {
+                        throw new SemanticException("Analyze external table only support hive, iceberg, deltalake, " +
+                                "paimon and odps table", statement.getTableName().toString());
+>>>>>>> ce4b5248a7 ([Enhancement] Support analyze paimon table and optimize query execution (#52858))
                     }
                 }
 
