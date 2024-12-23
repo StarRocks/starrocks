@@ -341,8 +341,11 @@ public class OlapTableFactory implements AbstractTableFactory {
             Pair<Boolean, Boolean> analyzeRet = PropertyAnalyzer.analyzeEnablePersistentIndex(properties,
                     table.getKeysType() == KeysType.PRIMARY_KEYS);
             boolean enablePersistentIndex = analyzeRet.first;
-            boolean enablePersistentIndexByUser = analyzeRet.second;
-            if (enablePersistentIndex && table.isCloudNativeTable()) {
+            if (!enablePersistentIndex) {
+                throw new DdlException("The in-memory PK index has been deprecated. "
+                        + "Please set property enable_persistent_index to true.");
+            }
+            if (table.isCloudNativeTable()) {
                 TPersistentIndexType persistentIndexType;
                 try {
                     persistentIndexType = PropertyAnalyzer.analyzePersistentIndexType(properties);
@@ -358,17 +361,11 @@ public class OlapTableFactory implements AbstractTableFactory {
                                         isSetStoragePath()).collect(Collectors.toSet());
                 if (cnUnSetStoragePath.size() != 0 && persistentIndexType == TPersistentIndexType.LOCAL) {
                     // Check CN storage path when using local persistent index
-                    if (enablePersistentIndexByUser) {
-                        throw new DdlException("Cannot create cloud native table with local persistent index" +
-                                "when ComputeNode without storage_path, nodeId:" + cnUnSetStoragePath);
-                    } else {
-                        // if user has not requested persistent index, switch it to false
-                        enablePersistentIndex = false;
-                    }
+                    throw new DdlException("Cannot create cloud native table with local persistent index" +
+                            "when ComputeNode without storage_path, nodeId:" + cnUnSetStoragePath +
+                            ". Please use CloudNative persistent index.");
                 }
-                if (enablePersistentIndex) {
-                    table.setPersistentIndexType(persistentIndexType);
-                }
+                table.setPersistentIndexType(persistentIndexType);
             }
             table.setEnablePersistentIndex(enablePersistentIndex);
 
