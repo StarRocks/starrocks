@@ -872,7 +872,7 @@ CONF_Int64(object_storage_connect_timeout_ms, "-1");
 // Note that for Curl this config is converted to seconds by rounding down to the nearest whole second except when the
 // value is greater than 0 and less than 1000.
 // When it's 0, low speed limit check will be disabled.
-CONF_Int64(object_storage_request_timeout_ms, "-1");
+CONF_mInt64(object_storage_request_timeout_ms, "-1");
 // Request timeout for object storage specialized for rename_file operation.
 // if this parameter is 0, use object_storage_request_timeout_ms instead.
 CONF_Int64(object_storage_rename_file_request_timeout_ms, "30000");
@@ -1031,6 +1031,9 @@ CONF_mInt32(starlet_fs_read_prefetch_threadpool_size, "128");
 CONF_mInt32(starlet_fslib_s3client_nonread_max_retries, "5");
 CONF_mInt32(starlet_fslib_s3client_nonread_retry_scale_factor, "200");
 CONF_mInt32(starlet_fslib_s3client_connect_timeout_ms, "1000");
+// make starlet_fslib_s3client_request_timeout_ms as an alias of the object_storage_request_timeout_ms
+// NOTE: need to handle the negative value properly
+CONF_Alias(object_storage_request_timeout_ms, starlet_fslib_s3client_request_timeout_ms);
 CONF_mInt32(starlet_delete_files_max_key_in_batch, "1000");
 #endif
 
