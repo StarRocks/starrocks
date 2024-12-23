@@ -231,7 +231,7 @@ echo "start time: $(date), server uptime: $(uptime)"
 
 # StarRocksFE java process will write its process id into $pidfile
 if [ ${RUN_DAEMON} -eq 1 ]; then
-    nohup $LIMIT $JAVA $final_java_opt com.starrocks.StarRocksFE ${HELPER} ${HOST_TYPE} ${CLUSTER_SNAPSHOT} "$@" </dev/null &
+    nohup $LIMIT $JAVA $final_java_opt --add-opens=java.base/java.nio=org.apache.arrow.memory.core,ALL-UNNAMED com.starrocks.StarRocksFE ${HELPER} ${HOST_TYPE} ${CLUSTER_SNAPSHOT} "$@" </dev/null &
 else
-    exec $LIMIT $JAVA $final_java_opt com.starrocks.StarRocksFE ${HELPER} ${HOST_TYPE} ${CLUSTER_SNAPSHOT} "$@" </dev/null
+    exec $LIMIT $JAVA $final_java_opt --add-opens=java.base/java.nio=org.apache.arrow.memory.core,ALL-UNNAMED com.starrocks.StarRocksFE ${HELPER} ${HOST_TYPE} ${CLUSTER_SNAPSHOT} "$@" </dev/null
 fi
