@@ -18,6 +18,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import org.junit.Assert;
 import org.junit.Test;
 
+
 public class TableFunctionTest extends PlanTestBase {
     @Test
     public void testSql0() throws Exception {
