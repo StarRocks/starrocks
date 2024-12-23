@@ -205,92 +205,17 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
 
         ScanBuilderImpl scanBuilder = (ScanBuilderImpl) snapshot.getScanBuilder(engine);
         ScanImpl scan = (ScanImpl) scanBuilder.withFilter(engine, deltaLakePredicate).build();
-<<<<<<< HEAD
-=======
-        long estimateRowSize = table.getColumns().stream().mapToInt(column -> column.getType().getTypeSize()).sum();
-        return new Iterator<>() {
-            CloseableIterator<FilteredColumnarBatch> scanFilesAsBatches;
-            CloseableIterator<Row> scanFileRows;
-            boolean hasMore = true;
-
-            @Override
-            public boolean hasNext() {
-                if (hasMore) {
-                    ensureOpen();
-                }
-                return hasMore;
-            }
-
-            @Override
-            public Pair<FileScanTask, DeltaLakeAddFileStatsSerDe> next() {
-                ensureOpen();
-                Row scanFileRow = scanFileRows.next();
-
-                DeletionVectorDescriptor dv = InternalScanFileUtils.getDeletionVectorDescriptorFromRow(scanFileRow);
-                return ScanFileUtils.convertFromRowToFileScanTask(enableCollectColumnStats, scanFileRow, metadata,
-                                estimateRowSize, dv);
-            }
-
-            private void ensureOpen() {
-                try {
-                    if (scanFilesAsBatches == null) {
-                        scanFilesAsBatches = scan.getScanFiles(engine, true);
-                    }
-                    while (scanFileRows == null || !scanFileRows.hasNext()) {
-                        if (!scanFilesAsBatches.hasNext()) {
-                            scanFilesAsBatches.close();
-                            hasMore = false;
-                            break;
-                        }
-                        if (scanFileRows != null) {
-                            scanFileRows.close();
-                        }
-                        FilteredColumnarBatch scanFileBatch = scanFilesAsBatches.next();
-                        scanFileRows = scanFileBatch.getRows();
-                    }
-                } catch (IOException e) {
-                    LOG.error("Failed to get delta lake scan files", e);
-                    throw new StarRocksConnectorException("Failed to get delta lake scan files", e);
-                }
-            }
-        };
-    }
-
-    private RemoteFileInfoSource buildRemoteInfoSource(Table table, ScalarOperator operator, boolean enableCollectColumnStats) {
-        Iterator<Pair<FileScanTask, DeltaLakeAddFileStatsSerDe>> iterator =
-                buildFileScanTaskIterator(table, operator, enableCollectColumnStats);
-        return new RemoteFileInfoSource() {
-            @Override
-            public RemoteFileInfo getOutput() {
-                Pair<FileScanTask, DeltaLakeAddFileStatsSerDe> pair = iterator.next();
-                return new DeltaRemoteFileInfo(pair.first);
-            }
-
-            @Override
-            public boolean hasMoreOutput() {
-                return iterator.hasNext();
-            }
-        };
-    }
-
-    private void collectDeltaLakePlanFiles(PredicateSearchKey key, Table table, ScalarOperator operator,
-                                           ConnectContext connectContext, List<String> fieldNames) {
-        DeltaLakeTable deltaLakeTable = (DeltaLakeTable) table;
-        Metadata metadata = deltaLakeTable.getDeltaMetadata();
-        StructType schema = metadata.getSchema();
-        Set<String> partitionColumns = metadata.getPartitionColNames();
->>>>>>> 61118de428 ([BugFix] Fix query error for delta lake partitioned table with column mapping (#54204))
 
         Set<String> nonPartitionPrimitiveColumns;
         Set<String> partitionPrimitiveColumns;
         if (fieldNames != null) {
             nonPartitionPrimitiveColumns = fieldNames.stream()
                     .filter(column -> DeltaDataType.canUseStatsType(schema.get(column).getDataType())
-                    && !partitionColumns.contains(column))
+                            && !partitionColumns.contains(column))
                     .collect(Collectors.toSet());
             partitionPrimitiveColumns = fieldNames.stream()
                     .filter(column -> DeltaDataType.canUseStatsType(schema.get(column).getDataType())
-                    && partitionColumns.contains(column))
+                            && partitionColumns.contains(column))
                     .collect(Collectors.toSet());
         } else {
             nonPartitionPrimitiveColumns = schema.fieldNames().stream()
@@ -319,7 +244,7 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
 
                         if (enableCollectColumnStatistics(connectContext)) {
                             Pair<FileScanTask, DeltaLakeAddFileStatsSerDe> pair =
-                                    ScanFileUtils.convertFromRowToFileScanTask(true, scanFileRow, estimateRowSize);
+                                    ScanFileUtils.convertFromRowToFileScanTask(true, scanFileRow, metadata, estimateRowSize);
                             files.add(pair.first);
 
                             try (Timer ignored = Tracers.watchScope(EXTERNAL, "DELTA_LAKE.updateDeltaLakeFileStats")) {
@@ -328,7 +253,7 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
                             }
                         } else {
                             Pair<FileScanTask, DeltaLakeAddFileStatsSerDe> pair =
-                                    ScanFileUtils.convertFromRowToFileScanTask(false, scanFileRow, estimateRowSize);
+                                    ScanFileUtils.convertFromRowToFileScanTask(false, scanFileRow, metadata, estimateRowSize);
                             files.add(pair.first);
 
                             try (Timer ignored = Tracers.watchScope(EXTERNAL, "DELTA_LAKE.updateDeltaLakeCardinality")) {

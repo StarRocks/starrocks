@@ -21,13 +21,9 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.persist.gson.GsonUtils;
 import io.delta.kernel.data.Row;
 import io.delta.kernel.internal.InternalScanFileUtils;
-<<<<<<< HEAD
-=======
-import io.delta.kernel.internal.actions.DeletionVectorDescriptor;
 import io.delta.kernel.internal.actions.Metadata;
 import io.delta.kernel.internal.util.ColumnMapping;
 import io.delta.kernel.types.StructField;
->>>>>>> 61118de428 ([BugFix] Fix query error for delta lake partitioned table with column mapping (#54204))
 import io.delta.kernel.utils.FileStatus;
 import org.apache.commons.collections4.map.CaseInsensitiveMap;
 
@@ -87,14 +83,10 @@ public class ScanFileUtils {
     }
 
     public static Pair<FileScanTask, DeltaLakeAddFileStatsSerDe> convertFromRowToFileScanTask(
-<<<<<<< HEAD
-            boolean needStats, Row file, long estimateRowSize) {
-=======
-            boolean needStats, Row file, Metadata metadata, long estimateRowSize, DeletionVectorDescriptor dv) {
+            boolean needStats, Row file, Metadata metadata, long estimateRowSize) {
         Set<String> partitionColumns = metadata.getPartitionColNames();
         Map<String, StructField> schema = buildCaseInsensitiveSchema(metadata.getSchema().fields());
 
->>>>>>> 61118de428 ([BugFix] Fix query error for delta lake partitioned table with column mapping (#54204))
         FileStatus fileStatus = InternalScanFileUtils.getAddFileStatus(file);
         Map<String, String> partitionValues = InternalScanFileUtils.getPartitionValues(file);
         Map<String, String> physicalNameToPartitionNameMap = Maps.newHashMap();
@@ -116,19 +108,11 @@ public class ScanFileUtils {
         if (needStats) {
             DeltaLakeAddFileStatsSerDe stats = ScanFileUtils.getColumnStatistics(
                     addFileRow, fileStatus, estimateRowSize);
-<<<<<<< HEAD
-            fileScanTask = new FileScanTask(fileStatus, stats.numRecords, partitionValues);
+            fileScanTask = new FileScanTask(fileStatus, stats.numRecords, logicalPartitionValues);
             return new Pair<>(fileScanTask, stats);
         } else {
             long records = ScanFileUtils.getFileRows(addFileRow, fileStatus, estimateRowSize);
-            fileScanTask = new FileScanTask(fileStatus, records, partitionValues);
-=======
-            fileScanTask = new FileScanTask(fileStatus, stats.numRecords, logicalPartitionValues, dv);
-            return new Pair<>(fileScanTask, stats);
-        } else {
-            long records = ScanFileUtils.getFileRows(addFileRow, fileStatus, estimateRowSize);
-            fileScanTask = new FileScanTask(fileStatus, records, logicalPartitionValues, dv);
->>>>>>> 61118de428 ([BugFix] Fix query error for delta lake partitioned table with column mapping (#54204))
+            fileScanTask = new FileScanTask(fileStatus, records, logicalPartitionValues);
             return new Pair<>(fileScanTask, null);
         }
     }
