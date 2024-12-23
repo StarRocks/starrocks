@@ -27,12 +27,21 @@ namespace starrocks::lake {
 
 void LoadSpillBlockContainer::append_block(const spill::BlockPtr& block) {
     std::lock_guard guard(_mutex);
-    _blocks.emplace_back(block);
+    _block_groups.back().append(block);
 }
 
-size_t LoadSpillBlockContainer::block_count() {
+void LoadSpillBlockContainer::create_block_group() {
     std::lock_guard guard(_mutex);
-    return _blocks.size();
+    _block_groups.push_back(spill::BlockGroup());
+}
+
+bool LoadSpillBlockContainer::empty() {
+    std::lock_guard guard(_mutex);
+    return _block_groups.empty();
+}
+
+spill::BlockPtr LoadSpillBlockContainer::get_block(size_t gid, size_t bid) {
+    return _block_groups[gid].blocks()[bid];
 }
 
 LoadSpillBlockManager::~LoadSpillBlockManager() {
@@ -74,7 +83,6 @@ StatusOr<spill::BlockPtr> LoadSpillBlockManager::acquire_block(size_t block_size
     if (!block.ok()) {
         return block.status();
     }
-    _block_container->append_block(block.value());
     return block.value();
 }
 

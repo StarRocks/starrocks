@@ -16,6 +16,7 @@
 
 #include "exec/spill/block_manager.h"
 #include "exec/spill/dir_manager.h"
+#include "exec/spill/input_stream.h"
 
 namespace starrocks {
 
@@ -23,17 +24,17 @@ namespace lake {
 
 class LoadSpillBlockContainer {
 public:
-    LoadSpillBlockContainer() {}
-    ~LoadSpillBlockContainer() = default;
-
     void append_block(const spill::BlockPtr& block);
-    size_t block_count();
+    void create_block_group();
+    bool empty();
     // No thread safe, UT only
-    spill::BlockPtr get_block(size_t idx) { return _blocks[idx]; }
+    spill::BlockPtr get_block(size_t gid, size_t bid);
 
 private:
-    std::mutex _mutex;                    // Mutex for the container.
-    std::vector<spill::BlockPtr> _blocks; // Blocks generated when loading.
+    // Mutex for the container.
+    std::mutex _mutex;
+    // Blocks generated when loading. Each block group contains multiple blocks which are ordered.
+    std::vector<spill::BlockGroup> _block_groups;
 };
 
 class LoadSpillBlockManager {

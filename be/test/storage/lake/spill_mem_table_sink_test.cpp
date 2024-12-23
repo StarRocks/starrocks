@@ -100,9 +100,9 @@ TEST_F(SpillMemTableSinkTest, test_flush_chunk) {
         // write chunk to spill
         ASSERT_OK(sink.flush_chunk(*chunk, &segment, false));
         // read block
-        auto block = block_manager->block_container()->get_block(i);
+        auto block = block_manager->block_container()->get_block(i, 0);
         ASSERT_TRUE(block != nullptr);
-        ASSERT_TRUE(block_manager->block_container()->block_count() == i + 1);
+        ASSERT_FALSE(block_manager->block_container()->empty());
         spill::SerdeContext ctx;
         spill::BlockReaderOptions options2;
         RuntimeProfile::Counter* read_io_timer = ADD_TIMER(&_dummy_runtime_profile, "ReadIOTime");
@@ -140,7 +140,7 @@ TEST_F(SpillMemTableSinkTest, test_flush_chunk_with_deletes) {
         // write chunk to spill
         ASSERT_OK(sink.flush_chunk_with_deletes(*chunk, *(chunk->columns()[0]), &segment, false));
         // read block
-        auto block = block_manager->block_container()->get_block(i);
+        auto block = block_manager->block_container()->get_block(i, 0);
         ASSERT_TRUE(block != nullptr);
         spill::SerdeContext ctx;
         spill::BlockReaderOptions options2;
@@ -190,6 +190,49 @@ TEST_F(SpillMemTableSinkTest, test_flush_chunk_with_delete2) {
     starrocks::SegmentPB segment;
     ASSERT_OK(sink.flush_chunk_with_deletes(*chunk, *(chunk->columns()[0]), &segment, true));
     ASSERT_TRUE(tablet_writer->files().size() == 2);
+}
+
+TEST_F(SpillMemTableSinkTest, test_flush_chunk_with_limit) {
+    int64_t tablet_id = 1;
+    int64_t txn_id = 1;
+    std::unique_ptr<LoadSpillBlockManager> block_manager =
+            std::make_unique<LoadSpillBlockManager>(TUniqueId(), tablet_id, txn_id, kTestDir);
+    ASSERT_OK(block_manager->init());
+    std::unique_ptr<TabletWriter> tablet_writer = std::make_unique<HorizontalGeneralTabletWriter>(
+            _tablet_mgr.get(), tablet_id, _tablet_schema, txn_id, false);
+    SpillMemTableSink sink(block_manager.get(), tablet_writer.get());
+    for (int i = 0; i < 3; i++) {
+        int64_t old_val = config::load_spill_max_chunk_bytes;
+        config::load_spill_max_chunk_bytes = 1;
+        // 3 times
+        auto chunk = gen_data(kChunkSize, i);
+        starrocks::SegmentPB segment;
+        // write chunk to spill
+        ASSERT_OK(sink.flush_chunk(*chunk, &segment, false));
+        // read block
+        auto block = block_manager->block_container()->get_block(i, 0);
+        ASSERT_TRUE(block != nullptr);
+        ASSERT_FALSE(block_manager->block_container()->empty());
+        spill::SerdeContext ctx;
+        spill::BlockReaderOptions options2;
+        RuntimeProfile::Counter* read_io_timer = ADD_TIMER(&_dummy_runtime_profile, "ReadIOTime");
+        RuntimeProfile::Counter* read_io_count = ADD_COUNTER(&_dummy_runtime_profile, "ReadIOCount", TUnit::UNIT);
+        RuntimeProfile::Counter* read_io_bytes = ADD_COUNTER(&_dummy_runtime_profile, "ReadIOBytes", TUnit::BYTES);
+        options2.read_io_timer = read_io_timer;
+        options2.read_io_count = read_io_count;
+        options2.read_io_bytes = read_io_bytes;
+        // 3. read block data
+        auto reader = block->get_reader(options2);
+        for (int j = 0; j < kChunkSize; j++) {
+            ASSIGN_OR_ABORT(auto result_chunk, sink.get_spiller()->serde()->deserialize(ctx, reader.get()));
+            // 4. check result
+            EXPECT_EQ(j + i * kChunkSize, result_chunk->get(0)[0].get_int32());
+            EXPECT_EQ((j + i * kChunkSize) * 3, result_chunk->get(0)[1].get_int32());
+        }
+        config::load_spill_max_chunk_bytes = old_val;
+    }
+    ASSERT_OK(sink.merge_blocks_to_segments());
+    ASSERT_TRUE(tablet_writer->files().size() == 0);
 }
 
 } // namespace starrocks::lake

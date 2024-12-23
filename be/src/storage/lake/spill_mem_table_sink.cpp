@@ -30,20 +30,42 @@ Status LoadSpillOutputDataStream::append(RuntimeState* state, const std::vector<
     size_t total_size = 0;
     // calculate total size
     std::for_each(data.begin(), data.end(), [&](const Slice& slice) { total_size += slice.size; });
-    // acquire block
-    ASSIGN_OR_RETURN(_block, _block_manager->acquire_block(total_size));
+    // preallocate block
+    RETURN_IF_ERROR(_preallocate(total_size));
     // append data
     return _block->append(data);
 }
 
 Status LoadSpillOutputDataStream::flush() {
-    RETURN_IF_ERROR(_block->flush());
-    RETURN_IF_ERROR(_block_manager->release_block(_block));
+    RETURN_IF_ERROR(_freeze_current_block());
     return Status::OK();
 }
 
 bool LoadSpillOutputDataStream::is_remote() const {
-    return _block->is_remote();
+    return _block ? _block->is_remote() : false;
+}
+
+Status LoadSpillOutputDataStream::_freeze_current_block() {
+    if (_block == nullptr) {
+        return Status::OK();
+    }
+    RETURN_IF_ERROR(_block->flush());
+    RETURN_IF_ERROR(_block_manager->release_block(_block));
+    // Save this block into block container.
+    _block_manager->block_container()->append_block(_block);
+    _block = nullptr;
+    return Status::OK();
+}
+
+Status LoadSpillOutputDataStream::_preallocate(size_t block_size) {
+    // Try to preallocate from current block first.
+    if (_block == nullptr || !_block->preallocate(block_size)) {
+        // Freeze current block firstly.
+        RETURN_IF_ERROR(_freeze_current_block());
+        // Acquire new block.
+        ASSIGN_OR_RETURN(_block, _block_manager->acquire_block(block_size));
+    }
+    return Status::OK();
 }
 
 SpillMemTableSink::SpillMemTableSink(LoadSpillBlockManager* block_manager, TabletWriter* w) {
@@ -69,27 +91,42 @@ Status SpillMemTableSink::_prepare(const ChunkPtr& chunk_ptr) {
     return Status::OK();
 }
 
+Status SpillMemTableSink::_do_spill(const Chunk& chunk, const spill::SpillOutputDataStreamPtr& output) {
+    // 1. caclulate per row memory usage
+    const int64_t per_row_memory_usage = chunk.memory_usage() / chunk.num_rows();
+    const int64_t spill_rows = config::load_spill_max_chunk_bytes / (per_row_memory_usage + 1) + 1;
+    // 2. serialize chunk
+    for (int64_t rowid = 0; rowid < chunk.num_rows(); rowid += spill_rows) {
+        int64_t rows = std::min(spill_rows, (int64_t)chunk.num_rows() - rowid);
+        ChunkPtr each_chunk = std::move(chunk.clone_empty());
+        each_chunk->append(chunk, rowid, rows);
+        RETURN_IF_ERROR(_prepare(each_chunk));
+        spill::SerdeContext ctx;
+        RETURN_IF_ERROR(_spiller->serde()->serialize(_runtime_state.get(), ctx, each_chunk, output, true));
+    }
+    return Status::OK();
+}
+
 Status SpillMemTableSink::flush_chunk(const Chunk& chunk, starrocks::SegmentPB* segment, bool eos) {
-    if (eos && _block_manager->block_container()->block_count() == 0) {
+    if (eos && _block_manager->block_container()->empty()) {
         // If there is only one flush, flush it to segment directly
         RETURN_IF_ERROR(_writer->write(chunk, segment));
         return _writer->flush(segment);
     }
-    ChunkPtr chunk_ptr(const_cast<Chunk*>(&chunk), [](Chunk*) { /* do nothing */ });
-    // 1. prepare
-    RETURN_IF_ERROR(_prepare(chunk_ptr));
-    // 3. serialize chunk
+    if (chunk.num_rows() == 0) return Status::OK();
+    // 1. create new block group
+    _block_manager->block_container()->create_block_group();
     auto output = std::make_shared<LoadSpillOutputDataStream>(_block_manager);
-    spill::SerdeContext ctx;
-    RETURN_IF_ERROR(_spiller->serde()->serialize(_runtime_state.get(), ctx, chunk_ptr, output, true));
-    // 4. flush
+    // 2. spill
+    RETURN_IF_ERROR(_do_spill(chunk, output));
+    // 3. flush
     RETURN_IF_ERROR(output->flush());
     return Status::OK();
 }
 
 Status SpillMemTableSink::flush_chunk_with_deletes(const Chunk& upserts, const Column& deletes,
                                                    starrocks::SegmentPB* segment, bool eos) {
-    if (eos && _block_manager->block_container()->block_count() == 0) {
+    if (eos && _block_manager->block_container()->empty()) {
         // If there is only one flush, flush it to segment directly
         RETURN_IF_ERROR(_writer->flush_del_file(deletes));
         RETURN_IF_ERROR(_writer->write(upserts, segment));

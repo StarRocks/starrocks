@@ -40,6 +40,12 @@ public:
     bool is_remote() const override;
 
 private:
+    Status _preallocate(size_t block_size);
+
+    // Freeze current block and append it to block container
+    Status _freeze_current_block();
+
+private:
     LoadSpillBlockManager* _block_manager = nullptr;
     spill::BlockPtr _block;
 };
@@ -60,6 +66,7 @@ public:
 
 private:
     Status _prepare(const ChunkPtr& chunk_ptr);
+    Status _do_spill(const Chunk& chunk, const spill::SpillOutputDataStreamPtr& output);
 
 private:
     LoadSpillBlockManager* _block_manager = nullptr;
