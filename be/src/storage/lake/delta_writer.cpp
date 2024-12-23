@@ -31,6 +31,7 @@
 #include "storage/lake/meta_file.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/pk_tablet_writer.h"
+#include "storage/lake/spill_mem_table_sink.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_writer.h"
@@ -53,13 +54,13 @@ public:
 
     DISALLOW_COPY_AND_MOVE(TabletWriterSink);
 
-    Status flush_chunk(const Chunk& chunk, starrocks::SegmentPB* segment = nullptr) override {
+    Status flush_chunk(const Chunk& chunk, starrocks::SegmentPB* segment = nullptr, bool eos = false) override {
         RETURN_IF_ERROR(_writer->write(chunk, segment));
         return _writer->flush(segment);
     }
 
     Status flush_chunk_with_deletes(const Chunk& upserts, const Column& deletes,
-                                    starrocks::SegmentPB* segment = nullptr) override {
+                                    starrocks::SegmentPB* segment = nullptr, bool eos = false) override {
         RETURN_IF_ERROR(_writer->flush_del_file(deletes));
         RETURN_IF_ERROR(_writer->write(upserts, segment));
         return _writer->flush(segment);
@@ -152,6 +153,8 @@ private:
 
     bool is_partial_update();
 
+    Status merge_blocks_to_segments();
+
     TabletManager* _tablet_manager;
     const int64_t _tablet_id;
     const int64_t _txn_id;
@@ -208,6 +211,8 @@ private:
     PUniqueId _load_id;
     // Used for maintain spill block for bulk load.
     std::unique_ptr<LoadSpillBlockManager> _load_spill_block_mgr;
+    // End of data ingestion
+    bool _eos = false;
 };
 
 bool DeltaWriterImpl::is_immutable() const {
@@ -245,7 +250,19 @@ Status DeltaWriterImpl::build_schema_and_writer() {
                                                                              _txn_id, false);
         }
         RETURN_IF_ERROR(_tablet_writer->open());
-        _mem_table_sink = std::make_unique<TabletWriterSink>(_tablet_writer.get());
+        if (config::enable_load_spill) {
+            if (_load_spill_block_mgr == nullptr) {
+                _load_spill_block_mgr =
+                        std::make_unique<LoadSpillBlockManager>(UniqueId(_load_id).to_thrift(), _tablet_id, _txn_id,
+                                                                _tablet_manager->tablet_root_location(_tablet_id));
+                RETURN_IF_ERROR(_load_spill_block_mgr->init());
+            }
+            // Init SpillMemTableSink
+            _mem_table_sink = std::make_unique<SpillMemTableSink>(_load_spill_block_mgr.get(), _tablet_writer.get());
+        } else {
+            // Init normal TabletWriterSink
+            _mem_table_sink = std::make_unique<TabletWriterSink>(_tablet_writer.get());
+        }
         _write_schema_for_mem_table = MemTable::convert_schema(_write_schema, _slots);
 
         DCHECK_LE(_write_schema->num_columns(), _tablet_schema->num_columns());
@@ -276,7 +293,7 @@ inline Status DeltaWriterImpl::flush_async() {
         if (_miss_auto_increment_column && _mem_table->get_result_chunk() != nullptr) {
             RETURN_IF_ERROR(fill_auto_increment_id(*_mem_table->get_result_chunk()));
         }
-        st = _flush_token->submit(std::move(_mem_table), false, [this](std::unique_ptr<SegmentPB> seg, bool eos) {
+        st = _flush_token->submit(std::move(_mem_table), _eos, [this](std::unique_ptr<SegmentPB> seg, bool eos) {
             if (_immutable_tablet_size > 0 && !_is_immutable.load(std::memory_order_relaxed)) {
                 if (seg) {
                     _tablet_manager->add_in_writing_data_size(_tablet_id, seg->data_size());
@@ -285,7 +302,8 @@ inline Status DeltaWriterImpl::flush_async() {
                     _is_immutable.store(true, std::memory_order_relaxed);
                 }
                 VLOG(2) << "flush memtable, tablet=" << _tablet_id << ", txn=" << _txn_id
-                        << " _immutable_tablet_size=" << _immutable_tablet_size << ", segment_size=" << seg->data_size()
+                        << " _immutable_tablet_size=" << _immutable_tablet_size
+                        << ", segment_size=" << (seg ? seg->data_size() : 0)
                         << ", in_writing_data_size=" << _tablet_manager->in_writing_data_size(_tablet_id)
                         << ", is_immutable=" << _is_immutable.load(std::memory_order_relaxed);
             }
@@ -364,11 +382,6 @@ Status DeltaWriterImpl::check_partial_update_with_sort_key(const Chunk& chunk) {
 Status DeltaWriterImpl::write(const Chunk& chunk, const uint32_t* indexes, uint32_t indexes_size) {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
 
-    if (_load_spill_block_mgr == nullptr) {
-        _load_spill_block_mgr = std::make_unique<LoadSpillBlockManager>(
-                UniqueId(_load_id).to_thrift(), _tablet_manager->tablet_root_location(_tablet_id));
-        //RETURN_IF_ERROR(_load_spill_block_mgr->init());
-    }
     if (_mem_table == nullptr) {
         // When loading memory usage is larger than hard limit, we will reject new loading task.
         if (!config::enable_new_load_on_memory_limit_exceeded &&
@@ -452,10 +465,20 @@ bool DeltaWriterImpl::is_partial_update() {
     return _write_schema->num_columns() < _tablet_schema->num_columns();
 }
 
+Status DeltaWriterImpl::merge_blocks_to_segments() {
+    if (auto spill_sink = dynamic_cast<SpillMemTableSink*>(_mem_table_sink.get())) {
+        // merge spill blocks to segments
+        RETURN_IF_ERROR(spill_sink->merge_blocks_to_segments());
+    }
+    return Status::OK();
+}
+
 Status DeltaWriterImpl::finish() {
+    _eos = true;
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
     RETURN_IF_ERROR(build_schema_and_writer());
     RETURN_IF_ERROR(flush());
+    RETURN_IF_ERROR(merge_blocks_to_segments());
     RETURN_IF_ERROR(_tablet_writer->finish());
     return Status::OK();
 }

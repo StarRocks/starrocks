@@ -96,7 +96,7 @@ public:
     // return true suggests caller should flush this memory table
     StatusOr<bool> insert(const Chunk& chunk, const uint32_t* indexes, uint32_t from, uint32_t size);
 
-    Status flush(SegmentPB* seg_info = nullptr);
+    Status flush(SegmentPB* seg_info = nullptr, bool eos = false);
 
     Status finalize();
 
