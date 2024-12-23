@@ -1168,8 +1168,13 @@ insertStatement
 
 // for compatibility with the case 'LABEL before columnAliases'
 insertLabelOrColumnAliases
-    : WITH LABEL label=identifier
-    | columnAliases
+    : columnAliasesOrByName
+    | WITH LABEL label=identifier
+    ;
+
+columnAliasesOrByName
+    : columnAliases
+    | BY NAME
     ;
 
 updateStatement
