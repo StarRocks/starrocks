@@ -30,7 +30,7 @@ test_clear_stats.tbl	analyze	status	OK
 -- !result
 insert into _statistics_.column_statistics
 select
-table_id, 1 , column_name, db_id, table_name, partition_name, row_count, data_size, ndv, null_count,max, min, '2024-05-01'
+table_id, 1 , column_name, db_id, table_name, partition_name, row_count, data_size, ndv, null_count,max, min, '2024-05-01', collection_size  
 from _statistics_.column_statistics where table_name = 'test_clear_stats.tbl' limit 1;
 -- result:
 -- !result

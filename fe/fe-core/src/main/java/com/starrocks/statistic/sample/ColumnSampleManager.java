@@ -48,7 +48,7 @@ public class ColumnSampleManager {
             Type columnType = columnTypes.get(i);
 
             if (table.getColumn(columnName) != null) {
-                if (columnType.canStatistic()) {
+                if (columnType.canStatistic() && !columnType.isCollectionType()) {
                     if (onlyOneDistributionCol && table.getDistributionColumnNames().contains(columnName)) {
                         primitiveTypeStats.add(new DistributionColumnStats(columnName, columnType, sampleInfo));
                         onlyOneDistributionCol = false;
@@ -91,7 +91,7 @@ public class ColumnSampleManager {
                     }
                 }
                 if (!names.isEmpty()) {
-                    if (columnType.canStatistic()) {
+                    if (columnType.canStatistic() && !columnType.isCollectionType()) {
                         primitiveTypeStats.add(new SubFieldColumnStats(names, columnType));
                     } else {
                         complexTypeStats.add(new SubFieldColumnStats(names, columnType));
