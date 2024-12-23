@@ -192,6 +192,7 @@ void UpdateManager::unload_and_remove_primary_index(int64_t tablet_id) {
 StatusOr<IndexEntry*> UpdateManager::rebuild_primary_index(
         const TabletMetadataPtr& metadata, MetaFileBuilder* builder, int64_t base_version, int64_t new_version,
         std::unique_ptr<std::lock_guard<std::shared_timed_mutex>>& guard) {
+    LOG(INFO) << "rebuild tablet: " << metadata->id() << " primary index, version: " << base_version;
     unload_and_remove_primary_index(metadata->id());
     return prepare_primary_index(metadata, builder, base_version, new_version, guard);
 }

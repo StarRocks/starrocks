@@ -1124,8 +1124,12 @@ timeUnit
     | MINUTES
     ;
 
+integer_list
+    : '(' INTEGER_VALUE (',' INTEGER_VALUE)* ')'
+    ;
+
 dropPersistentIndexClause
-    : DROP PERSISTENT INDEX ON INTEGER_VALUE (',' INTEGER_VALUE)*
+    : DROP PERSISTENT INDEX ON TABLETS integer_list
     ;
 
 // ---------Alter partition clause---------
@@ -2929,4 +2933,5 @@ nonReserved
     | DOTDOTDOT | NGRAMBF | VECTOR
     | FIELD
     | ARRAY_ELEMENT
+    | PERSISTENT
     ;

@@ -89,7 +89,7 @@ public class LakeTableDropPersistentIndexTest {
         Assert.assertTrue(tablets.size() == 2);
 
         {
-            String sql = "ALTER TABLE t0 DROP PERSISTENT INDEX ON 2333";
+            String sql = "ALTER TABLE t0 DROP PERSISTENT INDEX ON TABLETS (2333)";
             AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             try {
                 GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(connectContext, stmt);
@@ -100,7 +100,7 @@ public class LakeTableDropPersistentIndexTest {
 
         {
             table.setPersistentIndexType(TPersistentIndexType.CLOUD_NATIVE);
-            String sql = "ALTER TABLE t0 DROP PERSISTENT INDEX ON 2333";
+            String sql = "ALTER TABLE t0 DROP PERSISTENT INDEX ON TABLETS (2333)";
             AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             try {
                 GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(connectContext, stmt);
@@ -110,7 +110,7 @@ public class LakeTableDropPersistentIndexTest {
         }
 
         {
-            String sql = "ALTER TABLE t0 DROP PERSISTENT INDEX ON " + String.valueOf(tablets.get(0).getId());
+            String sql = "ALTER TABLE t0 DROP PERSISTENT INDEX ON TABLETS (" + String.valueOf(tablets.get(0).getId()) + ")";
             AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             try {
                 GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(connectContext, stmt);
@@ -119,7 +119,7 @@ public class LakeTableDropPersistentIndexTest {
                 Assert.assertTrue(((LakeTablet) tablets.get(1)).rebuildPindexVersion() == 0);
 
                 physicalPartitions.get(0).setVisibleVersion(10, 1000);
-                sql = "ALTER TABLE t0 DROP PERSISTENT INDEX ON " + String.valueOf(tablets.get(1).getId());
+                sql = "ALTER TABLE t0 DROP PERSISTENT INDEX ON TABLETS (" + String.valueOf(tablets.get(1).getId()) + ")";
                 stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
                 GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(connectContext, stmt);
                 long rebuildVersion = ((LakeTablet) tablets.get(0)).rebuildPindexVersion();

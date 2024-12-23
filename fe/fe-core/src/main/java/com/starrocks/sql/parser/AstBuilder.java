@@ -4466,7 +4466,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         Set<Long> tabletIds = Sets.newHashSet();
 
         // Iterate through the integerValueList in the context
-        for (TerminalNode integerValueNode : context.INTEGER_VALUE()) {
+        StarRocksParser.Integer_listContext integerListContext = context.integer_list();
+        for (TerminalNode integerValueNode : integerListContext.INTEGER_VALUE()) {
             try {
                 // Parse each INTEGER_VALUE as a Long and add it to tabletIds
                 Long tabletId = Long.parseLong(integerValueNode.getText());
