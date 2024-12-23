@@ -166,7 +166,7 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
         context.put("tableName", table.getName());
         context.put("catalogName", this.catalogName);
 
-        if (!columnType.canStatistic()) {
+        if (!columnType.canStatistic() || columnType.isCollectionType()) {
             context.put("hllFunction", "hex(hll_serialize(hll_empty()))");
             context.put("countNullFunction", "0");
             context.put("maxFunction", "''");

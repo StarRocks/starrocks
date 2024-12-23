@@ -42,6 +42,9 @@ private:
     StatusOr<TFetchDataResultPtr> _process_chunk(Chunk* chunk);
 
     Status _fill_statistic_data_v1(int version, const Columns& columns, const Chunk* chunk, TFetchDataResult* result);
+
+    Status _fill_statistic_data_v2(int version, const Columns& columns, const Chunk* chunk, TFetchDataResult* result);
+
     Status _fill_dict_statistic_data(int version, const Columns& columns, const Chunk* chunk, TFetchDataResult* result);
 
     Status _fill_statistic_histogram(int version, const Columns& columns, const Chunk* chunk, TFetchDataResult* result);
@@ -52,6 +55,9 @@ private:
                                           TFetchDataResult* result);
 
     Status _fill_full_statistic_data_v4(int version, const Columns& columns, const Chunk* chunk,
+                                        TFetchDataResult* result);
+
+    Status _fill_full_statistic_data_v5(int version, const Columns& columns, const Chunk* chunk,
                                         TFetchDataResult* result);
 
     Status _fill_full_statistic_data_external(int version, const Columns& columns, const Chunk* chunk,
