@@ -313,9 +313,16 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
                 // validate azure_blob_path configuration
                 normalizeConfigPath(Config.azure_blob_path, "azblob", "Config.azure_blob_path", true);
                 break;
+            case "adls2":
+                if (Config.azure_adls2_endpoint.isEmpty()) {
+                    throw new InvalidConfException("The configuration item \"azure_adls2_endpoint\" is empty.");
+                }
+                // validate azure_adls2_path configuration
+                normalizeConfigPath(Config.azure_adls2_path, "adls2", "Config.azure_adls2_path", true);
+                break;
             default:
                 throw new InvalidConfException(String.format(
-                        "The configuration item \"cloud_native_storage_type = %s\" is invalid, must be HDFS or S3 or AZBLOB.",
+                        "The configuration item \"cloud_native_storage_type = %s\" is invalid, must be HDFS S3 AZBLOB or ADLS2.",
                         Config.cloud_native_storage_type));
         }
     }
@@ -430,6 +437,10 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
                 uri = normalizeConfigPath(Config.azure_blob_path, "azblob", "Config.azure_blob_path", true);
                 locations.add(uri.toString());
                 break;
+            case "adls2":
+                uri = normalizeConfigPath(Config.azure_adls2_path, "adls2", "Config.azure_adls2_path", true);
+                locations.add(uri.toString());
+                break;
             default:
                 return locations;
         }
@@ -458,6 +469,11 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
                 params.put(CloudConfigurationConstants.AZURE_BLOB_SHARED_KEY, Config.azure_blob_shared_key);
                 params.put(CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN, Config.azure_blob_sas_token);
                 params.put(CloudConfigurationConstants.AZURE_BLOB_ENDPOINT, Config.azure_blob_endpoint);
+                break;
+            case "adls2":
+                params.put(CloudConfigurationConstants.AZURE_ADLS2_SHARED_KEY, Config.azure_adls2_shared_key);
+                params.put(CloudConfigurationConstants.AZURE_ADLS2_SAS_TOKEN, Config.azure_adls2_sas_token);
+                params.put(CloudConfigurationConstants.AZURE_ADLS2_ENDPOINT, Config.azure_adls2_endpoint);
                 break;
             default:
                 return params;
