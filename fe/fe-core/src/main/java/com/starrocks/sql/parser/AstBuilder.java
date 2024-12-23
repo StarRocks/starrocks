@@ -2216,7 +2216,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
 
             String label = null;
+            boolean hasColumnAliases = false;
+            boolean hasByName = false;
             List<String> columnAliases = null;
+            InsertStmt.ColumnMatchPolicy columnMatchPolicy = InsertStmt.ColumnMatchPolicy.POSITION;
             for (StarRocksParser.InsertLabelOrColumnAliasesContext desc : ListUtils.emptyIfNull(
                     context.insertLabelOrColumnAliases())) {
                 NodePosition clausePos = createPos(desc);
@@ -2226,11 +2229,25 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     }
                     label = ((Identifier) visit(desc.label)).getValue();
                 }
-                if (desc.columnAliases() != null) {
-                    if (columnAliases != null) {
+                if (desc.columnAliasesOrByName() != null) {
+                    StarRocksParser.ColumnAliasesOrByNameContext columnAliasesOrByNameContext = desc.columnAliasesOrByName();
+                    if (hasColumnAliases && columnAliasesOrByNameContext.columnAliases() != null) {
                         throw new ParsingException(PARSER_ERROR_MSG.duplicatedClause("COLUMN LIST", "insert"), clausePos);
+                    } else if (hasByName && columnAliasesOrByNameContext.BY() != null) {
+                        throw new ParsingException(PARSER_ERROR_MSG.duplicatedClause("BY NAME", "insert"), clausePos);
+                    } else if (hasColumnAliases || hasByName) {
+                        throw new ParsingException("Cannot use COLUMN LIST and BY NAME clause together in insert");
                     }
-                    columnAliases = getColumnNames(desc.columnAliases());
+
+                    if (columnAliasesOrByNameContext.columnAliases() != null) {
+                        columnAliases = getColumnNames(columnAliasesOrByNameContext.columnAliases());
+                        hasColumnAliases = true;
+                    } else {
+                        Preconditions.checkState(columnAliasesOrByNameContext.BY() != null &&
+                                columnAliasesOrByNameContext.NAME() != null);
+                        columnMatchPolicy = InsertStmt.ColumnMatchPolicy.NAME;
+                        hasByName = true;
+                    }
                 }
             }
 
@@ -2238,6 +2255,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     context.OVERWRITE() != null, getProperties(context.properties()), createPos(context));
             stmt.setHintNodes(hintMap.get(context));
             stmt.setTargetBranch(targetBranch);
+            stmt.setColumnMatchPolicy(columnMatchPolicy);
             return stmt;
         }
 
