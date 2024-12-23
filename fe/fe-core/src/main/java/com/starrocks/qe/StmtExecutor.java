@@ -2251,6 +2251,7 @@ public class StmtExecutor {
                         estimateScanFileSize,
                         type,
                         ConnectContext.get().getSessionVariable().getQueryTimeoutS(),
+                        context.getCurrentWarehouseId(),
                         coord);
                 if (txnState != null) {
                     txnState.setCallbackId(jobId);
