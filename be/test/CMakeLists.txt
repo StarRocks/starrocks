@@ -271,6 +271,7 @@ set(EXEC_FILES
         ./storage/lake/compaction_task_context_test.cpp
         ./storage/lake/lake_primary_key_consistency_test.cpp
         ./storage/lake/load_spill_block_manager_test.cpp
+        ./storage/lake/spill_mem_table_sink_test.cpp
         ./storage/rowset_update_state_test.cpp
         ./storage/rowset_column_update_state_test.cpp
         ./storage/rowset_column_partial_update_test.cpp

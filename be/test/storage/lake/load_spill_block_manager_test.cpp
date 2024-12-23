@@ -35,17 +35,17 @@ protected:
 
 TEST_F(LoadSpillBlockManagerTest, test_basic) {
     std::unique_ptr<LoadSpillBlockManager> block_manager =
-            std::make_unique<LoadSpillBlockManager>(TUniqueId(), kTestDir);
+            std::make_unique<LoadSpillBlockManager>(TUniqueId(), 1, 1, kTestDir);
     ASSERT_OK(block_manager->init());
-    ASSIGN_OR_ABORT(auto block, block_manager->acquire_block(1, 1, 1024));
+    ASSIGN_OR_ABORT(auto block, block_manager->acquire_block(1024));
     ASSERT_OK(block_manager->release_block(block));
 }
 
 TEST_F(LoadSpillBlockManagerTest, test_write_read) {
     std::unique_ptr<LoadSpillBlockManager> block_manager =
-            std::make_unique<LoadSpillBlockManager>(TUniqueId(), kTestDir);
+            std::make_unique<LoadSpillBlockManager>(TUniqueId(), 1, 1, kTestDir);
     ASSERT_OK(block_manager->init());
-    ASSIGN_OR_ABORT(auto block, block_manager->acquire_block(1, 1, 1024));
+    ASSIGN_OR_ABORT(auto block, block_manager->acquire_block(1024));
     ASSERT_OK(block->append({Slice("hello"), Slice("world")}));
     ASSERT_OK(block->flush());
     ASSIGN_OR_ABORT(auto input_stream, block->get_readable());
