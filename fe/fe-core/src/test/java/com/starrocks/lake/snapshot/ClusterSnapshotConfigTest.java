@@ -62,7 +62,7 @@ public class ClusterSnapshotConfigTest {
 
         ClusterSnapshotConfig.StorageVolume storageVolume1 = config.getStorageVolumes().get(0);
         Assert.assertEquals("my_s3_volume", storageVolume1.getName());
-        Assert.assertEquals(ClusterSnapshotConfig.StorageVolume.StorageVolumeType.S3, storageVolume1.getType());
+        Assert.assertEquals("S3", storageVolume1.getType());
         Assert.assertEquals("s3://defaultbucket/test/", storageVolume1.getLocation());
         Assert.assertEquals("my s3 volume", storageVolume1.getComment());
         Assert.assertEquals(4, storageVolume1.getProperties().size());
@@ -74,7 +74,7 @@ public class ClusterSnapshotConfigTest {
 
         ClusterSnapshotConfig.StorageVolume storageVolume2 = config.getStorageVolumes().get(1);
         Assert.assertEquals("my_hdfs_volume", storageVolume2.getName());
-        Assert.assertEquals(ClusterSnapshotConfig.StorageVolume.StorageVolumeType.HDFS, storageVolume2.getType());
+        Assert.assertEquals("HDFS", storageVolume2.getType());
         Assert.assertEquals("hdfs://127.0.0.1:9000/sr/test/", storageVolume2.getLocation());
         Assert.assertEquals("my hdfs volume", storageVolume2.getComment());
         Assert.assertEquals(2, storageVolume2.getProperties().size());

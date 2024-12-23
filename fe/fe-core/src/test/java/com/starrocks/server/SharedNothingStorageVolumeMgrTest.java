@@ -98,16 +98,16 @@ public class SharedNothingStorageVolumeMgrTest {
         storageParams.put(AWS_S3_ACCESS_KEY, "ak");
         storageParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
         try {
-            svm.updateStorageVolume(svName1, storageParams, Optional.of(false), "test update");
+            svm.updateStorageVolume(svName1, null, null, storageParams, Optional.of(false), "test update");
             Assert.fail();
         } catch (IllegalStateException e) {
             Assert.assertTrue(e.getMessage().contains("Storage volume 'test1' does not exist"));
         }
         storageParams.put("aaa", "bbb");
         Assert.assertThrows(DdlException.class, () ->
-                svm.updateStorageVolume(svName, storageParams, Optional.of(true), "test update"));
+                svm.updateStorageVolume(svName, null, null, storageParams, Optional.of(true), "test update"));
         storageParams.remove("aaa");
-        svm.updateStorageVolume(svName, storageParams, Optional.of(true), "test update");
+        svm.updateStorageVolume(svName, null, null, storageParams, Optional.of(true), "test update");
         sv = svm.getStorageVolumeByName(svName);
         cloudConfiguration = sv.getCloudConfiguration();
         Assert.assertEquals("region1", ((AwsCloudConfiguration) cloudConfiguration).getAwsCloudCredential()
@@ -127,7 +127,7 @@ public class SharedNothingStorageVolumeMgrTest {
         svm.setDefaultStorageVolume(svName);
         Assert.assertEquals(sv.getId(), svm.getDefaultStorageVolumeId());
         try {
-            svm.updateStorageVolume(svName, storageParams, Optional.of(false), "");
+            svm.updateStorageVolume(svName, null, null, storageParams, Optional.of(false), "");
             Assert.fail();
         } catch (IllegalStateException e) {
             Assert.assertTrue(e.getMessage().contains("Default volume can not be disabled"));
@@ -148,7 +148,7 @@ public class SharedNothingStorageVolumeMgrTest {
         Assert.assertEquals("Storage volume 'test1' does not exist", ex.getMessage());
 
         svm.createStorageVolume(svName1, "S3", locations, storageParams, Optional.empty(), "");
-        svm.updateStorageVolume(svName1, storageParams, Optional.empty(), "test update");
+        svm.updateStorageVolume(svName1, null, null, storageParams, Optional.empty(), "test update");
         svm.setDefaultStorageVolume(svName1);
 
         sv = svm.getStorageVolumeByName(svName);
