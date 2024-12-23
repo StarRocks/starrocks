@@ -85,8 +85,9 @@ public class ReplaceColumnRefRewriter {
                     if (mapped.equals(mapperOperator)) {
                         break;
                     }
-                    mapperOperator = mapped.clone();
+                    mapperOperator = mapped;
                 }
+                mapperOperator = mapperOperator.clone();
                 for (int i = 0; i < mapperOperator.getChildren().size(); ++i) {
                     mapperOperator.setChild(i, mapperOperator.getChild(i).accept(this, null));
                 }
