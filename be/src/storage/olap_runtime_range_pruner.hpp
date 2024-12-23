@@ -96,16 +96,15 @@ struct RuntimeColumnPredicateBuilder {
 
             if (rf->has_null()) {
                 std::vector<const ColumnPredicate*> new_preds;
+                auto type = preds[0]->type_info_ptr();
+                auto column_id = preds[0]->column_id();
 
-                ColumnAndPredicate* and_pred =
-                        pool->add(new ColumnAndPredicate(preds[0]->type_info_ptr(), preds[0]->column_id()));
+                ColumnAndPredicate* and_pred = pool->add(new ColumnAndPredicate(type, column_id));
                 and_pred->add_child(preds.begin(), preds.end());
 
-                ColumnPredicate* null_pred =
-                        pool->add(new_column_null_predicate(preds[0]->type_info_ptr(), preds[0]->column_id(), true));
+                ColumnPredicate* null_pred = pool->add(new_column_null_predicate(type, column_id, true));
 
-                ColumnOrPredicate* or_pred =
-                        pool->add(new ColumnOrPredicate(preds[0]->type_info_ptr(), preds[0]->column_id()));
+                ColumnOrPredicate* or_pred = pool->add(new ColumnOrPredicate(type, column_id));
                 or_pred->add_child(and_pred);
                 or_pred->add_child(null_pred);
                 new_preds.emplace_back(or_pred);
