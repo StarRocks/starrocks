@@ -23,7 +23,7 @@ Query Feedback 是一个框架，属于 CBO 优化器的重要组成部分。它
 
 ## 使用方法
 
-Query Plan Advisor 功能通过系统变量 `enable_plan_advisor`（默认值：`true`）控制。该功能针对慢查询默认启用，即耗时超过 FE 配置项 `slow_query_analyze_threshold` 中配置的阈值的查询。
+Query Plan Advisor 功能通过系统变量 `enable_plan_advisor`（默认值：`true`）控制。该功能针对慢查询默认启用，即耗时超过 FE 配置项 `slow_query_analyze_threshold`（默认值：`5` 秒）中配置的阈值的查询。
 
 此外，您还可以手动分析特定查询，或为所有查询启用自动分析。
 
