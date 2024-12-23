@@ -79,11 +79,7 @@ StatusOr<spill::BlockPtr> LoadSpillBlockManager::acquire_block(size_t block_size
     opts.plan_node_id = 0;
     opts.name = "load_spill";
     opts.block_size = block_size;
-    auto block = _block_manager->acquire_block(opts);
-    if (!block.ok()) {
-        return block.status();
-    }
-    return block.value();
+    return _block_manager->acquire_block(opts);
 }
 
 // return Block to BlockManager

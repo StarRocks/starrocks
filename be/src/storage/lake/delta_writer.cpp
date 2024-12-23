@@ -466,9 +466,9 @@ bool DeltaWriterImpl::is_partial_update() {
 }
 
 Status DeltaWriterImpl::merge_blocks_to_segments() {
-    if (auto spillSink = dynamic_cast<SpillMemTableSink*>(_mem_table_sink.get())) {
+    if (auto spill_sink = dynamic_cast<SpillMemTableSink*>(_mem_table_sink.get())) {
         // merge spill blocks to segments
-        RETURN_IF_ERROR(spillSink->merge_blocks_to_segments());
+        RETURN_IF_ERROR(spill_sink->merge_blocks_to_segments());
     }
     return Status::OK();
 }
