@@ -109,7 +109,7 @@ public:
 private:
     friend class MemtableFlushTask;
 
-    void _flush_memtable(MemTable* memtable, SegmentPB* segment);
+    void _flush_memtable(MemTable* memtable, SegmentPB* segment, bool eos);
 
     std::unique_ptr<ThreadPoolToken> _flush_token;
 
