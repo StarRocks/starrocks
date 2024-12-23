@@ -35,7 +35,7 @@ public:
 
     virtual Status init() { return Status::OK(); }
 
-    virtual Status apply(const TxnLogPB& tnx_log, bool rebuild_pindex) = 0;
+    virtual Status apply(const TxnLogPB& tnx_log) = 0;
 
     virtual Status finish() = 0;
 
@@ -46,6 +46,6 @@ protected:
 };
 
 std::unique_ptr<TxnLogApplier> new_txn_log_applier(const Tablet& tablet, MutableTabletMetadataPtr metadata,
-                                                   int64_t new_version);
+                                                   int64_t new_version, bool rebuild_pindex);
 
 } // namespace starrocks::lake
