@@ -7,6 +7,7 @@ import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PEntryObject;
 import com.starrocks.authorization.PrivilegeException;
 import com.starrocks.authorization.PrivilegeType;
+import com.starrocks.authorization.WarehousePEntryObject;
 import com.starrocks.epack.sql.ast.PolicyType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -37,11 +38,6 @@ public class AuthorizationProviderEPack extends DefaultAuthorizationProvider {
                 PrivilegeTypeEPack.APPLY,
                 PrivilegeType.DROP,
                 PrivilegeType.ALTER));
-
-        typeToActionList.put(ObjectType.WAREHOUSE, Lists.newArrayList(
-                PrivilegeType.USAGE,
-                PrivilegeType.ALTER,
-                PrivilegeType.DROP));
 
         typeToActionList.put(ObjectTypeEPack.FAILOVER_GROUP, Lists.newArrayList(
                 PrivilegeType.USAGE,
