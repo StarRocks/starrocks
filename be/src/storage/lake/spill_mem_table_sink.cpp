@@ -98,7 +98,7 @@ Status SpillMemTableSink::_do_spill(const Chunk& chunk, const spill::SpillOutput
     // 2. serialize chunk
     for (int64_t rowid = 0; rowid < chunk.num_rows(); rowid += spill_rows) {
         int64_t rows = std::min(spill_rows, (int64_t)chunk.num_rows() - rowid);
-        ChunkPtr each_chunk = std::move(chunk.clone_empty());
+        ChunkPtr each_chunk = chunk.clone_empty();
         each_chunk->append(chunk, rowid, rows);
         RETURN_IF_ERROR(_prepare(each_chunk));
         spill::SerdeContext ctx;

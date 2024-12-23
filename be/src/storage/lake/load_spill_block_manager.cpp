@@ -32,7 +32,7 @@ void LoadSpillBlockContainer::append_block(const spill::BlockPtr& block) {
 
 void LoadSpillBlockContainer::create_block_group() {
     std::lock_guard guard(_mutex);
-    _block_groups.push_back(spill::BlockGroup());
+    _block_groups.emplace_back(spill::BlockGroup());
 }
 
 bool LoadSpillBlockContainer::empty() {
