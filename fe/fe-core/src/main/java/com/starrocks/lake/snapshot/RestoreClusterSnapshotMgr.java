@@ -19,6 +19,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
+import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
@@ -27,6 +28,7 @@ import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.Collections;
 import java.util.List;
 
 public class RestoreClusterSnapshotMgr {
@@ -63,6 +65,14 @@ public class RestoreClusterSnapshotMgr {
         return instance != null;
     }
 
+    public static ClusterSnapshotConfig getConfig() {
+        RestoreClusterSnapshotMgr self = instance;
+        if (self == null) {
+            return null;
+        }
+        return self.config;
+    }
+
     public static void finishRestoring() throws DdlException {
         RestoreClusterSnapshotMgr self = instance;
         if (self == null) {
@@ -70,55 +80,80 @@ public class RestoreClusterSnapshotMgr {
         }
 
         try {
-            List<ClusterSnapshotConfig.Frontend> frontends = self.config.getFrontends();
-            if (frontends != null) {
-                NodeMgr nodeMgr = GlobalStateMgr.getCurrentState().getNodeMgr();
-                // Drop old frontends
-                for (Frontend frontend : nodeMgr.getOtherFrontends()) {
-                    LOG.info("Drop old frontend {}", frontend);
-                    nodeMgr.dropFrontend(frontend.getRole(), frontend.getHost(), frontend.getEditLogPort());
-                }
+            self.updateFrontends();
 
-                // Add new frontends
-                for (ClusterSnapshotConfig.Frontend frontend : frontends) {
-                    LOG.info("Add new frontend {}", frontend);
-                    nodeMgr.addFrontend(frontend.isFollower() ? FrontendNodeType.FOLLOWER : FrontendNodeType.OBSERVER,
-                            frontend.getHost(), frontend.getEditLogPort());
-                }
-            }
+            self.updateComputeNodes();
 
-            List<ClusterSnapshotConfig.ComputeNode> computeNodes = self.config.getComputeNodes();
-            if (computeNodes != null) {
-                SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-                for (Backend be : systemInfoService.getIdToBackend().values()) {
-                    LOG.info("Drop old backend {}", be);
-                    systemInfoService.dropBackend(be.getHost(), be.getHeartbeatPort(),
-                            WarehouseManager.DEFAULT_WAREHOUSE_NAME, false);
-                }
-
-                // Drop old compute nodes
-                for (ComputeNode cn : systemInfoService.getIdComputeNode().values()) {
-                    LOG.info("Drop old compute node {}", cn);
-                    systemInfoService.dropComputeNode(cn.getHost(), cn.getHeartbeatPort(),
-                            WarehouseManager.DEFAULT_WAREHOUSE_NAME);
-                }
-
-                // Add new compute nodes
-                for (ClusterSnapshotConfig.ComputeNode cn : computeNodes) {
-                    LOG.info("Add new compute node {}", cn);
-                    systemInfoService.addComputeNode(cn.getHost(), cn.getHeartbeatServicePort(),
-                            WarehouseManager.DEFAULT_WAREHOUSE_NAME);
-                }
-            }
-
-            // TODO: Update storage volume
-
+            self.updateStorageVolumes();
         } finally {
             // Rollback config
             Config.start_with_incomplete_meta = self.oldStartWithIncompleteMeta;
             Config.bdbje_reset_election_group = self.oldResetElectionGroup;
 
             instance = null;
+        }
+    }
+
+    private void updateFrontends() throws DdlException {
+        List<ClusterSnapshotConfig.Frontend> frontends = config.getFrontends();
+        if (frontends == null) {
+            return;
+        }
+
+        NodeMgr nodeMgr = GlobalStateMgr.getCurrentState().getNodeMgr();
+        // Drop old frontends
+        for (Frontend frontend : nodeMgr.getOtherFrontends()) {
+            LOG.info("Drop old frontend {}", frontend);
+            nodeMgr.dropFrontend(frontend.getRole(), frontend.getHost(), frontend.getEditLogPort());
+        }
+
+        // Add new frontends
+        for (ClusterSnapshotConfig.Frontend frontend : frontends) {
+            LOG.info("Add new frontend {}", frontend);
+            nodeMgr.addFrontend(frontend.isFollower() ? FrontendNodeType.FOLLOWER : FrontendNodeType.OBSERVER,
+                    frontend.getHost(), frontend.getEditLogPort());
+        }
+    }
+
+    private void updateComputeNodes() throws DdlException {
+        List<ClusterSnapshotConfig.ComputeNode> computeNodes = config.getComputeNodes();
+        if (computeNodes == null) {
+            return;
+        }
+
+        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        for (Backend be : systemInfoService.getIdToBackend().values()) {
+            LOG.info("Drop old backend {}", be);
+            systemInfoService.dropBackend(be.getHost(), be.getHeartbeatPort(),
+                    WarehouseManager.DEFAULT_WAREHOUSE_NAME, false);
+        }
+
+        // Drop old compute nodes
+        for (ComputeNode cn : systemInfoService.getIdComputeNode().values()) {
+            LOG.info("Drop old compute node {}", cn);
+            systemInfoService.dropComputeNode(cn.getHost(), cn.getHeartbeatPort(),
+                    WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+        }
+
+        // Add new compute nodes
+        for (ClusterSnapshotConfig.ComputeNode cn : computeNodes) {
+            LOG.info("Add new compute node {}", cn);
+            systemInfoService.addComputeNode(cn.getHost(), cn.getHeartbeatServicePort(),
+                    WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+        }
+    }
+
+    private void updateStorageVolumes() throws DdlException {
+        List<ClusterSnapshotConfig.StorageVolume> storageVolumes = config.getStorageVolumes();
+        if (storageVolumes == null) {
+            return;
+        }
+
+        StorageVolumeMgr storageVolumeMgr = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
+        for (ClusterSnapshotConfig.StorageVolume storageVolume : storageVolumes) {
+            storageVolumeMgr.updateStorageVolume(storageVolume.getName(), storageVolume.getType(),
+                    Collections.singletonList(storageVolume.getLocation()), storageVolume.getProperties(),
+                    storageVolume.getComment());
         }
     }
 }

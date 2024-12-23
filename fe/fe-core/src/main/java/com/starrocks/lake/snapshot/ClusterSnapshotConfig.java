@@ -133,22 +133,6 @@ public class ClusterSnapshotConfig {
     }
 
     public static class StorageVolume {
-        public static enum StorageVolumeType {
-            S3,
-            HDFS,
-            AZBLOB;
-
-            @JsonCreator
-            public static StorageVolumeType forValue(String value) {
-                return StorageVolumeType.valueOf(value.toUpperCase());
-            }
-
-            @JsonValue
-            public String toValue() {
-                return name().toLowerCase();
-            }
-        }
-
         private static class PropertiesDeserializer extends JsonDeserializer<Map<String, String>> {
 
             @Override
@@ -178,7 +162,7 @@ public class ClusterSnapshotConfig {
         private String name;
 
         @JsonProperty("type")
-        private StorageVolumeType type;
+        private String type;
 
         @JsonProperty("location")
         private String location;
@@ -198,11 +182,11 @@ public class ClusterSnapshotConfig {
             this.name = name;
         }
 
-        public StorageVolumeType getType() {
+        public String getType() {
             return type;
         }
 
-        public void setType(StorageVolumeType type) {
+        public void setType(String type) {
             this.type = type;
         }
 
