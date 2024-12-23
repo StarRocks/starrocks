@@ -292,6 +292,8 @@ StatusOr<bool> ScalarColumnReader::row_group_zone_map_filter(const std::vector<c
     if (get_chunk_metadata()->meta_data.statistics.__isset.null_count) {
         has_null = get_chunk_metadata()->meta_data.statistics.null_count > 0;
         is_all_null = get_chunk_metadata()->meta_data.statistics.null_count == rg_num_rows;
+    } else {
+        return true;
     }
 
     std::optional<ZoneMapDetail> zone_map_detail = std::nullopt;
@@ -306,13 +308,14 @@ StatusOr<bool> ScalarColumnReader::row_group_zone_map_filter(const std::vector<c
     } else {
         std::vector<string> min_values;
         std::vector<string> max_values;
+        std::vector<bool> null_pages{false};
         Status st =
                 StatisticsHelper::get_min_max_value(_opts.file_meta_data, *_col_type, &get_chunk_metadata()->meta_data,
                                                     get_column_parquet_field(), min_values, max_values);
         if (st.ok()) {
-            RETURN_IF_ERROR(StatisticsHelper::decode_value_into_column(min_column, min_values, *_col_type,
+            RETURN_IF_ERROR(StatisticsHelper::decode_value_into_column(min_column, min_values, null_pages, *_col_type,
                                                                        get_column_parquet_field(), _opts.timezone));
-            RETURN_IF_ERROR(StatisticsHelper::decode_value_into_column(max_column, max_values, *_col_type,
+            RETURN_IF_ERROR(StatisticsHelper::decode_value_into_column(max_column, max_values, null_pages, *_col_type,
                                                                        get_column_parquet_field(), _opts.timezone));
 
             zone_map_detail = ZoneMapDetail{min_column->get(0), max_column->get(0), has_null};
@@ -355,11 +358,12 @@ StatusOr<bool> ScalarColumnReader::page_index_zone_map_filter(const std::vector<
     ASSIGN_OR_RETURN(const tparquet::OffsetIndex* offset_index, get_offset_index(rg_first_row));
 
     const size_t page_num = column_index.min_values.size();
+    const std::vector<bool> null_pages = column_index.null_pages;
 
     ColumnPtr min_column = ColumnHelper::create_column(*_col_type, true);
     ColumnPtr max_column = ColumnHelper::create_column(*_col_type, true);
     // deal with min_values
-    auto st = StatisticsHelper::decode_value_into_column(min_column, column_index.min_values, *_col_type,
+    auto st = StatisticsHelper::decode_value_into_column(min_column, column_index.min_values, null_pages, *_col_type,
                                                          get_column_parquet_field(), _opts.timezone);
     if (!st.ok()) {
         // swallow error status
@@ -367,7 +371,7 @@ StatusOr<bool> ScalarColumnReader::page_index_zone_map_filter(const std::vector<
         return false;
     }
     // deal with max_values
-    st = StatisticsHelper::decode_value_into_column(max_column, column_index.max_values, *_col_type,
+    st = StatisticsHelper::decode_value_into_column(max_column, column_index.max_values, null_pages, *_col_type,
                                                     get_column_parquet_field(), _opts.timezone);
     if (!st.ok()) {
         // swallow error status
@@ -379,7 +383,6 @@ StatusOr<bool> ScalarColumnReader::page_index_zone_map_filter(const std::vector<
     DCHECK_EQ(page_num, max_column->size());
 
     // fill ZoneMapDetail
-    const std::vector<bool> null_pages = column_index.null_pages;
     std::vector<ZoneMapDetail> zone_map_details{};
     for (size_t i = 0; i < page_num; i++) {
         if (null_pages[i]) {

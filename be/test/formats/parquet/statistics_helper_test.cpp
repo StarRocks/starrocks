@@ -16,7 +16,6 @@
 
 #include <gtest/gtest.h>
 
-#include "formats/parquet/parquet_test_util/util.h"
 #include "formats/parquet/parquet_ut_base.h"
 #include "formats/parquet/schema.h"
 #include "testutil/assert.h"
@@ -60,9 +59,10 @@ TEST_F(StatisticsHelperTest, TestInFilterInt) {
     EXPECT_EQ(ctxs.size(), 1);
 
     std::vector<int64_t> null_counts{0, 0};
+    std::vector<bool> null_pages{false, false};
     Filter selected(min_values.size(), true);
-    auto st = StatisticsHelper::in_filter_on_min_max_stat(min_values, max_values, null_counts, ctxs[0], &field,
-                                                          timezone, selected);
+    auto st = StatisticsHelper::in_filter_on_min_max_stat(min_values, max_values, null_pages, null_counts, ctxs[0],
+                                                          &field, timezone, selected);
     ASSERT_OK(st);
     ASSERT_TRUE(selected[0]);
     ASSERT_FALSE(selected[1]);
@@ -85,9 +85,10 @@ TEST_F(StatisticsHelperTest, TestInFilterString) {
         EXPECT_EQ(ctxs.size(), 1);
 
         std::vector<int64_t> null_counts{0};
+        std::vector<bool> null_pages{false};
         Filter selected(min_values.size(), true);
-        auto st = StatisticsHelper::in_filter_on_min_max_stat(min_values, max_values, null_counts, ctxs[0], &field,
-                                                              timezone, selected);
+        auto st = StatisticsHelper::in_filter_on_min_max_stat(min_values, max_values, null_pages, null_counts, ctxs[0],
+                                                              &field, timezone, selected);
         ASSERT_OK(st);
         ASSERT_FALSE(selected[0]);
     }
@@ -102,9 +103,10 @@ TEST_F(StatisticsHelperTest, TestInFilterString) {
         EXPECT_EQ(ctxs.size(), 1);
 
         std::vector<int64_t> null_counts{0};
+        std::vector<bool> null_pages{false};
         Filter selected(min_values.size(), true);
-        auto st = StatisticsHelper::in_filter_on_min_max_stat(min_values, max_values, null_counts, ctxs[0], &field,
-                                                              timezone, selected);
+        auto st = StatisticsHelper::in_filter_on_min_max_stat(min_values, max_values, null_pages, null_counts, ctxs[0],
+                                                              &field, timezone, selected);
         ASSERT_OK(st);
         ASSERT_TRUE(selected[0]);
     }
@@ -133,9 +135,10 @@ TEST_F(StatisticsHelperTest, TestInFilterDate) {
     EXPECT_EQ(ctxs.size(), 1);
 
     std::vector<int64_t> null_counts{0, 0};
+    std::vector<bool> null_pages{false, false};
     Filter selected(min_values.size(), true);
-    auto st = StatisticsHelper::in_filter_on_min_max_stat(min_values, max_values, null_counts, ctxs[0], &field,
-                                                          timezone, selected);
+    auto st = StatisticsHelper::in_filter_on_min_max_stat(min_values, max_values, null_pages, null_counts, ctxs[0],
+                                                          &field, timezone, selected);
     ASSERT_OK(st);
     ASSERT_TRUE(selected[0]);
     ASSERT_FALSE(selected[1]);
@@ -170,9 +173,10 @@ TEST_F(StatisticsHelperTest, TestInFilterDatetime) {
     EXPECT_EQ(ctxs.size(), 1);
 
     std::vector<int64_t> null_counts{0, 0};
+    std::vector<bool> null_pages{false, false};
     Filter selected(min_values.size(), true);
-    auto st = StatisticsHelper::in_filter_on_min_max_stat(min_values, max_values, null_counts, ctxs[0], &field,
-                                                          timezone, selected);
+    auto st = StatisticsHelper::in_filter_on_min_max_stat(min_values, max_values, null_pages, null_counts, ctxs[0],
+                                                          &field, timezone, selected);
     ASSERT_OK(st);
     ASSERT_TRUE(selected[0]);
     ASSERT_FALSE(selected[1]);

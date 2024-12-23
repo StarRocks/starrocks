@@ -32,7 +32,15 @@ public:
     static void create_conjunct_ctxs(ObjectPool* pool, RuntimeState* runtime_state, std::vector<TExpr>* tExprs,
                                      std::vector<ExprContext*>* conjunct_ctxs);
 
+    static void append_smallint_conjunct(TExprOpcode::type opcode, SlotId slot_id, int value,
+                                         std::vector<TExpr>* tExprs);
     static void append_int_conjunct(TExprOpcode::type opcode, SlotId slot_id, int value, std::vector<TExpr>* tExprs);
+    static void append_bigint_conjunct(TExprOpcode::type opcode, SlotId slot_id, int64_t value,
+                                       std::vector<TExpr>* tExprs);
+    static void append_datetime_conjunct(TExprOpcode::type opcode, SlotId slot_id, const std::string& value,
+                                         std::vector<TExpr>* tExprs);
+    static void append_decimal_conjunct(TExprOpcode::type opcode, SlotId slot_id, const std::string& value,
+                                        std::vector<TExpr>* tExprs);
     static void append_string_conjunct(TExprOpcode::type opcode, SlotId slot_id, std::string value,
                                        std::vector<TExpr>* tExprs);
 
