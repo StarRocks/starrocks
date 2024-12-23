@@ -211,11 +211,11 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
         if (fieldNames != null) {
             nonPartitionPrimitiveColumns = fieldNames.stream()
                     .filter(column -> DeltaDataType.canUseStatsType(schema.get(column).getDataType())
-                    && !partitionColumns.contains(column))
+                            && !partitionColumns.contains(column))
                     .collect(Collectors.toSet());
             partitionPrimitiveColumns = fieldNames.stream()
                     .filter(column -> DeltaDataType.canUseStatsType(schema.get(column).getDataType())
-                    && partitionColumns.contains(column))
+                            && partitionColumns.contains(column))
                     .collect(Collectors.toSet());
         } else {
             nonPartitionPrimitiveColumns = schema.fieldNames().stream()
@@ -244,7 +244,7 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
 
                         if (enableCollectColumnStatistics(connectContext)) {
                             Pair<FileScanTask, DeltaLakeAddFileStatsSerDe> pair =
-                                    ScanFileUtils.convertFromRowToFileScanTask(true, scanFileRow, estimateRowSize);
+                                    ScanFileUtils.convertFromRowToFileScanTask(true, scanFileRow, metadata, estimateRowSize);
                             files.add(pair.first);
 
                             try (Timer ignored = Tracers.watchScope(EXTERNAL, "DELTA_LAKE.updateDeltaLakeFileStats")) {
@@ -253,7 +253,7 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
                             }
                         } else {
                             Pair<FileScanTask, DeltaLakeAddFileStatsSerDe> pair =
-                                    ScanFileUtils.convertFromRowToFileScanTask(false, scanFileRow, estimateRowSize);
+                                    ScanFileUtils.convertFromRowToFileScanTask(false, scanFileRow, metadata, estimateRowSize);
                             files.add(pair.first);
 
                             try (Timer ignored = Tracers.watchScope(EXTERNAL, "DELTA_LAKE.updateDeltaLakeCardinality")) {
