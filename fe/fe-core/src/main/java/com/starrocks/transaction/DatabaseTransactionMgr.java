@@ -173,7 +173,7 @@ public class DatabaseTransactionMgr {
     public long beginTransaction(List<Long> tableIdList, String label, TUniqueId requestId,
                                  TransactionState.TxnCoordinator coordinator,
                                  TransactionState.LoadJobSourceType sourceType,
-                                 long listenerId,
+                                 long callbackId,
                                  long timeoutSecond,
                                  long warehouseId)
             throws DuplicatedRequestException, LabelAlreadyUsedException, RunningTxnExceedException, AnalysisException {
@@ -185,9 +185,10 @@ public class DatabaseTransactionMgr {
         long tid = globalStateMgr.getGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
         boolean combinedTxnLog = LakeTableHelper.supportCombinedTxnLog(sourceType);
         LOG.info("begin transaction: txn_id: {} with label {} from coordinator {}, listner id: {}",
-                tid, label, coordinator, listenerId);
+                tid, label, coordinator, callbackId);
         TransactionState transactionState = new TransactionState(dbId, tableIdList, tid, label, requestId, sourceType,
-                coordinator, listenerId, timeoutSecond * 1000);
+                coordinator, callbackId, timeoutSecond * 1000);
+
         transactionState.setPrepareTime(System.currentTimeMillis());
         transactionState.setWarehouseId(warehouseId);
         transactionState.setUseCombinedTxnLog(combinedTxnLog);
@@ -251,6 +252,66 @@ public class DatabaseTransactionMgr {
         }
     }
 
+    public void upsertTransactionState(TransactionState transactionState)
+            throws DuplicatedRequestException, LabelAlreadyUsedException, RunningTxnExceedException, AnalysisException {
+        checkDatabaseDataQuota();
+
+        writeLock();
+        try {
+            checkLabel(transactionState.getLabel(), transactionState.getRequestId());
+            checkRunningTxnExceedLimit(transactionState.getSourceType());
+            unprotectUpsertTransactionState(transactionState);
+
+            if (MetricRepo.hasInit) {
+                MetricRepo.COUNTER_TXN_BEGIN.increase(1L);
+            }
+        } catch (DuplicatedRequestException e) {
+            throw e;
+        } catch (Exception e) {
+            if (MetricRepo.hasInit) {
+                MetricRepo.COUNTER_TXN_REJECT.increase(1L);
+            }
+            throw e;
+        } finally {
+            writeUnlock();
+        }
+    }
+
+    private void checkLabel(String label, TUniqueId requestId)
+            throws LabelAlreadyUsedException, DuplicatedRequestException {
+        /*
+         * Check if label already used, by following steps
+         * 1. get all existing transactions
+         * 2. if there is a PREPARE transaction, check if this is a retry request. If yes, return the
+         *    existing txn id.
+         * 3. if there is a non-aborted transaction, throw label already used exception.
+         */
+        Set<Long> existingTxnIds = unprotectedGetTxnIdsByLabel(label);
+        if (existingTxnIds != null && !existingTxnIds.isEmpty()) {
+            List<TransactionState> notAbortedTxns = Lists.newArrayList();
+            for (long txnId : existingTxnIds) {
+                TransactionState txn = unprotectedGetTransactionState(txnId);
+                Preconditions.checkNotNull(txn);
+                if (txn.getTransactionStatus() != TransactionStatus.ABORTED) {
+                    notAbortedTxns.add(txn);
+                }
+            }
+            // there should be at most 1 txn in PREPARE/COMMITTED/VISIBLE status
+            Preconditions.checkState(notAbortedTxns.size() <= 1, notAbortedTxns);
+            if (!notAbortedTxns.isEmpty()) {
+                TransactionState notAbortedTxn = notAbortedTxns.get(0);
+                if (requestId != null && notAbortedTxn.getTransactionStatus() == TransactionStatus.PREPARE
+                        && notAbortedTxn.getRequestId() != null &&
+                        notAbortedTxn.getRequestId().equals(requestId)) {
+                    // this may be a retry request for same job, just return existing txn id.
+                    throw new DuplicatedRequestException(DebugUtil.printId(requestId),
+                            notAbortedTxn.getTransactionId(), "");
+                }
+                throw new LabelAlreadyUsedException(label, notAbortedTxn.getTransactionStatus());
+            }
+        }
+    }
+
     /**
      * Change the transaction status to Prepared, indicating that the data has been prepared and is waiting for commit
      * prepared transaction process as follows:
@@ -262,7 +323,8 @@ public class DatabaseTransactionMgr {
      * @param transactionId     transactionId
      * @param tabletCommitInfos tabletCommitInfos
      */
-    public void prepareTransaction(long transactionId, List<TabletCommitInfo> tabletCommitInfos,
+    public void prepareTransaction(long transactionId,
+                                   List<TabletCommitInfo> tabletCommitInfos,
                                    List<TabletFailInfo> tabletFailInfos,
                                    TxnCommitAttachment txnCommitAttachment,
                                    boolean writeEditLog)

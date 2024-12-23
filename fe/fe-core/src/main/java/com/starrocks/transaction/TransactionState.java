@@ -52,6 +52,7 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.common.TraceManager;
 import com.starrocks.common.io.Writable;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
@@ -83,7 +84,7 @@ import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
 
-public class TransactionState implements Writable {
+public class TransactionState implements Writable, GsonPreProcessable {
     private static final Logger LOG = LogManager.getLogger(TransactionState.class);
 
     // compare the TransactionState by txn id, desc
@@ -404,8 +405,6 @@ public class TransactionState implements Writable {
         this.publishVersionTasks = Maps.newHashMap();
         this.hasSendTask = false;
         this.latch = new CountDownLatch(1);
-        //For compatibility, if the implicit transaction can be rolled back, duplicates will be removed in getCallbackId.
-        this.callbackId = callbackId;
         this.callbackIdList = Lists.newArrayList(callbackId);
 
         this.timeoutMs = timeoutMs;
@@ -471,7 +470,6 @@ public class TransactionState implements Writable {
         this.tabletCommitInfos.addAll(infos);
     }
 
-
     public boolean checkReplicaNeedSkip(Tablet tablet, Replica replica, PartitionCommitInfo partitionCommitInfo) {
         boolean isContain = tabletCommitInfosContainsReplica(tablet.getId(), replica.getBackendId(), replica.getState());
         if (isContain) {
@@ -493,7 +491,7 @@ public class TransactionState implements Writable {
 
         return true;
     }
-  
+
     public void resetTabletCommitInfos() {
         // With a high streamload frequency and too many tablets involved,
         // TabletCommitInfos will take up too much memory.
@@ -594,12 +592,12 @@ public class TransactionState implements Writable {
         return txnCommitAttachment;
     }
 
-    public Set<Long> getCallbackId() {
-        Set<Long> callbackIdCopy = Sets.newHashSet(callbackIdList);
+    public List<Long> getCallbackId() {
         if (callbackId != -1) {
-            callbackIdCopy.add(callbackId);
+            return Lists.newArrayList(callbackId);
+        } else {
+            return new ArrayList<>(callbackIdList);
         }
-        return callbackIdCopy;
     }
 
     public long getTimeoutMs() {
@@ -1145,5 +1143,13 @@ public class TransactionState implements Writable {
     @Override
     public void write(DataOutput out) throws IOException {
 
+    }
+
+    @Override
+    public void gsonPreProcess() throws IOException {
+        //For compatibility, if the implicit transaction can be rolled back, duplicates will be removed in getCallbackId.
+        if (callbackId == -1 && !callbackIdList.isEmpty()) {
+            callbackId = callbackIdList.get(0);
+        }
     }
 }
