@@ -713,6 +713,11 @@ inline std::ostream& operator<<(std::ostream& os, const StatusOr<T>& st) {
     RETURN_IF_ERROR(varname);                    \
     lhs = std::move(varname).value();
 
+#define ASSIGN_OR_ASSERT_FAIL_IMPL(varname, lhs, rhs) \
+    auto&& varname = (rhs);                           \
+    ASSERT_OK(varname);                               \
+    lhs = std::move(varname).value();
+
 // ASSIGN_OR_RETURN is modelled after Apache Arrow's ARROW_ASSIGN_OR_RAISE macro.
 //
 // Execute an expression that returns a StatusOr, extracting its value
@@ -732,6 +737,7 @@ inline std::ostream& operator<<(std::ostream& os, const StatusOr<T>& st) {
 // WARNING: ARROW_ASSIGN_OR_RETURN `std::move`s its right operand. If you have
 // an lvalue StatusOr which you *don't* want to move out of cast appropriately.
 #define ASSIGN_OR_RETURN(lhs, rhs) ASSIGN_OR_RETURN_IMPL(VARNAME_LINENUM(value_or_err), lhs, rhs)
+#define ASSIGN_OR_ASSERT_FAIL(lhs, rhs) ASSIGN_OR_ASSERT_FAIL_IMPL(VARNAME_LINENUM(value_or_err), lhs, rhs)
 
 #define ASSIGN_OR_SET_STATUS_AND_RETURN_IF_ERROR_IMPL(err_status, lhs, rhs) \
     auto&& varname = (rhs);                                                 \

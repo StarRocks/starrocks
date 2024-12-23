@@ -22,6 +22,8 @@
 #include "exprs/runtime_filter_bank.h"
 #include "runtime/global_dict/config.h"
 #include "runtime/runtime_state.h"
+#include "storage/column_and_predicate.h"
+#include "storage/column_or_predicate.h"
 #include "storage/column_predicate.h"
 #include "storage/olap_runtime_range_pruner.h"
 #include "storage/predicate_parser.h"
@@ -92,7 +94,26 @@ struct RuntimeColumnPredicateBuilder {
                 preds.emplace_back(p);
             }
 
-            return preds;
+            if (rf->has_null()) {
+                std::vector<const ColumnPredicate*> new_preds;
+
+                ColumnAndPredicate* and_pred =
+                        pool->add(new ColumnAndPredicate(preds[0]->type_info_ptr(), preds[0]->column_id()));
+                and_pred->add_child(preds.begin(), preds.end());
+
+                ColumnPredicate* null_pred =
+                        pool->add(new_column_null_predicate(preds[0]->type_info_ptr(), preds[0]->column_id(), true));
+
+                ColumnOrPredicate* or_pred =
+                        pool->add(new ColumnOrPredicate(preds[0]->type_info_ptr(), preds[0]->column_id()));
+                or_pred->add_child(and_pred);
+                or_pred->add_child(null_pred);
+                new_preds.emplace_back(or_pred);
+
+                return new_preds;
+            } else {
+                return preds;
+            }
         }
     }
 
@@ -224,8 +245,6 @@ inline Status OlapRuntimeScanRangePruner::_update(const ColumnIdToGlobalDictMap*
 
 inline auto OlapRuntimeScanRangePruner::_get_predicates(const ColumnIdToGlobalDictMap* global_dictmaps, size_t idx,
                                                         ObjectPool* pool) -> StatusOr<PredicatesRawPtrs> {
-    auto rf = _unarrived_runtime_filters[idx]->runtime_filter(_driver_sequence);
-    if (rf->has_null()) return PredicatesRawPtrs{};
     // convert to olap filter
     auto slot_desc = _slot_descs[idx];
     return type_dispatch_predicate<StatusOr<PredicatesRawPtrs>>(
