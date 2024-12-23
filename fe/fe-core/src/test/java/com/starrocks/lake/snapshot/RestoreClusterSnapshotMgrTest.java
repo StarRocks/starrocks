@@ -14,10 +14,14 @@
 
 package com.starrocks.lake.snapshot;
 
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import java.util.Collections;
+import java.util.Optional;
 
 public class RestoreClusterSnapshotMgrTest {
     @BeforeClass
@@ -30,6 +34,12 @@ public class RestoreClusterSnapshotMgrTest {
         RestoreClusterSnapshotMgr.init("src/test/resources/conf/cluster_snapshot.yaml",
                 new String[] { "-cluster_snapshot" });
         Assert.assertTrue(RestoreClusterSnapshotMgr.isRestoring());
+
+        for (ClusterSnapshotConfig.StorageVolume sv : RestoreClusterSnapshotMgr.getConfig().getStorageVolumes()) {
+            GlobalStateMgr.getCurrentState().getStorageVolumeMgr().createStorageVolume(sv.getName(), sv.getType(),
+                    Collections.singletonList(sv.getLocation()), sv.getProperties(), Optional.of(true),
+                    sv.getComment());
+        }
 
         RestoreClusterSnapshotMgr.finishRestoring();
         Assert.assertFalse(RestoreClusterSnapshotMgr.isRestoring());
