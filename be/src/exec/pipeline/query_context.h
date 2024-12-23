@@ -159,12 +159,8 @@ public:
     std::shared_ptr<MemTracker> mem_tracker() { return _mem_tracker; }
     MemTracker* connector_scan_mem_tracker() { return _connector_scan_mem_tracker.get(); }
 
-<<<<<<< HEAD
     MemTracker* operator_mem_tracker(int32_t plan_node_id);
 
-=======
-    Status init_spill_manager(const TQueryOptions& query_options);
->>>>>>> 0dc29fa8e1 ([Refactor] Remove meaningless profiler operator mem peaks (#53045))
     Status init_query_once(workgroup::WorkGroup* wg, bool enable_group_level_query_queue);
     /// Release the workgroup token only once to avoid double-free.
     /// This method should only be invoked while the QueryContext is still valid,
