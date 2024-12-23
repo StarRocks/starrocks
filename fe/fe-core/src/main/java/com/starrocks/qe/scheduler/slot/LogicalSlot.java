@@ -142,6 +142,10 @@ public class LogicalSlot {
         return nowMs >= expiredPendingTimeMs;
     }
 
+    public boolean isPendingTimeout() {
+        return System.currentTimeMillis() >= expiredPendingTimeMs;
+    }
+
     public boolean isAllocatedExpired(long nowMs) {
         return nowMs >= expiredAllocatedTimeMs;
     }
