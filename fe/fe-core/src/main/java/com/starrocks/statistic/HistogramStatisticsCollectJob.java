@@ -22,6 +22,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.thrift.TStatisticData;
 import org.apache.velocity.VelocityContext;
 
@@ -29,6 +30,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import static com.starrocks.statistic.StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME;
 
@@ -109,7 +111,12 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
     private String buildCollectHistogram(Database database, Table table, double sampleRatio,
                                          Long bucketNum, Map<String, String> mostCommonValues, String columnName,
                                          Type columnType) {
-        StringBuilder builder = new StringBuilder("INSERT INTO ").append(HISTOGRAM_STATISTICS_TABLE_NAME).append(" ");
+        List<String> targetColumnNames = StatisticUtils.buildStatsColumnDef(HISTOGRAM_STATISTICS_TABLE_NAME).stream()
+                .map(ColumnDef::getName)
+                .collect(Collectors.toList());
+        String columnNames = "(" + String.join(", ", targetColumnNames) + ")";
+        StringBuilder builder = new StringBuilder("INSERT INTO ").append(HISTOGRAM_STATISTICS_TABLE_NAME)
+                .append(columnNames).append(" ");
         String quoteColumName = StatisticUtils.quoting(table, columnName);
 
         VelocityContext context = new VelocityContext();
