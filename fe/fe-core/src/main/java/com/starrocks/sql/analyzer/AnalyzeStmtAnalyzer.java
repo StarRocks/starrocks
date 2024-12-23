@@ -184,7 +184,7 @@ public class AnalyzeStmtAnalyzer {
             if (CatalogMgr.isExternalCatalog(statement.getTableName().getCatalog())) {
                 if (!analyzeTable.isAnalyzableExternalTable()) {
                     throw new SemanticException(
-                            "Analyze external table only support hive, iceberg, deltalake and odps table",
+                            "Analyze external table only support hive, iceberg, deltalake, paimon and odps table",
                             statement.getTableName().toString());
                 }
                 statement.setExternal(true);
@@ -215,8 +215,8 @@ public class AnalyzeStmtAnalyzer {
                     tbl.setDb(dbName);
                     Table analyzeTable = MetaUtils.getSessionAwareTable(session, null, statement.getTableName());
                     if (!analyzeTable.isAnalyzableExternalTable()) {
-                        throw new SemanticException("Analyze external table only support hive, iceberg, deltalake and odps table",
-                                statement.getTableName().toString());
+                        throw new SemanticException("Analyze external table only support hive, iceberg, deltalake, " +
+                                "paimon and odps table", statement.getTableName().toString());
                     }
                 }
 

@@ -22,6 +22,7 @@ import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
@@ -32,6 +33,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalPaimonScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -283,6 +285,14 @@ public class UtilsTest {
         GlobalStateMgr.getCurrentState().getStatisticStorage().addColumnStatistic(t0, "v3",
                 new ColumnStatistic(1, 1, 0, 1, 1));
         opt = new OptExpression(new LogicalOlapScanOperator(t0, columnRefMap, Maps.newHashMap(), null, -1, null));
+        Assert.assertFalse(Utils.hasUnknownColumnsStats(opt));
+    }
+
+    @Test
+    public void testPaimonUnknownColumnsStats() {
+        PaimonTable t = new PaimonTable();
+        OptExpression opt =
+                new OptExpression(new LogicalPaimonScanOperator(t, Maps.newHashMap(), Maps.newHashMap(), -1, null));
         Assert.assertFalse(Utils.hasUnknownColumnsStats(opt));
     }
 
