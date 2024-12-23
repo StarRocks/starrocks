@@ -151,6 +151,7 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
 
         auto new_metadata = std::make_shared<TabletMetadataPB>(*metadata);
         new_metadata->set_version(new_version);
+        new_metadata->set_gtid(txns[0].gtid());
 
         RETURN_IF_ERROR(tablet_mgr->put_tablet_metadata(new_metadata));
         return new_metadata;
@@ -171,7 +172,6 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
     VLOG(2) << "publish version tablet_id: " << tablet_id << ", txns: " << txns << ", base_version: " << base_version
             << ", new_version: " << new_version;
 
-    auto commit_time = txns.back().commit_time();
     auto new_metadata_path = tablet_mgr->tablet_metadata_location(tablet_id, new_version);
     auto cached_new_metadata = tablet_mgr->metacache()->lookup_tablet_metadata(new_metadata_path);
     if (cached_new_metadata != nullptr) {
@@ -222,6 +222,8 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
     std::unique_ptr<TxnLogApplier> log_applier;
     std::shared_ptr<TabletMetadataPB> new_metadata;
     std::vector<std::string> files_to_delete;
+    auto commit_time = txns.back().commit_time();
+    auto gtid = txns.back().gtid();
 
     // Apply txn logs
     int64_t alter_version = -1;
@@ -322,6 +324,7 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
             }
 
             new_metadata->set_commit_time(commit_time);
+            new_metadata->set_gtid(gtid);
 
             auto init_st = log_applier->init();
             if (!init_st.ok()) {
