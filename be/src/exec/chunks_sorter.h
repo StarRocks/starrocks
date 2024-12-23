@@ -179,22 +179,60 @@ protected:
 namespace detail {
 struct SortRuntimeFilterBuilder {
     template <LogicalType ltype>
-    JoinRuntimeFilter* operator()(ObjectPool* pool, const ColumnPtr& column, int rid, bool asc,
+    JoinRuntimeFilter* operator()(ObjectPool* pool, const ColumnPtr& column, int rid, bool asc, bool null_first,
                                   bool is_close_interval) {
+        bool need_null = false;
+        if (null_first) {
+            need_null = true;
+            if (column->is_null(rid)) {
+                if (is_close_interval) {
+                    return RuntimeBloomFilter<ltype>::create_with_only_null_range(pool);
+                } else {
+                    return RuntimeBloomFilter<ltype>::create_with_empty_range(pool);
+                }
+            }
+        } else {
+            if (column->is_null(rid)) {
+                if (is_close_interval) {
+                    return nullptr;
+                } else {
+                    return RuntimeBloomFilter<ltype>::create_with_full_range_without_null(pool);
+                }
+            }
+        }
+
         auto data_column = ColumnHelper::get_data_column(column.get());
         auto runtime_data_column = down_cast<RunTimeColumnType<ltype>*>(data_column);
         auto data = runtime_data_column->get_data()[rid];
         if (asc) {
-            return RuntimeBloomFilter<ltype>::template create_with_range<false>(pool, data, is_close_interval);
+            return RuntimeBloomFilter<ltype>::template create_with_range<false>(pool, data, is_close_interval,
+                                                                                need_null);
         } else {
-            return RuntimeBloomFilter<ltype>::template create_with_range<true>(pool, data, is_close_interval);
+            return RuntimeBloomFilter<ltype>::template create_with_range<true>(pool, data, is_close_interval,
+                                                                               need_null);
         }
     }
 };
 
 struct SortRuntimeFilterUpdater {
     template <LogicalType ltype>
-    std::nullptr_t operator()(JoinRuntimeFilter* filter, const ColumnPtr& column, int rid, bool asc) {
+    std::nullptr_t operator()(JoinRuntimeFilter* filter, const ColumnPtr& column, int rid, bool asc, bool null_first,
+                              bool is_close_interval) {
+        if (null_first) {
+            if (column->is_null(rid)) {
+                if (is_close_interval) {
+                    down_cast<RuntimeBloomFilter<ltype>*>(filter)->update_to_all_null();
+                } else {
+                    down_cast<RuntimeBloomFilter<ltype>*>(filter)->update_to_empty_and_not_null();
+                }
+                return nullptr;
+            }
+        } else {
+            if (column->is_null(rid)) {
+                return nullptr;
+            }
+        }
+
         auto data_column = ColumnHelper::get_data_column(column.get());
         auto runtime_data_column = down_cast<RunTimeColumnType<ltype>*>(data_column);
         auto data = runtime_data_column->get_data()[rid];

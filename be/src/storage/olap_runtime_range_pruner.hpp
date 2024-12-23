@@ -84,7 +84,16 @@ struct RuntimeColumnPredicateBuilder {
 
             // if runtime filter generate an empty range we could return directly
             if (range.is_empty_value_range()) {
-                return Status::EndOfFile("EOF, Filter by always false runtime filter");
+                if (rf->has_null()) {
+                    std::vector<const ColumnPredicate*> new_preds;
+                    TypeInfoPtr type = get_type_info(limit_type, slot->type().precision, slot->type().scale);
+                    auto column_id = parser->column_id(*slot);
+                    ColumnPredicate* null_pred = pool->add(new_column_null_predicate(type, column_id, true));
+                    new_preds.emplace_back(null_pred);
+                    return new_preds;
+                } else {
+                    return Status::EndOfFile("EOF, Filter by always false runtime filter");
+                }
             }
 
             for (auto& f : filters) {
@@ -228,7 +237,11 @@ inline Status OlapRuntimeScanRangePruner::_update(const ColumnIdToGlobalDictMap*
                 (rf_version > _rf_versions[i] && raw_read_rows - _raw_read_rows > rf_update_threshold)) {
                 ObjectPool pool;
 
-                ASSIGN_OR_RETURN(auto predicates, _get_predicates(global_dictmaps, i, &pool));
+                auto tmp_ret = _get_predicates(global_dictmaps, i, &pool);
+                RETURN_IF_ERROR(tmp_ret);
+                auto predicates = tmp_ret.value();
+
+                //ASSIGN_OR_RETURN(auto predicates, _get_predicates(global_dictmaps, i, &pool));
                 if (!predicates.empty()) {
                     RETURN_IF_ERROR(updater(predicates.front()->column_id(), predicates));
                 }
