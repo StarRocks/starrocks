@@ -154,6 +154,8 @@ public:
     // Check if this rowset need to rebuild, return `True` means need to rebuild this rowset.
     static bool needs_rowset_rebuild(const RowsetMetadataPB& rowset, uint32_t rebuild_rss_id);
 
+    Status test_minor_compact() { return minor_compact(_memtable.get()); }
+
 private:
     Status flush_memtable();
 
