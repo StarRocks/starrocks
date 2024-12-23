@@ -39,8 +39,8 @@
 namespace starrocks::parquet {
 
 Status StatisticsHelper::decode_value_into_column(ColumnPtr column, const std::vector<std::string>& values,
-                                                  const TypeDescriptor& type, const ParquetField* field,
-                                                  const std::string& timezone) {
+                                                  const std::vector<bool>& null_pages, const TypeDescriptor& type,
+                                                  const ParquetField* field, const std::string& timezone) {
     std::unique_ptr<ColumnConverter> converter;
     RETURN_IF_ERROR(ColumnConverterFactory::create_converter(*field, type, timezone, &converter));
     bool ret = true;
@@ -49,14 +49,22 @@ Status StatisticsHelper::decode_value_into_column(ColumnPtr column, const std::v
         int32_t decode_value = 0;
         if (!converter->need_convert) {
             for (size_t i = 0; i < values.size(); i++) {
-                RETURN_IF_ERROR(PlainDecoder<int32_t>::decode(values[i], &decode_value));
-                ret &= (column->append_numbers(&decode_value, sizeof(int32_t)) > 0);
+                if (null_pages[i]) {
+                    ret &= column->append_nulls(1);
+                } else {
+                    RETURN_IF_ERROR(PlainDecoder<int32_t>::decode(values[i], &decode_value));
+                    ret &= (column->append_numbers(&decode_value, sizeof(int32_t)) > 0);
+                }
             }
         } else {
             ColumnPtr src_column = converter->create_src_column();
             for (size_t i = 0; i < values.size(); i++) {
-                RETURN_IF_ERROR(PlainDecoder<int32_t>::decode(values[i], &decode_value));
-                ret &= (src_column->append_numbers(&decode_value, sizeof(int32_t)) > 0);
+                if (null_pages[i]) {
+                    ret &= src_column->append_nulls(1);
+                } else {
+                    RETURN_IF_ERROR(PlainDecoder<int32_t>::decode(values[i], &decode_value));
+                    ret &= (src_column->append_numbers(&decode_value, sizeof(int32_t)) > 0);
+                }
             }
             RETURN_IF_ERROR(converter->convert(src_column, column.get()));
         }
@@ -66,14 +74,22 @@ Status StatisticsHelper::decode_value_into_column(ColumnPtr column, const std::v
         int64_t decode_value = 0;
         if (!converter->need_convert) {
             for (size_t i = 0; i < values.size(); i++) {
-                RETURN_IF_ERROR(PlainDecoder<int64_t>::decode(values[i], &decode_value));
-                ret &= (column->append_numbers(&decode_value, sizeof(int64_t)) > 0);
+                if (null_pages[i]) {
+                    ret &= column->append_nulls(1);
+                } else {
+                    RETURN_IF_ERROR(PlainDecoder<int64_t>::decode(values[i], &decode_value));
+                    ret &= (column->append_numbers(&decode_value, sizeof(int64_t)) > 0);
+                }
             }
         } else {
             ColumnPtr src_column = converter->create_src_column();
             for (size_t i = 0; i < values.size(); i++) {
-                RETURN_IF_ERROR(PlainDecoder<int64_t>::decode(values[i], &decode_value));
-                ret &= (src_column->append_numbers(&decode_value, sizeof(int64_t)) > 0);
+                if (null_pages[i]) {
+                    ret &= src_column->append_nulls(1);
+                } else {
+                    RETURN_IF_ERROR(PlainDecoder<int64_t>::decode(values[i], &decode_value));
+                    ret &= (src_column->append_numbers(&decode_value, sizeof(int64_t)) > 0);
+                }
             }
             RETURN_IF_ERROR(converter->convert(src_column, column.get()));
         }
@@ -85,14 +101,22 @@ Status StatisticsHelper::decode_value_into_column(ColumnPtr column, const std::v
         Slice decode_value;
         if (!converter->need_convert) {
             for (size_t i = 0; i < values.size(); i++) {
-                RETURN_IF_ERROR(PlainDecoder<Slice>::decode(values[i], &decode_value));
-                ret &= column->append_strings(std::vector<Slice>{decode_value});
+                if (null_pages[i]) {
+                    ret &= column->append_nulls(1);
+                } else {
+                    RETURN_IF_ERROR(PlainDecoder<Slice>::decode(values[i], &decode_value));
+                    ret &= column->append_strings(std::vector<Slice>{decode_value});
+                }
             }
         } else {
             ColumnPtr src_column = converter->create_src_column();
             for (size_t i = 0; i < values.size(); i++) {
-                RETURN_IF_ERROR(PlainDecoder<Slice>::decode(values[i], &decode_value));
-                ret &= src_column->append_strings(std::vector<Slice>{decode_value});
+                if (null_pages[i]) {
+                    ret &= src_column->append_nulls(1);
+                } else {
+                    RETURN_IF_ERROR(PlainDecoder<Slice>::decode(values[i], &decode_value));
+                    ret &= src_column->append_strings(std::vector<Slice>{decode_value});
+                }
             }
             RETURN_IF_ERROR(converter->convert(src_column, column.get()));
         }
@@ -197,6 +221,7 @@ void translate_to_string_value(ColumnPtr col, size_t i, std::string& value) {
 
 Status StatisticsHelper::min_max_filter_on_min_max_stat(const std::vector<std::string>& min_values,
                                                         const std::vector<std::string>& max_values,
+                                                        const std::vector<bool>& null_pages,
                                                         const std::vector<int64_t>& null_counts, ExprContext* ctx,
                                                         const ParquetField* field, const std::string& timezone,
                                                         Filter& selected) {
@@ -205,8 +230,8 @@ Status StatisticsHelper::min_max_filter_on_min_max_stat(const std::vector<std::s
     switch (ltype) {
 #define M(NAME)                                                                                                     \
     case LogicalType::NAME: {                                                                                       \
-        return min_max_filter_on_min_max_stat_t<LogicalType::NAME>(min_values, max_values, null_counts, ctx, field, \
-                                                                   timezone, selected);                             \
+        return min_max_filter_on_min_max_stat_t<LogicalType::NAME>(min_values, max_values, null_pages, null_counts, \
+                                                                   ctx, field, timezone, selected);                 \
     }
         APPLY_FOR_ALL_SCALAR_TYPE(M);
 #undef M
@@ -218,6 +243,7 @@ Status StatisticsHelper::min_max_filter_on_min_max_stat(const std::vector<std::s
 template <LogicalType LType>
 Status StatisticsHelper::min_max_filter_on_min_max_stat_t(const std::vector<std::string>& min_values,
                                                           const std::vector<std::string>& max_values,
+                                                          const std::vector<bool>& null_pages,
                                                           const std::vector<int64_t>& null_counts, ExprContext* ctx,
                                                           const ParquetField* field, const std::string& timezone,
                                                           Filter& selected) {
@@ -231,10 +257,10 @@ Status StatisticsHelper::min_max_filter_on_min_max_stat_t(const std::vector<std:
     auto rf_min_value = min_max_filter->get_min_value();
     auto rf_max_value = min_max_filter->get_max_value();
 
-    RETURN_IF_ERROR(
-            StatisticsHelper::decode_value_into_column(min_column, min_values, root_expr->type(), field, timezone));
-    RETURN_IF_ERROR(
-            StatisticsHelper::decode_value_into_column(max_column, max_values, root_expr->type(), field, timezone));
+    RETURN_IF_ERROR(StatisticsHelper::decode_value_into_column(min_column, min_values, null_pages, root_expr->type(),
+                                                               field, timezone));
+    RETURN_IF_ERROR(StatisticsHelper::decode_value_into_column(max_column, max_values, null_pages, root_expr->type(),
+                                                               field, timezone));
 
     for (size_t i = 0; i < min_values.size(); i++) {
         if (!selected[i]) {
@@ -242,6 +268,10 @@ Status StatisticsHelper::min_max_filter_on_min_max_stat_t(const std::vector<std:
         }
         if (rf_has_null && null_counts[i] > 0) {
             selected[i] = 1;
+            continue;
+        }
+        if (null_pages[i]) {
+            selected[i] = 0;
             continue;
         }
 
@@ -258,6 +288,7 @@ Status StatisticsHelper::min_max_filter_on_min_max_stat_t(const std::vector<std:
 
 Status StatisticsHelper::in_filter_on_min_max_stat(const std::vector<std::string>& min_values,
                                                    const std::vector<std::string>& max_values,
+                                                   const std::vector<bool>& null_pages,
                                                    const std::vector<int64_t>& null_counts, ExprContext* ctx,
                                                    const ParquetField* field, const std::string& timezone,
                                                    Filter& selected) {
@@ -291,13 +322,11 @@ Status StatisticsHelper::in_filter_on_min_max_stat(const std::vector<std::string
     //  but there are many places in our reader just treat column as nullable, and use down_cast<NullableColumn>
     ColumnPtr min_col = ColumnHelper::create_column(c->type(), true);
     min_col->reserve(min_values.size());
-    RETURN_IF_ERROR(decode_value_into_column(min_col, min_values, c->type(), field, timezone));
-    DCHECK(!min_col->has_null());
+    RETURN_IF_ERROR(decode_value_into_column(min_col, min_values, null_pages, c->type(), field, timezone));
     min_col = down_cast<NullableColumn*>(min_col.get())->data_column();
     ColumnPtr max_col = ColumnHelper::create_column(c->type(), true);
     max_col->reserve(max_values.size());
-    RETURN_IF_ERROR(decode_value_into_column(max_col, max_values, c->type(), field, timezone));
-    DCHECK(!max_col->has_null());
+    RETURN_IF_ERROR(decode_value_into_column(max_col, max_values, null_pages, c->type(), field, timezone));
     max_col = down_cast<NullableColumn*>(max_col.get())->data_column();
 
     // logic and example:
@@ -321,6 +350,10 @@ Status StatisticsHelper::in_filter_on_min_max_stat(const std::vector<std::string
         }
         if (is_runtime_filter && has_null && null_counts[i] > 0) {
             selected[i] = 1;
+            continue;
+        }
+        if (null_pages[i]) {
+            selected[i] = 0;
             continue;
         }
 
