@@ -325,16 +325,7 @@ private:
     void _init_rf_counters(bool init_bloom);
     void _init_conjuct_counters();
 
-<<<<<<< HEAD
-    // All the memory usage will be automatically added to this MemTracker by memory allocate hook.
-    // DO NOT use this MemTracker manually.
-    // The MemTracker is owned by QueryContext, so that all the operators with the same plan_node_id can share
-    // the same MemTracker.
-    MemTracker* _mem_tracker = nullptr;
-=======
     std::shared_ptr<MemTracker> _mem_tracker;
-    std::vector<ExprContext*> _runtime_in_filters;
->>>>>>> 0dc29fa8e1 ([Refactor] Remove meaningless profiler operator mem peaks (#53045))
 };
 
 class OperatorFactory {
