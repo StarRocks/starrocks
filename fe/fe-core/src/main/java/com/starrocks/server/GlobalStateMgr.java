@@ -1310,15 +1310,6 @@ public class GlobalStateMgr {
                                         LiteralExpr.create("true", Type.BOOLEAN)),
                             false);
             }
-            if (nodeMgr.isFirstTimeStartUp()) {
-                // When the cluster is initially deployed, we use cloud native persistent index by default
-                variableMgr.setSystemVariable(variableMgr.getDefaultSessionVariable(), new SystemVariable(SetType.GLOBAL,
-                                        SessionVariable.ENABLE_CLOUD_NATIVE_PERSISTENT_INDEX_BY_DEFAULT,
-                                        LiteralExpr.create("true", Type.BOOLEAN)),
-                        false);
-            }
-            Config.enable_cloud_native_persistent_index_by_default = variableMgr.getDefaultSessionVariable()
-                    .getEnableCloudNativePersistentIndexByDefault();
         } catch (UserException e) {
             LOG.warn("Failed to set ENABLE_ADAPTIVE_SINK_DOP", e);
         } catch (Throwable t) {
