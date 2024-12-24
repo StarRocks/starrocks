@@ -66,6 +66,7 @@ import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.PublishVersionTask;
 import com.starrocks.thrift.TTaskType;
 import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -417,6 +418,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         long txnId = txnState.getTransactionId();
         long dbId = txnState.getDbId();
+        LOG.info("start publish lake db:{} table:{} txn:{}", dbId, StringUtils.join(txnState.getTableIdList(), ","), txnId);
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
             LOG.info("the database of transaction {} has been deleted", txnId);
@@ -644,6 +646,8 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 publishVersionData.addTransaction(state);
             }
         }
+        LOG.info("start publish lake batch db:{} table:{} txns:{}", dbId, tableId,
+                StringUtils.join(states.stream().map(TransactionState::getTransactionId).toArray(), ","));
 
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
 
