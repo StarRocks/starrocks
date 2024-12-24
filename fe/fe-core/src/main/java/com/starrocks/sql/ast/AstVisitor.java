@@ -1108,6 +1108,10 @@ public interface AstVisitor<R, C> {
         return visitNode(clause, context);
     }
 
+    default R visitDropPersistentIndexClause(DropPersistentIndexClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
     default R visitTableRenameClause(TableRenameClause clause, C context) {
         return visitNode(clause, context);
     }

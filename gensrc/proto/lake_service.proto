@@ -39,6 +39,7 @@ message PublishVersionRequest {
     // txn_infos[i] records some additional information about the transaction represented by txn_ids[i]
     // The size of this list is either empty or must be equal to the size of |txn_ids|.
     repeated TxnInfoPB txn_infos = 7;
+    repeated int64 rebuild_pindex_tablet_ids = 8;
 }
 
 message PublishVersionResponse {
