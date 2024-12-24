@@ -151,6 +151,7 @@ import com.starrocks.sql.ast.pipe.CreatePipeStmt;
 import com.starrocks.sql.ast.pipe.DescPipeStmt;
 import com.starrocks.sql.ast.pipe.DropPipeStmt;
 import com.starrocks.sql.ast.pipe.ShowPipeStmt;
+import com.starrocks.sql.ast.translate.TranslateStmt;
 import com.starrocks.sql.ast.txn.BeginStmt;
 import com.starrocks.sql.ast.txn.CommitStmt;
 import com.starrocks.sql.ast.txn.RollbackStmt;
@@ -1101,6 +1102,13 @@ public class Analyzer {
         @Override
         public Void visitRollbackStatement(RollbackStmt statement, ConnectContext context) {
             TransactionAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        // ---------------------------------------- Translate Statement --------------------------------------------------
+        @Override
+        public Void visitTranslateStatement(TranslateStmt statement, ConnectContext context) {
+            TranslateAnalyzer.analyze(statement, context);
             return null;
         }
     }

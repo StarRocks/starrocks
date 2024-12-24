@@ -220,7 +220,7 @@ select count(distinct t1.c1, if(t2.c3 is null, 1, 0)), sum(t1.c2 + if(t2.c3 is n
 # streaming_preaggregation_mode = 'auto' new_planner_agg_stage = '0'
 set streaming_preaggregation_mode = 'auto';
 -- result:
-E: (1064, "Getting syntax error at line 1, column 2. Detail message: Unexpected input 'streaming_preaggregation_mode', the most similar input is {'ADMIN', 'GRANT', 'STOP', 'TRUNCATE', 'INSERT', '(', ';'}.")
+E: (1064, "Getting syntax error at line 1, column 2. Detail message: Unexpected input 'streaming_preaggregation_mode', the most similar input is {'ADMIN', 'GRANT', TRANSLATE, 'STOP', 'TRUNCATE', '(', ';'}.")
 -- !result
 set new_planner_agg_stage = '0';
 -- result:
@@ -492,7 +492,7 @@ select array_agg(distinct c2), count(distinct c2), sum(c3) from skew_agg group b
 # streaming_preaggregation_mode = 'force_streaming' new_planner_agg_stage = '2'
 set streaming_preaggregation_mode = 'force_streaming';
 -- result:
-E: (1064, "Getting syntax error at line 1, column 2. Detail message: Unexpected input 'streaming_preaggregation_mode', the most similar input is {'ADMIN', 'GRANT', 'STOP', 'TRUNCATE', 'INSERT', '(', ';'}.")
+E: (1064, "Getting syntax error at line 1, column 2. Detail message: Unexpected input 'streaming_preaggregation_mode', the most similar input is {'ADMIN', 'GRANT', TRANSLATE, 'STOP', 'TRUNCATE', '(', ';'}.")
 -- !result
 set new_planner_agg_stage = '0';
 -- result:
@@ -740,7 +740,7 @@ select array_agg(distinct c2), count(distinct c2), sum(c3) from skew_agg group b
 # streaming_preaggregation_mode = 'force_preaggregation' new_planner_agg_stage = '2'
 set streaming_preaggregation_mode = 'force_preaggregation';
 -- result:
-E: (1064, "Getting syntax error at line 1, column 2. Detail message: Unexpected input 'streaming_preaggregation_mode', the most similar input is {'ADMIN', 'GRANT', 'STOP', 'TRUNCATE', 'INSERT', '(', ';'}.")
+E: (1064, "Getting syntax error at line 1, column 2. Detail message: Unexpected input 'streaming_preaggregation_mode', the most similar input is {'ADMIN', 'GRANT', TRANSLATE, 'STOP', 'TRUNCATE', '(', ';'}.")
 -- !result
 set new_planner_agg_stage = '0';
 -- result:
