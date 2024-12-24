@@ -61,6 +61,14 @@ import com.starrocks.sql.ast.pipe.DescPipeStmt;
 import com.starrocks.sql.ast.pipe.DropPipeStmt;
 import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.sql.ast.pipe.ShowPipeStmt;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.translate.TranslateStmt;
+import com.starrocks.sql.ast.txn.BeginStmt;
+import com.starrocks.sql.ast.txn.CommitStmt;
+import com.starrocks.sql.ast.txn.RollbackStmt;
+import com.starrocks.sql.ast.warehouse.AlterWarehouseStmt;
+>>>>>>> bce3ff8074 ([Feature] Support translate Trino query to StarRocks Query (#54185))
 import com.starrocks.sql.ast.warehouse.CreateWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.DropWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.ResumeWarehouseStmt;
@@ -1440,7 +1448,47 @@ public interface AstVisitor<R, C> {
         return visitExpression(node, context);
     }
 
+<<<<<<< HEAD
     // ------------------------------------------- AST ---------------------------------------==------------------------
+=======
+    // ------------------------------------------- Plan Tuning Statement -----------------------------------------------
+    default R visitAddPlanAdvisorStatement(AddPlanAdvisorStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    default R visitClearPlanAdvisorStatement(ClearPlanAdvisorStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    default R visitDelPlanAdvisorStatement(DelPlanAdvisorStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    default R visitShowPlanAdvisorStatement(ShowPlanAdvisorStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    // ---------------------------------------- Transaction Statement --------------------------------------------------
+
+    default R visitBeginStatement(BeginStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    default R visitCommitStatement(CommitStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    default R visitRollbackStatement(RollbackStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    // ---------------------------------------- Translate Statement --------------------------------------------------
+    default R visitTranslateStatement(TranslateStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    // ------------------------------------------- AST -----------------------------------------------------------------
+>>>>>>> bce3ff8074 ([Feature] Support translate Trino query to StarRocks Query (#54185))
 
     default R visitLimitElement(LimitElement node, C context) {
         return null;
