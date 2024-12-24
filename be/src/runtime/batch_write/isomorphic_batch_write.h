@@ -54,6 +54,7 @@ public:
     void unregister_stream_load_pipe(StreamLoadContext* pipe_ctx);
     // For testing
     bool contain_pipe(StreamLoadContext* pipe_ctx);
+    bool is_pipe_alive(StreamLoadContext* pipe_ctx);
 
     Status append_data(StreamLoadContext* data_ctx);
 

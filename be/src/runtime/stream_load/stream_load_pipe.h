@@ -90,6 +90,11 @@ public:
     // called when producer finished
     Status finish() override;
 
+    bool finished() {
+        std::unique_lock<std::mutex> l(_lock);
+        return _finished;
+    }
+
     // called when producer/consumer failed
     void cancel(const Status& status) override;
 

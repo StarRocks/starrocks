@@ -210,6 +210,12 @@ bool IsomorphicBatchWrite::contain_pipe(StreamLoadContext* pipe_ctx) {
     return _dead_stream_load_pipe_ctxs.find(pipe_ctx) != _dead_stream_load_pipe_ctxs.end();
 }
 
+bool IsomorphicBatchWrite::is_pipe_alive(starrocks::StreamLoadContext* pipe_ctx) {
+    std::unique_lock<std::mutex> lock(_mutex);
+    auto it = _alive_stream_load_pipe_ctxs.find(pipe_ctx);
+    return it != _alive_stream_load_pipe_ctxs.end();
+}
+
 Status IsomorphicBatchWrite::append_data(StreamLoadContext* data_ctx) {
     if (_stopped.load(std::memory_order_acquire)) {
         return Status::ServiceUnavailable("Batch write is stopped");
