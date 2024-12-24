@@ -46,7 +46,7 @@ ALTER PLAN ADVISOR ADD SELECT COUNT(*) FROM (
 
 ### 为所有查询启用自动分析
 
-如需为所有查询启用自动分析，需将系统变量 `enable_plan_analyzer` 设置为 `true`。
+如需为所有查询启用自动分析，需将系统变量 `enable_plan_analyzer`（默认值：`false`）设置为 `true`。
 
 ```SQL
 SET enable_plan_analyzer = true;
