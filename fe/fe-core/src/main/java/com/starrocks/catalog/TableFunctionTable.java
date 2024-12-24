@@ -98,7 +98,7 @@ public class TableFunctionTable extends Table {
             .column("MODIFICATION_TIME", Type.DATETIME)
             .build();
 
-    private static final int DEFAULT_AUTO_DETECT_SAMPLE_FILES = 1;
+    private static final int DEFAULT_AUTO_DETECT_SAMPLE_FILES = 2;
     private static final int DEFAULT_AUTO_DETECT_SAMPLE_ROWS = 500;
 
     private static final Logger LOG = LogManager.getLogger(TableFunctionTable.class);
