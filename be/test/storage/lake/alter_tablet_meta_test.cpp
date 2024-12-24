@@ -202,7 +202,7 @@ void AlterTabletMetaTest::test_alter_update_tablet_schema(KeysType keys_type) {
         auto tablet_id = tablet_metadata->id();
         auto version = tablet_metadata->version() + 1;
         std::unique_ptr<TxnLogApplier> log_applier =
-                new_txn_log_applier(Tablet(_tablet_mgr.get(), tablet_id), tablet_metadata, version);
+                new_txn_log_applier(Tablet(_tablet_mgr.get(), tablet_id), tablet_metadata, version, false);
 
         ASSERT_OK(log_applier->apply(log));
         ASSERT_TRUE(tablet_metadata->rowset_to_schema().size() == 0);
@@ -224,7 +224,7 @@ void AlterTabletMetaTest::test_alter_update_tablet_schema(KeysType keys_type) {
         auto tablet_id = tablet_metadata->id();
         auto version = tablet_metadata->version() + 1;
         std::unique_ptr<TxnLogApplier> log_applier =
-                new_txn_log_applier(Tablet(_tablet_mgr.get(), tablet_id), tablet_metadata, version);
+                new_txn_log_applier(Tablet(_tablet_mgr.get(), tablet_id), tablet_metadata, version, false);
 
         ASSERT_OK(log_applier->apply(log));
 
@@ -249,7 +249,7 @@ void AlterTabletMetaTest::test_alter_update_tablet_schema(KeysType keys_type) {
         auto tablet_id = tablet_metadata->id();
         auto version = tablet_metadata->version() + 1;
         std::unique_ptr<TxnLogApplier> log_applier =
-                new_txn_log_applier(Tablet(_tablet_mgr.get(), tablet_id), tablet_metadata, version);
+                new_txn_log_applier(Tablet(_tablet_mgr.get(), tablet_id), tablet_metadata, version, false);
 
         ASSERT_OK(log_applier->apply(log));
 
@@ -279,7 +279,7 @@ void AlterTabletMetaTest::test_alter_update_tablet_schema(KeysType keys_type) {
         auto tablet_id = tablet_metadata->id();
         auto version = tablet_metadata->version() + 1;
         std::unique_ptr<TxnLogApplier> log_applier =
-                new_txn_log_applier(Tablet(_tablet_mgr.get(), tablet_id), tablet_metadata, version);
+                new_txn_log_applier(Tablet(_tablet_mgr.get(), tablet_id), tablet_metadata, version, false);
 
         ASSERT_OK(log_applier->apply(log));
 
@@ -315,7 +315,7 @@ void AlterTabletMetaTest::test_alter_update_tablet_schema(KeysType keys_type) {
         auto tablet_id = tablet_metadata->id();
         auto version = tablet_metadata->version() + 1;
         std::unique_ptr<TxnLogApplier> log_applier =
-                new_txn_log_applier(Tablet(_tablet_mgr.get(), tablet_id), tablet_metadata, version);
+                new_txn_log_applier(Tablet(_tablet_mgr.get(), tablet_id), tablet_metadata, version, false);
 
         ASSERT_OK(log_applier->apply(log));
         auto rowset_id0 = tablet_metadata->rowsets(0).id();
@@ -349,7 +349,7 @@ void AlterTabletMetaTest::test_alter_update_tablet_schema(KeysType keys_type) {
         auto tablet_id = tablet_metadata->id();
         auto version = tablet_metadata->version() + 1;
         std::unique_ptr<TxnLogApplier> log_applier =
-                new_txn_log_applier(Tablet(_tablet_mgr.get(), tablet_id), tablet_metadata, version);
+                new_txn_log_applier(Tablet(_tablet_mgr.get(), tablet_id), tablet_metadata, version, false);
 
         ASSERT_OK(log_applier->apply(log));
         auto rowset_id0 = tablet_metadata->rowsets(0).id();
@@ -384,7 +384,7 @@ void AlterTabletMetaTest::test_alter_update_tablet_schema(KeysType keys_type) {
         auto tablet_id = tablet_metadata->id();
         auto version = tablet_metadata->version() + 1;
         std::unique_ptr<TxnLogApplier> log_applier =
-                new_txn_log_applier(Tablet(_tablet_mgr.get(), tablet_id), tablet_metadata, version);
+                new_txn_log_applier(Tablet(_tablet_mgr.get(), tablet_id), tablet_metadata, version, false);
 
         ASSERT_OK(log_applier->apply(log));
         auto rowset_id0 = tablet_metadata->rowsets(0).id();
@@ -426,7 +426,7 @@ void AlterTabletMetaTest::test_alter_update_tablet_schema(KeysType keys_type) {
         auto tablet_id = tablet_metadata->id();
         auto version = tablet_metadata->version() + 1;
         std::unique_ptr<TxnLogApplier> log_applier =
-                new_txn_log_applier(Tablet(_tablet_mgr.get(), tablet_id), tablet_metadata, version);
+                new_txn_log_applier(Tablet(_tablet_mgr.get(), tablet_id), tablet_metadata, version, false);
 
         ASSERT_OK(log_applier->apply(log));
         auto rowset_id0 = tablet_metadata->rowsets(0).id();
@@ -498,7 +498,7 @@ TEST_F(AlterTabletMetaTest, test_alter_persistent_index_type) {
                             : PersistentIndexTypePB::CLOUD_NATIVE);
     };
 
-    auto write_data_fn = [&]() {
+    auto write_data_fn = [&](bool rebuild_pindex) {
         int64_t txn_id = next_id();
         std::vector<int> k0{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22};
         std::vector<int> v0{2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 41, 44};
@@ -528,7 +528,7 @@ TEST_F(AlterTabletMetaTest, test_alter_persistent_index_type) {
         op_write->mutable_rowset()->set_overlapped(false);
         ASSERT_OK(_tablet_mgr->put_txn_log(txn_log));
         writer->close();
-        ASSERT_OK(publish_single_version(_tablet_metadata->id(), version++, txn_id).status());
+        ASSERT_OK(publish_single_version(_tablet_metadata->id(), version++, txn_id, rebuild_pindex).status());
     };
 
     // 1. change to local index
@@ -537,7 +537,7 @@ TEST_F(AlterTabletMetaTest, test_alter_persistent_index_type) {
     ASSERT_EQ(true, tablet_meta->enable_persistent_index());
     ASSERT_TRUE(tablet_meta->persistent_index_type() == PersistentIndexTypePB::LOCAL);
     // 2. write data
-    write_data_fn();
+    write_data_fn(false);
     // 3. change to cloud native index
     change_index_fn(true, TPersistentIndexType::CLOUD_NATIVE);
     ASSIGN_OR_ABORT(auto tablet_meta2, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version - 1));
@@ -547,12 +547,16 @@ TEST_F(AlterTabletMetaTest, test_alter_persistent_index_type) {
     int64_t old_val = config::l0_max_mem_usage;
     config::l0_max_mem_usage = 1;
     for (int i = 0; i < 10; i++) {
-        write_data_fn();
+        write_data_fn(false);
     }
-    config::l0_max_mem_usage = old_val;
     ASSIGN_OR_ABORT(auto tablet_meta3, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version - 1));
     ASSERT_TRUE(tablet_meta3->sstable_meta().sstables_size() > 0);
-    // 4. change back to local
+
+    // 4. rebuild pindex
+    { write_data_fn(true); }
+    config::l0_max_mem_usage = old_val;
+
+    // 5. change back to local
     change_index_fn(true, TPersistentIndexType::LOCAL);
     ASSIGN_OR_ABORT(auto tablet_meta4, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version - 1));
     ASSERT_EQ(true, tablet_meta4->enable_persistent_index());

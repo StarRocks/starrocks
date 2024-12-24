@@ -170,6 +170,11 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
              request->tablet_ids_size());
 
     Status::OK().to_protobuf(response->mutable_status());
+    std::unordered_set<int64> rebuild_pindex_tablets;
+    for (auto id : request->rebuild_pindex_tablet_ids()) {
+        LOG(INFO) << "get rebuild tablet: " << id;
+        rebuild_pindex_tablets.insert(id);
+    }
     for (auto tablet_id : request->tablet_ids()) {
         auto task = [&, tablet_id]() {
             DeferOp defer([&] { latch.count_down(); });
@@ -189,6 +194,11 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
             auto txns = std::vector<TxnInfoPB>();
             if (request->txn_infos_size() > 0) {
                 txns.insert(txns.begin(), request->txn_infos().begin(), request->txn_infos().end());
+                if (rebuild_pindex_tablets.count(tablet_id) > 0) {
+                    for (auto& txn : txns) {
+                        txn.set_rebuild_pindex(true);
+                    }
+                }
             } else { // This is a request from older version FE
                 // Construct TxnInfoPB from other fields
                 txns.reserve(request->txn_ids_size());
@@ -199,6 +209,9 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                     info.set_combined_txn_log(false);
                     info.set_commit_time(request->commit_time());
                     info.set_force_publish(false);
+                    if (rebuild_pindex_tablets.count(tablet_id) > 0) {
+                        info.set_rebuild_pindex(true);
+                    }
                 }
             }
 

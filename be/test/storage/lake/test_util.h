@@ -39,7 +39,8 @@
 namespace starrocks::lake {
 
 StatusOr<TabletMetadataPtr> TEST_publish_single_version(TabletManager* tablet_mgr, int64_t tablet_id,
-                                                        int64_t new_version, int64_t txn_id);
+                                                        int64_t new_version, int64_t txn_id,
+                                                        bool rebuild_pindex = false);
 
 Status TEST_publish_single_log_version(TabletManager* tablet_mgr, int64_t tablet_id, int64_t txn_id,
                                        int64_t log_version);
@@ -93,7 +94,8 @@ protected:
         ASSERT_TRUE(index_meta.version().major_number() == expected_version);
     }
 
-    StatusOr<TabletMetadataPtr> publish_single_version(int64_t tablet_id, int64_t new_version, int64_t txn_id);
+    StatusOr<TabletMetadataPtr> publish_single_version(int64_t tablet_id, int64_t new_version, int64_t txn_id,
+                                                       bool rebuild_pindex = false);
 
     Status publish_single_log_version(int64_t tablet_id, int64_t txn_id, int64_t log_version);
 
@@ -116,7 +118,8 @@ struct PrimaryKeyParam {
 };
 
 inline StatusOr<TabletMetadataPtr> TEST_publish_single_version(TabletManager* tablet_mgr, int64_t tablet_id,
-                                                               int64_t new_version, int64_t txn_id) {
+                                                               int64_t new_version, int64_t txn_id,
+                                                               bool rebuild_pindex) {
     PublishVersionRequest request;
     PublishVersionResponse response;
 
@@ -125,6 +128,9 @@ inline StatusOr<TabletMetadataPtr> TEST_publish_single_version(TabletManager* ta
     request.set_base_version(new_version - 1);
     request.set_new_version(new_version);
     request.set_commit_time(time(nullptr));
+    if (rebuild_pindex) {
+        request.add_rebuild_pindex_tablet_ids(tablet_id);
+    }
 
     auto lake_service = LakeServiceImpl(ExecEnv::GetInstance(), tablet_mgr);
     lake_service.publish_version(nullptr, &request, &response, nullptr);
@@ -184,8 +190,8 @@ inline Status TEST_publish_single_log_version(TabletManager* tablet_mgr, int64_t
 }
 
 inline StatusOr<TabletMetadataPtr> TestBase::publish_single_version(int64_t tablet_id, int64_t new_version,
-                                                                    int64_t txn_id) {
-    return TEST_publish_single_version(_tablet_mgr.get(), tablet_id, new_version, txn_id);
+                                                                    int64_t txn_id, bool rebuild_pindex) {
+    return TEST_publish_single_version(_tablet_mgr.get(), tablet_id, new_version, txn_id, rebuild_pindex);
 }
 
 inline Status TestBase::publish_single_log_version(int64_t tablet_id, int64_t txn_id, int64_t log_version) {

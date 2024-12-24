@@ -1083,6 +1083,7 @@ alterClause
     | dropBranchClause
     | dropTagClause
     | tableOperationClause
+    | dropPersistentIndexClause
 
     //Apply Policy clause
     | applyMaskingPolicyClause
@@ -1316,6 +1317,14 @@ timeUnit
     : DAYS
     | HOURS
     | MINUTES
+    ;
+
+integer_list
+    : '(' INTEGER_VALUE (',' INTEGER_VALUE)* ')'
+    ;
+
+dropPersistentIndexClause
+    : DROP PERSISTENT INDEX ON TABLETS integer_list
     ;
 
 // ---------Alter partition clause---------
@@ -3286,4 +3295,5 @@ nonReserved
     | TUNESPACE | APPEND | POPULATE | RECOMMENDATIONS
     | FIELD
     | ARRAY_ELEMENT
+    | PERSISTENT
     ;

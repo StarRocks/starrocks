@@ -37,6 +37,7 @@ message PublishVersionRequest {
     optional int64 commit_time = 5; // deprecated
     optional int64 timeout_ms = 6;
     repeated TxnInfoPB txn_infos = 7;
+    repeated int64 rebuild_pindex_tablet_ids = 8;
 }
 
 message PublishVersionResponse {
