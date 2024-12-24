@@ -70,6 +70,8 @@ import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.TabletInvertedIndex;
+import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Type;
 import com.starrocks.catalog.constraint.ForeignKeyConstraint;
 import com.starrocks.catalog.constraint.UniqueConstraint;
@@ -89,6 +91,7 @@ import com.starrocks.common.util.WriteQuorum;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.lake.LakeTablet;
 import com.starrocks.persist.TableAddOrDropColumnsInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
@@ -107,6 +110,7 @@ import com.starrocks.sql.ast.CreateIndexClause;
 import com.starrocks.sql.ast.DropColumnClause;
 import com.starrocks.sql.ast.DropFieldClause;
 import com.starrocks.sql.ast.DropIndexClause;
+import com.starrocks.sql.ast.DropPersistentIndexClause;
 import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.ast.IndexDef.IndexType;
 import com.starrocks.sql.ast.ModifyColumnClause;
@@ -2129,6 +2133,38 @@ public class SchemaChangeHandler extends AlterHandler {
         LOG.info("finished to create alter meta job {} of cloud table: {}", alterMetaJob.getJobId(),
                 olapTable.getName());
         return null;
+    }
+
+    public void processLakeTableDropPersistentIndex(AlterClause alterClause, Database db, OlapTable olapTable)
+            throws StarRocksException {
+        if (!olapTable.enablePersistentIndex() || 
+                olapTable.getPersistentIndexType() != TPersistentIndexType.CLOUD_NATIVE) {
+            LOG.warn(String.format("drop persistent index on table %s failed, it must be" +
+                        " cloud_native persistent index", olapTable.getName()));
+            throw new DdlException("drop persistent index only support cloud native index");
+        }
+        Set<Long> dropPindexTablets = ((DropPersistentIndexClause) alterClause).getTabletIds();
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+
+        for (Long tabletId : dropPindexTablets) {
+            try {
+                TabletMeta tabletMeta = invertedIndex.getTabletMeta(tabletId);
+                if (tabletMeta == null) {
+                    throw new DdlException(String.format("tablet %d is not exist", tabletId));
+                }
+                long partitionId = tabletMeta.getPhysicalPartitionId();
+                PhysicalPartition partition = olapTable.getPhysicalPartition(partitionId);
+                MaterializedIndex index = partition.getIndex(tabletMeta.getIndexId());
+                Tablet tablet = index.getTablet(tabletId);
+                LakeTablet lakeTablet = (LakeTablet) tablet;
+                lakeTablet.setRebuildPindexVersion(partition.getVisibleVersion());
+            } catch (Exception e) {
+                LOG.warn(String.format("drop persistent index on tablet %d failed, error: %s",
+                        tabletId, e.getMessage()));
+                throw new DdlException(String.format("drop persistent index on tablet %d failed, error: %s",
+                    tabletId, e.getMessage()));
+            }
+        }
     }
 
     public void updateTableMeta(Database db, String tableName, Map<String, String> properties,

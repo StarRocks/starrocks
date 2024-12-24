@@ -121,6 +121,7 @@ public class Utils {
             warehouseId = warehouseManager.getBackgroundWarehouse().getId();
         }
 
+        List<Long> rebuildPindexTabletIds = new ArrayList<>();
         for (Tablet tablet : tablets) {
             ComputeNode computeNode = warehouseManager.getComputeNodeAssignedToTablet(warehouseId, (LakeTablet) tablet);
             if (computeNode == null) {
@@ -132,6 +133,10 @@ public class Utils {
                 }
             }
             nodeToTablets.computeIfAbsent(computeNode, k -> Lists.newArrayList()).add(tablet.getId());
+            if (baseVersion == ((LakeTablet) tablet).rebuildPindexVersion() && baseVersion != 0) {
+                rebuildPindexTabletIds.add(tablet.getId());
+                LOG.info("lake tablet {} publish rebuild pindex version {}", tablet.getId(), baseVersion);
+            }
         }
 
         List<Future<PublishVersionResponse>> responseList = Lists.newArrayListWithCapacity(nodeToTablets.size());
@@ -143,6 +148,9 @@ public class Utils {
             request.tabletIds = entry.getValue(); // todo: limit the number of Tablets sent to a single node
             request.timeoutMs = LakeService.TIMEOUT_PUBLISH_VERSION;
             request.txnInfos = txnInfos;
+            if (!rebuildPindexTabletIds.isEmpty()) {
+                request.rebuildPindexTabletIds = rebuildPindexTabletIds;
+            }
 
             ComputeNode node = entry.getKey();
             LakeService lakeService = BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort());

@@ -59,6 +59,8 @@ public class LakeTablet extends Tablet {
     @SerializedName(value = JSON_KEY_DATA_SIZE_UPDATE_TIME)
     private volatile long dataSizeUpdateTime = 0L;
 
+    public long rebuildPindexVersion = 0L;
+
     public LakeTablet(long id) {
         super(id);
     }
@@ -177,5 +179,15 @@ public class LakeTablet extends Tablet {
 
         LakeTablet tablet = (LakeTablet) obj;
         return (id == tablet.id && dataSize == tablet.dataSize && rowCount == tablet.rowCount);
+    }
+
+    public void setRebuildPindexVersion(long rebuildPindexVersion) {
+        if (rebuildPindexVersion > this.rebuildPindexVersion) {
+            this.rebuildPindexVersion = rebuildPindexVersion;
+        }
+    }
+
+    public long rebuildPindexVersion() {
+        return rebuildPindexVersion;
     }
 }
