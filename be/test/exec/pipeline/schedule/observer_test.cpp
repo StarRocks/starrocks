@@ -148,29 +148,58 @@ TEST(TimerThreadTest, test) {
     }
 }
 
-TEST(ObservableTest, test) {
-    auto dummy_query_ctx = std::make_shared<QueryContext>();
-    auto dummy_fragment_ctx = std::make_shared<FragmentContext>();
-    auto exec_group = std::make_shared<NormalExecutionGroup>();
-    auto runtime_state = std::make_shared<RuntimeState>();
-    runtime_state->_obj_pool = std::make_shared<ObjectPool>();
-    runtime_state->set_query_ctx(dummy_query_ctx.get());
-    runtime_state->set_fragment_ctx(dummy_fragment_ctx.get());
-    runtime_state->_profile = std::make_shared<RuntimeProfile>("dummy");
-    dummy_fragment_ctx->set_runtime_state(std::move(runtime_state));
+class PipelineObserverTest : public ::testing::Test {
+public:
+    void SetUp() override {
+        _dummy_query_ctx = std::make_shared<QueryContext>();
+        _dummy_fragment_ctx = std::make_shared<FragmentContext>();
+        _exec_group = std::make_shared<NormalExecutionGroup>();
+        _runtime_state = std::make_shared<RuntimeState>();
+        _runtime_state->_obj_pool = std::make_shared<ObjectPool>();
+        _runtime_state->set_query_ctx(_dummy_query_ctx.get());
+        _runtime_state->set_fragment_ctx(_dummy_fragment_ctx.get());
+        _runtime_state->_profile = std::make_shared<RuntimeProfile>("dummy");
+        _dummy_fragment_ctx->set_runtime_state(std::move(_runtime_state));
+        _runtime_state = _dummy_fragment_ctx->runtime_state_ptr();
+    }
+
+    std::shared_ptr<QueryContext> _dummy_query_ctx;
+    std::shared_ptr<FragmentContext> _dummy_fragment_ctx;
+    std::shared_ptr<NormalExecutionGroup> _exec_group;
+    std::shared_ptr<RuntimeState> _runtime_state;
+};
+
+struct SimpleTestContext {
+    SimpleTestContext(OpFactories factories, ExecutionGroup* exec_group, FragmentContext* fragment_ctx,
+                      QueryContext* query_ctx)
+            : pipeline(0, std::move(factories), exec_group) {
+        auto operators = pipeline.create_operators(1, 0);
+        driver = std::make_unique<PipelineDriver>(operators, query_ctx, fragment_ctx, &pipeline, 1);
+        driver->assign_observer();
+        driver_queue = std::make_unique<QuerySharedDriverQueue>();
+        fragment_ctx->init_event_scheduler();
+        fragment_ctx->event_scheduler()->attach_queue(driver_queue.get());
+    }
+
+    Pipeline pipeline;
+    std::unique_ptr<DriverQueue> driver_queue;
+    std::unique_ptr<PipelineDriver> driver;
+};
+
+TEST_F(PipelineObserverTest, basic_test) {
     OpFactories factories;
     factories.emplace_back(std::make_shared<EmptySetOperatorFactory>(0, 1));
     factories.emplace_back(std::make_shared<NoopSinkOperatorFactory>(2, 3));
 
-    Pipeline pipeline(0, factories, exec_group.get());
+    Pipeline pipeline(0, factories, _exec_group.get());
     auto operators = pipeline.create_operators(1, 0);
-    PipelineDriver driver(operators, dummy_query_ctx.get(), dummy_fragment_ctx.get(), &pipeline, 1);
+    PipelineDriver driver(operators, _dummy_query_ctx.get(), _dummy_fragment_ctx.get(), &pipeline, 1);
     driver.assign_observer();
-    ASSERT_OK(driver.prepare(dummy_fragment_ctx->runtime_state()));
+    ASSERT_OK(driver.prepare(_dummy_fragment_ctx->runtime_state()));
 
     auto driver_queue = std::make_unique<QuerySharedDriverQueue>();
-    dummy_fragment_ctx->init_event_scheduler();
-    dummy_fragment_ctx->event_scheduler()->attach_queue(driver_queue.get());
+    _dummy_fragment_ctx->init_event_scheduler();
+    _dummy_fragment_ctx->event_scheduler()->attach_queue(driver_queue.get());
 
     driver.set_in_block_queue(true);
     driver.set_driver_state(DriverState::INPUT_EMPTY);
@@ -184,4 +213,54 @@ TEST(ObservableTest, test) {
     driver.observer()->source_update();
     driver.observer()->source_update();
 }
+
+TEST_F(PipelineObserverTest, basic_test2) {
+    OpFactories factories;
+    factories.emplace_back(std::make_shared<EmptySetOperatorFactory>(0, 1));
+    factories.emplace_back(std::make_shared<NoopSinkOperatorFactory>(2, 3));
+    SimpleTestContext tx(factories, _exec_group.get(), _dummy_fragment_ctx.get(), _dummy_query_ctx.get());
+    ASSERT_OK(tx.driver->prepare(_runtime_state.get()));
+    const auto& driver = tx.driver;
+    const auto& driver_queue = tx.driver_queue;
+
+    driver->set_in_block_queue(true);
+    driver->set_driver_state(DriverState::INPUT_EMPTY);
+    // test notify
+    driver->observer()->all_update();
+    ASSERT_OK(driver_queue->take(false));
+    driver->observer()->cancel_update();
+    ASSERT_OK(driver_queue->take(false));
+    driver->observer()->sink_update();
+    ASSERT_OK(driver_queue->take(false));
+    driver->observer()->source_update();
+    driver->observer()->source_update();
+}
+
+TEST_F(PipelineObserverTest, race_scheduler_with_observer) {
+    OpFactories factories;
+    factories.emplace_back(std::make_shared<EmptySetOperatorFactory>(0, 1));
+    factories.emplace_back(std::make_shared<NoopSinkOperatorFactory>(2, 3));
+    SimpleTestContext tx(factories, _exec_group.get(), _dummy_fragment_ctx.get(), _dummy_query_ctx.get());
+    ASSERT_OK(tx.driver->prepare(_runtime_state.get()));
+    const auto& driver = tx.driver;
+    const auto& driver_queue = tx.driver_queue;
+
+    driver->set_in_block_queue(false);
+    driver->set_driver_state(DriverState::INPUT_EMPTY);
+    driver->observer()->sink_update();
+    _dummy_fragment_ctx->event_scheduler()->add_blocked_driver(driver.get());
+
+    driver->set_in_block_queue(true);
+    driver->set_driver_state(DriverState::INPUT_EMPTY);
+    // test notify
+    driver->observer()->all_update();
+    ASSERT_OK(driver_queue->take(false));
+    driver->observer()->cancel_update();
+    ASSERT_OK(driver_queue->take(false));
+    driver->observer()->sink_update();
+    ASSERT_OK(driver_queue->take(false));
+    driver->observer()->source_update();
+    driver->observer()->source_update();
+}
+
 } // namespace starrocks::pipeline
