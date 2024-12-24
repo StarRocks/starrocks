@@ -219,6 +219,7 @@ public:
     // bitmap index or bloom filter, the predicate operand should be right-padded with '\0'.
     virtual bool padding_zeros(size_t column_length) { return false; }
     const TypeInfo* type_info() const { return _type_info.get(); }
+    TypeInfoPtr type_info_ptr() const { return _type_info; }
 
 protected:
     constexpr static const char* kMsgTooManyItems = "too many bitmap filter items";
