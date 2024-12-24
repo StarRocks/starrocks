@@ -20,9 +20,12 @@ import com.starrocks.sql.analyzer.SemanticException;
 import org.junit.Assert;
 import org.junit.Test;
 
+<<<<<<< HEAD
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
+=======
+>>>>>>> 1cc8fd4eb2 ([Enhancement] support calcuate unnest table function row nums (#54252))
 
 public class TableFunctionTest extends PlanTestBase {
     @Test
