@@ -4880,6 +4880,7 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
         ColumnIteratorOptions iter_opts;
         OlapReaderStatistics stats;
         iter_opts.stats = &stats;
+<<<<<<< HEAD
         ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file((*segment)->file_info()));
         for (auto i = 0; i < column_ids.size(); ++i) {
             // try to build iterator from delta column file first
@@ -4888,6 +4889,44 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
                 // not found in delta column file, build iterator from main segment
                 ASSIGN_OR_RETURN(col_iter, (*segment)->new_column_iterator(column_ids[i]));
                 iter_opts.read_file = read_file.get();
+=======
+        iter_opts.use_page_cache = true;
+        RandomAccessFileOptions ropts;
+        if ((*segment)->encryption_info()) {
+            ropts.encryption_info = *(*segment)->encryption_info();
+        }
+        ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(ropts, (*segment)->file_info()));
+        iter_opts.read_file = read_file.get();
+
+        if (full_row_column) {
+            full_row_column->reset_column();
+            full_row_column->reserve(rowids.size());
+            const auto& column = _tablet.tablet_schema()->column(_tablet.tablet_schema()->num_columns() - 1);
+            ASSIGN_OR_RETURN(auto col_iter, (*segment)->new_column_iterator_or_default(column, nullptr));
+            RETURN_IF_ERROR(col_iter->init(iter_opts));
+            RETURN_IF_ERROR(col_iter->fetch_values_by_rowid(rowids.data(), rowids.size(), full_row_column.get()));
+            auto row_encoder = RowStoreEncoderFactory::instance()->get_or_create_encoder(SIMPLE);
+            RETURN_IF_ERROR(row_encoder->decode_columns_from_full_row_column(*(_tablet.tablet_schema()->schema()),
+                                                                             *full_row_column, column_ids, columns));
+        } else {
+            for (auto i = 0; i < column_ids.size(); ++i) {
+                const auto& column = read_tablet_schema->column(column_ids[i]);
+                // try to build iterator from delta column file first
+                ASSIGN_OR_RETURN(auto col_iter,
+                                 new_dcg_column_iterator(ctx, fs, iter_opts, column, read_tablet_schema));
+                if (col_iter == nullptr) {
+                    // not found in delta column file, build iterator from main segment
+                    ASSIGN_OR_RETURN(col_iter, (*segment)->new_column_iterator_or_default(column, nullptr));
+                    iter_opts.read_file = read_file.get();
+                }
+                RETURN_IF_ERROR(col_iter->init(iter_opts));
+                RETURN_IF_ERROR(col_iter->fetch_values_by_rowid(rowids.data(), rowids.size(), (*columns)[i].get()));
+                // padding char columns
+                const auto& field = read_tablet_schema->schema()->field(column_ids[i]);
+                if (field->type()->type() == TYPE_CHAR) {
+                    ChunkHelper::padding_char_column(read_tablet_schema, *field, (*columns)[i].get());
+                }
+>>>>>>> fc1e74d943 ([BugFix] fix char padding missing after partial update (#54182))
             }
             RETURN_IF_ERROR(col_iter->init(iter_opts));
             RETURN_IF_ERROR(col_iter->fetch_values_by_rowid(rowids.data(), rowids.size(), (*columns)[i].get()));
@@ -4929,6 +4968,11 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
             }
             RETURN_IF_ERROR(col_iter->init(iter_opts));
             RETURN_IF_ERROR(col_iter->fetch_values_by_rowid(rowids.data(), rowids.size(), (*columns)[i].get()));
+            // padding char columns
+            const auto& field = read_tablet_schema->schema()->field(column_ids[i]);
+            if (field->type()->type() == TYPE_CHAR) {
+                ChunkHelper::padding_char_column(read_tablet_schema, *field, (*columns)[i].get());
+            }
         }
     }
     return Status::OK();
