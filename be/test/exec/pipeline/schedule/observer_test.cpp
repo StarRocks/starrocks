@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include <bits/types/struct_timespec.h>
+#include <unistd.h>
 
 #include <atomic>
 #include <condition_variable>
@@ -119,6 +120,31 @@ TEST(TimerThreadTest, test) {
         sleep(1);
         noop.unschedule(&timer);
         ASSERT_FALSE(changed);
+    }
+    {
+        std::counting_semaphore<> s(0);
+        int changed = false;
+        struct SleepTimer : public PipelineTimerTask {
+            SleepTimer(int32_t& changed_, std::counting_semaphore<>& s_) : changed(changed_), s(s_) {}
+            void Run() override {
+                s.release();
+                (void)sleep(5);
+                changed = true;
+            }
+            int32_t& changed;
+            std::counting_semaphore<>& s;
+        };
+        SleepTimer noop(changed, s);
+        //
+        timespec abstime = butil::microseconds_to_timespec(butil::gettimeofday_us());
+        timespec s1 = abstime;
+        s1.tv_sec -= 10;
+        // schedule a expired task
+        ASSERT_OK(timer.schedule(&noop, s1));
+        s.acquire();
+        // will wait util timer finished
+        noop.unschedule(&timer);
+        ASSERT_TRUE(changed);
     }
 }
 

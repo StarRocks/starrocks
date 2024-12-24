@@ -25,7 +25,6 @@
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/scan/olap_scan_operator.h"
 #include "exec/pipeline/scan/scan_operator.h"
-#include "exec/pipeline/schedule/timeout_tasks.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/query_cache/cache_operator.h"
 #include "exec/query_cache/lane_arbiter.h"
