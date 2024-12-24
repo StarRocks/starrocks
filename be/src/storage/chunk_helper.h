@@ -80,7 +80,7 @@ public:
                                      const TabletSchema& tschema, Chunk* chunk);
 
     // Padding one char column
-    static void padding_char_column(const starrocks::TabletSchemaCSPtr& tschema, const Field& field, Column* column);
+    static void padding_char_column(const TabletSchema& tschema, const Field& field, Column* column);
 
     // Reorder columns of `chunk` according to the order of |tuple_desc|.
     static void reorder_chunk(const TupleDescriptor& tuple_desc, Chunk* chunk);
