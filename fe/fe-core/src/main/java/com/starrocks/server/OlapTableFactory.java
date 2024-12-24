@@ -341,11 +341,11 @@ public class OlapTableFactory implements AbstractTableFactory {
             Pair<Boolean, Boolean> analyzeRet = PropertyAnalyzer.analyzeEnablePersistentIndex(properties,
                     table.getKeysType() == KeysType.PRIMARY_KEYS);
             boolean enablePersistentIndex = analyzeRet.first;
-            if (!enablePersistentIndex) {
+            if (!enablePersistentIndex && table.getKeysType() == KeysType.PRIMARY_KEYS) {
                 throw new DdlException("The in-memory PK index has been deprecated. "
                         + "Please set property enable_persistent_index to true.");
             }
-            if (table.isCloudNativeTable()) {
+            if (table.isCloudNativeTable() && table.getKeysType() == KeysType.PRIMARY_KEYS) {
                 TPersistentIndexType persistentIndexType;
                 try {
                     persistentIndexType = PropertyAnalyzer.analyzePersistentIndexType(properties);
