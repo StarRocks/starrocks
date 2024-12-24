@@ -385,28 +385,44 @@ void FileScanner::merge_schema(const std::vector<std::vector<SlotDescriptor>>& i
     }
 }
 
-Status FileScanner::sample_schema(RuntimeState* state, const TBrokerScanRange& scan_range,
-                                  std::vector<SlotDescriptor>* schema) {
-    auto max_sample_file_count = scan_range.params.schema_sample_file_count;
-
-    // Use float step to get a good precision.
-    float step;
-    if (max_sample_file_count <= 0 || max_sample_file_count >= scan_range.ranges.size()) {
-        // sample all files
-        step = 1;
-    } else if (max_sample_file_count == 1 || scan_range.ranges.size() == 1) {
-        step = scan_range.ranges.size();
-    } else {
-        step = static_cast<float>(scan_range.ranges.size() - 1) / (max_sample_file_count - 1);
+void FileScanner::sample_files(size_t total_file_count, int64_t sample_file_count,
+                               std::vector<size_t>* sample_file_indexes) {
+    if (sample_file_count == 0 || total_file_count == 0) {
+        return;
     }
 
+    // select the last file if sample only 1 file or total only 1 file
+    if (sample_file_count == 1 || total_file_count == 1) {
+        sample_file_indexes->emplace_back(total_file_count - 1);
+        return;
+    }
+
+    // select the first file, the last file, and some middle files with fixed step
+    // use double step to get a good precision.
+    double step;
+    if (sample_file_count <= 0 || sample_file_count >= total_file_count) {
+        // sample all files
+        step = 1;
+    } else {
+        step = static_cast<double>(total_file_count - 1) / (sample_file_count - 1);
+    }
+    for (size_t i = 0; i < sample_file_count - 1; ++i) {
+        sample_file_indexes->emplace_back(std::round(i * step));
+    }
+    sample_file_indexes->emplace_back(total_file_count - 1);
+}
+
+Status FileScanner::sample_schema(RuntimeState* state, const TBrokerScanRange& scan_range,
+                                  std::vector<SlotDescriptor>* schema) {
     std::vector<std::vector<SlotDescriptor>> schemas;
-    size_t sample_file_count = 0;
     // lowercase_name: <file_path, original_name>
     std::map<std::string, std::pair<std::string, std::string>> unique_names;
 
     // sample some files.
-    for (size_t i = 0; i < scan_range.ranges.size(); i = std::round(i + step)) {
+    std::vector<size_t> sample_file_indexes;
+    sample_files(scan_range.ranges.size(), scan_range.params.schema_sample_file_count, &sample_file_indexes);
+
+    for (auto i : sample_file_indexes) {
         // sample range only contains 1 file.
         auto sample_range = scan_range;
         sample_range.ranges = {sample_range.ranges[i]};
@@ -468,8 +484,6 @@ Status FileScanner::sample_schema(RuntimeState* state, const TBrokerScanRange& s
         }
 
         schemas.emplace_back(std::move(schema));
-
-        if (++sample_file_count > max_sample_file_count) break;
     }
 
     if (schemas.empty()) return Status::InvalidArgument("get an empty schema");
