@@ -20,6 +20,7 @@
 
 #include "column/bytes.h"
 #include "column/vectorized_fwd.h"
+#include "common/config.h"
 #include "common/logging.h"
 #include "gutil/bits.h"
 #include "gutil/casts.h"
@@ -71,28 +72,62 @@ void BinaryColumnBase<T>::append(const Column& src, size_t offset, size_t count)
 
 template <typename T>
 void BinaryColumnBase<T>::append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) {
-    const auto& src_column = down_cast<const BinaryColumnBase<T>&>(src);
-    const auto& src_offsets = src_column.get_offset();
-    const auto& src_bytes = src_column.get_bytes();
+    if (!config::enable_string_select) {
+        const auto& src_column = down_cast<const BinaryColumnBase<T>&>(src);
+        const auto& src_offsets = src_column.get_offset();
+        const auto& src_bytes = src_column.get_bytes();
 
-    size_t cur_row_count = _offsets.size() - 1;
-    size_t cur_byte_size = _bytes.size();
+        size_t cur_row_count = _offsets.size() - 1;
+        size_t cur_byte_size = _bytes.size();
 
-    _offsets.resize(cur_row_count + size + 1);
-    for (size_t i = 0; i < size; i++) {
-        uint32_t row_idx = indexes[from + i];
-        T str_size = src_offsets[row_idx + 1] - src_offsets[row_idx];
-        _offsets[cur_row_count + i + 1] = _offsets[cur_row_count + i] + str_size;
-        cur_byte_size += str_size;
-    }
-    _bytes.resize(cur_byte_size);
+        _offsets.resize(cur_row_count + size + 1);
+        for (size_t i = 0; i < size; i++) {
+            uint32_t row_idx = indexes[from + i];
+            T str_size = src_offsets[row_idx + 1] - src_offsets[row_idx];
+            _offsets[cur_row_count + i + 1] = _offsets[cur_row_count + i] + str_size;
+            cur_byte_size += str_size;
+        }
+        _bytes.resize(cur_byte_size);
 
-    auto* dest_bytes = _bytes.data();
-    for (size_t i = 0; i < size; i++) {
-        uint32_t row_idx = indexes[from + i];
-        T str_size = src_offsets[row_idx + 1] - src_offsets[row_idx];
-        strings::memcpy_inlined(dest_bytes + _offsets[cur_row_count + i], src_bytes.data() + src_offsets[row_idx],
-                                str_size);
+        auto* dest_bytes = _bytes.data();
+        for (size_t i = 0; i < size; i++) {
+            uint32_t row_idx = indexes[from + i];
+            T str_size = src_offsets[row_idx + 1] - src_offsets[row_idx];
+            strings::memcpy_inlined(dest_bytes + _offsets[cur_row_count + i], src_bytes.data() + src_offsets[row_idx],
+                                    str_size);
+        }
+
+    } else {
+        size_t cur_row_count = _offsets.size() - 1;
+        const auto& src_column = down_cast<const BinaryColumnBase<T>&>(src);
+        const auto& src_offsets = src_column.get_offset().data();
+
+        uint32_t idx = 0;
+        uint32_t next_idx = 0;
+
+        T* dst_offsets = _offsets.data() + cur_row_count;
+        auto* dst_bytes = _bytes.data() + *dst_offsets;
+        auto* src_bytes = src_column.get_bytes().data();
+
+        for (size_t i = 0; i < size - 1; i++) {
+            idx = indexes[from + i];
+            next_idx = indexes[from + i + 1];
+            __builtin_prefetch(src_bytes + src_offsets[idx], 0, PREFETCH_HINT_T0);
+
+            T str_size = src_offsets[idx + 1] - src_offsets[idx];
+            *(dst_offsets + 1) = *(dst_offsets) + str_size;
+            strings::memcpy_inlined(dst_bytes, src_bytes + src_offsets[idx], str_size);
+
+            __builtin_prefetch(src_offsets + next_idx, 0, PREFETCH_HINT_T0);
+            dst_bytes += str_size;
+            dst_offsets++;
+        }
+
+        T str_size = src_offsets[next_idx + 1] - src_offsets[next_idx];
+        *(dst_offsets + 1) = *(dst_offsets) + str_size;
+        strings::memcpy_inlined(dst_bytes, src_bytes + src_offsets[next_idx], str_size);
+
+        _bytes.resize(*(dst_offsets + 1));
     }
 
     _slices_cache = false;

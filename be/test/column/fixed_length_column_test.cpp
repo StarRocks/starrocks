@@ -16,8 +16,12 @@
 
 #include <gtest/gtest.h>
 
+#include <cstdint>
+#include <vector>
+
 #include "column/column_helper.h"
 #include "column/const_column.h"
+#include "column/datum.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "exec/sorting/sorting.h"
@@ -642,6 +646,96 @@ TEST(FixedLengthColumnTest, test_fill_range) {
     ASSERT_EQ(0, p[2]);
     ASSERT_EQ(values[3], p[3]);
     ASSERT_EQ(0, p[4]);
+}
+
+// NOLINTNEXTLINE
+TEST(FixedLengthColumnTest, test_append_select) {
+    auto column = FixedLengthColumn<int32_t>::create();
+    auto clone = FixedLengthColumn<int32_t>::create();
+    for (int i = 0; i < 100; i++) {
+        column->append(i);
+    }
+
+    vector<uint32_t> index;
+    for (int i = 0; i < 50; i++) {
+        index.push_back(i * 2);
+    }
+    LOG(INFO) << clone->debug_string();
+    clone->append_selective(*column, index.data(), 0, 50);
+    LOG(INFO) << clone->debug_string();
+}
+
+// NOLINTNEXTLINE
+TEST(FixedLengthColumnTest, test_append_select2) {
+    auto column = FixedLengthColumn<uint8_t>::create();
+    auto clone = FixedLengthColumn<uint8_t>::create();
+    for (int i = 0; i < 100; i++) {
+        column->append(i);
+    }
+
+    vector<uint32_t> index;
+    for (int i = 0; i < 50; i++) {
+        index.push_back(i * 2);
+    }
+    LOG(INFO) << clone->debug_string();
+    clone->append_selective(*column, index.data(), 0, 50);
+    LOG(INFO) << clone->debug_string();
+}
+
+// NOLINTNEXTLINE
+TEST(FixedLengthColumnTest, test_append_select4) {
+    auto column = FixedLengthColumn<int16_t>::create();
+    auto clone = FixedLengthColumn<int16_t>::create();
+    for (int i = 0; i < 100; i++) {
+        column->append(i);
+    }
+
+    vector<uint32_t> index;
+    for (int i = 0; i < 50; i++) {
+        index.push_back(i * 2);
+    }
+    LOG(INFO) << clone->debug_string();
+    clone->append_selective(*column, index.data(), 0, 50);
+    LOG(INFO) << clone->debug_string();
+}
+
+// NOLINTNEXTLINE
+TEST(FixedLengthColumnTest, test_append_select3) {
+    auto column = FixedLengthColumn<int64_t>::create();
+    auto clone = FixedLengthColumn<int64_t>::create();
+    for (int i = 0; i < 100; i++) {
+        column->append(i);
+    }
+
+    vector<uint32_t> index;
+    for (int i = 0; i < 50; i++) {
+        index.push_back(i * 2);
+    }
+    LOG(INFO) << clone->debug_string();
+    clone->append_selective(*column, index.data(), 0, index.size());
+    LOG(INFO) << clone->debug_string();
+}
+
+// NOLINTNEXTLINE
+TEST(FixedLengthColumnTest, test_append_select5) {
+    auto column = NullableColumn::create(FixedLengthColumn<int16_t>::create(), NullColumn::create());
+    // auto column = FixedLengthColumn<int64_t>::create();
+    auto clone = column->clone_empty();
+    for (int i = 0; i < 100; i++) {
+        if (i % 7 == 0) {
+            column->append_nulls(1);
+        } else {
+            column->append_datum(Datum((int16_t)i));
+        }
+    }
+
+    vector<uint32_t> index;
+    for (int i = 0; i < 50; i++) {
+        index.push_back(i * 2);
+    }
+    LOG(INFO) << clone->debug_string();
+    clone->append_selective(*column, index.data(), 0, index.size());
+    LOG(INFO) << clone->debug_string();
 }
 
 } // namespace starrocks

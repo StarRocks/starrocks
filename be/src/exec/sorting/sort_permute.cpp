@@ -265,4 +265,22 @@ void materialize_by_permutation(Chunk* dst, const std::vector<ChunkPtr>& chunks,
         materialize_column_by_permutation(dst->get_column_by_index(col_index).get(), tmp_columns, perm);
     }
 }
+
+void materialize_by_permutation(Chunk* dst, Chunk* chunk, const PermutationView& perm) {
+    if (chunk == nullptr || perm.empty()) {
+        return;
+    }
+
+    DCHECK_LT(std::max_element(perm.begin(), perm.end(),
+                               [](auto& lhs, auto& rhs) { return lhs.chunk_index < rhs.chunk_index; })
+                      ->chunk_index, 1);
+    DCHECK_EQ(dst->num_columns(), chunk->columns().size());
+
+    for (size_t col_index = 0; col_index < dst->num_columns(); col_index++) {
+        Columns tmp_columns;
+        tmp_columns.reserve(1);
+        tmp_columns.push_back(chunk->get_column_by_index(col_index));
+        materialize_column_by_permutation(dst->get_column_by_index(col_index).get(), tmp_columns, perm);
+    }
+}
 } // namespace starrocks

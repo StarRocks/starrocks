@@ -21,10 +21,14 @@
 #include <memory>
 #include <random>
 #include <utility>
+#include <vector>
 
 #include "common/config.h"
+#include "common/statusor.h"
+#include "exec/chunks_sorter.h"
 #include "exec/pipeline/exchange/shuffler.h"
 #include "exec/pipeline/exchange/sink_buffer.h"
+#include "exec/sorting/sorting.h"
 #include "exprs/expr.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/descriptors.h"
@@ -196,7 +200,24 @@ Status ExchangeSinkOperator::Channel::add_rows_selective(Chunk* chunk, int32_t d
     }
 
     if (_chunks[driver_sequence]->num_rows() + size > state->chunk_size()) {
-        RETURN_IF_ERROR(send_one_chunk(state, _chunks[driver_sequence].get(), driver_sequence, false));
+        if (config::enable_shuffle_sort) {
+            Permutation _sort_permutation;
+            _sort_permutation.resize(0);
+            Columns orderby_columns;
+            for (auto& expr : _parent->_sort_expr_ctxs) {
+                ASSIGN_OR_RETURN(auto col, expr->evaluate(_chunks[driver_sequence].get()));
+                orderby_columns.emplace_back(col);
+            }
+            RETURN_IF_ERROR(sort_and_tie_columns(state->cancelled_ref(), orderby_columns, _parent->_sort_descs,
+                                                 &_sort_permutation));
+            auto sorted_chunk =
+                    _chunks[driver_sequence]->clone_empty_with_slot(_chunks[driver_sequence].get()->num_rows());
+            materialize_by_permutation(sorted_chunk.get(), chunk, _sort_permutation);
+            RETURN_IF_ERROR(send_one_chunk(state, sorted_chunk.get(), driver_sequence, false));
+        } else {
+            RETURN_IF_ERROR(send_one_chunk(state, _chunks[driver_sequence].get(), driver_sequence, false));
+        }
+
         // we only clear column data, because we need to reuse column schema
         _chunks[driver_sequence]->set_num_rows(0);
     }
@@ -422,6 +443,12 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
     if (_part_type == TPartitionType::HASH_PARTITIONED ||
         _part_type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
         _partitions_columns.resize(_partition_expr_ctxs.size());
+
+        _sort_expr_ctxs.emplace_back(_partition_expr_ctxs[0]);
+        std::vector<bool> orders = {true};
+        std::vector<bool> null_fists = {false};
+        _sort_descs = SortDescs(orders, null_fists);
+
         _unique_metrics->add_info_string("ShuffleNumPerChannel", std::to_string(_num_shuffles_per_channel));
         _unique_metrics->add_info_string("TotalShuffleNum", std::to_string(_num_shuffles));
         _unique_metrics->add_info_string("PipelineLevelShuffle", _is_pipeline_level_shuffle ? "Yes" : "No");

@@ -14,11 +14,17 @@
 
 #include <gutil/strings/fastmem.h>
 
+#include <cstdint>
+#include <type_traits>
+
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
+#include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
+#include "common/config.h"
 #include "exec/sorting/sort_helper.h"
 #include "gutil/casts.h"
+#include "gutil/integral_types.h"
 #include "storage/decimal12.h"
 #include "types/large_int_value.h"
 #include "util/hash_util.hpp"
@@ -45,7 +51,50 @@ void FixedLengthColumnBase<T>::append_selective(const Column& src, const uint32_
     const T* src_data = reinterpret_cast<const T*>(src.raw_data());
     size_t orig_size = _data.size();
     _data.resize(orig_size + size);
-    for (size_t i = 0; i < size; ++i) {
+
+    size_t i = 0;
+#ifdef __AVX2__
+    if (config::enable_avx_gather) {
+        T* store = _data.data() + orig_size;
+        if constexpr (std::is_same_v<T, int32_t>) {
+            const int* fsrc_data = (const int*)src_data;
+            for (; i + 7 < size; i += 8) {
+                __m256i index_vec = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(indexes + from + i));
+                __m256i data_vec = _mm256_i32gather_epi32(fsrc_data, index_vec, 4);
+                _mm256_storeu_si256(reinterpret_cast<__m256i*>(store + i), data_vec);
+            }
+        } else if constexpr (std::is_same_v<T, int64_t>) {
+            const long long int* fsrc_data = (const long long int*)src_data;
+            for (; i + 3 < size; i += 4) {
+                __m128i index_vec = _mm_loadu_si128(reinterpret_cast<const __m128i*>(indexes + from + i));
+                __m256i data_vec = _mm256_i32gather_epi64(fsrc_data, index_vec, 8);
+                _mm256_storeu_si256(reinterpret_cast<__m256i*>(store + i), data_vec);
+            }
+        } else if constexpr (std::is_same_v<T, uint8_t> || std::is_same_v<T, int8_t> || std::is_same_v<T, int16_t>) {
+            constexpr int type_size = sizeof(T);
+            const int* fsrc_data = (const int*)src_data;
+            int temp[8] = {0};
+            for (; i + 7 < size; i += 8) {
+                __m256i index_vec = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(indexes + from + i));
+                __m256i data_vec = _mm256_i32gather_epi32(fsrc_data, index_vec, type_size);
+                _mm256_storeu_si256(reinterpret_cast<__m256i*>(temp), data_vec);
+                for (int j = 0; j < 8; j++) {
+                    store[i + j] = temp[j];
+                }
+                // store[i + 0] = (T)_mm256_extract_epi32(data_vec, 0);
+                // store[i + 1] = (T)_mm256_extract_epi32(data_vec, 1);
+                // store[i + 2] = (T)_mm256_extract_epi32(data_vec, 2);
+                // store[i + 3] = (T)_mm256_extract_epi32(data_vec, 3);
+                // store[i + 4] = (T)_mm256_extract_epi32(data_vec, 4);
+                // store[i + 5] = (T)_mm256_extract_epi32(data_vec, 5);
+                // store[i + 6] = (T)_mm256_extract_epi32(data_vec, 6);
+                // store[i + 7] = (T)_mm256_extract_epi32(data_vec, 7);
+            }
+        }
+    }
+#endif
+    // Handle the remaining elements
+    for (; i < size; ++i) {
         _data[orig_size + i] = src_data[indexes[from + i]];
     }
 }

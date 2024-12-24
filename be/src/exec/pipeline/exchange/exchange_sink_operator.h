@@ -16,6 +16,7 @@
 
 #include <memory>
 #include <utility>
+#include <vector>
 
 #include "column/column.h"
 #include "common/global_types.h"
@@ -26,6 +27,7 @@
 #include "exec/pipeline/exchange/sink_buffer.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/operator.h"
+#include "exec/sorting/sorting.h"
 #include "gen_cpp/data.pb.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "serde/protobuf_serde.h"
@@ -189,6 +191,10 @@ private:
     // The following fields are for shuffle exchange:
     const std::vector<ExprContext*>& _partition_expr_ctxs; // compute per-row partition values
     Columns _partitions_columns;
+    SortDescs _sort_descs;
+    std::vector<ExprContext*> _sort_expr_ctxs;
+    // Permutation _sort_permutation;
+
     std::vector<uint32_t> _hash_values;
     std::vector<uint32_t> _shuffle_channel_ids;
     std::vector<int> _driver_sequence_per_shuffle;

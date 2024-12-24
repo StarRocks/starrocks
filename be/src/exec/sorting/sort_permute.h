@@ -105,6 +105,8 @@ inline void permutate_to_selective(const Permutation& perm, std::vector<uint32_t
 
 // Materialize chunk by permutation
 void materialize_by_permutation(Chunk* dst, const std::vector<ChunkPtr>& chunks, const PermutationView& perm);
+void materialize_by_permutation(Chunk* dst, Chunk* chunk, const PermutationView& perm);
+
 void materialize_column_by_permutation(Column* dst, const Columns& columns, const PermutationView& perm);
 
 // Tie and TieIterator
