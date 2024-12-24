@@ -97,6 +97,12 @@ public:
         return cache_sizes;
     }
 
+    static long get_l3_cache_size() {
+        auto& cache_sizes = get_cache_sizes();
+        return cache_sizes[CacheLevel::L3_CACHE] ? cache_sizes[CacheLevel::L3_CACHE]
+                                                 : cache_sizes[CacheLevel::L2_CACHE];
+    }
+
     static std::vector<size_t> get_core_ids();
 
     static bool is_cgroup_with_cpuset() { return is_cgroup_with_cpuset_; }
