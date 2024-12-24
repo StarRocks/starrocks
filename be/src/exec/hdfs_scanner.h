@@ -40,6 +40,11 @@ struct HdfsSplitContext : public pipeline::ScanSplitContext {
 };
 using HdfsSplitContextPtr = std::unique_ptr<HdfsSplitContext>;
 
+struct SkipRowsContext {
+    std::set<int64_t> need_skip_rowids;
+};
+using SkipRowsContextPtr = std::shared_ptr<SkipRowsContext>;
+
 struct HdfsScanStats {
     int64_t raw_rows_read = 0;
     int64_t rows_read = 0;
