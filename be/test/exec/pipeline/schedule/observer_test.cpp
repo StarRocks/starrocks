@@ -227,13 +227,31 @@ TEST_F(PipelineObserverTest, test_obs) {
     const auto& driver = tx.driver;
 
     driver->set_in_block_queue(true);
-    driver->set_driver_state(DriverState::INPUT_EMPTY);
+    driver->set_driver_state(DriverState::PENDING_FINISH);
     Observable obs;
     _runtime_state->set_enable_event_scheduler(true);
     obs.add_observer(_runtime_state.get(), driver->observer());
     ASSERT_GT(obs.to_string().size(), 0);
     obs.notify_sink_observers();
     obs.notify_source_observers();
+}
+
+TEST_F(PipelineObserverTest, test_cancel) {
+    OpFactories factories;
+    factories.emplace_back(std::make_shared<EmptySetOperatorFactory>(0, 1));
+    factories.emplace_back(std::make_shared<NoopSinkOperatorFactory>(2, 3));
+
+    SimpleTestContext tx(factories, _exec_group.get(), _dummy_fragment_ctx.get(), _dummy_query_ctx.get());
+    ASSERT_OK(tx.driver->prepare(_runtime_state.get()));
+    const auto& driver = tx.driver;
+
+    driver->set_driver_state(DriverState::INPUT_EMPTY);
+    _dummy_fragment_ctx->cancel(Status::InternalError("error"));
+    driver->set_in_block_queue(true);
+    driver->observer()->all_update();
+    for (size_t i = 0; i < driver->_operator_stages.size(); ++i) {
+        driver->_operator_stages[i] = OperatorStage::CLOSED;
+    }
 }
 
 } // namespace starrocks::pipeline
