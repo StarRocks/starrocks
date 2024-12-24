@@ -404,4 +404,10 @@ void FragmentContext::_close_stream_load_contexts() {
     }
 }
 
+void FragmentContext::init_event_scheduler() {
+    _event_scheduler = std::make_unique<EventScheduler>();
+    runtime_state()->runtime_profile()->add_info_string("EnableEventScheduler",
+                                                        enable_event_scheduler() ? "true" : "false");
+}
+
 } // namespace starrocks::pipeline
