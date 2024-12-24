@@ -857,27 +857,27 @@ void LakeTabletsChannel::_update_tablet_profile(DeltaWriter* writer, RuntimeProf
                            DEFAULT_IF_NULL(flush_stat, flush_stat->queueing_memtable_num.load(), 0));
     ADD_AND_UPDATE_TIMER(profile, "FlushTaskPendingTime", DEFAULT_IF_NULL(flush_stat, flush_stat->pending_time_ns, 0));
     ADD_AND_UPDATE_COUNTER(profile, "MemtableInsertCount", TUnit::UNIT,
-                           DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.insert_count, 0));
+                           DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.insert_count.load(), 0));
     ADD_AND_UPDATE_TIMER(profile, "MemtableInsertTime",
-                         DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.insert_time_ns, 0));
+                         DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.insert_time_ns.load(), 0));
     ADD_AND_UPDATE_TIMER(profile, "MemtableFinalizeTime",
-                         DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.finalize_time_ns, 0));
+                         DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.finalize_time_ns.load(), 0));
     ADD_AND_UPDATE_COUNTER(profile, "MemtableSortCount", TUnit::UNIT,
-                           DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.sort_count, 0));
+                           DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.sort_count.load(), 0));
     ADD_AND_UPDATE_TIMER(profile, "MemtableSortTime",
-                         DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.sort_time_ns, 0));
+                         DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.sort_time_ns.load(), 0));
     ADD_AND_UPDATE_COUNTER(profile, "MemtableAggCount", TUnit::UNIT,
-                           DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.agg_count, 0));
+                           DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.agg_count.load(), 0));
     ADD_AND_UPDATE_TIMER(profile, "MemtableAggTime",
-                         DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.agg_time_ns, 0));
+                         DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.agg_time_ns.load(), 0));
     ADD_AND_UPDATE_TIMER(profile, "MemtableFlushTime",
-                         DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.flush_time_ns, 0));
+                         DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.flush_time_ns.load(), 0));
     ADD_AND_UPDATE_TIMER(profile, "MemtableIOTime",
-                         DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.io_time_ns, 0));
+                         DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.io_time_ns.load(), 0));
     ADD_AND_UPDATE_COUNTER(profile, "MemtableMemorySize", TUnit::BYTES,
-                           DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.flush_memory_size, 0));
+                           DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.flush_memory_size.load(), 0));
     ADD_AND_UPDATE_COUNTER(profile, "MemtableDiskSize", TUnit::BYTES,
-                           DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.flush_disk_size, 0));
+                           DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.flush_disk_size.load(), 0));
 }
 
 std::shared_ptr<TabletsChannel> new_lake_tablets_channel(LoadChannel* load_channel, lake::TabletManager* tablet_manager,
