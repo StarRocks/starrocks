@@ -16,11 +16,13 @@ package com.starrocks.sql.automv.generator;
 
 import com.starrocks.common.Pair;
 import com.starrocks.sql.automv.column.GenericColumn;
+import com.starrocks.sql.automv.pieces.TableUsage;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 public final class QueryGenerateContext {
     private final boolean trace;
@@ -29,17 +31,19 @@ public final class QueryGenerateContext {
     private final boolean rectifyTableName;
     private final List<Pair<Integer, GenericColumn>> outputColumns;
     private final ColumnRefSet inputColumnIds;
+    // only used in 11MV
+    private final TableUsage tableUsage;
     private List<QueryGenerateResult> inputResults;
-
     private QueryGenerateContext(boolean trace, boolean reserveConjuncts, boolean newTableAliasForTopPiece,
                                  boolean rectifyTableName, List<Pair<Integer, GenericColumn>> outputColumns,
-                                 ColumnRefSet inputColumnIds) {
+                                 ColumnRefSet inputColumnIds, TableUsage tableUsage) {
         this.trace = trace;
         this.reserveConjuncts = reserveConjuncts;
         this.newTableAliasForTopPiece = newTableAliasForTopPiece;
         this.rectifyTableName = rectifyTableName;
         this.outputColumns = outputColumns;
         this.inputColumnIds = inputColumnIds;
+        this.tableUsage = tableUsage;
     }
 
     public static QueryGenerateContext of(
@@ -47,16 +51,17 @@ public final class QueryGenerateContext {
             boolean reserveConjuncts,
             boolean rectifyTableName) {
         return new QueryGenerateContext(trace, reserveConjuncts, true, rectifyTableName, Collections.emptyList(),
-                ColumnRefSet.of());
+                ColumnRefSet.of(), null);
     }
 
-    public static QueryGenerateContext of11MV(ColumnRefSet inputColumnIds) {
-        return new QueryGenerateContext(false, true, true, false, Collections.emptyList(), inputColumnIds);
+    public static QueryGenerateContext of11MV(TableUsage tableUsage) {
+        return new QueryGenerateContext(false, true, true, false, Collections.emptyList(), ColumnRefSet.of(),
+                tableUsage);
     }
 
     public static QueryGenerateContext ofNoTopAlias() {
         return new QueryGenerateContext(false, false, false, false,
-                Collections.emptyList(), ColumnRefSet.of());
+                Collections.emptyList(), ColumnRefSet.of(), null);
     }
 
     public static QueryGenerateContext of(
@@ -65,7 +70,12 @@ public final class QueryGenerateContext {
             boolean rectifyTableName,
             List<Pair<Integer, GenericColumn>> outputColumns,
             ColumnRefSet inputColumnIds) {
-        return new QueryGenerateContext(trace, reserveConjuncts, true, rectifyTableName, outputColumns, inputColumnIds);
+        return new QueryGenerateContext(trace, reserveConjuncts, true, rectifyTableName, outputColumns, inputColumnIds,
+                null);
+    }
+
+    public Optional<TableUsage> getTableUsage() {
+        return Optional.ofNullable(tableUsage);
     }
 
     public boolean isRectifyTableName() {
@@ -78,7 +88,7 @@ public final class QueryGenerateContext {
 
     public QueryGenerateContext derive(List<Pair<Integer, GenericColumn>> outputColumns, ColumnRefSet inputColumnIds) {
         return new QueryGenerateContext(trace, reserveConjuncts, newTableAliasForTopPiece, rectifyTableName,
-                outputColumns, inputColumnIds);
+                outputColumns, inputColumnIds, tableUsage);
     }
 
     public boolean isTrace() {

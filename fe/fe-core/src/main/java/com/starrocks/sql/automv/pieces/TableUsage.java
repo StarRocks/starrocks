@@ -36,6 +36,7 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
@@ -50,6 +51,9 @@ public class TableUsage {
     private final Map<Integer, TieredList<Op>> pushDownConjuncts;
     private final List<ColumnRefSet> joinKeys;
     private final List<ColumnRefSet> groupByKeys;
+
+    private transient TieredList<Op> whereConjuncts;
+    private transient Map<Integer, Map<StrictOp, Long>> conjunctFreq;
 
     public TableUsage(PlanPiece piece, TablePiece tablePiece, ColumnRefSet usedColumns,
                       Map<Integer, TieredList<Op>> pushDownConjuncts, List<ColumnRefSet> joinKeys,
@@ -223,6 +227,50 @@ public class TableUsage {
                         Collectors.mapping(p -> p.second,
                                 Collectors.groupingBy(pp -> pp.first,
                                         Collectors.mapping(pp -> pp.second, TieredList.<Op>toList())))));
+    }
+
+    private void analyzeUsageOfPushDownPredicates() {
+        Preconditions.checkState(whereConjuncts == null);
+        Preconditions.checkState(conjunctFreq == null);
+        Map<Integer, Map<StrictOp, Long>> predicateFreq = pushDownConjuncts.entrySet()
+                .stream()
+                .collect(Collectors.toMap(
+                        Map.Entry::getKey,
+                        e -> e.getValue()
+                                .stream()
+                                .collect(Collectors.groupingBy(Op::strict, Collectors.counting()))));
+
+        TieredList.Builder<Op> stiffPredicatesBuilder = TieredList.<Op>newGenesisTier();
+        Map<Integer, Map<StrictOp, Long>> finalPredicateFreq = Maps.newHashMap();
+        for (Map.Entry<Integer, Map<StrictOp, Long>> entry : predicateFreq.entrySet()) {
+            Integer columnId = entry.getKey();
+            Map<StrictOp, Long> opToFreq = entry.getValue();
+            Map<Boolean, TieredMap<StrictOp, Long>> opGroups = opToFreq.entrySet()
+                    .stream()
+                    .collect(Collectors.partitioningBy(
+                            e -> OpUtil.isStiffPredicate(e.getKey().getOp()),
+                            TieredMap.toMap(Map.Entry::getKey, Map.Entry::getValue)));
+            opGroups.get(true).keySet().forEach(sop -> stiffPredicatesBuilder.add(sop.getOp()));
+            if (!opGroups.get(false).isEmpty()) {
+                finalPredicateFreq.put(columnId, opGroups.get(false));
+            }
+        }
+        whereConjuncts = stiffPredicatesBuilder.build();
+        conjunctFreq = finalPredicateFreq;
+    }
+
+    public TieredList<Op> getWhereConjuncts() {
+        if (whereConjuncts == null) {
+            analyzeUsageOfPushDownPredicates();
+        }
+        return Objects.requireNonNull(whereConjuncts);
+    }
+
+    public Map<Integer, Map<StrictOp, Long>> getConjunctFreq() {
+        if (conjunctFreq == null) {
+            analyzeUsageOfPushDownPredicates();
+        }
+        return Objects.requireNonNull(conjunctFreq);
     }
 
     public PlanPiece getPiece() {

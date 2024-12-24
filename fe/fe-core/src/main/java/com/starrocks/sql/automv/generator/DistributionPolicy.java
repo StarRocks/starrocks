@@ -28,9 +28,9 @@ import java.util.List;
 // 2. MV of group-by agg, we use the harmony mean of bucket numbers of base tables as MV's bucket number.
 //    MV, and MV's bucket number at least is 64.
 public class DistributionPolicy {
-    public static PrettyPrinter getDistribution(AggregatePiece aggPiece, List<String> bucketColumns) {
+    public static PrettyPrinter getDistribution(PlanPiece piece, List<String> bucketColumns) {
         PrettyPrinter printer = new PrettyPrinter();
-        List<TablePiece> tablePieces = PlanPiece.collect(aggPiece, TablePiece.class);
+        List<TablePiece> tablePieces = PlanPiece.collect(piece, TablePiece.class);
         double harmonyDivider = tablePieces.stream().map(tablePiece ->
                 1.0 / Util.downcast(tablePiece.getTable().getTable(), OlapTable.class)
                         .map(olapTable -> Math.max(1, olapTable.getDefaultDistributionInfo().getBucketNum()))
@@ -39,7 +39,7 @@ public class DistributionPolicy {
         int harmonyMean = (int) (tablePieces.size() / harmonyDivider);
         int bucketNum = Math.max(harmonyMean, 64);
         // non-group-by agg mv, we use dummy column integer 1 as bucket column and set bucketNum to 1
-        if (aggPiece.getDimensions().isEmpty()) {
+        if (piece.cast(AggregatePiece.class).map(aggPiece -> aggPiece.getDimensions().isEmpty()).orElse(false)) {
             bucketNum = 1;
         }
         if (!bucketColumns.isEmpty()) {

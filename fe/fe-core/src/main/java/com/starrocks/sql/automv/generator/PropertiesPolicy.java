@@ -22,7 +22,6 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.automv.column.ColumnAlias;
-import com.starrocks.sql.automv.pieces.AggregatePiece;
 import com.starrocks.sql.automv.pieces.PlanPiece;
 import com.starrocks.sql.automv.pieces.TablePiece;
 import com.starrocks.sql.automv.util.PrettyPrinter;
@@ -50,9 +49,9 @@ public class PropertiesPolicy {
         return defaultReplicationNum;
     }
 
-    public static PrettyPrinter getProperties(AggregatePiece aggPiece, Map<Integer, ColumnAlias> columAliases,
+    public static PrettyPrinter getProperties(PlanPiece piece, Map<Integer, ColumnAlias> columAliases,
                                               boolean isPartitioned, Optional<String> optCollocateGroup) {
-        List<TablePiece> tablePieces = PlanPiece.collect(aggPiece, TablePiece.class);
+        List<TablePiece> tablePieces = PlanPiece.collect(piece, TablePiece.class);
         List<Table> cloudTables = tablePieces.stream()
                 .map(tablePiece -> tablePiece.getTable().getTable())
                 .filter(Table::isCloudNativeTableOrMaterializedView)

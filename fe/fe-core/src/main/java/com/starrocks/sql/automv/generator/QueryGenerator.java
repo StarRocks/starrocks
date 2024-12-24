@@ -30,6 +30,7 @@ import com.starrocks.sql.automv.pieces.PlanPiece;
 import com.starrocks.sql.automv.pieces.PlanPieceVisitor;
 import com.starrocks.sql.automv.pieces.StarJoinPiece;
 import com.starrocks.sql.automv.pieces.TablePiece;
+import com.starrocks.sql.automv.pieces.TableUsage;
 import com.starrocks.sql.automv.pn.Op;
 import com.starrocks.sql.automv.pn.OpUtil;
 import com.starrocks.sql.automv.util.MetaUtil;
@@ -130,25 +131,45 @@ public class QueryGenerator {
             return newResult;
         }
 
-        Function<Pair<Integer, GenericColumn>, Double> getColumnWeightCalculator(
-                List<Op> hoistConjuncts, List<Op> nonHoistConjuncts, ColumnRefSet dimensionIds) {
+        private Pair<List<Pair<Integer, GenericColumn>>, List<Pair<Integer, GenericColumn>>> rerangeColumns(
+                List<Pair<Integer, GenericColumn>> outputColumns, PlanPiece piece, QueryGenerateContext context) {
+            if (piece.isTop() && piece.isAggregate()) {
+                return sortOutputColumnsIfTopAgg(outputColumns, piece, context);
+            } else if (context.getTableUsage().isPresent() && piece.isTableScan()) {
+                return sortOutputColumnsIf11MV(outputColumns, piece, context);
+            } else {
+                return Pair.create(outputColumns, Collections.emptyList());
+            }
+        }
 
-            ConjunctWeightCalculator weightCalculator = new ConjunctWeightCalculator();
-            Map<Integer, Double> weights1 = weightCalculator.calculate(hoistConjuncts);
-            Map<Integer, Double> weights2 = weightCalculator.calculate(nonHoistConjuncts);
-            return p -> {
-                double g = dimensionIds.contains(p.first) && p.second.getType().canDistributedBy() ? 1 : 0;
-                double h = weights1.getOrDefault(p.first, 0.0) * 1.5 + weights2.getOrDefault(p.first, 0.0);
-                int w = p.second.getType().getPrimitiveType().isVariableLengthType() ? 1 : 10;
-                return -g * (h + 10 * w);
-            };
+        private Pair<List<Pair<Integer, GenericColumn>>, List<Pair<Integer, GenericColumn>>> sortOutputColumnsIf11MV(
+                List<Pair<Integer, GenericColumn>> outputColumns, PlanPiece piece, QueryGenerateContext context) {
+            Preconditions.checkState(piece.isTableScan());
+            Preconditions.checkState(context.getTableUsage().isPresent());
+            TableUsage usage = context.getTableUsage().get();
+            Map<Boolean, TieredList<Pair<Integer, GenericColumn>>> columnGroups = outputColumns
+                    .stream()
+                    .collect(Collectors.partitioningBy(
+                            p -> p.second.getType().canDistributedBy(),
+                            TieredList.<Pair<Integer, GenericColumn>>toList()));
+
+            Function<Pair<Integer, GenericColumn>, Double> weightCalculator =
+                    ConjunctWeightCalculator.getColumnWeightCalculatorFor11MV(usage.getConjunctFreq());
+
+            TieredList<Pair<Integer, GenericColumn>> orderedDimensions = columnGroups.get(true)
+                    .stream()
+                    .map(p -> Pair.create(p, weightCalculator.apply(p)))
+                    .sorted(Pair.comparingBySecond())
+                    .map(p -> p.first)
+                    .collect(TieredList.<Pair<Integer, GenericColumn>>toList());
+
+            TieredList<Pair<Integer, GenericColumn>> orderedColumns = orderedDimensions.concat(columnGroups.get(false));
+            return Pair.create(orderedColumns, orderedDimensions);
         }
 
         private Pair<List<Pair<Integer, GenericColumn>>, List<Pair<Integer, GenericColumn>>> sortOutputColumnsIfTopAgg(
-                List<Pair<Integer, GenericColumn>> outputColumns, PlanPiece piece) {
-            if (!(piece.isTop() && piece.isAggregate())) {
-                return Pair.create(outputColumns, Collections.emptyList());
-            }
+                List<Pair<Integer, GenericColumn>> outputColumns, PlanPiece piece, QueryGenerateContext context) {
+            Preconditions.checkState(piece.isAggregate() && piece.isTop());
             AggregatePiece aggPiece = piece.cast();
             TieredList<Pair<Integer, GenericColumn>> dummyDimension = TieredList.genesis();
             // non-group-by aggregation needs add a dummy column as DISTRIBUTION KEY
@@ -159,7 +180,8 @@ public class QueryGenerator {
             }
             ColumnRefSet dimensionIds = ColumnRefSet.createByIds(aggPiece.getDimensions().keySet());
             Function<Pair<Integer, GenericColumn>, Double> calculator =
-                    getColumnWeightCalculator(aggPiece.getHoistConjuncts(), aggPiece.getNonHoistConjuncts(),
+                    ConjunctWeightCalculator.getColumnWeightCalculatorForAggMV(aggPiece.getHoistConjuncts(),
+                            aggPiece.getNonHoistConjuncts(),
                             dimensionIds);
 
             Map<Boolean, TieredList<Pair<Integer, GenericColumn>>> columnGroups = outputColumns.stream()
@@ -189,7 +211,7 @@ public class QueryGenerator {
 
             List<Pair<Integer, GenericColumn>> outputColumns = context.getOutputColumns();
             Pair<List<Pair<Integer, GenericColumn>>, List<Pair<Integer, GenericColumn>>>
-                    outputColumnsAndDimensions = sortOutputColumnsIfTopAgg(outputColumns, planPiece);
+                    outputColumnsAndDimensions = rerangeColumns(outputColumns, planPiece, context);
 
             outputColumns = outputColumnsAndDimensions.first;
             List<Pair<Integer, GenericColumn>> orderedDimensions = outputColumnsAndDimensions.second;
@@ -484,8 +506,7 @@ public class QueryGenerator {
             ColumnRefSet outputColumnIds = ColumnRefSet.createByIds(piece.getColumns().keySet());
             // for 11MV, the output columns is determined by QueryGenerateContext.inputColumnIds.
             // for SPJG MV, the output columns is determined by the top AggregatePiece.
-            if (piece.isTableScan() && context.getInputColumnIds()
-                    .equals(piece.mustCast(TablePiece.class).getUsedColumns())) {
+            if (piece.isTableScan() && context.getTableUsage().isPresent()) {
                 // TODO(by satanson): in future, 11MV would support derived columns that
                 //  extracts and transforms complex types(such as JSON, STRUCT, MAP and etc.),
                 //  at present, derived columns is neglected.
@@ -495,7 +516,7 @@ public class QueryGenerator {
                 //          .map(Map.Entry::getKey)
                 //          .collect(Collectors.toList());
                 //  outputColumnIds = ColumnRefSet.createByIds(derivedColumnIds);
-                outputColumnIds = context.getInputColumnIds();
+                outputColumnIds = context.getTableUsage().get().getUsedColumns().clone();
             }
             if (piece.isAggregate()) {
                 AggregatePiece aggPiece = piece.cast();

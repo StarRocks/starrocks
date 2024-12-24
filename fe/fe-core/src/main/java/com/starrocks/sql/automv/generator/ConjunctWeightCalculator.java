@@ -16,11 +16,15 @@ package com.starrocks.sql.automv.generator;
 
 import com.google.common.collect.Maps;
 import com.starrocks.common.Pair;
+import com.starrocks.sql.automv.column.GenericColumn;
 import com.starrocks.sql.automv.pn.Op;
+import com.starrocks.sql.automv.pn.StrictOp;
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Function;
 
 // A MV's dimension columns can be used for two purposes:
 // 1. the dimension columns come from conjuncts and are used to filter data;
@@ -62,6 +66,34 @@ public class ConjunctWeightCalculator {
     private static final double SCORE_NOT_LIKE = 8.0;
 
     private static final double SCORE_UNKNOWN = 20.0;
+
+    public static Function<Pair<Integer, GenericColumn>, Double> getColumnWeightCalculatorForAggMV(
+            List<Op> hoistConjuncts, List<Op> nonHoistConjuncts, ColumnRefSet dimensionIds) {
+
+        ConjunctWeightCalculator weightCalculator = new ConjunctWeightCalculator();
+        Map<Integer, Double> weights1 = weightCalculator.calculate(hoistConjuncts);
+        Map<Integer, Double> weights2 = weightCalculator.calculate(nonHoistConjuncts);
+        return p -> {
+            double g = dimensionIds.contains(p.first) && p.second.getType().canDistributedBy() ? 1 : 0;
+            double h = weights1.getOrDefault(p.first, 0.0) * 1.5 + weights2.getOrDefault(p.first, 0.0);
+            int w = p.second.getType().getPrimitiveType().isVariableLengthType() ? 1 : 10;
+            return -g * (h + 10 * w);
+        };
+    }
+
+    public static Function<Pair<Integer, GenericColumn>, Double> getColumnWeightCalculatorFor11MV(
+            Map<Integer, Map<StrictOp, Long>> conjunctFreq) {
+
+        ConjunctWeightCalculator weightCalculator = new ConjunctWeightCalculator();
+        Map<Integer, Double> weights = weightCalculator.calculate(conjunctFreq);
+        ColumnRefSet ids = ColumnRefSet.createByIds(weights.keySet());
+        return p -> {
+            double g = ids.contains(p.first) && p.second.getType().canDistributedBy() ? 1 : 0;
+            double h = weights.getOrDefault(p.first, 0.0);
+            int w = p.second.getType().getPrimitiveType().isVariableLengthType() ? 1 : 10;
+            return -g * (h + 10 * w);
+        };
+    }
 
     double getConjunctScore(Op conjunct) {
         if ((conjunct.isEq() || conjunct.isNullSafeEq())) {
@@ -112,6 +144,19 @@ public class ConjunctWeightCalculator {
                 .map(this::calculate)
                 .filter(Optional::isPresent)
                 .map(Optional::get)
+                .forEach(p -> columnWeights.merge(p.first, p.second, Double::sum));
+        return columnWeights;
+    }
+
+    public Map<Integer, Double> calculate(Map<Integer, Map<StrictOp, Long>> conjunctFreq) {
+        Map<Integer, Double> columnWeights = Maps.newHashMap();
+        conjunctFreq.entrySet()
+                .stream()
+                .flatMap(e -> e.getValue().entrySet()
+                        .stream()
+                        .map(ee -> Pair.create(ee.getKey().getOp(), Pair.create(e.getKey(), ee.getValue()))))
+                .map(p -> Pair.create(this.calculate(p.first).map(pp -> pp.second).orElse(0.0), p.second))
+                .map(p -> Pair.create(p.second.first, p.first * p.second.second))
                 .forEach(p -> columnWeights.merge(p.first, p.second, Double::sum));
         return columnWeights;
     }

@@ -335,17 +335,18 @@ public class PlanPieceTest {
                         "FROM\n" +
                         "  `tpcds`.`customer`",
                 "SELECT\n" +
-                        "  `tpcds`.`store`.s_store_sk\n" +
-                        "  ,`tpcds`.`store`.s_state\n" +
+                        "  `tpcds`.`store`.s_state\n" +
+                        "  ,`tpcds`.`store`.s_store_sk\n" +
                         "FROM\n" +
                         "  `tpcds`.`store`",
                 "SELECT\n" +
-                        "  `tpcds`.`date_dim`.d_date_sk\n" +
-                        "  ,`tpcds`.`date_dim`.d_year\n" +
+                        "  `tpcds`.`date_dim`.d_year\n" +
+                        "  ,`tpcds`.`date_dim`.d_date_sk\n" +
                         "FROM\n" +
                         "  `tpcds`.`date_dim`\n" +
                         "WHERE\n" +
                         "  (`tpcds`.`date_dim`.d_year = 2000)",
+
                 "SELECT\n" +
                         "  `tpcds`.`store_returns`.sr_returned_date_sk\n" +
                         "  ,`tpcds`.`store_returns`.sr_customer_sk\n" +
@@ -359,7 +360,7 @@ public class PlanPieceTest {
 
         for (int i = 0; i < mergedTableUsages.size(); ++i) {
             TablePiece tablePiece = mergedTableUsages.get(i).getTablePiece();
-            QueryGenerateContext queryGenContext = QueryGenerateContext.of11MV(tablePiece.getUsedColumns());
+            QueryGenerateContext queryGenContext = QueryGenerateContext.of11MV(mergedTableUsages.get(i));
             String s = QueryGenerator.generate(tablePiece, queryGenContext).getSubquery().getResult();
             Assert.assertEquals(expectResults[i], s);
         }

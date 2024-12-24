@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.automv.generator;
 
+import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
@@ -30,6 +31,7 @@ import com.starrocks.sql.automv.qe.PartitionPlus;
 import com.starrocks.sql.automv.util.PrettyPrinter;
 import com.starrocks.sql.automv.util.TieredMap;
 
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -60,6 +62,22 @@ public class PartitionPolicy {
                     .map(pp -> !pp.isListPartitionOlapTable() || op.isVar())
                     .orElse(false);
         };
+    }
+
+    private static List<Integer> getPartitionColumnsFor11MV(PlanPiece piece, PartitionExtractor partitionExtractor) {
+        Preconditions.checkState(piece.isTableScan());
+        List<PartitionPlus> partitions = piece.getPartitionColumns(partitionExtractor);
+        if (partitions.size() != 1) {
+            return Collections.emptyList();
+        }
+        PartitionPlus partitionPlus = partitions.get(0);
+        if (partitionPlus.isRangePartitionOlapTable()) {
+            return Collections.singletonList(partitionPlus.getPartitionColumns().get(0).first);
+        } else {
+            return partitionPlus.getPartitionColumns()
+                    .stream()
+                    .map(p -> p.first).collect(Collectors.toList());
+        }
     }
 
     public static Optional<Integer> getPartitionColumnId(AggregatePiece aggPiece, PartitionExtractor extractor) {
@@ -112,8 +130,32 @@ public class PartitionPolicy {
         );
     }
 
+    public static Optional<PrettyPrinter> getPartitionClauseFor11MV(PlanPiece piece,
+                                                                    PartitionExtractor extractor,
+                                                                    TieredMap<Integer, ColumnAlias> columnAliases) {
+        List<Integer> partitionIds = getPartitionColumnsFor11MV(piece, extractor);
+        if (partitionIds.isEmpty()) {
+            return Optional.empty();
+        } else if (partitionIds.size() == 1) {
+            String alias = Objects.requireNonNull(columnAliases.get(partitionIds.get(0))).getName();
+            PrettyPrinter printer = new PrettyPrinter()
+                    .add("PARTITION BY ")
+                    .addBacktickQuoted(alias)
+                    .newLine();
+            return Optional.of(printer);
+        } else {
+            List<String> aliases = partitionIds.stream()
+                    .map(id -> Objects.requireNonNull(columnAliases.get(id)).getName())
+                    .collect(Collectors.toList());
+            PrettyPrinter printer = new PrettyPrinter()
+                    .add("PARTITION BY (")
+                    .addItemsBacktickQuoted(",", aliases).add(")")
+                    .newLine();
+            return Optional.of(printer);
+        }
+    }
+
     public static void getPartitionInfo(Table table) {
         List<Column> pColumns = PartitionUtil.getPartitionColumns(table);
-
     }
 }
