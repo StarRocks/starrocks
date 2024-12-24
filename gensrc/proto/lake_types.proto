@@ -232,5 +232,6 @@ message TxnInfoPB {
     optional bool combined_txn_log = 3;
     optional TxnTypePB txn_type = 4;
     optional bool force_publish = 5; // only used for compaction
+    optional bool rebuild_pindex = 6;
 };
 
