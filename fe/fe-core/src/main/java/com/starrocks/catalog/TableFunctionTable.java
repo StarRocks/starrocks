@@ -234,10 +234,30 @@ public class TableFunctionTable extends Table {
     public List<List<String>> listFilesAndDirs() {
         List<List<String>> files = Lists.newArrayList();
         try {
+            List<FileStatus> fileStatuses = Lists.newArrayList();
             List<String> pieces = Splitter.on(",").trimResults().omitEmptyStrings().splitToList(path);
             for (String piece : ListUtils.emptyIfNull(pieces)) {
-                files.addAll(listFilesAndDirs(piece, listRecursively, properties));
+                fileStatuses.addAll(listFilesAndDirs(piece, listRecursively, properties));
+
+                // if the path is directory, return files and sub directories in this directory
+                if (!listRecursively && fileStatuses.size() == 1 && fileStatuses.get(0).isDirectory()) {
+                    String dirPath = fileStatuses.get(0).getPath().toString() + "/*";
+                    fileStatuses.clear();
+                    fileStatuses.addAll(listFilesAndDirs(dirPath, false, properties));
+                }
+
+                for (FileStatus fStatus : fileStatuses) {
+                    List<String> fileInfo = Lists.newArrayList(
+                            fStatus.getPath().toString(),
+                            String.valueOf(fStatus.getLen()),
+                            String.valueOf(fStatus.isDirectory()),
+                            ScalarOperatorFunctions.fromUnixTime(
+                                    ConstantOperator.createBigint(fStatus.getModificationTime() / 1000)).getVarchar());
+                    files.add(fileInfo);
+                }
+                fileStatuses.clear();
             }
+
             if (files.isEmpty()) {
                 ErrorReport.reportDdlException(ErrorCode.ERR_NO_FILES_FOUND, path);
             }
@@ -248,7 +268,7 @@ public class TableFunctionTable extends Table {
         }
     }
 
-    private static List<List<String>> listFilesAndDirs(String path, boolean listRecursively, Map<String, String> properties)
+    private static List<FileStatus> listFilesAndDirs(String path, boolean listRecursively, Map<String, String> properties)
             throws StarRocksException {
         URI uri = null;
         try {
@@ -257,17 +277,9 @@ public class TableFunctionTable extends Table {
             throw new StarRocksException(e);
         }
 
-        List<List<String>> files = Lists.newArrayList();
-        List<FileStatus> fileStatuses = HdfsUtil.listFileMeta(uri.normalize().toString(), new BrokerDesc(properties), false);
-        for (FileStatus fStatus : fileStatuses) {
-            List<String> fileInfo = Lists.newArrayList(
-                    fStatus.getPath().toString(),
-                    String.valueOf(fStatus.getLen()),
-                    String.valueOf(fStatus.isDirectory()),
-                    ScalarOperatorFunctions.fromUnixTime(
-                            ConstantOperator.createBigint(fStatus.getModificationTime() / 1000)).getVarchar());
-            files.add(fileInfo);
-
+        List<FileStatus> files = Lists.newArrayList();
+        for (FileStatus fStatus : HdfsUtil.listFileMeta(uri.normalize().toString(), new BrokerDesc(properties), false)) {
+            files.add(fStatus);
             if (listRecursively && fStatus.isDirectory()) {
                 files.addAll(listFilesAndDirs(fStatus.getPath().toString() + "/*", true, properties));
             }

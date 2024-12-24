@@ -70,6 +70,20 @@ Succeed: Total num: 1, size: 1,027. OK num: 1(upload 1 files).
 select path, size, is_dir from files(
     "path" = "oss://${oss_bucket}/test_files/list_files/${uuid0}/",
     "list_files_only" = "true",
+    "list_recursively" = "false",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+-- result:
+[REGEX].*basic1.csv	52	0
+.*basic2.csv	34	0
+.*orc0	0	1
+.*parquet	0	1
+-- !result
+
+select path, size, is_dir from files(
+    "path" = "oss://${oss_bucket}/test_files/list_files/${uuid0}/",
+    "list_files_only" = "true",
     "list_recursively" = "true",
     "aws.s3.access_key" = "${oss_ak}",
     "aws.s3.secret_key" = "${oss_sk}",
