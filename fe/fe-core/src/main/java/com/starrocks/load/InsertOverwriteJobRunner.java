@@ -469,7 +469,9 @@ public class InsertOverwriteJobRunner {
 
         // trigger listeners after insert overwrite committed, trigger listeners after
         // write unlock to avoid holding lock too long
-        GlobalStateMgr.getCurrentState().getOperationListenerBus().onInsertOverwriteJobCommitFinish(db, tmpTargetTable);
+        if (!isReplay) {
+            GlobalStateMgr.getCurrentState().getOperationListenerBus().onInsertOverwriteJobCommitFinish(db, tmpTargetTable);
+        }
     }
 
     private void prepareInsert() {
