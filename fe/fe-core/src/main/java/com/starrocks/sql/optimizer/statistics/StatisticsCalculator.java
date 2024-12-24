@@ -1456,15 +1456,18 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     @Override
     public Void visitLogicalTableFunction(LogicalTableFunctionOperator node, ExpressionContext context) {
-        return computeTableFunctionNode(context, node.getOutputColRefs());
+        return computeTableFunctionNode(context, node.getOutputColRefs(), node.getFn().functionName(),
+                node.getFnParamColumnProject().stream().map(x -> x.first).collect(Collectors.toList()));
     }
 
     @Override
     public Void visitPhysicalTableFunction(PhysicalTableFunctionOperator node, ExpressionContext context) {
-        return computeTableFunctionNode(context, node.getOutputColRefs());
+        return computeTableFunctionNode(context, node.getOutputColRefs(), node.getFn().functionName(),
+                node.getFnParamColumnRefs());
     }
 
-    private Void computeTableFunctionNode(ExpressionContext context, List<ColumnRefOperator> outputColumns) {
+    private Void computeTableFunctionNode(ExpressionContext context, List<ColumnRefOperator> outputColumns,
+                                          String funcName, List<ColumnRefOperator> fnParamColumnRefs) {
         Statistics.Builder builder = Statistics.builder();
 
         Statistics inputStatistics = context.getChildStatistics(0);
@@ -1477,6 +1480,20 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             } else {
                 builder.addColumnStatistic(col, ColumnStatistic.unknown());
             }
+        }
+
+        if (funcName.equalsIgnoreCase("unnest")) {
+            double maxRows = rowCount;
+            for (ColumnRefOperator column : fnParamColumnRefs) {
+                ColumnStatistic columnStatistic = inputStatistics.getColumnStatistic(column);
+                if (columnStatistic != null) {
+                    double collectionSize = columnStatistic.getCollectionSize();
+                    if (collectionSize >= 1 && collectionSize * rowCount >= maxRows) {
+                        maxRows = collectionSize * rowCount;
+                    }
+                }
+            }
+            rowCount = maxRows;
         }
 
         builder.setOutputRowCount(rowCount);
