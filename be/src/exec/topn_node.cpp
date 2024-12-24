@@ -325,10 +325,11 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> TopNNode::_decompose_to_
     int64_t max_buffered_rows = ChunksSorterFullSort::kDefaultMaxBufferRows;
     int64_t max_buffered_bytes =
             std::max<int64_t>(ChunksSorterFullSort::kDefaultMaxBufferBytes, CpuInfo::get_l3_cache_size());
-
     if (_tnode.sort_node.__isset.max_buffered_bytes) {
-        max_buffered_rows = _tnode.sort_node.max_buffered_rows;
         max_buffered_bytes = _tnode.sort_node.max_buffered_bytes;
+    }
+    if (_tnode.sort_node.__isset.max_buffered_rows) {
+        max_buffered_rows = _tnode.sort_node.max_buffered_rows;
     }
 
     sink_operator = std::make_shared<SinkFactory>(
