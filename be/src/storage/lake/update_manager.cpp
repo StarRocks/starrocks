@@ -469,7 +469,7 @@ Status UpdateManager::get_column_values(Tablet* tablet, const TabletMetadata& me
             // padding char columns
             const auto& field = tablet_schema->schema()->field(read_column_ids[i]);
             if (field->type()->type() == TYPE_CHAR) {
-                ChunkHelper::padding_char_column(tablet_schema, *field, (*columns)[i].get());
+                ChunkHelper::padding_char_column(*tablet_schema, *field, (*columns)[i].get());
             }
         }
         return Status::OK();
