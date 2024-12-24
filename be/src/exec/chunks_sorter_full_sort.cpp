@@ -31,14 +31,7 @@ ChunksSorterFullSort::ChunksSorterFullSort(RuntimeState* state, const std::vecto
         : ChunksSorter(state, sort_exprs, is_asc_order, is_null_first, sort_keys, false),
           max_buffered_rows(static_cast<size_t>(max_buffered_rows)),
           max_buffered_bytes(max_buffered_bytes),
-          _early_materialized_slots(early_materialized_slots.begin(), early_materialized_slots.end()) {
-    // initialize _sort_slots
-    for (auto& expr : *sort_exprs) {
-        std::vector<SlotId> slots;
-        expr->root()->get_slot_ids(&slots);
-        _sort_slots.insert(slots.begin(), slots.end());
-    }
-}
+          _early_materialized_slots(early_materialized_slots.begin(), early_materialized_slots.end()) {}
 
 ChunksSorterFullSort::~ChunksSorterFullSort() = default;
 
@@ -64,20 +57,7 @@ Status ChunksSorterFullSort::_merge_unsorted(RuntimeState* state, const ChunkPtr
     SCOPED_TIMER(_build_timer);
     _staging_unsorted_chunks.push_back(std::move(chunk));
     _staging_unsorted_rows += chunk->num_rows();
-
-    // Only consider the memory usage of columns used as SORT_KEY, as they are more critical for CPU-cache
-    if (!_sort_slots.empty()) {
-        size_t mem_usage = 0;
-        auto& slot_map = chunk->get_slot_id_to_index_map();
-        for (auto [slot_id, index] : slot_map) {
-            if (_sort_slots.contains(slot_id)) {
-                mem_usage += chunk->get_column_by_slot_id(slot_id)->byte_size();
-            }
-        }
-        _staging_unsorted_bytes += mem_usage;
-    } else {
-        _staging_unsorted_bytes += chunk->memory_usage();
-    }
+    _staging_unsorted_bytes += chunk->bytes_usage();
     return Status::OK();
 }
 
@@ -117,8 +97,7 @@ Status ChunksSorterFullSort::_partial_sort(RuntimeState* state, bool done) {
     if (!_staging_unsorted_rows) {
         return Status::OK();
     }
-    bool reach_limit = _staging_unsorted_rows >= kDefaultMinBufferRows &&
-                       (_staging_unsorted_rows >= max_buffered_rows || _staging_unsorted_bytes >= max_buffered_bytes);
+    bool reach_limit = _staging_unsorted_rows >= max_buffered_rows || _staging_unsorted_bytes >= max_buffered_bytes;
     if (done || reach_limit) {
         _max_num_rows = std::max<int>(_max_num_rows, _staging_unsorted_rows);
         _profiler->input_required_memory->update(_staging_unsorted_bytes);

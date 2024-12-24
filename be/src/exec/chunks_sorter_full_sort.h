@@ -33,9 +33,10 @@ struct ChunksSorterFullSortProfiler {
 };
 class ChunksSorterFullSort : public ChunksSorter {
 public:
-    static constexpr size_t kDefaultMaxBufferRows = 2 << 20;   // 2097152 rows
-    static constexpr size_t kDefaultMinBufferRows = 1 << 20;   // 1048576 rows
-    static constexpr size_t kDefaultMaxBufferBytes = 16 << 20; // 16MB
+    static constexpr size_t kDefaultMaxBufferRows =
+            1 << 30; // 1 billion rows, the number of rows has little impact on performance
+    static constexpr size_t kDefaultMaxBufferBytes =
+            256 << 20; // 256MB, a larger limit may improve performance but is not memory allocator friendly
 
     /**
      * Constructor.
@@ -93,11 +94,9 @@ protected:
     std::unique_ptr<ObjectPool> _object_pool = nullptr;
     ChunksSorterFullSortProfiler* _profiler = nullptr;
 
-    // Parameters to control the buffering behavior: buffering some chunks before partial-sort to reduce memory random access
-    // TODO: further tunning the buffer parameter
-    const size_t max_buffered_rows;  // Max buffer 2097152 rows
-    const size_t max_buffered_bytes; // Max buffer 16MB
-    std::set<SlotId> _sort_slots;    // Slots participating in the sorting procedure
+    // Parameters to control the Merge-Sort behavior
+    const size_t max_buffered_rows;
+    const size_t max_buffered_bytes;
 
     // only when order-by columns(_sort_exprs) are all ColumnRefs and the cost of eager-materialization of
     // other columns is large than ordinal column, then we materialize order-by columns and ordinal columns eagerly,
