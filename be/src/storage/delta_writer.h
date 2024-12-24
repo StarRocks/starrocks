@@ -101,7 +101,7 @@ struct DeltaWriterStat {
     // trigger memtable flush, and wait for it to finish
     int32_t memory_exceed_count = 0;
     // Accumulated time to wait for flush because of reaching memory limit
-    int64_t write_wait_flush_tims_ns = 0;
+    int64_t write_wait_flush_time_ns = 0;
 
     // ====== statistics for add_segment()
 

@@ -840,8 +840,8 @@ void LakeTabletsChannel::_update_tablet_profile(DeltaWriter* writer, RuntimeProf
     ADD_AND_UPDATE_TIMER(profile, "WriteTime", writer_stat.write_time_ns);
     ADD_AND_UPDATE_COUNTER(profile, "MemtableFullCount", TUnit::UNIT, writer_stat.memtable_full_count);
     ADD_AND_UPDATE_COUNTER(profile, "MemoryExceedCount", TUnit::UNIT, writer_stat.memory_exceed_count);
-    ADD_AND_UPDATE_TIMER(profile, "WriteWaitFlushTime", writer_stat.write_wait_flush_tims_ns);
-    ADD_AND_UPDATE_TIMER(profile, "CloseTime", writer_stat.write_wait_flush_tims_ns);
+    ADD_AND_UPDATE_TIMER(profile, "WriteWaitFlushTime", writer_stat.write_wait_flush_time_ns);
+    ADD_AND_UPDATE_TIMER(profile, "CloseTime", writer_stat.write_wait_flush_time_ns);
     ADD_AND_UPDATE_TIMER(profile, "FinishTime", writer_stat.finish_time_ns);
     ADD_AND_UPDATE_TIMER(profile, "FinishWaitFlushTime", writer_stat.finish_wait_flush_time_ns);
     ADD_AND_UPDATE_TIMER(profile, "FinishPrepareTxnLogTime", writer_stat.finish_prepare_txn_log_time_ns);

@@ -421,14 +421,14 @@ Status DeltaWriterImpl::write(const Chunk& chunk, const uint32_t* indexes, uint3
         watch.start();
         st = flush();
         _stats.memory_exceed_count += 1;
-        _stats.write_wait_flush_tims_ns += watch.elapsed_time();
+        _stats.write_wait_flush_time_ns += watch.elapsed_time();
     } else if (_mem_tracker->parent() && _mem_tracker->parent()->limit_exceeded()) {
         VLOG(2) << "Flushing memory table due to parent memory limit exceeded";
         MonotonicStopWatch watch;
         watch.start();
         st = flush();
         _stats.memory_exceed_count += 1;
-        _stats.write_wait_flush_tims_ns += watch.elapsed_time();
+        _stats.write_wait_flush_time_ns += watch.elapsed_time();
     } else if (full) {
         st = flush_async();
         _stats.memtable_full_count += 1;
