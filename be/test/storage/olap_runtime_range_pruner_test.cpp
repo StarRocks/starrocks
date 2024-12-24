@@ -34,79 +34,72 @@ public:
         _predicate_parser = std::make_unique<OlapPredicateParser>(_tablet_schema);
     }
 
-    static StatusOr<std::shared_ptr<RuntimeFilterProbeDescriptor>> gen_runtime_filter_desc(TPlanNodeId node_id,
-                                                                                           ObjectPool* pool,
-                                                                                           RuntimeState* runtime_state);
-
 protected:
+    StatusOr<std::shared_ptr<RuntimeFilterProbeDescriptor>> _gen_runtime_filter_desc();
+
+    using Int32Decoder = detail::RuntimeColumnPredicateBuilder::DummyDecoder<int32_t>;
+    using Int32RuntimeFilter = RuntimeBloomFilter<TYPE_INT>;
+    using Decimal32RuntimeFilter = RuntimeBloomFilter<TYPE_DECIMAL32>;
+
+    const TypeDescriptor TYPE_DECIMAL32_DESC = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 5, 4);
+
     ObjectPool _pool;
     RuntimeState _runtime_state;
-    TPlanNodeId _node_id;
+    TPlanNodeId _node_id = 0;
     TabletSchemaSPtr _tablet_schema;
     std::unique_ptr<OlapPredicateParser> _predicate_parser;
 };
 
-StatusOr<std::shared_ptr<RuntimeFilterProbeDescriptor>> OlapRuntimeRangePrunerTest::gen_runtime_filter_desc(
-        TPlanNodeId node_id, ObjectPool* pool, RuntimeState* runtime_state) {
-    TRuntimeFilterDescription tRuntimeFilterDescription;
-    tRuntimeFilterDescription.__set_filter_id(1);
-    tRuntimeFilterDescription.__set_has_remote_targets(false);
-    tRuntimeFilterDescription.__set_build_plan_node_id(node_id);
-    tRuntimeFilterDescription.__set_build_join_mode(TRuntimeFilterBuildJoinMode::BORADCAST);
-    tRuntimeFilterDescription.__set_filter_type(TRuntimeFilterBuildType::TOPN_FILTER);
+StatusOr<std::shared_ptr<RuntimeFilterProbeDescriptor>> OlapRuntimeRangePrunerTest::_gen_runtime_filter_desc() {
+    TRuntimeFilterDescription desc;
+    desc.__set_filter_id(1);
+    desc.__set_has_remote_targets(false);
+    desc.__set_build_plan_node_id(_node_id);
+    desc.__set_build_join_mode(TRuntimeFilterBuildJoinMode::BORADCAST);
+    desc.__set_filter_type(TRuntimeFilterBuildType::TOPN_FILTER);
 
     TExpr col_ref = ExprsTestHelper::create_column_ref_t_expr<TYPE_INT>(1, true);
-    tRuntimeFilterDescription.__isset.plan_node_id_to_target_expr = true;
-    tRuntimeFilterDescription.plan_node_id_to_target_expr.emplace(node_id, col_ref);
+    desc.__isset.plan_node_id_to_target_expr = true;
+    desc.plan_node_id_to_target_expr.emplace(_node_id, col_ref);
 
     auto runtime_filter_desc = std::make_shared<RuntimeFilterProbeDescriptor>();
-    RETURN_IF_ERROR(runtime_filter_desc->init(pool, tRuntimeFilterDescription, node_id, runtime_state));
+    RETURN_IF_ERROR(runtime_filter_desc->init(&_pool, desc, _node_id, &_runtime_state));
 
     return runtime_filter_desc;
 }
 
 TEST_F(OlapRuntimeRangePrunerTest, min_max_parser) {
-    using DecodeType = detail::RuntimeColumnPredicateBuilder::DummyDecoder<int32_t>;
-    using RuntimeFilteType = RuntimeBloomFilter<TYPE_INT>;
+    Int32Decoder decoder(nullptr);
 
-    DecodeType decoder(nullptr);
-
-    RuntimeFilteType rf;
+    Int32RuntimeFilter rf;
     rf.insert(10);
     rf.insert(20);
-    TypeDescriptor type_desc = TypeDescriptor(TYPE_INT);
 
-    detail::RuntimeColumnPredicateBuilder::MinMaxParser<RuntimeFilteType, DecodeType> parser(&rf, &decoder);
-    ColumnPtr min_column = parser.min_const_column<TYPE_INT>(type_desc);
-    ColumnPtr max_column = parser.max_const_column<TYPE_INT>(type_desc);
+    detail::RuntimeColumnPredicateBuilder::MinMaxParser<Int32RuntimeFilter, Int32Decoder> parser(&rf, &decoder);
+    ColumnPtr min_column = parser.min_const_column<TYPE_INT>(TYPE_INT_DESC);
+    ColumnPtr max_column = parser.max_const_column<TYPE_INT>(TYPE_INT_DESC);
     ASSERT_EQ(min_column->debug_string(), "CONST: 10 Size : 1");
     ASSERT_EQ(max_column->debug_string(), "CONST: 20 Size : 1");
 }
 
 TEST_F(OlapRuntimeRangePrunerTest, min_max_parser_for_decimal) {
-    using DecodeType = detail::RuntimeColumnPredicateBuilder::DummyDecoder<int32_t>;
-    using RuntimeFilteType = RuntimeBloomFilter<TYPE_DECIMAL32>;
+    Int32Decoder decoder(nullptr);
 
-    DecodeType decoder(nullptr);
-
-    RuntimeFilteType rf;
+    Decimal32RuntimeFilter rf;
     rf.insert(10);
     rf.insert(20);
-    TypeDescriptor type_desc = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 5, 4);
 
-    detail::RuntimeColumnPredicateBuilder::MinMaxParser<RuntimeFilteType, DecodeType> parser(&rf, &decoder);
-    ColumnPtr min_column = parser.min_const_column<TYPE_DECIMAL32>(type_desc);
-    ColumnPtr max_column = parser.max_const_column<TYPE_DECIMAL32>(type_desc);
+    detail::RuntimeColumnPredicateBuilder::MinMaxParser<Decimal32RuntimeFilter, Int32Decoder> parser(&rf, &decoder);
+    ColumnPtr min_column = parser.min_const_column<TYPE_DECIMAL32>(TYPE_DECIMAL32_DESC);
+    ColumnPtr max_column = parser.max_const_column<TYPE_DECIMAL32>(TYPE_DECIMAL32_DESC);
     ASSERT_EQ(min_column->debug_string(), "CONST: 0.0010 Size : 1");
     ASSERT_EQ(max_column->debug_string(), "CONST: 0.0020 Size : 1");
 }
 
 TEST_F(OlapRuntimeRangePrunerTest, update_1) {
-    SlotDescriptor slot(0, "c0", TypeDescriptor(TYPE_INT));
+    SlotDescriptor slot(0, "c0", TYPE_INT_DESC);
 
-    auto ret = gen_runtime_filter_desc(_node_id, &_pool, &_runtime_state);
-    ASSERT_TRUE(ret.ok());
-    auto runtime_filter_desc = ret.value();
+    ASSIGN_OR_ASSERT_FAIL(auto runtime_filter_desc, _gen_runtime_filter_desc());
 
     UnarrivedRuntimeFilterList unarrivedRuntimeFilterList;
     unarrivedRuntimeFilterList.add_unarrived_rf(runtime_filter_desc.get(), &slot, 1);
@@ -117,23 +110,22 @@ TEST_F(OlapRuntimeRangePrunerTest, update_1) {
     std::string pred_2;
 
     // init
-    Status st = pruner.update_range_if_arrived(
+    ASSERT_OK(pruner.update_range_if_arrived(
             nullptr,
             [&pred_size](auto vid, const PredicateList& predicates) {
                 pred_size = predicates.size();
                 return Status::OK();
             },
-            100000);
-    ASSERT_TRUE(st.ok());
+            100000));
     ASSERT_EQ(pred_size, 0);
 
     // version 1
-    RuntimeBloomFilter<TYPE_INT> _rf;
+    Int32RuntimeFilter _rf;
     _rf.insert(10);
     _rf.insert(20);
     runtime_filter_desc->set_runtime_filter(&_rf);
 
-    st = pruner.update_range_if_arrived(
+    ASSERT_OK(pruner.update_range_if_arrived(
             nullptr,
             [&pred_size, &pred_1, &pred_2](auto vid, const PredicateList& predicates) {
                 pred_size = predicates.size();
@@ -141,8 +133,7 @@ TEST_F(OlapRuntimeRangePrunerTest, update_1) {
                 pred_2 = predicates[1]->debug_string();
                 return Status::OK();
             },
-            200000);
-    ASSERT_TRUE(st.ok());
+            200000));
     ASSERT_EQ(pred_size, 2);
     ASSERT_EQ(pred_1, "(columnId(0)>=10)");
     ASSERT_EQ(pred_2, "(columnId(0)<=20)");
@@ -150,7 +141,7 @@ TEST_F(OlapRuntimeRangePrunerTest, update_1) {
     // version 2 & 3
     _rf.update_min_max<true>(11);
     _rf.update_min_max<false>(15);
-    st = pruner.update_range_if_arrived(
+    ASSERT_OK(pruner.update_range_if_arrived(
             nullptr,
             [&pred_size, &pred_1, &pred_2](auto vid, const PredicateList& predicates) {
                 pred_size = predicates.size();
@@ -158,10 +149,65 @@ TEST_F(OlapRuntimeRangePrunerTest, update_1) {
                 pred_2 = predicates[1]->debug_string();
                 return Status::OK();
             },
-            300000);
-    ASSERT_TRUE(st.ok());
+            300000));
     ASSERT_EQ(pred_size, 2);
     ASSERT_EQ(pred_1, "(columnId(0)>=11)");
     ASSERT_EQ(pred_2, "(columnId(0)<=15)");
+}
+
+TEST_F(OlapRuntimeRangePrunerTest, update_has_null) {
+    SlotDescriptor slot(0, "c0", TYPE_INT_DESC);
+
+    ASSIGN_OR_ASSERT_FAIL(auto runtime_filter_desc, _gen_runtime_filter_desc());
+
+    UnarrivedRuntimeFilterList unarrivedRuntimeFilterList;
+    unarrivedRuntimeFilterList.add_unarrived_rf(runtime_filter_desc.get(), &slot, 1);
+    OlapRuntimeScanRangePruner pruner(_predicate_parser.get(), unarrivedRuntimeFilterList);
+
+    size_t pred_size = 0;
+    std::string pred;
+
+    // init
+    ASSERT_OK(pruner.update_range_if_arrived(
+            nullptr,
+            [&pred_size](auto vid, const PredicateList& predicates) {
+                pred_size = predicates.size();
+                return Status::OK();
+            },
+            100000));
+    ASSERT_EQ(pred_size, 0);
+
+    // version 1
+    Int32RuntimeFilter _rf;
+    _rf.insert(10);
+    _rf.insert(20);
+    _rf.insert_null();
+    runtime_filter_desc->set_runtime_filter(&_rf);
+
+    ASSERT_OK(pruner.update_range_if_arrived(
+            nullptr,
+            [&pred_size, &pred](auto vid, const PredicateList& predicates) {
+                pred_size = predicates.size();
+                pred = predicates[0]->debug_string();
+                return Status::OK();
+            },
+            200000));
+    ASSERT_EQ(pred_size, 1);
+    ASSERT_EQ(pred, "OR(0:AND(0:(columnId(0)>=10), 1:(columnId(0)<=20)), 1:(ColumnId(0) IS NULL))");
+
+    // version 2 & 3
+    _rf.update_min_max<true>(11);
+    _rf.update_min_max<false>(15);
+    _rf.insert_null();
+    ASSERT_OK(pruner.update_range_if_arrived(
+            nullptr,
+            [&pred_size, &pred](auto vid, const PredicateList& predicates) {
+                pred_size = predicates.size();
+                pred = predicates[0]->debug_string();
+                return Status::OK();
+            },
+            300000));
+    ASSERT_EQ(pred_size, 1);
+    ASSERT_EQ(pred, "OR(0:AND(0:(columnId(0)>=11), 1:(columnId(0)<=15)), 1:(ColumnId(0) IS NULL))");
 }
 } // namespace starrocks
