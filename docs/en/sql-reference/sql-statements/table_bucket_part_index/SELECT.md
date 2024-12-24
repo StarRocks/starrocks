@@ -937,7 +937,7 @@ select * from small_table where tiny_column in (1,2);
 
 #### Like Operator
 
-This operator is used to compare to a string. ''matches a single character,'%' matches multiple characters. The parameter must match the complete string. Typically, placing'%'at the end of a string is more practical.
+This operator is used to compare to a string. '_' (underscore) matches a single character, '%' matches multiple characters. The parameter must match the complete string. Typically, placing'%'at the end of a string is more practical.
 
 Examples:
 
