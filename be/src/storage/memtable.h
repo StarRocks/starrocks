@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <ostream>
 
 #include "column/chunk.h"
@@ -32,27 +33,27 @@ class MemTableSink;
 
 struct MemtableStats {
     // The number of insert operation
-    int32_t insert_count = 0;
+    std::atomic_int32_t insert_count = 0;
     // Accumulated time to insert
-    int64_t insert_time_ns = 0;
+    std::atomic_int64_t insert_time_ns = 0;
     // Time to finalize
-    int64_t finalize_time_ns = 0;
+    std::atomic_int64_t finalize_time_ns = 0;
     // The number of sort operation
-    int32_t sort_count = 0;
+    std::atomic_int32_t sort_count = 0;
     // Accumulated time to sort
-    int64_t sort_time_ns = 0;
+    std::atomic_int64_t sort_time_ns = 0;
     // The number of agg operation
-    int32_t agg_count = 0;
+    std::atomic_int32_t agg_count = 0;
     // Accumulated time to aggregate
-    int64_t agg_time_ns = 0;
+    std::atomic_int64_t agg_time_ns = 0;
     // Time to flush the memtable
-    int64_t flush_time_ns = 0;
+    std::atomic_int64_t flush_time_ns = 0;
     // IO time for flush
-    int64_t io_time_ns = 0;
+    std::atomic_int64_t io_time_ns = 0;
     // Memory size to flush
-    int64_t flush_memory_size = 0;
+    std::atomic_int64_t flush_memory_size = 0;
     // Disk size to flush
-    int64_t flush_disk_size = 0;
+    std::atomic_int64_t flush_disk_size = 0;
 
     MemtableStats& operator+=(const MemtableStats& other) {
         insert_count += other.insert_count;

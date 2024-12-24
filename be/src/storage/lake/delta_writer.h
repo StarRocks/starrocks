@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <memory>
 #include <vector>
 
@@ -41,41 +42,41 @@ class TabletWriter;
 
 // Statistics for DeltaWriter
 struct DeltaWriterStat {
-    int32_t task_count = 0;
-    int64_t pending_time_ns = 0;
+    std::atomic_int32_t task_count = 0;
+    std::atomic_int64_t pending_time_ns = 0;
 
     // ====== statistics for write()
 
     // The number of write()
-    int32_t write_count = 0;
+    std::atomic_int32_t write_count = 0;
     // The number of rows to write
-    int32_t row_count = 0;
+    std::atomic_int32_t row_count = 0;
     // Accumulated time for write()
-    int64_t write_time_ns = 0;
+    std::atomic_int64_t write_time_ns = 0;
     // The number that memtable is full
-    int32_t memtable_full_count = 0;
+    std::atomic_int32_t memtable_full_count = 0;
     // The number that reach memory limit, and each will
     // trigger memtable flush, and wait for it to finish
-    int32_t memory_exceed_count = 0;
+    std::atomic_int32_t memory_exceed_count = 0;
     // Accumulated time to wait for flush because of reaching memory limit
-    int64_t write_wait_flush_time_ns = 0;
+    std::atomic_int64_t write_wait_flush_time_ns = 0;
 
     // ====== statistics for finish_with_txnlog()
 
-    int64_t finish_time_ns = 0;
+    std::atomic_int64_t finish_time_ns = 0;
     // Time to wait for memtable flush
-    int64_t finish_wait_flush_time_ns = 0;
+    std::atomic_int64_t finish_wait_flush_time_ns = 0;
     // Time to prepare txn log in
-    int64_t finish_prepare_txn_log_time_ns = 0;
+    std::atomic_int64_t finish_prepare_txn_log_time_ns = 0;
     // Time to put txn log
-    int64_t finish_put_txn_log_time_ns = 0;
+    std::atomic_int64_t finish_put_txn_log_time_ns = 0;
     // Time to preload pk
-    int64_t finish_pk_preload_time_ns = 0;
+    std::atomic_int64_t finish_pk_preload_time_ns = 0;
 
     // ====== statistics for close()
 
     // Time for close()
-    int64_t close_time_ns = 0;
+    std::atomic_int64_t close_time_ns = 0;
 };
 
 class DeltaWriter {
