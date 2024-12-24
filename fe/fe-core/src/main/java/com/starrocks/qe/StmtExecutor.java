@@ -188,6 +188,7 @@ import com.starrocks.sql.ast.UseCatalogStmt;
 import com.starrocks.sql.ast.UseDbStmt;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.ast.feedback.PlanAdvisorStmt;
+import com.starrocks.sql.ast.translate.TranslateStmt;
 import com.starrocks.sql.ast.txn.BeginStmt;
 import com.starrocks.sql.ast.txn.CommitStmt;
 import com.starrocks.sql.ast.txn.RollbackStmt;
@@ -809,6 +810,8 @@ public class StmtExecutor {
                     || parsedStmt instanceof CommitStmt
                     || parsedStmt instanceof RollbackStmt) {
                 handleUnsupportedStmt();
+            } else if (parsedStmt instanceof TranslateStmt) {
+                handleTranslateStmt();
             } else {
                 context.getState().setError("Do not support this query.");
             }
@@ -1832,6 +1835,11 @@ public class StmtExecutor {
             return;
         }
         context.getState().setOk();
+    }
+
+    private void handleTranslateStmt() throws IOException {
+        ShowResultSet resultSet = TranslateExecutor.execute((TranslateStmt) parsedStmt);
+        sendShowResult(resultSet);
     }
 
     private void sendMetaData(ShowResultSetMetaData metaData) throws IOException {

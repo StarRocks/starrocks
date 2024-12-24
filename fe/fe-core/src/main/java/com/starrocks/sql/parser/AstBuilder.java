@@ -478,6 +478,7 @@ import com.starrocks.sql.ast.pipe.DescPipeStmt;
 import com.starrocks.sql.ast.pipe.DropPipeStmt;
 import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.sql.ast.pipe.ShowPipeStmt;
+import com.starrocks.sql.ast.translate.TranslateStmt;
 import com.starrocks.sql.ast.txn.BeginStmt;
 import com.starrocks.sql.ast.txn.CommitStmt;
 import com.starrocks.sql.ast.txn.RollbackStmt;
@@ -3445,7 +3446,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     // ------------------------------------------- Backup Store Statement ----------------------------------------------
     private ParseNode getFunctionRef(StarRocksParser.QualifiedNameContext qualifiedNameContext,
-                                   String alias, NodePosition position) {
+                                     String alias, NodePosition position) {
         String functionName = getQualifiedName(qualifiedNameContext).toString();
         FunctionName fnName = FunctionName.createFnName(functionName);
         return new FunctionRef(fnName, alias, position);
@@ -3474,22 +3475,22 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
         List<CatalogRef> externalCatalogRefs = new ArrayList<>();
         boolean allExternalCatalog = backupContext != null ?
-                                     (backupContext.ALL() != null) : (restoreContext.ALL() != null);
+                (backupContext.ALL() != null) : (restoreContext.ALL() != null);
         if (!allExternalCatalog && (backupContext != null ?
-                                    (backupContext.CATALOG() != null || backupContext.CATALOGS() != null) :
-                                    (restoreContext.CATALOG() != null || restoreContext.CATALOGS() != null))) {
+                (backupContext.CATALOG() != null || backupContext.CATALOGS() != null) :
+                (restoreContext.CATALOG() != null || restoreContext.CATALOGS() != null))) {
             if (backupContext != null) {
                 StarRocksParser.IdentifierListContext identifierListContext = backupContext.identifierList();
                 externalCatalogRefs = visit(identifierListContext.identifier(), Identifier.class)
-                                            .stream().map(Identifier::getValue)
-                                            .map(x -> new CatalogRef(x)).collect(Collectors.toList());
+                        .stream().map(Identifier::getValue)
+                        .map(x -> new CatalogRef(x)).collect(Collectors.toList());
             } else {
                 List<StarRocksParser.IdentifierWithAliasContext> identifierWithAliasList =
-                                                                 restoreContext.identifierWithAliasList().identifierWithAlias();
+                        restoreContext.identifierWithAliasList().identifierWithAlias();
                 for (StarRocksParser.IdentifierWithAliasContext identifierWithAliasContext : identifierWithAliasList) {
                     String originalName = getIdentifierName(identifierWithAliasContext.originalName);
                     String alias = identifierWithAliasContext.AS() != null ?
-                                   getIdentifierName(identifierWithAliasContext.alias) : "";
+                            getIdentifierName(identifierWithAliasContext.alias) : "";
                     externalCatalogRefs.add(new CatalogRef(originalName, alias));
                 }
             }
@@ -3497,7 +3498,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         boolean containsExternalCatalog = allExternalCatalog || !externalCatalogRefs.isEmpty();
 
         boolean specifyDbExplicitly =
-                            backupContext != null ? (backupContext.DATABASE() != null) : (restoreContext.DATABASE() != null);
+                backupContext != null ? (backupContext.DATABASE() != null) : (restoreContext.DATABASE() != null);
 
         if (specifyDbExplicitly && containsExternalCatalog) {
             throw new ParsingException(PARSER_ERROR_MSG.unsupportedSepcifyDbForExternalCatalog());
@@ -3524,7 +3525,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         labelName = qualifiedNameToLabelName(getQualifiedName(backupContext != null ?
-                                                              backupContext.qualifiedName() : restoreContext.qualifiedName()));
+                backupContext.qualifiedName() : restoreContext.qualifiedName()));
         if (specifyDbExplicitly) {
             if (labelName.getDbName() != null) {
                 throw new ParsingException(PARSER_ERROR_MSG.unsupportedSepcifyDbNameAfterSnapshotName());
@@ -3546,16 +3547,16 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
         for (StarRocksParser.BackupRestoreObjectDescContext backupRestoreObjectDescContext : backupRestoreObjectDescContexts) {
             boolean specifiedFunction = backupRestoreObjectDescContext.FUNCTION() != null ||
-                                        backupRestoreObjectDescContext.FUNCTIONS() != null;
+                    backupRestoreObjectDescContext.FUNCTIONS() != null;
             boolean specifiedMV = backupRestoreObjectDescContext.MATERIALIZED() != null;
             boolean specifiedView = !specifiedMV && (backupRestoreObjectDescContext.VIEW() != null ||
-                                                     backupRestoreObjectDescContext.VIEWS() != null);
+                    backupRestoreObjectDescContext.VIEWS() != null);
             boolean specifiedTable = backupRestoreObjectDescContext.TABLE() != null ||
-                                     backupRestoreObjectDescContext.TABLES() != null;
+                    backupRestoreObjectDescContext.TABLES() != null;
 
             if (backupContext != null && (backupRestoreObjectDescContext.AS() != null ||
-                                          (backupRestoreObjectDescContext.backupRestoreTableDesc() != null &&
-                                           backupRestoreObjectDescContext.backupRestoreTableDesc().AS() != null))) {
+                    (backupRestoreObjectDescContext.backupRestoreTableDesc() != null &&
+                            backupRestoreObjectDescContext.backupRestoreTableDesc().AS() != null))) {
                 throw new ParsingException(PARSER_ERROR_MSG.unsupportedSepcifyAliasInBackupStmt());
             }
 
@@ -3566,7 +3567,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 if (backupRestoreObjectDescContext.AS() != null) {
                     alias = getIdentifierName(backupRestoreObjectDescContext.identifier());
                 } else if (backupRestoreObjectDescContext.backupRestoreTableDesc() != null &&
-                           backupRestoreObjectDescContext.backupRestoreTableDesc().AS() != null) {
+                        backupRestoreObjectDescContext.backupRestoreTableDesc().AS() != null) {
                     alias = getIdentifierName(backupRestoreObjectDescContext.backupRestoreTableDesc().identifier());
                 }
             }
@@ -3578,7 +3579,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 }
 
                 fnRefs.add((FunctionRef) getFunctionRef(backupRestoreObjectDescContext.qualifiedName(),
-                                                        alias, createPos(backupRestoreObjectDescContext)));
+                        alias, createPos(backupRestoreObjectDescContext)));
             } else if (specifiedMV) {
                 if (backupRestoreObjectDescContext.ALL() != null) {
                     allMarker.add(BackupObjectType.MV);
@@ -3586,7 +3587,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 }
 
                 mvRefs.add((TableRef) getTableRef(backupRestoreObjectDescContext.qualifiedName(),
-                                                  null, alias, createPos(backupRestoreObjectDescContext)));
+                        null, alias, createPos(backupRestoreObjectDescContext)));
             } else if (specifiedView) {
                 if (backupRestoreObjectDescContext.ALL() != null) {
                     allMarker.add(BackupObjectType.VIEW);
@@ -3594,7 +3595,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 }
 
                 viewRefs.add((TableRef) getTableRef(backupRestoreObjectDescContext.qualifiedName(),
-                                                    null, alias, createPos(backupRestoreObjectDescContext)));
+                        null, alias, createPos(backupRestoreObjectDescContext)));
             } else if (specifiedTable) {
                 if (backupRestoreObjectDescContext.ALL() != null) {
                     allMarker.add(BackupObjectType.TABLE);
@@ -3602,12 +3603,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 }
 
                 tblRefs.add((TableRef) getTableRef(backupRestoreObjectDescContext.backupRestoreTableDesc().qualifiedName(),
-                                                   backupRestoreObjectDescContext.backupRestoreTableDesc().partitionNames(),
-                                                   alias, createPos(backupRestoreObjectDescContext)));
+                        backupRestoreObjectDescContext.backupRestoreTableDesc().partitionNames(),
+                        alias, createPos(backupRestoreObjectDescContext)));
             } else {
                 mixTblRefs.add((TableRef) getTableRef(backupRestoreObjectDescContext.backupRestoreTableDesc().qualifiedName(),
-                                                      backupRestoreObjectDescContext.backupRestoreTableDesc().partitionNames(),
-                                                      alias, createPos(backupRestoreObjectDescContext)));
+                        backupRestoreObjectDescContext.backupRestoreTableDesc().partitionNames(),
+                        alias, createPos(backupRestoreObjectDescContext)));
             }
         }
 
@@ -3626,7 +3627,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
         Map<String, String> properties = null;
         StarRocksParser.PropertyListContext contextProperties =
-                                (backupContext != null) ? backupContext.propertyList() : restoreContext.propertyList();
+                (backupContext != null) ? backupContext.propertyList() : restoreContext.propertyList();
         if (contextProperties != null) {
             properties = new HashMap<>();
             List<Property> propertyList = visit(contextProperties.property(), Property.class);
@@ -3638,10 +3639,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         AbstractBackupStmt stmt = null;
         if (backupContext != null) {
             stmt = new BackupStmt(labelName, repoName, mixTblRefs, fnRefs, externalCatalogRefs, allMarker, withOnClause,
-                                  originDb != null ? originDb : "", properties, createPos(backupContext));
+                    originDb != null ? originDb : "", properties, createPos(backupContext));
         } else {
             stmt = new RestoreStmt(labelName, repoName, mixTblRefs, fnRefs, externalCatalogRefs, allMarker, withOnClause,
-                                   originDb != null ? originDb : "", properties, createPos(restoreContext));
+                    originDb != null ? originDb : "", properties, createPos(restoreContext));
         }
 
         return stmt;
@@ -3680,7 +3681,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (context.CATALOG() == null && context.identifier() == null) {
             throw new ParsingException(PARSER_ERROR_MSG.nullIdentifierCancelBackupRestore());
         }
-        return new CancelBackupStmt(context.CATALOG() != null ? "" :  ((Identifier) visit(context.identifier())).getValue(),
+        return new CancelBackupStmt(context.CATALOG() != null ? "" : ((Identifier) visit(context.identifier())).getValue(),
                 true, context.CATALOG() != null, createPos(context));
     }
 
@@ -5149,6 +5150,25 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitRollbackStatement(StarRocksParser.RollbackStatementContext context) {
         return new RollbackStmt(createPos(context));
+    }
+
+    // ------------------------------------------- Translate Statement -------------------------------------------------
+    @Override
+    public ParseNode visitTranslateStatement(StarRocksParser.TranslateStatementContext context) {
+        String dialect = ((Identifier) visit(context.dialect().identifier())).getValue();
+        return new TranslateStmt(createPos(context), dialect, ((StringLiteral) visit(context.translateSQL())).getValue());
+    }
+
+    @Override
+    public ParseNode visitTranslateSQL(StarRocksParser.TranslateSQLContext context) {
+        StringBuilder buf = new StringBuilder();
+        for (int i = 0; i < context.getChildCount(); ++i) {
+            if (i > 0) {
+                buf.append(' ');
+            }
+            buf.append(context.getChild(i).getText());
+        }
+        return new StringLiteral(buf.toString(), createPos(context));
     }
 
     // ------------------------------------------- Query Statement -----------------------------------------------------
