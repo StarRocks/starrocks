@@ -317,49 +317,51 @@ std::vector<size_t> ChunkHelper::get_char_field_indexes(const Schema& schema) {
     return char_field_indexes;
 }
 
+void ChunkHelper::padding_char_column(const starrocks::TabletSchemaCSPtr& tschema, const Field& field, Column* column) {
+    size_t num_rows = column->size();
+    Column* data_column = ColumnHelper::get_data_column(column);
+    auto* binary = down_cast<BinaryColumn*>(data_column);
+
+    Offsets& offset = binary->get_offset();
+    Bytes& bytes = binary->get_bytes();
+
+    // Padding 0 to CHAR field, the storage bitmap index and zone map need it.
+    // TODO(kks): we could improve this if there are many null valus
+    auto new_binary = BinaryColumn::create();
+    Offsets& new_offset = new_binary->get_offset();
+    Bytes& new_bytes = new_binary->get_bytes();
+
+    // |schema| maybe partial columns in vertical compaction, so get char column length by name.
+    uint32_t len = tschema->column(tschema->field_index(field.name())).length();
+
+    new_offset.resize(num_rows + 1);
+    new_bytes.assign(num_rows * len, 0); // padding 0
+
+    uint32_t from = 0;
+    for (size_t j = 0; j < num_rows; ++j) {
+        uint32_t copy_data_len = std::min(len, offset[j + 1] - offset[j]);
+        strings::memcpy_inlined(new_bytes.data() + from, bytes.data() + offset[j], copy_data_len);
+        from += len; // no copy data will be 0
+    }
+
+    for (size_t j = 1; j <= num_rows; ++j) {
+        new_offset[j] = static_cast<uint32_t>(len * j);
+    }
+
+    if (field.is_nullable()) {
+        auto* nullable_column = down_cast<NullableColumn*>(column);
+        auto new_column = NullableColumn::create(new_binary, nullable_column->null_column());
+        new_column->swap_column(*column);
+    } else {
+        new_binary->swap_column(*column);
+    }
+}
+
 void ChunkHelper::padding_char_columns(const std::vector<size_t>& char_column_indexes, const Schema& schema,
                                        const starrocks::TabletSchemaCSPtr& tschema, Chunk* chunk) {
-    size_t num_rows = chunk->num_rows();
     for (auto field_index : char_column_indexes) {
         Column* column = chunk->get_column_by_index(field_index).get();
-        Column* data_column = ColumnHelper::get_data_column(column);
-        auto* binary = down_cast<BinaryColumn*>(data_column);
-
-        Offsets& offset = binary->get_offset();
-        Bytes& bytes = binary->get_bytes();
-
-        // Padding 0 to CHAR field, the storage bitmap index and zone map need it.
-        // TODO(kks): we could improve this if there are many null valus
-        auto new_binary = BinaryColumn::create();
-        Offsets& new_offset = new_binary->get_offset();
-        Bytes& new_bytes = new_binary->get_bytes();
-
-        // |schema| maybe partial columns in vertical compaction, so get char column length by name.
-        uint32_t len = tschema->column(tschema->field_index(schema.field(field_index)->name())).length();
-
-        new_offset.resize(num_rows + 1);
-        new_bytes.assign(num_rows * len, 0); // padding 0
-
-        uint32_t from = 0;
-        for (size_t j = 0; j < num_rows; ++j) {
-            uint32_t copy_data_len = std::min(len, offset[j + 1] - offset[j]);
-            strings::memcpy_inlined(new_bytes.data() + from, bytes.data() + offset[j], copy_data_len);
-            from += len; // no copy data will be 0
-        }
-
-        for (size_t j = 1; j <= num_rows; ++j) {
-            new_offset[j] = static_cast<uint32_t>(len * j);
-        }
-
-        const auto& field = schema.field(field_index);
-
-        if (field->is_nullable()) {
-            auto* nullable_column = down_cast<NullableColumn*>(column);
-            auto new_column = NullableColumn::create(new_binary, nullable_column->null_column());
-            new_column->swap_column(*column);
-        } else {
-            new_binary->swap_column(*column);
-        }
+        padding_char_column(tschema, *schema.field(field_index), column);
     }
 }
 
