@@ -234,16 +234,26 @@ public class TableFunctionTable extends Table {
     public List<List<String>> listFilesAndDirs() {
         List<List<String>> files = Lists.newArrayList();
         try {
-            List<FileStatus> fileStatuses = Lists.newArrayList();
             List<String> pieces = Splitter.on(",").trimResults().omitEmptyStrings().splitToList(path);
             for (String piece : ListUtils.emptyIfNull(pieces)) {
+                List<FileStatus> fileStatuses = Lists.newArrayList();
                 fileStatuses.addAll(listFilesAndDirs(piece, listRecursively, properties));
 
-                // if the path is directory, return files and sub directories in this directory
-                if (!listRecursively && fileStatuses.size() == 1 && fileStatuses.get(0).isDirectory()) {
-                    String dirPath = fileStatuses.get(0).getPath().toString() + "/*";
+                if (!listRecursively && !fileStatuses.isEmpty()) {
+                    List<FileStatus> newFileStatuses = Lists.newArrayList();
+                    for (FileStatus fStatus : fileStatuses) {
+                        if (!fStatus.isDirectory()) {
+                            newFileStatuses.add(fStatus);
+                            continue;
+                        }
+
+                        // if the path is directory, return files and sub directories in this directory
+                        String dirPath = fStatus.getPath().toString() + "/*";
+                        newFileStatuses.addAll(listFilesAndDirs(dirPath, false, properties));
+                    }
+
                     fileStatuses.clear();
-                    fileStatuses.addAll(listFilesAndDirs(dirPath, false, properties));
+                    fileStatuses.addAll(newFileStatuses);
                 }
 
                 for (FileStatus fStatus : fileStatuses) {
@@ -255,7 +265,6 @@ public class TableFunctionTable extends Table {
                                     ConstantOperator.createBigint(fStatus.getModificationTime() / 1000)).getVarchar());
                     files.add(fileInfo);
                 }
-                fileStatuses.clear();
             }
 
             if (files.isEmpty()) {
