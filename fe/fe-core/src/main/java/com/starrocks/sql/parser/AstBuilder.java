@@ -251,6 +251,7 @@ import com.starrocks.sql.ast.DropIndexClause;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropObserverClause;
 import com.starrocks.sql.ast.DropPartitionClause;
+import com.starrocks.sql.ast.DropPersistentIndexClause;
 import com.starrocks.sql.ast.DropRepositoryStmt;
 import com.starrocks.sql.ast.DropResourceGroupStmt;
 import com.starrocks.sql.ast.DropResourceStmt;
@@ -4468,6 +4469,28 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitDropIndexClause(StarRocksParser.DropIndexClauseContext context) {
         Identifier identifier = (Identifier) visit(context.identifier());
         return new DropIndexClause(identifier.getValue(), createPos(context));
+    }
+
+    @Override
+    public ParseNode visitDropPersistentIndexClause(StarRocksParser.DropPersistentIndexClauseContext context) {
+        // Initialize the list to store tablet IDs
+        Set<Long> tabletIds = Sets.newHashSet();
+
+        // Iterate through the integerValueList in the context
+        StarRocksParser.Integer_listContext integerListContext = context.integer_list();
+        for (TerminalNode integerValueNode : integerListContext.INTEGER_VALUE()) {
+            try {
+                // Parse each INTEGER_VALUE as a Long and add it to tabletIds
+                Long tabletId = Long.parseLong(integerValueNode.getText());
+                tabletIds.add(tabletId);
+            } catch (NumberFormatException e) {
+                // Handle invalid integer parsing (e.g., non-numeric values)
+                throw new SemanticException("Invalid tablet ID: " + integerValueNode.getText(), e);
+            }
+        }
+
+        // Return the constructed DropPersistentIndexClause object
+        return new DropPersistentIndexClause(tabletIds, createPos(context));
     }
 
     @Override
