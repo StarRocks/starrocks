@@ -61,16 +61,17 @@ public class TableKeeper {
     public synchronized void run() {
         try {
             if (!checkDatabaseExists()) {
-                GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(databaseName);
-                LOG.warn("database created: {}", databaseName);
+                LOG.warn("database not exists: {}", databaseName);
                 return;
             }
             if (!checkTableExists()) {
                 createTable();
                 LOG.info("table created: {}", tableName);
             }
-            correctTable();
-            changeTTL();
+            if (checkTableExists()) {
+                correctTable();
+                changeTTL();
+            }
         } catch (Exception e) {
             LOG.error("error happens in Keeper: {}", e.getMessage(), e);
         }
