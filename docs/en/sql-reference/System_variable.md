@@ -298,6 +298,18 @@ Used for MySQL client compatibility. No practical usage.
 * **Default**: true
 * **Introduced in**: v2.5.13, v3.0.7, v3.1.4, v3.2.0, v3.3.0
 
+### enable_plan_advisor
+
+* **Description**: Whether to enable Query Feedback feature for slow queries and manually marked queries.
+* **Default**: true
+* **Introduced in**: v3.4.0
+
+### enable_plan_analyzer
+
+* **Description**: Whether to enable Query Feedback feature for all queries. This variable takes effect only when `enable_plan_advisor` is set to `true`.
+* **Default**: false
+* **Introduced in**: v3.4.0
+
 ### follower_query_forward_mode
 
 * **Description**: Specifies to which FE nodes the query statements are routed.
