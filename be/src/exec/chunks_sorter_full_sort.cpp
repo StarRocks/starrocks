@@ -17,12 +17,9 @@
 #include "exec/sorting/merge.h"
 #include "exec/sorting/sort_permute.h"
 #include "exec/sorting/sorting.h"
-#include "exprs/column_ref.h"
 #include "exprs/expr.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
-#include "util/stopwatch.hpp"
 
 namespace starrocks {
 
@@ -43,8 +40,8 @@ void ChunksSorterFullSort::setup_runtime(RuntimeState* state, RuntimeProfile* pr
     _runtime_profile = profile;
     _parent_mem_tracker = parent_mem_tracker;
     _object_pool = std::make_unique<ObjectPool>();
-    _runtime_profile->add_info_string("MaxBufferedRows", strings::Substitute("$0", max_buffered_rows));
-    _runtime_profile->add_info_string("MaxBufferedBytes", strings::Substitute("$0", max_buffered_bytes));
+    _runtime_profile->add_info_string("MaxBufferedRows", std::to_string(max_buffered_rows));
+    _runtime_profile->add_info_string("MaxBufferedBytes", std::to_string(max_buffered_bytes));
     _profiler = _object_pool->add(new ChunksSorterFullSortProfiler(profile, parent_mem_tracker));
 }
 
@@ -130,6 +127,7 @@ Status ChunksSorterFullSort::_partial_sort(RuntimeState* state, bool done) {
 Status ChunksSorterFullSort::_merge_sorted(RuntimeState* state) {
     SCOPED_TIMER(_merge_timer);
     _profiler->num_sorted_runs->set((int64_t)_sorted_chunks.size());
+    // TODO: introduce an extra merge before cascading merge to handle the case that has a lot of sortruns
     // In cascading merging phase, the height of merging tree is ceiling(log2(num_sorted_runs)) + 1,
     // so when num_sorted_runs is 1 or 2, the height merging tree is less than 2, the sorted runs just be processed
     // in at most one pass. there is no need to enable lazy materialization which eliminates non-order-by output

@@ -17,7 +17,6 @@
 #include "column/vectorized_fwd.h"
 #include "exec/chunks_sorter.h"
 #include "exec/sorting/merge.h"
-#include "gtest/gtest_prod.h"
 
 namespace starrocks {
 class ExprContext;
@@ -34,6 +33,11 @@ struct ChunksSorterFullSortProfiler {
 };
 class ChunksSorterFullSort : public ChunksSorter {
 public:
+    static constexpr size_t kDefaultMaxBufferRows =
+            1 << 30; // 1 billion rows, the number of rows has little impact on performance
+    static constexpr size_t kDefaultMaxBufferBytes =
+            256 << 20; // 256MB, a larger limit may improve performance but is not memory allocator friendly
+
     /**
      * Constructor.
      * @param sort_exprs     The order-by columns or columns with expression. This sorter will use but not own the object.
@@ -90,9 +94,9 @@ protected:
     std::unique_ptr<ObjectPool> _object_pool = nullptr;
     ChunksSorterFullSortProfiler* _profiler = nullptr;
 
-    // TODO: further tunning the buffer parameter
-    const size_t max_buffered_rows;  // Max buffer 1024000 rows
-    const size_t max_buffered_bytes; // Max buffer 16MB bytes
+    // Parameters to control the Merge-Sort behavior
+    const size_t max_buffered_rows;
+    const size_t max_buffered_bytes;
 
     // only when order-by columns(_sort_exprs) are all ColumnRefs and the cost of eager-materialization of
     // other columns is large than ordinal column, then we materialize order-by columns and ordinal columns eagerly,
