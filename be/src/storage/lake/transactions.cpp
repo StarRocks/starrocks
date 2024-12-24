@@ -302,7 +302,8 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
         if (log_applier == nullptr) {
             // init log_applier
             new_metadata = std::make_shared<TabletMetadataPB>(*base_metadata);
-            log_applier = new_txn_log_applier(Tablet(tablet_mgr, tablet_id), new_metadata, new_version);
+            log_applier = new_txn_log_applier(Tablet(tablet_mgr, tablet_id), new_metadata, new_version,
+                                              txns[i].rebuild_pindex());
 
             if (new_metadata->compaction_inputs_size() > 0) {
                 new_metadata->mutable_compaction_inputs()->Clear();

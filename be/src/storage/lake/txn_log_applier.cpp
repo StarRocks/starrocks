@@ -91,12 +91,14 @@ Status apply_alter_meta_log(TabletMetadataPB* metadata, const TxnLogPB_OpAlterMe
 
 class PrimaryKeyTxnLogApplier : public TxnLogApplier {
 public:
-    PrimaryKeyTxnLogApplier(const Tablet& tablet, MutableTabletMetadataPtr metadata, int64_t new_version)
+    PrimaryKeyTxnLogApplier(const Tablet& tablet, MutableTabletMetadataPtr metadata, int64_t new_version,
+                            bool rebuild_pindex)
             : _tablet(tablet),
               _metadata(std::move(metadata)),
               _base_version(_metadata->version()),
               _new_version(new_version),
-              _builder(_tablet, _metadata) {
+              _builder(_tablet, _metadata),
+              _rebuild_pindex(rebuild_pindex) {
         _metadata->set_version(_new_version);
     }
 
@@ -126,11 +128,30 @@ public:
         _index_entry = nullptr;
     }
 
+    Status check_rebuild_index() {
+        if (_rebuild_pindex) {
+            for (const auto& sstable : _metadata->sstable_meta().sstables()) {
+                FileMetaPB file_meta;
+                file_meta.set_name(sstable.filename());
+                file_meta.set_size(sstable.filesize());
+                _metadata->mutable_orphan_files()->Add(std::move(file_meta));
+            }
+            _metadata->clear_sstable_meta();
+            _guard.reset(nullptr);
+            _index_entry = nullptr;
+            ASSIGN_OR_RETURN(_index_entry, _tablet.update_mgr()->rebuild_primary_index(
+                                                   _metadata, &_builder, _base_version, _new_version, _guard));
+            _rebuild_pindex = false;
+        }
+        return Status::OK();
+    }
+
     Status apply(const TxnLogPB& log) override {
         SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(true);
         SCOPED_THREAD_LOCAL_SINGLETON_CHECK_MEM_TRACKER_SETTER(
                 config::enable_pk_strict_memcheck ? _tablet.update_mgr()->mem_tracker() : nullptr);
         _max_txn_id = std::max(_max_txn_id, log.txn_id());
+        RETURN_IF_ERROR(check_rebuild_index());
         if (log.has_op_write()) {
             RETURN_IF_ERROR(check_and_recover([&]() { return apply_write_log(log.op_write(), log.txn_id()); }));
         }
@@ -359,6 +380,7 @@ private:
     std::unique_ptr<std::lock_guard<std::shared_timed_mutex>> _guard{nullptr};
     // True when finalize meta file success.
     bool _has_finalized = false;
+    bool _rebuild_pindex = false;
 };
 
 class NonPrimaryKeyTxnLogApplier : public TxnLogApplier {
@@ -609,9 +631,9 @@ private:
 };
 
 std::unique_ptr<TxnLogApplier> new_txn_log_applier(const Tablet& tablet, MutableTabletMetadataPtr metadata,
-                                                   int64_t new_version) {
+                                                   int64_t new_version, bool rebuild_pindex) {
     if (metadata->schema().keys_type() == PRIMARY_KEYS) {
-        return std::make_unique<PrimaryKeyTxnLogApplier>(tablet, std::move(metadata), new_version);
+        return std::make_unique<PrimaryKeyTxnLogApplier>(tablet, std::move(metadata), new_version, rebuild_pindex);
     }
     return std::make_unique<NonPrimaryKeyTxnLogApplier>(tablet, std::move(metadata), new_version);
 }
