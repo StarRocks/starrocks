@@ -63,6 +63,8 @@ TEST(RequestCntlTest, test) {
         std::condition_variable cv;
         std::atomic_int32_t val{};
         std::counting_semaphore<> s(0);
+        std::atomic_int32_t sync{};
+
         std::vector<int> data;
         data.emplace_back(0);
         std::vector<std::jthread> threads;
@@ -71,7 +73,7 @@ TEST(RequestCntlTest, test) {
                 {
                     std::unique_lock lock(mutex);
                     s.release();
-                    cv.wait(lock);
+                    cv.wait(lock, [&]() { return sync != 0; });
                 }
                 AtomicRequestControler cntl(val, [&]() {
                     while (!data.empty()) {
@@ -83,7 +85,12 @@ TEST(RequestCntlTest, test) {
         for (size_t i = 0; i < 10; ++i) {
             s.acquire();
         }
-        cv.notify_all();
+        {
+            std::lock_guard guard(mutex);
+            sync = 1;
+            cv.notify_all();
+        }
+
         for (auto& thread : threads) {
             thread.join();
         }
