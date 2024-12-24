@@ -22,6 +22,7 @@
 
 #include "agent/master_info.h"
 #include "common/compiler_util.h"
+#include "common/config.h"
 #include "fmt/format.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
@@ -243,7 +244,31 @@ StatusOr<TabletMetadataPtr> TabletManager::load_tablet_metadata(std::shared_ptr<
     auto t0 = butil::gettimeofday_us();
     auto metadata = std::make_shared<TabletMetadataPB>();
     ProtobufFile file(metadata_location, std::move(fs));
-    RETURN_IF_ERROR(file.load(metadata.get(), fill_cache));
+    auto s = file.load(metadata.get(), fill_cache);
+    if (!s.ok()) {
+        if (s.is_corruption() && config::lake_clear_corrupted_cache) {
+            auto tmp_fs = FileSystem::CreateSharedFromString(metadata_location);
+            if (!tmp_fs.ok()) {
+                LOG(WARNING) << "fail to get file system to clear corrupted cache for " << metadata_location
+                             << ", error: " << tmp_fs.status();
+                return s;
+            }
+            auto drop_status = (*tmp_fs)->drop_local_cache(metadata_location);
+            if (drop_status.ok()) {
+                LOG(INFO) << "clear corrupted cache for " << metadata_location;
+                // reset metadata
+                metadata = std::make_shared<TabletMetadataPB>();
+                // read again
+                RETURN_IF_ERROR(file.load(metadata.get(), fill_cache));
+            } else {
+                LOG(WARNING) << "clear corrupted cache for " << metadata_location << " failed, "
+                             << "error: " << drop_status;
+                return s; // return error so load tablet meta can be retried
+            }
+        } else {
+            return s;
+        }
+    }
     g_get_tablet_metadata_latency << (butil::gettimeofday_us() - t0);
     return std::move(metadata);
 }
