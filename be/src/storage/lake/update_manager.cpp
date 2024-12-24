@@ -570,6 +570,11 @@ Status UpdateManager::get_column_values(const RowsetUpdateStateParams& params, s
             ASSIGN_OR_RETURN(auto col_iter, (*segment)->new_column_iterator_or_default(col, nullptr));
             RETURN_IF_ERROR(col_iter->init(iter_opts));
             RETURN_IF_ERROR(col_iter->fetch_values_by_rowid(rowids.data(), rowids.size(), (*columns)[i].get()));
+            // padding char columns
+            const auto& field = tablet_schema->schema()->field(read_column_ids[i]);
+            if (field->type()->type() == TYPE_CHAR) {
+                ChunkHelper::padding_char_column(tablet_schema, *field, (*columns)[i].get());
+            }
         }
         return Status::OK();
     };
