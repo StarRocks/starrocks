@@ -1090,7 +1090,7 @@ public class AggStateCombinatorTest extends MvRewriteTestBase {
                 Joiner.on(", ").join(stateColumns) + " from t1 group by k1;";
         System.out.println(sql1);
         starRocksAssert.withRefreshedMaterializedView(sql1);
-
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(10000);
         // no rollup
         {
             String query = String.format("select k1, %s from t1 group by k1;", Joiner.on(", ").join(queryColumns));
@@ -1105,6 +1105,7 @@ public class AggStateCombinatorTest extends MvRewriteTestBase {
             String plan = getFragmentPlan(query);
             PlanTestBase.assertContains(plan, "test_mv1");
         }
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(3000);
         starRocksAssert.dropTable("t1");
         starRocksAssert.dropMaterializedView("test_mv1");
     }

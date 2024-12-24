@@ -65,6 +65,7 @@ import com.starrocks.sql.ast.pipe.DescPipeStmt;
 import com.starrocks.sql.ast.pipe.DropPipeStmt;
 import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.sql.ast.pipe.ShowPipeStmt;
+import com.starrocks.sql.ast.translate.TranslateStmt;
 import com.starrocks.sql.ast.txn.BeginStmt;
 import com.starrocks.sql.ast.txn.CommitStmt;
 import com.starrocks.sql.ast.txn.RollbackStmt;
@@ -1506,6 +1507,11 @@ public interface AstVisitor<R, C> {
     }
 
     default R visitRollbackStatement(RollbackStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    // ---------------------------------------- Translate Statement --------------------------------------------------
+    default R visitTranslateStatement(TranslateStmt statement, C context) {
         return visitStatement(statement, context);
     }
 
