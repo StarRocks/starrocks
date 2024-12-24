@@ -87,6 +87,9 @@ protected:
     // chunk depicted by dest_slot_descriptors
     StatusOr<ChunkPtr> materialize(const starrocks::ChunkPtr& src, starrocks::ChunkPtr& cast);
 
+    static void sample_files(size_t total_file_count, int64_t sample_file_count,
+                             std::vector<size_t>* sample_file_indexes);
+
 protected:
     RuntimeState* _state;
     RuntimeProfile* _profile;
