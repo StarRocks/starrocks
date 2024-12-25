@@ -108,8 +108,6 @@ storage_root_path =
 
    ```Bash
    # 假设 `storage_root_path = /data/disk1;/data/disk2`
-   rm -rf /data/disk1/starlet_cache/
-   rm -rf /data/disk2/starlet_cache/
    rm -rf /data/disk1/datacache/
    rm -rf /data/disk2/datacache/
    ```
