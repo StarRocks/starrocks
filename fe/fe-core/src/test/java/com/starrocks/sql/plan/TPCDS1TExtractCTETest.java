@@ -56,12 +56,12 @@ public class TPCDS1TExtractCTETest extends TPCDS1TTestBase {
     public void testQuery44() throws Exception {
         String plan = getFragmentPlan(Q44);
         assertContains(plan, "MultiCastDataSinks");
-        assertContains(plan, "  4:AGGREGATE (merge finalize)\n" +
-                "  |  output: avg(192: avg)\n" +
-                "  |  group by: 179: ss_item_sk");
-        assertContains(plan, "  9:AGGREGATE (merge finalize)\n" +
+        assertContains(plan, "AGGREGATE (merge finalize)\n" +
                 "  |  output: avg(168: avg)\n" +
-                "  |  group by: 165: ss_store_sk");
+                "  |  group by: 155: ss_item_sk");
+        assertContains(plan, "AGGREGATE (merge finalize)\n" +
+                "  |  output: avg(192: avg)\n" +
+                "  |  group by: 189: ss_store_sk");
     }
 
     @Test
