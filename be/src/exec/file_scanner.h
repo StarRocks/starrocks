@@ -100,6 +100,11 @@ protected:
 
     bool _strict_mode;
     int64_t _error_counter;
+    // When column mismatch, query and load have different behaviors.
+    // Query returns error, while load counts the filtered rows, and return error or not is based on max filter ratio,
+    // so need to check query or load in scanner.
+    // Currently only used in csv scanner.
+    bool _is_load;
 
     // sources
     std::vector<SlotDescriptor*> _src_slot_descriptors;

@@ -45,13 +45,27 @@ static std::string string_2_asc(const std::string& input) {
     return oss.str();
 }
 
-static std::string make_column_count_not_matched_error_message(int expected_count, int actual_count,
-                                                               CSVParseOptions& parse_options) {
+static std::string make_column_count_not_matched_error_message_for_load(int expected_count, int actual_count,
+                                                                        CSVParseOptions& parse_options) {
     std::stringstream error_msg;
     error_msg << "Target column count: " << expected_count
               << " doesn't match source value column count: " << actual_count << ". "
               << "Column separator: " << string_2_asc(parse_options.column_delimiter) << ", "
               << "Row delimiter: " << string_2_asc(parse_options.row_delimiter);
+    return error_msg.str();
+}
+
+static std::string make_column_count_not_matched_error_message_for_query(int expected_count, int actual_count,
+                                                                         CSVParseOptions& parse_options,
+                                                                         const std::string& row,
+                                                                         const std::string& filename) {
+    std::stringstream error_msg;
+    error_msg << "Schema column count: " << expected_count
+              << " doesn't match source value column count: " << actual_count << ". "
+              << "Column separator: " << string_2_asc(parse_options.column_delimiter) << ", "
+              << "Row delimiter: " << string_2_asc(parse_options.row_delimiter) << ", "
+              << "Row: '" << row << "', File: " << filename << ". "
+              << "Consider setting 'fill_mismatch_column_with' = 'null'";
     return error_msg.str();
 }
 
@@ -357,17 +371,23 @@ Status CSVScanner::_parse_csv_v2(Chunk* chunk) {
             if (status.is_end_of_file()) {
                 break;
             }
-            if (_counter->num_rows_filtered++ < REPORT_ERROR_MAX_NUMBER) {
-                std::string error_msg = make_column_count_not_matched_error_message(_num_fields_in_csv,
-                                                                                    row.columns.size(), _parse_options);
-                _report_error(record, error_msg);
+            if (_is_load) {
+                std::string error_msg = make_column_count_not_matched_error_message_for_load(
+                        _num_fields_in_csv, row.columns.size(), _parse_options);
+                if (_counter->num_rows_filtered++ < REPORT_ERROR_MAX_NUMBER) {
+                    _report_error(record, error_msg);
+                }
+                if (_state->enable_log_rejected_record()) {
+                    _report_rejected_record(record, error_msg);
+                }
+                continue;
+            } else {
+                // files() query return error
+                std::string error_msg = make_column_count_not_matched_error_message_for_query(
+                        _num_fields_in_csv, row.columns.size(), _parse_options, record.to_string(),
+                        _curr_reader->filename());
+                return Status::DataQualityError(error_msg);
             }
-            if (_state->enable_log_rejected_record()) {
-                std::string error_msg = make_column_count_not_matched_error_message(_num_fields_in_csv,
-                                                                                    row.columns.size(), _parse_options);
-                _report_rejected_record(record, error_msg);
-            }
-            continue;
         }
         if (!validate_utf8(record.data, record.size)) {
             if (_counter->num_rows_filtered++ < REPORT_ERROR_MAX_NUMBER) {
@@ -459,17 +479,23 @@ Status CSVScanner::_parse_csv(Chunk* chunk) {
         _curr_reader->split_record(record, &fields);
 
         if (fields.size() != _num_fields_in_csv && !_scan_range.params.flexible_column_mapping) {
-            if (_counter->num_rows_filtered++ < REPORT_ERROR_MAX_NUMBER) {
-                std::string error_msg =
-                        make_column_count_not_matched_error_message(_num_fields_in_csv, fields.size(), _parse_options);
-                _report_error(record, error_msg);
+            if (_is_load) {
+                std::string error_msg = make_column_count_not_matched_error_message_for_load(
+                        _num_fields_in_csv, fields.size(), _parse_options);
+                if (_counter->num_rows_filtered++ < REPORT_ERROR_MAX_NUMBER) {
+                    _report_error(record, error_msg);
+                }
+                if (_state->enable_log_rejected_record()) {
+                    _report_rejected_record(record, error_msg);
+                }
+                continue;
+            } else {
+                // files() query return error
+                std::string error_msg = make_column_count_not_matched_error_message_for_query(
+                        _num_fields_in_csv, fields.size(), _parse_options, record.to_string(),
+                        _curr_reader->filename());
+                return Status::DataQualityError(error_msg);
             }
-            if (_state->enable_log_rejected_record()) {
-                std::string error_msg =
-                        make_column_count_not_matched_error_message(_num_fields_in_csv, fields.size(), _parse_options);
-                _report_rejected_record(record, error_msg);
-            }
-            continue;
         }
         if (!validate_utf8(record.data, record.size)) {
             if (_counter->num_rows_filtered++ < REPORT_ERROR_MAX_NUMBER) {

@@ -3865,8 +3865,8 @@ public class PlanFragmentBuilder {
             int dop = ConnectContext.get().getSessionVariable().getSinkDegreeOfParallelism();
             scanNode.setLoadInfo(-1, -1, table, new BrokerDesc(table.getProperties()), fileGroups, table.isStrictMode(), dop);
             scanNode.setUseVectorizedLoad(true);
-            // table function enable flexible column mapping by default.
-            scanNode.setFlexibleColumnMapping(true);
+            scanNode.setFlexibleColumnMapping(table.isFlexibleColumnMapping());
+            scanNode.setIsLoad(table.isLoadType());
 
             Analyzer analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), context.getConnectContext());
             analyzer.setDescTbl(context.getDescTbl());
