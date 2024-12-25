@@ -721,11 +721,8 @@ public class StmtExecutor {
                         }
 
                         if (isAsync) {
-                            int timeout = context.getSessionVariable().getQueryTimeoutS();
-                            QeProcessorImpl.INSTANCE
-                                    .monitorQuery(context.getExecutionId(),
-                                            System.currentTimeMillis() + timeout * 1000L +
-                                                    context.getSessionVariable().getProfileTimeout() * 1000L);
+                            QeProcessorImpl.INSTANCE.monitorQuery(context.getExecutionId(),
+                                    System.currentTimeMillis() + context.getSessionVariable().getProfileTimeout() * 1000L);
                         } else {
                             QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
                         }
@@ -1346,7 +1343,7 @@ public class StmtExecutor {
                 sendFields(colNames, outputExprs);
             }
         }
-        
+
         if (batch != null) {
             statisticsForAuditLog = batch.getQueryStatistics();
             if (!isOutfileQuery) {

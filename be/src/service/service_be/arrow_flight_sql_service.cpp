@@ -29,6 +29,14 @@
 namespace starrocks {
 
 Status ArrowFlightSqlServer::start(int port) {
+    if (port <= 0) {
+        LOG(INFO) << "[ARROW] Arrow Flight SQL Server is disabled. You can modify `arrow_flight_port` in `be.conf` to "
+                     "a positive value to enable it.";
+        return Status::OK();
+    }
+
+    _running = true;
+
     arrow::flight::Location bind_location;
     RETURN_STATUS_IF_ERROR(arrow::flight::Location::ForGrpcTcp(BackendOptions::get_service_bind_address(), port)
                                    .Value(&bind_location));
@@ -36,6 +44,16 @@ Status ArrowFlightSqlServer::start(int port) {
     RETURN_STATUS_IF_ERROR(Init(flight_options));
 
     return Status::OK();
+}
+
+void ArrowFlightSqlServer::stop() {
+    if (!_running) {
+        return;
+    }
+    _running = false;
+    if (const auto status = Shutdown(); !status.ok()) {
+        LOG(INFO) << "[ARROW] Failed to stop Arrow Flight SQL Server [error=" << status << "]";
+    }
 }
 
 arrow::Result<std::unique_ptr<arrow::flight::FlightInfo>> ArrowFlightSqlServer::GetFlightInfoSchemas(
