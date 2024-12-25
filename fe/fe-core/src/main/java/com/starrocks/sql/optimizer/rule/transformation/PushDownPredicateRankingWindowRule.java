@@ -23,6 +23,7 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.SortPhase;
@@ -181,6 +182,14 @@ public class PushDownPredicateRankingWindowRule extends TransformationRule {
                 .map(ScalarOperator::<ColumnRefOperator>cast)
                 .collect(Collectors.toList());
 
+        // partition columns should not be included in orderByElements when it's not the only column in orderByElements
+        List<Ordering> orderByElements;
+        if (rankRelatedWindowOperator.getOrderByElements() != null && !rankRelatedWindowOperator.getOrderByElements().isEmpty()) {
+            orderByElements = rankRelatedWindowOperator.getOrderByElements();
+        } else {
+            orderByElements = rankRelatedWindowOperator.getEnforceSortColumns();
+        }
+
         TopNType topNType = TopNType.parse(callOperator.getFnName());
 
         // If partition by columns is not empty, then we cannot derive sort property from the SortNode
@@ -192,7 +201,7 @@ public class PushDownPredicateRankingWindowRule extends TransformationRule {
         LogicalTopNOperator.Builder topNBuilder = new LogicalTopNOperator.Builder()
                 .setPartitionByColumns(partitionByColumns)
                 .setPartitionLimit(partitionLimit)
-                .setOrderByElements(rankRelatedWindowOperator.getEnforceSortColumns())
+                .setOrderByElements(orderByElements)
                 .setLimit(limit)
                 .setTopNType(topNType)
                 .setSortPhase(sortPhase);

@@ -411,7 +411,7 @@ public class WindowTransformer {
                         .<LogicalWindowOperator>comparingInt(w -> w.getPartitionExpressions().size())
                         .thenComparing(w -> {
                             String fnName = w.getWindowCall().values().iterator().next().getFnName();
-                            return FunctionSet.RANK_RALATED_FUNCTIONS.contains(fnName) ? 1 : 0;
+                            return FunctionSet.RANK_RELATED_FUNCTIONS.contains(fnName) ? 1 : 0;
                         })));
 
         /*

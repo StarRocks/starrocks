@@ -178,6 +178,14 @@ public class PhysicalTopNOperator extends PhysicalOperator {
             }
         }
 
+        if (partitionByColumns != null) {
+            for (ColumnRefOperator column : partitionByColumns) {
+                if (column.getUsedColumns().isIntersect(dictSet)) {
+                    return true;
+                }
+            }
+        }
+
         return false;
     }
 

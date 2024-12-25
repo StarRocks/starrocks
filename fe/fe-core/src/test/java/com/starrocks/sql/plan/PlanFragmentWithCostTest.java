@@ -1992,7 +1992,7 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
         String sql;
         String plan;
 
-        // Partition columns include aggregation grouping columns, so needdn't exchange between PartitionTopN and Analytic.
+        // Partition columns include aggregation grouping columns, so needn't exchange between PartitionTopN and Analytic.
         {
             sql = "with " +
                     "w1 as (select v2, max(v1) as max_v1 from t0 group by v2), " +
@@ -2013,7 +2013,7 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
                     "  4:PARTITION-TOP-N\n" +
                     "  |  partition by: 2: v2 , 4: max \n" +
                     "  |  partition limit: 2\n" +
-                    "  |  order by: <slot 2> 2: v2 ASC, <slot 4> 4: max ASC\n" +
+                    "  |  order by: <slot 4> 4: max ASC\n" +
                     "  |  offset: 0\n" +
                     "  |  \n" +
                     "  3:AGGREGATE (merge finalize)\n" +
@@ -2041,7 +2041,7 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
                     "  4:PARTITION-TOP-N\n" +
                     "  |  partition by: 2: v2 , 4: max \n" +
                     "  |  partition limit: 2\n" +
-                    "  |  order by: <slot 2> 2: v2 ASC, <slot 4> 4: max ASC\n" +
+                    "  |  order by: <slot 4> 4: max ASC\n" +
                     "  |  offset: 0\n" +
                     "  |  \n" +
                     "  3:AGGREGATE (merge finalize)\n" +
@@ -2073,7 +2073,7 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
             assertContains(plan, "  4:PARTITION-TOP-N\n" +
                     "  |  partition by: 4: max \n" +
                     "  |  partition limit: 2\n" +
-                    "  |  order by: <slot 4> 4: max ASC, <slot 2> 2: v2 ASC\n" +
+                    "  |  order by: <slot 2> 2: v2 ASC\n" +
                     "  |  offset: 0");
 
             sql = "with " +
@@ -2122,7 +2122,7 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
                     "  1:PARTITION-TOP-N\n" +
                     "  |  partition by: 1: v1 , 2: v2 \n" +
                     "  |  partition limit: 2\n" +
-                    "  |  order by: <slot 1> 1: v1 ASC, <slot 2> 2: v2 ASC, <slot 3> 3: v3 ASC\n" +
+                    "  |  order by: <slot 3> 3: v3 ASC\n" +
                     "  |  offset: 0\n" +
                     "  |  \n" +
                     "  0:OlapScanNode");
@@ -2149,7 +2149,7 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
                     "  1:PARTITION-TOP-N\n" +
                     "  |  partition by: 1: v1 , 2: v2 \n" +
                     "  |  partition limit: 2\n" +
-                    "  |  order by: <slot 1> 1: v1 ASC, <slot 2> 2: v2 ASC, <slot 3> 3: v3 ASC\n" +
+                    "  |  order by: <slot 3> 3: v3 ASC\n" +
                     "  |  offset: 0\n" +
                     "  |  \n" +
                     "  0:OlapScanNode");
@@ -2178,7 +2178,7 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
             assertContains(plan, "  1:PARTITION-TOP-N\n" +
                     "  |  partition by: 2: v2 , 3: v3 \n" +
                     "  |  partition limit: 2\n" +
-                    "  |  order by: <slot 2> 2: v2 ASC, <slot 3> 3: v3 ASC, <slot 1> 1: v1 ASC\n" +
+                    "  |  order by: <slot 1> 1: v1 ASC\n" +
                     "  |  offset: 0\n" +
                     "  |  \n" +
                     "  0:OlapScanNode");
@@ -2204,7 +2204,7 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
             assertContains(plan, "  1:PARTITION-TOP-N\n" +
                     "  |  partition by: 2: v2 , 3: v3 \n" +
                     "  |  partition limit: 2\n" +
-                    "  |  order by: <slot 2> 2: v2 ASC, <slot 3> 3: v3 ASC, <slot 1> 1: v1 ASC\n" +
+                    "  |  order by: <slot 1> 1: v1 ASC\n" +
                     "  |  offset: 0");
         }
     }
