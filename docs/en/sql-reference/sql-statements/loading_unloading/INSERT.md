@@ -80,7 +80,7 @@ Currently, the default behavior of INSERT OVERWRITE is as follows:
 
 The behavior of the new Dynamic Overwrite semantic is much different:
 
-When overwriting a partitioned table as a whole, new data records will replace the data in their corresponding partitions. If there are partitions that are not involved, they will be left alone, instead of being truncated or deleted. And if there are new data records correspond a non-existent partition, the system will create the partition.
+When overwriting a partitioned table as a whole, new data records will replace the data in their corresponding partitions. If there are partitions that are not involved, they will be left alone, instead of being truncated or deleted. And if there are new data records correspond to a non-existent partition, the system will create the partition.
 
 The Dynamic Overwrite semantic is disabled by default. To enable it, you need to set the system variable `dynamic_overwrite` to `true`.
 
