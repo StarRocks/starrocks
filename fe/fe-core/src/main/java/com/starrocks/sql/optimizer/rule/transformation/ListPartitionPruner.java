@@ -20,7 +20,6 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
@@ -84,27 +83,17 @@ public class ListPartitionPruner implements PartitionPruner {
     private final Set<Long> allPartitions;
     private final List<ColumnRefOperator> partitionColumnRefs;
     private final List<Long> specifyPartitionIds;
-    private final ListPartitionInfo listPartitionInfo;
 
     public ListPartitionPruner(
             Map<ColumnRefOperator, ConcurrentNavigableMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap,
             Map<ColumnRefOperator, Set<Long>> columnToNullPartitions,
             List<ScalarOperator> partitionConjuncts, List<Long> specifyPartitionIds) {
-        this(columnToPartitionValuesMap, columnToNullPartitions, partitionConjuncts, specifyPartitionIds, null);
-    }
-
-    public ListPartitionPruner(
-            Map<ColumnRefOperator, ConcurrentNavigableMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap,
-            Map<ColumnRefOperator, Set<Long>> columnToNullPartitions,
-            List<ScalarOperator> partitionConjuncts, List<Long> specifyPartitionIds,
-            ListPartitionInfo listPartitionInfo) {
         this.columnToPartitionValuesMap = columnToPartitionValuesMap;
         this.columnToNullPartitions = columnToNullPartitions;
         this.partitionConjuncts = partitionConjuncts;
         this.allPartitions = getAllPartitions();
         this.partitionColumnRefs = getPartitionColumnRefs();
         this.specifyPartitionIds = specifyPartitionIds;
-        this.listPartitionInfo = listPartitionInfo;
     }
 
     private Set<Long> getAllPartitions() {
@@ -346,17 +335,7 @@ public class ListPartitionPruner implements PartitionPruner {
                 matches.removeAll(nullPartitions);
                 // remove partition matches literal
                 if (partitionValueMap.containsKey(literal)) {
-                    if (listPartitionInfo == null) {
-                        // external table
-                        matches.removeAll(partitionValueMap.get(literal));
-                    } else {
-                        Set<Long> partitionIds = partitionValueMap.get(literal);
-                        for (Long id : partitionIds) {
-                            if (listPartitionInfo.isSingleValuePartition(id)) {
-                                matches.remove(id);
-                            }
-                        }
-                    }
+                    matches.removeAll(partitionValueMap.get(literal));
                 }
                 return matches;
             case LE:
@@ -469,18 +448,7 @@ public class ListPartitionPruner implements PartitionPruner {
             Set<Long> partitions = partitionValueMap.get(literal);
             if (partitions != null) {
                 if (inPredicate.isNotIn()) {
-                    // external table, one partition column for one partition can only have one value
-                    if (listPartitionInfo == null) {
-                        matches.removeAll(partitions);
-                    } else {
-                        // for olap table, if one partition is multi value partition like PARTITION pCalifornia VALUES IN ("Los Angeles","San Francisco","San Diego")
-                        // and we have a not in predicate like city not in ("Los Angeles"), it's not safe to remove this partition
-                        for (Long id : partitions) {
-                            if (listPartitionInfo.isSingleValuePartition(id)) {
-                                matches.remove(id);
-                            }
-                        }
-                    }
+                    matches.removeAll(partitions);
                 } else {
                     matches.addAll(partitions);
                 }
