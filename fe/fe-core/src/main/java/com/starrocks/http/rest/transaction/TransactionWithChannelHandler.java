@@ -63,7 +63,7 @@ public class TransactionWithChannelHandler implements TransactionOperationHandle
                 if (warehouse == null) {
                     throw new StarRocksException("Warehouse " + txnOperationParams.getWarehouseName() + " not exist");
                 }
-                GlobalStateMgr.getCurrentState().getStreamLoadMgr().beginLoadTask(
+                GlobalStateMgr.getCurrentState().getStreamLoadMgr().beginLoadTaskFromFrontend(
                         dbName, tableName, label, "", "", timeoutMillis, channel.getNum(),
                         channel.getId(), result, warehouse.getId());
                 return new ResultWrapper(result);
