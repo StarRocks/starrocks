@@ -71,7 +71,7 @@ class FileReader {
 public:
     FileReader(int chunk_size, RandomAccessFile* file, size_t file_size,
                const DataCacheOptions& datacache_options = DataCacheOptions(),
-               io::SharedBufferedInputStream* sb_stream = nullptr, const SkipRowsContextPtr& skipRowsContext = nullptr);
+               io::SharedBufferedInputStream* sb_stream = nullptr, SkipRowsContextPtr skipRowsContext = nullptr);
     ~FileReader();
 
     Status init(HdfsScannerContext* scanner_ctx);
@@ -145,7 +145,7 @@ private:
     io::SharedBufferedInputStream* _sb_stream = nullptr;
     GroupReaderParam _group_reader_param;
     std::shared_ptr<MetaHelper> _meta_helper = nullptr;
-    const SkipRowsContextPtr _skip_rows_ctx = nullptr;
+    SkipRowsContextPtr _skip_rows_ctx = nullptr;
 };
 
 } // namespace starrocks::parquet
