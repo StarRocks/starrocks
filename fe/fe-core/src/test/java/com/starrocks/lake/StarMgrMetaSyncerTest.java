@@ -17,7 +17,13 @@ package com.starrocks.lake;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.staros.client.StarClientException;
+import com.staros.proto.FilePathInfo;
+import com.staros.proto.FileStoreInfo;
+import com.staros.proto.FileStoreType;
+import com.staros.proto.S3FileStoreInfo;
 import com.staros.proto.ShardGroupInfo;
+import com.staros.proto.ShardInfo;
+import com.staros.proto.StatusCode;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.ColocateTableIndex.GroupId;
 import com.starrocks.catalog.Column;
@@ -485,7 +491,7 @@ public class StarMgrMetaSyncerTest {
         List<ShardGroupInfo> shardGroupInfos = new ArrayList<>();
         for (long groupId : allShardGroupId) {
             ShardGroupInfo info = ShardGroupInfo.newBuilder()
-                    .setGroupId(groupIdToClear)
+                    .setGroupId(groupId)
                     .putProperties("createTime", String.valueOf(System.currentTimeMillis() - 86400 * 1000))
                     .addAllShardIds(allShardIds)
                     .build();
@@ -558,29 +564,211 @@ public class StarMgrMetaSyncerTest {
     }
 
     @Test
-    public void testForceDelete() {
+    public void testDeleteShardAndShardGroupWithForceAndGetShardException() {
+        boolean oldValue = Config.meta_sync_force_delete_shard_meta;
         Config.meta_sync_force_delete_shard_meta = true;
         Config.shard_group_clean_threshold_sec = 0;
         long groupIdToClear = shardGroupId + 1;
-        List<Long> allShardGroupId = Lists.newArrayList(groupIdToClear);
+        // build shardGroupInfos
+        List<Long> allShardIds = Stream.of(1000L, 1001L, 1002L, 1003L).collect(Collectors.toList());
+        List<ShardGroupInfo> shardGroupInfos = new ArrayList<>();
+        ShardGroupInfo info = ShardGroupInfo.newBuilder()
+                .setGroupId(groupIdToClear)
+                .putProperties("createTime", String.valueOf(System.currentTimeMillis() - 86400 * 1000))
+                .addAllShardIds(allShardIds)
+                .build();
+        shardGroupInfos.add(info);
+
+        // case get shard info failed, should also delete shards
+        {
+            new MockUp<StarOSAgent>() {
+                @Mock
+                public List<ShardGroupInfo> listShardGroup() {
+                    return shardGroupInfos;
+                }
+
+                @Mock
+                public List<Long> listShard(long groupId) {
+                    return allShardIds;
+                }
+
+                @Mock
+                public void deleteShards(Set<Long> shardIds) {
+                    allShardIds.removeAll(shardIds);
+                }
+
+                @Mock
+                public ShardInfo getShardInfo(long shardId, long workerGroupId) throws StarClientException {
+                    throw new StarClientException(StatusCode.INTERNAL, "failed to get shard info");
+                }
+            };
+
+            Deencapsulation.invoke(starMgrMetaSyncer, "deleteUnusedShardAndShardGroup");
+            Assert.assertEquals(0, allShardIds.size());
+        }
+        Config.meta_sync_force_delete_shard_meta = oldValue;
+    }
+
+    @Test
+    public void testDeleteShardAndShardGroupWithForceAndDeleteException() {
+        boolean oldValue = Config.meta_sync_force_delete_shard_meta;
+        Config.meta_sync_force_delete_shard_meta = true;
+        Config.shard_group_clean_threshold_sec = 0;
+        long groupIdToClear = shardGroupId + 1;
+        // build shardGroupInfos
+        List<Long> allShardIds = Stream.of(1000L, 1001L, 1002L, 1003L).collect(Collectors.toList());
+        List<ShardGroupInfo> shardGroupInfos = new ArrayList<>();
+        ShardGroupInfo info = ShardGroupInfo.newBuilder()
+                .setGroupId(groupIdToClear)
+                .putProperties("createTime", String.valueOf(System.currentTimeMillis() - 86400 * 1000))
+                .addAllShardIds(allShardIds)
+                .build();
+        shardGroupInfos.add(info);
+        // case: delete shards failed, should also delete shards
+        {
+            new MockUp<StarOSAgent>() {
+                @Mock
+                public List<ShardGroupInfo> listShardGroup() {
+                    return shardGroupInfos;
+                }
+
+                @Mock
+                public List<Long> listShard(long groupId) {
+                    return allShardIds;
+                }
+
+                @Mock
+                public void deleteShards(Set<Long> shardIds) throws DdlException {
+                    throw new DdlException("delete shard failed..");
+                }
+
+                @Mock
+                public ShardInfo getShardInfo(long shardId, long workerGroupId) throws StarClientException {
+                    ShardInfo.Builder builder = ShardInfo.newBuilder();
+                    builder.setShardId(1000L);
+
+                    FilePathInfo.Builder filePathBuilder = FilePathInfo.newBuilder();
+                    FileStoreInfo.Builder fsBuilder = filePathBuilder.getFsInfoBuilder();
+
+                    S3FileStoreInfo.Builder s3FsBuilder = fsBuilder.getS3FsInfoBuilder();
+                    s3FsBuilder.setBucket("test-bucket");
+                    s3FsBuilder.setRegion("test-region");
+
+                    fsBuilder.setFsType(FileStoreType.S3);
+                    fsBuilder.setFsKey("test-bucket");
+                    fsBuilder.setS3FsInfo(s3FsBuilder.build());
+                    FileStoreInfo fsInfo = fsBuilder.build();
+
+                    filePathBuilder.setFsInfo(fsInfo);
+                    filePathBuilder.setFullPath("s3://test-bucket/1/");
+
+                    builder.setFilePath(filePathBuilder);
+                    return builder.build();
+                }
+            };
+
+            Deencapsulation.invoke(starMgrMetaSyncer, "deleteUnusedShardAndShardGroup");
+            Assert.assertEquals(4, allShardIds.size());
+        }
+        Config.meta_sync_force_delete_shard_meta = oldValue;
+    }
+
+    @Test
+    public void testDeleteShardAndShardGroupWithForce() {
+        boolean oldValue = Config.meta_sync_force_delete_shard_meta;
+        Config.meta_sync_force_delete_shard_meta = true;
+        Config.shard_group_clean_threshold_sec = 0;
+        long groupIdToClear = shardGroupId + 1;
+        // build shardGroupInfos
+        List<Long> allShardIds = Stream.of(1000L, 1001L, 1002L, 1003L).collect(Collectors.toList());
+        List<ShardGroupInfo> shardGroupInfos = new ArrayList<>();
+        ShardGroupInfo info = ShardGroupInfo.newBuilder()
+                .setGroupId(groupIdToClear)
+                .putProperties("createTime", String.valueOf(System.currentTimeMillis() - 86400 * 1000))
+                .addAllShardIds(allShardIds)
+                .build();
+        shardGroupInfos.add(info);
+        // iterate 1: delete all shards
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public List<ShardGroupInfo> listShardGroup() {
+                return shardGroupInfos;
+            }
+
+            @Mock
+            public List<Long> listShard(long groupId) {
+                return allShardIds;
+            }
+
+            @Mock
+            public void deleteShards(Set<Long> shardIds) {
+                allShardIds.removeAll(shardIds);
+            }
+
+            @Mock
+            public ShardInfo getShardInfo(long shardId, long workerGroupId) throws StarClientException {
+                ShardInfo.Builder builder = ShardInfo.newBuilder();
+                builder.setShardId(1000L);
+
+                FilePathInfo.Builder filePathBuilder = FilePathInfo.newBuilder();
+                FileStoreInfo.Builder fsBuilder = filePathBuilder.getFsInfoBuilder();
+
+                S3FileStoreInfo.Builder s3FsBuilder = fsBuilder.getS3FsInfoBuilder();
+                s3FsBuilder.setBucket("test-bucket");
+                s3FsBuilder.setRegion("test-region");
+
+                fsBuilder.setFsType(FileStoreType.S3);
+                fsBuilder.setFsKey("test-bucket");
+                fsBuilder.setS3FsInfo(s3FsBuilder.build());
+                FileStoreInfo fsInfo = fsBuilder.build();
+
+                filePathBuilder.setFsInfo(fsInfo);
+                filePathBuilder.setFullPath("s3://test-bucket/1/");
+
+                builder.setFilePath(filePathBuilder);
+                return builder.build();
+            }
+        };
+
+        Deencapsulation.invoke(starMgrMetaSyncer, "deleteUnusedShardAndShardGroup");
+        Assert.assertEquals(0, allShardIds.size());
+
+
+        // iterate 2: delete empty group (shards has been deleted by iterate 1)
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public void deleteShardGroup(List<Long> groupIds) throws StarClientException {
+                for (long groupId : groupIds) {
+                    shardGroupInfos.removeIf(item -> item.getGroupId() == groupId);
+                }
+            }
+        };
+        Deencapsulation.invoke(starMgrMetaSyncer, "deleteUnusedShardAndShardGroup");
+        Assert.assertEquals(0, shardGroupInfos.size());
+
+        Config.meta_sync_force_delete_shard_meta = oldValue;
+    }
+
+    @Test
+    public void testDeleteShardAndShardGroupWithoutForce() {
+        boolean oldValue = Config.meta_sync_force_delete_shard_meta;
+        Config.meta_sync_force_delete_shard_meta = false;
+        Config.shard_group_clean_threshold_sec = 0;
+        long groupIdToClear = shardGroupId + 1;
         // build shardGroupInfos
         List<Long> allShardIds = Stream.of(1000L, 1001L, 1002L, 1003L).collect(Collectors.toList());
         int numOfShards = allShardIds.size();
         List<ShardGroupInfo> shardGroupInfos = new ArrayList<>();
-        for (long groupId : allShardGroupId) {
-            ShardGroupInfo info = ShardGroupInfo.newBuilder()
-                    .setGroupId(groupIdToClear)
-                    .putProperties("createTime", String.valueOf(System.currentTimeMillis() - 86400 * 1000))
-                    .addAllShardIds(allShardIds)
-                    .build();
-            shardGroupInfos.add(info);
-        }
+        ShardGroupInfo info = ShardGroupInfo.newBuilder()
+                .setGroupId(groupIdToClear)
+                .putProperties("createTime", String.valueOf(System.currentTimeMillis() - 86400 * 1000))
+                .addAllShardIds(allShardIds)
+                .build();
+        shardGroupInfos.add(info);
 
         new MockUp<StarOSAgent>() {
             @Mock
-            public void deleteShardGroup(List<Long> groupIds) throws
-                    StarClientException {
-                allShardGroupId.removeAll(groupIds);
+            public void deleteShardGroup(List<Long> groupIds) {
                 for (long groupId : groupIds) {
                     shardGroupInfos.removeIf(item -> item.getGroupId() == groupId);
                 }
@@ -591,7 +779,7 @@ public class StarMgrMetaSyncerTest {
             }
 
             @Mock
-            public List<Long> listShard(long groupId) throws DdlException {
+            public List<Long> listShard(long groupId) {
                 if (groupId == groupIdToClear) {
                     return allShardIds;
                 } else {
@@ -600,7 +788,7 @@ public class StarMgrMetaSyncerTest {
             }
 
             @Mock
-            public void deleteShards(Set<Long> shardIds) throws DdlException {
+            public void deleteShards(Set<Long> shardIds) {
                 allShardIds.removeAll(shardIds);
             }
         };
@@ -614,19 +802,19 @@ public class StarMgrMetaSyncerTest {
 
         new MockUp<PseudoBackend.PseudoLakeService>() {
             @Mock
-            Future<DeleteTabletResponse> deleteTablet(DeleteTabletRequest request) throws Exception {
-                throw new Exception("testForceDelete");
+            Future<DeleteTabletResponse> deleteTablet(DeleteTabletRequest request) {
+                DeleteTabletResponse resp = new DeleteTabletResponse();
+                resp.status = new StatusPB();
+                resp.status.statusCode = TStatusCode.INTERNAL_ERROR.getValue();
+                resp.failedTablets = new ArrayList<>(request.tabletIds);
+                return CompletableFuture.completedFuture(resp);
             }
         };
-        Config.meta_sync_force_delete_shard_meta = false;
         Deencapsulation.invoke(starMgrMetaSyncer, "deleteUnusedShardAndShardGroup");
+        // No shards deleted
         Assert.assertEquals(numOfShards, allShardIds.size());
 
-        Config.meta_sync_force_delete_shard_meta = true;
-        Deencapsulation.invoke(starMgrMetaSyncer, "deleteUnusedShardAndShardGroup");
-        Assert.assertEquals(0, allShardIds.size());
-
-        Config.meta_sync_force_delete_shard_meta = false;
+        Config.meta_sync_force_delete_shard_meta = oldValue;
     }
 
     @Test
