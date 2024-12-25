@@ -261,5 +261,41 @@ TEST_F(PipelineObserverTest, test_cancel) {
     }
 }
 
+TEST_F(PipelineObserverTest, test_add_blocked_driver) {
+    OpFactories factories;
+    factories.emplace_back(std::make_shared<EmptySetOperatorFactory>(0, 1));
+    factories.emplace_back(std::make_shared<NoopSinkOperatorFactory>(2, 3));
+
+    SimpleTestContext tx(factories, _exec_group.get(), _dummy_fragment_ctx.get(), _dummy_query_ctx.get());
+    ASSERT_OK(tx.driver->prepare(_runtime_state.get()));
+    const auto& driver = tx.driver;
+
+    driver->set_driver_state(DriverState::INPUT_EMPTY);
+    _dummy_fragment_ctx->event_scheduler()->add_blocked_driver(driver.get());
+}
+
+TEST_F(PipelineObserverTest, race_scheduler_observer) {
+    OpFactories factories;
+    factories.emplace_back(std::make_shared<EmptySetOperatorFactory>(0, 1));
+    factories.emplace_back(std::make_shared<NoopSinkOperatorFactory>(2, 3));
+
+    SimpleTestContext tx(factories, _exec_group.get(), _dummy_fragment_ctx.get(), _dummy_query_ctx.get());
+    ASSERT_OK(tx.driver->prepare(_runtime_state.get()));
+    const auto& driver = tx.driver;
+
+    driver->set_driver_state(DriverState::INPUT_EMPTY);
+    Observable obs;
+    obs.add_observer(_runtime_state.get(), driver->observer());
+
+    std::vector<std::jthread> threads;
+
+    threads.emplace_back([&]() { _dummy_fragment_ctx->event_scheduler()->add_blocked_driver(driver.get()); });
+    threads.emplace_back([&]() { obs.notify_source_observers(); });
+
+    for (auto& thread : threads) {
+        thread.join();
+    }
+}
+
 } // namespace starrocks::pipeline
 #pragma GCC pop_options
