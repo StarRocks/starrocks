@@ -698,6 +698,8 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
 
         assertContains(plan, "  1:TOP-N\n" +
                 "  |  order by: [1, BIGINT, true] ASC\n" +
+                "  |  build runtime filters:\n" +
+                "  |  - filter_id = 0, build_expr = (<slot 1> 1: v4), remote = false\n" +
                 "  |  offset: 0\n" +
                 "  |  limit: 1000000000\n" +
                 "  |  cardinality: 1000000000\n" +
