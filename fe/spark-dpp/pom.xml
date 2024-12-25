@@ -35,6 +35,10 @@ under the License.
     <packaging>jar</packaging>
 
     <properties>
+        <!-- Do not change the version unless all external Spark clusters have upgraded JDK to a higher version.  -->
+        <maven.compiler.source>8</maven.compiler.source>
+        <maven.compiler.target>8</maven.compiler.target>
+        <maven.compiler.release>8</maven.compiler.release>
         <starrocks.home>${basedir}/../../</starrocks.home>
         <fe_ut_parallel>1</fe_ut_parallel>
     </properties>
@@ -430,16 +434,6 @@ under the License.
                             </pluginExecutions>
 
                         </lifecycleMappingMetadata>
-                    </configuration>
-                </plugin>
-                <plugin>
-                    <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-compiler-plugin</artifactId>
-                    <version>3.8.1</version>
-                    <configuration>
-                        <source>1.8</source>
-                        <target>1.8</target>
-                        <release>8</release>
                     </configuration>
                 </plugin>
             </plugins>
