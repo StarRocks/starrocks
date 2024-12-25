@@ -53,14 +53,12 @@ Data Cache 支持内存和磁盘的两级缓存。您也可以根据实际需要
 
 ## 开启 Data Cache
 
-自 v3.3.0 起，Data Cache 功能默认开启。
-
-默认情况下，系统会通过以下方式缓存数据：
+Data Cache 功能默认开启。默认情况下，系统会通过以下方式缓存数据：
 
 - 系统变量 `enable_scan_datacache` 和 BE 参数 `datacache_enable` 默认设置为 `true`。
-- 如未手动配置缓存路径和内存以及磁盘上限，系统会自动选择相应的路径并设置上限：
-  - 在 `storage_root_path` 目录下创建 **datacache** 目录作为磁盘缓存目录。（您可以通过 BE 参数 `datacache_disk_path` 修改。）
-  - 开启磁盘空间自动调整功能。根据缓存磁盘当前使用情况自动设置上限，保证当前缓存盘整体磁盘使用率在 70% 左右，并根据后续磁盘使用情况动态调整。（您可以通过 BE 参数 `datacache_disk_high_level`、`datacache_disk_safe_level` 以及 `datacache_disk_low_level` 调整该行为。）
+- 系统在 `storage_root_path` 目录下创建 **datacache** 目录作为磁盘缓存目录，从 v3.4.0 起，不再支持手动更改磁盘缓存路径。如需使用其他路径，可创建 Linux Symbolic Link。
+- 如未手动配置内存以及磁盘上限，系统会根据磁盘容量自动设置磁盘上限：
+  - 开启磁盘空间自动调整功能。根据缓存磁盘当前使用情况自动设置上限，保证当前缓存盘整体磁盘使用率在 80% 左右，并根据后续磁盘使用情况动态调整。（您可以通过 BE 参数 `datacache_disk_high_level`、`datacache_disk_safe_level` 以及 `datacache_disk_low_level` 调整该行为。）
   - 默认配置缓存数据的内存上限为 `0`。（您可以通过 BE 参数 `datacache_mem_size` 修改。）
 - 默认使用异步缓存方式，减少缓存填充影响数据读操作。
 - 默认启用 I/O 自适应功能，当磁盘 I/O 负载比较高时，系统会自动将一部分请求路由到远端存储，减少磁盘压力。
@@ -115,6 +113,10 @@ Data Cache 支持以同步或异步的方式进行缓存填充。
   使用异步填充方式时，系统会尝试在尽可能不影响读取性能的前提下在后台对访问到的数据进行缓存。异步方式能够减少缓存填充对首次读取性能的影响，但填充效率较低。通常单次查询不能保证将访问到的所以数据都缓存到本地，往往需要多次。
 
 自 v3.3.0 起，系统默认以异步方式进行缓存，您可以通过修改 Session 变量 [enable_datacache_async_populate_mode](../sql-reference/System_variable.md) 来修改填充方式。
+
+### 持久化
+
+Data Cache 当前默认会持久化磁盘缓存数据，BE 进程重启后，可直接复用先前磁盘缓存数据。
 
 ## 查看 Data Cache 命中情况
 
@@ -258,8 +260,6 @@ datacache_auto_adjust_enable=true
 ### BE 参数
 
 - [datacache_enable](../administration/management/BE_configuration.md#datacache_enable)
-- [datacache_disk_path](../administration/management/BE_configuration.md#datacache_disk_path)
-- [datacache_meta_path](../administration/management/BE_configuration.md#datacache_meta_path)
 - [datacache_mem_size](../administration/management/BE_configuration.md#datacache_mem_size)
 - [datacache_disk_size](../administration/management/BE_configuration.md#datacache_disk_size)
 - [datacache_auto_adjust_enable](../administration/management/BE_configuration.md#datacache_auto_adjust_enable)
@@ -270,4 +270,4 @@ datacache_auto_adjust_enable=true
 - [datacache_disk_idle_seconds_for_expansion](../administration/management/BE_configuration.md#datacache_disk_idle_seconds_for_expansion)
 - [datacache_min_disk_quota_for_adjustment](../administration/management/BE_configuration.md#datacache_min_disk_quota_for_adjustment)
 - [datacache_eviction_policy](../administration/management/BE_configuration.md#datacache_eviction_policy)
-
+- [datacache_inline_item_count_limit](../administration/management/BE_configuration.md#datacache_inline_item_count_limit)
