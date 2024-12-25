@@ -200,7 +200,7 @@ Status ExchangeSinkOperator::Channel::add_rows_selective(Chunk* chunk, int32_t d
     }
 
     if (_chunks[driver_sequence]->num_rows() + size > state->chunk_size()) {
-        if (config::enable_shuffle_sort) {
+        if (config::enable_hk_shuffle_sort) {
             Permutation _sort_permutation;
             _sort_permutation.resize(0);
             Columns orderby_columns;
@@ -212,7 +212,7 @@ Status ExchangeSinkOperator::Channel::add_rows_selective(Chunk* chunk, int32_t d
                                                  &_sort_permutation));
             auto sorted_chunk =
                     _chunks[driver_sequence]->clone_empty_with_slot(_chunks[driver_sequence].get()->num_rows());
-            materialize_by_permutation(sorted_chunk.get(), chunk, _sort_permutation);
+            materialize_by_permutation(sorted_chunk.get(), _chunks[driver_sequence].get(), _sort_permutation);
             RETURN_IF_ERROR(send_one_chunk(state, sorted_chunk.get(), driver_sequence, false));
         } else {
             RETURN_IF_ERROR(send_one_chunk(state, _chunks[driver_sequence].get(), driver_sequence, false));

@@ -54,7 +54,7 @@ void FixedLengthColumnBase<T>::append_selective(const Column& src, const uint32_
 
     size_t i = 0;
 #ifdef __AVX2__
-    if (config::enable_avx_gather) {
+    if (config::enable_hk_avx_gather) {
         T* store = _data.data() + orig_size;
         if constexpr (std::is_same_v<T, int32_t>) {
             const int* fsrc_data = (const int*)src_data;

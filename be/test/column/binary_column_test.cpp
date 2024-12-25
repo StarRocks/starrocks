@@ -22,6 +22,7 @@
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "testutil/parallel_test.h"
+#include "util/slice.h"
 
 namespace starrocks {
 
@@ -657,6 +658,24 @@ PARALLEL_TEST(BinaryColumnTest, test_reference_memory_usage) {
     column->append("456");
 
     ASSERT_EQ(0, column->Column::reference_memory_usage());
+}
+
+// NOLINTNEXTLINE
+PARALLEL_TEST(BinaryColumnTest, test_append_selective) {
+    auto c1 = BinaryColumn::create();
+    auto c2 = BinaryColumn::create();
+
+    for (int i = 0; i < 100; i++) {
+        c1->append_datum(Slice(fmt::format("abc_{}", std::to_string(i))));
+    }
+
+    vector<uint32_t> index;
+    for (int i = 0; i < 50; i++) {
+        index.push_back(i * 2);
+    }
+    LOG(INFO) << c2->debug_string();
+    c2->append_selective(*c1, index.data(), 0, index.size());
+    LOG(INFO) << c2->debug_string();
 }
 
 } // namespace starrocks
