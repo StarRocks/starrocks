@@ -4006,10 +4006,10 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 ##### datacache_unified_instance_enable
 
 - 默认值：true
-- 类型：Bool
+- 类型：Boolean
 - 单位：-
 - 是否动态：否
-- 描述：在存算分离集群中，存算分离内表是否和数据湖查询使用同一个 Data Cache 实例。
+- 描述：在存算分离集群中，是否为存算分离内表和数据湖查询使用同一个 Data Cache 实例。
 - 引入版本：v3.4.0
 
 ##### query_max_memory_limit_percent
