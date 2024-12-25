@@ -805,15 +805,21 @@ void LakeTabletsChannel::update_profile() {
     COUNTER_UPDATE(_profile_update_counter, 1);
     SCOPED_TIMER(_profile_update_timer);
 
-    std::vector<RuntimeProfile*> tablets_profile;
+    std::vector<DeltaWriter*> delta_writers;
     {
         std::shared_lock<bthreads::BThreadSharedMutex> lk(_rw_mtx);
+        delta_writers.reserve(_delta_writers.size());
         for (auto& [tablet_id, async_writer] : _delta_writers) {
-            DeltaWriter* writer = async_writer->delta_writer();
-            RuntimeProfile* profile = _tablets_profile->create_child(fmt::format("{}", writer->tablet_id()));
-            _update_tablet_profile(writer, profile);
-            tablets_profile.push_back(profile);
+            delta_writers.push_back(async_writer->delta_writer());
         }
+    }
+
+    std::vector<RuntimeProfile*> tablets_profile;
+    tablets_profile.reserve(delta_writers.size());
+    for (auto* writer : delta_writers) {
+        RuntimeProfile* profile = _tablets_profile->create_child(fmt::format("{}", writer->tablet_id()));
+        _update_tablet_profile(writer, profile);
+        tablets_profile.push_back(profile);
     }
 
     ObjectPool obj_pool;
