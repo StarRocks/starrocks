@@ -860,12 +860,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
                     if (!slot.getId().equals(slotRef.getSlotId())) {
                         continue;
                     }
-                    if (!slotRef.isNullable() || rfDesc.isNullLast()) {
-                        return true;
-                    }
-                    if (slotRef.isNullable() && canEliminateNull(slot)) {
-                        return true;
-                    }
+                    return true;
                 }
             }
             return false;
