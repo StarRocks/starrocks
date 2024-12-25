@@ -43,7 +43,7 @@ protected:
 };
 
 TEST_F(RuntimeBloomFilterTest, create_with_empty_range) {
-    auto* rf = Int32RF::create_with_empty_range(&_pool);
+    auto* rf = Int32RF::create_with_empty_range_without_null(&_pool);
     ASSERT_TRUE(rf->is_empty_range());
     ASSERT_FALSE(rf->has_null());
 }
@@ -854,7 +854,7 @@ TEST_F(RuntimeFilterTest, TestGlobalRuntimeFilterMinMax) {
 
 void test_pipeline_level_helper(TRuntimeFilterBuildJoinMode::type join_mode, const RuntimeFilterLayout& layout,
                                 size_t num_rows, size_t num_partitions) {
-    auto part_by_func_gen = [=](bool is_reduce) -> auto{
+    auto part_by_func_gen = [=](bool is_reduce) -> auto {
         return [is_reduce, layout, num_rows, num_partitions](BinaryColumn* column, std::vector<uint32_t>& hash_values,
                                                              std::vector<size_t>& num_rows_per_partitions) {
             if (is_reduce) {
