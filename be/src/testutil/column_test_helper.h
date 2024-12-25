@@ -52,7 +52,7 @@ public:
     static ColumnPtr build_nullable_column(const std::vector<T>& values) {
         auto null_column = NullColumn::create(values.size(), 0);
         auto data_column = build_column<T>(values);
-        return  NullableColumn::create(std::move(data_column), std::move(null_column));
+        return NullableColumn::create(std::move(data_column), std::move(null_column));
     }
 
     template <class T>
