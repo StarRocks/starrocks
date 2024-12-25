@@ -4012,6 +4012,29 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：缓存淘汰策略。有效值：`lru` (least recently used) 和 `slru` (Segmented LRU)。
 - 引入版本：v3.4.0
 
+<<<<<<< HEAD
+=======
+##### datacache_inline_item_count_limit
+
+- 默认值：130172
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：Data Cache 内联对象数量上限。当缓存的 Block 对象特别小时，Data Cache 会选择使用内联方式将 Block 数据和元数据一起缓存在内存中。
+- 引入版本：v3.4.0
+
+<!--
+##### datacache_unified_instance_enable
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：在存算分离集群中，是否为存算分离内表和数据湖查询使用同一个 Data Cache 实例。
+- 引入版本：v3.4.0
+-->
+
+>>>>>>> f7f18b479 ([Doc] adjust data cache doc for 3.4 (#54267))
 ##### query_max_memory_limit_percent
 
 - 默认值：90
