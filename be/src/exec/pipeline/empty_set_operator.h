@@ -41,6 +41,8 @@ public:
 
     ~EmptySetOperatorFactory() override = default;
 
+    bool support_event_scheduler() const override { return true; }
+
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         return std::make_shared<EmptySetOperator>(this, _id, _plan_node_id, driver_sequence);
     }

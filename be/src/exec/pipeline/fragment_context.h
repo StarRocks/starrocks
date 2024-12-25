@@ -25,6 +25,7 @@
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/runtime_filter_types.h"
 #include "exec/pipeline/scan/morsel.h"
+#include "exec/pipeline/schedule/event_scheduler.h"
 #include "exec/query_cache/cache_param.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/HeartbeatService.h"
@@ -174,6 +175,10 @@ public:
     // acquire runtime filter from cache
     void acquire_runtime_filters();
 
+    bool enable_event_scheduler() const { return event_scheduler() != nullptr; }
+    EventScheduler* event_scheduler() const { return _event_scheduler.get(); }
+    void init_event_scheduler();
+
 private:
     void _close_stream_load_contexts();
 
@@ -235,6 +240,8 @@ private:
     RuntimeProfile::Counter* _jit_timer = nullptr;
 
     bool _report_when_finish{};
+
+    std::unique_ptr<EventScheduler> _event_scheduler;
 };
 
 class FragmentContextManager {

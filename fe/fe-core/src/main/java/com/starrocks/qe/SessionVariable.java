@@ -580,6 +580,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_EXECUTION_ONLY = "enable_execution_only";
 
+    public static final String ENABLE_PIPELINE_EVENT_SCHEDULER = "enable_pipeline_event_scheduler";
+
     // Flag to control whether to proxy follower's query statement to leader/follower.
     public enum FollowerQueryForwardMode {
         DEFAULT,    // proxy queries by the follower's replay progress (default)
@@ -2485,6 +2487,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_PHASED_SCHEDULER)
     private boolean enablePhasedScheduler = false;
+
+    @VarAttr(name = ENABLE_PIPELINE_EVENT_SCHEDULER)
+    private boolean enablePipelineEventScheduler = false;
 
     @VarAttr(name = PHASED_SCHEDULER_MAX_CONCURRENCY)
     private int phasedSchedulerMaxConcurrency = 2;
@@ -4888,6 +4893,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setEnable_wait_dependent_event(enableWaitDependentEvent);
         tResult.setConnector_max_split_size(connectorMaxSplitSize);
         tResult.setOrc_use_column_names(orcUseColumnNames);
+        tResult.setEnable_pipeline_event_scheduler(enablePipelineEventScheduler);
         return tResult;
     }
 
