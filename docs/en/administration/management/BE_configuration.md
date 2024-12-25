@@ -4044,6 +4044,17 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: The maximum number of inline cache items in Data Cache. For some particularly small cache blocks, Data Cache stores them in `inline` mode, which caches the block data and metadata together in memory.
 - Introduced in: v3.4.0
 
+<!--
+##### datacache_unified_instance_enable
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether to use a unified Data Cache instance for queries against external catalogs and cloud-native tables (in shared-data clusters).
+- Introduced in: v3.4.0
+-->
+
 ##### query_max_memory_limit_percent
 
 - Default: 90
