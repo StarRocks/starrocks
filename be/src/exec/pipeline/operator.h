@@ -19,6 +19,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "exec/pipeline/runtime_filter_types.h"
+#include "exec/pipeline/schedule/observer.h"
 #include "exec/spill/operator_mem_resource_manager.h"
 #include "exprs/runtime_filter_bank.h"
 #include "gutil/strings/substitute.h"
@@ -269,6 +270,9 @@ public:
 
     virtual void update_exec_stats(RuntimeState* state);
 
+    void set_observer(PipelineObserver* observer) { _observer = observer; }
+    PipelineObserver* observer() const { return _observer; }
+
 protected:
     OperatorFactory* _factory;
     const int32_t _id;
@@ -322,6 +326,8 @@ protected:
     // Some extra cpu cost of this operator that not accounted by pipeline driver,
     // such as OlapScanOperator( use separated IO thread to execute the IO task)
     std::atomic_int64_t _last_growth_cpu_time_ns = 0;
+
+    PipelineObserver* _observer = nullptr;
 
 private:
     void _init_rf_counters(bool init_bloom);
@@ -407,6 +413,8 @@ public:
 
     // try to get runtime filter from cache
     void acquire_runtime_filter(RuntimeState* state);
+
+    virtual bool support_event_scheduler() const { return false; }
 
 protected:
     void _prepare_runtime_in_filters(RuntimeState* state);
