@@ -17,21 +17,25 @@ toc_max_heading_level: 2
 
 ## 启用 Data Cache
 
-自 v3.4.0 版本起，StarRocks 存算分离内表和数据湖查询使用同一个 Data Cache 实例。如果希望存算分离内表和数据湖各自使用独立的 Data Cache 实例，可以参考参数 `datacache_unified_instance_enable`。
+自 v3.4.0 版本起，StarRocks 存算分离内表和数据湖查询使用同一个 Data Cache 实例。如果希望存算分离内表和数据湖各自使用独立的 Data Cache 实例，需要手动将 FE 静态参数 `datacache_unified_instance_enable` 设置为 `false`。
 
 ## 配置 Data Cache
 
 您可以通过以下 CN（BE）配置项配置 Data Cache：
 
 ### 缓存路径
+
 - [storage_root_path](../../administration/management/BE_configuration.md#storage_root_path)（在存算分离集群中，此项用于指定用于缓存数据的根路径。）
 
 ### 缓存使用磁盘容量
+
 - [datacache_unified_instance_enable](../../administration/management/BE_configuration.md#datacache_unified_instance_enable)
 - [datacache_disk_size](../../administration/management/BE_configuration.md#datacache_disk_size)
 - [starlet_star_cache_disk_size_percent](../../administration/management/BE_configuration.md#starlet_star_cache_disk_size_percent)
-当 datacache_unified_instance_enable 为 true 时，存算分离集群的缓存使用磁盘容量，会取 `datacache_disk_size` 和 `starlet_star_cache_disk_size_percent` 中的较大值。
-当 datacache_unified_instance_enable 为 false 时，存算分离集群的缓存使用磁盘容量，会取 `starlet_star_cache_disk_size_percent`。
+
+当 `datacache_unified_instance_enable` 为 `true` 时，存算分离集群的缓存使用磁盘容量会取 `datacache_disk_size` 和 `starlet_star_cache_disk_size_percent` 中的较大值。
+
+当 `datacache_unified_instance_enable` 为 `false` 时，存算分离集群的缓存使用磁盘容量会取 `starlet_star_cache_disk_size_percent`。
 
 ## 查看 Data Cache 状态
 
@@ -42,8 +46,8 @@ toc_max_heading_level: 2
   WHERE NAME LIKE "%storage_root_path%";
   ```
 
-  如果 datacache_unified_instance_enable 为 true（默认情况），缓存数据存储在 `storage_root_path` 的子路径 `datacache/` 下。
-  如果 datacache_unified_instance_enable 为 false，缓存数据存储在 `storage_root_path` 的子路径 `starlet_cache/star_cache/` 下。
+  - 如果 `datacache_unified_instance_enable` 为 `true`（默认值），缓存数据存储在 `storage_root_path` 的子路径 `datacache/` 下。
+  - 如果 `datacache_unified_instance_enable` 为 `false`，缓存数据存储在 `storage_root_path` 的子路径 `starlet_cache/star_cache/` 下。
 
 - 执行以下语句以查看 Data Cache 的磁盘使用上限：
 
@@ -85,7 +89,7 @@ Data Cache 的实际磁盘占用。
 
 ## 禁用 Data Cache
 
-如需禁用 Data Cache，需要将以下配置添加到 CN 配置文件 **cn.conf** 中，并重新启动 CN 节点：
+如需禁用 Data Cache，需要将以下配置项添加到 CN 配置文件 **cn.conf** 中，并重新启动 CN 节点：
 
 ```Properties
 datacache_enable = false
@@ -98,7 +102,7 @@ storage_root_path =
 
 按照以下步骤清除 CN 节点上的缓存数据：
 
-1. 删除存储缓存数据的子目录，
+1. 删除存储缓存数据的子目录。
 
    示例：
 
