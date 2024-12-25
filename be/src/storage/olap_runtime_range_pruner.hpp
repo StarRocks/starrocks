@@ -84,7 +84,16 @@ struct RuntimeColumnPredicateBuilder {
 
             // if runtime filter generate an empty range we could return directly
             if (range.is_empty_value_range()) {
-                return Status::EndOfFile("EOF, Filter by always false runtime filter");
+                if (rf->has_null()) {
+                    std::vector<const ColumnPredicate*> new_preds;
+                    TypeInfoPtr type = get_type_info(limit_type, slot->type().precision, slot->type().scale);
+                    auto column_id = parser->column_id(*slot);
+                    ColumnPredicate* null_pred = pool->add(new_column_null_predicate(type, column_id, true));
+                    new_preds.emplace_back(null_pred);
+                    return new_preds;
+                } else {
+                    return Status::EndOfFile("EOF, Filter by always false runtime filter");
+                }
             }
 
             for (auto& f : filters) {
