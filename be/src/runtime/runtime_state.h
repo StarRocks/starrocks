@@ -505,6 +505,9 @@ public:
         return this->_broadcast_join_right_offsprings;
     }
 
+    bool enable_event_scheduler() const { return _enable_event_scheduler; }
+    void set_enable_event_scheduler(bool enable) { _enable_event_scheduler = enable; }
+
 private:
     // Set per-query state.
     void _init(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
@@ -646,6 +649,8 @@ private:
     BroadcastJoinRightOffsprings _broadcast_join_right_offsprings;
 
     std::optional<TSpillOptions> _spill_options;
+
+    bool _enable_event_scheduler = false;
 };
 
 #define LIMIT_EXCEEDED(tracker, state, msg)                                                                         \

@@ -285,7 +285,7 @@ void GlobalDriverExecutor::submit(DriverRawPtr driver) {
 void GlobalDriverExecutor::cancel(DriverRawPtr driver) {
     // if driver is already in ready queue, we should cancel it
     // otherwise, just ignore it and wait for the poller to schedule
-    if (driver->is_in_ready_queue()) {
+    if (driver->is_in_ready()) {
         this->_driver_queue->cancel(driver);
     }
 }
