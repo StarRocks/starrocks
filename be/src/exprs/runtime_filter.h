@@ -477,7 +477,7 @@ public:
         return p;
     }
 
-    static RuntimeBloomFilter* create_with_empty_range(ObjectPool* pool) {
+    static RuntimeBloomFilter* create_with_empty_range_without_null(ObjectPool* pool) {
         auto* rf = pool->add(new RuntimeBloomFilter());
         rf->_always_true = true;
         return rf;

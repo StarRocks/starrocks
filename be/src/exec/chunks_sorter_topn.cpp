@@ -130,7 +130,9 @@ std::vector<JoinRuntimeFilter*>* ChunksSorterTopn::runtime_filters(ObjectPool* p
         auto* rf = type_dispatch_predicate<JoinRuntimeFilter*>(
                 (*_sort_exprs)[0]->root()->type().type, false, detail::SortRuntimeFilterBuilder(), pool,
                 order_by_column, current_max_value_row_id, asc, null_first, is_close_interval);
-        if (rf != nullptr) {
+        if (rf == nullptr) {
+            return nullptr;
+        } else {
             _runtime_filter.emplace_back(rf);
         }
     } else {
