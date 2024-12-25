@@ -17,7 +17,7 @@ toc_max_heading_level: 2
 
 ## 启用 Data Cache
 
-自 v3.4.0 版本起，StarRocks 存算分离内表和数据湖查询使用同一个 Data Cache 实例。如果希望存算分离内表和数据湖各自使用独立的 Data Cache 实例，需要手动将 FE 静态参数 `datacache_unified_instance_enable` 设置为 `false`。
+自 v3.4.0 版本起，StarRocks 存算分离内表和数据湖查询使用同一个 Data Cache 实例。
 
 ## 配置 Data Cache
 
@@ -29,13 +29,10 @@ toc_max_heading_level: 2
 
 ### 缓存使用磁盘容量
 
-- [datacache_unified_instance_enable](../../administration/management/BE_configuration.md#datacache_unified_instance_enable)
 - [datacache_disk_size](../../administration/management/BE_configuration.md#datacache_disk_size)
 - [starlet_star_cache_disk_size_percent](../../administration/management/BE_configuration.md#starlet_star_cache_disk_size_percent)
 
-当 `datacache_unified_instance_enable` 为 `true` 时，存算分离集群的缓存使用磁盘容量会取 `datacache_disk_size` 和 `starlet_star_cache_disk_size_percent` 中的较大值。
-
-当 `datacache_unified_instance_enable` 为 `false` 时，存算分离集群的缓存使用磁盘容量会取 `starlet_star_cache_disk_size_percent`。
+存算分离集群的缓存使用磁盘容量会取 `datacache_disk_size` 和 `starlet_star_cache_disk_size_percent` 中的较大值。
 
 ## 查看 Data Cache 状态
 
@@ -46,8 +43,7 @@ toc_max_heading_level: 2
   WHERE NAME LIKE "%storage_root_path%";
   ```
 
-  - 如果 `datacache_unified_instance_enable` 为 `true`（默认值），缓存数据存储在 `storage_root_path` 的子路径 `datacache/` 下。
-  - 如果 `datacache_unified_instance_enable` 为 `false`，缓存数据存储在 `storage_root_path` 的子路径 `starlet_cache/star_cache/` 下。
+  通常，缓存数据存储在 `storage_root_path` 的子路径 `datacache/` 下。
 
 - 执行以下语句以查看 Data Cache 的磁盘使用上限：
 
