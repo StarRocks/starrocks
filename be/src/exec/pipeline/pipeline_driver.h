@@ -198,6 +198,9 @@ class PipelineDriver {
     friend class PipelineDriverPoller;
 
 public:
+    // used in event scheduler
+    // If event_scheduler doesn't get the token, it proves that the observer has entered the critical zone,
+    // and we don't know the real state of the driver, so we need to try scheduling the driver one more time.
     class ScheduleToken {
     public:
         ScheduleToken(DriverRawPtr driver, bool acquired) : _driver(driver), _acquired(acquired) {}
@@ -462,17 +465,17 @@ public:
     size_t get_driver_queue_level() const { return _driver_queue_level; }
     void set_driver_queue_level(size_t driver_queue_level) { _driver_queue_level = driver_queue_level; }
 
-    inline bool is_in_ready_queue() const { return _in_ready_queue.load(std::memory_order_acquire); }
-    void set_in_ready_queue(bool v) {
-        SCHEDULE_CHECK(!v || !is_in_ready_queue());
-        _in_ready_queue.store(v, std::memory_order_release);
+    inline bool is_in_ready() const { return _in_ready.load(std::memory_order_acquire); }
+    void set_in_ready(bool v) {
+        SCHEDULE_CHECK(!v || !is_in_ready());
+        _in_ready.store(v, std::memory_order_release);
     }
 
-    bool is_in_block_queue() const { return _in_block_queue.load(std::memory_order_acquire); }
-    void set_in_block_queue(bool v) {
-        SCHEDULE_CHECK(!v || !is_in_block_queue());
-        SCHEDULE_CHECK(!is_in_ready_queue());
-        _in_block_queue.store(v, std::memory_order_release);
+    bool is_in_blocked() const { return _in_blocked.load(std::memory_order_acquire); }
+    void set_in_blocked(bool v) {
+        SCHEDULE_CHECK(!v || !is_in_blocked());
+        SCHEDULE_CHECK(!is_in_ready());
+        _in_blocked.store(v, std::memory_order_release);
     }
 
     ScheduleToken acquire_schedule_token() {
@@ -572,9 +575,10 @@ protected:
     DriverQueue* _in_queue = nullptr;
     // The index of QuerySharedDriverQueue._queues which this driver belongs to.
     size_t _driver_queue_level = 0;
-    std::atomic<bool> _in_ready_queue{false};
-    // Indicates whether it is in a block queue. Only used in EventScheduler mode.
-    std::atomic<bool> _in_block_queue{false};
+    // Indicates whether it is in a ready queue.
+    std::atomic<bool> _in_ready{false};
+    // Indicates whether it is in a block states. Only used when enable event scheduler mode.
+    std::atomic<bool> _in_blocked{false};
 
     std::atomic<bool> _schedule_token{true};
     // Indicates if the block queue needs to be checked when it is added to the block queue. See EventScheduler for details.

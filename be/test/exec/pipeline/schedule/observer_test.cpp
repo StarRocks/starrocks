@@ -212,17 +212,17 @@ TEST_F(PipelineObserverTest, basic_test) {
     const auto& driver = tx.driver;
     const auto& driver_queue = tx.driver_queue;
 
-    driver->set_in_block_queue(true);
+    driver->set_in_blocked(true);
     driver->set_driver_state(DriverState::INPUT_EMPTY);
     // test notify
-    driver->observer()->all_update();
+    driver->observer()->all_trigger();
     ASSERT_OK(driver_queue->take(false));
-    driver->observer()->cancel_update();
+    driver->observer()->cancel_trigger();
     ASSERT_OK(driver_queue->take(false));
-    driver->observer()->sink_update();
+    driver->observer()->sink_trigger();
     ASSERT_OK(driver_queue->take(false));
-    driver->observer()->source_update();
-    driver->observer()->source_update();
+    driver->observer()->source_trigger();
+    driver->observer()->source_trigger();
 }
 
 TEST_F(PipelineObserverTest, test_obs) {
@@ -233,7 +233,7 @@ TEST_F(PipelineObserverTest, test_obs) {
     ASSERT_OK(tx.driver->prepare(_runtime_state.get()));
     const auto& driver = tx.driver;
 
-    driver->set_in_block_queue(true);
+    driver->set_in_blocked(true);
     driver->set_driver_state(DriverState::PENDING_FINISH);
     Observable obs;
     _runtime_state->set_enable_event_scheduler(true);
@@ -254,8 +254,8 @@ TEST_F(PipelineObserverTest, test_cancel) {
 
     driver->set_driver_state(DriverState::INPUT_EMPTY);
     _dummy_fragment_ctx->cancel(Status::InternalError("error"));
-    driver->set_in_block_queue(true);
-    driver->observer()->all_update();
+    driver->set_in_blocked(true);
+    driver->observer()->all_trigger();
     for (size_t i = 0; i < driver->_operator_stages.size(); ++i) {
         driver->_operator_stages[i] = OperatorStage::CLOSED;
     }

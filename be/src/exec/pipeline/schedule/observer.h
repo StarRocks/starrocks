@@ -39,22 +39,22 @@ public:
 
     DISALLOW_COPY_AND_MOVE(PipelineObserver);
 
-    void source_update() {
+    void source_trigger() {
         _active_event(SOURCE_CHANGE_EVENT);
         _update([this](int event) { _do_update(event); });
     }
 
-    void sink_update() {
+    void sink_trigger() {
         _active_event(SINK_CHANGE_EVENT);
         _update([this](int event) { _do_update(event); });
     }
 
-    void cancel_update() {
+    void cancel_trigger() {
         _active_event(CANCEL_EVENT);
         _update([this](int event) { _do_update(event); });
     }
 
-    void all_update() {
+    void all_trigger() {
         _active_event(SOURCE_CHANGE_EVENT | SINK_CHANGE_EVENT);
         _update([this](int event) { _do_update(event); });
     }
@@ -111,12 +111,12 @@ public:
 
     void notify_source_observers() {
         for (auto* observer : _observers) {
-            observer->source_update();
+            observer->source_trigger();
         }
     }
     void notify_sink_observers() {
         for (auto* observer : _observers) {
-            observer->sink_update();
+            observer->sink_trigger();
         }
     }
 

@@ -25,20 +25,20 @@ namespace starrocks::pipeline {
 void EventScheduler::add_blocked_driver(const DriverRawPtr driver) {
     // Capture query-context is needed before calling reschedule to avoid UAF
     auto query_ctx = driver->fragment_ctx()->runtime_state()->query_ctx()->shared_from_this();
-    SCHEDULE_CHECK(!driver->is_in_block_queue());
-    driver->set_in_block_queue(true);
+    SCHEDULE_CHECK(!driver->is_in_blocked());
+    driver->set_in_blocked(true);
     TRACE_SCHEDULE_LOG << "TRACE add to block queue:" << driver << "," << driver->to_readable_string();
     auto token = driver->acquire_schedule_token();
     // The driver is ready put to block queue. but is_in_block_queue is false, but the driver is active.
     // set this flag to make the block queue should check the driver is active
     if (!token.acquired() || driver->need_check_reschedule()) {
-        driver->observer()->cancel_update();
+        driver->observer()->cancel_trigger();
     }
 }
 
 // For a single driver try_schedule has no concurrency.
 void EventScheduler::try_schedule(const DriverRawPtr driver) {
-    SCHEDULE_CHECK(driver->is_in_block_queue());
+    SCHEDULE_CHECK(driver->is_in_blocked());
     bool add_to_ready_queue = false;
     RACE_DETECT(driver->schedule);
 
@@ -69,7 +69,7 @@ void EventScheduler::try_schedule(const DriverRawPtr driver) {
     if (add_to_ready_queue) {
         TRACE_SCHEDULE_LOG << "TRACE schedule driver:" << driver << " to ready queue";
         driver->set_need_check_reschedule(false);
-        driver->set_in_block_queue(false);
+        driver->set_in_blocked(false);
         _driver_queue->put_back(driver);
     }
 }
