@@ -1168,4 +1168,65 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
         }
         connectContext.getSessionVariable().setEnableViewBasedMvRewrite(false);
     }
+
+    @Test
+    public void testMVPartitionRefreshRewrite() throws Exception {
+        connectContext.getSessionVariable().setEnableMaterializedViewTransparentUnionRewrite(false);
+        sql("CREATE TABLE test_base_table1(\n" +
+                "    `col0`           int(11) NULL,\n" +
+                "    `col2`           date NULL,\n" +
+                "    `col3`           varchar(32) NULL,\n" +
+                "    `id`             bigint(20) NULL,\n" +
+                "    `col1`           bigint(20) NULL\n" +
+                ") DUPLICATE KEY(col0, col2, col3)\n" +
+                "  PARTITION BY RANGE(col2)(\n" +
+                "  START (\"2022-04-01\") END (\"2022-04-10\") EVERY (INTERVAL 1 day))\n" +
+                "  DISTRIBUTED BY HASH(col0)\n" +
+                "  PROPERTIES(\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");");
+        sql("INSERT INTO test_base_table1 (col0, col2, col3) VALUES " +
+                "(987654321, '2022-04-01', 'Fujian1')," +
+                "(987654321, '2022-04-02', 'Fujian2')," +
+                "(987654321, '2022-04-03', 'Guangdong')," +
+                "(987654321, '2022-04-04', 'Fujian');");
+        sql("CREATE MATERIALIZED VIEW test_mv1 \n" +
+                "partition by (col2)\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "AS\n" +
+                "SELECT * from (select col2,col3,col0,id,col1 FROM test_base_table1 " +
+                "where col3 = 'Guangdong' and col0 = 123456789) tmp;\n");
+
+        sql("refresh materialized view test_mv1 partition start('2022-04-01') end ('2022-04-04') with sync mode;");
+
+        String query = "select col1, col2, 'server' source_meta_type, count(1) " +
+                "from test_base_table1 where col2 between '2022-04-01' and '2022-04-05'  group by col1, col2;\n";
+        {
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "UNION");
+            // TODO: This should be rewritten since the partition range is not changed but it increased union operator,
+            // TODO: so the rewritten plan's performance is not better than the original plan.
+            // input query's partition range is [2022-04-01, 2022-04-05] and should not be changed.
+            PlanTestBase.assertContains(plan, "     TABLE: test_base_table1\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     PREDICATES: ((13: col0 != 123456789) OR (14: col2 < '2022-04-01')) " +
+                    "OR ((14: col2 >= '2022-04-04') OR (15: col3 != 'Guangdong'))\n" +
+                    "     partitions=5/9");
+        }
+
+        {
+            sql("INSERT INTO test_base_table1 partition('p20220405') VALUES (123456789, '2022-04-05', 'Guangdong', 1, 10001)");
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "UNION");
+            // input query's partition range is [2022-04-01, 2022-04-05] and should not be changed.
+            PlanTestBase.assertContains(plan, "     TABLE: test_base_table1\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     PREDICATES: ((13: col0 != 123456789) OR (14: col2 < '2022-04-01')) " +
+                    "OR ((14: col2 >= '2022-04-04') OR (15: col3 != 'Guangdong'))\n" +
+                    "     partitions=5/9");
+        }
+        connectContext.getSessionVariable().setEnableMaterializedViewTransparentUnionRewrite(true);
+        starRocksAssert.dropTable("test_base_table1");
+        starRocksAssert.dropMaterializedView("test_mv1");
+    }
 }
