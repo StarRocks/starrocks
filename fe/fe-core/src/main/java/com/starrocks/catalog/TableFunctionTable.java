@@ -64,6 +64,8 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -79,11 +81,13 @@ import java.util.stream.Collectors;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 public class TableFunctionTable extends Table {
-    public static final String PARQUET = "parquet";
-    public static final String ORC = "orc";
-    public static final String CSV = "csv";
+    private static final Logger LOG = LogManager.getLogger(TableFunctionTable.class);
 
-    public static final Set<String> SUPPORTED_FORMATS;
+    private static final String PARQUET = "parquet";
+    private static final String ORC = "orc";
+    private static final String CSV = "csv";
+
+    private static final Set<String> SUPPORTED_FORMATS;
     static {
         SUPPORTED_FORMATS = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         SUPPORTED_FORMATS.add(PARQUET);
@@ -100,8 +104,6 @@ public class TableFunctionTable extends Table {
 
     private static final int DEFAULT_AUTO_DETECT_SAMPLE_FILES = 2;
     private static final int DEFAULT_AUTO_DETECT_SAMPLE_ROWS = 500;
-
-    private static final Logger LOG = LogManager.getLogger(TableFunctionTable.class);
 
     public static final String FAKE_PATH = "fake://";
     public static final String PROPERTY_PATH = "path";
@@ -126,10 +128,10 @@ public class TableFunctionTable extends Table {
     public static final String PROPERTY_PARQUET_USE_LEGACY_ENCODING = "parquet.use_legacy_encoding";
 
     private static final String PROPERTY_LIST_FILES_ONLY = "list_files_only";
+    private static final String PROPERTY_LIST_RECURSIVELY = "list_recursively";
 
     private String path;
     private String format;
-    private boolean listFilesOnly = false;
 
     // for load data
     private int autoDetectSampleFiles;
@@ -157,6 +159,10 @@ public class TableFunctionTable extends Table {
 
     // PARQUET format options
     private boolean parquetUseLegacyEncoding = false;
+
+    // for list files
+    private boolean listFilesOnly = false;
+    private boolean listRecursively = false;
 
     // Ctor for load data / list files via table function
     public TableFunctionTable(Map<String, String> properties) throws DdlException {
@@ -230,7 +236,26 @@ public class TableFunctionTable extends Table {
         try {
             List<String> pieces = Splitter.on(",").trimResults().omitEmptyStrings().splitToList(path);
             for (String piece : ListUtils.emptyIfNull(pieces)) {
-                List<FileStatus> fileStatuses = HdfsUtil.listFileMeta(piece, new BrokerDesc(properties), false);
+                List<FileStatus> fileStatuses = Lists.newArrayList();
+                fileStatuses.addAll(listFilesAndDirs(piece, listRecursively, properties));
+
+                if (!listRecursively && !fileStatuses.isEmpty()) {
+                    List<FileStatus> newFileStatuses = Lists.newArrayList();
+                    for (FileStatus fStatus : fileStatuses) {
+                        if (!fStatus.isDirectory()) {
+                            newFileStatuses.add(fStatus);
+                            continue;
+                        }
+
+                        // if the path is directory, return files and sub directories in this directory
+                        String dirPath = fStatus.getPath().toString() + "/*";
+                        newFileStatuses.addAll(listFilesAndDirs(dirPath, false, properties));
+                    }
+
+                    fileStatuses.clear();
+                    fileStatuses.addAll(newFileStatuses);
+                }
+
                 for (FileStatus fStatus : fileStatuses) {
                     List<String> fileInfo = Lists.newArrayList(
                             fStatus.getPath().toString(),
@@ -241,6 +266,7 @@ public class TableFunctionTable extends Table {
                     files.add(fileInfo);
                 }
             }
+
             if (files.isEmpty()) {
                 ErrorReport.reportDdlException(ErrorCode.ERR_NO_FILES_FOUND, path);
             }
@@ -249,6 +275,25 @@ public class TableFunctionTable extends Table {
             LOG.warn("failed to parse files", e);
             throw new SemanticException("failed to parse files: " + e.getMessage());
         }
+    }
+
+    private static List<FileStatus> listFilesAndDirs(String path, boolean listRecursively, Map<String, String> properties)
+            throws StarRocksException {
+        URI uri = null;
+        try {
+            uri = new URI(path);
+        } catch (URISyntaxException e) {
+            throw new StarRocksException(e);
+        }
+
+        List<FileStatus> files = Lists.newArrayList();
+        for (FileStatus fStatus : HdfsUtil.listFileMeta(uri.normalize().toString(), new BrokerDesc(properties), false)) {
+            files.add(fStatus);
+            if (listRecursively && fStatus.isDirectory()) {
+                files.addAll(listFilesAndDirs(fStatus.getPath().toString() + "/*", true, properties));
+            }
+        }
+        return files;
     }
 
     @Override
@@ -312,8 +357,17 @@ public class TableFunctionTable extends Table {
             listFilesOnly = ParseUtil.parseBooleanValue(property, PROPERTY_LIST_FILES_ONLY);
         }
 
-        if (!listFilesOnly) {
+        if (listFilesOnly) {
+            parsePropertiesForListFiles(properties);
+        } else {
             parsePropertiesForLoad(properties);
+        }
+    }
+
+    private void parsePropertiesForListFiles(Map<String, String> properties) {
+        if (properties.containsKey(PROPERTY_LIST_RECURSIVELY)) {
+            String property = properties.get(PROPERTY_LIST_RECURSIVELY);
+            listRecursively = ParseUtil.parseBooleanValue(property, PROPERTY_LIST_RECURSIVELY);
         }
     }
 
