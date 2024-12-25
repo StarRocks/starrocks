@@ -238,8 +238,6 @@ inline Status OlapRuntimeScanRangePruner::_update(const ColumnIdToGlobalDictMap*
                 ObjectPool pool;
 
                 ASSIGN_OR_RETURN(auto predicates, _get_predicates(global_dictmaps, i, &pool));
-
-                //ASSIGN_OR_RETURN(auto predicates, _get_predicates(global_dictmaps, i, &pool));
                 if (!predicates.empty()) {
                     RETURN_IF_ERROR(updater(predicates.front()->column_id(), predicates));
                 }
