@@ -278,12 +278,12 @@ public class TableFunctionTable extends Table {
     }
 
     private static List<FileStatus> listFilesAndDirs(String path, boolean listRecursively, Map<String, String> properties)
-            throws StarRocksException {
+            throws UserException {
         URI uri = null;
         try {
             uri = new URI(path);
         } catch (URISyntaxException e) {
-            throw new StarRocksException(e);
+            throw new UserException(e);
         }
 
         List<FileStatus> files = Lists.newArrayList();
