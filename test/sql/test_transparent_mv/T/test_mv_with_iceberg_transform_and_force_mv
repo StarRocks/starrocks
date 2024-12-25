@@ -1,0 +1,53 @@
+-- name: test_mv_with_iceberg_transform_and_force_mv
+
+-- create mv
+create database db_${uuid0};
+use db_${uuid0};
+
+create external catalog mv_iceberg_${uuid0}
+properties
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+
+-------------------------------- DAYS WITH PARTITION TTL --------------------------------
+CREATE MATERIALIZED VIEW test_days
+PARTITION BY (l_returnflag, l_linestatus, date_trunc('day', l_shipdate))
+REFRESH DEFERRED MANUAL
+PROPERTIES (
+  "replication_num" = "1",
+  "partition_retention_condition" = "date_trunc('day', l_shipdate) >= '2024-11-13'",
+  "query_rewrite_consistency" = "force_mv"
+)
+AS
+  SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_days;
+REFRESH MATERIALIZED VIEW test_days PARTITION (('R', 'F', '2024-11-12 08:00:00')) WITH SYNC MODE;
+function: print_hit_materialized_views("SELECT * FROM test_days order by l_orderkey;")
+function: print_hit_materialized_views("SELECT * FROM test_days where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;")
+function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_days where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;")
+function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_days where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;")
+function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_days order by l_orderkey;")
+SELECT * FROM test_days order by l_orderkey;
+SELECT * FROM test_days where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;
+SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_days where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;
+SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_days where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;
+SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_days order by l_orderkey;
+
+REFRESH MATERIALIZED VIEW test_days WITH SYNC MODE;
+function: print_hit_materialized_views("SELECT * FROM test_days order by l_orderkey;")
+function: print_hit_materialized_views("SELECT * FROM test_days where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;")
+function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_days where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;")
+function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_days where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;")
+function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_days order by l_orderkey;")
+SELECT * FROM test_days order by l_orderkey;
+SELECT * FROM test_days where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;
+SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_days where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;
+SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_days where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;
+SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_days order by l_orderkey;
+DROP MATERIALIZED VIEW test_days;
+
+
+drop database db_${uuid0} force;
+drop catalog mv_iceberg_${uuid0};

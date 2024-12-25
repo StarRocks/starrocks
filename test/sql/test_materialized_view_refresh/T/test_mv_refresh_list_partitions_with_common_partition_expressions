@@ -1,0 +1,168 @@
+-- name: test_mv_refresh_list_partitions_with_common_partition_expressions
+
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t1(
+    dt1 datetime, 
+    dt2 datetime, 
+    v int) 
+partition by date_trunc('day', dt1), date_trunc('month', dt2);
+
+insert into t1 values
+    ('2024-01-01','2024-01-02', 1),
+    ('2024-02-01','2024-02-02', 2),
+    ('2024-03-01','2024-03-02', 3)
+;
+-------- TEST ONE TO ONE BY GENERATED_COLUMN REMAPPING-----
+CREATE MATERIALIZED VIEW mv1 
+PARTITION BY (__generated_partition_column_0, __generated_partition_column_1)
+REFRESH DEFERRED MANUAL 
+PROPERTIES (
+    "replication_num" = "1"
+)
+AS 
+    SELECT dt1, dt2, v, __generated_partition_column_0, __generated_partition_column_1 FROM t1;
+REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
+
+select * from mv1 order by 1, 2;
+function: print_hit_materialized_view("select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2)", "mv1")
+select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2) order by 1;
+
+INSERT INTO t1 VALUES 
+    ('2024-04-01','2024-04-02', 4),
+    ('2024-05-01','2024-05-02', 2),
+    ('2024-06-01','2024-06-02', 3);
+select * from mv1 order by 1, 2;
+function: print_hit_materialized_view("select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2)", "mv1")
+select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2) order by 1;
+
+REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
+select * from mv1 order by 1, 2;
+function: print_hit_materialized_view("select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2)", "mv1")
+select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2) order by 1;
+drop materialized view mv1;
+-------- TEST ONE TO ONE REMAPPING-----
+CREATE MATERIALIZED VIEW mv1 
+PARTITION BY (date_trunc('day', dt1), date_trunc('month', dt2))
+REFRESH DEFERRED MANUAL 
+PROPERTIES (
+    "replication_num" = "1"
+)
+AS 
+    SELECT * FROM t1;
+REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
+
+select * from mv1 order by 1, 2;
+function: print_hit_materialized_view("select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2)", "mv1")
+select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2) order by 1;
+
+INSERT INTO t1 VALUES 
+    ('2024-04-01','2024-04-02', 4),
+    ('2024-05-01','2024-05-02', 2),
+    ('2024-06-01','2024-06-02', 3);
+select * from mv1 order by 1, 2;
+function: print_hit_materialized_view("select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2)", "mv1")
+select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2) order by 1;
+
+REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
+select * from mv1 order by 1, 2;
+function: print_hit_materialized_view("select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2)", "mv1")
+select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2) order by 1;
+drop materialized view mv1;
+
+-------- TEST MANY TO ONE REMAPPING-----
+CREATE MATERIALIZED VIEW mv1 
+PARTITION BY (date_trunc('month', dt2))
+REFRESH DEFERRED MANUAL 
+PROPERTIES (
+    "replication_num" = "1"
+)
+AS 
+    SELECT * FROM t1;
+REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
+
+select * from mv1 order by 1, 2;
+function: print_hit_materialized_view("select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2)", "mv1")
+select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2) order by 1;
+
+INSERT INTO t1 VALUES 
+    ('2024-04-01','2024-04-02', 4),
+    ('2024-05-01','2024-05-02', 2),
+    ('2024-06-01','2024-06-02', 3);
+select * from mv1 order by 1, 2;
+function: print_hit_materialized_view("select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2)", "mv1")
+select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2) order by 1;
+
+REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
+select * from mv1 order by 1, 2;
+function: print_hit_materialized_view("select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2)", "mv1")
+select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2) order by 1;
+
+drop materialized view mv1;
+
+-- DISABLE GENERATED COLUMN REWRITE FOR MV REWRITE
+
+SET disable_generated_column_rewrite=TRUE;
+-------- TEST ONE TO ONE REMAPPING WITH PARTITION TTL -----
+
+CREATE MATERIALIZED VIEW mv1 
+PARTITION BY  (date_trunc('day', dt1), date_trunc('month', dt2))
+REFRESH DEFERRED MANUAL 
+PROPERTIES (
+    "replication_num" = "1",
+    "partition_retention_condition" = "date_trunc('day', dt1) >= '2024-02-01'"
+)
+AS 
+    SELECT * FROM t1;
+REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
+
+select * from mv1 order by 1, 2;
+function: print_hit_materialized_view("select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2)", "mv1")
+select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2) order by 1;
+
+INSERT INTO t1 VALUES 
+    ('2024-04-01','2024-04-02', 4),
+    ('2024-05-01','2024-05-02', 2),
+    ('2024-06-01','2024-06-02', 3);
+select * from mv1 order by 1, 2;
+function: print_hit_materialized_view("select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2)", "mv1")
+select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2) order by 1;
+
+REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
+select * from mv1 order by 1, 2;
+select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2) order by 1;
+drop materialized view mv1;
+
+-------- TEST MANY TO ONE REMAPPING WITH PARTITINO TTL -----
+CREATE MATERIALIZED VIEW mv1 
+PARTITION BY  (date_trunc('month', dt2))
+REFRESH DEFERRED MANUAL 
+PROPERTIES (
+    "replication_num" = "1",
+    "partition_retention_condition" = "date_trunc('month', dt2) >= '2024-02-01'"
+)
+AS 
+    SELECT * FROM t1;
+REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
+
+select * from mv1 order by 1, 2;
+function: print_hit_materialized_view("select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2)", "mv1")
+select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2) order by 1;
+
+INSERT INTO t1 VALUES 
+    ('2024-04-01','2024-04-02', 4),
+    ('2024-05-01','2024-05-02', 2),
+    ('2024-06-01','2024-06-02', 3);
+select * from mv1 order by 1, 2;
+
+function: print_hit_materialized_view("select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2)", "mv1")
+select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2) order by 1;
+
+REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
+select * from mv1 order by 1, 2;
+function: print_hit_materialized_view("select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2)", "mv1")
+select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2) order by 1;
+
+drop table t1;
+drop database db_${uuid0} force;

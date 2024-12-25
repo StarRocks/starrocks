@@ -48,6 +48,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeState;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.Field;
+import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
 import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
@@ -125,15 +126,26 @@ public class PartitionSelector {
         return getPartitionIdsByExpr(context, tableName, olapTable, whereExpr, isRecyclingCondition, null);
     }
 
-    /**
-     * Return filtered partition ids by whereExpr with extra input cells which are used for mv refresh.
-     */
     public static List<Long> getPartitionIdsByExpr(ConnectContext context,
                                                    TableName tableName,
                                                    OlapTable olapTable,
                                                    Expr whereExpr,
                                                    boolean isRecyclingCondition,
-                                                   Map<Long, PCell> inputCells) {
+                                                   Map<Expr, Expr> partitionByExprMap) {
+        return getPartitionIdsByExpr(context, tableName, olapTable, whereExpr, isRecyclingCondition,
+                null, partitionByExprMap);
+    }
+
+    /**
+     * Return filtered partition ids by whereExpr with extra input cells which are used for mv refresh.
+     */
+    private static List<Long> getPartitionIdsByExpr(ConnectContext context,
+                                                    TableName tableName,
+                                                    OlapTable olapTable,
+                                                    Expr whereExpr,
+                                                    boolean isRecyclingCondition,
+                                                    Map<Long, PCell> inputCells,
+                                                    Map<Expr, Expr> partitionByExprMap) {
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         if (!partitionInfo.isPartitioned()) {
             throw new SemanticException("Can't drop partitions with where expression since it is not partitioned");
@@ -143,6 +155,14 @@ public class PartitionSelector {
                         .map(col -> new Field(col.getName(), col.getType(), tableName, null))
                         .collect(Collectors.toList())));
         ExpressionAnalyzer.analyzeExpression(whereExpr, new AnalyzeState(), scope, context);
+
+        // replace partitionByExpr with partition slotRef if partitionByExprMap is not empty.
+        if (olapTable.isMaterializedView() && CollectionUtils.sizeIsEmpty(partitionByExprMap)) {
+            partitionByExprMap = MaterializedViewAnalyzer.getMVPartitionByExprToAdjustMap(tableName,
+                    (MaterializedView) olapTable);
+        }
+        whereExpr = MaterializedViewAnalyzer.adjustWhereExprIfNeeded(partitionByExprMap, whereExpr, scope, context);
+
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
         Map<Column, ColumnRefOperator> columnRefOperatorMap = Maps.newHashMap();
         List<ColumnRefOperator> columnRefOperators = Lists.newArrayList();
@@ -185,6 +205,7 @@ public class PartitionSelector {
             gcExprToColRefMap.put(scalarOperator, columnRefOperatorMap.get(column));
         }
         expressionMapping.addGeneratedColumnExprOpToColumnRef(gcExprToColRefMap);
+        // substitute generated column expr if whereExpr is a mv which contains iceberg transform expr.
         // translate whereExpr to scalarOperator and replace whereExpr's generatedColumnExpr to partition slotRef.
         ScalarOperator scalarOperator =
                 SqlToScalarOperatorTranslator.translate(whereExpr, expressionMapping, Lists.newArrayList(),
@@ -270,7 +291,7 @@ public class PartitionSelector {
             }
         }
         return PartitionSelector.getPartitionIdsByExpr(context, tableName, olapTable,
-                whereExpr, false, inputCellsMap);
+                whereExpr, false, inputCellsMap, null);
     }
 
     private static List<String> getPartitionsByRetentionCondition(Database db,
@@ -650,7 +671,7 @@ public class PartitionSelector {
         }
 
         // extra check for materialized view
-        if (olapTable instanceof MaterializedView)  {
+        if (olapTable instanceof MaterializedView) {
             Pair<Boolean, String> result = OperatorFunctionChecker.onlyContainFEConstantFunctions(predicate);
             if (!result.first) {
                 throw new SemanticException("Retention condition must only contain FE constant functions for materialized" +
