@@ -382,7 +382,6 @@ Status CSVScanner::_parse_csv_v2(Chunk* chunk) {
 
         SCOPED_RAW_TIMER(&_counter->fill_ns);
         bool has_error = false;
-        bool error_reported = false;
         for (int j = 0, k = 0; j < _num_fields_in_csv; j++) {
             auto slot = _src_slot_descriptors[j];
             if (slot == nullptr) {
@@ -391,24 +390,8 @@ Status CSVScanner::_parse_csv_v2(Chunk* chunk) {
 
             if (j >= row.columns.size()) {
                 // table columns are more than file fields
-
                 // append null.
                 _column_raw_ptrs[k]->append_default(1);
-
-                // report error.
-                if (_strict_mode && !error_reported) {
-                    if (_counter->num_rows_filtered++ < REPORT_ERROR_MAX_NUMBER) {
-                        std::string error_msg = make_column_count_not_matched_error_message(
-                                _num_fields_in_csv, row.columns.size(), _parse_options);
-                        _report_error(record, error_msg);
-                    }
-                    if (_state->enable_log_rejected_record()) {
-                        std::string error_msg = make_column_count_not_matched_error_message(
-                                _num_fields_in_csv, row.columns.size(), _parse_options);
-                        _report_rejected_record(record, error_msg);
-                    }
-                    error_reported = true;
-                }
                 k++;
                 continue;
             }
@@ -500,7 +483,6 @@ Status CSVScanner::_parse_csv(Chunk* chunk) {
 
         SCOPED_RAW_TIMER(&_counter->fill_ns);
         bool has_error = false;
-        bool error_reported = false;
         for (int j = 0, k = 0; j < _num_fields_in_csv; j++) {
             auto slot = _src_slot_descriptors[j];
             if (slot == nullptr) {
@@ -509,24 +491,8 @@ Status CSVScanner::_parse_csv(Chunk* chunk) {
 
             if (j >= fields.size()) {
                 // table columns are more than file fields
-
                 // append null.
                 _column_raw_ptrs[k]->append_default(1);
-
-                // report error.
-                if (_strict_mode && !error_reported) {
-                    if (_counter->num_rows_filtered++ < REPORT_ERROR_MAX_NUMBER) {
-                        std::string error_msg = make_column_count_not_matched_error_message(
-                                _num_fields_in_csv, fields.size(), _parse_options);
-                        _report_error(record, error_msg);
-                    }
-                    if (_state->enable_log_rejected_record()) {
-                        std::string error_msg = make_column_count_not_matched_error_message(
-                                _num_fields_in_csv, fields.size(), _parse_options);
-                        _report_rejected_record(record, error_msg);
-                    }
-                    error_reported = true;
-                }
                 k++;
                 continue;
             }
