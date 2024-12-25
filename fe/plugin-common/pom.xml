@@ -33,7 +33,6 @@
     <packaging>jar</packaging>
 
     <properties>
-        <!-- This version cannot exceed the version of spark-dpp and hive-udf because plugin-common is referenced by these modules. -->
         <maven.compiler.source>8</maven.compiler.source>
         <maven.compiler.target>8</maven.compiler.target>
         <maven.compiler.release>8</maven.compiler.release>
