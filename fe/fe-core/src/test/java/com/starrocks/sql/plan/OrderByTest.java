@@ -528,7 +528,7 @@ class OrderByTest extends PlanTestBase {
         // TopN filter only works in no-nullable column
         sql = "select * from test_all_type order by t1a limit 10";
         plan = getVerboseExplain(sql);
-        assertNotContains(plan, "runtime filters");
+        assertContains(plan, "runtime filters");
 
         // only first order by column can use top n filter
         sql = "select * from test_all_type_not_null order by t1a, t1b limit 10";
