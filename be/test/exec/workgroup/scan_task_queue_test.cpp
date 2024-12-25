@@ -83,6 +83,7 @@ PARALLEL_TEST(ScanExecutorTest, test_yield) {
             ctx.total_yield_point_cnt = 2;
             DCHECK_LT(ctx.yield_point, ctx.total_yield_point_cnt);
             if (ctx.yield_point == 1) {
+                std::lock_guard guard(mutex);
                 finished_tasks++;
                 cv.notify_one();
             }
