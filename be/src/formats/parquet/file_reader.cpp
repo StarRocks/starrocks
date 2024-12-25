@@ -71,7 +71,7 @@ FileReader::FileReader(int chunk_size, RandomAccessFile* file, size_t file_size,
           _file_size(file_size),
           _datacache_options(datacache_options),
           _sb_stream(sb_stream),
-          _skip_rows_ctx(skip_rows_context) {}
+          _skip_rows_ctx(std::move(skip_rows_context)) {}
 
 FileReader::~FileReader() = default;
 
