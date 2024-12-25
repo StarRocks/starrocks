@@ -88,6 +88,7 @@ public class MvRewriteTestBase {
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withDatabase(DB_NAME).useDatabase(DB_NAME);
+        connectContext.setDatabase(DB_NAME);
 
         // set default config for async mvs
         UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
@@ -243,6 +244,10 @@ public class MvRewriteTestBase {
         connectContext.setQueryId(UUIDUtil.genUUID());
         StatementBase statement = SqlParser.parseSingleStatement(sql, connectContext.getSessionVariable().getSqlMode());
         StmtExecutor.newInternalExecutor(connectContext, statement).execute();
+    }
+
+    public static void sql(String sql) throws Exception {
+        cluster.runSql(DB_NAME, sql);
     }
 
     /**
