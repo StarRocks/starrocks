@@ -126,8 +126,6 @@ std::vector<JoinRuntimeFilter*>* ChunksSorterTopn::runtime_filters(ObjectPool* p
     bool asc = _sort_desc.descs[0].asc_order();
     bool null_first = _sort_desc.descs[0].is_null_first();
 
-    LOG(ERROR) << "TOPN: " << max_value_row_id << ":" << current_max_value_row_id;
-
     if (_runtime_filter.empty()) {
         auto* rf = type_dispatch_predicate<JoinRuntimeFilter*>(
                 (*_sort_exprs)[0]->root()->type().type, false, detail::SortRuntimeFilterBuilder(), pool,
