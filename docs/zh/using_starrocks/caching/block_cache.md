@@ -17,45 +17,24 @@ toc_max_heading_level: 2
 
 ## 启用 Data Cache
 
-自 v3.2.3 版本起，StarRocks 默认启用 Data Cache。如果您需要在 v3.1 版本集群中使用 Data Cache，或此前曾手动禁用了此功能，需执行以下流程启用 Data Cache。
-
-执行以下语句在集群运行时动态启用 Data Cache：
-
-```SQL
-UPDATE information_schema.be_configs SET VALUE = 1 
-WHERE name = "starlet_use_star_cache";
-```
-
-动态配置将在 CN 节点重新启动后失效。
-
-如需永久启用 Data Cache，需要将以下配置添加到 CN 配置文件 **cn.conf** 中，并重新启动 CN 节点：
-
-```Properties
-starlet_use_star_cache = true
-```
+自 v3.4.0 版本起，StarRocks 存算分离内表和数据湖查询使用同一个 Data Cache 实例。
 
 ## 配置 Data Cache
 
 您可以通过以下 CN（BE）配置项配置 Data Cache：
 
+### 缓存路径
+
 - [storage_root_path](../../administration/management/BE_configuration.md#storage_root_path)（在存算分离集群中，此项用于指定用于缓存数据的根路径。）
-- [starlet_use_star_cache](../../administration/management/BE_configuration.md#starlet_use_star_cache)
+
+### 缓存使用磁盘容量
+
+- [datacache_disk_size](../../administration/management/BE_configuration.md#datacache_disk_size)
 - [starlet_star_cache_disk_size_percent](../../administration/management/BE_configuration.md#starlet_star_cache_disk_size_percent)
 
-:::note
-
-如果您在升级至 v3.1.7、v3.2.3 或更高版本之前启用了 File Cache，则需要检查是否修改了配置项 `starlet_cache_evict_high_water`。该项的默认值为 `0.2`，表示 File Cache 将使用 80% 的存储空间来缓存数据文件。如果您曾修改过此项，您必须在升级时针对 `starlet_star_cache_disk_size_percent` 做相应配置。假设您之前将 `starlet_cache_evict_high_water` 设置为 `0.3`，在升级 StarRocks 集群时，您需要将 `starlet_star_cache_disk_size_percent` 设置为 `70`，以确保 Data Cache 使用的磁盘容量上限与 File Cache 相同。
-
-:::
+存算分离集群的缓存使用磁盘容量会取 `datacache_disk_size` 和 `starlet_star_cache_disk_size_percent` 中的较大值。
 
 ## 查看 Data Cache 状态
-
-- 执行以下语句查看是否已启用 Data Cache：
-
-  ```SQL
-  SELECT * FROM information_schema.be_configs 
-  WHERE NAME LIKE "%starlet_use_star_cache%";
-  ```
 
 - 执行以下语句查看存储缓存数据的根路径：
 
@@ -64,13 +43,13 @@ starlet_use_star_cache = true
   WHERE NAME LIKE "%storage_root_path%";
   ```
 
-  缓存数据存储在 `storage_root_path` 的子路径 `starlet_cache/star_cache` 下。
+  通常，缓存数据存储在 `storage_root_path` 的子路径 `datacache/` 下。
 
 - 执行以下语句以查看 Data Cache 的磁盘使用上限：
 
   ```SQL
   SELECT * FROM information_schema.be_configs 
-  WHERE NAME LIKE "%starlet_star_cache_disk_size_percent%";
+  WHERE NAME LIKE "%starlet_star_cache_disk_size_percent% or %datacache_disk_size%";
   ```
 
 ## 监控 Data Cache
@@ -106,19 +85,11 @@ Data Cache 的实际磁盘占用。
 
 ## 禁用 Data Cache
 
-执行以下语句在集群运行时动态禁用 Data Cache：
-
-```SQL
-UPDATE information_schema.be_configs SET VALUE = 0 
-WHERE name = "starlet_use_star_cache";
-```
-
-动态配置将在 CN 节点重新启动后失效。
-
-如需永久禁用 Data Cache，需要将以下配置添加到 CN 配置文件 **cn.conf** 中，并重新启动 CN 节点：
+如需禁用 Data Cache，需要将以下配置项添加到 CN 配置文件 **cn.conf** 中，并重新启动 CN 节点：
 
 ```Properties
-starlet_use_star_cache = false
+datacache_enable = false
+storage_root_path =
 ```
 
 ## 清除缓存数据
@@ -127,14 +98,14 @@ starlet_use_star_cache = false
 
 按照以下步骤清除 CN 节点上的缓存数据：
 
-1. 删除存储缓存数据的子目录，即 `${storage_root_path}/starlet_cache`。
+1. 删除存储缓存数据的子目录。
 
    示例：
 
    ```Bash
    # 假设 `storage_root_path = /data/disk1;/data/disk2`
-   rm -rf /data/disk1/starlet_cache/
-   rm -rf /data/disk2/starlet_cache/
+   rm -rf /data/disk1/datacache/
+   rm -rf /data/disk2/datacache/
    ```
 
 2. 重启 CN 节点。
@@ -197,7 +168,6 @@ Data Cache 的磁盘容量使用是精确的，不会超过配置中设置的容
 - CN 崩溃产生的 Core 文件。
 - 主键表的持久化索引（存储于 `${storage_root_path}/persist/` 目录下）。
 - 混部 BE/CN/FE 实例共享一个磁盘。
-- 外部表的缓存（存储于 `${STARROCKS_HOME}/block_cache/` 目录下）。
 - 磁盘自身问题，如使用少见的 ext3 文件系统。
 
 您可以在磁盘根目录或各个子目录执行 `du -h . -d 1` 查看具体占用空间的目录，然后删除意外的占用部分。或者，也可以通过配置 `starlet_star_cache_disk_size_percent` 调小 Data Cache 可使用的磁盘容量。
