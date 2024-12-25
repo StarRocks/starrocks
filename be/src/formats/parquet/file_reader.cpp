@@ -65,7 +65,7 @@ namespace starrocks::parquet {
 
 FileReader::FileReader(int chunk_size, RandomAccessFile* file, size_t file_size,
                        const DataCacheOptions& datacache_options, io::SharedBufferedInputStream* sb_stream,
-                       const SkipRowsContextPtr skip_rows_context)
+                       const SkipRowsContextPtr& skip_rows_context)
         : _chunk_size(chunk_size),
           _file(file),
           _file_size(file_size),

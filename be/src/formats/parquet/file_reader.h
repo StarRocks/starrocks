@@ -71,7 +71,7 @@ class FileReader {
 public:
     FileReader(int chunk_size, RandomAccessFile* file, size_t file_size,
                const DataCacheOptions& datacache_options = DataCacheOptions(),
-               io::SharedBufferedInputStream* sb_stream = nullptr, const SkipRowsContextPtr skipRowsContext = nullptr);
+               io::SharedBufferedInputStream* sb_stream = nullptr, const SkipRowsContextPtr& skipRowsContext = nullptr);
     ~FileReader();
 
     Status init(HdfsScannerContext* scanner_ctx);
