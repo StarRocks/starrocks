@@ -492,7 +492,7 @@ public class CreateTableAnalyzer {
                 partitionColumnList.add(identifier.getValue());
             }
             if (partitionExpr instanceof FunctionCallExpr) {
-                FunctionCallExpr expr = (FunctionCallExpr) partitionExpr;
+                FunctionCallExpr expr = (FunctionCallExpr) (((Expr) partitionExpr).clone());
                 ExpressionAnalyzer.analyzeExpression(expr, new AnalyzeState(), new Scope(RelationId.anonymous(),
                                 new RelationFields(columnDefs.stream().map(col -> new Field(col.getName(),
                                         col.getType(), null, null)).collect(Collectors.toList()))),
@@ -515,11 +515,12 @@ public class CreateTableAnalyzer {
                     throw new SemanticException("Generate partition column " + columnName
                             + " for multi expression partition error: " + e.getMessage(), partitionDesc.getPos());
                 }
+                // generated column expression should be saved in unanalyzed way in meta
                 ColumnDef generatedPartitionColumn = new ColumnDef(
                         columnName, typeDef, null, false, null, null, true,
-                        ColumnDef.DefaultValueDef.NOT_SET, null, expr, "");
+                        ColumnDef.DefaultValueDef.NOT_SET, null, (FunctionCallExpr) partitionExpr, "");
                 columnDefs.add(generatedPartitionColumn);
-                partitionExprs.add(expr);
+                partitionExprs.add((FunctionCallExpr) partitionExpr);
             }
         }
         for (ColumnDef columnDef : columnDefs) {
