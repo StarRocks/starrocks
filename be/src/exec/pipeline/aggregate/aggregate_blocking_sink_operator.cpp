@@ -33,6 +33,7 @@ Status AggregateBlockingSinkOperator::prepare(RuntimeState* state) {
                                 _aggregator->limit() != -1 &&                 // has limit
                                 _aggregator->conjunct_ctxs().empty() &&       // no 'having' clause
                                 _aggregator->get_aggr_phase() == AggrPhase2); // phase 2, keep it to make things safe
+    _aggregator->attach_sink_observer(state, this->_observer);
     return Status::OK();
 }
 
@@ -46,6 +47,7 @@ void AggregateBlockingSinkOperator::close(RuntimeState* state) {
 Status AggregateBlockingSinkOperator::set_finishing(RuntimeState* state) {
     if (_is_finished) return Status::OK();
     ONCE_DETECT(_set_finishing_once);
+    auto notify = _aggregator->defer_notify_source();
     auto defer = DeferOp([this]() {
         COUNTER_UPDATE(_aggregator->input_row_count(), _aggregator->num_input_rows());
         _aggregator->sink_complete();

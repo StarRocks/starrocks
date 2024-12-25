@@ -286,6 +286,7 @@ set(EXEC_FILES
     pipeline/group_execution/execution_group.cpp
     pipeline/group_execution/execution_group_builder.cpp
     pipeline/group_execution/group_operator.cpp
+    pipeline/schedule/timeout_tasks.cpp
     pipeline/schedule/event_scheduler.cpp
     pipeline/schedule/observer.cpp
     pipeline/schedule/pipeline_timer.cpp

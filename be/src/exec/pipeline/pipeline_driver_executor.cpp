@@ -102,6 +102,8 @@ void GlobalDriverExecutor::_worker_thread() {
         if (driver == nullptr) {
             continue;
         }
+        DCHECK(!driver->is_in_ready());
+        DCHECK(!driver->is_in_blocked());
 
         if (current_thread != nullptr) {
             current_thread->set_idle(false);
@@ -257,6 +259,9 @@ StatusOr<DriverRawPtr> GlobalDriverExecutor::_get_next_driver(std::queue<DriverR
 
 void GlobalDriverExecutor::submit(DriverRawPtr driver) {
     driver->start_timers();
+    if (driver->fragment_ctx()->enable_event_scheduler()) {
+        driver->fragment_ctx()->event_scheduler()->attach_queue(_driver_queue.get());
+    }
 
     if (driver->is_precondition_block()) {
         driver->set_driver_state(DriverState::PRECONDITION_BLOCK);

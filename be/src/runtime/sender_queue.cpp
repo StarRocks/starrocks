@@ -561,6 +561,7 @@ void DataStreamRecvr::PipelineSenderQueue::close() {
 
 void DataStreamRecvr::PipelineSenderQueue::clean_buffer_queues() {
     std::lock_guard<Mutex> l(_lock);
+    tls_thread_status.set_mem_tracker(nullptr);
     auto& metrics = _recvr->_metrics[0];
     for (size_t i = 0; i < _chunk_queues.size(); i++) {
         auto& chunk_queue = _chunk_queues[i];
@@ -814,6 +815,7 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
             _total_chunks++;
             // Double check here for short circuit compatibility without introducing a critical section
             if (_chunk_queue_states[index].is_short_circuited.load(std::memory_order_relaxed)) {
+                tls_thread_status.set_mem_tracker(nullptr);
                 short_circuit(index);
                 // We cannot early-return for short circuit, it may occur for parts of parallelism,
                 // and the other parallelism may need to proceed.

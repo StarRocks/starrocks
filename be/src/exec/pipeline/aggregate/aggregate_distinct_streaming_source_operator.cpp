@@ -14,7 +14,17 @@
 
 #include "aggregate_distinct_streaming_source_operator.h"
 
+#include "common/status.h"
+#include "exec/pipeline/source_operator.h"
+#include "runtime/runtime_state.h"
+
 namespace starrocks::pipeline {
+
+Status AggregateDistinctStreamingSourceOperator::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(SourceOperator::prepare(state));
+    _aggregator->attach_source_observer(state, this->_observer);
+    return Status::OK();
+}
 
 bool AggregateDistinctStreamingSourceOperator::has_output() const {
     // There are two cases where chunk buffer is not null
@@ -46,6 +56,7 @@ bool AggregateDistinctStreamingSourceOperator::is_finished() const {
 }
 
 Status AggregateDistinctStreamingSourceOperator::set_finished(RuntimeState* state) {
+    auto notify = _aggregator->defer_notify_sink();
     return _aggregator->set_finished();
 }
 

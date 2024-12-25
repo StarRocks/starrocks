@@ -328,6 +328,18 @@ void QueryContextManager::_clean_query_contexts() {
     }
 }
 
+void QueryContextManager::for_each_active_ctx(const std::function<void(QueryContextPtr)>& func) {
+    for (auto i = 0; i < _num_slots; ++i) {
+        auto& mutex = _mutexes[i];
+        std::vector<QueryContextPtr> del_list;
+        std::unique_lock write_lock(mutex);
+        auto& contexts = _context_maps[i];
+        for (auto& [_, context] : contexts) {
+            func(context);
+        }
+    }
+}
+
 void QueryContextManager::_clean_func(QueryContextManager* manager) {
     while (!manager->_is_stopped()) {
         manager->_clean_query_contexts();

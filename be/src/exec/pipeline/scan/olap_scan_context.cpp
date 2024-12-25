@@ -52,14 +52,17 @@ void OlapScanContext::attach_shared_input(int32_t operator_seq, int32_t source_i
     auto key = std::make_pair(operator_seq, source_index);
     VLOG_ROW << fmt::format("attach_shared_input ({}, {}), active {}", operator_seq, source_index,
                             _active_inputs.size());
-    _active_inputs.emplace(key);
+    _num_active_inputs += _active_inputs.emplace(key).second;
 }
 
 void OlapScanContext::detach_shared_input(int32_t operator_seq, int32_t source_index) {
     auto key = std::make_pair(operator_seq, source_index);
     VLOG_ROW << fmt::format("detach_shared_input ({}, {}), remain {}", operator_seq, source_index,
                             _active_inputs.size());
-    _active_inputs.erase(key);
+    int erased = _active_inputs.erase(key);
+    if (erased && _num_active_inputs.fetch_sub(1) == 1) {
+        _active_inputs_empty = true;
+    }
 }
 
 bool OlapScanContext::has_active_input() const {

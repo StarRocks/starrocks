@@ -26,6 +26,7 @@ Status AggregateDistinctStreamingSinkOperator::prepare(RuntimeState* state) {
     if (_aggregator->streaming_preaggregation_mode() == TStreamingPreaggregationMode::LIMITED_MEM) {
         _limited_mem_state.limited_memory_size = config::streaming_agg_limited_memory_size;
     }
+    _aggregator->attach_sink_observer(state, this->_observer);
     return _aggregator->open(state);
 }
 
@@ -37,6 +38,7 @@ void AggregateDistinctStreamingSinkOperator::close(RuntimeState* state) {
 }
 
 Status AggregateDistinctStreamingSinkOperator::set_finishing(RuntimeState* state) {
+    auto notify = _aggregator->defer_notify_source();
     _is_finished = true;
 
     // skip processing if cancelled

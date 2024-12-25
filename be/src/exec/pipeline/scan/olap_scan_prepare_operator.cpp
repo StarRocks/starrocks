@@ -85,6 +85,7 @@ StatusOr<ChunkPtr> OlapScanPrepareOperator::pull_chunk(RuntimeState* state) {
 
     DeferOp defer([&]() {
         _ctx->set_prepare_finished();
+        _ctx->notify_observers();
         TEST_SYNC_POINT("OlapScnPrepareOperator::pull_chunk::after_set_prepare_finished");
     });
 
