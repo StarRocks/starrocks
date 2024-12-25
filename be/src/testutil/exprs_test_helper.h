@@ -91,6 +91,8 @@ public:
         return type_desc;
     }
 
+    static const TTypeDesc IntTTypeDesc;
+
     static TSlotDescriptor create_slot_desc(const TTypeDesc& type, TupleId tuple_id, SlotId slot_id,
                                             const std::string& col_name) {
         //k1_int
@@ -168,6 +170,76 @@ public:
         return node;
     }
 
+    static TExprNode create_in_pred_node(size_t size) {
+        TExprNode node;
+
+        node.node_type = TExprNodeType::IN_PRED;
+        node.num_children = size;
+        node.type = IntTTypeDesc;
+
+        node.__set_opcode(TExprOpcode::FILTER_IN);
+        node.__set_child_type(TPrimitiveType::INT);
+
+        return node;
+    }
+
+    static TExprNode create_not_in_pred_node(size_t size) {
+        TExprNode node;
+        TInPredicate in_pred;
+        in_pred.__set_is_not_in(true);
+
+        node.node_type = TExprNodeType::IN_PRED;
+        node.num_children = size;
+        node.type = IntTTypeDesc;
+
+        node.__set_in_predicate(in_pred);
+        node.__set_opcode(TExprOpcode::FILTER_NOT_IN);
+        node.__set_child_type(TPrimitiveType::INT);
+
+        return node;
+    }
+
+    static TExpr create_in_pred_texpr(SlotId slot_id, const std::vector<int32_t>& values, bool has_null) {
+        std::vector<TExprNode> nodes;
+
+        nodes.emplace_back(create_in_pred_node(values.size() + 1 + has_null));
+        nodes.emplace_back(create_slot_expr_node(0, slot_id, ExprsTestHelper::IntTTypeDesc, true));
+        for (int32_t value : values) {
+            nodes.emplace_back(create_int_literal(value, ExprsTestHelper::IntTTypeDesc, false));
+        }
+        if (has_null) {
+            nodes.emplace_back(create_null_literal(ExprsTestHelper::IntTTypeDesc));
+        }
+
+        TExpr t_expr;
+        t_expr.nodes = nodes;
+        return t_expr;
+    }
+
+    static TExpr create_not_in_pred_texpr(SlotId slot_id, const std::vector<int32_t>& values, bool has_null) {
+        std::vector<TExprNode> nodes;
+
+        nodes.emplace_back(create_not_in_pred_node(values.size() + 1 + has_null));
+        nodes.emplace_back(create_slot_expr_node(0, slot_id, ExprsTestHelper::IntTTypeDesc, true));
+        for (int32_t value : values) {
+            nodes.emplace_back(create_int_literal(value, ExprsTestHelper::IntTTypeDesc, false));
+        }
+        if (has_null) {
+            nodes.emplace_back(create_null_literal(ExprsTestHelper::IntTTypeDesc));
+        }
+
+        TExpr t_expr;
+        t_expr.nodes = nodes;
+        return t_expr;
+    }
+
+    static Status create_and_open_conjunct_ctxs(ObjectPool* pool, RuntimeState* runtime_state,
+                                                std::vector<TExpr>* tExprs, std::vector<ExprContext*>* conjunct_ctxs) {
+        RETURN_IF_ERROR(Expr::create_expr_trees(pool, *tExprs, conjunct_ctxs, nullptr));
+        RETURN_IF_ERROR(Expr::prepare(*conjunct_ctxs, runtime_state));
+        return Expr::open(*conjunct_ctxs, runtime_state);
+    }
+
     static TExprNode create_slot_expr_node(TupleId tuple_id, SlotId slot_id, TTypeDesc t_type, bool is_nullable) {
         TExprNode slot_ref;
         slot_ref.node_type = TExprNodeType::SLOT_REF;
@@ -192,6 +264,13 @@ public:
         node.__set_int_literal(int_literal);
         node.is_nullable = is_nullable;
 
+        return node;
+    }
+
+    static TExprNode create_null_literal(TTypeDesc t_type) {
+        TExprNode node;
+        node.node_type = TExprNodeType::NULL_LITERAL;
+        node.type = t_type;
         return node;
     }
 
@@ -280,6 +359,7 @@ public:
         return expr;
     }
 };
+
 class TExprBuilder {
 public:
     TExprBuilder& operator<<(const LogicalType& slot_type) {

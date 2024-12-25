@@ -158,8 +158,19 @@ public:
 
                 ColumnViewer<Type> viewer(value);
                 if (viewer.is_null(0)) {
-                    _null_in_set = true;
-                    continue;
+                    if (_is_join_runtime_filter || _eq_null) {
+                        _null_in_set = true;
+                        continue;
+                    } else {
+                        if (_is_not_in) {
+                            _null_in_set = true;
+                            _hash_set.clear();
+                            _init_array_buffer();
+                            break;
+                        } else {
+                            continue;
+                        }
+                    }
                 }
 
                 // insert into set
