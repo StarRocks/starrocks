@@ -1380,7 +1380,9 @@ public class ScalarOperatorFunctionsTest {
         ConnectContext ctx = new ConnectContext(null);
         ctx.setThreadLocalInfo();
         ctx.setStartTime();
-        LocalDateTime expected = ctx.getStartTimeInstant().atZone(TimeUtils.getTimeZone().toZoneId()).toLocalDateTime();
+        Instant instant = ctx.getStartTimeInstant();
+        LocalDateTime expected = Instant.ofEpochSecond(instant.getEpochSecond(), instant.getNano() / 1000 * 1000)
+                .atZone(TimeUtils.getTimeZone().toZoneId()).toLocalDateTime();
         assertEquals(expected, ScalarOperatorFunctions.now(new ConstantOperator(6, Type.INT)).getDatetime());
     }
 
