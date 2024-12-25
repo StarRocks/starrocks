@@ -57,6 +57,12 @@
         </dependency>
 
         <dependency>
+            <groupId>org.apache.httpcomponents</groupId>
+            <artifactId>httpclient</artifactId>
+            <version>4.5.14</version>
+        </dependency>
+
+        <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
             <version>1.7.30</version>
@@ -68,6 +74,13 @@
             <artifactId>protobuf-java</artifactId>
             <version>3.25.5</version>
             <scope>compile</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>com.mysql</groupId>
+            <artifactId>mysql-connector-j</artifactId>
+            <version>8.0.33</version>
+            <scope>test</scope>
         </dependency>
 
         <dependency>
@@ -162,6 +175,41 @@
                     </execution>
                 </executions>
             </plugin>
+            <!--<plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <version>3.5.2</version>
+                <configuration>
+                    <shadeSourcesContent>true</shadeSourcesContent>
+                    <createSourcesJar>true</createSourcesJar>
+                    <minimizeJar>true</minimizeJar>
+                    <artifactSet>
+                        <includes>
+                            <include>com.starrocks.format:format-sdk</include>
+                            <include>org.apache.arrow:*</include>
+                            <include>org.apache.commons:*</include>
+                            <include>commons-codec:*</include>
+                        </includes>
+                    </artifactSet>
+                    <relocations>
+                        <relocation>
+                            <pattern>org.apache.arrow</pattern>
+                            <shadedPattern>com.starrocks.format.shaded.arrow</shadedPattern>
+                            <pattern>org.apache.commons</pattern>
+                            <shadedPattern>com.starrocks.format.shaded.commons</shadedPattern>
+                        </relocation>
+                    </relocations>
+                </configuration>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>shade</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>-->
+
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>
                 <artifactId>exec-maven-plugin</artifactId>

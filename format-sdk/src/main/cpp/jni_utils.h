@@ -20,6 +20,17 @@
 #include <unordered_map>
 #include <vector>
 
+#define SAFE_CALL_READER_FUNCATION(reader, body)                                   \
+    if (reader != nullptr) {                                                       \
+        try {                                                                      \
+            body;                                                                  \
+        } catch (const std::exception& ex) {                                       \
+            env->ThrowNew(kNativeOptExceptionClass, ex.what());                    \
+        }                                                                          \
+    } else {                                                                       \
+        env->ThrowNew(kNativeOptExceptionClass, "Invalid tablet reader handler!"); \
+    }
+
 #define SAFE_CALL_WRITER_FUNCATION(writer, body)                                   \
     if (writer != nullptr) {                                                       \
         try {                                                                      \

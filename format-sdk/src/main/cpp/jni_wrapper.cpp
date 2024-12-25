@@ -17,6 +17,7 @@
 
 #include <string>
 
+#include "format/starrocks_format_reader.h"
 #include "format/starrocks_format_writer.h"
 #include "jni_utils.h"
 #include "starrocks_format/starrocks_lib.h"
@@ -146,6 +147,78 @@ JNIEXPORT void JNICALL Java_com_starrocks_format_jni_LibraryHelper_releaseWriter
     StarRocksFormatWriter* tablet_writer = reinterpret_cast<StarRocksFormatWriter*>(writerAddress);
     if (tablet_writer != nullptr) {
         delete tablet_writer;
+    }
+}
+
+/* reader functions */
+
+JNIEXPORT jlong JNICALL Java_com_starrocks_format_StarRocksReader_createNativeReader(
+        JNIEnv* env, jobject jobj, jlong jtablet_id, jlong jversion, jlong jrequired_schema, jlong joutput_schema,
+        jstring jtable_root_path, jobject joptions) {
+    int64_t tablet_id = jtablet_id;
+    int64_t version = jversion;
+    // get schema
+    if (jrequired_schema == 0) {
+        env->ThrowNew(kNativeOptExceptionClass, "required_schema should not be null");
+        return 0;
+    }
+
+    if (joutput_schema == 0) {
+        env->ThrowNew(kNativeOptExceptionClass, "output_schema should not be null");
+        return 0;
+    }
+
+    std::string table_root_path = jstring_to_cstring(env, jtable_root_path);
+    std::unordered_map<std::string, std::string> options = jhashmap_to_cmap(env, joptions);
+    auto&& result = StarRocksFormatReader::create(
+            tablet_id, std::move(table_root_path), version, reinterpret_cast<struct ArrowSchema*>(jrequired_schema),
+            reinterpret_cast<struct ArrowSchema*>(joutput_schema), std::move(options));
+    if (!result.ok()) {
+        env->ThrowNew(kNativeOptExceptionClass, result.status().message().c_str());
+        return 0;
+    }
+
+    StarRocksFormatReader* format_reader = std::move(result).ValueUnsafe();
+    return reinterpret_cast<int64_t>(format_reader);
+}
+
+JNIEXPORT jlong JNICALL Java_com_starrocks_format_StarRocksReader_nativeOpen(JNIEnv* env, jobject jobj, jlong handler) {
+    StarRocksFormatReader* format_reader = reinterpret_cast<StarRocksFormatReader*>(handler);
+    SAFE_CALL_READER_FUNCATION(format_reader, {
+        arrow::Status st = format_reader->open();
+        if (!st.ok()) {
+            env->ThrowNew(kNativeOptExceptionClass, st.message().c_str());
+        }
+    });
+    return 0;
+}
+
+JNIEXPORT jlong JNICALL Java_com_starrocks_format_StarRocksReader_nativeGetNext(JNIEnv* env, jobject jobj,
+                                                                                jlong handler, jlong jArrowArray) {
+    StarRocksFormatReader* format_reader = reinterpret_cast<StarRocksFormatReader*>(handler);
+    SAFE_CALL_READER_FUNCATION(format_reader, {
+        ArrowArray* c_array_export = reinterpret_cast<struct ArrowArray*>(jArrowArray);
+        arrow::Status st = format_reader->get_next(c_array_export);
+        if (!st.ok()) {
+            env->ThrowNew(kNativeOptExceptionClass, st.message().c_str());
+        }
+        return 0;
+    });
+    return 0;
+}
+
+JNIEXPORT jlong JNICALL Java_com_starrocks_format_StarRocksReader_nativeClose(JNIEnv* env, jobject jobj,
+                                                                              jlong handler) {
+    StarRocksFormatReader* format_reader = reinterpret_cast<StarRocksFormatReader*>(handler);
+    SAFE_CALL_READER_FUNCATION(format_reader, { format_reader->close(); });
+    return 0;
+}
+
+JNIEXPORT void JNICALL Java_com_starrocks_format_jni_LibraryHelper_releaseReader(JNIEnv* env, jobject jobj,
+                                                                                 jlong chunkAddress) {
+    StarRocksFormatReader* format_reader = reinterpret_cast<StarRocksFormatReader*>(chunkAddress);
+    if (format_reader != nullptr) {
+        delete format_reader;
     }
 }
 
