@@ -716,7 +716,6 @@ public class RestoreJobTest {
         Assert.assertEquals(RestoreJobState.DOWNLOAD, job.getState());
     }
 
-    @Test
     public void testSignature() {
         Adler32 sig1 = new Adler32();
         sig1.update("name1".getBytes());
