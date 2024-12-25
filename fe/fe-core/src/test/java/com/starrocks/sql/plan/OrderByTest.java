@@ -637,7 +637,7 @@ class OrderByTest extends PlanTestBase {
 
         String sql2 = "select * from t0 where v1 is null order by v1 limit 10";
         String plan2 = getVerboseExplain(sql2);
-        assertNotContains(plan2, " runtime filters");
+        assertContains(plan2, " runtime filters");
     }
 
     @Test
