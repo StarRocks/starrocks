@@ -29,6 +29,7 @@ import com.starrocks.task.LoadEtlTask;
 import com.starrocks.thrift.TLoadInfo;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.warehouse.WarehouseIdleChecker;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -98,8 +99,19 @@ public class StreamLoadTaskTest {
         QeProcessorImpl.INSTANCE.registerQuery(streamLoadTask.getTUniqueId(), coord);
         Assert.assertEquals(1, QeProcessorImpl.INSTANCE.getCoordinatorCount());
 
+        long ts = System.currentTimeMillis();
         streamLoadTask.afterAborted(txnState, txnOperated, "");
         Assert.assertEquals(0, QeProcessorImpl.INSTANCE.getCoordinatorCount());
+        Assert.assertTrue(ts <= WarehouseIdleChecker.getLastFinishedJobTime(streamLoadTask.getCurrentWarehouseId()));
+    }
+
+    @Test
+    public void testAfterVisible() {
+        TransactionState txnState = new TransactionState();
+        boolean txnOperated = true;
+        long ts = System.currentTimeMillis();
+        streamLoadTask.afterVisible(txnState, txnOperated);
+        Assert.assertTrue(ts <= WarehouseIdleChecker.getLastFinishedJobTime(streamLoadTask.getCurrentWarehouseId()));
     }
 
     @Test

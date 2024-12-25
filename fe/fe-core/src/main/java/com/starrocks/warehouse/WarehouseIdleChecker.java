@@ -63,7 +63,7 @@ public class WarehouseIdleChecker extends FrontendDaemon {
                 .getAllRunnableTaskCount();
 
         for (long wId : warehouseIds) {
-            long lastFinishedJobTime = LAST_FINISHED_JOB_TIME.getOrDefault(wId, -1L);
+            long lastFinishedJobTime = getLastFinishedJobTime(wId);
             long runningJobCnt = 0;
             runningJobCnt += getRunningSQLCount(wId).get();
             runningJobCnt += runningStreamLoadCnt.getOrDefault(wId, 0L);
@@ -112,6 +112,10 @@ public class WarehouseIdleChecker extends FrontendDaemon {
                 return ts > value ? ts : value;
             }
         });
+    }
+
+    public static long getLastFinishedJobTime(long wId) {
+        return LAST_FINISHED_JOB_TIME.getOrDefault(wId, -1L);
     }
 
     public IdleStatus getIdleStatus() {

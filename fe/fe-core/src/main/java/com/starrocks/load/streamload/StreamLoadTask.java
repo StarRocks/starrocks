@@ -1651,4 +1651,8 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
     public static void setTableId(StreamLoadTask streamLoadTask, long tableId) {
         streamLoadTask.tableId = tableId;
     }
+
+    protected void setState(State state) {
+        this.state = state;
+    }
 }

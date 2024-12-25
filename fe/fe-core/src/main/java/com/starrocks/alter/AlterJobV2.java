@@ -327,11 +327,11 @@ public abstract class AlterJobV2 implements Writable {
 
     public abstract void replay(AlterJobV2 replayedJob);
 
-    public void finishHook() {
+    private void finishHook() {
         WarehouseIdleChecker.updateJobLastFinishTime(warehouseId);
     }
 
-    public void cancelHook(boolean cancelled) {
+    protected void cancelHook(boolean cancelled) {
         if (cancelled) {
             WarehouseIdleChecker.updateJobLastFinishTime(warehouseId);
         }
