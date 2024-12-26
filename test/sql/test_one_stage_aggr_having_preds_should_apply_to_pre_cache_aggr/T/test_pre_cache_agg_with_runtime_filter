@@ -40,5 +40,10 @@ PROPERTIES (
 insert into t0 SELECT generate_series, generate_series, generate_series, generate_series FROM TABLE(generate_series(1,  40960));
 insert into t1 SELECT generate_series, generate_series, generate_series, generate_series FROM TABLE(generate_series(1,  40960));
 
+set enable_query_cache=true;
+
 select count(*),sum(v) from (select c0,c1,c2,count(distinct c3) v from t0 group by c0,c1,c2)l join [broadcast] t1 r on l.c0 = r.c1 where r.c2 < 5000;
 select count(*),sum(v) from (select c0,c1,c2,count(distinct c3) v from t0 group by c0,c1,c2)l join [broadcast] t1 r on l.v = r.c1 where r.c2 < 5000;
+
+-- TODO avoid runtime filter push down to scan
+select count(*) from (select c0,c1 from t0 group by c0,c1)l join t1 r on l.c1 = r.c1 and l.c0=r.c0 where r.c2 < 5000;

@@ -41,7 +41,8 @@ Operator::Operator(OperatorFactory* factory, int32_t id, std::string name, int32
           _name(std::move(name)),
           _plan_node_id(plan_node_id),
           _is_subordinate(is_subordinate),
-          _driver_sequence(driver_sequence) {
+          _driver_sequence(driver_sequence),
+          _runtime_filter_probe_sequence(driver_sequence) {
     std::string upper_name(_name);
     std::transform(upper_name.begin(), upper_name.end(), upper_name.begin(), ::toupper);
     std::string profile_name = strings::Substitute("$0 (plan_node_id=$1)", upper_name, _plan_node_id);
@@ -263,7 +264,7 @@ void Operator::_init_rf_counters(bool init_bloom) {
                 ADD_COUNTER(_common_metrics, "JoinRuntimeFilterOutputRows", TUnit::UNIT);
         _bloom_filter_eval_context.join_runtime_filter_eval_counter =
                 ADD_COUNTER(_common_metrics, "JoinRuntimeFilterEvaluate", TUnit::UNIT);
-        _bloom_filter_eval_context.driver_sequence = _driver_sequence;
+        _bloom_filter_eval_context.driver_sequence = _runtime_filter_probe_sequence;
     }
 }
 

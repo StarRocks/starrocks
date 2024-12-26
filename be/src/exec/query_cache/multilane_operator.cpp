@@ -332,6 +332,9 @@ pipeline::OperatorPtr MultilaneOperatorFactory::create(int32_t degree_of_paralle
         processors.push_back(
                 _factory->create(degree_of_parallelism * _num_lanes, i * degree_of_parallelism + driver_sequence));
     }
+    for (auto& operators : processors) {
+        operators->set_runtime_filter_probe_sequence(driver_sequence);
+    }
     auto op = std::make_shared<MultilaneOperator>(this, driver_sequence, _num_lanes, std::move(processors),
                                                   _can_passthrough);
     return op;
