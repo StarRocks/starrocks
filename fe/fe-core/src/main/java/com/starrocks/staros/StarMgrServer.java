@@ -296,4 +296,8 @@ public class StarMgrServer {
     public CheckpointWorker getCheckpointWorker() {
         return checkpointWorker;
     }
+
+    public void triggerNewImage() {
+        journalSystem.getJournalWriter().setForceRollJournal();
+    }
 }
