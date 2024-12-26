@@ -43,6 +43,7 @@ Status BucketProcessContext::finish_current_sink(RuntimeState* state) {
 Status BucketProcessSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
     RETURN_IF_ERROR(_ctx->sink->prepare(state));
+    _ctx->sink->set_runtime_filter_probe_sequence(_runtime_filter_probe_sequence);
     return Status::OK();
 }
 
@@ -105,7 +106,9 @@ Status BucketProcessSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr
 
 Status BucketProcessSourceOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
-    return _ctx->source->prepare(state);
+    RETURN_IF_ERROR(_ctx->source->prepare(state));
+    _ctx->source->set_runtime_filter_probe_sequence(_runtime_filter_probe_sequence);
+    return Status::OK();
 }
 // case 1: has_output() is true then call pull_chunk to pull chunk
 // case 2: has_output() is false (empty bucket) then to reset state
