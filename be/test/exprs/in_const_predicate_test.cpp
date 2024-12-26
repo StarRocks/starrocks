@@ -40,13 +40,13 @@ TExpr InConstPredicateTest::_create_not_in_null_mid(SlotId slot_id, const std::v
 
     nodes.emplace_back(ExprsTestHelper::create_not_in_pred_node(values.size() + 1 + has_null));
     nodes.emplace_back(ExprsTestHelper::create_slot_expr_node(0, slot_id, ExprsTestHelper::IntTTypeDesc, true));
-    for (size_t i = 0; i < values.size()/2; i++) {
+    for (size_t i = 0; i < values.size() / 2; i++) {
         nodes.emplace_back(ExprsTestHelper::create_int_literal(values[i], ExprsTestHelper::IntTTypeDesc, false));
     }
     if (has_null) {
         nodes.emplace_back(ExprsTestHelper::create_null_literal(ExprsTestHelper::IntTTypeDesc));
     }
-    for (size_t i = values.size()/2; i < values.size(); i++) {
+    for (size_t i = values.size() / 2; i < values.size(); i++) {
         nodes.emplace_back(ExprsTestHelper::create_int_literal(values[i], ExprsTestHelper::IntTTypeDesc, false));
     }
 
