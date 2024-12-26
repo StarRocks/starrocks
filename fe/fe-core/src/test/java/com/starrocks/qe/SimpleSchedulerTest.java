@@ -336,10 +336,20 @@ public class SimpleSchedulerTest {
     @Test
     public void testUpdateBlacklist(@Mocked SystemInfoService systemInfoService, @Mocked NetUtils netUtils) {
         Config.heartbeat_timeout_second = 1;
+        // the node is allowed to be removed from blocklist immediately.
+        long defaultBlockPenaltyTime = Config.black_host_penalty_min_ms;
+        Config.black_host_penalty_min_ms = 0;
 
-        SimpleScheduler.addToBlocklist(10001L);
-        SimpleScheduler.addToBlocklist(10002L);
-        SimpleScheduler.addToBlocklist(10003L);
+        Backend backend1 = new Backend(10001L, "host10002", 10002);
+        backend1.setAlive(true);
+        backend1.setBrpcPort(10002);
+        backend1.setHttpPort(10012);
+
+        ComputeNode computeNode1 = new ComputeNode(10003, "host10003", 10003);
+        computeNode1.setAlive(false);
+        computeNode1.setBrpcPort(10003);
+        computeNode1.setHttpPort(10013);
+
         new Expectations() {
             {
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
@@ -351,12 +361,6 @@ public class SimpleSchedulerTest {
                 result = null;
                 times = 1;
 
-                // backend 10002 will be removed
-                Backend backend1 = new Backend();
-                backend1.setAlive(true);
-                backend1.setHost("host10002");
-                backend1.setBrpcPort(10002);
-                backend1.setHttpPort(10012);
                 systemInfoService.getBackendOrComputeNode(10002L);
                 result = backend1;
                 times = 1;
@@ -370,11 +374,6 @@ public class SimpleSchedulerTest {
                 times = 1;
 
                 // backend 10003, which is not available, will not be removed
-                ComputeNode computeNode1 = new ComputeNode();
-                computeNode1.setAlive(false);
-                computeNode1.setHost("host10003");
-                computeNode1.setBrpcPort(10003);
-                computeNode1.setHttpPort(10013);
                 systemInfoService.getBackendOrComputeNode(10003L);
                 result = computeNode1;
                 times = 2;
@@ -384,6 +383,10 @@ public class SimpleSchedulerTest {
                 times = 2;
             }
         };
+        SimpleScheduler.addToBlocklist(10001L);
+        SimpleScheduler.addToBlocklist(10002L);
+        SimpleScheduler.addToBlocklist(10003L);
+
         SimpleScheduler.getHostBlacklist().refresh();
 
         Assert.assertFalse(SimpleScheduler.isInBlocklist(10001L));
@@ -393,6 +396,8 @@ public class SimpleSchedulerTest {
         //Having retried for Config.heartbeat_timeout_second + 1 times, backend 10003 will be removed.
         SimpleScheduler.getHostBlacklist().refresh();
         Assert.assertTrue(SimpleScheduler.isInBlocklist(10003L));
+
+        Config.black_host_penalty_min_ms = defaultBlockPenaltyTime;
     }
 
     @Test
@@ -574,5 +579,68 @@ public class SimpleSchedulerTest {
         Thread.sleep(2000);
         blacklist.refresh();
         Assert.assertTrue(blacklist.contains(10003L));
+    }
+
+    @Test
+    public void testPenaltyTimeInBlockList(@Mocked SystemInfoService systemInfoService, @Mocked NetUtils netUtils)
+            throws InterruptedException {
+        Config.black_host_history_sec = 5; // 5s
+        HostBlacklist blacklist = new HostBlacklist();
+        blacklist.disableAutoUpdate();
+
+        // stay at least 2 seconds before removed from the list
+        long originPenaltyTime = Config.black_host_penalty_min_ms;
+        Config.black_host_penalty_min_ms = 2000;
+
+        long nodeId = 2000L;
+        ComputeNode node = new ComputeNode(nodeId, "computeNode", 1111);
+        node.setBrpcPort(0);
+        node.updateOnce(1, 2, 3);
+        List<Integer> ports = new ArrayList<>();
+        Collections.addAll(ports, node.getBrpcPort(), node.getBePort(), node.getHttpPort(), node.getBeRpcPort());
+
+        new Expectations() {
+            {
+                globalStateMgr.getNodeMgr().getClusterInfo();
+                result = systemInfoService;
+
+                systemInfoService.getBackendOrComputeNode(nodeId);
+                result = node;
+
+                systemInfoService.checkNodeAvailable(node);
+                result = true;
+
+                NetUtils.checkAccessibleForAllPorts(anyString, (List<Integer>) any);
+                result = true;
+            }
+        };
+
+        long ts1 = System.currentTimeMillis();
+        blacklist.add(node.getId());
+        long ts2 = System.currentTimeMillis();
+
+        long checkedCount = 0;
+        while (ts1 + Config.black_host_penalty_min_ms > System.currentTimeMillis()) {
+            Assert.assertNotNull(systemInfoService.getBackendOrComputeNode(nodeId));
+            Assert.assertTrue(systemInfoService.checkNodeAvailable(node));
+            Assert.assertTrue(NetUtils.checkAccessibleForAllPorts(node.getHost(), ports));
+            blacklist.refresh();
+            // still in the blocklist
+            Assert.assertTrue(blacklist.contains(node.getId()));
+            ++checkedCount;
+            // check every 200ms
+            Thread.sleep(200);
+        }
+        Assert.assertTrue(checkedCount > 0);
+        long remainMs = System.currentTimeMillis() - ts2 - Config.black_host_penalty_min_ms;
+        if (remainMs > 0) {
+            Thread.sleep(remainMs);
+        }
+        // must be expired in the blocklist
+        Assert.assertTrue(ts2 + Config.black_host_penalty_min_ms <= System.currentTimeMillis());
+        blacklist.refresh();
+        Assert.assertFalse(blacklist.contains(node.getId()));
+
+        Config.black_host_penalty_min_ms = originPenaltyTime;
     }
 }
