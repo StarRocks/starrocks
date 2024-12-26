@@ -76,4 +76,24 @@ TEST_F(HdfsFileSystemTest, create_file_and_destroy) {
     thread.join();
 }
 
+TEST_F(HdfsFileSystemTest, create_file_with_open_after_delete) {
+    auto fs = new_fs_hdfs(FSOptions());
+    std::string filepath = "file://" + _root_path + "/create_file_with_open_truncate";
+    auto st = fs->path_exists(filepath);
+    EXPECT_TRUE(st.is_not_found());
+
+    WritableFileOptions opts{.sync_on_close = false,
+                             .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+    auto wfile_1 = fs->new_writable_file(opts, filepath);
+    EXPECT_TRUE(wfile_1.ok());
+    (*wfile_1)->close();
+
+    auto wfile_2 = fs->new_writable_file(opts, filepath);
+    EXPECT_TRUE(wfile_2.ok());
+    (*wfile_2)->close();
+
+    (*wfile_1).reset();
+    (*wfile_2).reset();
+}
+
 } // namespace starrocks
