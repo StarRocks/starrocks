@@ -214,7 +214,7 @@ TEST_F(PersistentIndexSstableTest, test_persistent_index_sstable) {
     ASSIGN_OR_ABORT(auto file, fs::new_writable_file(lake::join_path(kTestDir, filename)));
     phmap::btree_map<std::string, IndexValueWithVer, std::less<>> map;
     for (int i = 0; i < N; i++) {
-        map.insert({fmt::format("test_key_{:016X}", i), std::make_pair(100, i)});
+        map.emplace(fmt::format("test_key_{:016X}", i), std::make_pair(100, IndexValue(i)));
     }
     uint64_t filesize = 0;
     ASSERT_OK(PersistentIndexSstable::build_sstable(map, file.get(), &filesize));
