@@ -68,6 +68,9 @@ public class UnionToValuesRule extends TransformationRule {
 
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
+        if (!context.getSessionVariable().isEnableConstantUnionToValues()) {
+            return false;
+        }
         return input.getInputs().stream()
                 .filter(UnionToValuesRule::isMergeable)
                 .count() > 1;
