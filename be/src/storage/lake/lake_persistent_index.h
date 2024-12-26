@@ -158,15 +158,6 @@ private:
     bool is_memtable_full() const;
 
     // batch get
-    // |keys|: key array as raw buffer
-    // |values|: value array
-    // |key_indexes|: the indexes of keys.
-    // |found_key_indexes|: founded indexes of keys
-    // |version|: version of values
-    Status get_from_immutable_memtable(const Slice* keys, IndexValue* values, const KeyIndexSet& key_indexes,
-                                       KeyIndexSet* found_key_indexes, int64_t version) const;
-
-    // batch get
     // |n|: size of key/value array
     // |keys|: key array as raw buffer
     // |values|: value array
@@ -191,7 +182,6 @@ private:
 
 private:
     std::unique_ptr<PersistentIndexMemtable> _memtable;
-    std::unique_ptr<PersistentIndexMemtable> _immutable_memtable{nullptr};
     TabletManager* _tablet_mgr{nullptr};
     int64_t _tablet_id{0};
     // The size of sstables is not expected to be too large.
