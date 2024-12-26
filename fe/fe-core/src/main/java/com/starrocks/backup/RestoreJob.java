@@ -1071,20 +1071,42 @@ public class RestoreJob extends AbstractJob {
 
     protected void genFileMappingWithPartition(OlapTable localTbl, Partition localPartition, Long remoteTblId,
                                                BackupPartitionInfo backupPartInfo, boolean overwrite) {
-        for (MaterializedIndex localIdx : localPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
-            BackupIndexInfo backupIdxInfo = backupPartInfo.getIdx(localTbl.getIndexNameById(localIdx.getId()));
-            Preconditions.checkState(backupIdxInfo.tablets.size() == localIdx.getTablets().size());
-            for (int i = 0; i < localIdx.getTablets().size(); i++) {
-                LocalTablet localTablet = (LocalTablet) localIdx.getTablets().get(i);
-                BackupTabletInfo backupTabletInfo = backupIdxInfo.tablets.get(i);
-                for (Replica localReplica : localTablet.getImmutableReplicas()) {
-                    IdChain src = new IdChain(remoteTblId, backupPartInfo.id, backupIdxInfo.id, backupTabletInfo.id,
-                            -1L /* no replica id */);
-                    IdChain dest = new IdChain(localTbl.getId(), localPartition.getId(),
-                            localIdx.getId(), localTablet.getId(), localReplica.getId());
-                    fileMapping.putMapping(dest, src, overwrite);
-                    LOG.debug("tablet mapping: {} to {} file mapping: {} to {}",
-                            backupTabletInfo.id, localTablet.getId(), src, dest);
+        // Because 3.4 will only generate backInfo of subPartition, but due to code compatibility,
+        // non-subPartition tables may be generated (single subPartition will use Partition storage for compatibility)
+        if (backupPartInfo.indexes == null || backupPartInfo.indexes.isEmpty()) {
+            BackupPhysicalPartitionInfo physicalPartitionInfo = backupPartInfo.subPartitions.values().stream().findFirst().get();
+            for (MaterializedIndex localIdx : localPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+                BackupIndexInfo backupIdxInfo = physicalPartitionInfo.getIdx(localTbl.getIndexNameById(localIdx.getId()));
+                for (int i = 0; i < localIdx.getTablets().size(); i++) {
+                    LocalTablet localTablet = (LocalTablet) localIdx.getTablets().get(i);
+                    BackupTabletInfo backupTabletInfo = backupIdxInfo.tablets.get(i);
+                    for (Replica localReplica : localTablet.getImmutableReplicas()) {
+                        IdChain src = new IdChain(remoteTblId, backupPartInfo.id, backupIdxInfo.id, backupTabletInfo.id,
+                                -1L /* no replica id */);
+                        IdChain dest = new IdChain(localTbl.getId(), localPartition.getId(),
+                                localIdx.getId(), localTablet.getId(), localReplica.getId());
+                        fileMapping.putMapping(dest, src, overwrite);
+                        LOG.debug("tablet mapping: {} to {} file mapping: {} to {}",
+                                backupTabletInfo.id, localTablet.getId(), src, dest);
+                    }
+                }
+            }
+        } else {
+            for (MaterializedIndex localIdx : localPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+                BackupIndexInfo backupIdxInfo = backupPartInfo.getIdx(localTbl.getIndexNameById(localIdx.getId()));
+                Preconditions.checkState(backupIdxInfo.tablets.size() == localIdx.getTablets().size());
+                for (int i = 0; i < localIdx.getTablets().size(); i++) {
+                    LocalTablet localTablet = (LocalTablet) localIdx.getTablets().get(i);
+                    BackupTabletInfo backupTabletInfo = backupIdxInfo.tablets.get(i);
+                    for (Replica localReplica : localTablet.getImmutableReplicas()) {
+                        IdChain src = new IdChain(remoteTblId, backupPartInfo.id, backupIdxInfo.id, backupTabletInfo.id,
+                                -1L /* no replica id */);
+                        IdChain dest = new IdChain(localTbl.getId(), localPartition.getId(),
+                                localIdx.getId(), localTablet.getId(), localReplica.getId());
+                        fileMapping.putMapping(dest, src, overwrite);
+                        LOG.debug("tablet mapping: {} to {} file mapping: {} to {}",
+                                backupTabletInfo.id, localTablet.getId(), src, dest);
+                    }
                 }
             }
         }
