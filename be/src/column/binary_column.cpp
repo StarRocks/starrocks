@@ -112,7 +112,6 @@ void BinaryColumnBase<T>::append_selective(const Column& src, const uint32_t* in
         for (size_t i = 0; i < size - 1; i++) {
             idx = indexes[from + i];
             next_idx = indexes[from + i + 1];
-            __builtin_prefetch(src_offsets + idx, 0, PREFETCH_HINT_T0);
             *(dst_offsets + 1) = *(dst_offsets) + (src_offsets[idx + 1] - src_offsets[idx]);
             __builtin_prefetch(src_offsets + next_idx, 0, PREFETCH_HINT_T0);
             dst_offsets++;
@@ -120,15 +119,13 @@ void BinaryColumnBase<T>::append_selective(const Column& src, const uint32_t* in
 
         *(dst_offsets + 1) = *(dst_offsets) + src_offsets[next_idx + 1] - src_offsets[next_idx];
         _bytes.resize(*(dst_offsets + 1));
-        
+
         auto* dst_bytes = _bytes.data() + _offsets[cur_row_count];
         auto* src_bytes = src_column.get_bytes().data();
 
         for (size_t i = 0; i < size - 1; i++) {
             idx = indexes[from + i];
             next_idx = indexes[from + i + 1];
-            __builtin_prefetch(src_bytes + src_offsets[idx], 0, PREFETCH_HINT_T0);
-
             T str_size = src_offsets[idx + 1] - src_offsets[idx];
             strings::memcpy_inlined(dst_bytes, src_bytes + src_offsets[idx], str_size);
 
