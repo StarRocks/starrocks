@@ -1940,6 +1940,7 @@ public class AstToStringBuilder {
             }
             createTableSql.append(")");
         }
+        createTableSql.append(";");
 
         return createTableSql.toString();
     }
