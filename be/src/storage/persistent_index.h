@@ -123,6 +123,8 @@ struct IndexValue {
     void operator=(uint64_t rhs) { return UNALIGNED_STORE64(v, rhs); }
 };
 
+using IndexValueWithVer = std::pair<int64_t, IndexValue>;
+
 static constexpr size_t kIndexValueSize = 8;
 static_assert(sizeof(IndexValue) == kIndexValueSize);
 constexpr static size_t kSliceMaxFixLength = 64;
