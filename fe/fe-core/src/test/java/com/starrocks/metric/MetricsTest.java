@@ -173,17 +173,17 @@ public class MetricsTest {
         String output = visitor.build();
         List<String> metricNames = Arrays.asList(
                 "{\"tags\":{\"metric\":\"sr_duration\",\"k1\":\"v1\",\"k2\":\"v2\",\"quantile\":\"0.75\"}," +
-                        "\"unit\":\"milliseconds\",\"value\":0.0},\n" ,
+                        "\"unit\":\"milliseconds\",\"value\":0.0},\n",
                 "{\"tags\":{\"metric\":\"sr_duration\",\"k1\":\"v1\",\"k2\":\"v2\",\"quantile\":\"0.95\"}," +
-                        "\"unit\":\"milliseconds\",\"value\":0.0},\n" ,
+                        "\"unit\":\"milliseconds\",\"value\":0.0},\n",
                 "{\"tags\":{\"metric\":\"sr_duration\",\"k1\":\"v1\",\"k2\":\"v2\",\"quantile\":\"0.98\"}," +
-                        "\"unit\":\"milliseconds\",\"value\":0.0},\n" ,
+                        "\"unit\":\"milliseconds\",\"value\":0.0},\n",
                 "{\"tags\":{\"metric\":\"sr_duration\",\"k1\":\"v1\",\"k2\":\"v2\",\"quantile\":\"0.99\"}," +
-                        "\"unit\":\"milliseconds\",\"value\":0.0},\n" ,
+                        "\"unit\":\"milliseconds\",\"value\":0.0},\n",
                 "{\"tags\":{\"metric\":\"sr_duration\",\"k1\":\"v1\",\"k2\":\"v2\",\"quantile\":\"0.999\"}," +
-                        "\"unit\":\"milliseconds\",\"value\":0.0},\n" ,
+                        "\"unit\":\"milliseconds\",\"value\":0.0},\n",
                 "{\"tags\":{\"metric\":\"sr_duration_sum\",\"k1\":\"v1\",\"k2\":\"v2\"},\"unit\":\"milliseconds\",\"value\":0" +
-                        ".0},\n" ,
+                        ".0},\n",
                 "{\"tags\":{\"metric\":\"sr_duration_count\",\"k1\":\"v1\",\"k2\":\"v2\"},\"unit\":\"nounit\",\"value\":0}"
         );
         for (String metricName : metricNames) {
@@ -201,17 +201,17 @@ public class MetricsTest {
         String output = visitor.build();
         List<String> metricNames = Arrays.asList(
                 "{\"tags\":{\"metric\":\"sr_duration\",\"k1\":\"v1\",\"k2\":\"v2\",\"quantile\":\"0.75\"}," +
-                        "\"unit\":\"milliseconds\",\"value\":0.0},\n" ,
+                        "\"unit\":\"milliseconds\",\"value\":0.0},\n",
                 "{\"tags\":{\"metric\":\"sr_duration\",\"k1\":\"v1\",\"k2\":\"v2\",\"quantile\":\"0.95\"}," +
-                        "\"unit\":\"milliseconds\",\"value\":0.0},\n" ,
+                        "\"unit\":\"milliseconds\",\"value\":0.0},\n",
                 "{\"tags\":{\"metric\":\"sr_duration\",\"k1\":\"v1\",\"k2\":\"v2\",\"quantile\":\"0.98\"}," +
-                        "\"unit\":\"milliseconds\",\"value\":0.0},\n" ,
+                        "\"unit\":\"milliseconds\",\"value\":0.0},\n",
                 "{\"tags\":{\"metric\":\"sr_duration\",\"k1\":\"v1\",\"k2\":\"v2\",\"quantile\":\"0.99\"}," +
-                        "\"unit\":\"milliseconds\",\"value\":0.0},\n" ,
+                        "\"unit\":\"milliseconds\",\"value\":0.0},\n",
                 "{\"tags\":{\"metric\":\"sr_duration\",\"k1\":\"v1\",\"k2\":\"v2\",\"quantile\":\"0.999\"}," +
-                        "\"unit\":\"milliseconds\",\"value\":0.0},\n" ,
+                        "\"unit\":\"milliseconds\",\"value\":0.0},\n",
                 "{\"tags\":{\"metric\":\"sr_duration_sum\",\"k1\":\"v1\",\"k2\":\"v2\"},\"unit\":\"milliseconds\",\"value\":0" +
-                        ".0},\n" ,
+                        ".0},\n",
                 "{\"tags\":{\"metric\":\"sr_duration_count\",\"k1\":\"v1\",\"k2\":\"v2\"},\"unit\":\"nounit\",\"value\":0}"
         );
         for (String metricName : metricNames) {
