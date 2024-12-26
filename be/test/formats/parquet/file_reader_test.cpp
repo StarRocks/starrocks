@@ -1085,12 +1085,8 @@ TEST_F(FileReaderTest, TestGetNextWithSkipID) {
     auto file = _create_file(_file1_path);
     auto file_reader =
             std::make_shared<FileReader>(config::vector_chunk_size, file.get(), std::filesystem::file_size(_file1_path),
-<<<<<<< HEAD
                                          _mock_datacache_options(), nullptr, skip_rows_ctx);
-=======
-                                         _mock_datacache_options(), nullptr, &need_skip_rowids);
 
->>>>>>> 33da39029 ([BugFix] Fix the bug of decode min/max value in null page stats (#54196))
     // init
     auto* ctx = _create_file1_base_context();
     Status status = file_reader->init(ctx);
