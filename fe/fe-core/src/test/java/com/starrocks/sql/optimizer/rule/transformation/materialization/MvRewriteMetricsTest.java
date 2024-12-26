@@ -33,11 +33,11 @@ import org.junit.runners.MethodSorters;
 import static com.starrocks.sql.plan.PlanTestNoneDBBase.assertContains;
 
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
-public class MvRewriteMetricsTest extends MvRewriteTestBase {
+public class MvRewriteMetricsTest extends MVTestBase {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        MvRewriteTestBase.beforeClass();
+        MVTestBase.beforeClass();
 
         starRocksAssert.withTable(cluster, "depts");
         starRocksAssert.withTable(cluster, "locations");
