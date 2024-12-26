@@ -990,36 +990,6 @@ public class PlanTestBase extends PlanTestNoneDBBase {
         connectContext.getSessionVariable().setCboPushDownGroupingSet(true);
     }
 
-<<<<<<< HEAD
-    public static void cleanupEphemeralMVs(StarRocksAssert starRocksAssert, long startTime) throws Exception {
-        String currentDb = starRocksAssert.getCtx().getDatabase();
-        if (StringUtils.isNotEmpty(currentDb)) {
-            Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(currentDb);
-            for (MaterializedView mv : ListUtils.emptyIfNull(testDb.getMaterializedViews())) {
-                if (startTime > 0 && mv.getCreateTime() > startTime) {
-                    starRocksAssert.dropMaterializedView(mv.getName());
-                    LOG.warn("cleanup mv after test case: {}", mv.getName());
-                }
-            }
-            if (CollectionUtils.isNotEmpty(testDb.getMaterializedViews())) {
-                LOG.warn("database [{}] still contains {} materialized views",
-                        testDb.getFullName(), testDb.getMaterializedViews().size());
-            }
-        }
-=======
-    // NOTE: for JUnit 5
-    @BeforeAll
-    public static void beforeAll() throws Exception {
-        beforeClass();
-    }
-
-    // NOTE: for JUnit 5
-    @AfterAll
-    public static void afterAll() throws Exception {
-        afterClass();
->>>>>>> 571cf7830 ([UT] [Refactor] Fix unstable mv test cases (#54320))
-    }
-
     public static List<TScanRangeParams> collectAllScanRangeParams(DefaultCoordinator coordinator) {
         List<TScanRangeParams> scanRangeParams = new ArrayList<>();
         for (FragmentInstance instance : coordinator.getExecutionDAG().getInstances()) {

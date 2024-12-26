@@ -1076,13 +1076,8 @@ public class AggStateCombinatorTest extends MVTestBase {
         // create async mv with all agg functions
         String sql1 = "CREATE MATERIALIZED VIEW test_mv1 REFRESH MANUAL as select k1, " +
                 Joiner.on(", ").join(stateColumns) + " from t1 group by k1;";
-<<<<<<< HEAD
-        System.out.println(sql1);
-        starRocksAssert.withRefreshedMaterializedView(sql1);
-=======
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(10000);
         starRocksAssert.withMaterializedView(sql1);
->>>>>>> 571cf7830 ([UT] [Refactor] Fix unstable mv test cases (#54320))
 
         // no rollup
         {
