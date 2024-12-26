@@ -687,10 +687,7 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
         long start = System.currentTimeMillis();
         for (Long dbId : GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds()) {
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
-            if (db == null) {
-                continue;
-            }
-            if (db.isSystemDatabase() || db.isStatisticsDatabase()) {
+            if (db == null || db.isSystemDatabase()) {
                 continue;
             }
 
