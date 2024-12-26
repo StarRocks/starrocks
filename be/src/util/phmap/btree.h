@@ -3114,6 +3114,7 @@ public:
     size_type size() const { return tree_.size(); }
     size_type max_size() const { return tree_.max_size(); }
     bool empty() const { return tree_.empty(); }
+    size_type bytes_used() const { return tree_.bytes_used(); }
 
     friend bool operator==(const btree_container& x, const btree_container& y) {
         if (x.size() != y.size()) return false;

@@ -36,8 +36,6 @@ class PersistentIndexMemtable;
 class PersistentIndexSstable;
 class TabletManager;
 
-using IndexValueWithVer = std::pair<int64_t, IndexValue>;
-
 class KeyValueMerger {
 public:
     explicit KeyValueMerger(const std::string& key, uint64_t max_rss_rowid, sstable::TableBuilder* builder,
