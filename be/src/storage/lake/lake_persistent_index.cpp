@@ -247,7 +247,6 @@ Status LakePersistentIndex::get(size_t n, const Slice* keys, IndexValue* values)
     // Assuming we always want the latest value now
     RETURN_IF_ERROR(_memtable->get(n, keys, values, &not_founds, -1));
     KeyIndexSet& key_indexes = not_founds;
-    KeyIndexSet found_key_indexes;
     RETURN_IF_ERROR(get_from_sstables(n, keys, values, &key_indexes, -1));
     return Status::OK();
 }
@@ -258,8 +257,6 @@ Status LakePersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue
     size_t num_found;
     RETURN_IF_ERROR(_memtable->upsert(n, keys, values, old_values, &not_founds, &num_found, _version.major_number()));
     KeyIndexSet& key_indexes = not_founds;
-    KeyIndexSet found_key_indexes;
-    set_difference(&key_indexes, found_key_indexes);
     RETURN_IF_ERROR(get_from_sstables(n, keys, old_values, &key_indexes, -1));
     if (is_memtable_full()) {
         return flush_memtable();
@@ -293,8 +290,6 @@ Status LakePersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_v
     size_t num_found;
     RETURN_IF_ERROR(_memtable->erase(n, keys, old_values, &not_founds, &num_found, _version.major_number(), rowset_id));
     KeyIndexSet& key_indexes = not_founds;
-    KeyIndexSet found_key_indexes;
-    set_difference(&key_indexes, found_key_indexes);
     RETURN_IF_ERROR(get_from_sstables(n, keys, old_values, &key_indexes, -1));
     if (is_memtable_full()) {
         return flush_memtable();
