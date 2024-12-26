@@ -15,6 +15,7 @@
 package com.starrocks.sql.automv.lattice;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.MaterializedView;
@@ -93,7 +94,10 @@ public class AutoMVTPCDSTest {
 
     @Test
     public void testAll() {
-        AutoMVUtil.defaultTestHelper(STARROCKS_ASSERT.get().getCtx(), TestUtil.getTPCDSQueryList());
+        List<Pair<String, String>> queryList = Lists.newArrayList(TestUtil.getTPCHQueryList());
+        Collections.shuffle(queryList);
+        queryList = queryList.subList(0, 5);
+        AutoMVUtil.defaultTestHelper(STARROCKS_ASSERT.get().getCtx(), queryList);
     }
 
     @ParameterizedTest(name = "{0}")

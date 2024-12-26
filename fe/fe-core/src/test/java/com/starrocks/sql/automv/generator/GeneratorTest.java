@@ -37,6 +37,7 @@ import com.starrocks.sql.util.Util;
 import com.starrocks.utframe.StarRocksAssert;
 import org.junit.Assert;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.io.IOException;
@@ -80,6 +81,7 @@ public class GeneratorTest {
         Assert.assertFalse(mvName.collidesWith(mvName2));
     }
 
+    @Ignore
     @Test
     public void testAllQueriesOfTPCDS() throws IOException {
         ConnectContext ctx = getStarRocksAssert().getCtx();

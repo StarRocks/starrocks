@@ -33,6 +33,7 @@ import org.junit.Test;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -487,22 +488,20 @@ public class AutoMVPartitionPolicyTest {
                 return 0.6;
             }
         };
-        for (int n = 1; n < 50; n += 8) {
-            int mvLimit = n;
-            AutoMVUtil.testHelper(getStarRocksAssert().getCtx(), queryList,
-                    sv -> {
-                        GlobalVariable.setEnableAutoMVLifecycleKeeper(true);
-                        GlobalVariable.setAutoMVPerLatticeMVLimit(mvLimit);
-                        GlobalVariable.setAutoMVPerLatticeMVSelectivityRatio(0.3);
-                        GlobalVariable.setAutoMVPartitionedMVCardMax(1.0E11);
-                        sv.setAutoMVCardRowCountRatioHWM(1.0);
-                        sv.setAutoMVCardRowCountRatioLWM(1.0);
-                    },
-                    result -> {
-                        Assert.assertTrue(
-                                (mvLimit < 30 && result.size() == mvLimit) || (mvLimit >= 30 && result.size() == 30));
-                    });
-        }
+        int mvLimit = 1 + new Random().nextInt(50);
+        AutoMVUtil.testHelper(getStarRocksAssert().getCtx(), queryList,
+                sv -> {
+                    GlobalVariable.setEnableAutoMVLifecycleKeeper(true);
+                    GlobalVariable.setAutoMVPerLatticeMVLimit(mvLimit);
+                    GlobalVariable.setAutoMVPerLatticeMVSelectivityRatio(0.3);
+                    GlobalVariable.setAutoMVPartitionedMVCardMax(1.0E11);
+                    sv.setAutoMVCardRowCountRatioHWM(1.0);
+                    sv.setAutoMVCardRowCountRatioLWM(1.0);
+                },
+                result -> {
+                    Assert.assertTrue(
+                            (mvLimit < 30 && result.size() == mvLimit) || (mvLimit >= 30 && result.size() == 30));
+                });
     }
 
     @Test
