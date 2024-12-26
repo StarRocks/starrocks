@@ -308,6 +308,6 @@ public class IcebergScanNode extends ScanNode {
 
     @Override
     protected boolean supportTopNRuntimeFilter() {
-        return !icebergTable.isV2Format();
+        return true;
     }
 }
