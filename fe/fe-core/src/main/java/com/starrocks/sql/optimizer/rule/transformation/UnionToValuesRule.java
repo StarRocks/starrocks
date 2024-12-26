@@ -27,6 +27,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -113,7 +114,7 @@ public class UnionToValuesRule extends TransformationRule {
                     new LogicalValuesOperator.Builder().setColumnRefSet(unionOp.getOutputColumnRefOp()).setRows(newRows)
                             .setLimit(unionOp.getLimit())
                             .setPredicate(unionOp.getPredicate()).setProjection(unionOp.getProjection()).build();
-            return List.of(OptExpression.create(newValuesOperator));
+            return Collections.singletonList(OptExpression.create(newValuesOperator));
         } else {
             List<OptExpression> inputs = new ArrayList<>(otherChildren);
             if (!newRows.isEmpty()) {
@@ -131,7 +132,7 @@ public class UnionToValuesRule extends TransformationRule {
                             .build();
             OptExpression newUnionExpr = OptExpression.create(newUnionOp, inputs);
 
-            return List.of(newUnionExpr);
+            return Collections.singletonList(newUnionExpr);
         }
     }
 
