@@ -26,6 +26,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.DistributionCol;
 import com.starrocks.sql.optimizer.base.DistributionDisjointSet;
@@ -73,8 +74,8 @@ public class OptExpressionDuplicator {
         this.partialPartitionRewrite = !materializationContext.getMvPartitionNamesToRefresh().isEmpty();
     }
 
-    public OptExpression duplicate(OptExpression source) {
-        OptExpressionDuplicatorVisitor visitor = new OptExpressionDuplicatorVisitor();
+    public OptExpression duplicate(OptExpression source, boolean isKeptPrunedPartitionPredicate) {
+        OptExpressionDuplicatorVisitor visitor = new OptExpressionDuplicatorVisitor(isKeptPrunedPartitionPredicate);
         return source.getOp().accept(visitor, source, null);
     }
 
@@ -91,6 +92,12 @@ public class OptExpressionDuplicator {
     }
 
     class OptExpressionDuplicatorVisitor extends OptExpressionVisitor<OptExpression, Void> {
+        private final boolean isKeptPrunedPartitionPredicate;
+
+        public OptExpressionDuplicatorVisitor(boolean isKeptPrunedPartitionPredicate) {
+            this.isKeptPrunedPartitionPredicate = isKeptPrunedPartitionPredicate;
+        }
+
         @Override
         public OptExpression visitLogicalTableScan(OptExpression optExpression, Void context) {
             Operator.Builder opBuilder = OperatorBuilderFactory.build(optExpression.getOp());
@@ -128,16 +135,35 @@ public class OptExpressionDuplicator {
             }
             ImmutableMap<Column, ColumnRefOperator> newColumnMetaToColRefMap = columnMetaToColRefMapBuilder.build();
             scanBuilder.setColumnMetaToColRefMap(newColumnMetaToColRefMap);
-
+            
             // process HashDistributionSpec
-            if (optExpression.getOp() instanceof LogicalOlapScanOperator) {
-                LogicalOlapScanOperator olapScan = (LogicalOlapScanOperator) optExpression.getOp();
+            LogicalScanOperator scanOperator = (LogicalScanOperator) optExpression.getOp();
+            if (scanOperator instanceof LogicalOlapScanOperator) {
+                LogicalOlapScanOperator olapScan = (LogicalOlapScanOperator) scanOperator;
+                LogicalOlapScanOperator.Builder olapScanBuilder = (LogicalOlapScanOperator.Builder) scanBuilder;
                 if (olapScan.getDistributionSpec() instanceof HashDistributionSpec) {
                     HashDistributionSpec newHashDistributionSpec =
                             processHashDistributionSpec((HashDistributionSpec) olapScan.getDistributionSpec(),
-                            columnRefFactory, columnMapping);
-                    LogicalOlapScanOperator.Builder olapScanBuilder = (LogicalOlapScanOperator.Builder) scanBuilder;
+                                    columnRefFactory, columnMapping);
                     olapScanBuilder.setDistributionSpec(newHashDistributionSpec);
+                }
+                List<ScalarOperator> prunedPartitionPredicates = olapScan.getPrunedPartitionPredicates();
+                if (prunedPartitionPredicates != null && !prunedPartitionPredicates.isEmpty()) {
+                    List<ScalarOperator> newPrunedPartitionPredicates = Lists.newArrayList();
+                    for (ScalarOperator predicate : prunedPartitionPredicates) {
+                        ScalarOperator newPredicate = rewriter.rewrite(predicate);
+                        newPrunedPartitionPredicates.add(newPredicate);
+                    }
+                    olapScanBuilder.setPrunedPartitionPredicates(newPrunedPartitionPredicates);
+
+                    // TODO: this is a temporary solution, it is removed in the later version.
+                    // For union rewrite, input query's selected partitions should be kept but it will be removed in
+                    // MVPartitionPruner. So we need to keep the pruned partition predicates.
+                    if (isKeptPrunedPartitionPredicate) {
+                        ScalarOperator predicate = Utils.compoundAnd(olapScan.getPredicate(),
+                                Utils.compoundAnd(newPrunedPartitionPredicates));
+                        olapScanBuilder.setPredicate(predicate);
+                    }
                 }
             }
 
