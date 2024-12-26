@@ -1091,95 +1091,9 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
         dropMv("test", "test_mv1");
         starRocksAssert.dropTable("base_tbl1");
     }
-<<<<<<< HEAD
-=======
-
-    @Test
-    public void testViewBaseMvRewriteOnHive() throws Exception {
-        String view = "create view hive_view_1 " +
-                "as " +
-                "SELECT `o_orderkey`, `o_orderstatus`, `o_orderdate`  FROM `hive0`.`partitioned_db`.`orders`";
-        starRocksAssert.withView(view);
-        String mv = "CREATE MATERIALIZED VIEW `view_based_mv_1`\n" +
-                "PARTITION BY date_trunc('month', o_orderdate)\n" +
-                "DISTRIBUTED BY HASH(`o_orderkey`) BUCKETS 10\n" +
-                "REFRESH MANUAL\n" +
-                "AS SELECT `o_orderkey`, `o_orderstatus`, `o_orderdate`  FROM hive_view_1";
-        starRocksAssert.withMaterializedView(mv);
-        refreshMaterializedView("test", "view_based_mv_1");
-        {
-            String query = "SELECT `o_orderkey`, `o_orderstatus`, `o_orderdate`  FROM hive_view_1";
-            String plan = getFragmentPlan(query);
-            PlanTestBase.assertContains(plan, "view_based_mv_1");
-        }
-        starRocksAssert.dropMaterializedView("view_based_mv_1");
-    }
-
-    @Test
-    public void testViewBaseMvRewriteWithPartitionExpr() throws Exception {
-        connectContext.getSessionVariable().setEnableViewBasedMvRewrite(true);
-        {
-            starRocksAssert.withView("create view view_with_expr" +
-                    " as" +
-                    " SELECT DATE_TRUNC('DAY', `id_datetime`) AS `day_date`, \n" +
-                    "  COUNT(`t1a`) AS `cnt` \n" +
-                    "FROM `table_with_datetime_partition` \n" +
-                    "GROUP BY DATE_TRUNC('DAY', `id_datetime`)");
-            createAndRefreshMv("create materialized view mv_on_view_1" +
-                            " partition by day_date" +
-                            " distributed by hash(`day_date`)" +
-                            " refresh deferred manual" +
-                            " as" +
-                            " select * from view_with_expr");
-            cluster.runSql("test", "insert into table_with_datetime_partition partition(p19910330)" +
-                    " values(\"varchar12\", '1991-03-30', 2, 2, 1)");
-            String query5 = "select * from view_with_expr";
-            String plan5 = getFragmentPlan(query5);
-            PlanTestBase.assertContains(plan5, "mv_on_view_1");
-            PlanTestBase.assertContains(plan5, "UNION",
-                    "     TABLE: table_with_datetime_partition\n" +
-                            "     PREAGGREGATION: ON\n" +
-                            "     partitions=1/4");
-            PlanTestBase.assertContains(plan5, "     TABLE: mv_on_view_1\n" +
-                    "     PREAGGREGATION: ON\n" +
-                    "     partitions=3/4");
-            dropMv("test", "mv_on_view_1");
-            starRocksAssert.dropView("view_with_expr");
-        }
-
-        {
-            starRocksAssert.withView("create view view_with_expr" +
-                    " as" +
-                    " SELECT DATE_TRUNC('DAY', `id_date`) AS `day_date`, \n" +
-                    "  COUNT(`t1a`) AS `cnt` \n" +
-                    "FROM `table_with_day_partition` \n" +
-                    "GROUP BY DATE_TRUNC('DAY', `id_date`)");
-            createAndRefreshMv("create materialized view mv_on_view_1" +
-                            " partition by day_date" +
-                            " distributed by hash(`day_date`)" +
-                            " as" +
-                            " select * from view_with_expr");
-            cluster.runSql("test", "insert into table_with_day_partition partition(p19910330)" +
-                    " values(\"varchar12\", '1991-03-30', 2, 2, 1)");
-            String query5 = "select * from view_with_expr";
-            String plan5 = getFragmentPlan(query5);
-            PlanTestBase.assertContains(plan5, "mv_on_view_1");
-            PlanTestBase.assertContains(plan5, "UNION",
-                    "     TABLE: mv_on_view_1\n" +
-                            "     PREAGGREGATION: ON\n" +
-                            "     partitions=3/4");
-            PlanTestBase.assertContains(plan5, "     TABLE: table_with_day_partition\n" +
-                    "     PREAGGREGATION: ON\n" +
-                    "     partitions=1/4");
-            dropMv("test", "mv_on_view_1");
-            starRocksAssert.dropView("view_with_expr");
-        }
-        connectContext.getSessionVariable().setEnableViewBasedMvRewrite(false);
-    }
 
     @Test
     public void testMVPartitionRefreshRewrite() throws Exception {
-        connectContext.getSessionVariable().setEnableMaterializedViewTransparentUnionRewrite(false);
         sql("CREATE TABLE test_base_table1(\n" +
                 "    `col0`           int(11) NULL,\n" +
                 "    `col2`           date NULL,\n" +
@@ -1233,9 +1147,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
                     "OR ((14: col2 >= '2022-04-04') OR (15: col3 != 'Guangdong'))\n" +
                     "     partitions=5/9");
         }
-        connectContext.getSessionVariable().setEnableMaterializedViewTransparentUnionRewrite(true);
         starRocksAssert.dropTable("test_base_table1");
         starRocksAssert.dropMaterializedView("test_mv1");
     }
->>>>>>> dee8d1c22b ([BugFix] Fix mv union rewrite and partition prune bug (#54293))
 }
