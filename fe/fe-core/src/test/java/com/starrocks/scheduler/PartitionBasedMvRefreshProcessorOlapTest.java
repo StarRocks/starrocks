@@ -45,6 +45,7 @@ import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.common.SyncPartitionUtils;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
@@ -56,16 +57,12 @@ import mockit.MockUp;
 import org.apache.commons.collections4.SetUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.jetbrains.annotations.NotNull;
-import org.junit.After;
-import org.junit.AfterClass;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.FixMethodOrder;
 import org.junit.Test;
 import org.junit.runners.MethodSorters;
 
-import java.time.Instant;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
@@ -77,14 +74,13 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.starrocks.scheduler.TaskRun.MV_ID;
-import static com.starrocks.sql.plan.PlanTestBase.cleanupEphemeralMVs;
 
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
-public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase {
+public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        MVRefreshTestBase.beforeClass();
+        MVTestBase.beforeClass();
 
         starRocksAssert.withTable("CREATE TABLE test.tbl1\n" +
                         "(\n" +
@@ -233,21 +229,6 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                         ")\n" +
                         "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                         "PROPERTIES('replication_num' = '1');");
-    }
-
-    @AfterClass
-    public static void afterClass() throws Exception {
-        cleanupEphemeralMVs(starRocksAssert, startSuiteTime);
-    }
-
-    @Before
-    public void before() {
-        startCaseTime = Instant.now().getEpochSecond();
-    }
-
-    @After
-    public void after() throws Exception {
-        cleanupEphemeralMVs(starRocksAssert, startCaseTime);
     }
 
     protected void assertPlanContains(ExecPlan execPlan, String... explain) throws Exception {
@@ -1623,7 +1604,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                                         .getTable(testDb.getFullName(), "tt1");
                                 OlapTable tbl2 = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                                         .getTable(testDb.getFullName(), "tt2");
-                                TaskRun taskRun = buildMVTaskRun(materializedView, TEST_DB_NAME);
+                                TaskRun taskRun = buildMVTaskRun(materializedView, DB_NAME);
                                 taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
                                 taskRun.executeTaskRun();
 
@@ -1707,7 +1688,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                             ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                                     .getTable(testDb.getFullName(), "mv_with_join0"));
                     Assert.assertEquals(2, materializedView.getPartitionExprMaps().size());
-                    TaskRun taskRun = buildMVTaskRun(materializedView, TEST_DB_NAME);
+                    TaskRun taskRun = buildMVTaskRun(materializedView, DB_NAME);
 
                     OlapTable tbl1 = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                             .getTable(testDb.getFullName(), "tt1");
@@ -1810,7 +1791,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                                     "as select k1, k2, v1 from mock_tbl;",
                             (mvName) -> {
                                 Database testDb =
-                                        GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(TEST_DB_NAME);
+                                        GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
                                 MaterializedView materializedView =
                                         ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                                                 .getTable(testDb.getFullName(), (String) mvName));
@@ -1818,7 +1799,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
 
                                 // initial refresh
                                 {
-                                    TaskRun taskRun = buildMVTaskRun(materializedView, TEST_DB_NAME);
+                                    TaskRun taskRun = buildMVTaskRun(materializedView, DB_NAME);
                                     taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
                                     taskRun.executeTaskRun();
                                 }
@@ -1826,7 +1807,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                                 {
                                     executeInsertSql(connectContext, "insert into mock_tbl partition(p0) " +
                                             "values('2021-07-23',2,10);");
-                                    TaskRun taskRun = buildMVTaskRun(materializedView, TEST_DB_NAME);
+                                    TaskRun taskRun = buildMVTaskRun(materializedView, DB_NAME);
 
                                     taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
                                     taskRun.executeTaskRun();
@@ -1859,7 +1840,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                                             "values('2021-07-29',2,10);");
                                     executeInsertSql(connectContext, "insert into mock_tbl partition(p3) " +
                                             "values('2021-08-02',2,10);");
-                                    TaskRun taskRun = buildMVTaskRun(materializedView, TEST_DB_NAME);
+                                    TaskRun taskRun = buildMVTaskRun(materializedView, DB_NAME);
 
                                     taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
                                     taskRun.executeTaskRun();
@@ -1913,7 +1894,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                                     "as select k1, k2, v1 from mock_tbl;",
                             (mvName) -> {
                                 Database testDb =
-                                        GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(TEST_DB_NAME);
+                                        GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
                                 MaterializedView materializedView =
                                         ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                                                 .getTable(testDb.getFullName(), (String) mvName));
@@ -1921,7 +1902,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
 
                                 // initial refresh
                                 {
-                                    TaskRun taskRun = buildMVTaskRun(materializedView, TEST_DB_NAME);
+                                    TaskRun taskRun = buildMVTaskRun(materializedView, DB_NAME);
                                     taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
                                     taskRun.executeTaskRun();
                                 }
@@ -1929,7 +1910,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                                 {
                                     executeInsertSql(connectContext, "insert into mock_tbl partition(p0) " +
                                             "values('2021-07-23',2,10);");
-                                    TaskRun taskRun = buildMVTaskRun(materializedView, TEST_DB_NAME);
+                                    TaskRun taskRun = buildMVTaskRun(materializedView, DB_NAME);
 
                                     taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
                                     taskRun.executeTaskRun();
@@ -1959,7 +1940,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                                             "values('2021-08-27',2,10);");
                                     executeInsertSql(connectContext, "insert into mock_tbl partition(p2) " +
                                             "values('2021-09-29',2,10);");
-                                    TaskRun taskRun = buildMVTaskRun(materializedView, TEST_DB_NAME);
+                                    TaskRun taskRun = buildMVTaskRun(materializedView, DB_NAME);
 
                                     taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
                                     taskRun.executeTaskRun();
@@ -2023,7 +2004,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                             () -> {
                                 String mvName = "mock_mv0";
                                 Database testDb =
-                                        GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(TEST_DB_NAME);
+                                        GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
                                 MaterializedView materializedView =
                                         ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                                                 .getTable(testDb.getFullName(), mvName));
@@ -2043,9 +2024,9 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                                 // without db name
                                 Assert.assertFalse(tm.listMVRefreshedTaskRunStatus(null, null).isEmpty());
                                 // specific db
-                                Assert.assertFalse(tm.listMVRefreshedTaskRunStatus(TEST_DB_NAME, null).isEmpty());
+                                Assert.assertFalse(tm.listMVRefreshedTaskRunStatus(DB_NAME, null).isEmpty());
                                 Map<String, List<TaskRunStatus>> taskNameJobStatusMap =
-                                        tm.listMVRefreshedTaskRunStatus(TEST_DB_NAME, Set.of(mvTaskName));
+                                        tm.listMVRefreshedTaskRunStatus(DB_NAME, Set.of(mvTaskName));
                                 Assert.assertEquals(1, taskNameJobStatusMap.size());
                                 List<TaskRunStatus> taskRunStatuses = taskNameJobStatusMap.get(mvTaskName);
                                 // task runs may be gc, skip to check if it's not expected
@@ -2053,7 +2034,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                                     return;
                                 }
                                 ShowMaterializedViewStatus status =
-                                        new ShowMaterializedViewStatus(materializedView.getId(), TEST_DB_NAME,
+                                        new ShowMaterializedViewStatus(materializedView.getId(), DB_NAME,
                                                 materializedView.getName());
                                 System.out.println(status);
                                 status.setLastJobTaskRunStatus(taskRunStatuses);
@@ -2112,7 +2093,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                             () -> {
                                 String mvName = "mock_mv0";
                                 Database testDb =
-                                        GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(TEST_DB_NAME);
+                                        GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
                                 MaterializedView materializedView =
                                         ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                                                 .getTable(testDb.getFullName(), mvName));
@@ -2133,11 +2114,11 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                                 // without db name
                                 Assert.assertFalse(tm.listMVRefreshedTaskRunStatus(null, null).isEmpty());
                                 // specific db
-                                Assert.assertFalse(tm.listMVRefreshedTaskRunStatus(TEST_DB_NAME, null).isEmpty());
+                                Assert.assertFalse(tm.listMVRefreshedTaskRunStatus(DB_NAME, null).isEmpty());
 
                                 Thread.sleep(new Random().nextInt(2000));
                                 Map<String, List<TaskRunStatus>> taskNameJobStatusMap =
-                                        tm.listMVRefreshedTaskRunStatus(TEST_DB_NAME, Set.of(mvTaskName));
+                                        tm.listMVRefreshedTaskRunStatus(DB_NAME, Set.of(mvTaskName));
                                 System.out.println(taskNameJobStatusMap);
                                 Assert.assertFalse(taskNameJobStatusMap.isEmpty());
                                 Assert.assertEquals(1, taskNameJobStatusMap.size());
@@ -2147,7 +2128,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                                     return;
                                 }
                                 ShowMaterializedViewStatus status =
-                                        new ShowMaterializedViewStatus(materializedView.getId(), TEST_DB_NAME,
+                                        new ShowMaterializedViewStatus(materializedView.getId(), DB_NAME,
                                                 materializedView.getName());
                                 status.setLastJobTaskRunStatus(taskNameJobStatusMap.get(mvTaskName));
                                 ShowMaterializedViewStatus.RefreshJobStatus refreshJobStatus =
@@ -2203,7 +2184,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                             () -> {
                                 String mvName = "mock_mv0";
                                 Database testDb =
-                                        GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(TEST_DB_NAME);
+                                        GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
                                 MaterializedView materializedView =
                                         ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                                                 .getTable(testDb.getFullName(), mvName));
@@ -2220,16 +2201,16 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                                 // without db name
                                 Assert.assertFalse(tm.listMVRefreshedTaskRunStatus(null, null).isEmpty());
                                 // specific db
-                                Assert.assertFalse(tm.listMVRefreshedTaskRunStatus(TEST_DB_NAME, null).isEmpty());
+                                Assert.assertFalse(tm.listMVRefreshedTaskRunStatus(DB_NAME, null).isEmpty());
                                 Thread.sleep(new Random().nextInt(2000));
                                 Map<String, List<TaskRunStatus>> taskNameJobStatusMap =
-                                        tm.listMVRefreshedTaskRunStatus(TEST_DB_NAME, Set.of(mvTaskName));
+                                        tm.listMVRefreshedTaskRunStatus(DB_NAME, Set.of(mvTaskName));
                                 System.out.println(taskNameJobStatusMap);
                                 Assert.assertFalse(taskNameJobStatusMap.isEmpty());
                                 Assert.assertEquals(1, taskNameJobStatusMap.size());
 
                                 ShowMaterializedViewStatus status =
-                                        new ShowMaterializedViewStatus(materializedView.getId(), TEST_DB_NAME,
+                                        new ShowMaterializedViewStatus(materializedView.getId(), DB_NAME,
                                                 materializedView.getName());
                                 status.setLastJobTaskRunStatus(taskNameJobStatusMap.get(mvTaskName));
                                 ShowMaterializedViewStatus.RefreshJobStatus refreshJobStatus =
