@@ -65,13 +65,13 @@ namespace starrocks::parquet {
 
 FileReader::FileReader(int chunk_size, RandomAccessFile* file, size_t file_size,
                        const DataCacheOptions& datacache_options, io::SharedBufferedInputStream* sb_stream,
-                       const std::set<int64_t>* _need_skip_rowids)
+                       SkipRowsContextPtr skip_rows_context)
         : _chunk_size(chunk_size),
           _file(file),
           _file_size(file_size),
           _datacache_options(datacache_options),
           _sb_stream(sb_stream),
-          _need_skip_rowids(_need_skip_rowids) {}
+          _skip_rows_ctx(std::move(skip_rows_context)) {}
 
 FileReader::~FileReader() = default;
 
@@ -166,6 +166,7 @@ Status FileReader::_build_split_tasks() {
         split_ctx->split_start = start_offset;
         split_ctx->split_end = end_offset;
         split_ctx->file_metadata = _file_metadata;
+        split_ctx->skip_rows_ctx = _skip_rows_ctx;
         _scanner_ctx->split_tasks.emplace_back(std::move(split_ctx));
     }
     _scanner_ctx->merge_split_tasks();
@@ -544,8 +545,8 @@ Status FileReader::_init_group_readers() {
             continue;
         }
 
-        auto row_group_reader =
-                std::make_shared<GroupReader>(_group_reader_param, i, _need_skip_rowids, row_group_first_row);
+        auto row_group_reader = std::make_shared<GroupReader>(_group_reader_param, i, &_skip_rows_ctx->need_skip_rowids,
+                                                              row_group_first_row);
         RETURN_IF_ERROR(row_group_reader->init());
 
         _group_reader_param.stats->parquet_total_row_groups += 1;
@@ -560,9 +561,9 @@ Status FileReader::_init_group_readers() {
         _row_group_readers.emplace_back(row_group_reader);
         int64_t num_rows = _file_metadata->t_metadata().row_groups[i].num_rows;
         // for iceberg v2 pos delete
-        if (_need_skip_rowids != nullptr && !_need_skip_rowids->empty()) {
-            auto start_iter = _need_skip_rowids->lower_bound(row_group_first_row);
-            auto end_iter = _need_skip_rowids->upper_bound(row_group_first_row + num_rows - 1);
+        if (_skip_rows_ctx != nullptr && !_skip_rows_ctx->need_skip_rowids.empty()) {
+            auto start_iter = _skip_rows_ctx->need_skip_rowids.lower_bound(row_group_first_row);
+            auto end_iter = _skip_rows_ctx->need_skip_rowids.upper_bound(row_group_first_row + num_rows - 1);
             num_rows -= std::distance(start_iter, end_iter);
         }
         _total_row_count += num_rows;
