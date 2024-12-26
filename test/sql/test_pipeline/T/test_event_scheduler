@@ -62,4 +62,4 @@ insert into blackhole() select distinct c1,c2,c0 from t1;
 
 -- test with force streaming
 set streaming_preaggregation_mode="force_streaming";
-insert into blackhole() select sum(c0),c0 from t1 group by c1, c2;
+insert into blackhole() select sum(c0),c1,c2 from t1 group by c1, c2;

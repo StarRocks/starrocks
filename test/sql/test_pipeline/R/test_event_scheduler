@@ -96,7 +96,6 @@ insert into blackhole() select distinct c1,c2,c0 from t1;
 set streaming_preaggregation_mode="force_streaming";
 -- result:
 -- !result
-insert into blackhole() select sum(c0),c0 from t1 group by c1, c2;
+insert into blackhole() select sum(c0),c1,c2 from t1 group by c1, c2;
 -- result:
-E: (1064, "Getting analyzing error at line 1, column 39. Detail message: '`test_db_878ece9a6ddd4779a591620d397e86cd`.`t1`.`c0`' must be an aggregate expression or appear in GROUP BY clause.")
 -- !result
