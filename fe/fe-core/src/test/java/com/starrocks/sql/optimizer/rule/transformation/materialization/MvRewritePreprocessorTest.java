@@ -69,9 +69,10 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.planner.MaterializedViewTestBase.getRefBaseTablePartitionColumn;
 
-public class MvRewritePreprocessorTest extends MvRewriteTestBase {
+public class MvRewritePreprocessorTest extends MVTestBase {
     @BeforeClass
-    public static void before() throws Exception {
+    public static void beforeClass() throws Exception {
+        MVTestBase.beforeClass();
         starRocksAssert.useTable("t0");
         starRocksAssert.useTable("t1");
         starRocksAssert.useTable("t2");

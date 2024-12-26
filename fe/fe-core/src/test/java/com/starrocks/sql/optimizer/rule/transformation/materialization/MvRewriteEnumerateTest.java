@@ -25,16 +25,16 @@ import org.junit.jupiter.params.provider.MethodSource;
 import java.util.List;
 import java.util.stream.Stream;
 
-public class MvRewriteEnumerateTest extends MvRewriteTestBase {
+public class MvRewriteEnumerateTest extends MVTestBase {
 
     @BeforeAll
     public static void beforeClass() throws Exception {
-        MvRewriteTestBase.beforeClass();
+        MVTestBase.beforeClass();
     }
 
     @AfterAll
     public static void afterClass() throws Exception {
-        MvRewriteTestBase.tearDown();
+        MVTestBase.tearDown();
     }
 
     @ParameterizedTest(name = "{index}-{0}-{1}-{2}")
