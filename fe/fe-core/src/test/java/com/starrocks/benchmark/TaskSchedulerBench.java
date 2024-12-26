@@ -24,7 +24,7 @@ import com.starrocks.scheduler.TaskRun;
 import com.starrocks.scheduler.TaskRunBuilder;
 import com.starrocks.scheduler.TaskRunScheduler;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.MvRewriteTestBase;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Ignore;
@@ -33,7 +33,7 @@ import org.junit.Test;
 import org.junit.rules.TestRule;
 
 @Ignore
-public class TaskSchedulerBench extends MvRewriteTestBase {
+public class TaskSchedulerBench extends MVTestBase {
 
     // private static final int TASK_NUM = Config.task_runs_queue_length;
     private static final int TASK_NUM = 10;
@@ -43,7 +43,7 @@ public class TaskSchedulerBench extends MvRewriteTestBase {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        MvRewriteTestBase.beforeClass();
+        MVTestBase.beforeClass();
         Config.task_runs_concurrency = TASK_NUM;
         LOG.info("prepared {} tasks", TASK_NUM);
     }

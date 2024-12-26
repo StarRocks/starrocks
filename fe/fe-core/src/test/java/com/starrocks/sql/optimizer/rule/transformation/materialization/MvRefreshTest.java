@@ -18,7 +18,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.Config;
 import com.starrocks.pseudocluster.PseudoCluster;
-import com.starrocks.scheduler.MVRefreshTestBase;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskRun;
@@ -31,13 +30,13 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-public class MvRefreshTest extends MVRefreshTestBase {
+public class MvRefreshTest extends MVTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
         PseudoCluster.getOrCreateWithRandomPort(true, 1);
         GlobalStateMgr.getCurrentState().getTabletChecker().setInterval(500);
         cluster = PseudoCluster.getInstance();
-        MVRefreshTestBase.beforeClass();
+        MVTestBase.beforeClass();
         starRocksAssert.withTable(cluster, "test_base_part");
         starRocksAssert.withTable(cluster, "table_with_partition");
     }

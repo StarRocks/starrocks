@@ -31,11 +31,11 @@ import static com.starrocks.sql.optimizer.rule.transformation.materialization.co
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.common.AggregateFunctionRollupUtils.SAFE_REWRITE_ROLLUP_FUNCTION_MAP;
 
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
-public class MvTimeSeriesRewriteWithOlapTest extends MvRewriteTestBase {
+public class MvTimeSeriesRewriteWithOlapTest extends MVTestBase {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        MvRewriteTestBase.beforeClass();
+        MVTestBase.beforeClass();
         starRocksAssert.withTable("CREATE TABLE t0(\n" +
                 " k1 datetime,\n" +
                 " v1 INT,\n" +

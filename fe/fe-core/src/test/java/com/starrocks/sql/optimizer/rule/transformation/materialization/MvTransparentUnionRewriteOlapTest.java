@@ -19,22 +19,19 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.schema.MTable;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.utframe.StarRocksAssert;
-import org.junit.After;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.time.Instant;
 import java.util.Set;
 
-public class MvTransparentUnionRewriteOlapTest extends MvRewriteTestBase {
+public class MvTransparentUnionRewriteOlapTest extends MVTestBase {
     private static MTable m1;
     private static MTable m2;
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        MvRewriteTestBase.beforeClass();
+        MVTestBase.beforeClass();
 
         m1 = new MTable("m1", "k1",
                 ImmutableList.of(
@@ -65,16 +62,6 @@ public class MvTransparentUnionRewriteOlapTest extends MvRewriteTestBase {
                 )
         );
         connectContext.getSessionVariable().setEnableMaterializedViewTransparentUnionRewrite(true);
-    }
-
-    @Before
-    public void before() {
-        startCaseTime = Instant.now().getEpochSecond();
-    }
-
-    @After
-    public void after() throws Exception {
-        PlanTestBase.cleanupEphemeralMVs(starRocksAssert, startCaseTime);
     }
 
     private void withPartialScanMv(StarRocksAssert.ExceptionRunnable runner) {

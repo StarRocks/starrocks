@@ -16,8 +16,8 @@
 package com.starrocks.scheduler.persist;
 
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.common.Config;
-import org.assertj.core.util.Sets;
 import org.junit.Assert;
 import org.junit.Test;
 

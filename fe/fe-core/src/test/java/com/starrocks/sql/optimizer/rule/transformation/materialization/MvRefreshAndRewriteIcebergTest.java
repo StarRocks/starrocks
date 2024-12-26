@@ -33,10 +33,10 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
-public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
+public class MvRefreshAndRewriteIcebergTest extends MVTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
-        MvRewriteTestBase.beforeClass();
+        MVTestBase.beforeClass();
         ConnectorPlanTestBase.mockCatalog(connectContext, MockIcebergMetadata.MOCKED_ICEBERG_CATALOG_NAME);
         connectContext.getSessionVariable().setMaterializedViewUnionRewriteMode(1);
         connectContext.getSessionVariable().setEnableMaterializedViewTransparentUnionRewrite(false);

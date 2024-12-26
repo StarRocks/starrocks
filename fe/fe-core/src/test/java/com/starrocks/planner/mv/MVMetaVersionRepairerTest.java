@@ -22,7 +22,7 @@ import com.starrocks.mv.MVMetaVersionRepairer;
 import com.starrocks.mv.MVRepairHandler;
 import com.starrocks.schema.MTable;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.MvRewriteTestBase;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -30,11 +30,11 @@ import org.junit.Test;
 import java.util.Map;
 import java.util.Set;
 
-public class MVMetaVersionRepairerTest extends MvRewriteTestBase {
+public class MVMetaVersionRepairerTest extends MVTestBase {
     private static MTable m1;
     @BeforeClass
     public static void beforeClass() throws Exception {
-        MvRewriteTestBase.beforeClass();
+        MVTestBase.beforeClass();
         m1 = new MTable("m1", "k1",
                 ImmutableList.of(
                         "k1 INT",

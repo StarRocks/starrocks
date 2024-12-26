@@ -33,10 +33,10 @@ import java.util.List;
 import static com.starrocks.sql.optimizer.MVTestUtils.waitForSchemaChangeAlterJobFinish;
 import static com.starrocks.sql.optimizer.MVTestUtils.waitingRollupJobV2Finish;
 
-public class MVRewriteWithSchemaChangeTest extends MvRewriteTestBase {
+public class MVRewriteWithSchemaChangeTest extends MVTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
-        MvRewriteTestBase.beforeClass();
+        MVTestBase.beforeClass();
         // For mv rewrite with schema change or rollup, need to set it false, otherwise unit tests will be failed.
         FeConstants.runningUnitTest = false;
 
