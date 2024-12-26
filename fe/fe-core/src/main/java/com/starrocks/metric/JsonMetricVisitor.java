@@ -41,6 +41,7 @@ import com.starrocks.monitor.jvm.JvmStats;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.system.SystemInfoService;
+import org.apache.commons.collections.ListUtils;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -151,11 +152,33 @@ public class JsonMetricVisitor extends MetricVisitor {
 
     @Override
     public void visitHistogram(HistogramMetric histogram) {
+        final String fullName = prefix + "_" + histogram.getName().replace("\\.", "_");
+        Snapshot snapshot = histogram.getSnapshot();
+        List<MetricLabel> labels = histogram.getLabels();
+        buildMetric(fullName, MILLISECONDS, String.valueOf(snapshot.get75thPercentile()),
+                ListUtils.union(labels, Collections.singletonList(new MetricLabel(QUANTILE, "0.75"))));
+        buildMetric(fullName, MILLISECONDS, String.valueOf(snapshot.get95thPercentile()),
+                ListUtils.union(labels, Collections.singletonList(new MetricLabel(QUANTILE, "0.95"))));
+        buildMetric(fullName, MILLISECONDS, String.valueOf(snapshot.get98thPercentile()),
+                ListUtils.union(labels, Collections.singletonList(new MetricLabel(QUANTILE, "0.98"))));
+        buildMetric(fullName, MILLISECONDS, String.valueOf(snapshot.get99thPercentile()),
+                ListUtils.union(labels, Collections.singletonList(new MetricLabel(QUANTILE, "0.99"))));
+        buildMetric(fullName, MILLISECONDS, String.valueOf(snapshot.get999thPercentile()),
+                ListUtils.union(labels, Collections.singletonList(new MetricLabel(QUANTILE, "0.999"))));
 
+        buildMetric(fullName + "_sum", MILLISECONDS,
+                String.valueOf(histogram.getCount() * snapshot.getMean()), labels);
+        buildMetric(fullName + "_count", NOUNIT,
+                String.valueOf(histogram.getCount()), labels);
     }
 
     @Override
     public void visitHistogram(String name, Histogram histogram) {
+        // skip HistogramMetric since it needs extra processing
+        if (histogram instanceof HistogramMetric) {
+            visitHistogram((HistogramMetric) histogram);
+            return;
+        }
         final String fullName = prefix + "_" + name.replace("\\.", "_");
         Snapshot snapshot = histogram.getSnapshot();
 
