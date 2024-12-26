@@ -39,9 +39,8 @@ Status PersistentIndexSstable::init(std::unique_ptr<RandomAccessFile> rf, const 
     return Status::OK();
 }
 
-Status PersistentIndexSstable::build_sstable(
-        const phmap::btree_map<std::string, std::list<IndexValueWithVer>, std::less<>>& map, WritableFile* wf,
-        uint64_t* filesz) {
+Status PersistentIndexSstable::build_sstable(const phmap::btree_map<std::string, IndexValueWithVer, std::less<>>& map,
+                                             WritableFile* wf, uint64_t* filesz) {
     std::unique_ptr<sstable::FilterPolicy> filter_policy;
     filter_policy.reset(const_cast<sstable::FilterPolicy*>(sstable::NewBloomFilterPolicy(10)));
     sstable::Options options;
@@ -49,12 +48,10 @@ Status PersistentIndexSstable::build_sstable(
     sstable::TableBuilder builder(options, wf);
     for (const auto& [k, v] : map) {
         IndexValuesWithVerPB index_value_pb;
-        for (const auto& index_value_with_ver : v) {
-            auto* value = index_value_pb.add_values();
-            value->set_version(index_value_with_ver.first);
-            value->set_rssid(index_value_with_ver.second.get_rssid());
-            value->set_rowid(index_value_with_ver.second.get_rowid());
-        }
+        auto* value = index_value_pb.add_values();
+        value->set_version(v.first);
+        value->set_rssid(v.second.get_rssid());
+        value->set_rowid(v.second.get_rowid());
         builder.Add(Slice(k), Slice(index_value_pb.SerializeAsString()));
     }
     RETURN_IF_ERROR(builder.Finish());
