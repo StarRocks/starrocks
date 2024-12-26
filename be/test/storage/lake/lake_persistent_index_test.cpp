@@ -230,7 +230,7 @@ TEST_F(LakePersistentIndexTest, test_major_compaction) {
         vector<IndexValue> upsert_old_values(keys.size());
         ASSERT_OK(index->upsert(N, key_slices.data(), values.data(), upsert_old_values.data()));
         // generate sst files.
-        index->test_minor_compact();
+        index->minor_compact();
     }
     ASSERT_TRUE(index->memory_usage() > 0);
 
