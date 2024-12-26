@@ -133,7 +133,7 @@ if [ ${COVERAGE} -eq 1 ]; then
     echo "Run coverage statistic tasks"
     ant cover-test
 elif [ ${DUMPCASE} -eq 1 ]; then
-    ${MVN_CMD} test -DfailIfNoTests=false -DtrimStackTrace=false -D test=com.starrocks.sql.dump.QueryDumpRegressionTest -D dumpJsonConfig=$1
+    ${MVN_CMD} test -Dsurefire.failIfNoSpecifiedTests=false -DfailIfNoTests=false -DtrimStackTrace=false -D test=com.starrocks.sql.dump.QueryDumpRegressionTest -D dumpJsonConfig=$1
 else
     if [ $DRY_RUN -eq 0 ]; then
         if [ ${RUN_SPECIFIED_TEST} -eq 1 ]; then
@@ -143,6 +143,6 @@ else
         fi
 
         # set trimStackTrace to false to show full stack when debugging specified class or case
-        ${MVN_CMD} test -DfailIfNoTests=false -DtrimStackTrace=false -D test="$TEST_NAME"
+        ${MVN_CMD} test -Dsurefire.failIfNoSpecifiedTests=false -DfailIfNoTests=false -DtrimStackTrace=false -D test="$TEST_NAME"
     fi
 fi
