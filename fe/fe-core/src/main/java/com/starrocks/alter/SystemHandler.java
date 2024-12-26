@@ -72,6 +72,7 @@ import com.starrocks.sql.ast.DropObserverClause;
 import com.starrocks.sql.ast.ModifyBackendClause;
 import com.starrocks.sql.ast.ModifyBrokerClause;
 import com.starrocks.sql.ast.ModifyFrontendAddressClause;
+import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import org.apache.commons.lang.NotImplementedException;
@@ -308,6 +309,9 @@ public class SystemHandler extends AlterHandler {
         public Void visitCreateImageClause(CreateImageClause clause, Void context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 GlobalStateMgr.getCurrentState().triggerNewImage();
+                if (RunMode.isSharedDataMode()) {
+                    StarMgrServer.getCurrentState().triggerNewImage();
+                }
             });
             return null;
         }
