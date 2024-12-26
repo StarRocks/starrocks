@@ -60,7 +60,18 @@ PROPERTIES(
 
 ## View partitions
 
-After you enable dynamic partitions for a table, the input data is continuously and automatically partitioned. You can view the current partitions by using the following statement. For example, if the current date is 2020-03-25, you can only see partitions in the time range from 2020-03-22 to 2020-03-28.
+After you enable dynamic partitions for a table, the input data is continuously and automatically partitioned. You can view the current partitions by using the following statement. For example, if the current date is 2020-03-25, you can only see partitions in the time range from 2020-03-25 to 2020-03-28.
+
+```SQL
+SHOW PARTITIONS FROM site_access;
+
+[types: [DATE]; keys: [2020-03-25]; ‥types: [DATE]; keys: [2020-03-26]; )
+[types: [DATE]; keys: [2020-03-26]; ‥types: [DATE]; keys: [2020-03-27]; )
+[types: [DATE]; keys: [2020-03-27]; ‥types: [DATE]; keys: [2020-03-28]; )
+[types: [DATE]; keys: [2020-03-28]; ‥types: [DATE]; keys: [2020-03-29]; )
+```
+
+If you want to create historical partitions when creating a table, you need to specify `dynamic_partition.history_partition_num` to define the number of historical partitions to be created. For example, if you set `dynamic_partition.history_partition_num` to `3` during table creation and the current date is 2020-03-25, you will only see partitions in the time range from 2020-03-22 to 2020-03-28.
 
 ```SQL
 SHOW PARTITIONS FROM site_access;

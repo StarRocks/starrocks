@@ -69,6 +69,16 @@ SHOW PARTITIONS FROM site_access;
 假设当前时间为 2020-03-25，在调度动态分区时，会删除分区上界小于 2020-03-22 的分区，同时在调度时会创建今后 3 天的分区。则如上语句的返回结果中，`Range` 列显示当前分区的信息如下：
 
 ```SQL
+[types: [DATE]; keys: [2020-03-25]; ‥types: [DATE]; keys: [2020-03-26]; )
+[types: [DATE]; keys: [2020-03-26]; ‥types: [DATE]; keys: [2020-03-27]; )
+[types: [DATE]; keys: [2020-03-27]; ‥types: [DATE]; keys: [2020-03-28]; )
+[types: [DATE]; keys: [2020-03-28]; ‥types: [DATE]; keys: [2020-03-29]; )
+```
+
+如果你希望在建表时同时创建历史分区，需要指定 `dynamic_partition.history_partition_num` 来定义要创建的历史分区数量。在建表时指定 `dynamic_partition.history_partition_num` 为 `3`，
+则会创建过去 3 天的历史分区，则如上语句的返回结果中，`Range` 列显示当前分区的信息如下：
+
+```SQL
 [types: [DATE]; keys: [2020-03-22]; ‥types: [DATE]; keys: [2020-03-23]; )
 [types: [DATE]; keys: [2020-03-23]; ‥types: [DATE]; keys: [2020-03-24]; )
 [types: [DATE]; keys: [2020-03-24]; ‥types: [DATE]; keys: [2020-03-25]; )
