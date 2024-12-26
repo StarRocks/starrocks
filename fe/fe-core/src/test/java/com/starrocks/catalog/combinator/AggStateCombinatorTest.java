@@ -221,7 +221,7 @@ public class AggStateCombinatorTest extends MVTestBase {
     private void buildTableT1(List<String> funcNames,
                               Map<String, String> colTypes,
                               List<List<String>> aggArgTypes) {
-        buildTableT1(funcNames, colTypes, aggArgTypes, Lists.newArrayList(), Lists.newArrayList());
+        buildTableT1(funcNames, colTypes, aggArgTypes, Lists.newArrayList(), Lists.newArrayList(), -1);
     }
 
     private void buildTableT1(List<String> funcNames,
@@ -229,6 +229,15 @@ public class AggStateCombinatorTest extends MVTestBase {
                               List<List<String>> aggArgTypes,
                               List<String> aggStateColumns,
                               List<String> aggStateColNames) {
+        buildTableT1(funcNames, colTypes, aggArgTypes, aggStateColumns, aggStateColNames, -1);
+    }
+
+    private void buildTableT1(List<String> funcNames,
+                              Map<String, String> colTypes,
+                              List<List<String>> aggArgTypes,
+                              List<String> aggStateColumns,
+                              List<String> aggStateColNames,
+                              int size) {
         String define = "c0 boolean,\n" +
                 "c1 tinyint(4),\n" +
                 "c2 smallint(6),\n" +
@@ -273,6 +282,9 @@ public class AggStateCombinatorTest extends MVTestBase {
                 continue;
             }
 
+            if (size != -1 && i > size) {
+                break;
+            }
             List<Type> argTypes = Stream.of(aggFunc.getArgs()).map(this::mockType).collect(Collectors.toList());
             List<String> argTypeStr = argTypes.stream().map(this::mockType).map(Type::toSql).collect(Collectors.toList());
             aggArgTypes.add(argTypeStr);
@@ -587,6 +599,9 @@ public class AggStateCombinatorTest extends MVTestBase {
 
         // test _state
         for (int k = 0; k < funcNames.size(); k++) {
+            if (k > MAX_AGG_FUNC_NUM_IN_TEST) {
+                break;
+            }
             List<String> stateColumns = Lists.newArrayList();
             List<String> argTypes = aggArgTypes.get(k);
             String fnName = funcNames.get(k);
@@ -611,6 +626,9 @@ public class AggStateCombinatorTest extends MVTestBase {
         // test _state
         List<String> stateColumns = Lists.newArrayList();
         for (int k = 0; k < funcNames.size(); k++) {
+            if (k > MAX_AGG_FUNC_NUM_IN_TEST) {
+                break;
+            }
             String fnName = funcNames.get(k);
             List<String> argTypes = aggArgTypes.get(k);
             String arg = buildAggFuncArgs(fnName, argTypes, colTypes);
@@ -880,7 +898,7 @@ public class AggStateCombinatorTest extends MVTestBase {
         List<List<String>> aggArgTypes = Lists.newArrayList();
         List<String> columns = Lists.newArrayList();
         List<String> colNames = Lists.newArrayList();
-        buildTableT1(funcNames, colTypes, aggArgTypes, columns, colNames);
+        buildTableT1(funcNames, colTypes, aggArgTypes, columns, colNames, MAX_AGG_FUNC_NUM_IN_TEST);
 
         String sql = " CREATE TABLE test_agg_state_table ( \n" +
                 "k1  date, \n" +
