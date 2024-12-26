@@ -65,6 +65,42 @@ StatusOr<std::shared_ptr<RuntimeFilterProbeDescriptor>> OlapRuntimeRangePrunerTe
     return runtime_filter_desc;
 }
 
+TEST_F(OlapRuntimeRangePrunerTest, min_max_parser) {
+    using DecodeType = detail::RuntimeColumnPredicateBuilder::DummyDecoder<int32_t>;
+    using RuntimeFilteType = RuntimeBloomFilter<TYPE_INT>;
+
+    DecodeType decoder(nullptr);
+
+    RuntimeFilteType rf;
+    rf.insert(10);
+    rf.insert(20);
+    TypeDescriptor type_desc = TypeDescriptor(TYPE_INT);
+
+    detail::RuntimeColumnPredicateBuilder::MinMaxParser<RuntimeFilteType, DecodeType> parser(&rf, &decoder);
+    ColumnPtr min_column = parser.min_const_column<TYPE_INT>(type_desc);
+    ColumnPtr max_column = parser.max_const_column<TYPE_INT>(type_desc);
+    ASSERT_EQ(min_column->debug_string(), "CONST: 10 Size : 1");
+    ASSERT_EQ(max_column->debug_string(), "CONST: 20 Size : 1");
+}
+
+TEST_F(OlapRuntimeRangePrunerTest, min_max_parser_for_decimal) {
+    using DecodeType = detail::RuntimeColumnPredicateBuilder::DummyDecoder<int32_t>;
+    using RuntimeFilteType = RuntimeBloomFilter<TYPE_DECIMAL32>;
+
+    DecodeType decoder(nullptr);
+
+    RuntimeFilteType rf;
+    rf.insert(10);
+    rf.insert(20);
+    TypeDescriptor type_desc = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 5, 4);
+
+    detail::RuntimeColumnPredicateBuilder::MinMaxParser<RuntimeFilteType, DecodeType> parser(&rf, &decoder);
+    ColumnPtr min_column = parser.min_const_column<TYPE_DECIMAL32>(type_desc);
+    ColumnPtr max_column = parser.max_const_column<TYPE_DECIMAL32>(type_desc);
+    ASSERT_EQ(min_column->debug_string(), "CONST: 0.0010 Size : 1");
+    ASSERT_EQ(max_column->debug_string(), "CONST: 0.0020 Size : 1");
+}
+
 TEST_F(OlapRuntimeRangePrunerTest, update_1) {
     SlotDescriptor slot(0, "c0", TypeDescriptor(TYPE_INT));
 
