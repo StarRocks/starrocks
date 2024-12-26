@@ -28,11 +28,11 @@ import org.junit.runners.MethodSorters;
 import java.util.List;
 
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
-public class MvRewritePartitionTest extends MvRewriteTestBase {
+public class MvRewritePartitionTest extends MVTestBase {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        MvRewriteTestBase.beforeClass();
+        MVTestBase.beforeClass();
         starRocksAssert.withTable(cluster, "table_with_day_partition");
         starRocksAssert.withTable(cluster, "table_with_day_partition1");
         starRocksAssert.withTable(cluster, "table_with_day_partition2");

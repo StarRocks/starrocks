@@ -17,13 +17,11 @@ package com.starrocks.catalog;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.clone.DynamicPartitionScheduler;
 import com.starrocks.common.util.UUIDUtil;
-import com.starrocks.pseudocluster.PseudoCluster;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
-import com.starrocks.scheduler.MVRefreshTestBase;
 import com.starrocks.scheduler.PartitionBasedMvRefreshProcessor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
@@ -32,12 +30,8 @@ import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -45,11 +39,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
-public class DropPartitionWithExprRangeTest extends MVRefreshTestBase  {
-    private static final Logger LOG = LogManager.getLogger(DropPartitionWithExprRangeTest.class);
-    protected static ConnectContext connectContext;
-    protected static PseudoCluster cluster;
-    protected static StarRocksAssert starRocksAssert;
+public class DropPartitionWithExprRangeTest extends MVTestBase {
     private static String R1;
     private static String R2;
     private static List<String> RANGE_TABLES;
@@ -97,14 +87,6 @@ public class DropPartitionWithExprRangeTest extends MVRefreshTestBase  {
 
     @AfterClass
     public static void afterClass() throws Exception {
-    }
-
-    @Before
-    public void before() {
-    }
-
-    @After
-    public void after() throws Exception {
     }
 
     public static void executeInsertSql(String sql) throws Exception {
