@@ -491,7 +491,7 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
         // rewrite query
         OptExpressionDuplicator duplicator = new OptExpressionDuplicator(materializationContext);
         // don't reset selected partition ids for query input, because query's partition ranges should not be extended.
-        OptExpression newQueryInput = duplicator.duplicate(queryInput);
+        OptExpression newQueryInput = duplicator.duplicate(queryInput, true);
         List<ColumnRefOperator> newQueryOutputColumns = duplicator.getMappedColumns(originalOutputColumns);
 
         Preconditions.checkState(viewInput.getOp().getProjection() != null);

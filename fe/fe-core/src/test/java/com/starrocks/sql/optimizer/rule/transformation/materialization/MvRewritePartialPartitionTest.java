@@ -1131,6 +1131,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
         String query = "select col1, col2, 'server' source_meta_type, count(1) " +
                 "from test_base_table1 where col2 between '2022-04-01' and '2022-04-05'  group by col1, col2;\n";
         {
+            connectContext.getSessionVariable().setTraceLogMode("MV");
             String plan = getFragmentPlan(query);
             PlanTestBase.assertContains(plan, "UNION");
             // TODO: This should be rewritten since the partition range is not changed but it increased union operator,
