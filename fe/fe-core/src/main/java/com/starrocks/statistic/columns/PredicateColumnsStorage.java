@@ -248,6 +248,10 @@ public class PredicateColumnsStorage extends FrontendDaemon {
         LOG.info("vacuum column usage from storage before {}", ttlTime);
     }
 
+    public boolean isSystemTableReady() {
+        return KEEPER.isReady();
+    }
+
     public boolean isRestored() {
         return lastPersist != LocalDateTime.MIN;
     }

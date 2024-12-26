@@ -213,6 +213,11 @@ public class PredicateColumnsMgr {
             PredicateColumnsMgr mgr = PredicateColumnsMgr.getInstance();
             PredicateColumnsStorage storage = PredicateColumnsStorage.getInstance();
 
+            if (!storage.isSystemTableReady()) {
+                LOG.warn("system table of predicate_columns is still not ready");
+                return;
+            }
+
             if (!storage.isRestored()) {
                 mgr.restore();
                 storage.finishRestore();
