@@ -249,6 +249,9 @@ public:
         }
     }
     int32_t get_driver_sequence() const { return _driver_sequence; }
+    void set_runtime_filter_probe_sequence(int32_t probe_sequence) {
+        this->_runtime_filter_probe_sequence = probe_sequence;
+    }
     OperatorFactory* get_factory() const { return _factory; }
 
     // memory to be reserved before executing push_chunk
@@ -277,6 +280,7 @@ protected:
     const int32_t _plan_node_id;
     const bool _is_subordinate;
     const int32_t _driver_sequence;
+    int32_t _runtime_filter_probe_sequence;
     // _common_metrics and _unique_metrics are the only children of _runtime_profile
     // _common_metrics contains the common metrics of Operator, including counters and sub profiles,
     // e.g. OperatorTotalTime/PushChunkNum/PullChunkNum etc.
