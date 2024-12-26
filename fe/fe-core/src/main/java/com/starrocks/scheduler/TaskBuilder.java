@@ -139,10 +139,14 @@ public class TaskBuilder {
         return stmt;
     }
 
-    public static OptimizeTask buildOptimizeTask(String name, Map<String, String> properties, String sql, String dbName) {
+    public static OptimizeTask buildOptimizeTask(String name, Map<String, String> properties, String sql, String dbName,
+                                                 long warehouseId) {
         OptimizeTask task = new OptimizeTask(name);
         task.setSource(Constants.TaskSource.INSERT);
         task.setDbName(dbName);
+        Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                .getWarehouse(warehouseId);
+        properties.put(PropertyAnalyzer.PROPERTIES_WAREHOUSE, warehouse.getName());
         task.setProperties(properties);
         task.setDefinition(sql);
         task.setExpireTime(0L);
