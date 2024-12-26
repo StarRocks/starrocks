@@ -125,6 +125,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static com.starrocks.sql.optimizer.operator.Operator.OP_PARTITION_PRUNE_BIT;
 import static com.starrocks.sql.optimizer.rule.RuleType.TF_MATERIALIZED_VIEW;
 
 /**
@@ -417,6 +418,10 @@ public class Optimizer {
         // TODO: move this into doRuleBasedMaterializedViewRewrite
         // TODO: Do it in CBO if needed later.
         if (MvUtils.isAppliedMVUnionRewrite(tree)) {
+            // reset partition prune bit to do partition prune again.
+            MvUtils.getScanOperator(tree).forEach(scan -> {
+                scan.resetOpRuleMask(OP_PARTITION_PRUNE_BIT);
+            });
             // Do predicate push down if union rewrite successes.
             tree = new SeparateProjectRule().rewrite(tree, rootTaskContext);
             deriveLogicalProperty(tree);
