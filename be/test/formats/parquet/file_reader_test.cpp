@@ -1081,10 +1081,11 @@ TEST_F(FileReaderTest, TestGetNext) {
 TEST_F(FileReaderTest, TestGetNextWithSkipID) {
     int64_t ids[] = {1};
     std::set<int64_t> need_skip_rowids(ids, ids + 1);
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>(need_skip_rowids);
     auto file = _create_file(_file1_path);
     auto file_reader =
             std::make_shared<FileReader>(config::vector_chunk_size, file.get(), std::filesystem::file_size(_file1_path),
-                                         _mock_datacache_options(), nullptr, &need_skip_rowids);
+                                         _mock_datacache_options(), nullptr, skip_rows_ctx);
 
     // init
     auto* ctx = _create_file1_base_context();

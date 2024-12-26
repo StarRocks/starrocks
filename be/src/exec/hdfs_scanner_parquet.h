@@ -23,7 +23,7 @@ class FileReader;
 
 class HdfsParquetScanner final : public HdfsScanner {
 public:
-    HdfsParquetScanner() = default;
+    HdfsParquetScanner() : _skip_rows_ctx(std::make_shared<SkipRowsContext>()){};
     ~HdfsParquetScanner() override = default;
 
     Status do_open(RuntimeState* runtime_state) override;
@@ -34,7 +34,7 @@ public:
 
 private:
     std::shared_ptr<parquet::FileReader> _reader = nullptr;
-    std::set<int64_t> _need_skip_rowids;
+    SkipRowsContextPtr _skip_rows_ctx;
 };
 
 } // namespace starrocks
