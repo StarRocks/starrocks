@@ -68,7 +68,7 @@ Status IcebergDeleteBuilder::fill_skip_rowids(const ChunkPtr& chunk) const {
     const ColumnPtr& pos = chunk->get_column_by_slot_id(k_delete_file_pos.id);
     for (int i = 0; i < chunk->num_rows(); i++) {
         if (file_path->get(i).get_slice() == _params.path) {
-            _need_skip_rowids->emplace(pos->get(i).get_int64());
+            roaring64_bitmap_add(_deletion_bitmap, pos->get(i).get_int64());
         }
     }
     return Status::OK();
@@ -147,6 +147,7 @@ Status IcebergDeleteBuilder::build_parquet(const TIcebergDeleteFile& delete_file
         RETURN_IF_ERROR(status);
         RETURN_IF_ERROR(fill_skip_rowids(chunk));
     }
+    _skip_rows_ctx->deletion_bitmap = std::make_shared<DeletionBitmap>(_deletion_bitmap);
     update_delete_file_io_counter(_params.profile->runtime_profile, app_scan_stats, fs_scan_stats, cache_input_stream,
                                   shared_buffered_input_stream);
     return Status::OK();
@@ -199,6 +200,7 @@ Status IcebergDeleteBuilder::build_orc(const TIcebergDeleteFile& delete_file) co
         }
         RETURN_IF_ERROR(fill_skip_rowids(ret.value()));
     }
+    _skip_rows_ctx->deletion_bitmap = std::make_shared<DeletionBitmap>(_deletion_bitmap);
     update_delete_file_io_counter(_params.profile->runtime_profile, app_scan_stats, fs_scan_stats, cache_input_stream,
                                   shared_buffered_input_stream);
     return Status::OK();

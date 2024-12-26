@@ -16,6 +16,7 @@
 
 #include <roaring/roaring64.h>
 
+#include "deletion_bitmap.h"
 #include "util/base85.h"
 #include "util/uuid_generator.h"
 
@@ -23,11 +24,11 @@ namespace starrocks {
 
 const std::string DeletionVector::DELETION_VECTOR = "DeletionVector";
 
-Status DeletionVector::fill_row_indexes(std::set<int64_t>* need_skip_rowids) {
+Status DeletionVector::fill_row_indexes(const SkipRowsContextPtr& skip_rows_ctx) {
     if (_deletion_vector_descriptor->__isset.cardinality && _deletion_vector_descriptor->__isset.cardinality == 0) {
         return Status::OK();
     } else if (is_inline()) {
-        return deserialized_inline_dv(_deletion_vector_descriptor->pathOrInlineDv, need_skip_rowids);
+        return deserialized_inline_dv(_deletion_vector_descriptor->pathOrInlineDv, skip_rows_ctx);
     } else {
         std::shared_ptr<io::SharedBufferedInputStream> shared_buffered_input_stream = nullptr;
         std::shared_ptr<io::CacheInputStream> cache_input_stream = nullptr;
@@ -65,13 +66,13 @@ Status DeletionVector::fill_row_indexes(std::set<int64_t>* need_skip_rowids) {
         offset += MAGIC_NUMBER_LENGTH;
 
         int64_t serialized_bitmap_length = length - MAGIC_NUMBER_LENGTH;
-        std::unique_ptr<char[]> deletion_vector(new char[serialized_bitmap_length]);
-        RETURN_IF_ERROR(dv_file->read_at_fully(offset, deletion_vector.get(), serialized_bitmap_length));
+        std::vector<char> deletion_vector(serialized_bitmap_length);
+        RETURN_IF_ERROR(dv_file->read_at_fully(offset, deletion_vector.data(), serialized_bitmap_length));
 
         update_dv_file_io_counter(_params.profile->runtime_profile, app_scan_stats, fs_scan_stats, cache_input_stream,
                                   shared_buffered_input_stream);
-        return deserialized_deletion_vector(magic_number_from_deletion_vector_file, std::move(deletion_vector),
-                                            serialized_bitmap_length, need_skip_rowids);
+        return deserialized_deletion_vector(magic_number_from_deletion_vector_file, deletion_vector,
+                                            serialized_bitmap_length, skip_rows_ctx);
     }
 }
 
@@ -100,42 +101,40 @@ StatusOr<std::unique_ptr<RandomAccessFile>> DeletionVector::open_random_access_f
 }
 
 Status DeletionVector::deserialized_inline_dv(std::string& encoded_bitmap_data,
-                                              std::set<int64_t>* need_skip_rowids) const {
+                                              const SkipRowsContextPtr& skip_rows_ctx) {
     ASSIGN_OR_RETURN(auto decoded_bitmap_data, base85_decode(encoded_bitmap_data));
     uint32_t inline_magic_number;
     memcpy(&inline_magic_number, decoded_bitmap_data.data(), DeletionVector::MAGIC_NUMBER_LENGTH);
 
     int64_t serialized_bitmap_length = decoded_bitmap_data.size() - MAGIC_NUMBER_LENGTH;
-    std::unique_ptr<char[]> deletion_vector(new char[serialized_bitmap_length]);
-    memcpy(deletion_vector.get(), decoded_bitmap_data.data() + MAGIC_NUMBER_LENGTH, serialized_bitmap_length);
+    std::vector<char> deletion_vector(serialized_bitmap_length);
+    memcpy(deletion_vector.data(), decoded_bitmap_data.data() + MAGIC_NUMBER_LENGTH, serialized_bitmap_length);
 
-    return deserialized_deletion_vector(inline_magic_number, std::move(deletion_vector), serialized_bitmap_length,
-                                        need_skip_rowids);
+    return deserialized_deletion_vector(inline_magic_number, deletion_vector, serialized_bitmap_length, skip_rows_ctx);
 }
 
-Status DeletionVector::deserialized_deletion_vector(uint32_t magic_number, std::unique_ptr<char[]> serialized_dv,
+Status DeletionVector::deserialized_deletion_vector(uint32_t magic_number, std::vector<char>& serialized_dv,
                                                     int64_t serialized_bitmap_length,
-                                                    std::set<int64_t>* need_skip_rowids) const {
-    if (magic_number != MAGIC_NUMBER) {
-        std::stringstream ss;
-        ss << "Unexpected magic number : " << magic_number;
-        return Status::RuntimeError(ss.str());
+                                                    const SkipRowsContextPtr& skip_rows_ctx) {
+    {
+        SCOPED_RAW_TIMER(&_build_stats.bitmap_deserialized_ns);
+        if (magic_number != MAGIC_NUMBER) {
+            std::stringstream ss;
+            ss << "Unexpected magic number : " << magic_number;
+            return Status::RuntimeError(ss.str());
+        }
+
+        // Construct the roaring bitmap of corresponding deletion vector
+        roaring64_bitmap_t* bitmap =
+                roaring64_bitmap_portable_deserialize_safe(serialized_dv.data(), serialized_bitmap_length);
+        if (bitmap == nullptr) {
+            return Status::RuntimeError("deserialize roaring64 bitmap error");
+        }
+        skip_rows_ctx->deletion_bitmap = std::make_shared<DeletionBitmap>(bitmap);
     }
-
-    // Construct the roaring bitmap of corresponding deletion vector
-    roaring64_bitmap_t* bitmap =
-            roaring64_bitmap_portable_deserialize_safe(serialized_dv.get(), serialized_bitmap_length);
-    if (bitmap == nullptr) {
-        return Status::RuntimeError("deserialize roaring64 bitmap error");
-    }
-
-    // Construct _need_skip_rowids from bitmap
-    uint64_t bitmap_cardinality = roaring64_bitmap_get_cardinality(bitmap);
-    std::unique_ptr<uint64_t[]> bitmap_array(new uint64_t[bitmap_cardinality]);
-    roaring64_bitmap_to_uint64_array(bitmap, bitmap_array.get());
-    need_skip_rowids->insert(bitmap_array.get(), bitmap_array.get() + bitmap_cardinality);
-
-    roaring64_bitmap_free(bitmap);
+#ifndef BE_TEST
+    update_dv_build_counter(_params.profile->runtime_profile, _build_stats);
+#endif
     return Status::OK();
 }
 
@@ -275,6 +274,21 @@ void DeletionVector::update_dv_file_io_counter(
         COUNTER_UPDATE(datacache_write_fail_bytes, stats.write_cache_fail_bytes);
         COUNTER_UPDATE(datacache_read_block_buffer_counter, stats.read_block_buffer_count);
         COUNTER_UPDATE(datacache_read_block_buffer_bytes, stats.read_block_buffer_bytes);
+    }
+}
+
+void DeletionVector::update_dv_build_counter(RuntimeProfile* parent_profile,
+                                             const DeletionVectorBuildStats& build_stats) {
+    const std::string DV_TIMER = DeletionVector::DELETION_VECTOR;
+    ADD_COUNTER(parent_profile, DV_TIMER, TUnit::NONE);
+    {
+        static const char* prefix = "DV_BuildTime";
+        ADD_CHILD_COUNTER(parent_profile, prefix, TUnit::NONE, DV_TIMER);
+
+        RuntimeProfile::Counter* bitmap_deserialized_timer =
+                ADD_CHILD_COUNTER(parent_profile, "DV_BitmapDeserializedTime", TUnit::TIME_NS, prefix);
+
+        COUNTER_UPDATE(bitmap_deserialized_timer, build_stats.bitmap_deserialized_ns);
     }
 }
 
