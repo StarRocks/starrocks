@@ -402,7 +402,7 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
                                         "TABLE: mt1\n" +
                                                 "     PREAGGREGATION: ON\n" +
                                                 "     PREDICATES: 10: k2 LIKE 'a%'\n" +
-                                                "     partitions=2/3"),
+                                                "     partitions=1/3"),
                                 Pair.create("SELECT k1,k2, v1,v2 from mt1 where k1 != 3 and k2 like 'a%'",
                                         "TABLE: mt1\n" +
                                                 "     PREAGGREGATION: ON\n" +

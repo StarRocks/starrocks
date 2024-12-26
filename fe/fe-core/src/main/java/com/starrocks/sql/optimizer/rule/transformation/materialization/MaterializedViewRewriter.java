@@ -2085,10 +2085,10 @@ public class MaterializedViewRewriter {
         // keys of queryColumnRefMap and mvColumnRefMap are the same
         List<ColumnRefOperator> originalOutputColumns =
                 queryColumnRefMap.keySet().stream().collect(Collectors.toList());
-
         // rewrite query
         OptExpressionDuplicator duplicator = new OptExpressionDuplicator(materializationContext);
-        OptExpression newQueryInput = duplicator.duplicate(queryInput);
+        // don't reset selected partition ids for query input, because query's partition ranges should not be extended.
+        OptExpression newQueryInput = duplicator.duplicate(queryInput, true);
         List<ColumnRefOperator> newQueryOutputColumns = duplicator.getMappedColumns(originalOutputColumns);
 
         // rewrite viewInput
@@ -2359,7 +2359,7 @@ public class MaterializedViewRewriter {
         // Generate different column-refs for multi use of the same mv to avoid bugs later.
         if (materializationContext.getMVUsedCount() > 0) {
             OptExpressionDuplicator duplicator = new OptExpressionDuplicator(materializationContext);
-            mvOptExpr = duplicator.duplicate(mvOptExpr);
+            mvOptExpr = duplicator.duplicate(mvOptExpr, false);
             Map<ColumnRefOperator, ScalarOperator> replacedOutputMapping = duplicator.getColumnMapping();
             Map<ColumnRefOperator, ColumnRefOperator> newOutputMapping = Maps.newHashMap();
             for (Map.Entry<ColumnRefOperator, ColumnRefOperator> entry : outputMapping.entrySet()) {
