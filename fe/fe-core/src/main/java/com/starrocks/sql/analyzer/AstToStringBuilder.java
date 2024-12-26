@@ -1931,9 +1931,14 @@ public class AstToStringBuilder {
         }
 
         if (!properties.isEmpty()) {
+            createTableSql.append("\nPROPERTIES (");
             for (Map.Entry<String, String> kv : properties.entrySet()) {
-                createTableSql.append("\nPROPERTIES (\"" + kv.getKey() + "\" = \"").append(kv.getValue()).append("\")");
+                createTableSql.append("\"" + kv.getKey() + "\" = \"").append(kv.getValue()).append("\",");
             }
+            if (createTableSql.charAt(createTableSql.length() - 1) == ',') {
+                createTableSql.deleteCharAt(createTableSql.length() - 1);
+            }
+            createTableSql.append(")");
         }
 
         return createTableSql.toString();
