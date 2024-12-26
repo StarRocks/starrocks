@@ -3280,6 +3280,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long black_host_connect_failures_within_time = 5;
 
+    @ConfField(mutable = true, comment = "The minimal time in milliseconds for the node to stay in the blocklist")
+    public static long black_host_penalty_min_ms = 500; // 500ms
+
     @ConfField(mutable = false)
     public static int jdbc_connection_pool_size = 8;
 
