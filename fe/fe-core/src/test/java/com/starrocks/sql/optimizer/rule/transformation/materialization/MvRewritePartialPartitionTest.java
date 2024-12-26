@@ -1101,7 +1101,6 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
 
     @Test
     public void testMVPartitionRefreshRewrite() throws Exception {
-        connectContext.getSessionVariable().setEnableMaterializedViewTransparentUnionRewrite(false);
         sql("CREATE TABLE test_base_table1(\n" +
                 "    `col0`           int(11) NULL,\n" +
                 "    `col2`           date NULL,\n" +
@@ -1155,7 +1154,6 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
                     "OR ((14: col2 >= '2022-04-04') OR (15: col3 != 'Guangdong'))\n" +
                     "     partitions=5/9");
         }
-        connectContext.getSessionVariable().setEnableMaterializedViewTransparentUnionRewrite(true);
         starRocksAssert.dropTable("test_base_table1");
         starRocksAssert.dropMaterializedView("test_mv1");
     }

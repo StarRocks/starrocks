@@ -130,14 +130,24 @@ public class OptExpressionDuplicator {
             scanBuilder.setColumnMetaToColRefMap(newColumnMetaToColRefMap);
 
             // process HashDistributionSpec
-            if (optExpression.getOp() instanceof LogicalOlapScanOperator) {
-                LogicalOlapScanOperator olapScan = (LogicalOlapScanOperator) optExpression.getOp();
+            LogicalScanOperator scanOperator = (LogicalScanOperator) optExpression.getOp();
+            if (scanOperator instanceof LogicalOlapScanOperator) {
+                LogicalOlapScanOperator olapScan = (LogicalOlapScanOperator) scanOperator;
+                LogicalOlapScanOperator.Builder olapScanBuilder = (LogicalOlapScanOperator.Builder) scanBuilder;
                 if (olapScan.getDistributionSpec() instanceof HashDistributionSpec) {
                     HashDistributionSpec newHashDistributionSpec =
                             processHashDistributionSpec((HashDistributionSpec) olapScan.getDistributionSpec(),
-                            columnRefFactory, columnMapping);
-                    LogicalOlapScanOperator.Builder olapScanBuilder = (LogicalOlapScanOperator.Builder) scanBuilder;
+                                    columnRefFactory, columnMapping);
                     olapScanBuilder.setDistributionSpec(newHashDistributionSpec);
+                }
+                List<ScalarOperator> prunedPartitionPredicates = olapScan.getPrunedPartitionPredicates();
+                if (prunedPartitionPredicates != null && !prunedPartitionPredicates.isEmpty()) {
+                    List<ScalarOperator> newPrunedPartitionPredicates = Lists.newArrayList();
+                    for (ScalarOperator predicate : prunedPartitionPredicates) {
+                        ScalarOperator newPredicate = rewriter.rewrite(predicate);
+                        newPrunedPartitionPredicates.add(newPredicate);
+                    }
+                    olapScanBuilder.setPrunedPartitionPredicates(newPrunedPartitionPredicates);
                 }
             }
 

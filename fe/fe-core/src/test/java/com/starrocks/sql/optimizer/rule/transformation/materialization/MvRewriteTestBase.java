@@ -218,48 +218,10 @@ public class MvRewriteTestBase {
 
     public static void executeInsertSql(ConnectContext connectContext, String sql) throws Exception {
         connectContext.setQueryId(UUIDUtil.genUUID());
-<<<<<<< HEAD
         new StmtExecutor(connectContext, sql).execute();
-=======
-        StatementBase statement = SqlParser.parseSingleStatement(sql, connectContext.getSessionVariable().getSqlMode());
-        StmtExecutor.newInternalExecutor(connectContext, statement).execute();
     }
 
     public static void sql(String sql) throws Exception {
         cluster.runSql(DB_NAME, sql);
-    }
-
-    /**
-     * Add list partition with one value
-     * @param tbl table name
-     * @param pName partition name
-     * @param pVal partition value
-     */
-    protected void addListPartition(String tbl, String pName, String pVal) {
-        String addPartitionSql = String.format("ALTER TABLE %s ADD PARTITION %s VALUES IN ('%s')", tbl, pName, pVal);
-        System.out.println(addPartitionSql);
-
-        StatementBase stmt = SqlParser.parseSingleStatement(addPartitionSql, connectContext.getSessionVariable().getSqlMode());
-        try {
-            StmtExecutor.newInternalExecutor(connectContext, stmt).execute();
-        } catch (Exception e) {
-            Assert.fail("add partition failed:" + e);
-        }
-    }
-
-    public static String getAggFunction(String funcName, String aggArg) {
-        if (funcName.equals(FunctionSet.ARRAY_AGG)) {
-            funcName = String.format("array_agg(distinct %s)", aggArg);
-        } else if (funcName.equals(FunctionSet.BITMAP_UNION)) {
-            funcName = String.format("bitmap_union(to_bitmap(%s))", aggArg);
-        } else if (funcName.equals(FunctionSet.PERCENTILE_UNION)) {
-            funcName = String.format("percentile_union(percentile_hash(%s))", aggArg);
-        } else if (funcName.equals(FunctionSet.HLL_UNION)) {
-            funcName = String.format("hll_union(hll_hash(%s))", aggArg);
-        } else {
-            funcName = String.format("%s(%s)", funcName, aggArg);
-        }
-        return funcName;
->>>>>>> dee8d1c22b ([BugFix] Fix mv union rewrite and partition prune bug (#54293))
     }
 }
