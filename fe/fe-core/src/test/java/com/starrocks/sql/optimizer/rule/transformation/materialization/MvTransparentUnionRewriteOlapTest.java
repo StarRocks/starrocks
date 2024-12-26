@@ -561,19 +561,7 @@ public class MvTransparentUnionRewriteOlapTest extends MvRewriteTestBase {
                     String query = sqls[i];
                     System.out.println("start to check:" + query);
                     String plan = getFragmentPlan(query);
-                    // TODO(fixme): prune empty nodes
-                    PlanTestBase.assertContains(plan, "UNION", "mv0", "mv1", "mv2");
-                }
-            }
-
-            {
-                String[] sqls = {
-                        "SELECT * from mv2",
-                };
-                for (int i = 0; i < sqls.length; i++) {
-                    String query = sqls[i];
-                    String plan = getFragmentPlan(query);
-                    PlanTestBase.assertContains(plan, "UNION", "mv0", "mv1", "mv2");
+                    PlanTestBase.assertContains(plan, "mv2");
                 }
             }
 
@@ -585,7 +573,7 @@ public class MvTransparentUnionRewriteOlapTest extends MvRewriteTestBase {
                 for (int i = 0; i < sqls.length; i++) {
                     String query = sqls[i];
                     String plan = getFragmentPlan(query);
-                    PlanTestBase.assertContains(plan, "UNION", "mv0", "mv1", "mv2");
+                    PlanTestBase.assertContains(plan,  "mv2");
                 }
             }
             starRocksAssert.dropMaterializedView("mv0");
