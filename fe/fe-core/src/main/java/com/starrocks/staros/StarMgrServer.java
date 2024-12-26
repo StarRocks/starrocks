@@ -265,4 +265,19 @@ public class StarMgrServer {
     public long getReplayId() {
         return getJournalSystem().getReplayId();
     }
+<<<<<<< HEAD
+=======
+
+    public CheckpointController getCheckpointController() {
+        return checkpointController;
+    }
+
+    public CheckpointWorker getCheckpointWorker() {
+        return checkpointWorker;
+    }
+
+    public void triggerNewImage() {
+        journalSystem.getJournalWriter().setForceRollJournal();
+    }
+>>>>>>> 3f0743032b ([Enhancement] Trigger new starmgr image in alter system create image for shared-data mode (#54370))
 }
