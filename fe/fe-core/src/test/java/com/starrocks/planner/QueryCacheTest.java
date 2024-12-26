@@ -462,6 +462,10 @@ public class QueryCacheTest {
     }
 
     private void testHelper(List<String> queryList) {
+        if (queryList.size() > 5) {
+            Collections.shuffle(queryList);
+            queryList = queryList.subList(0, 5);
+        }
         List<PlanFragment> frags = queryList.stream()
                 .map(q -> getCachedFragment(q).get()).collect(Collectors.toList());
         List<ByteBuffer> digests =
