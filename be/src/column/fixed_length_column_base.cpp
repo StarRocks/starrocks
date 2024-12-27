@@ -70,26 +70,6 @@ void FixedLengthColumnBase<T>::append_selective(const Column& src, const uint32_
                 __m256i data_vec = _mm256_i32gather_epi64(fsrc_data, index_vec, 8);
                 _mm256_storeu_si256(reinterpret_cast<__m256i*>(store + i), data_vec);
             }
-        } else if constexpr (std::is_same_v<T, uint8_t> || std::is_same_v<T, int8_t> || std::is_same_v<T, int16_t>) {
-            constexpr int type_size = sizeof(T);
-            const int* fsrc_data = (const int*)src_data;
-            int temp[8] = {0};
-            for (; i + 7 < size; i += 8) {
-                __m256i index_vec = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(indexes + from + i));
-                __m256i data_vec = _mm256_i32gather_epi32(fsrc_data, index_vec, type_size);
-                _mm256_storeu_si256(reinterpret_cast<__m256i*>(temp), data_vec);
-                for (int j = 0; j < 8; j++) {
-                    store[i + j] = temp[j];
-                }
-                // store[i + 0] = (T)_mm256_extract_epi32(data_vec, 0);
-                // store[i + 1] = (T)_mm256_extract_epi32(data_vec, 1);
-                // store[i + 2] = (T)_mm256_extract_epi32(data_vec, 2);
-                // store[i + 3] = (T)_mm256_extract_epi32(data_vec, 3);
-                // store[i + 4] = (T)_mm256_extract_epi32(data_vec, 4);
-                // store[i + 5] = (T)_mm256_extract_epi32(data_vec, 5);
-                // store[i + 6] = (T)_mm256_extract_epi32(data_vec, 6);
-                // store[i + 7] = (T)_mm256_extract_epi32(data_vec, 7);
-            }
         }
     }
 #endif
