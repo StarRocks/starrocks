@@ -24,6 +24,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
@@ -69,6 +70,9 @@ import com.starrocks.thrift.TLoadTxnCommitRequest;
 import com.starrocks.thrift.TLoadTxnCommitResult;
 import com.starrocks.thrift.TMergeCommitRequest;
 import com.starrocks.thrift.TMergeCommitResult;
+import com.starrocks.thrift.TPartitionMeta;
+import com.starrocks.thrift.TPartitionMetaRequest;
+import com.starrocks.thrift.TPartitionMetaResponse;
 import com.starrocks.thrift.TResourceUsage;
 import com.starrocks.thrift.TSetConfigRequest;
 import com.starrocks.thrift.TSetConfigResponse;
@@ -103,6 +107,7 @@ import org.mockito.internal.util.collections.Sets;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -1329,5 +1334,100 @@ public class FrontendServiceImplTest {
         System.out.println(result);
 
         Assert.assertNotEquals(0, result.getLocation().getTabletsSize());
+    }
+
+    @Test
+    public void testGetPartitionMeta() throws Exception {
+        starRocksAssert.useDatabase("test")
+                .withTable("CREATE TABLE site_access_fix_buckets (\n" +
+                        "    event_day DATETIME NOT NULL,\n" +
+                        "    site_id INT DEFAULT '10',\n" +
+                        "    city_code VARCHAR(100),\n" +
+                        "    user_name VARCHAR(32) DEFAULT '',\n" +
+                        "    pv BIGINT DEFAULT '0'\n" +
+                        ")\n" +
+                        "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                        "DISTRIBUTED BY HASH(event_day, site_id, city_code, user_name) BUCKETS 32\n" +
+                        "PROPERTIES(\n" +
+                        "    \"replication_num\" = \"1\"\n" +
+                        ");");
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        { // nothing set to the request
+            TPartitionMetaRequest request = new TPartitionMetaRequest();
+            TPartitionMetaResponse response = impl.getPartitionMeta(request);
+            TStatus status = response.getStatus();
+            Assert.assertEquals(TStatusCode.INVALID_ARGUMENT, status.getStatus_code());
+            Assert.assertEquals(1L, status.getError_msgs().size());
+            Assert.assertEquals("Invalid parameter from getPartitionMeta request, tablet_ids is required",
+                    status.getError_msgs().get(0));
+        }
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Table table = db.getTable("site_access_fix_buckets");
+        Assert.assertTrue(table instanceof OlapTable);
+        OlapTable olapTable = (OlapTable) table;
+        long bucketNum = 32;
+        Assert.assertEquals(bucketNum, olapTable.getDefaultDistributionInfo().getBucketNum());
+
+        List<Long> partitionIds = olapTable.getPhysicalPartitions().stream()
+                .map(PhysicalPartition::getId).toList();
+        long partitionId = partitionIds.get(0);
+        List<Tablet> tablets = olapTable.getPhysicalPartition(partitionId).getBaseIndex().getTablets();
+        Assert.assertEquals(bucketNum, tablets.size());
+
+        long tabletId = tablets.get(0).getId();
+        long tabletId2 = tablets.get(1).getId();
+
+        { // has a single correct tablet_id
+            TPartitionMetaRequest request = new TPartitionMetaRequest();
+            request.setTablet_ids(List.of(tabletId));
+            TPartitionMetaResponse response = impl.getPartitionMeta(request);
+            TStatus status = response.getStatus();
+            Assert.assertEquals(TStatusCode.OK, status.getStatus_code());
+            List<TPartitionMeta> metaList = response.getPartition_metas();
+            Map<Long, Integer> tabletIdMetaIndex = response.getTablet_id_partition_meta_index();
+            Assert.assertEquals(1L, metaList.size());
+            Assert.assertEquals(1L, tabletIdMetaIndex.size());
+            Assert.assertTrue(tabletIdMetaIndex.containsKey(tabletId));
+            TPartitionMeta meta = metaList.get(tabletIdMetaIndex.get(tabletId));
+            PhysicalPartition physicalPartition = olapTable.getPhysicalPartition(partitionId);
+            Partition partition = olapTable.getPartition(physicalPartition.getParentId());
+            Assert.assertEquals(physicalPartition.getName(), meta.getPartition_name());
+            Assert.assertEquals(partitionId, meta.getPartition_id());
+            Assert.assertEquals(partition.getState().name(), meta.getState());
+            Assert.assertEquals(physicalPartition.getVisibleVersion(), meta.getVisible_version());
+            Assert.assertEquals(physicalPartition.getNextVersion(), meta.getNext_version());
+            Assert.assertEquals(olapTable.isTempPartition(partitionId), meta.isIs_temp());
+        }
+        { // has 2 correct tablet_ids points to the same partition, one non-exist tablet id
+            TPartitionMetaRequest request = new TPartitionMetaRequest();
+            long nonExistTabletId = 1356798018;
+            request.setTablet_ids(List.of(tabletId, tabletId2, nonExistTabletId));
+            TPartitionMetaResponse response = impl.getPartitionMeta(request);
+            TStatus status = response.getStatus();
+            Assert.assertEquals(TStatusCode.OK, status.getStatus_code());
+            List<TPartitionMeta> metaList = response.getPartition_metas();
+            Map<Long, Integer> tabletIdMetaIndex = response.getTablet_id_partition_meta_index();
+            Assert.assertEquals(1L, metaList.size());
+            Assert.assertEquals(2L, tabletIdMetaIndex.size());
+            Assert.assertTrue(tabletIdMetaIndex.containsKey(tabletId));
+            Assert.assertTrue(tabletIdMetaIndex.containsKey(tabletId2));
+            Assert.assertFalse(tabletIdMetaIndex.containsKey(nonExistTabletId));
+
+            // both pointed to the same partition meta
+            Assert.assertEquals(0L, (long) tabletIdMetaIndex.get(tabletId));
+            Assert.assertEquals(0L, (long) tabletIdMetaIndex.get(tabletId2));
+
+            // verify the partitionMeta
+            TPartitionMeta meta = metaList.get(0);
+            PhysicalPartition physicalPartition = olapTable.getPhysicalPartition(partitionId);
+            Partition partition = olapTable.getPartition(physicalPartition.getParentId());
+            Assert.assertEquals(physicalPartition.getName(), meta.getPartition_name());
+            Assert.assertEquals(partitionId, meta.getPartition_id());
+            Assert.assertEquals(partition.getState().name(), meta.getState());
+            Assert.assertEquals(physicalPartition.getVisibleVersion(), meta.getVisible_version());
+            Assert.assertEquals(physicalPartition.getNextVersion(), meta.getNext_version());
+            Assert.assertEquals(olapTable.isTempPartition(partitionId), meta.isIs_temp());
+        }
     }
 }
