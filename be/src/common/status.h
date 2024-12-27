@@ -172,6 +172,8 @@ public:
 
     bool is_end_of_file() const { return code() == TStatusCode::END_OF_FILE; }
 
+    bool is_internal_error() const { return code() == TStatusCode::INTERNAL_ERROR; }
+
     bool is_ok_or_eof() const { return ok() || is_end_of_file(); }
 
     bool is_not_found() const { return code() == TStatusCode::NOT_FOUND; }
