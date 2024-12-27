@@ -176,7 +176,7 @@ Status PersistentIndexMemtable::get(const Slice* keys, IndexValue* values, const
 }
 
 size_t PersistentIndexMemtable::memory_usage() const {
-    return _map.bytes_used();
+    return _keys_size + _map.size() * sizeof(IndexValueWithVer);
 }
 
 Status PersistentIndexMemtable::flush(WritableFile* wf, uint64_t* filesize) {
