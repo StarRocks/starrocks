@@ -1215,15 +1215,6 @@ public class GlobalStateMgr {
         return isReady.get();
     }
 
-    public static String genFeNodeName(String host, int port, boolean isOldStyle) {
-        String name = host + "_" + port;
-        if (isOldStyle) {
-            return name;
-        } else {
-            return name + "_" + System.currentTimeMillis();
-        }
-    }
-
     private void transferToLeader() {
         FrontendNodeType oldType = feType;
         // stop replayer
