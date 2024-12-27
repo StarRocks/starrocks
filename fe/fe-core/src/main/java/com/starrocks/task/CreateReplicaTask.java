@@ -84,11 +84,7 @@ public class CreateReplicaTask extends AgentTask {
     private boolean createSchemaFile = true;
     private boolean enableTabletCreationOptimization = false;
     private final TTabletSchema tabletSchema;
-<<<<<<< HEAD
-=======
     private long gtid = 0;
-    private long timeoutMs = -1;
->>>>>>> f977337f8 ([Feature] Support restoring from a cluster snapshot for shared-data mode (part 3, introduce gtid for tablet metadata) (#54326))
 
     private CreateReplicaTask(Builder builder) {
         super(null, builder.getNodeId(), TTaskType.CREATE, builder.getDbId(), builder.getTableId(),
