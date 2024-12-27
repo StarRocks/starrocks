@@ -404,13 +404,13 @@ public class SecurityPolicyMgr {
                 writer.writeJson(entry.getValue());
             }
 
-            writer.writeJson(passwordPolicyMap.size());
+            writer.writeInt(passwordPolicyMap.size());
             for (Map.Entry<Long, PasswordPolicy> entry : passwordPolicyMap.entrySet()) {
                 PasswordPolicy passwordPolicy = entry.getValue();
                 writer.writeJson(new CreatePasswordPolicyLog(passwordPolicy.getPolicyId(),
                         passwordPolicy.getPolicyName(), passwordPolicy.getComment(), passwordPolicy.getProperties()));
             }
-            writer.writeJson(globalPasswordPolicy);
+            writer.writeLong(globalPasswordPolicy);
 
             writer.close();
         } catch (SRMetaBlockException e) {
@@ -430,10 +430,7 @@ public class SecurityPolicyMgr {
 
         reader.readMap(TableUID.class, PolicyAppliedContext.class, policyContextMap::put);
 
-        int passwordPolicySize = reader.readJson(int.class);
-        for (int i = 0; i < passwordPolicySize; ++i) {
-            CreatePasswordPolicyLog createPasswordPolicyLog = reader.readJson(CreatePasswordPolicyLog.class);
-
+        reader.readCollection(CreatePasswordPolicyLog.class, createPasswordPolicyLog -> {
             passwordPolicyMap.put(createPasswordPolicyLog.getPolicyId(),
                     new PasswordPolicy(
                             createPasswordPolicyLog.getPolicyId(),
@@ -442,9 +439,9 @@ public class SecurityPolicyMgr {
                             createPasswordPolicyLog.getProperties()));
 
             passwordPolicyNameToId.put(createPasswordPolicyLog.getPolicyName(), createPasswordPolicyLog.getPolicyId());
-        }
+        });
 
-        this.globalPasswordPolicy = reader.readJson(Long.class);
+        this.globalPasswordPolicy = reader.readLong();
     }
 
     public void applyMaskingPolicyContext(ConnectContext ctx, TableName tableName, String columnName,

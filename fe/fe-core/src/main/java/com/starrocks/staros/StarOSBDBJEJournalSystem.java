@@ -22,6 +22,7 @@ import com.staros.journal.JournalSystem;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.Daemon;
 import com.starrocks.common.util.Util;
+import com.starrocks.epack.persist.EditLogEPack;
 import com.starrocks.journal.JournalCursor;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalException;
@@ -57,7 +58,7 @@ public class StarOSBDBJEJournalSystem implements JournalSystem {
 
         journalWriter = new JournalWriter(bdbjeJournal, journalQueue);
 
-        editLog = new EditLog(journalQueue);
+        editLog = new EditLogEPack(journalQueue);
 
         replayedJournalId = new AtomicLong(0L);
 
@@ -68,7 +69,7 @@ public class StarOSBDBJEJournalSystem implements JournalSystem {
     public StarOSBDBJEJournalSystem(BDBJEJournal journal) {
         bdbjeJournal = journal;
         replayedJournalId = new AtomicLong(0L);
-        editLog = new EditLog(null);
+        editLog = new EditLogEPack(null);
     }
 
     public long getReplayId() {

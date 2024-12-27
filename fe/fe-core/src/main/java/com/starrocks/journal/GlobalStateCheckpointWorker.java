@@ -14,9 +14,9 @@
 
 package com.starrocks.journal;
 
+import com.starrocks.epack.persist.EditLogEPack;
 import com.starrocks.leader.CheckpointController;
 import com.starrocks.metric.MetricRepo;
-import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 
 public class GlobalStateCheckpointWorker extends CheckpointWorker {
@@ -31,7 +31,7 @@ public class GlobalStateCheckpointWorker extends CheckpointWorker {
         // generate new image file
         LOG.info("begin to generate new image: image.{}", journalId);
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        globalStateMgr.setEditLog(new EditLog(null));
+        globalStateMgr.setEditLog(new EditLogEPack(null));
         globalStateMgr.setJournal(journal);
         try {
             globalStateMgr.loadImage(imageDir);
