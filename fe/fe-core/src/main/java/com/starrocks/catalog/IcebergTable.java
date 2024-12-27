@@ -283,6 +283,11 @@ public class IcebergTable extends Table {
         return getNativeTable().location();
     }
 
+    @Override
+    public Map<String, String> getProperties() {
+        return getNativeTable().properties();
+    }
+
     public PartitionField getPartitionFiled(String colName) {
         org.apache.iceberg.Table nativeTable = getNativeTable();
         return nativeTable.spec().fields().stream()

@@ -14,7 +14,7 @@ partition_transform_table	CREATE TABLE `partition_transform_table` (
   `p2` varchar(1073741824) DEFAULT NULL
 )
 PARTITION BY (year(t1), month(t2), day(t3), hour(t4), truncate(p1, 5), bucket(p2, 3))
-PROPERTIES ("location" = "oss://starrocks-ci-test/iceberg_ci_db/partition_transform_table");
+PROPERTIES ("owner" = "root","location" = "oss://starrocks-ci-test/iceberg_ci_db/partition_transform_table");
 -- !result
 drop catalog iceberg_sql_test_${uuid0};
 -- result:
