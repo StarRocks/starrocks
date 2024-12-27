@@ -14,11 +14,16 @@
 
 package com.starrocks.sql.common;
 
+import com.google.api.client.util.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.thrift.TDebugAction;
+import com.starrocks.thrift.TExecDebugOption;
 import org.apache.logging.log4j.util.Strings;
+
+import java.util.List;
 
 public class QueryDebugOptions {
     private static QueryDebugOptions INSTANCE = new QueryDebugOptions();
@@ -38,6 +43,24 @@ public class QueryDebugOptions {
 
     @SerializedName(value = "mvRefreshTraceModule")
     private String mvRefreshTraceModule;
+
+    public static class ExecDebugOption {
+        @SerializedName(value = "plan_node_id")
+        private int planNodeId;
+        @SerializedName(value = "debug_action")
+        private String debugAction;
+        @SerializedName(value = "value")
+        private int value = 0;
+        public TExecDebugOption toThirft() {
+            final TExecDebugOption option = new TExecDebugOption();
+            option.setDebug_node_id(planNodeId);
+            option.setDebug_action(TDebugAction.valueOf(debugAction));
+            option.setValue(value);
+            return option;
+        }
+    }
+    @SerializedName(value = "execDebugOptions")
+    private List<ExecDebugOption> execDebugOptions = Lists.newArrayList();
 
     public QueryDebugOptions() {
         // To make unit test more stable, add retry times for refreshing materialized views.
@@ -76,6 +99,10 @@ public class QueryDebugOptions {
 
     public Tracers.Module getMvRefreshTraceModule() {
         return Strings.isEmpty(mvRefreshTraceModule) ? Tracers.Module.BASE : Tracers.Module.valueOf(mvRefreshTraceModule);
+    }
+
+    public List<ExecDebugOption> getExecDebugOptions() {
+        return execDebugOptions;
     }
 
     public static QueryDebugOptions getInstance() {

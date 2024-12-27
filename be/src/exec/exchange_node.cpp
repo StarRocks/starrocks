@@ -286,6 +286,7 @@ pipeline::OpFactories ExchangeNode::decompose_to_pipeline(pipeline::PipelineBuil
         may_add_chunk_accumulate_operator(operators, context, id());
     }
 
+    operators = context->maybe_interpolate_debug_ops(runtime_state(), _id, operators);
     operators = context->maybe_interpolate_collect_stats(runtime_state(), id(), operators);
 
     return operators;

@@ -251,6 +251,7 @@ pipeline::OpFactories DistinctBlockingNode::decompose_to_pipeline(pipeline::Pipe
     if (!_tnode.conjuncts.empty() || ops_with_source.back()->has_runtime_filters()) {
         may_add_chunk_accumulate_operator(ops_with_source, context, id());
     }
+    ops_with_source = context->maybe_interpolate_debug_ops(runtime_state(), _id, ops_with_source);
 
     return ops_with_source;
 }

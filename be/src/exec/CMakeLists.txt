@@ -289,6 +289,7 @@ set(EXEC_FILES
     pipeline/schedule/event_scheduler.cpp
     pipeline/schedule/observer.cpp
     pipeline/schedule/pipeline_timer.cpp
+    pipeline/wait_operator.cpp
     workgroup/pipeline_executor_set.cpp
     workgroup/pipeline_executor_set_manager.cpp
     workgroup/work_group.cpp
