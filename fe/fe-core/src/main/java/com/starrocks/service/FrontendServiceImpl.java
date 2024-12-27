@@ -69,6 +69,8 @@ import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.TabletInvertedIndex;
+import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.View;
 import com.starrocks.catalog.system.information.AnalyzeStatusSystemTable;
 import com.starrocks.catalog.system.information.ColumnStatsUsageSystemTable;
@@ -148,6 +150,7 @@ import com.starrocks.qe.ShowMaterializedViewStatus;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.TemporaryTableMgr;
 import com.starrocks.server.WarehouseManager;
@@ -289,6 +292,9 @@ import com.starrocks.thrift.TObjectDependencyRes;
 import com.starrocks.thrift.TOlapTableIndexTablets;
 import com.starrocks.thrift.TOlapTablePartition;
 import com.starrocks.thrift.TOlapTablePartitionParam;
+import com.starrocks.thrift.TPartitionMeta;
+import com.starrocks.thrift.TPartitionMetaRequest;
+import com.starrocks.thrift.TPartitionMetaResponse;
 import com.starrocks.thrift.TQueryStatisticsInfo;
 import com.starrocks.thrift.TRefreshTableRequest;
 import com.starrocks.thrift.TRefreshTableResponse;
@@ -351,8 +357,10 @@ import org.jetbrains.annotations.NotNull;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -3046,5 +3054,109 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             response.setStatus(status);
             return response;
         }
+    }
+
+    @Override
+    public TPartitionMetaResponse getPartitionMeta(TPartitionMetaRequest request) throws TException {
+        TPartitionMetaResponse response = new TPartitionMetaResponse();
+        if (!request.isSetTablet_ids() || request.getTablet_ids().isEmpty()) {
+            String errMsg = "Invalid parameter from getPartitionMeta request, tablet_ids is required";
+            LOG.info(errMsg);
+            TStatus status = new TStatus(TStatusCode.INVALID_ARGUMENT);
+            status.addToError_msgs(errMsg);
+            response.setStatus(status);
+            return response;
+        }
+
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        TabletInvertedIndex invertedIndex = globalStateMgr.getTabletInvertedIndex();
+
+        Map<Long, TabletMeta> tabletMetas = new HashMap<>();
+        List<Long> tabletIds = request.getTablet_ids();
+        tabletIds.forEach(id -> tabletMetas.put(id, invertedIndex.getTabletMeta(id)));
+        // build a list of the partitionMeta from the tabletMetaList
+        List<TPartitionMeta> partitionMetaList = getPartitionMetaImpl(tabletMetas.values());
+        if (partitionMetaList.isEmpty()) {
+            TStatus status = new TStatus(TStatusCode.NOT_FOUND);
+            response.setStatus(status);
+            return response;
+        }
+
+        // build the index for partitionId -> offset of partitionMeta array
+        Map<Long, Integer> partitionId2ArrayIndex = new HashMap<>();
+        for (int i = 0; i < partitionMetaList.size(); ++i) {
+            partitionId2ArrayIndex.put(partitionMetaList.get(i).getPartition_id(), i);
+        }
+        // build tabletId -> offset of partitionMeta array
+        Map<Long, Integer> tabletIdMetaIndex = new HashMap<>();
+        tabletMetas.forEach((key, value) -> {
+            if (value != null) {
+                long phyPartitionId = value.getPhysicalPartitionId();
+                if (partitionId2ArrayIndex.containsKey(phyPartitionId)) {
+                    tabletIdMetaIndex.put(key, partitionId2ArrayIndex.get(phyPartitionId));
+                }
+            }
+        });
+        response.setTablet_id_partition_meta_index(tabletIdMetaIndex);
+        response.setPartition_metas(partitionMetaList);
+        response.setStatus(new TStatus(OK));
+        return response;
+    }
+
+    static List<TPartitionMeta> getPartitionMetaImpl(Collection<TabletMeta> tabletMetas) {
+        List<TPartitionMeta> result = new ArrayList<>();
+        Set<Long> donePartitionIds = new HashSet<>();
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        for (TabletMeta tabletMeta : tabletMetas) {
+            if (tabletMeta == null) {
+                continue;
+            }
+            long partitionId = tabletMeta.getPhysicalPartitionId();
+            if (donePartitionIds.contains(partitionId)) {
+                continue;
+            }
+            long dbId = tabletMeta.getDbId();
+            long tableId = tabletMeta.getTableId();
+
+            Locker locker = new Locker();
+            locker.lockTableWithIntensiveDbLock(dbId, tableId, LockType.READ);
+            try {
+                Database db = metastore.getDb(dbId);
+                if (db == null) {
+                    donePartitionIds.add(partitionId);
+                    continue;
+                }
+                Table table = db.getTable(tableId);
+                if (table == null) {
+                    donePartitionIds.add(partitionId);
+                    continue;
+                }
+                OlapTable olapTable = (OlapTable) table;
+                PhysicalPartition physicalPartition = olapTable.getPhysicalPartition(partitionId);
+                if (physicalPartition == null) {
+                    donePartitionIds.add(partitionId);
+                    continue;
+                }
+                long parentPartitionId = physicalPartition.getParentId();
+                Partition partition = olapTable.getPartition(parentPartitionId);
+                if (partition == null) {
+                    donePartitionIds.add(partitionId);
+                    continue;
+                }
+                TPartitionMeta partitionMeta = new TPartitionMeta();
+                partitionMeta.setPartition_id(partitionId);
+                partitionMeta.setPartition_name(physicalPartition.getName());
+                partitionMeta.setState(partition.getState().name());
+                partitionMeta.setVisible_version(physicalPartition.getVisibleVersion());
+                partitionMeta.setVisible_time(physicalPartition.getVisibleVersionTime());
+                partitionMeta.setNext_version(physicalPartition.getNextVersion());
+                partitionMeta.setIs_temp(olapTable.isTempPartition(parentPartitionId));
+                result.add(partitionMeta);
+                donePartitionIds.add(partitionId);
+            } finally {
+                locker.unLockTableWithIntensiveDbLock(dbId, tableId, LockType.READ);
+            }
+        }
+        return result;
     }
 }
