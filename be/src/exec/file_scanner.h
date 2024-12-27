@@ -100,11 +100,12 @@ protected:
 
     bool _strict_mode;
     int64_t _error_counter;
-    // When column mismatch, query and load have different behaviors.
+    // When column mismatch, files query/load and other type load have different behaviors.
     // Query returns error, while load counts the filtered rows, and return error or not is based on max filter ratio,
-    // so need to check query or load in scanner.
+    // files load will not filter rows if file column count is larger that the schema,
+    // so need to check files query/load or other type load in scanner.
     // Currently only used in csv scanner.
-    bool _is_load;
+    TFileScanType::type _file_scan_type;
 
     // sources
     std::vector<SlotDescriptor*> _src_slot_descriptors;

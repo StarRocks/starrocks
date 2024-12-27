@@ -81,6 +81,7 @@ import com.starrocks.thrift.TBrokerScanRangeParams;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TFileScanNode;
+import com.starrocks.thrift.TFileScanType;
 import com.starrocks.thrift.TFileType;
 import com.starrocks.thrift.THdfsProperties;
 import com.starrocks.thrift.TNetworkAddress;
@@ -163,11 +164,12 @@ public class FileScanNode extends LoadScanNode {
     private LoadJob.JSONOptions jsonOptions = new LoadJob.JSONOptions();
     
     private boolean flexibleColumnMapping = false;
-    // When column mismatch, query and load have different behaviors.
+    // When column mismatch, files query/load and other type load have different behaviors.
     // Query returns error, while load counts the filtered rows, and return error or not is based on max filter ratio,
-    // so need to check query or load in scanner.
+    // files load will not filter rows if file column count is larger that the schema,
+    // so need to check files query/load or other type load in scanner.
     // Currently only used in csv scanner.
-    private boolean isLoad = true;
+    private TFileScanType fileScanType = TFileScanType.LOAD;
 
     private boolean nullExprInAutoIncrement;
 
@@ -265,8 +267,8 @@ public class FileScanNode extends LoadScanNode {
         this.flexibleColumnMapping = enable;
     }
 
-    public void setIsLoad(boolean isLoad) {
-        this.isLoad = isLoad;
+    public void setFileScanType(TFileScanType fileScanType) {
+        this.fileScanType = fileScanType;
     }
 
     public void setUseVectorizedLoad(boolean useVectorizedLoad) {
@@ -326,7 +328,7 @@ public class FileScanNode extends LoadScanNode {
         params.setEscape(fileGroup.getEscape());
         params.setJson_file_size_limit(Config.json_file_size_limit);
         params.setFlexible_column_mapping(flexibleColumnMapping);
-        params.setIs_load(isLoad);
+        params.setFile_scan_type(fileScanType);
         initColumns(context);
         initWhereExpr(fileGroup.getWhereExpr(), analyzer);
     }

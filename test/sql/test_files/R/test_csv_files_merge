@@ -92,6 +92,7 @@ select * from t1;
 1	Julia	20.2	1
 2	Andy	21.3	0
 3	Joke	22.4	1
+5	Jerry	40.8	0
 -- !result
 
 truncate table t1;

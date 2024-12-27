@@ -46,7 +46,7 @@ FileScanner::FileScanner(starrocks::RuntimeState* state, starrocks::RuntimeProfi
           _row_desc(nullptr),
           _strict_mode(false),
           _error_counter(0),
-          _is_load(true),
+          _file_scan_type(TFileScanType::LOAD),
           _schema_only(schema_only) {}
 
 FileScanner::~FileScanner() = default;
@@ -136,8 +136,8 @@ Status FileScanner::open() {
         _strict_mode = _params.strict_mode;
     }
 
-    if (_params.__isset.is_load) {
-        _is_load = _params.is_load;
+    if (_params.__isset.file_scan_type) {
+        _file_scan_type = _params.file_scan_type;
     }
 
     if (_strict_mode && !_params.__isset.dest_sid_to_src_sid_without_trans) {
