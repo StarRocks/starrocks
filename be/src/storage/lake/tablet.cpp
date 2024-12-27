@@ -47,10 +47,6 @@ Status Tablet::delete_metadata(int64_t version) {
     return _mgr->delete_tablet_metadata(_id, version);
 }
 
-Status Tablet::metadata_exists(int64_t version) {
-    return _mgr->tablet_metadata_exists(_id, version);
-}
-
 Status Tablet::put_txn_log(const TxnLog& log) {
     return _mgr->put_txn_log(log);
 }
