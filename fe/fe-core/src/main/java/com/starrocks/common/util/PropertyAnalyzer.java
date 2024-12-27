@@ -831,7 +831,7 @@ public class PropertyAnalyzer {
 
     // analyzeCompressionType will parse the compression type from properties
     public static Pair<TCompressionType, Integer> analyzeCompressionType(
-                                                    Map<String, String> properties) throws AnalysisException {
+            Map<String, String> properties) throws AnalysisException {
         TCompressionType compressionType = TCompressionType.LZ4_FRAME;
         if (ConnectContext.get() != null) {
             String defaultCompression = ConnectContext.get().getSessionVariable().getDefaultTableCompression();
@@ -1088,7 +1088,7 @@ public class PropertyAnalyzer {
         return val;
     }
 
-    public static List<UniqueConstraint> analyzeUniqueConstraint(Map<String, String> properties, Database db, OlapTable table) {
+    public static List<UniqueConstraint> analyzeUniqueConstraint(Map<String, String> properties, Database db, Table table) {
         List<UniqueConstraint> uniqueConstraints = Lists.newArrayList();
         List<UniqueConstraint> analyzedUniqueConstraints = Lists.newArrayList();
 
@@ -1127,11 +1127,11 @@ public class PropertyAnalyzer {
         return analyzedUniqueConstraints;
     }
 
-    private static Pair<BaseTableInfo, Table> analyzeForeignKeyConstraintTablePath(String tablePath,
+    private static Pair<BaseTableInfo, Table> analyzeForeignKeyConstraintTablePath(String catalogName,
+                                                                                   String tablePath,
                                                                                    String foreignKeyConstraintDesc,
                                                                                    Database db) {
         String[] parts = tablePath.split("\\.");
-        String catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
         String dbName = db.getFullName();
         String tableName = "";
         if (parts.length == 3) {
@@ -1262,21 +1262,17 @@ public class PropertyAnalyzer {
                             " columns' size does not match", foreignKeyConstraintDesc));
                 }
                 // analyze table exist for foreign key constraint
-                Pair<BaseTableInfo, Table> parentTablePair = analyzeForeignKeyConstraintTablePath(targetTablePath,
-                        foreignKeyConstraintDesc, db);
+                Pair<BaseTableInfo, Table> parentTablePair = analyzeForeignKeyConstraintTablePath(analyzedTable.getCatalogName(),
+                        targetTablePath, foreignKeyConstraintDesc, db);
                 BaseTableInfo parentTableInfo = parentTablePair.first;
                 Table parentTable = parentTablePair.second;
                 List<ColumnId> parentColumnIds = MetaUtils.getColumnIdsByColumnNames(parentTable, parentColumnNames);
                 Pair<BaseTableInfo, Table> childTablePair = Pair.create(null, analyzedTable);
                 Table childTable = analyzedTable;
                 if (analyzedTable.isMaterializedView()) {
-                    childTablePair = analyzeForeignKeyConstraintTablePath(sourceTablePath, foreignKeyConstraintDesc,
-                            db);
+                    childTablePair = analyzeForeignKeyConstraintTablePath(analyzedTable.getCatalogName(),
+                            sourceTablePath, foreignKeyConstraintDesc, db);
                     childTable = childTablePair.second;
-                } else {
-                    if (!analyzedTable.isNativeTable()) {
-                        throw new SemanticException("do not support add foreign key on external table");
-                    }
                 }
                 List<ColumnId> childColumnIds = MetaUtils.getColumnIdsByColumnNames(childTable, childColumnNames);
 
