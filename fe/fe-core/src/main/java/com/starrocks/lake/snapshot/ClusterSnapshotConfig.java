@@ -241,6 +241,10 @@ public class ClusterSnapshotConfig {
             ObjectMapper objectMapper = new ObjectMapper(new YAMLFactory());
             ClusterSnapshotConfig config = objectMapper.readValue(new File(clusterSnapshotYamlFile),
                     ClusterSnapshotConfig.class);
+            if (config == null) {
+                // Empty config file
+                config = new ClusterSnapshotConfig();
+            }
             return config;
         } catch (Exception e) {
             LOG.warn("Failed to load cluster snapshot config {} ", clusterSnapshotYamlFile, e);

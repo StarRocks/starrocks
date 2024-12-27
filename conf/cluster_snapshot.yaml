@@ -1,3 +1,5 @@
+--- # cluster_snapshot.yaml
+
 # do not include leader fe
 #frontends:
 #  - host: 172.26.92.1
