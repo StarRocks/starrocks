@@ -94,7 +94,7 @@ public class AutoMVTPCDSTest {
 
     @Test
     public void testAll() {
-        List<Pair<String, String>> queryList = Lists.newArrayList(TestUtil.getTPCHQueryList());
+        List<Pair<String, String>> queryList = Lists.newArrayList(TestUtil.getTPCDSQueryList());
         Collections.shuffle(queryList);
         queryList = queryList.subList(0, 5);
         AutoMVUtil.defaultTestHelper(STARROCKS_ASSERT.get().getCtx(), queryList);
