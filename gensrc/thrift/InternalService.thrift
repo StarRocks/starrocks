@@ -338,6 +338,12 @@ struct TScanRangeParams {
   4: optional bool has_more = false;
 }
 
+struct TExecDebugOption {
+  1: optional Types.TPlanNodeId debug_node_id
+  2: optional PlanNodes.TDebugAction debug_action
+  3: optional i32 value
+}
+
 // Parameters for a single execution instance of a particular TPlanFragment
 // TODO: for range partitioning, we also need to specify the range boundaries
 struct TPlanFragmentExecParams {
@@ -361,11 +367,6 @@ struct TPlanFragmentExecParams {
   // The number of output partitions is destinations.size().
   5: list<DataSinks.TPlanFragmentDestination> destinations
 
-  // Debug options: perform some action in a particular phase of a particular node
-  6: optional Types.TPlanNodeId debug_node_id
-  7: optional PlanNodes.TExecNodePhase debug_phase
-  8: optional PlanNodes.TDebugAction debug_action
-
   // Id of this fragment in its role as a sender.
   9: optional i32 sender_id
   10: optional i32 num_senders
@@ -384,7 +385,10 @@ struct TPlanFragmentExecParams {
 
   70: optional i32 pipeline_sink_dop
 
-  73: optional bool report_when_finish;
+  73: optional bool report_when_finish
+
+  // Debug options: perform some action in a particular phase of a particular node
+  74: optional list<TExecDebugOption> exec_debug_options
 }
 
 // Global query parameters assigned by the coordinator.

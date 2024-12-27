@@ -1,0 +1,38 @@
+-- name: test_debug_wait
+CREATE TABLE `t0` (
+  `c0` bigint DEFAULT NULL,
+  `c1` bigint DEFAULT NULL,
+  `c2` bigint DEFAULT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t0 SELECT generate_series, 4096 - generate_series, generate_series FROM TABLE(generate_series(1,  409600));
+-- result:
+-- !result
+set query_debug_options = '{"execDebugOptions":[{"plan_node_id":0, "debug_action":"WAIT", "value":500}]}';
+-- result:
+-- !result
+select count(*) from t0;
+-- result:
+409600
+-- !result
+set query_debug_options = '{"execDebugOptions":[{"plan_node_id":2, "debug_action":"WAIT", "value":500}]}';
+-- result:
+-- !result
+select count(*) from t0;
+-- result:
+409600
+-- !result
+set query_debug_options = '{"execDebugOptions":[{"plan_node_id":3, "debug_action":"WAIT", "value":500}]}';
+-- result:
+-- !result
+select count(*) from t0;
+-- result:
+409600
+-- !result
