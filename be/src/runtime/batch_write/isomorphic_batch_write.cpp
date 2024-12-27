@@ -312,8 +312,10 @@ Status IsomorphicBatchWrite::_execute_write(AsyncAppendDataContext* async_ctx) {
         num_retries += 1;
         {
             SCOPED_RAW_TIMER(&rpc_cost_ns);
-            // TODO check if the error is retryable if the return status is not ok
-            (void)_send_rpc_request(async_ctx->data_ctx());
+            st = _send_rpc_request(async_ctx->data_ctx());
+            if (!st.ok()) {
+                break;
+            }
         }
         {
             SCOPED_RAW_TIMER(&wait_pipe_cost_ns);
