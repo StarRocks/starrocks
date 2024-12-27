@@ -118,13 +118,8 @@ struct TCreateTabletReq {
     21: optional i32 compression_level = -1;
     // Whether or not use shared tablet initial metadata.
     22: optional bool enable_tablet_creation_optimization = false;
-<<<<<<< HEAD
-=======
-    // The timeout FE will wait for the tablet to be created.
-    23: optional i64 timeout_ms = -1;
     // Global transaction id
     24: optional i64 gtid = 0;
->>>>>>> f977337f8 ([Feature] Support restoring from a cluster snapshot for shared-data mode (part 3, introduce gtid for tablet metadata) (#54326))
 }
 
 struct TDropTabletReq {

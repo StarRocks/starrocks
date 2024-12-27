@@ -124,14 +124,7 @@ public class TabletTaskExecutor {
         int numIndexes = partitions.stream().mapToInt(
                 partition -> partition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE).size()).sum();
         int maxTimeout = numIndexes * Config.max_create_table_timeout_second;
-<<<<<<< HEAD
-        boolean enableTabletCreationOptimization = table.isCloudNativeTableOrMaterializedView()
-                && Config.lake_enable_tablet_creation_optimization;
-        if (enableTabletCreationOptimization) {
-=======
-        long maxWaitTimeSeconds = Math.min(timeout, maxTimeout);
         if (option.isEnableTabletCreationOptimization()) {
->>>>>>> f977337f8 ([Feature] Support restoring from a cluster snapshot for shared-data mode (part 3, introduce gtid for tablet metadata) (#54326))
             numReplicas = numIndexes;
         }
         MarkedCountDownLatch<Long, Long> countDownLatch = new MarkedCountDownLatch<>(numReplicas);

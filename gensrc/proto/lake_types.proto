@@ -234,10 +234,6 @@ message TxnInfoPB {
     optional bool combined_txn_log = 3;
     optional TxnTypePB txn_type = 4;
     optional bool force_publish = 5; // only used for compaction
-<<<<<<< HEAD
-=======
-    optional bool rebuild_pindex = 6;
     optional int64 gtid = 7 [default=0];
->>>>>>> f977337f8 ([Feature] Support restoring from a cluster snapshot for shared-data mode (part 3, introduce gtid for tablet metadata) (#54326))
 };
 
