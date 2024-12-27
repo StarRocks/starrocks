@@ -265,4 +265,8 @@ public class StarMgrServer {
     public long getReplayId() {
         return getJournalSystem().getReplayId();
     }
+
+    public void triggerNewImage() {
+        journalSystem.getJournalWriter().setForceRollJournal();
+    }
 }

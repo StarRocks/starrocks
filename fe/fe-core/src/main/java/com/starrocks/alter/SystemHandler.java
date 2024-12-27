@@ -68,6 +68,7 @@ import com.starrocks.sql.ast.DropObserverClause;
 import com.starrocks.sql.ast.ModifyBackendClause;
 import com.starrocks.sql.ast.ModifyBrokerClause;
 import com.starrocks.sql.ast.ModifyFrontendAddressClause;
+import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import org.apache.commons.lang.NotImplementedException;
@@ -204,6 +205,9 @@ public class SystemHandler extends AlterHandler {
             GlobalStateMgr.getCurrentSystemInfo().dropComputeNodes(dropComputeNodeClause.getHostPortPairs());
         } else if (alterClause instanceof CreateImageClause) {
             GlobalStateMgr.getCurrentState().triggerNewImage();
+            if (RunMode.isSharedDataMode()) {
+                StarMgrServer.getCurrentState().triggerNewImage();
+            }
         } else if (alterClause instanceof CleanTabletSchedQClause) {
             GlobalStateMgr.getCurrentState().getTabletScheduler().forceCleanSchedQ();
         } else {
