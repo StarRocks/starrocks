@@ -1776,18 +1776,23 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             numReplicas += partition.storageReplicaCount();
         }
 
+        TabletTaskExecutor.CreateTabletOption option = new TabletTaskExecutor.CreateTabletOption();
+        option.setEnableTabletCreationOptimization(table.isCloudNativeTableOrMaterializedView()
+                && Config.lake_enable_tablet_creation_optimization);
+        option.setGtid(GlobalStateMgr.getCurrentState().getGtidGenerator().nextGtid());
+
         try {
             GlobalStateMgr.getCurrentState().getConsistencyChecker().addCreatingTableId(table.getId());
             if (numReplicas > Config.create_table_max_serial_replicas) {
                 LOG.info("start to build {} partitions concurrently for table {}.{} with {} replicas",
                         partitions.size(), db.getFullName(), table.getName(), numReplicas);
                 TabletTaskExecutor.buildPartitionsConcurrently(
-                        db.getId(), table, partitions, numReplicas, numAliveNodes, warehouseId);
+                        db.getId(), table, partitions, numReplicas, numAliveNodes, warehouseId, option);
             } else {
                 LOG.info("start to build {} partitions sequentially for table {}.{} with {} replicas",
                         partitions.size(), db.getFullName(), table.getName(), numReplicas);
                 TabletTaskExecutor.buildPartitionsSequentially(
-                        db.getId(), table, partitions, numReplicas, numAliveNodes, warehouseId);
+                        db.getId(), table, partitions, numReplicas, numAliveNodes, warehouseId, option);
             }
         } finally {
             GlobalStateMgr.getCurrentState().getConsistencyChecker().deleteCreatingTableId(table.getId());
