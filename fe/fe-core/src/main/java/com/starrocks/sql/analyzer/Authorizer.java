@@ -183,7 +183,7 @@ public class Authorizer {
         doCheckTableLikeObject(currentUser, roleIds, dbName, tableBasicInfo, null);
     }
 
-    private static void doCheckTableLikeObject(UserIdentity currentUser, Set<Long> roleIds,
+    private static void doCheckTableLikeObject(UserIdentity currentUser, Set<Long> roleIds, String dbName,
                                                BasicTable tbl, PrivilegeType privilegeType) throws AccessDeniedException {
         if (tbl == null) {
             return;
@@ -210,7 +210,7 @@ public class Authorizer {
             case KUDU:
                 // `privilegeType == null` meaning we don't check specified action, just any action
                 if (privilegeType == null) {
-                    checkAnyActionOnTable(currentUser, roleIds, new TableName(tbl.getCatalogName(), tbl.get, tbl.getName()));
+                    checkAnyActionOnTable(currentUser, roleIds, new TableName(tbl.getCatalogName(), dbName, tbl.getName()));
                 } else {
                     checkTableAction(currentUser, roleIds, dbName, tbl.getName(), privilegeType);
                 }

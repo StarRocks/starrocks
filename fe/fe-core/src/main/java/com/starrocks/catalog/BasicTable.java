@@ -21,8 +21,6 @@ package com.starrocks.catalog;
 public interface BasicTable {
     String getCatalogName();
 
-    String getDbName();
-
     String getName();
 
     String getComment();
