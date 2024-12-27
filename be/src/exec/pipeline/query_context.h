@@ -390,8 +390,6 @@ public:
     void collect_query_statistics(const PCollectQueryStatisticsRequest* request,
                                   PCollectQueryStatisticsResult* response);
 
-    void for_each_active_ctx(const std::function<void(QueryContextPtr)>& func);
-
 private:
     static void _clean_func(QueryContextManager* manager);
     void _clean_query_contexts();
