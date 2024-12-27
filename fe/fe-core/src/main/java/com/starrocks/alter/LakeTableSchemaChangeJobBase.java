@@ -45,6 +45,8 @@ public abstract class LakeTableSchemaChangeJobBase extends AlterJobV2 {
     // The job will wait all transactions before this txn id finished, then send the rollup tasks.
     @SerializedName(value = "watershedTxnId")
     protected long watershedTxnId = -1;
+    @SerializedName(value = "watershedGtid")
+    protected long watershedGtid = -1;
 
     public LakeTableSchemaChangeJobBase(long jobId, JobType jobType, long dbId, long tableId,
                                         String tableName, long timeoutMs) {
