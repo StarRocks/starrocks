@@ -64,6 +64,8 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
     private static final Logger LOG = LogManager.getLogger(LakeTableAlterMetaJobBase.class);
     @SerializedName(value = "watershedTxnId")
     private long watershedTxnId = -1;
+    @SerializedName(value = "watershedGtid")
+    private long watershedGtid = -1;
     // PhysicalPartitionId -> indexId -> MaterializedIndex
     @SerializedName(value = "partitionIndexMap")
     private Table<Long, Long, MaterializedIndex> physicalPartitionIndexMap = HashBasedTable.create();
@@ -107,6 +109,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         if (this.watershedTxnId == -1) {
             this.watershedTxnId = globalStateMgr.getGlobalTransactionMgr().getTransactionIDGenerator()
                     .getNextTransactionId();
+            this.watershedGtid = globalStateMgr.getGtidGenerator().nextGtid();
             GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
         }
 
@@ -259,6 +262,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             txnInfo.combinedTxnLog = false;
             txnInfo.commitTime = finishedTimeMs / 1000;
             txnInfo.txnType = TxnTypePB.TXN_NORMAL;
+            txnInfo.gtid = watershedGtid;
             for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
                 long commitVersion = commitVersionMap.get(partitionId);
                 Map<Long, MaterializedIndex> dirtyIndexMap = physicalPartitionIndexMap.row(partitionId);
@@ -475,6 +479,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
 
             this.physicalPartitionIndexMap = other.physicalPartitionIndexMap;
             this.watershedTxnId = other.watershedTxnId;
+            this.watershedGtid = other.watershedGtid;
             this.commitVersionMap = other.commitVersionMap;
 
             restoreState(other);
