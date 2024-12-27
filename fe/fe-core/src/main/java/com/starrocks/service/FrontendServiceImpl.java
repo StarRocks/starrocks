@@ -1766,6 +1766,15 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     public TMergeCommitResult requestMergeCommit(TMergeCommitRequest request) throws TException {
         TMergeCommitResult result = new TMergeCommitResult();
         try {
+            GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+            Database db = globalStateMgr.getLocalMetastore().getDb(request.getDb());
+            if (db == null) {
+                throw new StarRocksException(String.format("unknown database [%s]", request.getDb()));
+            }
+            Table table = globalStateMgr.getLocalMetastore().getTable(db.getFullName(), request.getTbl());
+            if (table == null) {
+                throw new StarRocksException(String.format("unknown table [%s.%s]", request.getDb(), request.getTbl()));
+            }
             checkPasswordAndLoadPriv(request.getUser(), request.getPasswd(), request.getDb(),
                     request.getTbl(), request.getUser_ip());
             TableId tableId = new TableId(request.getDb(), request.getTbl());
