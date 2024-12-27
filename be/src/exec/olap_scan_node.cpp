@@ -910,7 +910,8 @@ pipeline::OpFactories OlapScanNode::decompose_to_pipeline(pipeline::PipelineBuil
                                                                        std::move(scan_ctx_factory));
     this->init_runtime_filter_for_operator(scan_op.get(), context, rc_rf_probe_collector);
 
-    return pipeline::decompose_scan_node_to_pipeline(scan_op, this, context);
+    auto ops = pipeline::decompose_scan_node_to_pipeline(scan_op, this, context);
+    return context->maybe_interpolate_debug_ops(runtime_state(), _id, ops);
 }
 
 } // namespace starrocks

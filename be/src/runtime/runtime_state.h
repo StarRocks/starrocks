@@ -57,6 +57,7 @@
 #include "runtime/global_dict/types.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
+#include "util/debug_action.h"
 #include "util/logging.h"
 #include "util/phmap/phmap.h"
 #include "util/runtime_profile.h"
@@ -508,6 +509,8 @@ public:
     bool enable_event_scheduler() const { return _enable_event_scheduler; }
     void set_enable_event_scheduler(bool enable) { _enable_event_scheduler = enable; }
 
+    DebugActionMgr& debug_action_mgr() { return _debug_action_mgr; }
+
 private:
     // Set per-query state.
     void _init(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
@@ -649,6 +652,8 @@ private:
     BroadcastJoinRightOffsprings _broadcast_join_right_offsprings;
 
     std::optional<TSpillOptions> _spill_options;
+
+    DebugActionMgr _debug_action_mgr;
 
     bool _enable_event_scheduler = false;
 };
