@@ -45,7 +45,7 @@ First you need to prepare a target sr to be tested, and then store their informa
 
 - DEMO:  
 ```yaml
-[mysql-client]
+[client]
 host = 172.26.195.96
 port = 9032
 user = root
@@ -54,6 +54,7 @@ http_port = 8034
 
 [replace]
 url = http://${mysql-client:host}:${mysql-client:http_port}
+[env]
 ```
 ### 5. Test Data
 To use the data `${DATA}` like ssb/tpcds/tpch, you need to download them to the dir: `common/data/[ssb|tpch|tpcds]`. Then you can load them in case like: `function: prepare_data("${DATA}", "${db[0]}")`
