@@ -84,6 +84,7 @@ public class CreateReplicaTask extends AgentTask {
     private boolean createSchemaFile = true;
     private boolean enableTabletCreationOptimization = false;
     private final TTabletSchema tabletSchema;
+    private long gtid = 0;
 
     private CreateReplicaTask(Builder builder) {
         super(null, builder.getNodeId(), TTaskType.CREATE, builder.getDbId(), builder.getTableId(),
@@ -104,6 +105,7 @@ public class CreateReplicaTask extends AgentTask {
         this.baseTabletId = builder.getBaseTabletId();
         this.recoverySource = builder.getRecoverySource();
         this.inRestoreMode = builder.isInRestoreMode();
+        this.gtid = builder.getGtid();
     }
 
     public static Builder newBuilder() {
@@ -177,6 +179,7 @@ public class CreateReplicaTask extends AgentTask {
         createTabletReq.setTablet_type(tabletType);
         createTabletReq.setCreate_schema_file(createSchemaFile);
         createTabletReq.setEnable_tablet_creation_optimization(enableTabletCreationOptimization);
+        createTabletReq.setGtid(gtid);
         return createTabletReq;
     }
 
@@ -205,6 +208,7 @@ public class CreateReplicaTask extends AgentTask {
         private boolean createSchemaFile = true;
         private boolean enableTabletCreationOptimization = false;
         private TTabletSchema tabletSchema;
+        private long gtid = 0;
 
         private Builder() {
         }
@@ -404,6 +408,15 @@ public class CreateReplicaTask extends AgentTask {
 
         public Builder setTabletSchema(TTabletSchema tabletSchema) {
             this.tabletSchema = tabletSchema;
+            return this;
+        }
+
+        public long getGtid() {
+            return gtid;
+        }
+
+        public Builder setGtid(long gtid) {
+            this.gtid = gtid;
             return this;
         }
 
