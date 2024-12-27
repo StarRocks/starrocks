@@ -54,6 +54,7 @@ public:
     void unregister_stream_load_pipe(StreamLoadContext* pipe_ctx);
     // For testing
     bool contain_pipe(StreamLoadContext* pipe_ctx);
+    bool is_pipe_alive(StreamLoadContext* pipe_ctx);
 
     Status append_data(StreamLoadContext* data_ctx);
 
@@ -64,8 +65,7 @@ private:
     static int _execute_tasks(void* meta, bthread::TaskIterator<Task>& iter);
 
     Status _execute_write(AsyncAppendDataContext* async_ctx);
-    Status _write_data(AsyncAppendDataContext* data_ctx);
-    Status _wait_for_stream_load_pipe();
+    Status _write_data_to_pipe(AsyncAppendDataContext* data_ctx);
     Status _send_rpc_request(StreamLoadContext* data_ctx);
     Status _wait_for_load_status(StreamLoadContext* data_ctx, int64_t timeout_ns);
 
