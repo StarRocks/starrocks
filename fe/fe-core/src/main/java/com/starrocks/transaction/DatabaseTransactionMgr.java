@@ -327,7 +327,7 @@ public class DatabaseTransactionMgr {
                 listener.preCommit(transactionState, tabletCommitInfos, tabletFailInfos);
             }
 
-            TxnStateChangeCallback callback = transactionState.beforeStateTransform(TransactionStatus.PREPARED);
+            transactionState.beforeStateTransform(TransactionStatus.PREPARED);
             boolean txnOperated = false;
 
             Span unprotectedCommitSpan = TraceManager.startSpan("unprotectedPreparedTransaction", txnSpan);
@@ -362,7 +362,7 @@ public class DatabaseTransactionMgr {
                 txnSpan.setAttribute("num_partition", numPartitions);
                 unprotectedCommitSpan.end();
                 // after state transform
-                transactionState.afterStateTransform(TransactionStatus.PREPARED, txnOperated, callback, null);
+                transactionState.afterStateTransform(TransactionStatus.PREPARED, txnOperated, null);
             }
             if (writeEditLog) {
                 persistTxnStateInTxnLevelLock(transactionState);
@@ -437,7 +437,7 @@ public class DatabaseTransactionMgr {
             txnSpan.setAttribute("tables", tableListString.toString());
 
             // before state transform
-            TxnStateChangeCallback callback = transactionState.beforeStateTransform(TransactionStatus.COMMITTED);
+            transactionState.beforeStateTransform(TransactionStatus.COMMITTED);
             // transaction state transform
             boolean txnOperated = false;
 
@@ -456,7 +456,7 @@ public class DatabaseTransactionMgr {
                 txnSpan.setAttribute("num_partition", numPartitions);
                 unprotectedCommitSpan.end();
                 // after state transform
-                transactionState.afterStateTransform(TransactionStatus.COMMITTED, txnOperated, callback, null);
+                transactionState.afterStateTransform(TransactionStatus.COMMITTED, txnOperated, null);
             }
 
             persistTxnStateInTxnLevelLock(transactionState);
@@ -530,7 +530,7 @@ public class DatabaseTransactionMgr {
         }
 
         // before state transform
-        TxnStateChangeCallback callback = transactionState.beforeStateTransform(TransactionStatus.ABORTED);
+        transactionState.beforeStateTransform(TransactionStatus.ABORTED);
         boolean txnOperated = false;
 
         transactionState.writeLock();
@@ -540,7 +540,7 @@ public class DatabaseTransactionMgr {
                 txnOperated = unprotectAbortTransaction(transactionId, abortPrepared, reason);
             } finally {
                 writeUnlock();
-                transactionState.afterStateTransform(TransactionStatus.ABORTED, txnOperated, callback, reason);
+                transactionState.afterStateTransform(TransactionStatus.ABORTED, txnOperated, reason);
             }
 
             persistTxnStateInTxnLevelLock(transactionState);
@@ -1192,7 +1192,7 @@ public class DatabaseTransactionMgr {
                     LOG.debug("after set transaction {} to visible", transactionState);
                 } finally {
                     writeUnlock();
-                    transactionState.afterStateTransform(TransactionStatus.VISIBLE, txnOperated);
+                    transactionState.afterStateTransform(TransactionStatus.VISIBLE, txnOperated, "");
                 }
 
                 persistTxnStateInTxnLevelLock(transactionState);
@@ -1845,7 +1845,8 @@ public class DatabaseTransactionMgr {
         return globalStateMgr;
     }
 
-    public void finishTransactionNew(TransactionState transactionState, Set<Long> publishErrorReplicas) {
+    public void finishTransactionNew(TransactionState transactionState, Set<Long> publishErrorReplicas)
+            throws StarRocksException {
         Database db = globalStateMgr.getLocalMetastore().getDb(transactionState.getDbId());
         if (db == null) {
             transactionState.writeLock();
@@ -1890,7 +1891,7 @@ public class DatabaseTransactionMgr {
                     txnOperated = true;
                 } finally {
                     writeUnlock();
-                    transactionState.afterStateTransform(TransactionStatus.VISIBLE, txnOperated);
+                    transactionState.afterStateTransform(TransactionStatus.VISIBLE, txnOperated, "");
                 }
                 persistTxnStateInTxnLevelLock(transactionState);
 

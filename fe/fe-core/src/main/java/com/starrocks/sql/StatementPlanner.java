@@ -468,6 +468,11 @@ public class StatementPlanner {
     private static void beginTransaction(DmlStmt stmt, ConnectContext session)
             throws BeginTransactionException, RunningTxnExceedException, AnalysisException, LabelAlreadyUsedException,
             DuplicatedRequestException {
+        if (session.getExplicitTxnState() != null) {
+            stmt.setTxnId(session.getExplicitTxnState().getTransactionState().getTransactionId());
+            return;
+        }
+
         // not need begin transaction here
         // 1. explain (exclude explain analyze)
         // 2. insert into files

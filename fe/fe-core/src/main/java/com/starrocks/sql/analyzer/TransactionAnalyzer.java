@@ -14,12 +14,15 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.txn.BeginStmt;
 import com.starrocks.sql.ast.txn.CommitStmt;
 import com.starrocks.sql.ast.txn.RollbackStmt;
+import com.starrocks.transaction.ExplicitTxnState;
 
 public class TransactionAnalyzer {
     public static void analyze(StatementBase statement, ConnectContext context) {
@@ -34,6 +37,11 @@ public class TransactionAnalyzer {
 
         @Override
         public Void visitBeginStatement(BeginStmt statement, ConnectContext context) {
+            ExplicitTxnState explicitTxnState = context.getExplicitTxnState();
+            if (context.getExplicitTxnState() != null) {
+                throw ErrorReportException.report(ErrorCode.ERR_BEGIN_TXN_FAILED, "Nested transactions are not allowed");
+            }
+
             return null;
         }
 

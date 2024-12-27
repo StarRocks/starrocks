@@ -233,6 +233,7 @@ import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionCommitFailedException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
+import com.starrocks.transaction.TransactionStmtExecutor;
 import com.starrocks.transaction.VisibleStateWaiter;
 import com.starrocks.warehouse.WarehouseIdleChecker;
 import org.apache.commons.collections4.CollectionUtils;
@@ -793,12 +794,14 @@ public class StmtExecutor {
                 handleDelBackendBlackListStmt();
             } else if (parsedStmt instanceof PlanAdvisorStmt) {
                 handlePlanAdvisorStmt();
-            } else if (parsedStmt instanceof BeginStmt
-                    || parsedStmt instanceof CommitStmt
-                    || parsedStmt instanceof RollbackStmt) {
-                handleUnsupportedStmt();
             } else if (parsedStmt instanceof TranslateStmt) {
                 handleTranslateStmt();
+            } else if (parsedStmt instanceof BeginStmt) {
+                TransactionStmtExecutor.beginStmt(context, (BeginStmt) parsedStmt);
+            } else if (parsedStmt instanceof CommitStmt) {
+                TransactionStmtExecutor.commitStmt(context, (CommitStmt) parsedStmt);
+            } else if (parsedStmt instanceof RollbackStmt) {
+                TransactionStmtExecutor.rollbackStmt(context, (RollbackStmt) parsedStmt);
             } else {
                 context.getState().setError("Do not support this query.");
             }
@@ -2395,7 +2398,7 @@ public class StmtExecutor {
                 loadJob.setJobProperties(stmt.getProperties());
                 jobId = loadJob.getId();
                 if (txnState != null) {
-                    txnState.setCallbackId(jobId);
+                    txnState.addCallbackId(jobId);
                 }
             }
 
