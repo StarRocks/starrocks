@@ -133,7 +133,8 @@ public class LoadExecutorTest extends BatchWriteTestBase {
         assertEquals(1, loadExecuteCallback.getFinishedLoads().size());
         assertEquals(label, loadExecuteCallback.getFinishedLoads().get(0));
         TransactionStatus txnStatus =
-                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getLabelStatus(DATABASE_1.getId(), label);
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                        .getLabelStatus(DATABASE_1.getId(), label).getStatus();
         assertEquals(TransactionStatus.VISIBLE, txnStatus);
     }
 
@@ -261,7 +262,8 @@ public class LoadExecutorTest extends BatchWriteTestBase {
         assertEquals(1, loadExecuteCallback.getFinishedLoads().size());
         assertEquals(label, loadExecuteCallback.getFinishedLoads().get(0));
         TransactionStatus txnStatus =
-                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getLabelStatus(DATABASE_1.getId(), label);
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                        .getLabelStatus(DATABASE_1.getId(), label).getStatus();
         assertEquals(expectedTxnStatus, txnStatus);
     }
 
