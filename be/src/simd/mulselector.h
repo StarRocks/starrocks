@@ -41,6 +41,16 @@ public:
 
         int row_sz = select_list[0]->size();
         int processed_rows = 0;
+        SelectVec __restrict handle_select_vec[select_vec_size];
+        // copy select vector pointer
+        for (int i = 0; i < select_vec_size; ++i) {
+            handle_select_vec[i] = select_vec[i];
+        }
+
+        const CppType* __restrict handle_select_data[select_list_size];
+        for (int i = 0; i < select_list_size; ++i) {
+            handle_select_data[i] = select_list[i]->data();
+        }
 
 #ifdef __AVX2__
         // SIMD multi select if Algorithm
@@ -58,28 +68,13 @@ public:
         // 5. store selected_dst
 
         if constexpr (sizeof(RunTimeCppType<TYPE>) == 1) {
-            SelectVec handle_select_vec[select_vec_size];
-            // copy select vector pointer
-            for (int i = 0; i < select_vec_size; ++i) {
-                handle_select_vec[i] = select_vec[i];
-            }
-
-            CppType* handle_select_data[select_list_size];
-            for (int i = 0; i < select_list_size; ++i) {
-                handle_select_data[i] = select_list[i]->data();
-            }
-
-            __m256i loaded_masks[select_vec_size + 1];
-            loaded_masks[select_vec_size] = _mm256_set1_epi8(0xff);
-
+            __m256i loaded_masks[select_vec_size];
             __m256i loaded_datas[select_list_size];
 
             const __m256i all_zero_vec = _mm256_setzero_si256();
 
             while (processed_rows + 32 < row_sz) {
                 __m256i selected_vec = all_zero_vec;
-                __m256i selected_dst = _mm256_undefined_si256();
-
                 // load select vector
                 for (int i = 0; i < select_vec_size; ++i) {
                     loaded_masks[i] = _mm256_loadu_si256(reinterpret_cast<__m256i*>(handle_select_vec[i]));
@@ -88,10 +83,12 @@ public:
 
                 // load select data
                 for (int i = 0; i < select_list_size; ++i) {
-                    loaded_datas[i] = _mm256_loadu_si256(reinterpret_cast<__m256i*>(handle_select_data[i]));
+                    loaded_datas[i] = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(handle_select_data[i]));
                 }
 
-                for (int i = 0; i < select_list_size; ++i) {
+                __m256i selected_dst = loaded_datas[select_list_size - 1];
+
+                for (int i = 0; i < select_list_size - 1; ++i) {
                     // get will select vector in this loop
                     __m256i not_selected_vec = ~selected_vec;
                     __m256i will_select = not_selected_vec & loaded_masks[i];
@@ -119,17 +116,15 @@ public:
         }
 #endif
 
-        auto get_select_index = [&](int idx) {
-            for (int i = 0; i < select_vec_size; ++i) {
-                if (select_vec[i][idx]) {
-                    return i;
+        for (int i = processed_rows; i < row_sz; ++i) {
+            int index = 0;
+            int j;
+            for (j = 0; j < select_vec_size; ++j) {
+                if (select_vec[j][i]) {
+                    break;
                 }
             }
-            return select_vec_size;
-        };
-
-        for (int i = processed_rows; i < row_sz; ++i) {
-            int index = get_select_index(i);
+            index = j;
             dst[i] = (*select_list[index])[i];
         }
     }
