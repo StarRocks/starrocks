@@ -533,4 +533,58 @@ TEST_F(StreamLoadActionTest, enable_batch_write_wrong_argument) {
     ASSERT_NE(nullptr, std::strstr(doc["Message"].GetString(), "Invalid parameter enable_merge_commit"));
 }
 
+TEST_F(StreamLoadActionTest, merge_commit_response) {
+    // success
+    {
+        StreamLoadContext ctx(&_env);
+        ctx.enable_batch_write = true;
+        ctx.status = Status::OK();
+        ctx.txn_id = 1;
+        ctx.batch_write_label = "label1";
+        ctx.label = "request_id_1";
+        ctx.receive_bytes = 10;
+        ctx.load_cost_nanos = 1'200'000'000;
+        ctx.mc_read_data_cost_nanos = 10'000'000;
+        ctx.mc_pending_cost_nanos = 20'000'000;
+        ctx.mc_wait_plan_cost_nanos = 100'000'000;
+        ctx.mc_write_data_cost_nanos = 70'000'000;
+        ctx.mc_wait_finish_cost_nanos = 1'000'000'000;
+        ctx.mc_left_merge_time_nanos = 800'000'000;
+        auto result = ctx.to_json();
+        ASSERT_EQ(
+                "{\"TxnId\":1,\"Label\":\"label1\",\"Status\":\"Success\",\"Message\":\"OK\",\"RequestId\":\"request_"
+                "id_1\","
+                "\"LoadBytes\":10,\"LoadTimeMs\":1200,\"ReadDataTimeMs\":10,\"PendingTimeMs\":20,\"WaitPlanTimeMs\":"
+                "100,"
+                "\"WriteDataTimeMs\":70,\"WaitFinishTimeMs\":1000,\"LeftMergeTimeMs\":800}",
+                result);
+    }
+
+    // fail
+    {
+        StreamLoadContext ctx(&_env);
+        ctx.enable_batch_write = true;
+        ctx.status = Status::InternalError("TestFail");
+        ctx.txn_id = 1;
+        ctx.batch_write_label = "label1";
+        ctx.label = "request_id_1";
+        ctx.receive_bytes = 10;
+        ctx.load_cost_nanos = 1'200'000'000;
+        ctx.mc_read_data_cost_nanos = 10'000'000;
+        ctx.mc_pending_cost_nanos = 20'000'000;
+        ctx.mc_wait_plan_cost_nanos = 100'000'000;
+        ctx.mc_write_data_cost_nanos = 70'000'000;
+        ctx.mc_wait_finish_cost_nanos = 1'000'000'000;
+        ctx.mc_left_merge_time_nanos = 800'000'000;
+        auto result = ctx.to_json();
+        ASSERT_EQ(
+                "{\"TxnId\":1,\"Label\":\"label1\",\"Status\":\"Fail\",\"Message\":\"TestFail\",\"RequestId\":"
+                "\"request_id_1\","
+                "\"LoadBytes\":10,\"LoadTimeMs\":1200,\"ReadDataTimeMs\":10,\"PendingTimeMs\":20,\"WaitPlanTimeMs\":"
+                "100,"
+                "\"WriteDataTimeMs\":70,\"WaitFinishTimeMs\":1000,\"LeftMergeTimeMs\":800}",
+                result);
+    }
+}
+
 } // namespace starrocks

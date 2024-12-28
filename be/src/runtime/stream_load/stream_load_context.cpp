@@ -241,17 +241,17 @@ std::string StreamLoadContext::to_merge_commit_json() const {
     writer.Key("LoadTimeMs");
     writer.Int64(load_cost_nanos / 1000000);
     writer.Key("ReadDataTimeMs");
-    writer.Int64(merge_commit_read_data_cost_nanos / 1000000);
+    writer.Int64(mc_read_data_cost_nanos / 1000000);
     writer.Key("PendingTimeMs");
-    writer.Int64(merge_commit_pending_cost_nanos / 1000000);
+    writer.Int64(mc_pending_cost_nanos / 1000000);
     writer.Key("WaitPlanTimeMs");
-    writer.Int64(merge_commit_wait_plan_cost_nanos / 1000000);
+    writer.Int64(mc_wait_plan_cost_nanos / 1000000);
     writer.Key("WriteDataTimeMs");
-    writer.Int64(merge_commit_write_data_cost_nanos / 1000000);
+    writer.Int64(mc_write_data_cost_nanos / 1000000);
     writer.Key("WaitFinishTimeMs");
-    writer.Int64(merge_commit_wait_finish_cost_nanos / 1000000);
+    writer.Int64(mc_wait_finish_cost_nanos / 1000000);
     writer.Key("LeftMergeTimeMs");
-    writer.Int64(merge_commit_left_merge_time_nanos / 1000000);
+    writer.Int64(mc_left_merge_time_nanos / 1000000);
 
     writer.EndObject();
     return s.GetString();

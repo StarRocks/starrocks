@@ -296,20 +296,20 @@ public:
 
     // Time consumption statistics for a merge commit request. The overall
     // time consumption can be divided into several parts:
-    // 1. merge_commit_read_data_cost_nanos: read the data from the http/brpc request
-    // 2. merge_commit_pending_cost_nanos: the request is pending in the execution_queue
+    // 1. mc_read_data_cost_nanos: read the data from the http/brpc request
+    // 2. mc_pending_cost_nanos: the request is pending in the execution_queue
     // 3. Execute the request
-    //    3.1 merge_commit_wait_plan_cost_nanos: wait for a load plan
-    //    3.2 merge_commit_write_data_cost_nanos: write data to the plan
-    //    3.3 merge_commit_wait_finish_cost_nanos: wait for the load to finish (txn publish)
+    //    3.1 mc_wait_plan_cost_nanos: wait for a load plan
+    //    3.2 mc_write_data_cost_nanos: write data to the plan
+    //    3.3 mc_wait_finish_cost_nanos: wait for the load to finish (txn publish)
     //        if using synchronous mode
-    int64_t merge_commit_read_data_cost_nanos = 0;
-    int64_t merge_commit_pending_cost_nanos = 0;
-    int64_t merge_commit_wait_plan_cost_nanos = 0;
-    int64_t merge_commit_write_data_cost_nanos = 0;
-    int64_t merge_commit_wait_finish_cost_nanos = 0;
+    int64_t mc_read_data_cost_nanos = 0;
+    int64_t mc_pending_cost_nanos = 0;
+    int64_t mc_wait_plan_cost_nanos = 0;
+    int64_t mc_write_data_cost_nanos = 0;
+    int64_t mc_wait_finish_cost_nanos = 0;
     // The left time of the merge window after writing the data to the plan
-    int64_t merge_commit_left_merge_time_nanos = -1;
+    int64_t mc_left_merge_time_nanos = -1;
 
 public:
     bool is_channel_stream_load_context() { return channel_id != -1; }
