@@ -455,7 +455,7 @@ TEST_F(IsomorphicBatchWriteTest, stop_retry_if_rpc_failed) {
         });
         StreamLoadContext* data_ctx2 = build_data_context(batch_write_id, "data2");
         Status st = batch_write->append_data(data_ctx2);
-        ASSERT_EQ(2, num_rpc_request);
+        ASSERT_EQ(3, num_rpc_request);
         ASSERT_TRUE(st.is_internal_error());
         ASSERT_TRUE(st.message().find("Failed to write data to stream load pipe, num retry: 3") != std::string::npos);
         ASSERT_TRUE(st.message().find("Internal error: artificial failure") != std::string::npos);
