@@ -14,7 +14,7 @@
 
 package com.starrocks.transaction;
 
-/** A snapshot of {@link TransactionState}. */
+/** A snapshot of {@link TransactionState}. The snapshot can include more members in the future. */
 public class TransactionStateSnapshot {
 
     private final TransactionStatus status;
