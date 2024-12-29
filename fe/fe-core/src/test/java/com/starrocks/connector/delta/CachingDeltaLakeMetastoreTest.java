@@ -19,13 +19,13 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.connector.DatabaseTableName;
 import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.hive.HiveMetastore;
 import com.starrocks.connector.hive.HiveMetastoreTest;
 import com.starrocks.connector.hive.IHiveMetastore;
-import io.delta.kernel.engine.Engine;
 import mockit.Expectations;
 import mockit.MockUp;
 import org.apache.hadoop.conf.Configuration;
@@ -93,10 +93,17 @@ public class CachingDeltaLakeMetastoreTest {
 
     @Test
     public void testGetTable() {
+        new MockUp<CachingDeltaLakeMetastore>() {
+            @mockit.Mock
+            public DeltaLakeSnapshot getCachedSnapshot(DatabaseTableName databaseTableName) {
+                return new DeltaLakeSnapshot("db1", "table1", null, null,
+                        123, "s3://bucket/path/to/table");
+            }
+        };
+
         new MockUp<DeltaUtils>() {
             @mockit.Mock
-            public DeltaLakeTable convertDeltaToSRTable(String catalog, String dbName, String tblName, String path,
-                                                        Engine deltaEngine, long createTime) {
+            public DeltaLakeTable convertDeltaSnapshotToSRTable(String catalog, DeltaLakeSnapshot snapshot) {
                 return new DeltaLakeTable(1, "delta0", "db1", "table1",
                         Lists.newArrayList(), Lists.newArrayList("ts"), null,
                         "s3://bucket/path/to/table", null, 0);
@@ -145,10 +152,17 @@ public class CachingDeltaLakeMetastoreTest {
             Assert.assertTrue(e.getMessage().contains("invalidated cache"));
         }
 
+        new MockUp<DeltaLakeMetastore>() {
+            @mockit.Mock
+            public DeltaLakeSnapshot getLatestSnapshot(String dbName, String tableName) {
+                return new DeltaLakeSnapshot("db1", "table1", null, null,
+                        123, "s3://bucket/path/to/table");
+            }
+        };
+
         new MockUp<DeltaUtils>() {
             @mockit.Mock
-            public DeltaLakeTable convertDeltaToSRTable(String catalog, String dbName, String tblName, String path,
-                                                        Engine deltaEngine, long createTime) {
+            public DeltaLakeTable convertDeltaSnapshotToSRTable(String catalog, DeltaLakeSnapshot snapshot) {
                 return new DeltaLakeTable(1, "delta0", "db1", "tbl1",
                         Lists.newArrayList(), Lists.newArrayList("ts"), null,
                         "s3://bucket/path/to/table", null, 0);
@@ -164,10 +178,17 @@ public class CachingDeltaLakeMetastoreTest {
 
     @Test
     public void testCacheMemoryUsage() {
+        new MockUp<CachingDeltaLakeMetastore>() {
+            @mockit.Mock
+            public DeltaLakeSnapshot getCachedSnapshot(DatabaseTableName databaseTableName) {
+                return new DeltaLakeSnapshot("db1", "table1", null, null,
+                        123, "s3://bucket/path/to/table");
+            }
+        };
+
         new MockUp<DeltaUtils>() {
             @mockit.Mock
-            public DeltaLakeTable convertDeltaToSRTable(String catalog, String dbName, String tblName, String path,
-                                                        Engine deltaEngine, long createTime) {
+            public DeltaLakeTable convertDeltaSnapshotToSRTable(String catalog, DeltaLakeSnapshot snapshot) {
                 return new DeltaLakeTable(1, "delta0", "db1", "table1",
                         Lists.newArrayList(), Lists.newArrayList("ts"), null,
                         "s3://bucket/path/to/table", null, 0);
