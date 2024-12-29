@@ -16,7 +16,6 @@ package com.starrocks.connector.delta;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.validate.ValidateException;
 import io.delta.kernel.Operation;
 import io.delta.kernel.Snapshot;
@@ -69,25 +68,9 @@ public class DeltaUtilsTest {
     }
 
     @Test
-    public void testConvertDeltaToSRTableWithException1() {
-        expectedEx.expect(SemanticException.class);
-        expectedEx.expectMessage("Failed to find Delta table for catalog.db.tbl");
-
-        new MockUp<Table>() {
-            @mockit.Mock
-            public Table forPath(Engine deltaEngine, String path) throws TableNotFoundException {
-                throw new TableNotFoundException("Table not found");
-            }
-        };
-
-        DeltaUtils.convertDeltaToSRTable("catalog", "db", "tbl", "path",
-                DeltaLakeEngine.create(new Configuration()), 0);
-    }
-
-    @Test
     public void testConvertDeltaToSRTableWithException2() {
-        expectedEx.expect(SemanticException.class);
-        expectedEx.expectMessage("Failed to get latest snapshot for catalog.db.tbl");
+        expectedEx.expect(RuntimeException.class);
+        expectedEx.expectMessage("Failed to get latest snapshot");
         Table table = new Table() {
             public Table forPath(Engine engine, String path) {
                 return this;
@@ -132,7 +115,8 @@ public class DeltaUtilsTest {
             }
         };
 
-        DeltaUtils.convertDeltaToSRTable("catalog", "db", "tbl", "path",
-                DeltaLakeEngine.create(new Configuration()), 0);
+        Engine engine = DeltaLakeEngine.create(new Configuration());
+        Table deltaTable = Table.forPath(engine, "path");
+        deltaTable.getLatestSnapshot(engine);
     }
 }
