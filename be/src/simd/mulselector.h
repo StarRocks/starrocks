@@ -34,8 +34,8 @@ public:
     using SelectVec = uint8_t*;
 
     // a normal implements
-    static void multi_select_if(SelectVec select_vec[], int select_vec_size, Container& dst, Container* select_list[],
-                                int select_list_size) {
+    static void multi_select_if(SelectVec __restrict select_vec[], int select_vec_size, Container& dst,
+                                Container* __restrict select_list[], int select_list_size) {
         DCHECK_GT(select_list_size, 0);
         DCHECK_EQ(select_vec_size + 1, select_list_size);
 
