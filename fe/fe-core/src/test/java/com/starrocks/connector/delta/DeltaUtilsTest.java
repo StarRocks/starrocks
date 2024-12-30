@@ -16,6 +16,7 @@ package com.starrocks.connector.delta;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.sql.optimizer.validate.ValidateException;
 import io.delta.kernel.Operation;
 import io.delta.kernel.Snapshot;
@@ -28,19 +29,27 @@ import io.delta.kernel.internal.SnapshotImpl;
 import io.delta.kernel.internal.TableImpl;
 import io.delta.kernel.internal.actions.Metadata;
 import io.delta.kernel.internal.actions.Protocol;
+import io.delta.kernel.internal.util.ColumnMapping;
+import io.delta.kernel.types.DateType;
+import io.delta.kernel.types.IntegerType;
+import io.delta.kernel.types.StructField;
+import io.delta.kernel.types.StructType;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.apache.hadoop.conf.Configuration;
+import org.junit.Assert;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
 
 import java.io.IOException;
+import java.util.List;
 
 import static io.delta.kernel.internal.util.ColumnMapping.COLUMN_MAPPING_MODE_KEY;
 import static io.delta.kernel.internal.util.ColumnMapping.COLUMN_MAPPING_MODE_NAME;
+import static io.delta.kernel.internal.util.ColumnMapping.COLUMN_MAPPING_MODE_NONE;
 
 public class DeltaUtilsTest {
     @Rule
@@ -118,5 +127,38 @@ public class DeltaUtilsTest {
         Engine engine = DeltaLakeEngine.create(new Configuration());
         Table deltaTable = Table.forPath(engine, "path");
         deltaTable.getLatestSnapshot(engine);
+    }
+
+    @Test
+    public void testConvertDeltaSnapshotToSRTable(@Mocked SnapshotImpl snapshot) {
+        new Expectations() {
+            {
+                snapshot.getSchema((Engine) any);
+                result = new StructType(Lists.newArrayList(new StructField("col1", IntegerType.INTEGER, true),
+                        new StructField("col2", DateType.DATE, true)));
+                minTimes = 0;
+            }
+        };
+
+        new MockUp<ColumnMapping>() {
+            @Mock
+            public String getColumnMappingMode(Configuration configuration) {
+                return COLUMN_MAPPING_MODE_NONE;
+            }
+        };
+
+        new MockUp<DeltaUtils>() {
+            @Mock
+            public List<String> loadPartitionColumnNames(SnapshotImpl snapshot) {
+                return Lists.newArrayList();
+            }
+        };
+
+        DeltaLakeTable deltaLakeTable = DeltaUtils.convertDeltaSnapshotToSRTable("catalog0",
+                new DeltaLakeSnapshot("db0", "table0", null, snapshot, 123, "path"));
+        Assert.assertEquals(2, deltaLakeTable.getFullSchema().size());
+        Assert.assertEquals("catalog0", deltaLakeTable.getCatalogName());
+        Assert.assertEquals("db0", deltaLakeTable.getCatalogDBName());
+        Assert.assertEquals("table0", deltaLakeTable.getCatalogTableName());
     }
 }

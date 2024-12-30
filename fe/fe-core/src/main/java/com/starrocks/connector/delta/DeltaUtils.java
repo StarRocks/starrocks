@@ -87,7 +87,7 @@ public class DeltaUtils {
                 loadPartitionColumnNames(snapshotImpl), snapshotImpl, path, deltaLakeEngine, snapshot.getCreateTime());
     }
 
-    private static List<String> loadPartitionColumnNames(SnapshotImpl snapshot) {
+    public static List<String> loadPartitionColumnNames(SnapshotImpl snapshot) {
         ArrayValue partitionColumns = snapshot.getMetadata().getPartitionColumns();
         ColumnVector partitionColNameVector = partitionColumns.getElements();
         List<String> partitionColumnNames = Lists.newArrayList();
