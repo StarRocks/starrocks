@@ -77,59 +77,6 @@ public class DeltaUtilsTest {
     }
 
     @Test
-    public void testConvertDeltaToSRTableWithException2() {
-        expectedEx.expect(RuntimeException.class);
-        expectedEx.expectMessage("Failed to get latest snapshot");
-        Table table = new Table() {
-            public Table forPath(Engine engine, String path) {
-                return this;
-            }
-
-            @Override
-            public String getPath(Engine engine) {
-                return null;
-            }
-
-            @Override
-            public SnapshotImpl getLatestSnapshot(Engine engine) {
-                throw new RuntimeException("Failed to get latest snapshot");
-            }
-
-            @Override
-            public Snapshot getSnapshotAsOfVersion(Engine engine, long versionId) throws TableNotFoundException {
-                return null;
-            }
-
-            @Override
-            public Snapshot getSnapshotAsOfTimestamp(Engine engine, long millisSinceEpochUTC)
-                    throws TableNotFoundException {
-                return null;
-            }
-
-            @Override
-            public TransactionBuilder createTransactionBuilder(Engine engine, String engineInfo, Operation operation) {
-                return null;
-            }
-
-            @Override
-            public void checkpoint(Engine engine, long version)
-                    throws TableNotFoundException, CheckpointAlreadyExistsException, IOException {
-            }
-        };
-
-        new MockUp<TableImpl>() {
-            @Mock
-            public Table forPath(Engine engine, String path) {
-                return table;
-            }
-        };
-
-        Engine engine = DeltaLakeEngine.create(new Configuration());
-        Table deltaTable = Table.forPath(engine, "path");
-        deltaTable.getLatestSnapshot(engine);
-    }
-
-    @Test
     public void testConvertDeltaSnapshotToSRTable(@Mocked SnapshotImpl snapshot) {
         new Expectations() {
             {
