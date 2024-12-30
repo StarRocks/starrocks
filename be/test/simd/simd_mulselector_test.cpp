@@ -78,7 +78,7 @@ void test_simd_multi_select_if() {
 template <LogicalType TYPE, int CASE_SIZE, int TEST_SIZE>
 bool test_function_wrapper() {
     test_simd_multi_select_if<TYPE, CASE_SIZE, TEST_SIZE, false>();
-    //test_simd_multi_select_if<TYPE, CASE_SIZE, TEST_SIZE, true>();
+    test_simd_multi_select_if<TYPE, CASE_SIZE, TEST_SIZE, true>();
     return true;
 }
 
@@ -95,7 +95,15 @@ bool test_all() {
 PARALLEL_TEST(SIMDMultiSelectorTest, TestVarVar) {
     // clang-format off
     test_all<TYPE_TINYINT, 
-            TYPE_SMALLINT>();
+            TYPE_SMALLINT, 
+            TYPE_INT, 
+            TYPE_BIGINT, 
+            TYPE_LARGEINT, 
+            TYPE_DECIMAL32,
+            TYPE_DECIMAL64, 
+            TYPE_DECIMAL128, 
+            TYPE_FLOAT, 
+            TYPE_DOUBLE>();
     // clang-format on
 }
 } // namespace starrocks
