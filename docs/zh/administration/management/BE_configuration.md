@@ -3532,6 +3532,10 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：
 - 引入版本：-
 -->
+##### starlet_fslib_s3client_request_timeout_ms
+
+- 描述: `object_storage_request_timeout_ms`配置项的别名, 详细信息请参考配置项[object_storage_request_timeout_ms](#object_storage_request_timeout_ms).
+- 引入版本: v3.3.9
 
 ##### lake_compaction_stream_buffer_size_bytes
 
