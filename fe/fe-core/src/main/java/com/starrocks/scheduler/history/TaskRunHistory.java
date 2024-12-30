@@ -104,6 +104,20 @@ public class TaskRunHistory {
         return result;
     }
 
+    /**
+     * Return the list of task runs belong to the LAST JOB:
+     * Each task run has a `startTaskRunId` as JobId, a job may have multiple task runs.
+     */
+    public List<TaskRunStatus> lookupLastJobOfTasks(String dbName, Set<String> taskNames) {
+        List<TaskRunStatus> result = getInMemoryHistory().stream()
+                .filter(x -> x.matchByTaskName(dbName, taskNames))
+                .collect(Collectors.toList());
+        if (isEnableArchiveHistory()) {
+            result.addAll(historyTable.lookupLastJobOfTasks(dbName, taskNames));
+        }
+        return result;
+    }
+
     public List<TaskRunStatus> lookupHistory(TGetTasksParams params) {
         List<TaskRunStatus> result = getInMemoryHistory().stream()
                 .filter(x -> x.match(params))
