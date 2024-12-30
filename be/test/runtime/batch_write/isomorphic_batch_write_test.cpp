@@ -391,4 +391,75 @@ TEST_F(IsomorphicBatchWriteTest, reach_max_rpc_retry) {
     ASSERT_TRUE(st.message().find("Failed to write data to stream load pipe, num retry: 5") != std::string::npos);
 }
 
+TEST_F(IsomorphicBatchWriteTest, stop_retry_if_rpc_failed) {
+    BatchWriteId batch_write_id{.db = "db", .table = "table", .load_params = {{HTTP_MERGE_COMMIT_ASYNC, "true"}}};
+    IsomorphicBatchWriteSharedPtr batch_write = std::make_shared<IsomorphicBatchWrite>(batch_write_id, _executor.get());
+    ASSERT_OK(batch_write->init());
+    DeferOp defer_writer([&] { batch_write->stop(); });
+
+    auto old_retry_num = config::batch_write_rpc_request_retry_num;
+    auto old_retry_interval = config::batch_write_rpc_request_retry_interval_ms;
+    config::batch_write_rpc_request_retry_num = 5;
+    config::batch_write_rpc_request_retry_interval_ms = 10;
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([&]() {
+        SyncPoint::GetInstance()->ClearCallBack("IsomorphicBatchWrite::send_rpc_request::request");
+        SyncPoint::GetInstance()->ClearCallBack("IsomorphicBatchWrite::send_rpc_request::status");
+        SyncPoint::GetInstance()->ClearCallBack("IsomorphicBatchWrite::send_rpc_request::response");
+        SyncPoint::GetInstance()->DisableProcessing();
+        config::batch_write_rpc_request_retry_num = old_retry_num;
+        config::batch_write_rpc_request_retry_interval_ms = old_retry_interval;
+    });
+
+    // rpc failed
+    {
+        int num_rpc_request = 0;
+        SyncPoint::GetInstance()->SetCallBack("IsomorphicBatchWrite::send_rpc_request::request",
+                                              [&](void* arg) { num_rpc_request += 1; });
+        SyncPoint::GetInstance()->SetCallBack("IsomorphicBatchWrite::send_rpc_request::status", [&](void* arg) {
+            *((Status*)arg) = num_rpc_request == 2 ? Status::ThriftRpcError("artificial failure") : Status::OK();
+        });
+        SyncPoint::GetInstance()->SetCallBack("IsomorphicBatchWrite::send_rpc_request::response", [&](void* arg) {
+            TMergeCommitResult* result = (TMergeCommitResult*)arg;
+            TStatus status;
+            status.__set_status_code(TStatusCode::OK);
+            result->__set_status(status);
+            result->__set_label("label");
+        });
+        StreamLoadContext* data_ctx1 = build_data_context(batch_write_id, "data1");
+        Status st = batch_write->append_data(data_ctx1);
+        ASSERT_EQ(2, num_rpc_request);
+        ASSERT_TRUE(st.is_internal_error());
+        ASSERT_TRUE(st.message().find("Failed to write data to stream load pipe, num retry: 2") != std::string::npos);
+        ASSERT_TRUE(st.message().find("Rpc error: artificial failure") != std::string::npos);
+    }
+
+    // response status failed
+    {
+        int num_rpc_request = 0;
+        SyncPoint::GetInstance()->SetCallBack("IsomorphicBatchWrite::send_rpc_request::request",
+                                              [&](void* arg) { num_rpc_request += 1; });
+        SyncPoint::GetInstance()->SetCallBack("IsomorphicBatchWrite::send_rpc_request::status",
+                                              [&](void* arg) { *((Status*)arg) = Status::OK(); });
+        SyncPoint::GetInstance()->SetCallBack("IsomorphicBatchWrite::send_rpc_request::response", [&](void* arg) {
+            TMergeCommitResult* result = (TMergeCommitResult*)arg;
+            TStatus status;
+            if (num_rpc_request != 3) {
+                status.__set_status_code(TStatusCode::OK);
+                result->__set_label("label");
+            } else {
+                status.__set_status_code(TStatusCode::INTERNAL_ERROR);
+                status.__set_error_msgs({"artificial failure"});
+            }
+            result->__set_status(status);
+        });
+        StreamLoadContext* data_ctx2 = build_data_context(batch_write_id, "data2");
+        Status st = batch_write->append_data(data_ctx2);
+        ASSERT_EQ(3, num_rpc_request);
+        ASSERT_TRUE(st.is_internal_error());
+        ASSERT_TRUE(st.message().find("Failed to write data to stream load pipe, num retry: 3") != std::string::npos);
+        ASSERT_TRUE(st.message().find("Internal error: artificial failure") != std::string::npos);
+    }
+}
+
 } // namespace starrocks
