@@ -418,19 +418,19 @@ Status DataDir::load() {
             if (tablet->keys_type() == KeysType::PRIMARY_KEYS) {
                 VLOG(1) << "skip a visible rowset meta, tablet: " << tablet->tablet_id()
                         << ", rowset: " << rowset_meta->rowset_id();
-                continue;
-            }
-            Status publish_status = tablet->load_rowset(rowset);
-            if (!rowset_meta->tablet_schema()) {
-                rowset_meta->set_tablet_schema(tablet->tablet_schema());
-                rowset_meta->set_skip_tablet_schema(true);
-            }
-            if (!publish_status.ok() && !publish_status.is_already_exist()) {
-                LOG(WARNING) << "Fail to add visible rowset=" << rowset->rowset_id()
-                             << " to tablet=" << rowset_meta->tablet_id() << " txn id=" << rowset_meta->txn_id()
-                             << " start version=" << rowset_meta->version().first
-                             << " end version=" << rowset_meta->version().second;
-                error_rowset_count++;
+            } else {
+                Status publish_status = tablet->load_rowset(rowset);
+                if (!rowset_meta->tablet_schema()) {
+                    rowset_meta->set_tablet_schema(tablet->tablet_schema());
+                    rowset_meta->set_skip_tablet_schema(true);
+                }
+                if (!publish_status.ok() && !publish_status.is_already_exist()) {
+                    LOG(WARNING) << "Fail to add visible rowset=" << rowset->rowset_id()
+                                 << " to tablet=" << rowset_meta->tablet_id() << " txn id=" << rowset_meta->txn_id()
+                                 << " start version=" << rowset_meta->version().first
+                                 << " end version=" << rowset_meta->version().second;
+                    error_rowset_count++;
+                }
             }
         } else {
             LOG(WARNING) << "Found invalid rowset=" << rowset_meta->rowset_id()

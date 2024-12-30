@@ -3920,6 +3920,20 @@ TEST_F(TabletUpdatesTest, test_skip_schema) {
         ASSERT_EQ(rs2->tablet_schema()->id(), old_schema_id);
         ASSERT_EQ(rs1->tablet_schema()->id(), old_schema_id);
     }
+
+    {
+        PFailPointTriggerMode trigger_mode;
+        trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
+        std::string fp_name = "tablet_get_visible_rowset";
+        auto fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get(fp_name);
+        fp->setMode(trigger_mode);
+
+        auto tmp_tablet1 = create_tablet(rand(), rand(), false, _tablet->tablet_schema()->id() + 1,
+                                         _tablet->tablet_schema()->schema_version() + 1);
+        _tablet->update_max_version_schema(tmp_tablet1->tablet_schema());
+        trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
+        fp->setMode(trigger_mode);
+    }
 }
 
 } // namespace starrocks
