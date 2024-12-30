@@ -62,6 +62,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 
@@ -157,6 +158,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
                     .add(TableType.HUDI)
                     .add(TableType.ODPS)
                     .add(TableType.DELTALAKE)
+                    .add(TableType.PAIMON)
                     .build();
 
     @SerializedName(value = "id")
@@ -266,6 +268,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
 
     public String getCatalogDBName() {
         throw new NotImplementedException();
+    }
+
+    public Optional<String> mayGetDatabaseName() {
+        return Optional.empty();
     }
 
     public String getName() {
@@ -470,6 +476,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
 
     public Column getColumn(ColumnId columnId) {
         return nameToColumn.get(columnId.getId());
+    }
+
+    public Column getColumnByUniqueId(long uniqueId) {
+        return fullSchema.stream().filter(c -> c.getUniqueId() == uniqueId).findFirst().get();
     }
 
     public boolean containColumn(String columnName) {

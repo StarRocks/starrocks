@@ -24,6 +24,7 @@ set(UTIL_FILES
   arrow/utils.cpp
   await.cpp
   bfd_parser.cpp
+  base85.cpp
   compression/block_compression.cpp
   compression/compression_context_pool_singletons.cpp
   compression/stream_compression.cpp
@@ -104,6 +105,7 @@ set(UTIL_FILES
   bthreads/future.h
   bthreads/future_impl.cpp
   hash_util.cpp
+  debug_action.cpp
   internal_service_recoverable_stub.cpp
 )
 

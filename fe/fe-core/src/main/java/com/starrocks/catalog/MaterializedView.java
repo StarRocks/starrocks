@@ -21,7 +21,6 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
@@ -32,6 +31,7 @@ import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.backup.Status;
 import com.starrocks.backup.mv.MvBackupInfo;
 import com.starrocks.backup.mv.MvBaseTableBackupInfo;
@@ -55,7 +55,6 @@ import com.starrocks.persist.ExpressionSerializedObject;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.scheduler.TableWithPartitions;
@@ -73,6 +72,7 @@ import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SelectAnalyzer;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.common.PCell;
 import com.starrocks.sql.common.PRangeCell;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.MvRewritePreprocessor;
@@ -584,14 +584,14 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         this.dbId = dbId;
     }
 
-    public boolean isActive() {
+    public synchronized boolean isActive() {
         return active;
     }
 
     /**
      * active the materialized again & reload the state.
      */
-    public void setActive() {
+    public synchronized void setActive() {
         LOG.info("set {} to active", name);
         // reset mv rewrite cache when it is active again
         CachingMvPlanContextBuilder.getInstance().updateMvPlanContextCache(this, true);
@@ -599,7 +599,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         this.inactiveReason = null;
     }
 
-    public void setInactiveAndReason(String reason) {
+    public synchronized void setInactiveAndReason(String reason) {
         LOG.warn("set {} to inactive because of {}", name, reason);
         this.active = false;
         this.inactiveReason = reason;
@@ -611,14 +611,14 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     /**
      * Reset cached metadata when mv's meta has changed.
      */
-    public void resetMetadataCache() {
+    public synchronized void resetMetadataCache() {
         refBaseTablePartitionExprsOpt = Optional.empty();
         refBaseTablePartitionSlotsOpt = Optional.empty();
         refBaseTablePartitionColumnsOpt = Optional.empty();
         tableToBaseTableInfoCache.clear();
     }
 
-    public String getInactiveReason() {
+    public synchronized String getInactiveReason() {
         return inactiveReason;
     }
 
@@ -957,7 +957,22 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         // 2. Remove from base tables
         List<BaseTableInfo> baseTableInfos = getBaseTableInfos();
         for (BaseTableInfo baseTableInfo : ListUtils.emptyIfNull(baseTableInfos)) {
-            Optional<Table> baseTableOpt = MvUtils.getTableWithIdentifier(baseTableInfo);
+            Optional<Table> baseTableOpt;
+            try {
+                baseTableOpt = MvUtils.getTableWithIdentifier(baseTableInfo);
+            } catch (Exception e) {
+                if (!(baseTableInfo.isInternalCatalog())) {
+                    GlobalStateMgr.getCurrentState().getConnectorTblMetaInfoMgr().
+                            removeConnectorTableInfo(baseTableInfo.getCatalogName(),
+                                    baseTableInfo.getDbName(),
+                                    baseTableInfo.getTableIdentifier(),
+                                    ConnectorTableInfo.builder().setRelatedMaterializedViews(
+                                            Sets.newHashSet(mvId)).build());
+                }
+                LOG.error("Failed to get base table: {}", baseTableInfo, e);
+                continue;
+            }
+
             if (baseTableOpt.isPresent()) {
                 Table baseTable = baseTableOpt.get();
                 baseTable.removeRelatedMaterializedView(mvId);
@@ -1540,14 +1555,14 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      *  we also need to consider other ref table partitions(p0); otherwise, the mv's final result will lose data.
      */
     public boolean isCalcPotentialRefreshPartition(List<TableWithPartitions> baseChangedPartitionNames,
-                                                   Map<Table, Map<String, Range<PartitionKey>>> refBaseTableRangePartitionMap,
+                                                   Map<Table, Map<String, PCell>> refBaseTablePartitionToCells,
                                                    Set<String> mvPartitions,
-                                                   Map<String, Range<PartitionKey>> mvPartitionNameToRangeMap) {
+                                                   Map<String, PCell> mvPartitionToCells) {
         List<PRangeCell> mvSortedPartitionRanges =
-                TableWithPartitions.getSortedPartitionRanges(mvPartitionNameToRangeMap, mvPartitions);
+                TableWithPartitions.getSortedPartitionRanges(mvPartitionToCells, mvPartitions);
         for (TableWithPartitions baseTableWithPartition : baseChangedPartitionNames) {
-            Map<String, Range<PartitionKey>> baseRangePartitionMap =
-                    refBaseTableRangePartitionMap.get(baseTableWithPartition.getTable());
+            Map<String, PCell> baseRangePartitionMap =
+                    refBaseTablePartitionToCells.get(baseTableWithPartition.getTable());
             List<PRangeCell> baseSortedPartitionRanges =
                     baseTableWithPartition.getSortedPartitionRanges(baseRangePartitionMap);
             for (PRangeCell basePartitionRange : baseSortedPartitionRanges) {
@@ -2109,29 +2124,5 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             }
         }
         return this.defineQueryParseNode;
-    }
-
-    /**
-     * For MV, its schema has relations with defined query's schema.`getBaseSchema` should not return the generated columns
-     * since they are inner columns and not visible to users.
-     * For now, the generated columns of mv can be created when mv's partition expression is not slot ref and its partition type
-     * is LIST.
-     */
-    @Override
-    public List<Column> getBaseSchema() {
-        if (!hasGeneratedColumn()) {
-            return getSchemaByIndexId(baseIndexId);
-        }
-
-        List<Column> schema = Lists.newArrayList(getSchemaByIndexId(baseIndexId));
-        while (schema.size() > 0) {
-            // check last column is whether is a generated column or not
-            if (schema.get(schema.size() - 1).isGeneratedColumn()) {
-                schema.remove(schema.size() - 1);
-            } else {
-                break;
-            }
-        }
-        return schema;
     }
 }

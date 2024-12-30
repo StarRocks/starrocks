@@ -39,6 +39,8 @@ namespace starrocks {
 // TODO(cbl): move to common space latter
 static const string LOAD_OP_COLUMN = "__op";
 
+#define ADD_COUNTER_RELAXED(counter, value) counter.fetch_add(value, std::memory_order_relaxed)
+
 Schema MemTable::convert_schema(const TabletSchemaCSPtr& tablet_schema,
                                 const std::vector<SlotDescriptor*>* slot_descs) {
     if (tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
@@ -162,8 +164,9 @@ bool MemTable::check_supported_column_partial_update(const Chunk& chunk) {
 }
 
 StatusOr<bool> MemTable::insert(const Chunk& chunk, const uint32_t* indexes, uint32_t from, uint32_t size) {
-    SCOPED_RAW_TIMER(&_stats.insert_time_ns);
-    _stats.insert_count += 1;
+    auto start_time = MonotonicMicros();
+    DeferOp defer([&]() { ADD_COUNTER_RELAXED(_stats.insert_time_ns, MonotonicMicros() - start_time); });
+    ADD_COUNTER_RELAXED(_stats.insert_count, 1);
     if (_chunk == nullptr) {
         _chunk = ChunkHelper::new_chunk(*_vectorized_schema, 0);
     }
@@ -318,12 +321,12 @@ Status MemTable::finalize() {
         }
     }
 
-    _stats.finalize_time_ns = duration_ns;
+    ADD_COUNTER_RELAXED(_stats.finalize_time_ns, duration_ns);
     StarRocksMetrics::instance()->memtable_finalize_duration_us.increment(duration_ns / 1000);
     return Status::OK();
 }
 
-Status MemTable::flush(SegmentPB* seg_info) {
+Status MemTable::flush(SegmentPB* seg_info, bool eos) {
     if (UNLIKELY(_result_chunk == nullptr)) {
         return Status::OK();
     }
@@ -336,16 +339,16 @@ Status MemTable::flush(SegmentPB* seg_info) {
     {
         SCOPED_RAW_TIMER(&duration_ns);
         if (_deletes) {
-            RETURN_IF_ERROR(_sink->flush_chunk_with_deletes(*_result_chunk, *_deletes, seg_info));
+            RETURN_IF_ERROR(_sink->flush_chunk_with_deletes(*_result_chunk, *_deletes, seg_info, eos));
         } else {
-            RETURN_IF_ERROR(_sink->flush_chunk(*_result_chunk, seg_info));
+            RETURN_IF_ERROR(_sink->flush_chunk(*_result_chunk, seg_info, eos));
         }
     }
     auto io_stat = scope.current_scoped_tls_io();
-    _stats.flush_time_ns = duration_ns;
-    _stats.io_time_ns = io_stat.write_time_ns + io_stat.sync_time_ns;
-    _stats.flush_memory_size = memory_usage();
-    _stats.flush_disk_size = io_stat.write_bytes;
+    ADD_COUNTER_RELAXED(_stats.flush_time_ns, duration_ns);
+    ADD_COUNTER_RELAXED(_stats.io_time_ns, io_stat.write_time_ns + io_stat.sync_time_ns);
+    ADD_COUNTER_RELAXED(_stats.flush_memory_size, memory_usage());
+    ADD_COUNTER_RELAXED(_stats.flush_disk_size, io_stat.write_bytes);
 
     StarRocksMetrics::instance()->memtable_flush_total.increment(1);
     StarRocksMetrics::instance()->memtable_flush_duration_us.increment(_stats.flush_time_ns / 1000);
@@ -377,8 +380,9 @@ void MemTable::_aggregate(bool is_final) {
     if (_result_chunk == nullptr || _result_chunk->num_rows() <= 0) {
         return;
     }
-    SCOPED_RAW_TIMER(&_stats.agg_time_ns);
-    _stats.agg_count += 1;
+    auto start_time = MonotonicNanos();
+    DeferOp defer([&]() { ADD_COUNTER_RELAXED(_stats.agg_time_ns, MonotonicNanos() - start_time); });
+    ADD_COUNTER_RELAXED(_stats.agg_count, 1);
     DCHECK(_result_chunk->num_rows() < INT_MAX);
     DCHECK(_aggregator->source_exhausted());
 
@@ -403,8 +407,9 @@ void MemTable::_aggregate(bool is_final) {
 }
 
 Status MemTable::_sort(bool is_final, bool by_sort_key) {
-    SCOPED_RAW_TIMER(&_stats.sort_time_ns);
-    _stats.sort_count += 1;
+    auto start_time = MonotonicNanos();
+    DeferOp defer([&]() { ADD_COUNTER_RELAXED(_stats.sort_time_ns, MonotonicNanos() - start_time); });
+    ADD_COUNTER_RELAXED(_stats.sort_count, 1);
     SmallPermutation perm = create_small_permutation(static_cast<uint32_t>(_chunk->num_rows()));
     std::swap(perm, _permutations);
 

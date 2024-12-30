@@ -19,6 +19,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "exec/pipeline/runtime_filter_types.h"
+#include "exec/pipeline/schedule/observer.h"
 #include "exec/spill/operator_mem_resource_manager.h"
 #include "exprs/runtime_filter_bank.h"
 #include "gutil/strings/substitute.h"
@@ -249,6 +250,9 @@ public:
         }
     }
     int32_t get_driver_sequence() const { return _driver_sequence; }
+    void set_runtime_filter_probe_sequence(int32_t probe_sequence) {
+        this->_runtime_filter_probe_sequence = probe_sequence;
+    }
     OperatorFactory* get_factory() const { return _factory; }
 
     // memory to be reserved before executing push_chunk
@@ -269,6 +273,9 @@ public:
 
     virtual void update_exec_stats(RuntimeState* state);
 
+    void set_observer(PipelineObserver* observer) { _observer = observer; }
+    PipelineObserver* observer() const { return _observer; }
+
 protected:
     OperatorFactory* _factory;
     const int32_t _id;
@@ -277,6 +284,7 @@ protected:
     const int32_t _plan_node_id;
     const bool _is_subordinate;
     const int32_t _driver_sequence;
+    int32_t _runtime_filter_probe_sequence;
     // _common_metrics and _unique_metrics are the only children of _runtime_profile
     // _common_metrics contains the common metrics of Operator, including counters and sub profiles,
     // e.g. OperatorTotalTime/PushChunkNum/PullChunkNum etc.
@@ -322,6 +330,8 @@ protected:
     // Some extra cpu cost of this operator that not accounted by pipeline driver,
     // such as OlapScanOperator( use separated IO thread to execute the IO task)
     std::atomic_int64_t _last_growth_cpu_time_ns = 0;
+
+    PipelineObserver* _observer = nullptr;
 
 private:
     void _init_rf_counters(bool init_bloom);
@@ -407,6 +417,8 @@ public:
 
     // try to get runtime filter from cache
     void acquire_runtime_filter(RuntimeState* state);
+
+    virtual bool support_event_scheduler() const { return false; }
 
 protected:
     void _prepare_runtime_in_filters(RuntimeState* state);

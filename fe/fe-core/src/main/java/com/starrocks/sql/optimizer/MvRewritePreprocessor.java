@@ -48,6 +48,7 @@ import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.lake.LakeMaterializedView;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
@@ -704,8 +705,15 @@ public class MvRewritePreprocessor {
                 // refresh schema
                 MaterializedView.MvRefreshScheme mvRefreshScheme =
                         new MaterializedView.MvRefreshScheme(MaterializedView.RefreshType.SYNC);
-                MaterializedView mv = new MaterializedView(db, mvName, indexMeta, olapTable,
-                        mvPartitionInfo, mvDistributionInfo, mvRefreshScheme);
+                MaterializedView mv;
+                if (olapTable.isCloudNativeTable()) {
+                    mv = new LakeMaterializedView(db, mvName, indexMeta, olapTable,
+                            mvPartitionInfo, mvDistributionInfo, mvRefreshScheme);
+                } else {
+                    mv = new MaterializedView(db, mvName, indexMeta, olapTable,
+                            mvPartitionInfo, mvDistributionInfo, mvRefreshScheme);
+                }
+
                 mv.setViewDefineSql(viewDefineSql);
                 mv.setBaseIndexId(indexId);
                 relatedMvs.add(mv);
@@ -737,7 +745,8 @@ public class MvRewritePreprocessor {
                 if (!checkMvPartitionNamesToRefresh(mv, partitionNamesToRefresh, mvPlanContext)) {
                     continue;
                 }
-                logMVPrepare(mv, "MV' partitions to refresh: {}", partitionNamesToRefresh);
+                logMVPrepare(mv, "MV' partitions to refresh: {}/{}", partitionNamesToRefresh.size(),
+                        MvUtils.shrinkToSize(partitionNamesToRefresh, Config.max_mv_task_run_meta_message_values_length));
 
                 // mv's partial partition predicates
                 ScalarOperator mvPartialPartitionPredicates =
@@ -919,9 +928,9 @@ public class MvRewritePreprocessor {
      */
     public static List<Column> getMvOutputColumns(MaterializedView mv) {
         if (mv.getQueryOutputIndices() == null || mv.getQueryOutputIndices().isEmpty()) {
-            return mv.getBaseSchema();
+            return mv.getBaseSchemaWithoutGeneratedColumn();
         } else {
-            List<Column> schema = mv.getBaseSchema();
+            List<Column> schema = mv.getBaseSchemaWithoutGeneratedColumn();
             List<Column> outputColumns = Lists.newArrayList();
             for (Integer index : mv.getQueryOutputIndices()) {
                 outputColumns.add(schema.get(index));
@@ -947,7 +956,7 @@ public class MvRewritePreprocessor {
 
         // first add base schema to avoid replaced in full schema.
         Set<String> columnNames = Sets.newHashSet();
-        for (Column column : mv.getBaseSchema()) {
+        for (Column column : mv.getBaseSchemaWithoutGeneratedColumn()) {
             ColumnRefOperator columnRef = columnRefFactory.create(column.getName(),
                     column.getType(),
                     column.isAllowNull());

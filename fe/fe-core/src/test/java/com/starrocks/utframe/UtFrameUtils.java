@@ -48,6 +48,7 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.UserVariableHint;
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.LocalTablet;
@@ -87,7 +88,6 @@ import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.planner.PlanFragment;
-import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
 import com.starrocks.qe.DefaultCoordinator;
@@ -280,7 +280,7 @@ public class UtFrameUtils {
             feConfMap.put("aws_s3_access_key", "dummy_access_key");
             feConfMap.put("aws_s3_secret_key", "dummy_secret_key");
             // turn on mock starletAgent inside StarOS
-            StarletAgentFactory.forTest = true;
+            StarletAgentFactory.AGENT_TYPE = StarletAgentFactory.AgentType.MOCK_STARLET_AGENT;
         }
         feConfMap.put("tablet_create_timeout_second", "10");
         frontend.init(starRocksHome + "/" + runningDir, feConfMap);
@@ -1251,7 +1251,7 @@ public class UtFrameUtils {
             @Mock
             public MvUpdateInfo getMVTimelinessUpdateInfo(MaterializedView mv,
                                                           boolean isQueryRewrite) {
-                return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.NO_REFRESH);
+                return MvUpdateInfo.noRefresh(mv);
             }
         };
 

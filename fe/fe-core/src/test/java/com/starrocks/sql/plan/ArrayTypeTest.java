@@ -738,7 +738,12 @@ public class ArrayTypeTest extends PlanTestBase {
                 "count(distinct array_length(array_map(x -> x + 1, d_2))) from adec";
         String plan = getFragmentPlan(sql);
         assertCContains(plan, "  2:AGGREGATE (update finalize)\n" +
-                "  |  output: multi_distinct_count(array_length(array_map" +
-                "(<slot 10> -> CAST(<slot 10> AS DECIMAL64(13,3)) + 1, 5: d_2)))");
+                "  |  output: multi_distinct_count(11: array_length)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 11> : array_length(array_map(<slot 10> -> CAST(<slot 10> AS DECIMAL64(13,3)) + 1, 5: d_2))\n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
     }
 }

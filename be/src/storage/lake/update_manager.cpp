@@ -144,6 +144,9 @@ StatusOr<IndexEntry*> UpdateManager::prepare_primary_index(
             StarRocksMetrics::instance()->primary_key_table_error_state_total.increment(1);
             builder->set_recover_flag(RecoverFlag::RECOVER_WITH_PUBLISH);
         }
+        // If load failed, release lock guard and remove index entry
+        // MUST release lock guard before remove index entry
+        guard.reset(nullptr);
         _index_cache.remove(index_entry);
         std::string msg = strings::Substitute("prepare_primary_index: load primary index failed: $0", st.to_string());
         LOG(ERROR) << msg;
@@ -152,6 +155,8 @@ StatusOr<IndexEntry*> UpdateManager::prepare_primary_index(
     _block_cache->update_memory_usage();
     st = index.prepare(EditVersion(new_version, 0), 0);
     if (!st.ok()) {
+        // If prepare failed, release lock guard and remove index entry
+        guard.reset(nullptr);
         _index_cache.remove(index_entry);
         std::string msg =
                 strings::Substitute("prepare_primary_index: prepare primary index failed: $0", st.to_string());
@@ -182,6 +187,14 @@ void UpdateManager::unload_and_remove_primary_index(int64_t tablet_id) {
         guard.reset(nullptr);
         _index_cache.remove(index_entry);
     }
+}
+
+StatusOr<IndexEntry*> UpdateManager::rebuild_primary_index(
+        const TabletMetadataPtr& metadata, MetaFileBuilder* builder, int64_t base_version, int64_t new_version,
+        std::unique_ptr<std::lock_guard<std::shared_timed_mutex>>& guard) {
+    LOG(INFO) << "rebuild tablet: " << metadata->id() << " primary index, version: " << base_version;
+    unload_and_remove_primary_index(metadata->id());
+    return prepare_primary_index(metadata, builder, base_version, new_version, guard);
 }
 
 DEFINE_FAIL_POINT(hook_publish_primary_key_tablet);
@@ -565,6 +578,11 @@ Status UpdateManager::get_column_values(const RowsetUpdateStateParams& params, s
             ASSIGN_OR_RETURN(auto col_iter, (*segment)->new_column_iterator_or_default(col, nullptr));
             RETURN_IF_ERROR(col_iter->init(iter_opts));
             RETURN_IF_ERROR(col_iter->fetch_values_by_rowid(rowids.data(), rowids.size(), (*columns)[i].get()));
+            // padding char columns
+            const auto& field = tablet_schema->schema()->field(read_column_ids[i]);
+            if (field->type()->type() == TYPE_CHAR) {
+                ChunkHelper::padding_char_column(tablet_schema, *field, (*columns)[i].get());
+            }
         }
         return Status::OK();
     };

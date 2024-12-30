@@ -44,6 +44,8 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.ToNumberPolicy;
 import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
 import com.starrocks.common.VectorSearchOptions;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -575,6 +577,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_EXECUTION_ONLY = "enable_execution_only";
 
+    public static final String ENABLE_PIPELINE_EVENT_SCHEDULER = "enable_pipeline_event_scheduler";
+
     // Flag to control whether to proxy follower's query statement to leader/follower.
     public enum FollowerQueryForwardMode {
         DEFAULT,    // proxy queries by the follower's replay progress (default)
@@ -758,6 +762,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ALLOW_HIVE_WITHOUT_PARTITION_FILTER = "allow_hive_without_partition_filter";
 
     public static final String SCAN_HIVE_PARTITION_NUM_LIMIT = "scan_hive_partition_num_limit";
+
+    public static final String SCAN_OLAP_PARTITION_NUM_LIMIT = "scan_olap_partition_num_limit";
 
     public static final String ENABLE_CROSS_JOIN = "enable_cross_join";
 
@@ -1155,7 +1161,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private int maxPipelineDop = 64;
 
     @VariableMgr.VarAttr(name = PROFILE_TIMEOUT, flag = VariableMgr.INVISIBLE)
-    private int profileTimeout = 2;
+    private int profileTimeout = 10;
 
     @VariableMgr.VarAttr(name = RUNTIME_PROFILE_REPORT_INTERVAL)
     private int runtimeProfileReportInterval = 10;
@@ -2038,10 +2044,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private long groupConcatMaxLen = 1024;
 
     @VariableMgr.VarAttr(name = FULL_SORT_MAX_BUFFERED_ROWS, flag = VariableMgr.INVISIBLE)
-    private long fullSortMaxBufferedRows = 1024000;
+    private long fullSortMaxBufferedRows = 1 * 1024 * 1024 * 1024;
 
     @VariableMgr.VarAttr(name = FULL_SORT_MAX_BUFFERED_BYTES, flag = VariableMgr.INVISIBLE)
-    private long fullSortMaxBufferedBytes = 16L * 1024 * 1024;
+    private long fullSortMaxBufferedBytes = 256L * 1024 * 1024;
 
     @VariableMgr.VarAttr(name = FULL_SORT_LATE_MATERIALIZATION_V2, alias = FULL_SORT_LATE_MATERIALIZATION,
             show = FULL_SORT_LATE_MATERIALIZATION)
@@ -2109,6 +2115,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // For the maximum number of partitions allowed to be scanned in a single hive table, 0 means no limit.
     @VarAttr(name = SCAN_HIVE_PARTITION_NUM_LIMIT)
     private int scanHivePartitionNumLimit = 0;
+
+    // For the maximum number of partitions allowed to be scanned in a single olap table, 0 means no limit.
+    @VarAttr(name = SCAN_OLAP_PARTITION_NUM_LIMIT)
+    private int scanOlapPartitionNumLimit = 0;
 
     @VarAttr(name = ENABLE_CROSS_JOIN)
     private boolean enableCrossJoin = true;
@@ -2384,6 +2394,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_PHASED_SCHEDULER)
     private boolean enablePhasedScheduler = false;
+
+    @VarAttr(name = ENABLE_PIPELINE_EVENT_SCHEDULER)
+    private boolean enablePipelineEventScheduler = false;
 
     @VarAttr(name = PHASED_SCHEDULER_MAX_CONCURRENCY)
     private int phasedSchedulerMaxConcurrency = 2;
@@ -2905,6 +2918,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     public void setInsertMaxFilterRatio(double insertMaxFilterRatio) {
+        if (insertMaxFilterRatio < 0 || insertMaxFilterRatio > 1) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_VALUE, SessionVariable.INSERT_MAX_FILTER_RATIO,
+                    insertMaxFilterRatio, "between 0.0 and 1.0");
+        }
         this.insertMaxFilterRatio = insertMaxFilterRatio;
     }
 
@@ -4177,6 +4194,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.scanHivePartitionNumLimit = scanHivePartitionNumLimit;
     }
 
+    public int getScanOlapPartitionNumLimit() {
+        return scanOlapPartitionNumLimit;
+    }
+
+    public void setScanOlapPartitionNumLimit(int scanOlapPartitionNumLimit) {
+        this.scanOlapPartitionNumLimit = scanOlapPartitionNumLimit;
+    }
+
     public boolean isEnableCrossJoin() {
         return enableCrossJoin;
     }
@@ -4599,6 +4624,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setEnable_wait_dependent_event(enableWaitDependentEvent);
         tResult.setConnector_max_split_size(connectorMaxSplitSize);
         tResult.setOrc_use_column_names(orcUseColumnNames);
+        tResult.setEnable_pipeline_event_scheduler(enablePipelineEventScheduler);
         return tResult;
     }
 

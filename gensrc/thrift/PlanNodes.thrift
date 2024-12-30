@@ -209,6 +209,13 @@ struct THdfsProperties {
   12: optional CloudConfiguration.TCloudConfiguration cloud_configuration
 }
 
+enum TFileScanType {
+    // broker load, stream load, except insert from files
+    LOAD,
+    FILES_INSERT,
+    FILES_QUERY
+}
+
 struct TBrokerScanRangeParams {
     1: required i8 column_separator;
     2: required i8 row_delimiter;
@@ -271,6 +278,7 @@ struct TBrokerScanRangeParams {
     30: optional i64 schema_sample_file_count
     31: optional i64 schema_sample_file_row_count
     32: optional bool flexible_column_mapping
+    33: optional TFileScanType file_scan_type
 }
 
 // Broker scan range
@@ -313,6 +321,15 @@ struct TPaimonDeletionFile {
     1: optional string path
     2: optional i64 offset
     3: optional i64 length
+}
+
+// refer to https://github.com/delta-io/delta/blob/master/PROTOCOL.md#deletion-vector-descriptor-schema
+struct TDeletionVectorDescriptor {
+  1: optional string storageType
+  2: optional string pathOrInlineDv
+  3: optional i64 offset
+  4: optional i64 sizeInBytes
+  5: optional i64 cardinality
 }
 
 // Hdfs scan range
@@ -401,6 +418,8 @@ struct THdfsScanRange {
     29: optional Descriptors.THdfsPartition partition_value;
 
     30: optional Types.TTableId table_id;
+
+    31:optional TDeletionVectorDescriptor deletion_vector_descriptor
 }
 
 struct TBinlogScanRange {

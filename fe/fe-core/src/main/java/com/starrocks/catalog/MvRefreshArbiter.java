@@ -24,7 +24,7 @@ import com.starrocks.catalog.mv.MVTimelinessNonPartitionArbiter;
 import com.starrocks.catalog.mv.MVTimelinessRangePartitionArbiter;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.DebugUtil;
-import com.starrocks.sql.common.PListCell;
+import com.starrocks.sql.common.PCell;
 import com.starrocks.sql.common.UnsupportedException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -34,8 +34,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
-import static com.starrocks.connector.PartitionUtil.getMVPartitionNameWithList;
 import static com.starrocks.connector.PartitionUtil.getMVPartitionNameWithRange;
+import static com.starrocks.connector.PartitionUtil.getMVPartitionToCells;
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVPrepare;
 
 /**
@@ -63,7 +63,7 @@ public class MvRefreshArbiter {
     public static MvUpdateInfo getMVTimelinessUpdateInfo(MaterializedView mv, boolean isQueryRewrite) {
         // Skip check for sync materialized view.
         if (mv.getRefreshScheme().isSync()) {
-            return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.NO_REFRESH);
+            return MvUpdateInfo.noRefresh(mv);
         }
 
         // check mv's query rewrite consistency mode property only in query rewrite.
@@ -72,9 +72,9 @@ public class MvRefreshArbiter {
         if (isQueryRewrite) {
             switch (mvConsistencyRewriteMode) {
                 case DISABLE:
-                    return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.FULL);
+                    return MvUpdateInfo.fullRefresh(mv);
                 case NOCHECK:
-                    return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.NO_REFRESH);
+                    return MvUpdateInfo.noRefresh(mv);
                 case LOOSE:
                 case CHECKED:
                 default:
@@ -89,7 +89,7 @@ public class MvRefreshArbiter {
             return timelinessArbiter.getMVTimelinessUpdateInfo(mvConsistencyRewriteMode);
         } catch (AnalysisException e) {
             logMVPrepare(mv, "Failed to get mv timeliness info: {}", DebugUtil.getStackTrace(e));
-            return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.UNKNOWN);
+            return MvUpdateInfo.unknown(mv);
         }
     }
 
@@ -198,9 +198,9 @@ public class MvRefreshArbiter {
                 List<Column> refPartitionColumns = refBaseTablePartitionColumns.get(baseTable);
                 PartitionInfo mvPartitionInfo = mv.getPartitionInfo();
                 if (mvPartitionInfo.isListPartition()) {
-                    Map<String, PListCell> mvPartitionNameWithList = getMVPartitionNameWithList(baseTable,
+                    Map<String, PCell> mvPartitionNameWithList = getMVPartitionToCells(baseTable,
                             refPartitionColumns, updatedPartitionNamesList);
-                    baseTableUpdateInfo.addListPartitionKeys(mvPartitionNameWithList);
+                    baseTableUpdateInfo.addPartitionCells(mvPartitionNameWithList);
                     baseTableUpdateInfo.addToRefreshPartitionNames(mvPartitionNameWithList.keySet());
                 } else if (mvPartitionInfo.isRangePartition()) {
                     Preconditions.checkArgument(refPartitionColumns.size() == 1,

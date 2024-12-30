@@ -20,6 +20,7 @@ import com.google.gson.annotations.SerializedName;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -243,5 +244,21 @@ public class TaskRunFIFOQueue {
             wLock.unlock();
         }
         return null;
+    }
+
+    public Map<Long, Long> getTaskCount() {
+        Map<Long, Long> result = new HashMap<>();
+        rLock.lock();
+        try {
+            for (Set<TaskRun> taskRuns : gIdToTaskRunsMap.values()) {
+                for (TaskRun taskRun : taskRuns) {
+                    result.compute(taskRun.getRunCtx().getCurrentWarehouseId(),
+                            (key, value) -> value == null ? 1 : value + 1);
+                }
+            }
+            return result;
+        } finally {
+            rLock.unlock();
+        }
     }
 }

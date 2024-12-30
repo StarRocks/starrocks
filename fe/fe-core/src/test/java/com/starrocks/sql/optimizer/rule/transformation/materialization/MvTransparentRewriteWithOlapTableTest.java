@@ -21,16 +21,13 @@ import com.starrocks.schema.MTable;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
-import org.junit.After;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.time.Instant;
 import java.util.Set;
 
-public class MvTransparentRewriteWithOlapTableTest extends MvRewriteTestBase {
+public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
     private static MTable m1;
     private static MTable m2;
     private static MTable m3;
@@ -40,7 +37,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MvRewriteTestBase {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        MvRewriteTestBase.beforeClass();
+        MVTestBase.beforeClass();
 
         m1 = new MTable("m1", "k1",
                 ImmutableList.of(
@@ -131,16 +128,6 @@ public class MvTransparentRewriteWithOlapTableTest extends MvRewriteTestBase {
                 "     PARTITION p4 VALUES IN ((\"guangdong\", \"2024-01-02\")) \n" +
                 ")\n" +
                 "DISTRIBUTED BY RANDOM\n";
-    }
-
-    @Before
-    public void before() {
-        startCaseTime = Instant.now().getEpochSecond();
-    }
-
-    @After
-    public void after() throws Exception {
-        PlanTestBase.cleanupEphemeralMVs(starRocksAssert, startCaseTime);
     }
 
     private void withPartialScanMv(StarRocksAssert.ExceptionRunnable runner) {

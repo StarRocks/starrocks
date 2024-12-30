@@ -189,6 +189,12 @@ TEST_F(AvroScannerTest, test_basic_type) {
         avro_value_set_string(&string_value, "abcdefg");
     }
 
+    avro_value_t bytes_value;
+    std::string byte_str = "hijklmn";
+    if (avro_value_get_by_name(&avro_helper.avro_val, "bytestype", &bytes_value, NULL) == 0) {
+        avro_value_set_bytes(&bytes_value, byte_str.data(), byte_str.size());
+    }
+
     avro_value_t enum_value;
     if (avro_value_get_by_name(&avro_helper.avro_val, "enumtype", &enum_value, NULL) == 0) {
         avro_value_set_enum(&enum_value, 2);
@@ -203,6 +209,7 @@ TEST_F(AvroScannerTest, test_basic_type) {
     types.emplace_back(TYPE_DOUBLE);
     types.emplace_back(TypeDescriptor::create_varchar_type(20));
     types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
@@ -210,9 +217,9 @@ TEST_F(AvroScannerTest, test_basic_type) {
     range.__set_path(data_path);
     ranges.emplace_back(range);
 
-    auto scanner = create_avro_scanner(types, ranges,
-                                       {"booleantype", "inttype", "longtype", "doubletype", "stringtype", "enumtype"},
-                                       avro_helper.schema_text);
+    auto scanner = create_avro_scanner(
+            types, ranges, {"booleantype", "inttype", "longtype", "doubletype", "stringtype", "bytestype", "enumtype"},
+            avro_helper.schema_text);
 
     Status st = scanner->open();
     ASSERT_TRUE(st.ok());
@@ -221,14 +228,15 @@ TEST_F(AvroScannerTest, test_basic_type) {
     ASSERT_TRUE(st2.ok());
 
     ChunkPtr chunk = st2.value();
-    EXPECT_EQ(6, chunk->num_columns());
+    EXPECT_EQ(7, chunk->num_columns());
     EXPECT_EQ(1, chunk->num_rows());
     EXPECT_EQ(1, chunk->get(0)[0].get_int8());
     EXPECT_EQ(10, chunk->get(0)[1].get_int32());
     EXPECT_EQ(4294967296, chunk->get(0)[2].get_int64());
     EXPECT_FLOAT_EQ(1.234567, chunk->get(0)[3].get_double());
     EXPECT_EQ("abcdefg", chunk->get(0)[4].get_slice());
-    EXPECT_EQ("DIAMONDS", chunk->get(0)[5].get_slice());
+    EXPECT_EQ("hijklmn", chunk->get(0)[5].get_slice());
+    EXPECT_EQ("DIAMONDS", chunk->get(0)[6].get_slice());
 }
 
 TEST_F(AvroScannerTest, test_basic_type_to_json_or_string) {
@@ -266,6 +274,12 @@ TEST_F(AvroScannerTest, test_basic_type_to_json_or_string) {
         avro_value_set_string(&string_value, "abcdefg");
     }
 
+    avro_value_t bytes_value;
+    std::string byte_str = "hijklmn";
+    if (avro_value_get_by_name(&avro_helper.avro_val, "bytestype", &bytes_value, NULL) == 0) {
+        avro_value_set_bytes(&bytes_value, byte_str.data(), byte_str.size());
+    }
+
     avro_value_t enum_value;
     if (avro_value_get_by_name(&avro_helper.avro_val, "enumtype", &enum_value, NULL) == 0) {
         avro_value_set_enum(&enum_value, 2);
@@ -299,8 +313,8 @@ TEST_F(AvroScannerTest, test_basic_type_to_json_or_string) {
         EXPECT_EQ(1, chunk->num_rows());
         const JsonValue* json = chunk->get(0)[0].get_json();
         EXPECT_EQ(
-                "{\"booleantype\": true, \"doubletype\": 1.234567, \"enumtype\": \"DIAMONDS\", \"inttype\": 10, "
-                "\"longtype\": 4294967296, \"stringtype\": \"abcdefg\"}",
+                "{\"booleantype\": true, \"bytestype\": \"hijklmn\", \"doubletype\": 1.234567, \"enumtype\": "
+                "\"DIAMONDS\", \"inttype\": 10, \"longtype\": 4294967296, \"stringtype\": \"abcdefg\"}",
                 json->to_string_uncheck());
     }
 
@@ -321,8 +335,8 @@ TEST_F(AvroScannerTest, test_basic_type_to_json_or_string) {
         EXPECT_EQ(1, chunk->num_rows());
         const JsonValue* json = chunk->get(0)[0].get_json();
         EXPECT_EQ(
-                "{\"booleantype\": true, \"doubletype\": 1.234567, \"enumtype\": \"DIAMONDS\", \"inttype\": 10, "
-                "\"longtype\": 4294967296, \"stringtype\": \"abcdefg\"}",
+                "{\"booleantype\": true, \"bytestype\": \"hijklmn\", \"doubletype\": 1.234567, \"enumtype\": "
+                "\"DIAMONDS\", \"inttype\": 10, \"longtype\": 4294967296, \"stringtype\": \"abcdefg\"}",
                 json->to_string_uncheck());
     }
 
@@ -344,7 +358,7 @@ TEST_F(AvroScannerTest, test_basic_type_to_json_or_string) {
         EXPECT_EQ(1, chunk->num_rows());
         EXPECT_EQ(
                 "{\"booleantype\": true, \"inttype\": 10, \"longtype\": 4294967296, \"doubletype\": 1.234567, "
-                "\"stringtype\": \"abcdefg\", \"enumtype\": \"DIAMONDS\"}",
+                "\"stringtype\": \"abcdefg\", \"bytestype\": \"hijklmn\", \"enumtype\": \"DIAMONDS\"}",
                 chunk->get(0)[0].get_slice());
     }
 
@@ -365,7 +379,7 @@ TEST_F(AvroScannerTest, test_basic_type_to_json_or_string) {
         EXPECT_EQ(1, chunk->num_rows());
         EXPECT_EQ(
                 "{\"booleantype\":true,\"inttype\":10,\"longtype\":4294967296,\"doubletype\":1.234567,\"stringtype\":"
-                "\"abcdefg\",\"enumtype\":\"DIAMONDS\"}",
+                "\"abcdefg\",\"bytestype\":\"hijklmn\",\"enumtype\":\"DIAMONDS\"}",
                 chunk->get(0)[0].get_slice());
     }
 }

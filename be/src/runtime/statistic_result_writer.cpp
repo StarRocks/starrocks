@@ -25,6 +25,7 @@
 namespace starrocks {
 
 const int STATISTIC_DATA_VERSION1 = 1;
+const int STATISTIC_DATA_VERSION2 = 10;
 const int STATISTIC_HISTOGRAM_VERSION = 2;
 const int DICT_STATISTIC_DATA_VERSION = 101;
 const int STATISTIC_TABLE_VERSION = 3;
@@ -34,6 +35,7 @@ const int STATISTIC_EXTERNAL_VERSION = 5;
 const int STATISTIC_EXTERNAL_QUERY_VERSION = 6;
 const int STATISTIC_EXTERNAL_HISTOGRAM_VERSION = 7;
 const int STATISTIC_EXTERNAL_QUERY_VERSION_V2 = 8;
+const int STATISTIC_BATCH_V5_VERSION = 9;
 
 StatisticResultWriter::StatisticResultWriter(BufferControlBlock* sinker,
                                              const std::vector<ExprContext*>& output_expr_ctxs,
@@ -120,6 +122,9 @@ StatusOr<TFetchDataResultPtr> StatisticResultWriter::_process_chunk(Chunk* chunk
     if (version == STATISTIC_DATA_VERSION1) {
         RETURN_IF_ERROR_WITH_WARN(_fill_statistic_data_v1(version, result_columns, chunk, result.get()),
                                   "Fill statistic data failed");
+    } else if (version == STATISTIC_DATA_VERSION2) {
+        RETURN_IF_ERROR_WITH_WARN(_fill_statistic_data_v2(version, result_columns, chunk, result.get()),
+                                  "Fill statistic data failed");
     } else if (version == DICT_STATISTIC_DATA_VERSION) {
         RETURN_IF_ERROR_WITH_WARN(_fill_dict_statistic_data(version, result_columns, chunk, result.get()),
                                   "Fill dict statistic data failed");
@@ -134,6 +139,9 @@ StatusOr<TFetchDataResultPtr> StatisticResultWriter::_process_chunk(Chunk* chunk
                                   "Fill partition statistic data failed");
     } else if (version == STATISTIC_BATCH_VERSION) {
         RETURN_IF_ERROR_WITH_WARN(_fill_full_statistic_data_v4(version, result_columns, chunk, result.get()),
+                                  "Fill table statistic data failed");
+    } else if (version == STATISTIC_BATCH_V5_VERSION) {
+        RETURN_IF_ERROR_WITH_WARN(_fill_full_statistic_data_v5(version, result_columns, chunk, result.get()),
                                   "Fill table statistic data failed");
     } else if (version == STATISTIC_EXTERNAL_VERSION) {
         RETURN_IF_ERROR_WITH_WARN(_fill_full_statistic_data_external(version, result_columns, chunk, result.get()),
@@ -215,6 +223,55 @@ Status StatisticResultWriter::_fill_statistic_data_v1(int version, const Columns
         data_list[i].__set_nullCount(nullCounts->get(i).get_int64());
         data_list[i].__set_max(maxColumn->get_slice(i).to_string());
         data_list[i].__set_min(minColumn->get_slice(i).to_string());
+    }
+
+    result->result_batch.rows.resize(num_rows);
+    result->result_batch.__set_statistic_version(version);
+
+    ThriftSerializer serializer(true, chunk->memory_usage());
+    for (int i = 0; i < num_rows; ++i) {
+        RETURN_IF_ERROR(serializer.serialize(&data_list[i], &result->result_batch.rows[i]));
+    }
+    return Status::OK();
+}
+
+// Added collection size compared to `_fill_statistic_data_v1`
+Status StatisticResultWriter::_fill_statistic_data_v2(int version, const Columns& columns, const Chunk* chunk,
+                                                      TFetchDataResult* result) {
+    SCOPED_TIMER(_serialize_timer);
+
+    // mapping with Data.thrift.TStatisticData
+    DCHECK(columns.size() == 12);
+
+    // skip read version
+    auto& updateTimes = ColumnHelper::cast_to_raw<TYPE_DATETIME>(columns[1])->get_data();
+    auto& dbIds = ColumnHelper::cast_to_raw<TYPE_BIGINT>(columns[2])->get_data();
+    auto& tableIds = ColumnHelper::cast_to_raw<TYPE_BIGINT>(columns[3])->get_data();
+    BinaryColumn* nameColumn = ColumnHelper::cast_to_raw<TYPE_VARCHAR>(columns[4]);
+    auto* rowCounts = down_cast<Int64Column*>(ColumnHelper::get_data_column(columns[5].get()));
+    auto* dataSizes = down_cast<Int64Column*>(ColumnHelper::get_data_column(columns[6].get()));
+    auto* countDistincts = down_cast<Int64Column*>(ColumnHelper::get_data_column(columns[7].get()));
+    auto* nullCounts = down_cast<Int64Column*>(ColumnHelper::get_data_column(columns[8].get()));
+    auto* maxColumn = down_cast<BinaryColumn*>(ColumnHelper::get_data_column(columns[9].get()));
+    auto* minColumn = down_cast<BinaryColumn*>(ColumnHelper::get_data_column(columns[10].get()));
+    auto* collectionSize = down_cast<Int64Column*>(ColumnHelper::get_data_column(columns[11].get()));
+
+    std::vector<TStatisticData> data_list;
+    int num_rows = chunk->num_rows();
+
+    data_list.resize(num_rows);
+    for (int i = 0; i < num_rows; ++i) {
+        data_list[i].__set_updateTime(updateTimes[i].to_string());
+        data_list[i].__set_dbId(dbIds[i]);
+        data_list[i].__set_tableId(tableIds[i]);
+        data_list[i].__set_columnName(nameColumn->get_slice(i).to_string());
+        data_list[i].__set_rowCount(rowCounts->get(i).get_int64());
+        data_list[i].__set_dataSize(dataSizes->get(i).get_int64());
+        data_list[i].__set_countDistinct(countDistincts->get(i).get_int64());
+        data_list[i].__set_nullCount(nullCounts->get(i).get_int64());
+        data_list[i].__set_max(maxColumn->get_slice(i).to_string());
+        data_list[i].__set_min(minColumn->get_slice(i).to_string());
+        data_list[i].__set_collectionSize(collectionSize->get(i).get_int64());
     }
 
     result->result_batch.rows.resize(num_rows);
@@ -355,6 +412,50 @@ Status StatisticResultWriter::_fill_full_statistic_data_v4(int version, const Co
         data_list[i].__set_nullCount(nullCounts.value(i));
         data_list[i].__set_max(max.value(i).to_string());
         data_list[i].__set_min(min.value(i).to_string());
+    }
+
+    result->result_batch.rows.resize(num_rows);
+    result->result_batch.__set_statistic_version(version);
+
+    ThriftSerializer serializer(true, chunk->memory_usage());
+    for (int i = 0; i < num_rows; ++i) {
+        RETURN_IF_ERROR(serializer.serialize(&data_list[i], &result->result_batch.rows[i]));
+    }
+    return Status::OK();
+}
+
+Status StatisticResultWriter::_fill_full_statistic_data_v5(int version, const Columns& columns, const Chunk* chunk,
+                                                           TFetchDataResult* result) {
+    SCOPED_TIMER(_serialize_timer);
+
+    // mapping with Data.thrift.TStatisticData
+    DCHECK(columns.size() == 10);
+
+    // skip read version
+    auto pid = ColumnViewer<TYPE_BIGINT>(columns[1]);
+    auto name = ColumnViewer<TYPE_VARCHAR>(columns[2]);
+    auto rowCounts = ColumnViewer<TYPE_BIGINT>(columns[3]);
+    auto dataSizes = ColumnViewer<TYPE_BIGINT>(columns[4]);
+    auto hll = ColumnViewer<TYPE_VARCHAR>(columns[5]);
+    auto nullCounts = ColumnViewer<TYPE_BIGINT>(columns[6]);
+    auto max = ColumnViewer<TYPE_VARCHAR>(columns[7]);
+    auto min = ColumnViewer<TYPE_VARCHAR>(columns[8]);
+    auto collection_size = ColumnViewer<TYPE_BIGINT>(columns[9]);
+
+    std::vector<TStatisticData> data_list;
+    int num_rows = chunk->num_rows();
+
+    data_list.resize(num_rows);
+    for (int i = 0; i < num_rows; ++i) {
+        data_list[i].__set_partitionId(pid.value(i));
+        data_list[i].__set_columnName(name.value(i).to_string());
+        data_list[i].__set_rowCount(rowCounts.value(i));
+        data_list[i].__set_dataSize(dataSizes.value(i));
+        data_list[i].__set_hll(hll.value(i).to_string());
+        data_list[i].__set_nullCount(nullCounts.value(i));
+        data_list[i].__set_max(max.value(i).to_string());
+        data_list[i].__set_min(min.value(i).to_string());
+        data_list[i].__set_collectionSize(collection_size.value(i));
     }
 
     result->result_batch.rows.resize(num_rows);

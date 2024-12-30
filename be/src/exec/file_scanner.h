@@ -87,6 +87,9 @@ protected:
     // chunk depicted by dest_slot_descriptors
     StatusOr<ChunkPtr> materialize(const starrocks::ChunkPtr& src, starrocks::ChunkPtr& cast);
 
+    static void sample_files(size_t total_file_count, int64_t sample_file_count,
+                             std::vector<size_t>* sample_file_indexes);
+
 protected:
     RuntimeState* _state;
     RuntimeProfile* _profile;
@@ -97,6 +100,12 @@ protected:
 
     bool _strict_mode;
     int64_t _error_counter;
+    // When column mismatch, files query/load and other type load have different behaviors.
+    // Query returns error, while load counts the filtered rows, and return error or not is based on max filter ratio,
+    // files load will not filter rows if file column count is larger that the schema,
+    // so need to check files query/load or other type load in scanner.
+    // Currently only used in csv scanner.
+    TFileScanType::type _file_scan_type;
 
     // sources
     std::vector<SlotDescriptor*> _src_slot_descriptors;

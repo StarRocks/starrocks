@@ -35,6 +35,7 @@ import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
+import com.starrocks.authorization.SecurityPolicyRewriteRule;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ConnectorView;
 import com.starrocks.catalog.Database;
@@ -56,7 +57,6 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
-import com.starrocks.privilege.SecurityPolicyRewriteRule;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
@@ -1455,6 +1455,10 @@ public class QueryAnalyzer {
                         }
                     }
                 }
+            }
+
+            if (table instanceof OlapTable) {
+                ((OlapTable) table).maySetDatabaseName(db.getFullName());
             }
 
             return table;

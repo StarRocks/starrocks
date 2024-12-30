@@ -31,7 +31,6 @@ import com.starrocks.catalog.KuduTable;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
@@ -151,6 +150,7 @@ import com.starrocks.sql.optimizer.operator.stream.LogicalBinlogScanOperator;
 import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamScanOperator;
 import com.starrocks.sql.optimizer.rule.transformation.ListPartitionPruner;
 import com.starrocks.statistic.StatisticUtils;
+import com.starrocks.statistic.columns.PredicateColumnsMgr;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -221,6 +221,9 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             predicate = physical.getPredicate();
             limit = physical.getLimit();
         }
+
+        PredicateColumnsMgr.getInstance().recordPredicateColumns(predicate, optimizerContext.getColumnRefFactory(),
+                context.getOptExpression());
 
         predicate = removePartitionPredicate(predicate, node, optimizerContext);
         Statistics statistics = context.getStatistics();
@@ -347,6 +350,12 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                                      Collection<Long> selectedPartitionIds,
                                      Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
         Preconditions.checkState(context.arity() == 0);
+
+        PredicateColumnsMgr.getInstance().recordScanColumns(colRefToColumnMetaMap, table, context.getOptExpression());
+        PredicateColumnsMgr.getInstance()
+                .recordPredicateColumns(node.getPredicate(), optimizerContext.getColumnRefFactory(),
+                        context.getOptExpression());
+
         // 1. get table row count
         long tableRowCount = StatisticsCalcUtils.getTableRowCount(table, node, optimizerContext);
         // 2. get required columns statistics
@@ -630,11 +639,16 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     private Void computePaimonScanNode(Operator node, ExpressionContext context, Table table,
                                        Map<ColumnRefOperator, Column> columnRefOperatorColumnMap) {
         if (context.getStatistics() == null) {
-            String catalogName = ((PaimonTable) table).getCatalogName();
+            String catalogName = table.getCatalogName();
             Statistics stats = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
                     optimizerContext, catalogName, table, columnRefOperatorColumnMap, null,
-                    node.getPredicate(), -1, TableVersionRange.empty());
+                    node.getPredicate(), node.getLimit(), TableVersionRange.empty());
             context.setStatistics(stats);
+            if (node.isLogical()) {
+                boolean hasUnknownColumns = stats.getColumnStatistics().values().stream()
+                        .anyMatch(ColumnStatistic::isUnknown);
+                ((LogicalPaimonScanOperator) node).setHasUnknownColumn(hasUnknownColumns);
+            }
         }
 
         return visitOperator(node, context);
@@ -976,6 +990,9 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         //Update the statistics of the GroupBy column
         Map<ColumnRefOperator, ColumnStatistic> groupStatisticsMap = new HashMap<>();
         double rowCount = computeGroupByStatistics(groupBys, inputStatistics, groupStatisticsMap);
+        PredicateColumnsMgr.getInstance()
+                .recordGroupByColumns(aggregations, groupBys, optimizerContext.getColumnRefFactory(),
+                        context.getOptExpression());
 
         //Update Node Statistics
         builder.addColumnStatistics(groupStatisticsMap);
@@ -1080,6 +1097,9 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
         List<BinaryPredicateOperator> eqOnPredicates = JoinHelper.getEqualsPredicate(leftStatistics.getUsedColumns(),
                 rightStatistics.getUsedColumns(), allJoinPredicate);
+
+        PredicateColumnsMgr.getInstance().recordJoinPredicate(eqOnPredicates, optimizerContext.getColumnRefFactory(),
+                context.getOptExpression());
 
         Statistics crossJoinStats = crossBuilder.build();
         double innerRowCount = -1;
@@ -1436,23 +1456,47 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     @Override
     public Void visitLogicalTableFunction(LogicalTableFunctionOperator node, ExpressionContext context) {
-        return computeTableFunctionNode(context, node.getOutputColRefs());
+        return computeTableFunctionNode(context, node.getOutputColRefs(), node.getFn().functionName(),
+                node.getFnParamColumnProject().stream().map(x -> x.first).collect(Collectors.toList()));
     }
 
     @Override
     public Void visitPhysicalTableFunction(PhysicalTableFunctionOperator node, ExpressionContext context) {
-        return computeTableFunctionNode(context, node.getOutputColRefs());
+        return computeTableFunctionNode(context, node.getOutputColRefs(), node.getFn().functionName(),
+                node.getFnParamColumnRefs());
     }
 
-    private Void computeTableFunctionNode(ExpressionContext context, List<ColumnRefOperator> outputColumns) {
+    private Void computeTableFunctionNode(ExpressionContext context, List<ColumnRefOperator> outputColumns,
+                                          String funcName, List<ColumnRefOperator> fnParamColumnRefs) {
         Statistics.Builder builder = Statistics.builder();
 
+        Statistics inputStatistics = context.getChildStatistics(0);
+        double rowCount = inputStatistics.getOutputRowCount();
+        Map<ColumnRefOperator, ColumnStatistic> columnStats = inputStatistics.getColumnStatistics();
+
         for (ColumnRefOperator col : outputColumns) {
-            builder.addColumnStatistic(col, ColumnStatistic.unknown());
+            if (columnStats.containsKey(col)) {
+                builder.addColumnStatistic(col, columnStats.get(col));
+            } else {
+                builder.addColumnStatistic(col, ColumnStatistic.unknown());
+            }
         }
 
-        Statistics inputStatistics = context.getChildStatistics(0);
-        builder.setOutputRowCount(inputStatistics.getOutputRowCount());
+        if (funcName.equalsIgnoreCase("unnest")) {
+            double maxRows = rowCount;
+            for (ColumnRefOperator column : fnParamColumnRefs) {
+                ColumnStatistic columnStatistic = inputStatistics.getColumnStatistic(column);
+                if (columnStatistic != null) {
+                    double collectionSize = columnStatistic.getCollectionSize();
+                    if (collectionSize >= 1 && collectionSize * rowCount >= maxRows) {
+                        maxRows = collectionSize * rowCount;
+                    }
+                }
+            }
+            rowCount = maxRows;
+        }
+
+        builder.setOutputRowCount(rowCount);
 
         context.setStatistics(builder.build());
         return visitOperator(context.getOp(), context);
@@ -1685,11 +1729,15 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     @Override
     public Void visitLogicalAnalytic(LogicalWindowOperator node, ExpressionContext context) {
+        PredicateColumnsMgr.getInstance().recordWindowPartitionBy(node.getPartitionExpressions(),
+                optimizerContext.getColumnRefFactory(), context.getOptExpression());
         return computeAnalyticNode(context, node.getWindowCall());
     }
 
     @Override
     public Void visitPhysicalAnalytic(PhysicalWindowOperator node, ExpressionContext context) {
+        PredicateColumnsMgr.getInstance().recordWindowPartitionBy(node.getPartitionExpressions(),
+                optimizerContext.getColumnRefFactory(), context.getOptExpression());
         return computeAnalyticNode(context, node.getAnalyticCall());
     }
 

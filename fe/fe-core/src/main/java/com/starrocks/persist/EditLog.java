@@ -42,6 +42,8 @@ import com.starrocks.alter.BatchAlterJobPersistInfo;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.authentication.UserProperty;
 import com.starrocks.authentication.UserPropertyInfo;
+import com.starrocks.authorization.RolePrivilegeCollectionV2;
+import com.starrocks.authorization.UserPrivilegeCollectionV2;
 import com.starrocks.backup.BackupJob;
 import com.starrocks.backup.Repository;
 import com.starrocks.backup.RestoreJob;
@@ -78,8 +80,6 @@ import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.plugin.PluginInfo;
-import com.starrocks.privilege.RolePrivilegeCollectionV2;
-import com.starrocks.privilege.UserPrivilegeCollectionV2;
 import com.starrocks.proto.EncryptionKeyPB;
 import com.starrocks.replication.ReplicationJob;
 import com.starrocks.scheduler.Task;
@@ -717,6 +717,7 @@ public class EditLog {
                 case OperationType.OP_DYNAMIC_PARTITION:
                 case OperationType.OP_MODIFY_IN_MEMORY:
                 case OperationType.OP_SET_FORBIDDEN_GLOBAL_DICT:
+                case OperationType.OP_SET_HAS_DELETE:
                 case OperationType.OP_MODIFY_REPLICATION_NUM:
                 case OperationType.OP_MODIFY_WRITE_QUORUM:
                 case OperationType.OP_MODIFY_REPLICATED_STORAGE:
@@ -1107,6 +1108,11 @@ public class EditLog {
                     Warehouse wh = (Warehouse) journal.getData();
                     WarehouseManager warehouseMgr = globalStateMgr.getWarehouseMgr();
                     warehouseMgr.replayAlterWarehouse(wh);
+                    break;
+                }
+                case OperationType.OP_CLUSTER_SNAPSHOT_LOG: {
+                    ClusterSnapshotLog log = (ClusterSnapshotLog) journal.getData();
+                    globalStateMgr.getClusterSnapshotMgr().replayLog(log);
                     break;
                 }
                 default: {
@@ -1539,6 +1545,10 @@ public class EditLog {
         logEdit(OperationType.OP_SET_FORBIDDEN_GLOBAL_DICT, info);
     }
 
+    public void logSetHasDelete(ModifyTablePropertyOperationLog info) {
+        logEdit(OperationType.OP_SET_HAS_DELETE, info);
+    }
+
     public void logBackendTabletsInfo(BackendTabletsInfo backendTabletsInfo) {
         logJsonObject(OperationType.OP_BACKEND_TABLETS_INFO_V2, backendTabletsInfo);
     }
@@ -1951,5 +1961,9 @@ public class EditLog {
 
     public void logRecoverPartitionVersion(PartitionVersionRecoveryInfo info) {
         logEdit(OperationType.OP_RECOVER_PARTITION_VERSION, info);
+    }
+
+    public void logClusterSnapshotLog(ClusterSnapshotLog info) {
+        logEdit(OperationType.OP_CLUSTER_SNAPSHOT_LOG, info);
     }
 }

@@ -22,6 +22,39 @@
 
 namespace starrocks::parquet {
 
+class FixedValueColumnReader final : public ColumnReader {
+public:
+    explicit FixedValueColumnReader(Datum fixed_value) : ColumnReader(nullptr), _fixed_value(std::move(fixed_value)) {}
+
+    ~FixedValueColumnReader() override = default;
+
+    Status prepare() override { return Status::OK(); }
+
+    void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) override {}
+
+    void set_need_parse_levels(bool need_parse_levels) override {}
+
+    void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
+                                 ColumnIOType type, bool active) override {}
+
+    void select_offset_index(const SparseRange<uint64_t>& range, const uint64_t rg_first_row) override {}
+
+    Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) override {
+        return Status::NotSupported("Not implemented");
+    }
+
+    StatusOr<bool> row_group_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                             CompoundNodeType pred_relation, const uint64_t rg_first_row,
+                                             const uint64_t rg_num_rows) const override;
+
+    StatusOr<bool> page_index_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                              SparseRange<uint64_t>* row_ranges, CompoundNodeType pred_relation,
+                                              const uint64_t rg_first_row, const uint64_t rg_num_rows) override;
+
+private:
+    const Datum _fixed_value;
+};
+
 class ScalarColumnReader final : public ColumnReader {
 public:
     explicit ScalarColumnReader(const ParquetField* parquet_field, const tparquet::ColumnChunk* column_chunk_metadata,
@@ -87,6 +120,14 @@ public:
     }
 
     void select_offset_index(const SparseRange<uint64_t>& range, const uint64_t rg_first_row) override;
+
+    StatusOr<bool> row_group_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                             CompoundNodeType pred_relation, uint64_t rg_first_row,
+                                             uint64_t rg_num_rows) const override;
+
+    StatusOr<bool> page_index_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                              SparseRange<uint64_t>* row_ranges, CompoundNodeType pred_relation,
+                                              const uint64_t rg_first_row, const uint64_t rg_num_rows) override;
 
 private:
     // Returns true if all of the data pages in the column chunk are dict encoded

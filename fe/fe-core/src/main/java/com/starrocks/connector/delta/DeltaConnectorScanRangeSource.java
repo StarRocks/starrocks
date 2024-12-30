@@ -24,6 +24,7 @@ import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.RemoteFileInfoSource;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.RemoteFileInputFormat;
+import com.starrocks.thrift.TDeletionVectorDescriptor;
 import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TScanRange;
@@ -36,6 +37,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -93,7 +95,12 @@ public class DeltaConnectorScanRangeSource implements ConnectorScanRangeSource {
         DescriptorTable.ReferencedPartitionInfo referencedPartitionInfo = referencedPartitions.get(partitionId);
         TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
         THdfsScanRange hdfsScanRange = new THdfsScanRange();
-        hdfsScanRange.setRelative_path(new Path(fileStatus.getPath()).getName());
+        if (fileStatus.getPath().contains(table.getTableLocation())) {
+            hdfsScanRange.setRelative_path(URLDecoder.decode("/" + Paths.get(table.getTableLocation()).
+                    relativize(Paths.get(fileStatus.getPath())), StandardCharsets.UTF_8));
+        } else {
+            hdfsScanRange.setFull_path(URLDecoder.decode(fileStatus.getPath(), StandardCharsets.UTF_8));
+        }
         hdfsScanRange.setOffset(0);
         hdfsScanRange.setLength(fileStatus.getSize());
         hdfsScanRange.setPartition_id(partitionId);
@@ -101,6 +108,17 @@ public class DeltaConnectorScanRangeSource implements ConnectorScanRangeSource {
         hdfsScanRange.setFile_format(remoteFileInputFormat.toThrift());
         hdfsScanRange.setPartition_value(table.toHdfsPartition(referencedPartitionInfo));
         hdfsScanRange.setTable_id(table.getId());
+        // serialize dv
+        if (fileScanTask.getDv() != null) {
+            TDeletionVectorDescriptor dv = new TDeletionVectorDescriptor();
+            dv.setStorageType(fileScanTask.getDv().getStorageType());
+            dv.setPathOrInlineDv(fileScanTask.getDv().getPathOrInlineDv());
+            dv.setOffset(fileScanTask.getDv().getOffset().orElse(0));
+            dv.setSizeInBytes(fileScanTask.getDv().getSizeInBytes());
+            dv.setCardinality(fileScanTask.getDv().getCardinality());
+            hdfsScanRange.setDeletion_vector_descriptor(dv);
+        }
+
         TScanRange scanRange = new TScanRange();
         scanRange.setHdfs_scan_range(hdfsScanRange);
         scanRangeLocations.setScan_range(scanRange);

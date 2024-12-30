@@ -131,11 +131,6 @@ public class SystemInfoService implements GsonPostProcessable {
 
     public void addComputeNodes(AddComputeNodeClause addComputeNodeClause)
             throws DdlException {
-
-        for (Pair<String, Integer> pair : addComputeNodeClause.getHostPortPairs()) {
-            checkSameNodeExist(pair.first, pair.second);
-        }
-
         for (Pair<String, Integer> pair : addComputeNodeClause.getHostPortPairs()) {
             addComputeNode(pair.first, pair.second, addComputeNodeClause.getWarehouse());
         }
@@ -169,7 +164,9 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     // Final entry of adding compute node
-    private void addComputeNode(String host, int heartbeatPort, String warehouse) throws DdlException {
+    public void addComputeNode(String host, int heartbeatPort, String warehouse) throws DdlException {
+        checkSameNodeExist(host, heartbeatPort);
+
         ComputeNode newComputeNode = new ComputeNode(GlobalStateMgr.getCurrentState().getNextId(), host, heartbeatPort);
         idToComputeNodeRef.put(newComputeNode.getId(), newComputeNode);
         setComputeNodeOwner(newComputeNode);

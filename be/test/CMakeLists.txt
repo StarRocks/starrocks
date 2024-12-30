@@ -24,6 +24,7 @@ set(EXEC_FILES
         ./common/status_test.cpp
         ./common/tracer_test.cpp
         ./common/uri_test.cpp
+        ./connector/deletion_vector/deletion_vector_test.cpp
         ./connector_sink/hive_chunk_sink_test.cpp
         ./connector_sink/iceberg_chunk_sink_test.cpp
         ./connector_sink/file_chunk_sink_test.cpp
@@ -46,6 +47,7 @@ set(EXEC_FILES
         ./exec/paimon/paimon_delete_file_builder_test.cpp
         ./exec/workgroup/scan_task_queue_test.cpp
         ./exec/workgroup/pipeline_executor_set_test.cpp
+        ./exec/pipeline/schedule/observer_test.cpp
         ./exec/pipeline/pipeline_control_flow_test.cpp
         ./exec/pipeline/pipeline_driver_queue_test.cpp
         ./exec/pipeline/pipeline_file_scan_node_test.cpp
@@ -91,6 +93,7 @@ set(EXEC_FILES
         ./exec/repeat_node_test.cpp
         ./exec/sorting_test.cpp
         ./exec/table_function_node_test.cpp
+        ./exec/olap_scan_prepare_test.cpp
         ./exprs/agg/json_each_test.cpp
         ./exprs/agg/aggregate_test.cpp
         ./exprs/arithmetic_expr_test.cpp
@@ -155,6 +158,7 @@ set(EXEC_FILES
         ./exprs/subfield_expr_test.cpp
         ./exprs/vectorized_literal_test.cpp
         ./exprs/min_max_predicate_test.cpp
+        ./exprs/in_const_predicate_test.cpp
         ./formats/csv/array_converter_test.cpp
         ./formats/csv/boolean_converter_test.cpp
         ./formats/csv/csv_file_writer_test.cpp
@@ -267,6 +271,8 @@ set(EXEC_FILES
         ./storage/lake/compaction_scheduler_test.cpp
         ./storage/lake/compaction_task_context_test.cpp
         ./storage/lake/lake_primary_key_consistency_test.cpp
+        ./storage/lake/load_spill_block_manager_test.cpp
+        ./storage/lake/spill_mem_table_sink_test.cpp
         ./storage/rowset_update_state_test.cpp
         ./storage/rowset_column_update_state_test.cpp
         ./storage/rowset_column_partial_update_test.cpp
@@ -359,6 +365,7 @@ set(EXEC_FILES
         ./storage/dictionary_cache_manager_test.cpp
         ./storage/column_or_predicate_test.cpp
         ./storage/column_and_predicate_test.cpp
+        ./storage/olap_runtime_range_pruner_test.cpp
         ./runtime/agg_state_desc_test.cpp
         ./runtime/buffer_control_block_test.cpp
         ./runtime/data_stream_mgr_test.cpp
@@ -409,6 +416,7 @@ set(EXEC_FILES
         ./util/phmap_test.cpp
         ./util/aes_util_test.cpp
         ./util/await_test.cpp
+        ./util/base85_test.cpp
         ./util/bitmap_test.cpp
         ./util/bit_mask_test.cpp
         ./util/bit_stream_utils_test.cpp
@@ -479,6 +487,7 @@ set(EXEC_FILES
         ./gutil/sysinfo-test.cc
         ./service/lake_service_test.cpp
         ./service/service_be/internal_service_test.cpp
+        ./service/staros_worker_test.cpp
         ./storage/metadata_util_test.cpp
         ./storage/delta_writer_test.cpp
         ./storage/compaction_parallelization_test.cpp

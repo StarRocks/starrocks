@@ -148,8 +148,7 @@ public class StatisticExecutor {
                             .map(x -> StatisticUtils.getQueryStatisticsColumnType(table, x.getColumnName()))
                             .collect(Collectors.toList());
 
-            String statsSql = StatisticSQLBuilder.buildQueryFullStatisticsSQL(
-                    dbId, tableId, columnNamesForStats, columnTypesForStats);
+            String statsSql = StatisticSQLBuilder.buildQueryFullStatisticsSQL(tableId, columnNamesForStats, columnTypesForStats);
             List<TStatisticData> tStatisticData = executeStatisticDQL(context, statsSql);
             columnStats.addAll(tStatisticData);
         }
@@ -161,7 +160,7 @@ public class StatisticExecutor {
                         .map(x -> StatisticUtils.getQueryStatisticsColumnType(table, x.getColumnName()))
                         .collect(Collectors.toList());
                 String statsSql = StatisticSQLBuilder.buildQueryFullStatisticsSQL(
-                        dbId, tableId, columnNamesForStats, columnTypesForStats);
+                        tableId, columnNamesForStats, columnTypesForStats);
                 List<TStatisticData> tStatisticData = executeStatisticDQL(context, statsSql);
                 columnStats.addAll(tStatisticData);
             } else {
@@ -296,7 +295,7 @@ public class StatisticExecutor {
         StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
 
         ExecPlan execPlan = StatementPlanner.plan(parsedStmt, context, TResultSinkType.STATISTIC);
-        StmtExecutor executor = new StmtExecutor(context, parsedStmt);
+        StmtExecutor executor = StmtExecutor.newInternalExecutor(context, parsedStmt);
         Pair<List<TResultBatch>, Status> sqlResult = executor.executeStmtWithExecPlan(context, execPlan);
         if (!sqlResult.second.ok()) {
             return Pair.create(Collections.emptyList(), sqlResult.second);
@@ -526,7 +525,7 @@ public class StatisticExecutor {
         }
         StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
         ExecPlan execPlan = StatementPlanner.plan(parsedStmt, context, TResultSinkType.STATISTIC);
-        StmtExecutor executor = new StmtExecutor(context, parsedStmt);
+        StmtExecutor executor = StmtExecutor.newInternalExecutor(context, parsedStmt);
         context.setExecutor(executor);
         context.getSessionVariable().setEnableMaterializedViewRewrite(false);
         Pair<List<TResultBatch>, Status> sqlResult = executor.executeStmtWithExecPlan(context, execPlan);
@@ -544,7 +543,7 @@ public class StatisticExecutor {
         StatementBase parsedStmt;
         try {
             parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
-            StmtExecutor executor = new StmtExecutor(context, parsedStmt);
+            StmtExecutor executor = StmtExecutor.newInternalExecutor(context, parsedStmt);
             context.setExecutor(executor);
             context.setQueryId(UUIDUtil.genUUID());
             executor.execute();

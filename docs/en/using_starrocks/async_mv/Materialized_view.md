@@ -175,6 +175,7 @@ GROUP BY order_id;
 > - The query statement used to create a materialized view does not support random functions, including rand(), random(), uuid(), and sleep().
 > - Asynchronous materialized views support a variety of data types. For more information, see [CREATE MATERIALIZED VIEW - Supported data types](../../sql-reference/sql-statements/materialized_view/CREATE_MATERIALIZED_VIEW.md#supported-data-types).
 > - By default, executing a CREATE MATERIALIZED VIEW statement immediately triggers the refresh task, which can consume a certain proportion of the system resources. If you want to defer the refresh task, you can add the REFRESH DEFERRED parameter to your CREATE MATERIALIZED VIEW statement.
+> - Materialized view can only be created in default_catalog. You could either create it with default_catalog.database.mv, or switch to default_catalog through `set catalog <default_catalog>` statement.
 
 - **About refresh mechanisms of asynchronous materialized views**
 

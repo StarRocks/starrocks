@@ -33,7 +33,7 @@ import java.util.stream.Collectors;
 /*
  * Split sample statistics query:
  * 1. max/max/count(1) to meta query
- * 2. length/count null/ndv to data query
+ * 2. length/count null/ndv/collection size to data query
  */
 public class MetaQueryJob extends HyperQueryJob {
     // column_partition -> rows index, for find row
@@ -121,6 +121,7 @@ public class MetaQueryJob extends HyperQueryJob {
                 tempData.setNullCount(data.getNullCount()); // real null count
                 tempData.setDataSize(data.getDataSize()); // real data size
                 tempData.setHll(data.getHll()); // real hll
+                tempData.setCollectionSize(data.getCollectionSize() <= 0 ? -1 : data.getCollectionSize());
                 sqlBuffer.add(createInsertValueSQL(tempData, tableName, partitionName));
                 rowsBuffer.add(createInsertValueExpr(tempData, tableName, partitionName));
             }

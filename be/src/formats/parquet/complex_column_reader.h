@@ -210,7 +210,26 @@ public:
         }
     }
 
+    StatusOr<bool> row_group_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                             CompoundNodeType pred_relation, const uint64_t rg_first_row,
+                                             const uint64_t rg_num_rows) const override;
+
+    StatusOr<bool> page_index_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                              SparseRange<uint64_t>* row_ranges, CompoundNodeType pred_relation,
+                                              const uint64_t rg_first_row, const uint64_t rg_num_rows) override;
+
+    ColumnReader* get_child_column_reader(const std::string& subfield) const;
+
+    // retrieve multi level subfield's ColumnReader
+    ColumnReader* get_child_column_reader(const std::vector<std::string>& subfields) const;
+
 private:
+    Status _rewrite_column_expr_predicate(ObjectPool* pool, const std::vector<const ColumnPredicate*>& src_preds,
+                                          std::vector<const ColumnPredicate*>& dst_preds) const;
+
+    StatusOr<ColumnPredicate*> _try_to_rewrite_subfield_expr(ObjectPool* pool, const ColumnPredicate* predicate,
+                                                             std::vector<std::string>* subfield_output) const;
+
     void _handle_null_rows(uint8_t* is_nulls, bool* has_null, size_t num_rows);
 
     // _children_readers order is the same as TypeDescriptor children order.

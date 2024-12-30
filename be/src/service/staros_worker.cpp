@@ -62,6 +62,7 @@ DECLARE_int32(fslib_s3client_max_instance_per_item);
 DECLARE_int32(fslib_s3client_nonread_max_retries);
 DECLARE_int32(fslib_s3client_nonread_retry_scale_factor);
 DECLARE_int32(fslib_s3client_connect_timeout_ms);
+DECLARE_int32(fslib_s3client_request_timeout_ms);
 DECLARE_bool(fslib_s3client_use_list_objects_v1);
 // threadpool size for buffer prefetch task
 DECLARE_int32(fs_buffer_prefetch_threadpool_size);
@@ -89,7 +90,18 @@ absl::Status StarOSWorker::add_shard(const ShardInfo& shard) {
             return st;
         }
     }
-    _shards.insert_or_assign(shard.id, ShardInfoDetails(shard));
+    auto ret = _shards.insert_or_assign(shard.id, ShardInfoDetails(shard));
+    l.unlock();
+    if (ret.second) {
+        // it is an insert op to the map
+        // NOTE:
+        //  1. Since the following statement is invoked outside the lock, it is possible that
+        //     the shard may be removed when retrieving from the callback.
+        //  2. Expect the callback is as quick and simple as possible, otherwise it will occupy
+        //     the GRPC thread too long and blocking response sent back to StarManager. A better
+        //     choice would be: starting a new thread pool and send callback tasks in the thread pool.
+        on_add_shard_event(shard.id);
+    }
     return absl::OkStatus();
 }
 
@@ -262,6 +274,9 @@ absl::StatusOr<std::string> StarOSWorker::build_scheme_from_shard_info(const Sha
     case staros::FileStoreType::AZBLOB:
         scheme = "azblob://";
         break;
+    case staros::FileStoreType::ADLS2:
+        scheme = "adls2://";
+        break;
     default:
         return absl::InvalidArgumentError("Unknown shard storage scheme!");
     }
@@ -381,6 +396,9 @@ void init_staros_worker(const std::shared_ptr<starcache::StarCache>& star_cache)
     FLAGS_fslib_s3client_nonread_retry_scale_factor = config::starlet_fslib_s3client_nonread_retry_scale_factor;
     FLAGS_fslib_s3client_connect_timeout_ms = config::starlet_fslib_s3client_connect_timeout_ms;
     FLAGS_fslib_s3client_use_list_objects_v1 = config::s3_use_list_objects_v1;
+    if (config::object_storage_request_timeout_ms >= 0) {
+        FLAGS_fslib_s3client_request_timeout_ms = static_cast<int32_t>(config::object_storage_request_timeout_ms);
+    }
     fslib::FLAGS_delete_files_max_key_in_batch = config::starlet_delete_files_max_key_in_batch;
 
     fslib::FLAGS_use_star_cache = config::starlet_use_star_cache;

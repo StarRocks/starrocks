@@ -205,8 +205,6 @@ Status GlobalEnv::_init_mem_tracker() {
     _process_mem_tracker = regist_tracker(MemTracker::PROCESS, bytes_limit, "process");
     _jemalloc_metadata_tracker =
             regist_tracker(MemTracker::JEMALLOC, -1, "jemalloc_metadata", _process_mem_tracker.get());
-    _jemalloc_fragmentation_tracker =
-            regist_tracker(MemTracker::JEMALLOC, -1, "jemalloc_fragmentation", _process_mem_tracker.get());
     int64_t query_pool_mem_limit =
             calc_max_query_memory(_process_mem_tracker->limit(), config::query_max_memory_limit_percent);
     _query_pool_mem_tracker =
@@ -753,6 +751,11 @@ void ExecEnv::destroy() {
 }
 
 void ExecEnv::_wait_for_fragments_finish() {
+    if (config::loop_count_wait_fragments_finish < 0) {
+        LOG(WARNING) << "'config::loop_count_wait_fragments_finish' is set to a negative integer, ignore it.";
+        return;
+    }
+
     size_t max_loop_secs = config::loop_count_wait_fragments_finish * 10;
     if (max_loop_secs == 0) {
         return;

@@ -47,8 +47,8 @@ import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TupleId;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.TreeNode;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.TreeNode;
 import com.starrocks.sql.common.PermutationGenerator;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -860,12 +860,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
                     if (!slot.getId().equals(slotRef.getSlotId())) {
                         continue;
                     }
-                    if (!slotRef.isNullable() || rfDesc.isNullLast()) {
-                        return true;
-                    }
-                    if (slotRef.isNullable() && canEliminateNull(slot)) {
-                        return true;
-                    }
+                    return true;
                 }
             }
             return false;

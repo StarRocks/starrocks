@@ -37,6 +37,7 @@ package com.starrocks.alter;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -74,7 +75,6 @@ import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
-import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
@@ -623,5 +623,12 @@ public class AlterJobMgr {
                 LOG.info("replay pending alter job when load alter job {} ", alterJobV2.getJobId());
             }
         });
+    }
+
+    public Map<Long, Long> getRunningAlterJobCount() {
+        Map<Long, Long> mv = materializedViewHandler.getRunningAlterJobCount();
+        Map<Long, Long> sc = schemaChangeHandler.getRunningAlterJobCount();
+        sc.forEach((key, value) -> mv.merge(key, value, Long::sum));
+        return mv;
     }
 }

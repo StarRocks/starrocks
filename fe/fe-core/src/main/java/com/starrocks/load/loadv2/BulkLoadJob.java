@@ -139,7 +139,7 @@ public abstract class BulkLoadJob extends LoadJob {
                     break;
                 case SPARK:
                     bulkLoadJob = new SparkLoadJob(db.getId(), stmt.getLabel().getLabelName(),
-                            stmt.getResourceDesc(), stmt.getOrigStmt());
+                            stmt.getResourceDesc(), stmt.getOrigStmt(), context);
                     break;
                 case MINI:
                 case DELETE:

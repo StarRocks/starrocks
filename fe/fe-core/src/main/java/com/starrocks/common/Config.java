@@ -1011,6 +1011,7 @@ public class Config extends ConfigBase {
     /**
      * Default insert load timeout
      */
+    @Deprecated
     @ConfField(mutable = true)
     public static int insert_load_default_timeout_second = 3600; // 1 hour
 
@@ -2012,6 +2013,13 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long statistic_collect_interval_sec = 5L * 60L; // 5m
 
+    @ConfField(mutable = true, comment = "The interval to persist predicate columns state")
+    public static long statistic_predicate_columns_persist_interval_sec = 60L;
+
+    @ConfField(mutable = true, comment = "The TTL of predicate columns, it would not be considered as predicate " +
+            "columns after this period")
+    public static long statistic_predicate_columns_ttl_hours = 24;
+
     /**
      * Num of thread to handle statistic collect(analyze command)
      */
@@ -2561,7 +2569,8 @@ public class Config extends ConfigBase {
     @ConfField
     public static boolean enable_load_volume_from_conf = true;
     // remote storage related configuration
-    @ConfField(comment = "storage type for cloud native table. Available options: \"S3\", \"HDFS\", \"AZBLOB\". case-insensitive")
+    @ConfField(comment = "storage type for cloud native table. Available options: " +
+            "\"S3\", \"HDFS\", \"AZBLOB\", \"ADLS2\". case-insensitive")
     public static String cloud_native_storage_type = "S3";
 
     // HDFS storage configuration
@@ -2604,11 +2613,21 @@ public class Config extends ConfigBase {
     public static String azure_blob_endpoint = "";
     @ConfField
     public static String azure_blob_path = "";
-
     @ConfField
     public static String azure_blob_shared_key = "";
     @ConfField
     public static String azure_blob_sas_token = "";
+
+    // azure adls2
+    @ConfField
+    public static String azure_adls2_endpoint = "";
+    @ConfField
+    public static String azure_adls2_path = "";
+    @ConfField
+    public static String azure_adls2_shared_key = "";
+    @ConfField
+    public static String azure_adls2_sas_token = "";
+
     @ConfField(mutable = true)
     public static int starmgr_grpc_timeout_seconds = 5;
 
@@ -2748,6 +2767,12 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int lake_warehouse_max_compute_replica = 3;
 
+    @ConfField(mutable = true, comment = "time interval to check whether warehouse is idle")
+    public static long warehouse_idle_check_interval_seconds = 60;
+
+    @ConfField(mutable = true, comment = "True to start warehouse idle checker")
+    public static boolean warehouse_idle_check_enable = false;
+
     // e.g. "tableId1;tableId2"
     @ConfField(mutable = true)
     public static String lake_compaction_disable_tables = "";
@@ -2876,10 +2901,11 @@ public class Config extends ConfigBase {
     public static int profile_info_reserved_num = 500;
 
     /**
+     * Deprecated
      * Number of stream load profile infos reserved by `ProfileManager` for recently executed stream load and routine load task.
      * Default value: 500
      */
-    @ConfField(mutable = true)
+    @ConfField(mutable = true, comment = "Deprecated")
     public static int load_profile_info_reserved_num = 500;
 
     /**
@@ -3253,6 +3279,9 @@ public class Config extends ConfigBase {
     // limit for the number of host disconnections in the last {black_host_history_sec} seconds
     @ConfField(mutable = true)
     public static long black_host_connect_failures_within_time = 5;
+
+    @ConfField(mutable = true, comment = "The minimal time in milliseconds for the node to stay in the blocklist")
+    public static long black_host_penalty_min_ms = 500; // 500ms
 
     @ConfField(mutable = false)
     public static int jdbc_connection_pool_size = 8;

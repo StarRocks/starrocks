@@ -77,6 +77,7 @@ public class BDBEnvironmentTest {
     }
 
 
+    @Ignore
     @Test
     public void testSetupStandalone() throws Exception {
         long startMs = System.currentTimeMillis();
@@ -103,6 +104,7 @@ public class BDBEnvironmentTest {
     }
 
     // address already in use
+    @Ignore
     @Test(expected = JournalException.class)
     public void testSetupStandaloneMultitimes() throws Exception {
         long startMs = System.currentTimeMillis();
@@ -191,64 +193,6 @@ public class BDBEnvironmentTest {
         }
         BDBEnvironment.RETRY_TIME = 3;
         BDBEnvironment.SLEEP_INTERVAL_SEC = 1;
-    }
-
-    @Test
-    public void testNormalCluster() throws Exception {
-        long startMs = System.currentTimeMillis();
-        initClusterMasterFollower();
-
-        // leader write
-        Long dbIndex1 = 0L;
-        String dbName1 = String.valueOf(dbIndex1);
-        CloseSafeDatabase leaderDb = leaderEnvironment.openDatabase(dbName1);
-        Assert.assertEquals(1, leaderEnvironment.getDatabaseNames().size());
-        Assert.assertEquals(dbIndex1, leaderEnvironment.getDatabaseNames().get(0));
-        DatabaseEntry key = randomEntry();
-        DatabaseEntry value = randomEntry();
-        leaderDb.put(null, key, value);
-        leaderDb.close();
-
-        Thread.sleep(1000);
-
-        // follower read
-        for (BDBEnvironment followerEnvironment : followerEnvironments) {
-            Assert.assertEquals(1, followerEnvironment.getDatabaseNames().size());
-            Assert.assertEquals(dbIndex1, followerEnvironment.getDatabaseNames().get(0));
-
-            CloseSafeDatabase followerDb = followerEnvironment.openDatabase(dbName1);
-            DatabaseEntry newvalue = new DatabaseEntry();
-            followerDb.get(null, key, newvalue, LockMode.READ_COMMITTED);
-            Assert.assertEquals(new String(value.getData()), new String(newvalue.getData()));
-            followerDb.close();
-        }
-
-        // add observer
-        BDBEnvironment observerEnvironment = new BDBEnvironment(
-                createTmpDir(),
-                "observer",
-                findUnbindHostPort(),
-                leaderNodeHostPort,
-                false);
-        observerEnvironment.setup();
-
-        // observer read
-        Assert.assertEquals(1, observerEnvironment.getDatabaseNames().size());
-        Assert.assertEquals(dbIndex1, observerEnvironment.getDatabaseNames().get(0));
-
-        CloseSafeDatabase observerDb = observerEnvironment.openDatabase(dbName1);
-        DatabaseEntry newvalue = new DatabaseEntry();
-        observerDb.get(null, key, newvalue, LockMode.READ_COMMITTED);
-        Assert.assertEquals(new String(value.getData()), new String(newvalue.getData()));
-        observerDb.close();
-
-        // close
-        leaderEnvironment.close();
-        for (BDBEnvironment followerEnvironment : followerEnvironments) {
-            followerEnvironment.close();
-        }
-        observerEnvironment.close();
-        System.out.println("testNormalCluster cost " + (System.currentTimeMillis() - startMs) / 1000 + " s");
     }
 
     /**

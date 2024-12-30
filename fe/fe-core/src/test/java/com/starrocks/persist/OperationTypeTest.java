@@ -36,6 +36,7 @@ public class OperationTypeTest {
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_MODIFY_REPLICATION_NUM));
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_MODIFY_IN_MEMORY));
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_SET_FORBIDDEN_GLOBAL_DICT));
+        Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_SET_HAS_DELETE));
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_INSTALL_PLUGIN));
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_UNINSTALL_PLUGIN));
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_CREATE_RESOURCE));
@@ -150,6 +151,7 @@ public class OperationTypeTest {
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_REPLICATION_JOB));
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_DELETE_REPLICATION_JOB));
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_RESET_FRONTENDS));
+        Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_CLUSTER_SNAPSHOT_LOG));
     }
 
     @Test

@@ -52,6 +52,7 @@ import com.starrocks.sql.optimizer.rule.transformation.ConvertToEqualForNullRule
 import com.starrocks.sql.optimizer.rule.transformation.DeriveRangeJoinPredicateRule;
 import com.starrocks.sql.optimizer.rule.transformation.EliminateAggRule;
 import com.starrocks.sql.optimizer.rule.transformation.EliminateConstantCTERule;
+import com.starrocks.sql.optimizer.rule.transformation.EliminateSortColumnWithEqualityPredicateRule;
 import com.starrocks.sql.optimizer.rule.transformation.ForceCTEReuseRule;
 import com.starrocks.sql.optimizer.rule.transformation.GroupByCountDistinctRewriteRule;
 import com.starrocks.sql.optimizer.rule.transformation.IcebergEqualityDeleteRewriteRule;
@@ -674,6 +675,7 @@ public class Optimizer {
         // After this rule, we shouldn't generate logical project operator
         ruleRewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
 
+        ruleRewriteOnlyOnce(tree, rootTaskContext, new EliminateSortColumnWithEqualityPredicateRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownTopNBelowOuterJoinRule());
         // intersect rewrite depend on statistics
         Utils.calculateStatistics(tree, rootTaskContext.getOptimizerContext());
@@ -703,7 +705,9 @@ public class Optimizer {
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.VECTOR_REWRITE);
         // this rule should be after mv
         // @TODO: it can also be applied to other table scan operator
-        ruleRewriteOnlyOnce(tree, rootTaskContext, PullUpScanPredicateRule.OLAP_SCAN);
+        if (context.getSessionVariable().isEnableScanPredicateExprReuse()) {
+            ruleRewriteOnlyOnce(tree, rootTaskContext, PullUpScanPredicateRule.OLAP_SCAN);
+        }
 
         tree = SimplifyCaseWhenPredicateRule.INSTANCE.rewrite(tree, rootTaskContext);
         deriveLogicalProperty(tree);

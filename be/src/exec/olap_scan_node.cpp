@@ -143,7 +143,7 @@ Status OlapScanNode::open(RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::open(state));
 
     Status status;
-    RETURN_IF_ERROR(OlapScanConjunctsManager::eval_const_conjuncts(_conjunct_ctxs, &status));
+    RETURN_IF_ERROR(ScanConjunctsManager::eval_const_conjuncts(_conjunct_ctxs, &status));
     _update_status(status);
 
     DictOptimizeParser::rewrite_descriptor(state, _conjunct_ctxs, _olap_scan_node.dict_string_id_to_int_ids,
@@ -528,7 +528,7 @@ Status OlapScanNode::_start_scan(RuntimeState* state) {
         enable_column_expr_predicate = _olap_scan_node.enable_column_expr_predicate;
     }
 
-    OlapScanConjunctsManagerOptions opts;
+    ScanConjunctsManagerOptions opts;
     opts.conjunct_ctxs_ptr = &_conjunct_ctxs;
     opts.tuple_desc = _tuple_desc;
     opts.obj_pool = _pool;
@@ -539,8 +539,8 @@ Status OlapScanNode::_start_scan(RuntimeState* state) {
     opts.max_scan_key_num = max_scan_key_num;
     opts.enable_column_expr_predicate = enable_column_expr_predicate;
 
-    _conjuncts_manager = std::make_unique<OlapScanConjunctsManager>(std::move(opts));
-    OlapScanConjunctsManager& cm = *_conjuncts_manager;
+    _conjuncts_manager = std::make_unique<ScanConjunctsManager>(std::move(opts));
+    ScanConjunctsManager& cm = *_conjuncts_manager;
 
     RETURN_IF_ERROR(cm.parse_conjuncts());
     RETURN_IF_ERROR(_start_scan_thread(state));
@@ -910,7 +910,8 @@ pipeline::OpFactories OlapScanNode::decompose_to_pipeline(pipeline::PipelineBuil
                                                                        std::move(scan_ctx_factory));
     this->init_runtime_filter_for_operator(scan_op.get(), context, rc_rf_probe_collector);
 
-    return pipeline::decompose_scan_node_to_pipeline(scan_op, this, context);
+    auto ops = pipeline::decompose_scan_node_to_pipeline(scan_op, this, context);
+    return context->maybe_interpolate_debug_ops(runtime_state(), _id, ops);
 }
 
 } // namespace starrocks

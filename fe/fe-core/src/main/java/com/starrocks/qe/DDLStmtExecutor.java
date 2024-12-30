@@ -41,6 +41,8 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
 import com.starrocks.sql.ast.AdminRepairTableStmt;
+import com.starrocks.sql.ast.AdminSetAutomatedSnapshotOffStmt;
+import com.starrocks.sql.ast.AdminSetAutomatedSnapshotOnStmt;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
 import com.starrocks.sql.ast.AdminSetPartitionVersionStmt;
 import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
@@ -178,7 +180,8 @@ public class DDLStmtExecutor {
             } else if (re.getCause() instanceof IOException) {
                 throw (IOException) re.getCause();
             } else if (re.getCause() != null) {
-                throw new DdlException(re.getCause().getMessage(), re);
+                throw new DdlException(re.getCause().getMessage() != null ?
+                        re.getCause().getMessage() : re.getMessage(), re);
             } else {
                 throw re;
             }
@@ -1181,6 +1184,24 @@ public class DDLStmtExecutor {
             ErrorReport.wrapWithRuntimeException(() -> {
                 WarehouseManager warehouseMgr = context.getGlobalStateMgr().getWarehouseMgr();
                 warehouseMgr.alterWarehouse(stmt);
+            });
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitAdminSetAutomatedSnapshotOnStatement(AdminSetAutomatedSnapshotOnStmt stmt,
+                                                                     ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getClusterSnapshotMgr().setAutomatedSnapshotOn(stmt);
+            });
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitAdminSetAutomatedSnapshotOffStatement(AdminSetAutomatedSnapshotOffStmt stmt,
+                                                                        ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getClusterSnapshotMgr().setAutomatedSnapshotOff(stmt);
             });
             return null;
         }

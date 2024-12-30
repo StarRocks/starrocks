@@ -20,7 +20,9 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
@@ -34,6 +36,7 @@ import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
@@ -49,6 +52,9 @@ import java.io.StringWriter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
+
+import static com.starrocks.statistic.StatsConstants.FULL_STATISTICS_TABLE_NAME;
 
 public class FullStatisticsCollectJob extends StatisticsCollectJob {
     private static final Logger LOG = LogManager.getLogger(FullStatisticsCollectJob.class);
@@ -66,6 +72,7 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
     //| max            | varchar(1048576) | NO   | false | <null>  |       |
     //| min            | varchar(1048576) | NO   | false | <null>  |       |
     //| update_time    | datetime         | NO   | false | <null>  |       |
+    //| collection_size| bigint           | NO   | false | <null>  |       |
     private static final String TABLE_NAME = "column_statistics";
     private static final String BATCH_FULL_STATISTIC_TEMPLATE = "SELECT cast($version as INT)" +
             ", cast($partitionId as BIGINT)" + // BIGINT
@@ -76,12 +83,14 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
             ", cast($countNullFunction as BIGINT)" + // BIGINT
             ", $maxFunction" + // VARCHAR
             ", $minFunction " + // VARCHAR
+            ", cast($collectionSizeFunction as BIGINT)" + // BIGINT
             " FROM (select $quoteColumnName as column_key from `$dbName`.`$tableName` partition `$partitionName`) tt";
     private static final String OVERWRITE_PARTITION_TEMPLATE =
-            "INSERT INTO " + TABLE_NAME + "\n" +
+            "INSERT INTO " + TABLE_NAME + "(" + StatisticUtils.buildStatsColumnDef(TABLE_NAME).stream().map(ColumnDef::getName)
+                    .collect(Collectors.joining(", ")) + ") " + "\n" +
                     "SELECT " +
                     "   table_id, $targetPartitionId, column_name, db_id, table_name, \n" +
-                    "   partition_name, row_count, data_size, ndv, null_count, max, min, update_time \n" +
+                    "   partition_name, row_count, data_size, ndv, null_count, max, min, update_time, collection_size \n" +
                     "FROM " + TABLE_NAME + "\n" +
                     "WHERE `table_id`=$tableId AND `partition_id`=$sourcePartitionId";
     private static final String DELETE_PARTITION_TEMPLATE =
@@ -173,9 +182,10 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
         flushInsertStatisticsData(context, true);
     }
 
-    // INSERT INTO column_statistics values
+    // INSERT INTO column_statistics(table_id, partition_id, column_name, db_id, table_name,
+    // partition_name, row_count, data_size, ndv, null_count, max, min, update_time, collection_size) values
     // ($tableId, $partitionId, '$columnName', $dbId, '$dbName.$tableName', '$partitionName',
-    //  $count, $dataSize, hll_deserialize('$hll'), $countNull, $maxFunction, $minFunction, NOW());
+    //  $count, $dataSize, hll_deserialize('$hll'), $countNull, $maxFunction, $minFunction, NOW(), $collectionSizeFunction);
     @Override
     public void collectStatisticSync(String sql, ConnectContext context) throws Exception {
         LOG.debug("statistics collect sql : " + sql);
@@ -210,6 +220,7 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
             params.add("'" + data.getMax() + "'");
             params.add("'" + data.getMin() + "'");
             params.add("now()");
+            params.add(String.valueOf(data.getCollectionSize() <= 0 ? -1 : data.getCollectionSize()));
             // int
             row.add(new IntLiteral(table.getId(), Type.BIGINT)); // table id, 8 byte
             row.add(new IntLiteral(data.getPartitionId(), Type.BIGINT)); // partition id, 8 byte
@@ -224,6 +235,7 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
             row.add(new StringLiteral(data.getMax())); // max, 200 byte
             row.add(new StringLiteral(data.getMin())); // min, 200 byte
             row.add(nowFn()); // update time, 8 byte
+            row.add(new IntLiteral(data.getCollectionSize() <= 0 ? -1 : data.getCollectionSize())); // collection size, 8 byte
 
             rowsBuffer.add(row);
             sqlBuffer.add("(" + String.join(", ", params) + ")");
@@ -246,7 +258,7 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
         StatementBase insertStmt = createInsertStmt();
         do {
             LOG.debug("statistics insert sql size:" + rowsBuffer.size());
-            StmtExecutor executor = new StmtExecutor(context, insertStmt);
+            StmtExecutor executor = StmtExecutor.newInternalExecutor(context, insertStmt);
             context.setExecutor(executor);
             context.setQueryId(UUIDUtil.genUUID());
             context.setStartTime();
@@ -272,12 +284,15 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
     }
 
     private StatementBase createInsertStmt() {
-        String sql = "INSERT INTO column_statistics values " + String.join(", ", sqlBuffer) + ";";
-        List<String> names = Lists.newArrayList("column_0", "column_1", "column_2", "column_3",
-                "column_4", "column_5", "column_6", "column_7", "column_8", "column_9",
-                "column_10", "column_11", "column_12");
-        QueryStatement qs = new QueryStatement(new ValuesRelation(rowsBuffer, names));
+        List<String> targetColumnNames = StatisticUtils.buildStatsColumnDef(FULL_STATISTICS_TABLE_NAME).stream()
+                .map(ColumnDef::getName)
+                .collect(Collectors.toList());
+
+        String sql = "INSERT INTO _statistics_.column_statistics(" + String.join(", ", targetColumnNames) +
+                ") values " + String.join(", ", sqlBuffer) + ";";
+        QueryStatement qs = new QueryStatement(new ValuesRelation(rowsBuffer, targetColumnNames));
         InsertStmt insert = new InsertStmt(new TableName("_statistics_", "column_statistics"), qs);
+        insert.setTargetColumnNames(targetColumnNames);
         insert.setOrigStmt(new OriginStatement(sql, 0));
         return insert;
     }
@@ -315,7 +330,7 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
         String quoteColumnName = StatisticUtils.quoting(table, columnName);
         String quoteColumnKey = "`column_key`";
 
-        context.put("version", StatsConstants.STATISTIC_BATCH_VERSION);
+        context.put("version", StatsConstants.STATISTIC_BATCH_VERSION_V5);
         context.put("partitionId", partition.getId());
         context.put("columnNameStr", columnNameStr);
         context.put("dataSize", fullAnalyzeGetDataSize(quoteColumnKey, columnType));
@@ -329,11 +344,25 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
             context.put("countNullFunction", "0");
             context.put("maxFunction", "''");
             context.put("minFunction", "''");
+            context.put("collectionSizeFunction", "-1");
+        } else if (columnType.isCollectionType()) {
+            String collectionSizeFunction = "AVG(" + (columnType.isArrayType() ? "ARRAY_LENGTH" : "MAP_SIZE") +
+                    "(" + quoteColumnKey + ")) ";
+            long elementTypeSize = columnType.isArrayType() ? ((ArrayType) columnType).getItemType().getTypeSize() :
+                    ((MapType) columnType).getKeyType().getTypeSize() + ((MapType) columnType).getValueType().getTypeSize();
+            String dataSizeFunction =  "COUNT(*) * " + elementTypeSize + " * " + collectionSizeFunction;
+            context.put("hllFunction", "'00'");
+            context.put("countNullFunction", "0");
+            context.put("maxFunction", "''");
+            context.put("minFunction", "''");
+            context.put("collectionSizeFunction", collectionSizeFunction);
+            context.put("dataSize", dataSizeFunction);
         } else {
             context.put("hllFunction", "hex(hll_serialize(IFNULL(hll_raw(" + quoteColumnKey + "), hll_empty())))");
             context.put("countNullFunction", "COUNT(1) - COUNT(" + quoteColumnKey + ")");
             context.put("maxFunction", getMinMaxFunction(columnType, quoteColumnKey, true));
             context.put("minFunction", getMinMaxFunction(columnType, quoteColumnKey, false));
+            context.put("collectionSizeFunction", "-1");
         }
 
         builder.append(build(context, BATCH_FULL_STATISTIC_TEMPLATE));

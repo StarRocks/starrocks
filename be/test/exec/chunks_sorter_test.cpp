@@ -14,8 +14,6 @@
 
 #include "exec/chunks_sorter.h"
 
-#include <fmt/format.h>
-#include <fmt/ranges.h>
 #include <gtest/gtest.h>
 
 #include <cstdio>
@@ -38,9 +36,374 @@
 #include "runtime/runtime_state.h"
 #include "runtime/types.h"
 #include "testutil/assert.h"
+#include "testutil/column_test_helper.h"
 #include "util/json.h"
 
 namespace starrocks {
+
+class SortRuntimeFilterBuilderTest : public ::testing::Test {
+public:
+    void SetUp() override {}
+    void TearDown() override {}
+
+protected:
+    ObjectPool _pool;
+    detail::SortRuntimeFilterBuilder _builder;
+};
+
+TEST_F(SortRuntimeFilterBuilderTest, null_first_all_null_single_column) {
+    auto data = std::vector<int32_t>{0, 0, 0, 0, 0};
+    auto null_data = std::vector<uint8_t>{1, 1, 1, 1, 1};
+    ColumnPtr column = ColumnTestHelper::build_nullable_column(data, null_data);
+
+    int row_id = 4;
+    bool asc = true;
+    bool null_first = true;
+    bool is_close_interval = false;
+
+    auto* rf = _builder.template operator()<TYPE_INT>(&_pool, column, row_id, asc, null_first, is_close_interval);
+    ASSERT_TRUE(rf != nullptr);
+    auto* bf = reinterpret_cast<RuntimeBloomFilter<TYPE_INT>*>(rf);
+    ASSERT_EQ(bf->debug_string(),
+              "RuntimeBF(type = 5, bfsize = 0, has_null = 0, _min = 2147483647, _max = -2147483648)");
+}
+
+TEST_F(SortRuntimeFilterBuilderTest, null_first_all_null_multi_column) {
+    auto data = std::vector<int32_t>{0, 0, 0, 0, 0};
+    auto null_data = std::vector<uint8_t>{1, 1, 1, 1, 1};
+    ColumnPtr column = ColumnTestHelper::build_nullable_column(data, null_data);
+
+    int row_id = 4;
+    bool asc = true;
+    bool null_first = true;
+    bool is_close_interval = true;
+
+    auto* rf = _builder.template operator()<TYPE_INT>(&_pool, column, row_id, asc, null_first, is_close_interval);
+    ASSERT_TRUE(rf != nullptr);
+    auto* bf = reinterpret_cast<RuntimeBloomFilter<TYPE_INT>*>(rf);
+    ASSERT_EQ(bf->debug_string(),
+              "RuntimeBF(type = 5, bfsize = 0, has_null = 1, _min = 2147483647, _max = -2147483648)");
+}
+
+TEST_F(SortRuntimeFilterBuilderTest, null_first_partial_null_asc) {
+    auto data = std::vector<int32_t>{0, 0, 10, 11, 12};
+    auto null_data = std::vector<uint8_t>{1, 1, 0, 0, 0};
+    ColumnPtr column = ColumnTestHelper::build_nullable_column(data, null_data);
+
+    int row_id = 4;
+    bool asc = true;
+    bool null_first = true;
+    bool is_close_interval = true;
+
+    auto* rf = _builder.template operator()<TYPE_INT>(&_pool, column, row_id, asc, null_first, is_close_interval);
+    ASSERT_TRUE(rf != nullptr);
+    auto* bf = reinterpret_cast<RuntimeBloomFilter<TYPE_INT>*>(rf);
+    ASSERT_EQ(bf->debug_string(), "RuntimeBF(type = 5, bfsize = 1, has_null = 1, _min = -2147483648, _max = 12)");
+}
+
+TEST_F(SortRuntimeFilterBuilderTest, null_first_partial_null_desc) {
+    auto data = std::vector<int32_t>{0, 0, 12, 11, 10};
+    auto null_data = std::vector<uint8_t>{1, 1, 0, 0, 0};
+    ColumnPtr column = ColumnTestHelper::build_nullable_column(data, null_data);
+
+    int row_id = 4;
+    bool asc = false;
+    bool null_first = true;
+    bool is_close_interval = true;
+
+    auto* rf = _builder.template operator()<TYPE_INT>(&_pool, column, row_id, asc, null_first, is_close_interval);
+    ASSERT_TRUE(rf != nullptr);
+    auto* bf = reinterpret_cast<RuntimeBloomFilter<TYPE_INT>*>(rf);
+    ASSERT_EQ(bf->debug_string(), "RuntimeBF(type = 5, bfsize = 1, has_null = 1, _min = 10, _max = 2147483647)");
+}
+
+TEST_F(SortRuntimeFilterBuilderTest, null_last_has_null_single_column) {
+    auto data = std::vector<int32_t>{0, 0, 0, 0, 0};
+    auto null_data = std::vector<uint8_t>{1, 1, 1, 1, 1};
+    ColumnPtr column = ColumnTestHelper::build_nullable_column(data, null_data);
+
+    int row_id = 4;
+    bool asc = true;
+    bool null_first = false;
+    bool is_close_interval = false;
+
+    auto* rf = _builder.template operator()<TYPE_INT>(&_pool, column, row_id, asc, null_first, is_close_interval);
+    ASSERT_TRUE(rf != nullptr);
+    auto* bf = reinterpret_cast<RuntimeBloomFilter<TYPE_INT>*>(rf);
+    ASSERT_EQ(bf->debug_string(),
+              "RuntimeBF(type = 5, bfsize = 0, has_null = 0, _min = -2147483648, _max = 2147483647)");
+}
+
+TEST_F(SortRuntimeFilterBuilderTest, null_last_has_null_multi_column) {
+    auto data = std::vector<int32_t>{0, 0, 0, 0, 0};
+    auto null_data = std::vector<uint8_t>{1, 1, 1, 1, 1};
+    ColumnPtr column = ColumnTestHelper::build_nullable_column(data, null_data);
+
+    int row_id = 4;
+    bool asc = true;
+    bool null_first = false;
+    bool is_close_interval = true;
+
+    auto* rf = _builder.template operator()<TYPE_INT>(&_pool, column, row_id, asc, null_first, is_close_interval);
+    ASSERT_TRUE(rf == nullptr);
+}
+
+TEST_F(SortRuntimeFilterBuilderTest, null_first_has_no_null_asc) {
+    auto data = std::vector<int32_t>{10, 11, 12, 13, 14};
+    auto null_data = std::vector<uint8_t>{0, 0, 0, 0, 0};
+    ColumnPtr column = ColumnTestHelper::build_nullable_column(data, null_data);
+
+    int row_id = 4;
+    bool asc = true;
+    bool null_first = true;
+    bool is_close_interval = true;
+
+    auto* rf = _builder.template operator()<TYPE_INT>(&_pool, column, row_id, asc, null_first, is_close_interval);
+    ASSERT_TRUE(rf != nullptr);
+    auto* bf = reinterpret_cast<RuntimeBloomFilter<TYPE_INT>*>(rf);
+    ASSERT_EQ(bf->debug_string(), "RuntimeBF(type = 5, bfsize = 1, has_null = 1, _min = -2147483648, _max = 14)");
+}
+
+TEST_F(SortRuntimeFilterBuilderTest, null_last_has_no_null_desc) {
+    auto data = std::vector<int32_t>{14, 13, 12, 12, 11};
+    auto null_data = std::vector<uint8_t>{0, 0, 0, 0, 0};
+    ColumnPtr column = ColumnTestHelper::build_nullable_column(data, null_data);
+
+    int row_id = 4;
+    bool asc = false;
+    bool null_first = false;
+    bool is_close_interval = true;
+
+    auto* rf = _builder.template operator()<TYPE_INT>(&_pool, column, row_id, asc, null_first, is_close_interval);
+    ASSERT_TRUE(rf != nullptr);
+    auto* bf = reinterpret_cast<RuntimeBloomFilter<TYPE_INT>*>(rf);
+    ASSERT_EQ(bf->debug_string(), "RuntimeBF(type = 5, bfsize = 1, has_null = 0, _min = 11, _max = 2147483647)");
+}
+
+class SortRuntimeFilterUpdaterTest : public ::testing::Test {
+public:
+    void SetUp() override {
+        _init_no_null_rf_for_asc_null_first();
+        _init_no_null_rf_for_asc_null_last();
+        _init_no_null_rf_for_desc();
+
+        _init_all_null_rf_for_null_first();
+        _init_all_null_rf_for_null_last();
+    }
+    void TearDown() override {}
+
+protected:
+    void _init_no_null_rf_for_asc_null_first() {
+        auto data = std::vector<int32_t>{10, 11, 12, 13, 14};
+        auto null_data = std::vector<uint8_t>{0, 0, 0, 0, 0};
+        ColumnPtr column = ColumnTestHelper::build_nullable_column(data, null_data);
+
+        int row_id = 4;
+        bool asc = true;
+        bool null_first = true;
+        bool is_close_interval = true;
+
+        auto* rf = _builder.template operator()<TYPE_INT>(&_pool, column, row_id, asc, null_first, is_close_interval);
+        ASSERT_TRUE(rf != nullptr);
+        _no_null_rf_asc_for_null_first = reinterpret_cast<RuntimeBloomFilter<TYPE_INT>*>(rf);
+    }
+
+    void _init_no_null_rf_for_asc_null_last() {
+        auto data = std::vector<int32_t>{10, 11, 12, 13, 14};
+        auto null_data = std::vector<uint8_t>{0, 0, 0, 0, 0};
+        ColumnPtr column = ColumnTestHelper::build_nullable_column(data, null_data);
+
+        int row_id = 4;
+        bool asc = true;
+        bool null_first = false;
+        bool is_close_interval = true;
+
+        auto* rf = _builder.template operator()<TYPE_INT>(&_pool, column, row_id, asc, null_first, is_close_interval);
+        ASSERT_TRUE(rf != nullptr);
+        _no_null_rf_asc_for_null_last = reinterpret_cast<RuntimeBloomFilter<TYPE_INT>*>(rf);
+    }
+
+    void _init_no_null_rf_for_desc() {
+        auto data = std::vector<int32_t>{14, 13, 12, 11, 10};
+        auto null_data = std::vector<uint8_t>{0, 0, 0, 0, 0};
+        ColumnPtr column = ColumnTestHelper::build_nullable_column(data, null_data);
+
+        int row_id = 4;
+        bool asc = false;
+        bool null_first = false;
+        bool is_close_interval = true;
+
+        auto* rf = _builder.template operator()<TYPE_INT>(&_pool, column, row_id, asc, null_first, is_close_interval);
+        ASSERT_TRUE(rf != nullptr);
+        _no_null_rf_desc = reinterpret_cast<RuntimeBloomFilter<TYPE_INT>*>(rf);
+    }
+
+    void _init_all_null_rf_for_null_first() {
+        auto data = std::vector<int32_t>{0, 0, 0, 0, 0};
+        auto null_data = std::vector<uint8_t>{1, 1, 1, 1, 1};
+        ColumnPtr column = ColumnTestHelper::build_nullable_column(data, null_data);
+
+        int row_id = 4;
+        bool asc = true;
+        bool null_first = true;
+        bool is_close_interval = false;
+
+        auto* rf = _builder.template operator()<TYPE_INT>(&_pool, column, row_id, asc, null_first, is_close_interval);
+        ASSERT_TRUE(rf != nullptr);
+        _all_null_rf_for_null_first = reinterpret_cast<RuntimeBloomFilter<TYPE_INT>*>(rf);
+    }
+
+    void _init_all_null_rf_for_null_last() {
+        auto data = std::vector<int32_t>{0, 0, 0, 0, 0};
+        auto null_data = std::vector<uint8_t>{1, 1, 1, 1, 1};
+        ColumnPtr column = ColumnTestHelper::build_nullable_column(data, null_data);
+
+        int row_id = 4;
+        bool asc = true;
+        bool null_first = false;
+        bool is_close_interval = false;
+
+        auto* rf = _builder.template operator()<TYPE_INT>(&_pool, column, row_id, asc, null_first, is_close_interval);
+        ASSERT_TRUE(rf != nullptr);
+        _all_null_rf_for_null_last = reinterpret_cast<RuntimeBloomFilter<TYPE_INT>*>(rf);
+    }
+
+    ObjectPool _pool;
+    detail::SortRuntimeFilterBuilder _builder;
+    detail::SortRuntimeFilterUpdater _updater;
+    RuntimeBloomFilter<TYPE_INT>* _no_null_rf_asc_for_null_first;
+    RuntimeBloomFilter<TYPE_INT>* _no_null_rf_asc_for_null_last;
+    RuntimeBloomFilter<TYPE_INT>* _no_null_rf_desc;
+    RuntimeBloomFilter<TYPE_INT>* _all_null_rf_for_null_first;
+    RuntimeBloomFilter<TYPE_INT>* _all_null_rf_for_null_last;
+};
+
+TEST_F(SortRuntimeFilterUpdaterTest, null_first_single_column_update_to_all_null) {
+    auto data = std::vector<int32_t>{0, 0, 0, 0, 0};
+    auto null_data = std::vector<uint8_t>{1, 1, 1, 1, 1};
+    ColumnPtr column = ColumnTestHelper::build_nullable_column(data, null_data);
+
+    int row_id = 4;
+    bool asc = true;
+    bool null_first = true;
+    bool is_close_interval = false;
+
+    _updater.template operator()<TYPE_INT>(_no_null_rf_asc_for_null_first, column, row_id, asc, null_first,
+                                           is_close_interval);
+    ASSERT_EQ(_no_null_rf_asc_for_null_first->debug_string(),
+              "RuntimeBF(type = 5, bfsize = 1, has_null = 0, _min = 2147483647, _max = -2147483648)");
+}
+
+TEST_F(SortRuntimeFilterUpdaterTest, null_first_multi_column_update_to_all_null) {
+    auto data = std::vector<int32_t>{0, 0, 0, 0, 0};
+    auto null_data = std::vector<uint8_t>{1, 1, 1, 1, 1};
+    ColumnPtr column = ColumnTestHelper::build_nullable_column(data, null_data);
+
+    int row_id = 4;
+    bool asc = true;
+    bool null_first = true;
+    bool is_close_interval = true;
+
+    _updater.template operator()<TYPE_INT>(_no_null_rf_asc_for_null_first, column, row_id, asc, null_first,
+                                           is_close_interval);
+    ASSERT_EQ(_no_null_rf_asc_for_null_first->debug_string(),
+              "RuntimeBF(type = 5, bfsize = 1, has_null = 1, _min = 2147483647, _max = -2147483648)");
+}
+
+TEST_F(SortRuntimeFilterUpdaterTest, null_first_one_column_update) {
+    auto data = std::vector<int32_t>{1, 2, 3, 4, 5};
+    auto null_data = std::vector<uint8_t>{0, 0, 0, 0, 0};
+    ColumnPtr column = ColumnTestHelper::build_nullable_column(data, null_data);
+
+    int row_id = 4;
+    bool asc = true;
+    bool null_first = true;
+    bool is_close_interval = false;
+
+    _updater.template operator()<TYPE_INT>(_no_null_rf_asc_for_null_first, column, row_id, asc, null_first,
+                                           is_close_interval);
+    ASSERT_EQ(_no_null_rf_asc_for_null_first->debug_string(),
+              "RuntimeBF(type = 5, bfsize = 1, has_null = 1, _min = -2147483648, _max = 5)");
+}
+
+TEST_F(SortRuntimeFilterUpdaterTest, null_last_one_column_all_null) {
+    auto data = std::vector<int32_t>{0, 0, 0, 0, 0};
+    auto null_data = std::vector<uint8_t>{1, 1, 1, 1, 1};
+    ColumnPtr column = ColumnTestHelper::build_nullable_column(data, null_data);
+
+    int row_id = 4;
+    bool asc = true;
+    bool null_first = false;
+    bool is_close_interval = false;
+
+    _updater.template operator()<TYPE_INT>(_all_null_rf_for_null_last, column, row_id, asc, null_first,
+                                           is_close_interval);
+    ASSERT_EQ(_all_null_rf_for_null_last->debug_string(),
+              "RuntimeBF(type = 5, bfsize = 0, has_null = 0, _min = -2147483648, _max = 2147483647)");
+}
+
+TEST_F(SortRuntimeFilterUpdaterTest, null_last_one_column_have_null) {
+    auto data = std::vector<int32_t>{14, 15, 0, 0, 0};
+    auto null_data = std::vector<uint8_t>{0, 0, 0, 1, 1};
+    ColumnPtr column = ColumnTestHelper::build_nullable_column(data, null_data);
+
+    int row_id = 4;
+    bool asc = true;
+    bool null_first = false;
+    bool is_close_interval = false;
+
+    _updater.template operator()<TYPE_INT>(_all_null_rf_for_null_last, column, row_id, asc, null_first,
+                                           is_close_interval);
+    ASSERT_EQ(_all_null_rf_for_null_last->debug_string(),
+              "RuntimeBF(type = 5, bfsize = 0, has_null = 0, _min = -2147483648, _max = 2147483647)");
+}
+
+TEST_F(SortRuntimeFilterUpdaterTest, null_first_one_column_have_no_null) {
+    auto data = std::vector<int32_t>{1, 2, 3, 4, 5};
+    auto null_data = std::vector<uint8_t>{0, 0, 0, 0, 0};
+    ColumnPtr column = ColumnTestHelper::build_nullable_column(data, null_data);
+
+    int row_id = 4;
+    bool asc = true;
+    bool null_first = true;
+    bool is_close_interval = false;
+
+    _updater.template operator()<TYPE_INT>(_no_null_rf_asc_for_null_first, column, row_id, asc, null_first,
+                                           is_close_interval);
+    ASSERT_EQ(_no_null_rf_asc_for_null_first->debug_string(),
+              "RuntimeBF(type = 5, bfsize = 1, has_null = 1, _min = -2147483648, _max = 5)");
+}
+
+TEST_F(SortRuntimeFilterUpdaterTest, null_last_one_column_have_no_null_asc) {
+    auto data = std::vector<int32_t>{1, 2, 3, 4, 5};
+    auto null_data = std::vector<uint8_t>{0, 0, 0, 0, 0};
+    ColumnPtr column = ColumnTestHelper::build_nullable_column(data, null_data);
+
+    int row_id = 4;
+    bool asc = true;
+    bool null_first = false;
+    bool is_close_interval = false;
+
+    _updater.template operator()<TYPE_INT>(_no_null_rf_asc_for_null_last, column, row_id, asc, null_first,
+                                           is_close_interval);
+    ASSERT_EQ(_no_null_rf_asc_for_null_last->debug_string(),
+              "RuntimeBF(type = 5, bfsize = 1, has_null = 0, _min = -2147483648, _max = 5)");
+}
+
+TEST_F(SortRuntimeFilterUpdaterTest, null_last_one_column_have_no_null_desc) {
+    auto data = std::vector<int32_t>{25, 24, 23, 22, 21};
+    auto null_data = std::vector<uint8_t>{0, 0, 0, 0, 0};
+    ColumnPtr column = ColumnTestHelper::build_nullable_column(data, null_data);
+
+    int row_id = 4;
+    bool asc = false;
+    bool null_first = false;
+    bool is_close_interval = false;
+
+    _updater.template operator()<TYPE_INT>(_no_null_rf_desc, column, row_id, asc, null_first, is_close_interval);
+    ASSERT_EQ(_no_null_rf_desc->debug_string(),
+              "RuntimeBF(type = 5, bfsize = 1, has_null = 0, _min = 21, _max = 2147483647)");
+}
 
 class ChunksSorterTest : public ::testing::Test {
 public:
@@ -56,101 +419,42 @@ public:
     void TearDown() override {}
 
     void setup_normal() {
-        const auto& int_type_desc = TypeDescriptor(TYPE_INT);
-        const auto& varchar_type_desc = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
-        ColumnPtr col_cust_key_1 = ColumnHelper::create_column(int_type_desc, false);
-        ColumnPtr col_cust_key_2 = ColumnHelper::create_column(int_type_desc, false);
-        ColumnPtr col_cust_key_3 = ColumnHelper::create_column(int_type_desc, false);
-        ColumnPtr col_nation_1 = ColumnHelper::create_column(varchar_type_desc, true);
-        ColumnPtr col_nation_2 = ColumnHelper::create_column(varchar_type_desc, true);
-        ColumnPtr col_nation_3 = ColumnHelper::create_column(varchar_type_desc, true);
-        ColumnPtr col_region_1 = ColumnHelper::create_column(varchar_type_desc, true);
-        ColumnPtr col_region_2 = ColumnHelper::create_column(varchar_type_desc, true);
-        ColumnPtr col_region_3 = ColumnHelper::create_column(varchar_type_desc, true);
-        ColumnPtr col_mkt_sgmt_1 = ColumnHelper::create_column(varchar_type_desc, true);
-        ColumnPtr col_mkt_sgmt_2 = ColumnHelper::create_column(varchar_type_desc, true);
-        ColumnPtr col_mkt_sgmt_3 = ColumnHelper::create_column(varchar_type_desc, true);
+        auto null_1 = std::vector<uint8_t>{0, 0, 0, 0, 0, 1};
+        auto data_cust_key_1 = std::vector<int32_t>{2, 12, 41, 54, 58, 71};
+        auto data_nation_1 = std::vector<Slice>{"JORDAN", "JORDAN", "IRAN", "EGYPT", "JORDAN", ""};
+        auto data_region_1 =
+                std::vector<Slice>{"MIDDLE EAST", "MIDDLE EAST", "MIDDLE EAST", "MIDDLE EAST", "MIDDLE EAST", ""};
+        auto data_mkt_sgmt_1 =
+                std::vector<Slice>{"AUTOMOBILE", "HOUSEHOLD", "HOUSEHOLD", "AUTOMOBILE", "HOUSEHOLD", ""};
 
-        col_cust_key_1->append_datum(Datum(int32_t(2)));
-        col_nation_1->append_datum(Datum(Slice("JORDAN")));
-        col_region_1->append_datum(Datum(Slice("MIDDLE EAST")));
-        col_mkt_sgmt_1->append_datum(Datum(Slice("AUTOMOBILE")));
-        col_cust_key_2->append_datum(Datum(int32_t(4)));
-        col_nation_2->append_datum(Datum(Slice("EGYPT")));
-        col_region_2->append_datum(Datum(Slice("MIDDLE EAST")));
-        col_mkt_sgmt_2->append_datum(Datum(Slice("MACHINERY")));
-        col_cust_key_3->append_datum(Datum(int32_t(6)));
-        col_nation_3->append_datum(Datum(Slice("SAUDI ARABIA")));
-        col_region_3->append_datum(Datum(Slice("MIDDLE EAST")));
-        col_mkt_sgmt_3->append_datum(Datum(Slice("AUTOMOBILE")));
-
-        col_cust_key_1->append_datum(Datum(int32_t(12)));
-        col_nation_1->append_datum(Datum(Slice("JORDAN")));
-        col_region_1->append_datum(Datum(Slice("MIDDLE EAST")));
-        col_mkt_sgmt_1->append_datum(Datum(Slice("HOUSEHOLD")));
-        col_cust_key_2->append_datum(Datum(int32_t(16)));
-        col_nation_2->append_datum(Datum(Slice("IRAN")));
-        col_region_2->append_datum(Datum(Slice("MIDDLE EAST")));
-        col_mkt_sgmt_2->append_datum(Datum(Slice("FURNITURE")));
-        col_cust_key_3->append_datum(Datum(int32_t(24)));
-        col_nation_3->append_datum(Datum(Slice("JORDAN")));
-        col_region_3->append_datum(Datum(Slice("MIDDLE EAST")));
-        col_mkt_sgmt_3->append_datum(Datum(Slice("MACHINERY")));
-
-        col_cust_key_1->append_datum(Datum(int32_t(41)));
-        col_nation_1->append_datum(Datum(Slice("IRAN")));
-        col_region_1->append_datum(Datum(Slice("MIDDLE EAST")));
-        col_mkt_sgmt_1->append_datum(Datum(Slice("HOUSEHOLD")));
-        col_cust_key_2->append_datum(Datum(int32_t(49)));
-        col_nation_2->append_datum(Datum(Slice("IRAN")));
-        col_region_2->append_datum(Datum(Slice("MIDDLE EAST")));
-        col_mkt_sgmt_2->append_datum(Datum(Slice("FURNITURE")));
-        col_cust_key_3->append_datum(Datum(int32_t(52)));
-        col_nation_3->append_datum(Datum(Slice("IRAQ")));
-        col_region_3->append_datum(Datum(Slice("MIDDLE EAST")));
-        col_mkt_sgmt_3->append_datum(Datum(Slice("HOUSEHOLD")));
-
-        col_cust_key_1->append_datum(Datum(int32_t(54)));
-        col_nation_1->append_datum(Datum(Slice("EGYPT")));
-        col_region_1->append_datum(Datum(Slice("MIDDLE EAST")));
-        col_mkt_sgmt_1->append_datum(Datum(Slice("AUTOMOBILE")));
-        col_cust_key_2->append_datum(Datum(int32_t(55)));
-        col_nation_2->append_datum(Datum(Slice("IRAN")));
-        col_region_2->append_datum(Datum(Slice("MIDDLE EAST")));
-        col_mkt_sgmt_2->append_datum(Datum(Slice("MACHINERY")));
-        col_cust_key_3->append_datum(Datum(int32_t(56)));
-        col_nation_3->append_datum(Datum(Slice("IRAN")));
-        col_region_3->append_datum(Datum(Slice("MIDDLE EAST")));
-        col_mkt_sgmt_3->append_datum(Datum(Slice("FURNITURE")));
-
-        col_cust_key_1->append_datum(Datum(int32_t(58)));
-        col_nation_1->append_datum(Datum(Slice("JORDAN")));
-        col_region_1->append_datum(Datum(Slice("MIDDLE EAST")));
-        col_mkt_sgmt_1->append_datum(Datum(Slice("HOUSEHOLD")));
-
-        col_cust_key_2->append_datum(Datum(int32_t(69)));
-        col_nation_2->append_datum(Datum(Slice("null0")));
-        col_region_2->append_datum(Datum(Slice("null0")));
-        col_mkt_sgmt_2->append_datum(Datum(Slice("null0")));
-        (void)col_nation_2->set_null(col_nation_2->size() - 1);
-        (void)col_region_2->set_null(col_region_2->size() - 1);
-        (void)col_mkt_sgmt_2->set_null(col_mkt_sgmt_2->size() - 1);
-
-        col_cust_key_3->append_datum(Datum(int32_t(70)));
-        col_nation_3->append_datum(Datum(Slice("null1")));
-        col_region_3->append_datum(Datum(Slice("null1")));
-        col_mkt_sgmt_3->append_datum(Datum(Slice("null1")));
-        (void)col_nation_3->set_null(col_nation_3->size() - 1);
-        (void)col_region_3->set_null(col_region_3->size() - 1);
-        (void)col_mkt_sgmt_3->set_null(col_mkt_sgmt_3->size() - 1);
-
-        col_cust_key_1->append_datum(Datum(int32_t(71)));
-        col_nation_1->append_datum(Datum());
-        col_region_1->append_datum(Datum());
-        col_mkt_sgmt_1->append_datum(Datum());
-
+        ColumnPtr col_cust_key_1 = ColumnTestHelper::build_column(data_cust_key_1);
+        ColumnPtr col_nation_1 = ColumnTestHelper::build_nullable_column(data_nation_1, null_1);
+        ColumnPtr col_region_1 = ColumnTestHelper::build_nullable_column(data_region_1, null_1);
+        ColumnPtr col_mkt_sgmt_1 = ColumnTestHelper::build_nullable_column(data_mkt_sgmt_1, null_1);
         Columns columns1 = {col_cust_key_1, col_nation_1, col_region_1, col_mkt_sgmt_1};
+
+        auto null_2 = std::vector<uint8_t>{0, 0, 0, 0, 1};
+        auto data_cust_key_2 = std::vector<int32_t>{4, 16, 49, 55, 69};
+        auto data_nation_key_2 = std::vector<Slice>{"EGYPT", "IRAN", "IRAN", "IRAN", "null0"};
+        auto data_region_2 = std::vector<Slice>{"MIDDLE EAST", "MIDDLE EAST", "MIDDLE EAST", "MIDDLE EAST", "null0"};
+        auto data_mkt_sgmt_2 = std::vector<Slice>{"MACHINERY", "FURNITURE", "FURNITURE", "MACHINERY", "null0"};
+
+        ColumnPtr col_cust_key_2 = ColumnTestHelper::build_column(data_cust_key_2);
+        ColumnPtr col_nation_2 = ColumnTestHelper::build_nullable_column(data_nation_key_2, null_2);
+        ColumnPtr col_region_2 = ColumnTestHelper::build_nullable_column(data_region_2, null_2);
+        ColumnPtr col_mkt_sgmt_2 = ColumnTestHelper::build_nullable_column(data_mkt_sgmt_2, null_2);
         Columns columns2 = {col_cust_key_2, col_nation_2, col_region_2, col_mkt_sgmt_2};
+
+        auto null_3 = std::vector<uint8_t>{0, 0, 0, 0, 1};
+        auto data_cust_key_3 = std::vector<int32_t>{6, 24, 52, 56, 70};
+        auto data_nation_key_3 = std::vector<Slice>{"SAUDI ARABIA", "JORDAN", "IRAQ", "IRAN", "null1"};
+        auto data_region_3 = std::vector<Slice>{"MIDDLE EAST", "MIDDLE EAST", "MIDDLE EAST", "MIDDLE EAST", "null1"};
+        auto data_mkt_sgmt_3 = std::vector<Slice>{"AUTOMOBILE", "MACHINERY", "HOUSEHOLD", "FURNITURE", "null1"};
+
+        ColumnPtr col_cust_key_3 = ColumnTestHelper::build_column(data_cust_key_3);
+        ColumnPtr col_nation_3 = ColumnTestHelper::build_nullable_column(data_nation_key_3, null_3);
+        ColumnPtr col_region_3 = ColumnTestHelper::build_nullable_column(data_region_3, null_3);
+        ColumnPtr col_mkt_sgmt_3 = ColumnTestHelper::build_nullable_column(data_mkt_sgmt_3, null_3);
         Columns columns3 = {col_cust_key_3, col_nation_3, col_region_3, col_mkt_sgmt_3};
 
         Chunk::SlotHashMap map;
@@ -172,34 +476,11 @@ public:
     }
 
     void setup_ranking() {
-        const auto& int_type_desc = TypeDescriptor(TYPE_INT);
+        auto data_ranking1 = std::vector<int32_t>{7, 7, 7, 6, 6, 6, 5, 4, 3, 2, 1};
+        auto data_ranking2 = std::vector<int32_t>{11, 12, 13, 14, 15, 16, 16, 16, 17, 17, 17};
 
-        ColumnPtr col_ranking1 = ColumnHelper::create_column(int_type_desc, false);
-        ColumnPtr col_ranking2 = ColumnHelper::create_column(int_type_desc, false);
-
-        col_ranking1->append_datum(Datum(int32_t(7)));
-        col_ranking1->append_datum(Datum(int32_t(7)));
-        col_ranking1->append_datum(Datum(int32_t(7)));
-        col_ranking1->append_datum(Datum(int32_t(6)));
-        col_ranking1->append_datum(Datum(int32_t(6)));
-        col_ranking1->append_datum(Datum(int32_t(6)));
-        col_ranking1->append_datum(Datum(int32_t(5)));
-        col_ranking1->append_datum(Datum(int32_t(4)));
-        col_ranking1->append_datum(Datum(int32_t(3)));
-        col_ranking1->append_datum(Datum(int32_t(2)));
-        col_ranking1->append_datum(Datum(int32_t(1)));
-
-        col_ranking2->append_datum(Datum(int32_t(11)));
-        col_ranking2->append_datum(Datum(int32_t(12)));
-        col_ranking2->append_datum(Datum(int32_t(13)));
-        col_ranking2->append_datum(Datum(int32_t(14)));
-        col_ranking2->append_datum(Datum(int32_t(15)));
-        col_ranking2->append_datum(Datum(int32_t(16)));
-        col_ranking2->append_datum(Datum(int32_t(16)));
-        col_ranking2->append_datum(Datum(int32_t(16)));
-        col_ranking2->append_datum(Datum(int32_t(17)));
-        col_ranking2->append_datum(Datum(int32_t(17)));
-        col_ranking2->append_datum(Datum(int32_t(17)));
+        ColumnPtr col_ranking1 = ColumnTestHelper::build_column(data_ranking1);
+        ColumnPtr col_ranking2 = ColumnTestHelper::build_column(data_ranking2);
 
         Columns columns1 = {col_ranking1};
         Columns columns2 = {col_ranking2};
@@ -213,7 +494,7 @@ public:
         _chunk_ranking_1 = std::make_shared<Chunk>(columns1, map);
         _chunk_ranking_2 = std::make_shared<Chunk>(columns2, map);
 
-        _expr_ranking_key = std::make_unique<ColumnRef>(TypeDescriptor(TYPE_INT), 0);
+        _expr_ranking_key = std::make_unique<ColumnRef>(TYPE_INT_DESC, 0);
     }
 
 protected:
@@ -240,27 +521,6 @@ static void clear_sort_exprs(std::vector<ExprContext*>& exprs) {
         delete ctx;
     }
     exprs.clear();
-}
-
-// NOLINTNEXTLINE
-static ColumnPtr make_int32_column(const std::vector<int32_t>& xs) {
-    auto column = Int32Column::create();
-    for (auto x : xs) {
-        column->append(x);
-    }
-    return column;
-}
-
-static ColumnPtr make_nullable_int32_column(const std::vector<int32_t>& xs) {
-    auto column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true, false, 0);
-    for (auto x : xs) {
-        if (x == 0) {
-            column->append_nulls(1);
-        } else {
-            column->append_datum(Datum(x));
-        }
-    }
-    return column;
 }
 
 static Permutation make_permutation(int len) {
@@ -381,7 +641,7 @@ TEST_F(ChunksSorterTest, full_sort_incremental) {
 TEST_F(ChunksSorterTest, topn_sort_limit_prune) {
     {
         // notnull
-        auto column = make_int32_column({1, 1, 1, 2, 2, 3, 4, 5, 6});
+        auto column = ColumnTestHelper::build_column<int32_t>({1, 1, 1, 2, 2, 3, 4, 5, 6});
         auto cmp = [&](PermutationItem lhs, PermutationItem rhs) {
             return column->compare_at(lhs.index_in_chunk, rhs.index_in_chunk, *column, 1);
         };
@@ -399,7 +659,9 @@ TEST_F(ChunksSorterTest, topn_sort_limit_prune) {
 
     {
         // nullable column
-        auto column = make_nullable_int32_column({0, 0, 0, 2, 2, 2, 3, 3, 4, 5, 6});
+        auto data = std::vector<int32_t>{0, 0, 0, 2, 2, 2, 3, 3, 4, 5, 6};
+        auto null_data = std::vector<uint8_t>{1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0};
+        auto column = ColumnTestHelper::build_nullable_column(data, null_data);
         std::vector<ColumnPtr> columns{column};
         auto null_pred = [&](PermutationItem item) { return column->is_null(item.index_in_chunk); };
         std::pair<int, int> range{0, column->size()};

@@ -42,12 +42,15 @@ import com.starrocks.thrift.TUnit;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 // Counter means indicators field. The counter's name is key, the counter itself is value.  
 public class Counter {
     private volatile int type;
     private volatile TCounterStrategy strategy;
     private volatile long value;
+    private volatile Optional<Long> minValue = Optional.empty();
+    private volatile Optional<Long> maxValue = Optional.empty();
 
     public long getValue() {
         return value;
@@ -55,6 +58,22 @@ public class Counter {
 
     public void setValue(long newValue) {
         value = newValue;
+    }
+
+    public Optional<Long> getMinValue() {
+        return minValue;
+    }
+
+    public Optional<Long> getMaxValue() {
+        return maxValue;
+    }
+
+    public void setMinValue(long minValue) {
+        this.minValue = Optional.of(minValue);
+    }
+
+    public void setMaxValue(long maxValue) {
+        this.maxValue = Optional.of(maxValue);
     }
 
     public void update(long increment) {

@@ -17,6 +17,7 @@
 #include <atomic>
 #include <boost/algorithm/string.hpp>
 
+#include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/scan/morsel.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
@@ -38,6 +39,11 @@ struct HdfsSplitContext : public pipeline::ScanSplitContext {
     virtual std::unique_ptr<HdfsSplitContext> clone() = 0;
 };
 using HdfsSplitContextPtr = std::unique_ptr<HdfsSplitContext>;
+
+struct SkipRowsContext {
+    std::set<int64_t> need_skip_rowids;
+};
+using SkipRowsContextPtr = std::shared_ptr<SkipRowsContext>;
 
 struct HdfsScanStats {
     int64_t raw_rows_read = 0;
@@ -82,6 +88,8 @@ struct HdfsScanStats {
     // page index
     int64_t rows_before_page_index = 0;
     int64_t page_index_ns = 0;
+    int64_t parquet_total_row_groups = 0;
+    int64_t parquet_filtered_row_groups = 0;
 
     // late materialize round-by-round
     int64_t group_min_round_cost = 0;
@@ -97,7 +105,11 @@ struct HdfsScanStats {
     // Iceberg v2 only!
     int64_t iceberg_delete_file_build_ns = 0;
     int64_t iceberg_delete_files_per_scan = 0;
-    int64_t iceberg_delete_file_build_filter_ns = 0;
+
+    // deletion vector
+    int64_t deletion_vector_build_ns = 0;
+    int64_t deletion_vector_build_count = 0;
+    int64_t build_rowid_filter_ns = 0;
 };
 
 class HdfsParquetProfile;
@@ -159,6 +171,7 @@ struct HdfsScannerParams {
     // runtime bloom filter.
     const RuntimeFilterProbeCollector* runtime_filter_collector = nullptr;
 
+    std::vector<ExprContext*> all_conjunct_ctxs;
     // all conjuncts except `conjunct_ctxs_by_slot`, like compound predicates
     std::vector<ExprContext*> scanner_conjunct_ctxs;
     std::unordered_set<SlotId> slots_in_conjunct;
@@ -174,6 +187,8 @@ struct HdfsScannerParams {
     std::string path;
     // The file size. -1 means unknown.
     int64_t file_size = -1;
+    // the table location
+    std::string table_location;
 
     const TupleDescriptor* tuple_desc = nullptr;
 
@@ -208,6 +223,8 @@ struct HdfsScannerParams {
     HdfsScanProfile* profile = nullptr;
 
     std::vector<const TIcebergDeleteFile*> deletes;
+
+    std::shared_ptr<TDeletionVectorDescriptor> deletion_vector_descriptor = nullptr;
 
     const TIcebergSchema* iceberg_schema = nullptr;
 
@@ -338,6 +355,11 @@ struct HdfsScannerContext {
     Status evaluate_on_conjunct_ctxs_by_slot(ChunkPtr* chunk, Filter* filter);
 
     void merge_split_tasks();
+
+    // used for parquet zone map filter only
+    std::unique_ptr<ScanConjunctsManager> conjuncts_manager = nullptr;
+    std::vector<std::unique_ptr<ColumnPredicate>> predicate_free_pool;
+    PredicateTree predicate_tree;
 };
 
 struct OpenFileOptions {
@@ -392,6 +414,7 @@ protected:
     static CompressionTypePB get_compression_type_from_path(const std::string& filename);
 
     void do_update_iceberg_v2_counter(RuntimeProfile* parquet_profile, const std::string& parent_name);
+    void do_update_deletion_vector_counter(RuntimeProfile* parent_profile);
 
 private:
     bool _opened = false;

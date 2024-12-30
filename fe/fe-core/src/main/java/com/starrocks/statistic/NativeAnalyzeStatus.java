@@ -98,10 +98,12 @@ public class NativeAnalyzeStatus implements AnalyzeStatus, Writable {
         return true;
     }
 
+    @Override
     public long getDbId() {
         return dbId;
     }
 
+    @Override
     public long getTableId() {
         return tableId;
     }

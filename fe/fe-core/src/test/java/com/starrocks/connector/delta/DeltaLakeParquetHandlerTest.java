@@ -130,7 +130,7 @@ public class DeltaLakeParquetHandlerTest {
                 .expireAfterWrite(3600, TimeUnit.SECONDS)
                 .weigher((key, value) ->
                         Math.toIntExact(SizeEstimator.estimate(key) + SizeEstimator.estimate(value)))
-                .maximumWeight(1024 * 2)
+                .maximumWeight(400 * 2)
                 .concurrencyLevel(1)
                 .build(new CacheLoader<>() {
                     @NotNull

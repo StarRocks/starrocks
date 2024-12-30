@@ -58,6 +58,9 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.analysis.UserVariableHint;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.ObjectType;
+import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.catalog.CatalogRecycleBin;
 import com.starrocks.catalog.CatalogUtils;
@@ -171,9 +174,6 @@ import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
-import com.starrocks.privilege.AccessDeniedException;
-import com.starrocks.privilege.ObjectType;
-import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.scheduler.Constants;
@@ -1791,18 +1791,23 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             numReplicas += partition.storageReplicaCount();
         }
 
+        TabletTaskExecutor.CreateTabletOption option = new TabletTaskExecutor.CreateTabletOption();
+        option.setEnableTabletCreationOptimization(table.isCloudNativeTableOrMaterializedView()
+                && Config.lake_enable_tablet_creation_optimization);
+        option.setGtid(GlobalStateMgr.getCurrentState().getGtidGenerator().nextGtid());
+
         try {
             GlobalStateMgr.getCurrentState().getConsistencyChecker().addCreatingTableId(table.getId());
             if (numReplicas > Config.create_table_max_serial_replicas) {
                 LOG.info("start to build {} partitions concurrently for table {}.{} with {} replicas",
                         partitions.size(), db.getFullName(), table.getName(), numReplicas);
                 TabletTaskExecutor.buildPartitionsConcurrently(
-                        db.getId(), table, partitions, numReplicas, numAliveNodes, warehouseId);
+                        db.getId(), table, partitions, numReplicas, numAliveNodes, warehouseId, option);
             } else {
                 LOG.info("start to build {} partitions sequentially for table {}.{} with {} replicas",
                         partitions.size(), db.getFullName(), table.getName(), numReplicas);
                 TabletTaskExecutor.buildPartitionsSequentially(
-                        db.getId(), table, partitions, numReplicas, numAliveNodes, warehouseId);
+                        db.getId(), table, partitions, numReplicas, numAliveNodes, warehouseId, option);
             }
         } finally {
             GlobalStateMgr.getCurrentState().getConsistencyChecker().deleteCreatingTableId(table.getId());
@@ -2981,7 +2986,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
         boolean isNonPartitioned = partitionInfo.isUnPartitioned();
         DataProperty dataProperty = PropertyAnalyzer.analyzeMVDataProperty(materializedView, properties);
-        PropertyAnalyzer.analyzeMVProperties(db, materializedView, properties, isNonPartitioned);
+        PropertyAnalyzer.analyzeMVProperties(db, materializedView, properties, isNonPartitioned,
+                stmt.getPartitionByExprToAdjustExprMap());
         try {
             Set<Long> tabletIdSet = new HashSet<>();
             // process single partition info
@@ -3063,12 +3069,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 for (int i = 0; i < partitionByExprs.size(); i++) {
                     Expr partitionByExpr = partitionByExprs.get(i);
                     Column mvPartitionColumn = mvPartitionColumns.get(i);
-                    if (!(partitionByExpr instanceof SlotRef || MvUtils.isFuncCallExpr(partitionByExpr,
-                            FunctionSet.DATE_TRUNC))) {
-                        throw new DdlException("List partition only support partition by slot ref column or date_trunc:"
-                                + partitionByExpr.toSql());
-                    }
-                    if (!(partitionByExpr instanceof SlotRef)) {
+                    // generate column can be any partition expression.
+                    if (generatedPartitionCols.containsKey(i)) {
                         Column generatedCol = generatedPartitionCols.get(i);
                         if (generatedCol == null) {
                             throw new DdlException("Partition expression for list must be a generated column: "
@@ -3077,6 +3079,11 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                         baseSchema.add(generatedCol);
                         newPartitionColumns.add(generatedCol);
                     } else {
+                        if (!(partitionByExpr instanceof SlotRef || MvUtils.isFuncCallExpr(partitionByExpr,
+                                FunctionSet.DATE_TRUNC))) {
+                            throw new DdlException("List partition expression can only be ref-base-table's partition " +
+                                    "expression but contains: " + partitionByExpr.toSql());
+                        }
                         newPartitionColumns.add(mvPartitionColumn);
                     }
                 }
@@ -3246,7 +3253,9 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         String mvName = refreshMaterializedViewStatement.getMvName().getTbl();
         boolean force = refreshMaterializedViewStatement.isForceRefresh();
         EitherOr<PartitionRangeDesc, Set<PListCell>> partitionDesc = refreshMaterializedViewStatement.getPartitionDesc();
-        return refreshMaterializedView(dbName, mvName, force, partitionDesc, Constants.TaskRunPriority.HIGH.value(),
+        int priority = refreshMaterializedViewStatement.getPriority() != null ?
+                refreshMaterializedViewStatement.getPriority() : Constants.TaskRunPriority.HIGH.value();
+        return refreshMaterializedView(dbName, mvName, force, partitionDesc, priority,
                 Config.enable_mv_refresh_sync_refresh_mergeable, true, refreshMaterializedViewStatement.isSync());
     }
 
@@ -3682,7 +3691,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                         + "no need to set partition retention condition.");
             }
             String partitionRetentionCondition = PropertyAnalyzer.analyzePartitionRetentionCondition(
-                    db, table, properties, true);
+                    db, table, properties, true, null);
             if (Strings.isNullOrEmpty(partitionRetentionCondition)) {
                 throw new DdlException("Invalid partition retention condition");
             }
@@ -4136,6 +4145,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                         IDictManager.getInstance().enableGlobalDict(olapTable.getId());
                     }
                 }
+            } else if (opCode == OperationType.OP_SET_HAS_DELETE) {
+                olapTable.setHasDelete();
             } else {
                 TableProperty tableProperty = olapTable.getTableProperty();
                 if (tableProperty == null) {
