@@ -1720,11 +1720,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
             Database db = globalStateMgr.getLocalMetastore().getDb(request.getDb());
             if (db == null) {
-                throw new StarRocksException(String.format("unknown database [%s]", request.getDb()));
+                throw new UserException(String.format("unknown database [%s]", request.getDb()));
             }
             Table table = db.getTable(request.getTbl());
             if (table == null) {
-                throw new StarRocksException(String.format("unknown table [%s.%s]", request.getDb(), request.getTbl()));
+                throw new UserException(String.format("unknown table [%s.%s]", request.getDb(), request.getTbl()));
             }
             checkPasswordAndLoadPriv(request.getUser(), request.getPasswd(), request.getDb(),
                     request.getTbl(), request.getUser_ip());
