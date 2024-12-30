@@ -37,7 +37,6 @@
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/update_manager.h"
 #include "storage/memtable.h"
-#include "storage/memtable_flush_executor.h"
 #include "storage/memtable_sink.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/storage_engine.h"
@@ -45,6 +44,8 @@
 namespace starrocks::lake {
 
 using TxnLogPtr = DeltaWriter::TxnLogPtr;
+
+#define ADD_COUNTER_RELAXED(counter, value) counter.fetch_add(value, std::memory_order_relaxed)
 
 class TabletWriterSink : public MemTableSink {
 public:
@@ -138,6 +139,17 @@ public:
 
     int64_t last_write_ts() const;
 
+    void update_task_stat(int32_t num_tasks, int64_t pending_time_ns) {
+        ADD_COUNTER_RELAXED(_stats.task_count, num_tasks);
+        ADD_COUNTER_RELAXED(_stats.pending_time_ns, pending_time_ns);
+    }
+
+    const DeltaWriterStat& get_writer_stat() const { return _stats; }
+
+    const FlushStatistic* get_flush_stats() const {
+        return _flush_token == nullptr ? nullptr : &(_flush_token->get_stats());
+    }
+
 private:
     Status reset_memtable();
 
@@ -213,6 +225,7 @@ private:
     std::unique_ptr<LoadSpillBlockManager> _load_spill_block_mgr;
     // End of data ingestion
     bool _eos = false;
+    DeltaWriterStat _stats;
 };
 
 bool DeltaWriterImpl::is_immutable() const {
@@ -394,6 +407,10 @@ Status DeltaWriterImpl::write(const Chunk& chunk, const uint32_t* indexes, uint3
         RETURN_IF_ERROR(reset_memtable());
     }
     RETURN_IF_ERROR(check_partial_update_with_sort_key(chunk));
+    ADD_COUNTER_RELAXED(_stats.write_count, 1);
+    ADD_COUNTER_RELAXED(_stats.row_count, indexes_size);
+    auto start_time = MonotonicNanos();
+    DeferOp defer([&]() { ADD_COUNTER_RELAXED(_stats.write_time_ns, MonotonicNanos() - start_time); });
     _last_write_ts = butil::gettimeofday_s();
     Status st;
     auto res = _mem_table->insert(chunk, indexes, 0, indexes_size);
@@ -403,12 +420,21 @@ Status DeltaWriterImpl::write(const Chunk& chunk, const uint32_t* indexes, uint3
     auto full = res.value();
     if (_mem_tracker->limit_exceeded()) {
         VLOG(2) << "Flushing memory table due to memory limit exceeded";
+        MonotonicStopWatch watch;
+        watch.start();
         st = flush();
+        ADD_COUNTER_RELAXED(_stats.memory_exceed_count, 1);
+        ADD_COUNTER_RELAXED(_stats.write_wait_flush_time_ns, watch.elapsed_time());
     } else if (_mem_tracker->parent() && _mem_tracker->parent()->limit_exceeded()) {
         VLOG(2) << "Flushing memory table due to parent memory limit exceeded";
+        MonotonicStopWatch watch;
+        watch.start();
         st = flush();
+        ADD_COUNTER_RELAXED(_stats.memory_exceed_count, 1);
+        ADD_COUNTER_RELAXED(_stats.write_wait_flush_time_ns, watch.elapsed_time());
     } else if (full) {
         st = flush_async();
+        ADD_COUNTER_RELAXED(_stats.memtable_full_count, 1);
     }
     return st;
 }
@@ -485,7 +511,12 @@ Status DeltaWriterImpl::finish() {
 
 StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mode) {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
+    MonotonicStopWatch watch;
+    watch.start();
+    DeferOp defer([&] { ADD_COUNTER_RELAXED(_stats.finish_time_ns, watch.elapsed_time()); });
     RETURN_IF_ERROR(finish());
+    auto wait_flush_ts = watch.elapsed_time();
+    ADD_COUNTER_RELAXED(_stats.finish_wait_flush_time_ns, wait_flush_ts);
 
     if (UNLIKELY(_txn_id < 0)) {
         return Status::InvalidArgument(fmt::format("negative txn id: {}", _txn_id));
@@ -571,15 +602,20 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
             }
         }
     }
+    auto prepare_txn_log_ts = watch.elapsed_time();
+    ADD_COUNTER_RELAXED(_stats.finish_prepare_txn_log_time_ns, prepare_txn_log_ts - wait_flush_ts);
     if (mode == kWriteTxnLog) {
         RETURN_IF_ERROR(tablet.put_txn_log(txn_log));
     } else {
         auto cache_key = _tablet_manager->txn_log_location(_tablet_id, _txn_id);
         _tablet_manager->metacache()->cache_txn_log(cache_key, txn_log);
     }
+    auto put_txn_log_ts = watch.elapsed_time();
+    ADD_COUNTER_RELAXED(_stats.finish_put_txn_log_time_ns, put_txn_log_ts - prepare_txn_log_ts);
     if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && !skip_pk_preload) {
         // preload update state here to minimaze the cost when publishing.
         tablet.update_mgr()->preload_update_state(*txn_log, &tablet);
+        ADD_COUNTER_RELAXED(_stats.finish_pk_preload_time_ns, watch.elapsed_time() - put_txn_log_ts);
     }
     return txn_log;
 }
@@ -654,7 +690,8 @@ Status DeltaWriterImpl::fill_auto_increment_id(const Chunk& chunk) {
 
 void DeltaWriterImpl::close() {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
-
+    auto start_time = MonotonicNanos();
+    DeferOp defer([&] { ADD_COUNTER_RELAXED(_stats.close_time_ns, MonotonicNanos() - start_time); });
     if (_flush_token != nullptr) {
         auto st = _flush_token->wait();
         LOG_IF(WARNING, !st.ok()) << "flush token error: " << st;
@@ -781,6 +818,18 @@ Status DeltaWriter::check_immutable() {
 
 int64_t DeltaWriter::last_write_ts() const {
     return _impl->last_write_ts();
+}
+
+void DeltaWriter::update_task_stat(int32_t num_tasks, int64_t pending_time_ns) {
+    _impl->update_task_stat(num_tasks, pending_time_ns);
+}
+
+const DeltaWriterStat& DeltaWriter::get_writer_stat() const {
+    return _impl->get_writer_stat();
+}
+
+const FlushStatistic* DeltaWriter::get_flush_stats() const {
+    return _impl->get_flush_stats();
 }
 
 ThreadPool* DeltaWriter::io_threads() {

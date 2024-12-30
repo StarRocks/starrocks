@@ -70,6 +70,8 @@ public:
 
     [[nodiscard]] int64_t last_write_ts() const { return _writer->last_write_ts(); }
 
+    DeltaWriter* delta_writer() { return _writer.get(); }
+
 private:
     enum TaskType {
         kWriteTask = 0,
@@ -78,10 +80,11 @@ private:
     };
 
     struct Task {
-        explicit Task(TaskType t) : type(t) {}
+        explicit Task(TaskType t) : type(t), create_time_ns(MonotonicNanos()) {}
         virtual ~Task() = default;
 
         TaskType type;
+        int64_t create_time_ns;
     };
 
     struct WriteTask : public Task {
@@ -142,13 +145,17 @@ inline int AsyncDeltaWriterImpl::execute(void* meta, bthread::TaskIterator<Async
         delta_writer->close();
         return 0;
     }
+    int num_tasks = 0;
     auto st = Status{};
+    int64_t pending_time_ns = 0;
     for (; iter; ++iter) {
         // It's safe to run without checking `closed()` but doing so can make the task quit earlier on cancel/error.
         if (async_writer->closed()) {
             st.update(Status::InternalError("AsyncDeltaWriter has been closed"));
         }
         auto task_ptr = *iter;
+        num_tasks += 1;
+        pending_time_ns += MonotonicNanos() - task_ptr->create_time_ns;
         switch (task_ptr->type) {
         case kWriteTask: {
             auto write_task = std::static_pointer_cast<WriteTask>(task_ptr);
@@ -183,6 +190,7 @@ inline int AsyncDeltaWriterImpl::execute(void* meta, bthread::TaskIterator<Async
         }
         }
     }
+    async_writer->_writer->update_task_stat(num_tasks, pending_time_ns);
     return 0;
 }
 
@@ -334,6 +342,10 @@ Status AsyncDeltaWriter::check_immutable() {
 
 int64_t AsyncDeltaWriter::last_write_ts() const {
     return _impl->last_write_ts();
+}
+
+DeltaWriter* AsyncDeltaWriter::delta_writer() {
+    return _impl->delta_writer();
 }
 
 StatusOr<AsyncDeltaWriterBuilder::AsyncDeltaWriterPtr> AsyncDeltaWriterBuilder::build() {
