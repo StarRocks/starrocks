@@ -569,8 +569,6 @@ void WorkGroupManager::create_workgroup_unlocked(const WorkGroupPtr& wg, UniqueL
     std::unique_ptr<PipelineExecutorSet> exclusive_executors = nullptr;
     {
         const auto& cpuids = _executors_manager.get_cpuids_of_workgroup(wg.get());
-        unique_lock.unlock();
-        DeferOp unlock_guard([&unique_lock] { unique_lock.lock(); });
         exclusive_executors = _executors_manager.maybe_create_exclusive_executors_unlocked(wg.get(), cpuids);
     }
     if (exclusive_executors != nullptr) {
