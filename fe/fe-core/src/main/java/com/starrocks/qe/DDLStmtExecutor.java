@@ -41,6 +41,8 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
 import com.starrocks.sql.ast.AdminRepairTableStmt;
+import com.starrocks.sql.ast.AdminSetAutomatedSnapshotOffStmt;
+import com.starrocks.sql.ast.AdminSetAutomatedSnapshotOnStmt;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
 import com.starrocks.sql.ast.AdminSetPartitionVersionStmt;
 import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
@@ -1174,6 +1176,36 @@ public class DDLStmtExecutor {
             });
             return null;
         }
+<<<<<<< HEAD
+=======
+
+        @Override
+        public ShowResultSet visitAlterWarehouseStatement(AlterWarehouseStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                WarehouseManager warehouseMgr = context.getGlobalStateMgr().getWarehouseMgr();
+                warehouseMgr.alterWarehouse(stmt);
+            });
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitAdminSetAutomatedSnapshotOnStatement(AdminSetAutomatedSnapshotOnStmt stmt,
+                                                                     ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getClusterSnapshotMgr().setAutomatedSnapshotOn(stmt);
+            });
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitAdminSetAutomatedSnapshotOffStatement(AdminSetAutomatedSnapshotOffStmt stmt,
+                                                                        ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getClusterSnapshotMgr().setAutomatedSnapshotOff(stmt);
+            });
+            return null;
+        }
+>>>>>>> be70af0d8 ([Feature] Support Cluster Snapshot Backup: SQL Interface and meta data (part 1) (#54447))
     }
 
 }
