@@ -588,6 +588,9 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_ADD_KEY = 13512;
 
+    @IgnorableOnReplayFailed
+    public static final short OP_CLUSTER_SNAPSHOT_LOG = 13513;
+
     /**
      * NOTICE: OperationType cannot use a value exceeding 20000, please follow the above sequence number
      */
