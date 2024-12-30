@@ -656,7 +656,7 @@ public class TaskManager implements MemoryTrackable {
                 .forEach(addResult);
 
         // history
-        taskRunManager.getTaskRunHistory().lookupHistoryByTaskNames(dbName, taskNames)
+        taskRunManager.getTaskRunHistory().lookupLastJobOfTasks(dbName, taskNames)
                 .stream()
                 .filter(taskRunFilter)
                 .forEach(addResult);
