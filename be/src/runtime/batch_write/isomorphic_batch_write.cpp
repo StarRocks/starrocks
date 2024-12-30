@@ -248,10 +248,13 @@ Status IsomorphicBatchWrite::append_data(StreamLoadContext* data_ctx) {
                       << ", pipe_left_active: " << (async_ctx->pipe_left_active_ns / 1000)
                       << ", async_status: " << async_ctx->get_status() << ", txn_id: " << async_ctx->txn_id()
                       << ", label: " << async_ctx->label();
-    RETURN_IF_ERROR(async_ctx->get_status());
     data_ctx->txn_id = async_ctx->txn_id();
     data_ctx->batch_write_label = async_ctx->label();
-    data_ctx->batch_left_time_nanos = async_ctx->pipe_left_active_ns;
+    data_ctx->mc_pending_cost_nanos = async_ctx->task_pending_cost_ns;
+    data_ctx->mc_wait_plan_cost_nanos = async_ctx->wait_pipe_cost_ns + async_ctx->rpc_cost_ns;
+    data_ctx->mc_write_data_cost_nanos = async_ctx->append_pipe_cost_ns;
+    data_ctx->mc_left_merge_time_nanos = async_ctx->pipe_left_active_ns;
+    RETURN_IF_ERROR(async_ctx->get_status());
     if (_batch_write_async) {
         return Status::OK();
     }
@@ -312,8 +315,10 @@ Status IsomorphicBatchWrite::_execute_write(AsyncAppendDataContext* async_ctx) {
         num_retries += 1;
         {
             SCOPED_RAW_TIMER(&rpc_cost_ns);
-            // TODO check if the error is retryable if the return status is not ok
-            (void)_send_rpc_request(async_ctx->data_ctx());
+            st = _send_rpc_request(async_ctx->data_ctx());
+            if (!st.ok()) {
+                break;
+            }
         }
         {
             SCOPED_RAW_TIMER(&wait_pipe_cost_ns);
@@ -426,7 +431,7 @@ bool is_final_load_status(const TTransactionStatus::type& status) {
 // TODO just poll the load status periodically. improve it later, such as cache the label, and FE notify the BE
 Status IsomorphicBatchWrite::_wait_for_load_status(StreamLoadContext* data_ctx, int64_t timeout_ns) {
     int64_t start_ts = MonotonicNanos();
-    int64_t wait_load_finish_ns = std::max((int64_t)0, data_ctx->batch_left_time_nanos) + 1000000;
+    int64_t wait_load_finish_ns = std::max((int64_t)0, data_ctx->mc_left_merge_time_nanos) + 1000000;
     bthread_usleep(std::min(wait_load_finish_ns, timeout_ns) / 1000);
     TGetLoadTxnStatusRequest request;
     request.__set_db(_batch_write_id.db);
@@ -468,6 +473,7 @@ Status IsomorphicBatchWrite::_wait_for_load_status(StreamLoadContext* data_ctx, 
         bthread_usleep(
                 std::min(config::batch_write_poll_load_status_interval_ms * (int64_t)1000, left_timeout_ns / 1000));
     } while (true);
+    data_ctx->mc_wait_finish_cost_nanos = MonotonicNanos() - start_ts;
     if (!st.ok()) {
         return Status::InternalError("Failed to get load status, " + st.to_string());
     }
