@@ -2465,6 +2465,15 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int star_client_write_timeout_seconds = 30;
 
+    @ConfField(mutable = true)
+    public static int star_client_read_timeout_seconds = 15;
+
+    @ConfField(mutable = true)
+    public static int star_client_list_timeout_seconds = 30;
+
+    @ConfField(mutable = true)
+    public static int star_client_write_timeout_seconds = 30;
+
     // ***********************************************************
     // * END: of Cloud native meta server related configurations
     // ***********************************************************
