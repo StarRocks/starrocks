@@ -63,7 +63,7 @@ public class MvRefreshArbiter {
     public static MvUpdateInfo getMVTimelinessUpdateInfo(MaterializedView mv, boolean isQueryRewrite) {
         // Skip check for sync materialized view.
         if (mv.getRefreshScheme().isSync()) {
-            return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.NO_REFRESH);
+            return MvUpdateInfo.noRefresh(mv);
         }
 
         // check mv's query rewrite consistency mode property only in query rewrite.
@@ -72,9 +72,9 @@ public class MvRefreshArbiter {
         if (isQueryRewrite) {
             switch (mvConsistencyRewriteMode) {
                 case DISABLE:
-                    return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.FULL);
+                    return MvUpdateInfo.fullRefresh(mv);
                 case NOCHECK:
-                    return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.NO_REFRESH);
+                    return MvUpdateInfo.noRefresh(mv);
                 case LOOSE:
                 case CHECKED:
                 default:
@@ -89,7 +89,7 @@ public class MvRefreshArbiter {
             return timelinessArbiter.getMVTimelinessUpdateInfo(mvConsistencyRewriteMode);
         } catch (AnalysisException e) {
             logMVPrepare(mv, "Failed to get mv timeliness info: {}", DebugUtil.getStackTrace(e));
-            return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.UNKNOWN);
+            return MvUpdateInfo.unknown(mv);
         }
     }
 

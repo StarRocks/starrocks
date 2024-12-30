@@ -45,4 +45,9 @@ public enum MVTransparentState {
     public boolean isUnknown() {
         return this == UNKNOWN;
     }
+
+    // If the state is NO_REWRITE or UNKNOWN, the mv is uncompensable.
+    public boolean isUncompensable() {
+        return this == NO_REWRITE || this == UNKNOWN;
+    }
 }

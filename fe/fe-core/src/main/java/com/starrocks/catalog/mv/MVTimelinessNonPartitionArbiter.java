@@ -64,7 +64,7 @@ public final class MVTimelinessNonPartitionArbiter extends MVTimelinessArbiter {
             // skip check external table if the external does not support rewrite.
             if (!table.isNativeTableOrMaterializedView() && isDisableExternalForceQueryRewrite) {
                 logMVPrepare(mv, "Non-partitioned contains external table, and it's disabled query rewrite");
-                return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.FULL);
+                return MvUpdateInfo.fullRefresh(mv);
             }
 
             // once mv's base table has updated, refresh the materialized view totally.
@@ -73,10 +73,10 @@ public final class MVTimelinessNonPartitionArbiter extends MVTimelinessArbiter {
             if (mvBaseTableUpdateInfo != null &&
                     CollectionUtils.isNotEmpty(mvBaseTableUpdateInfo.getToRefreshPartitionNames())) {
                 logMVPrepare(mv, "Non-partitioned base table has updated, need refresh totally.");
-                return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.FULL);
+                return MvUpdateInfo.fullRefresh(mv);
             }
         }
-        return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.NO_REFRESH);
+        return MvUpdateInfo.noRefresh(mv);
     }
 
     @Override
@@ -84,14 +84,14 @@ public final class MVTimelinessNonPartitionArbiter extends MVTimelinessArbiter {
         List<Partition> partitions = Lists.newArrayList(mv.getPartitions());
         if (partitions.size() > 0 && partitions.get(0).getDefaultPhysicalPartition().getVisibleVersion() <= 1) {
             // the mv is newly created, can not use it to rewrite query.
-            return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.FULL);
+            return MvUpdateInfo.fullRefresh(mv);
         }
-        return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.NO_REFRESH);
+        return MvUpdateInfo.noRefresh(mv);
     }
 
     @Override
     public MvUpdateInfo getMVTimelinessUpdateInfoInForceMVMode() {
         // for force mv mode, always no need to refresh for non-partitioned mv.
-        return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.NO_REFRESH);
+        return MvUpdateInfo.noRefresh(mv);
     }
 }
