@@ -18,6 +18,7 @@
 
 #include "column/type_traits.h"
 #include "glog/logging.h"
+#include "simd/simd_utils.h"
 #include "types/logical_type.h"
 #ifdef __AVX2__
 #include <emmintrin.h>
@@ -35,7 +36,8 @@ public:
 
     // a normal implements
     static void multi_select_if(SelectVec __restrict select_vec[], int select_vec_size, Container& dst,
-                                Container* __restrict select_list[], int select_list_size) {
+                                Container* __restrict select_list[], int select_list_size,
+                                const std::vector<bool>& then_column_is_const) {
         DCHECK_GT(select_list_size, 0);
         DCHECK_EQ(select_vec_size + 1, select_list_size);
 
@@ -83,7 +85,11 @@ public:
 
                 // load select data
                 for (int i = 0; i < select_list_size; ++i) {
-                    loaded_datas[i] = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(handle_select_data[i]));
+                    if (then_column_is_const[i]) {
+                        loaded_datas[i] = SIMDUtils::set_data(handle_select_data[i][0]);
+                    } else {
+                        loaded_datas[i] = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(handle_select_data[i]));
+                    }
                 }
 
                 __m256i selected_dst = loaded_datas[select_list_size - 1];
@@ -112,6 +118,97 @@ public:
                     handle_select_data[i] += 32;
                 }
                 processed_rows += 32;
+            }
+        } else {
+            constexpr int data_size = sizeof(RunTimeCppType<TYPE>);
+            __m256i loaded_masks[select_vec_size];
+            __m256i loaded_datas[select_list_size];
+            int loaded_masks_value[select_vec_size];
+
+            const __m256i all_zero_vec = _mm256_setzero_si256();
+            while (processed_rows + 32 < row_sz) {
+                // load select vector
+                for (int i = 0; i < select_vec_size; ++i) {
+                    loaded_masks[i] = _mm256_loadu_si256(reinterpret_cast<__m256i*>(handle_select_vec[i]));
+                    loaded_masks[i] = _mm256_cmpgt_epi8(loaded_masks[i], _mm256_setzero_si256());
+                    loaded_masks_value[i] = _mm256_movemask_epi8(loaded_masks[i]);
+                }
+
+                constexpr uint32_t mask_table[] = {0, 0xFFFFFFFF, 0xFFFF, 0, 0xFF, 0, 0, 0,   0x0F,
+                                                   0, 0,          0,      0, 0,    0, 0, 0x03};
+                constexpr uint8_t each_loop_handle_sz = 32 / sizeof(RunTimeCppType<TYPE>);
+
+                if constexpr (data_size == 2) {
+                    // Process 2 groups, each handling 16 int16
+                    for (int i = 0; i < 2; i++) {
+                        // load select data
+                        for (int i = 0; i < select_list_size; ++i) {
+                            // date columns except the last column, if mask is zero, no need to load it
+                            if (i < select_list_size - 1 && loaded_masks_value[i] == 0) {
+                                continue;
+                            }
+
+                            if (then_column_is_const[i]) {
+                                loaded_datas[i] = SIMDUtils::set_data(handle_select_data[i][0]);
+                            } else {
+                                loaded_datas[i] =
+                                        _mm256_loadu_si256(reinterpret_cast<const __m256i*>(handle_select_data[i]));
+                            }
+                        }
+
+                        // selected_vec[i] == 1 means this row is selected already
+                        __m256i selected_vec = all_zero_vec;
+                        // let the default value be the last data column, which is 'else' column
+                        __m256i selected_dst = loaded_datas[select_list_size - 1];
+
+                        for (int i = 0; i < select_list_size - 1; ++i) {
+                            uint32_t select_mask = loaded_masks_value[i] & mask_table[data_size];
+                            // all zero, skip this column
+                            if (select_mask == 0) {
+                                continue;
+                            }
+
+                            __m256i expand_mask = _mm256_set1_epi16(select_mask);
+                            const __m256i data_mask =
+                                    _mm256_setr_epi16(0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x100, 0x200,
+                                                      0x400, 0x800, 0x1000, 0x2000, 0x4000, 0x8000);
+                            expand_mask &= data_mask;
+                            expand_mask = _mm256_cmpeq_epi16(expand_mask, _mm256_setzero_si256());
+                            expand_mask = ~expand_mask;
+
+                            // get will select vector in this loop
+                            __m256i not_selected_vec = ~selected_vec;
+                            __m256i will_select = not_selected_vec & expand_mask;
+
+                            // select if
+                            selected_dst = _mm256_blendv_epi8(selected_dst, loaded_datas[i], will_select);
+                            // update select_vec
+                            selected_vec |= will_select;
+
+                            // right shift mask
+                            loaded_masks_value[i] >>= each_loop_handle_sz;
+
+                            // no need to check other columns
+                            if (select_mask == 0xffffffff) {
+                                break;
+                            }
+                        }
+                        _mm256_storeu_si256(reinterpret_cast<__m256i*>(dst.data() + processed_rows), selected_dst);
+                        processed_rows += 16;
+                        for (int i = 0; i < select_list_size; ++i) {
+                            for (int i = 0; i < select_list_size; ++i) {
+                                if (!then_column_is_const[i]) {
+                                    handle_select_data[i] += 16;
+                                }
+                            }
+                        }
+                    }
+
+                    // update handle_select_vec
+                    for (int i = 0; i < select_vec_size; ++i) {
+                        handle_select_vec[i] += 32;
+                    }
+                }
             }
         }
 #endif
