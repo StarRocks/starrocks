@@ -1110,6 +1110,11 @@ public class EditLog {
                     warehouseMgr.replayAlterWarehouse(wh);
                     break;
                 }
+                case OperationType.OP_CLUSTER_SNAPSHOT_LOG: {
+                    ClusterSnapshotLog log = (ClusterSnapshotLog) journal.getData();
+                    globalStateMgr.getClusterSnapshotMgr().replayLog(log);
+                    break;
+                }
                 default: {
                     if (Config.metadata_ignore_unknown_operation_type) {
                         LOG.warn("UNKNOWN Operation Type {}", opCode);
@@ -1956,5 +1961,9 @@ public class EditLog {
 
     public void logRecoverPartitionVersion(PartitionVersionRecoveryInfo info) {
         logEdit(OperationType.OP_RECOVER_PARTITION_VERSION, info);
+    }
+
+    public void logClusterSnapshotLog(ClusterSnapshotLog info) {
+        logEdit(OperationType.OP_CLUSTER_SNAPSHOT_LOG, info);
     }
 }
