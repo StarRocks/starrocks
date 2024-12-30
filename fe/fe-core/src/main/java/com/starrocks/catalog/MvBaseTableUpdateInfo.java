@@ -32,7 +32,7 @@ public class MvBaseTableUpdateInfo {
     // The partition names of base table that have been updated
     private final Set<String> toRefreshPartitionNames = Sets.newHashSet();
     // The mapping of partition name to partition range
-    private final Map<String, PCell> partitonToCells = Maps.newHashMap();
+    private final Map<String, PCell> partitionToCells = Maps.newHashMap();
 
     // If the base table is a mv, needs to record the mapping of mv partition name to partition range
     private final Map<String, PCell> mvPartitionNameToCellMap = Maps.newHashMap();
@@ -52,8 +52,8 @@ public class MvBaseTableUpdateInfo {
         return toRefreshPartitionNames;
     }
 
-    public Map<String, PCell> getPartitonToCells() {
-        return partitonToCells;
+    public Map<String, PCell> getPartitionToCells() {
+        return partitionToCells;
     }
 
     /**
@@ -71,14 +71,14 @@ public class MvBaseTableUpdateInfo {
      */
     public void addRangePartitionKeys(String partitionName,
                                       Range<PartitionKey> rangePartitionKey) {
-        partitonToCells.put(partitionName, new PRangeCell(rangePartitionKey));
+        partitionToCells.put(partitionName, new PRangeCell(rangePartitionKey));
     }
 
     /**
      * Add partition name that needs to be refreshed and its associated list partition key
      */
     public void addPartitionCells(Map<String, PCell> cells) {
-        partitonToCells.putAll(cells);
+        partitionToCells.putAll(cells);
     }
 
     /**
@@ -86,7 +86,7 @@ public class MvBaseTableUpdateInfo {
      */
     public Map<String, Range<PartitionKey>> getPartitionNameWithRanges() {
         Map<String, Range<PartitionKey>> result = Maps.newHashMap();
-        for (Map.Entry<String, PCell> e : partitonToCells.entrySet()) {
+        for (Map.Entry<String, PCell> e : partitionToCells.entrySet()) {
             Preconditions.checkState(e.getValue() instanceof PRangeCell);
             PRangeCell rangeCell = (PRangeCell) e.getValue();
             result.put(e.getKey(), rangeCell.getRange());
@@ -99,7 +99,7 @@ public class MvBaseTableUpdateInfo {
      */
     public Map<String, PListCell> getPartitionNameWithLists() {
         Map<String, PListCell> result = Maps.newHashMap();
-        for (Map.Entry<String, PCell> e : partitonToCells.entrySet()) {
+        for (Map.Entry<String, PCell> e : partitionToCells.entrySet()) {
             Preconditions.checkState(e.getValue() instanceof PListCell);
             PListCell listCell = (PListCell) e.getValue();
             result.put(e.getKey(), listCell);
@@ -111,7 +111,7 @@ public class MvBaseTableUpdateInfo {
     public String toString() {
         return "BaseTableRefreshInfo{" +
                 ", toRefreshPartitionNames=" + toRefreshPartitionNames +
-                ", nameToPartKeys=" + partitonToCells +
+                ", nameToPartKeys=" + partitionToCells +
                 '}';
     }
 }

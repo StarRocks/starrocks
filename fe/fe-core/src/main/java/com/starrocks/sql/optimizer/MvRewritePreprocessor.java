@@ -745,7 +745,8 @@ public class MvRewritePreprocessor {
                 if (!checkMvPartitionNamesToRefresh(mv, partitionNamesToRefresh, mvPlanContext)) {
                     continue;
                 }
-                logMVPrepare(mv, "MV' partitions to refresh: {}", partitionNamesToRefresh);
+                logMVPrepare(mv, "MV' partitions to refresh: {}/{}", partitionNamesToRefresh.size(),
+                        MvUtils.shrinkToSize(partitionNamesToRefresh, Config.max_mv_task_run_meta_message_values_length));
 
                 // mv's partial partition predicates
                 ScalarOperator mvPartialPartitionPredicates =
