@@ -1857,7 +1857,8 @@ void Tablet::update_max_version_schema(const TabletSchemaCSPtr& tablet_schema) {
         }
         std::vector<RowsetSharedPtr> rewrite_meta_rs;
         _get_rewrite_meta_rs(rewrite_meta_rs);
-        _tablet_meta->save_tablet_schema(_max_version_schema, rewrite_meta_rs, _data_dir);
+        _tablet_meta->save_tablet_schema(_max_version_schema, rewrite_meta_rs, _data_dir,
+                                         keys_type == KeysType::PRIMARY_KEYS);
         _committed_rs_map.clear();
     }
 }

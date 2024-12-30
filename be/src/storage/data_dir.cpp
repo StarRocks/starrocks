@@ -415,6 +415,11 @@ Status DataDir::load() {
 
         } else if (rowset_meta->rowset_state() == RowsetStatePB::VISIBLE &&
                    rowset_meta->tablet_uid() == tablet->tablet_uid()) {
+            if (tablet->keys_type() == KeysType::PRIMARY_KEYS) {
+                VLOG(1) << "skip a visible rowset meta, tablet: " << tablet->tablet_id()
+                        << ", rowset: " << rowset_meta->rowset_id();
+                continue;
+            }
             Status publish_status = tablet->load_rowset(rowset);
             if (!rowset_meta->tablet_schema()) {
                 rowset_meta->set_tablet_schema(tablet->tablet_schema());
