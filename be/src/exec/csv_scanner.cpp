@@ -367,22 +367,13 @@ Status CSVScanner::_parse_csv_v2(Chunk* chunk) {
 
         const char* data = _curr_reader->buffBasePtr() + row.parsed_start;
         CSVReader::Record record(data, row.parsed_end - row.parsed_start);
-        if (_file_scan_type == TFileScanType::LOAD && row.columns.size() != _num_fields_in_csv &&
+        if (((_file_scan_type == TFileScanType::LOAD && row.columns.size() != _num_fields_in_csv) ||
+             (_file_scan_type == TFileScanType::FILES_INSERT && row.columns.size() < _num_fields_in_csv)) &&
             !_scan_range.params.flexible_column_mapping) {
-            if (status.is_end_of_file()) {
-                break;
-            }
-            std::string error_msg = make_column_count_not_matched_error_message_for_load(
-                    _num_fields_in_csv, row.columns.size(), _parse_options);
-            if (_counter->num_rows_filtered++ < REPORT_ERROR_MAX_NUMBER) {
-                _report_error(record, error_msg);
-            }
-            if (_state->enable_log_rejected_record()) {
-                _report_rejected_record(record, error_msg);
-            }
-            continue;
-        } else if (_file_scan_type == TFileScanType::FILES_INSERT && row.columns.size() < _num_fields_in_csv &&
-                   !_scan_range.params.flexible_column_mapping) {
+            // broker load / stream load will filter rows when file column count is consistent with schema.
+            //
+            // insert from files() will filter rows when file column count is less than schema.
+            // file column count more than schema is normal, extra columns will be ignored.
             if (status.is_end_of_file()) {
                 break;
             }
@@ -400,7 +391,8 @@ Status CSVScanner::_parse_csv_v2(Chunk* chunk) {
             if (status.is_end_of_file()) {
                 break;
             }
-            // files() query return error
+            // query files() will return error when file column count is less than schema.
+            // file column count more than schema is normal, extra columns will be ignored.
             std::string error_msg = make_column_count_not_matched_error_message_for_query(
                     _num_fields_in_csv, row.columns.size(), _parse_options, record.to_string(),
                     _curr_reader->filename());

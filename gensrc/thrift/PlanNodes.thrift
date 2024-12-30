@@ -210,6 +210,7 @@ struct THdfsProperties {
 }
 
 enum TFileScanType {
+    // broker load, stream load, except insert from files
     LOAD,
     FILES_INSERT,
     FILES_QUERY
