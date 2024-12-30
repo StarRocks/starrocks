@@ -81,7 +81,10 @@ Status DirectS3OutputStream::close() {
     }
 
     if (!_upload_id.empty() && !_etags.empty()) {
+        MonotonicStopWatch watch;
+        watch.start();
         RETURN_IF_ERROR(complete_multipart_upload());
+        IOProfiler::add_sync(watch.elapsed_time());
     }
 
     _client = nullptr;

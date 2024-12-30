@@ -112,6 +112,8 @@ public:
 
     [[nodiscard]] int64_t last_write_ts() const;
 
+    DeltaWriter* delta_writer();
+
 private:
     AsyncDeltaWriterImpl* _impl;
 };

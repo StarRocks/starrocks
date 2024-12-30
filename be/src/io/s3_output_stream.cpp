@@ -82,12 +82,15 @@ Status S3OutputStream::close() {
         return Status::OK();
     }
 
+    MonotonicStopWatch watch;
+    watch.start();
     if (_upload_id.empty()) {
         RETURN_IF_ERROR(singlepart_upload());
     } else {
         RETURN_IF_ERROR(multipart_upload());
         RETURN_IF_ERROR(complete_multipart_upload());
     }
+    IOProfiler::add_sync(watch.elapsed_time());
     _client = nullptr;
     return Status::OK();
 }
