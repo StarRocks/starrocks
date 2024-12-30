@@ -124,6 +124,7 @@
 /be/src/http/action/compaction_action.cpp       @StarRocks/load-unload-maintainer
 /be/src/http/action/*stream_load.cpp    @StarRocks/load-unload-maintainer
 /be/src/http/action/restore*            @StarRocks/load-unload-maintainer
+/be/src/runtime/batch_write/*           @StarRocks/load-unload-maintainer
 /be/src/runtime/routine_load/*          @StarRocks/load-unload-maintainer
 /be/src/runtime/stream_load/*           @StarRocks/load-unload-maintainer
 /be/src/runtime/load*                   @StarRocks/load-unload-maintainer
