@@ -25,6 +25,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
+import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -54,7 +55,7 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
 
     public static final Integer LOW_CARDINALITY_THRESHOLD = 255;
 
-    private CacheDictManager() {
+    public CacheDictManager() {
     }
 
     private static final CacheDictManager INSTANCE = new CacheDictManager();
@@ -107,6 +108,8 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
 
     private final AsyncLoadingCache<ColumnIdentifier, Optional<ColumnDict>> dictStatistics = Caffeine.newBuilder()
             .maximumSize(Config.statistic_dict_columns)
+            .executor(ThreadPoolManager.newDaemonCacheThreadPool(Config.dict_collect_thread_pool_size, "cache-dict",
+                    false))
             .buildAsync(dictLoader);
 
     private Optional<ColumnDict> deserializeColumnDict(long tableId, ColumnId columnName, TStatisticData statisticData) {
