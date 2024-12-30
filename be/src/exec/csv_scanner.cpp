@@ -370,7 +370,7 @@ Status CSVScanner::_parse_csv_v2(Chunk* chunk) {
         if (((_file_scan_type == TFileScanType::LOAD && row.columns.size() != _num_fields_in_csv) ||
              (_file_scan_type == TFileScanType::FILES_INSERT && row.columns.size() < _num_fields_in_csv)) &&
             !_scan_range.params.flexible_column_mapping) {
-            // broker load / stream load will filter rows when file column count is consistent with column list.
+            // broker load / stream load will filter rows when file column count is inconsistent with column list.
             //
             // insert from files() will filter rows when file column count is less than files() schema.
             // file column count more than schema is normal, extra columns will be ignored.
@@ -388,11 +388,11 @@ Status CSVScanner::_parse_csv_v2(Chunk* chunk) {
             continue;
         } else if (_file_scan_type == TFileScanType::FILES_QUERY && row.columns.size() < _num_fields_in_csv &&
                    !_scan_range.params.flexible_column_mapping) {
+            // query files() will return error when file column count is less than files() schema.
+            // file column count more than schema is normal, extra columns will be ignored.
             if (status.is_end_of_file()) {
                 break;
             }
-            // query files() will return error when file column count is less than files() schema.
-            // file column count more than schema is normal, extra columns will be ignored.
             std::string error_msg = make_column_count_not_matched_error_message_for_query(
                     _num_fields_in_csv, row.columns.size(), _parse_options, record.to_string(),
                     _curr_reader->filename());
@@ -490,7 +490,7 @@ Status CSVScanner::_parse_csv(Chunk* chunk) {
         if (((_file_scan_type == TFileScanType::LOAD && fields.size() != _num_fields_in_csv) ||
              (_file_scan_type == TFileScanType::FILES_INSERT && fields.size() < _num_fields_in_csv)) &&
             !_scan_range.params.flexible_column_mapping) {
-            // broker load / stream load will filter rows when file column count is consistent with column list.
+            // broker load / stream load will filter rows when file column count is inconsistent with column list.
             //
             // insert from files() will filter rows when file column count is less than files() schema.
             // file column count more than schema is normal, extra columns will be ignored.
