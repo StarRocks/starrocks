@@ -125,7 +125,7 @@ jobs:
           ./bin/elastic-update-image.sh $BRANCH $PR_NUMBER ubuntu
 
       - name: update image - centos7
-        if: success()
+        if: steps.changes.outputs.thirdparty == 'true'
         run: |
           cd ci-tool && source lib/init.sh
           ./bin/elastic-update-image.sh $BRANCH $PR_NUMBER centos7
