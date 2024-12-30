@@ -14,22 +14,22 @@
 
 package com.starrocks.lake.snapshot;
 
-import com.google.common.collect.Lists;
+//import com.google.common.collect.Lists;
 import com.starrocks.alter.AlterTest;
 import com.starrocks.backup.BlobStorage;
 import com.starrocks.backup.Status;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.common.Pair;
-import com.starrocks.journal.bdbje.BDBJEJournal;
+//import com.starrocks.common.Pair;
+//import com.starrocks.journal.bdbje.BDBJEJournal;
 import com.starrocks.lake.StarOSAgent;
-import com.starrocks.lake.snapshot.ClusterSnapshotJob.ClusterSnapshotJobState;
+//import com.starrocks.lake.snapshot.ClusterSnapshotJob.ClusterSnapshotJobState;
 import com.starrocks.persist.ClusterSnapshotLog;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.Storage;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.RunMode;
+//import com.starrocks.server.RunMode;
 import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.AdminSetAutomatedSnapshotOffStmt;
@@ -68,8 +68,6 @@ public class ClusterSnapshotTest {
     private boolean initSv = false;
 
     private File mockedFile = new File("/abc/abc");
-
-    private ClusterSnapshotCheckpointContext context = new ClusterSnapshotCheckpointContext();
 
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -210,22 +208,6 @@ public class ClusterSnapshotTest {
         analyzeFail(turnOFFSql);
         setAutomatedSnapshotOn(false);
         analyzeSuccess(turnOFFSql);
-
-        // 2. test getInfo
-        setAutomatedSnapshotOn(false);
-        ClusterSnapshotJob job = GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().createNewAutomatedSnapshotJob();
-        GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().createAutomatedSnaphot(job);
-        ClusterSnapshot snapshot = GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAutomatedSnapshot();
-        Assert.assertTrue(job.getInfo() != null);
-        Assert.assertTrue(snapshot.getInfo() != null);
-        setAutomatedSnapshotOff(false);
-
-        // 3. test network communication interface
-        setAutomatedSnapshotOn(false);
-        GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().actualUploadImageForSnapshot(true, "abc", "/abc/");
-        GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().actualUploadImageForSnapshot(false, "abc", "/abc/");
-        GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
-                                        .deleteSnapshotFromRemote(ClusterSnapshotMgr.AUTOMATED_NAME_PREFIX);
     }
 
     @Test
@@ -235,404 +217,9 @@ public class ClusterSnapshotTest {
         logCreate.setCreateSnapshotNamePrefix(ClusterSnapshotMgr.AUTOMATED_NAME_PREFIX, storageVolumeName);
         GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().replayLog(logCreate);
 
-        // create snapshot log
-        ClusterSnapshotLog logSnapshot = new ClusterSnapshotLog();
-        clusterSnapshotMgr.createNewAutomatedSnapshotJob().setState(ClusterSnapshotJobState.FINISHED, false);
-        logSnapshot.setCreateSnapshot(clusterSnapshotMgr.getAutomatedSnapshot());
-        GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().replayLog(logCreate);
-
         // drop automated snapshot request log
         ClusterSnapshotLog logDrop = new ClusterSnapshotLog();
         logDrop.setDropSnapshot(ClusterSnapshotMgr.AUTOMATED_NAME_PREFIX);
         GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().replayLog(logDrop);
-    }
-
-    @Test
-    public void testCheckpointCoordination() {
-        new MockUp<BDBJEJournal>() {
-            @Mock
-            public long getMaxJournalId() {
-                return 123456L;
-            }
-        };
-    
-        new MockUp<Storage>() {
-            @Mock
-            public long getImageJournalId() {
-                return 1L;
-            }
-        };
-    
-        new MockUp<RunMode>() {
-            @Mock
-            public boolean isSharedDataMode() {
-                return true;
-            }
-        };
-    
-        new MockUp<ClusterSnapshotMgr>() {
-            @Mock
-            public void deleteSnapshotFromRemote(String snapshotName) {
-                return;
-            }
-        };
-    
-        String feImageDir = "/root/meta/";
-        String starMgrImageDir = "/root/meta/starmgr/";
-    
-        context.setJournal(new BDBJEJournal(null, ""), true);
-        context.setJournal(new BDBJEJournal(null, "starmgr_"), false);
-    
-        Pair<Boolean, Pair<Long, Boolean>> coordinateRet1 = null;
-        Pair<Boolean, Pair<Long, Boolean>> coordinateRet2 = null;
-        Pair<Boolean, String> createImageRet = Pair.create(true, "");
-    
-        List<Boolean> flags = Lists.newArrayList();
-        flags.add(new Boolean(true));
-        flags.add(new Boolean(false));
-        for (Boolean f : flags) {
-            boolean f1 = f.booleanValue();
-            boolean f2 = !f1;
-    
-            // case 1: normal case, cross execution
-            {
-                new MockUp<ClusterSnapshotMgr>() {
-                    @Mock
-                    public Status actualUploadImageForSnapshot(boolean belongToGlobalStateMgr,
-                                                               String snapshotName, String localMetaDir) {
-                        return Status.OK;
-                    }
-                };
-                boolean checkpointIsReady = true;
-    
-                setAutomatedSnapshotOn(false);
-                Assert.assertTrue(GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAutomatedSnapshot() == null);
-                coordinateRet1 = context.coordinateTwoCheckpointsIfNeeded(f1, checkpointIsReady);
-                coordinateRet2 = context.coordinateTwoCheckpointsIfNeeded(f2, checkpointIsReady);
-                Assert.assertTrue(coordinateRet1.first);
-                Assert.assertTrue(coordinateRet2.first);
-                Assert.assertTrue(coordinateRet1.second.first != ClusterSnapshotCheckpointContext.INVALID_JOURANL_ID);
-                Assert.assertTrue(coordinateRet2.second.first != ClusterSnapshotCheckpointContext.INVALID_JOURANL_ID);
-                Assert.assertTrue(coordinateRet1.second.second);
-                Assert.assertTrue(coordinateRet2.second.second);
-    
-                context.handleImageUpload(createImageRet, checkpointIsReady, f1 ? feImageDir : starMgrImageDir, f1);
-                context.handleImageUpload(createImageRet, checkpointIsReady, f2 ? feImageDir : starMgrImageDir, f2);
-                Assert.assertTrue(GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAutomatedSnapshot() != null);
-                setAutomatedSnapshotOff(false);
-            }
-    
-            // case 2: normal case, ordered execution
-            {
-                new MockUp<ClusterSnapshotMgr>() {
-                    @Mock
-                    public Status actualUploadImageForSnapshot(boolean belongToGlobalStateMgr,
-                                                               String snapshotName, String localMetaDir) {
-                        return Status.OK;
-                    }
-                };
-                boolean checkpointIsReady = true;
-    
-                setAutomatedSnapshotOn(false);
-                Assert.assertTrue(GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAutomatedSnapshot() == null);
-    
-                coordinateRet1 = context.coordinateTwoCheckpointsIfNeeded(f1, checkpointIsReady);
-                Assert.assertTrue(coordinateRet1.first);
-                Assert.assertTrue(coordinateRet1.second.first != ClusterSnapshotCheckpointContext.INVALID_JOURANL_ID);
-                Assert.assertTrue(coordinateRet1.second.second);
-                context.handleImageUpload(createImageRet, checkpointIsReady, f1 ? feImageDir : starMgrImageDir, f1);
-    
-                coordinateRet2 = context.coordinateTwoCheckpointsIfNeeded(f2, checkpointIsReady);
-                Assert.assertTrue(coordinateRet2.first);
-                Assert.assertTrue(coordinateRet2.second.first != ClusterSnapshotCheckpointContext.INVALID_JOURANL_ID);
-                Assert.assertTrue(coordinateRet2.second.second);
-                context.handleImageUpload(createImageRet, checkpointIsReady, f2 ? feImageDir : starMgrImageDir, f2);
-    
-                Assert.assertTrue(GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAutomatedSnapshot() != null);
-                setAutomatedSnapshotOff(false);
-            }
-    
-            // case 3: normal case, peer is super slow
-            {
-                new MockUp<ClusterSnapshotMgr>() {
-                    @Mock
-                    public Status actualUploadImageForSnapshot(boolean belongToGlobalStateMgr,
-                                                               String snapshotName, String localMetaDir) {
-                        return Status.OK;
-                    }
-                };
-                boolean checkpointIsReady = true;
-    
-                setAutomatedSnapshotOn(false);
-                Assert.assertTrue(GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAutomatedSnapshot() == null);
-    
-                coordinateRet1 = context.coordinateTwoCheckpointsIfNeeded(f1, checkpointIsReady);
-                Assert.assertTrue(coordinateRet1.first);
-                Assert.assertTrue(coordinateRet1.second.first != ClusterSnapshotCheckpointContext.INVALID_JOURANL_ID);
-                Assert.assertTrue(coordinateRet1.second.second);
-                context.handleImageUpload(createImageRet, checkpointIsReady, f1 ? feImageDir : starMgrImageDir, f1);
-    
-                coordinateRet1 = context.coordinateTwoCheckpointsIfNeeded(f1, checkpointIsReady);
-                Assert.assertTrue(!coordinateRet1.first);
-                Assert.assertTrue(coordinateRet1.second.first == ClusterSnapshotCheckpointContext.INVALID_JOURANL_ID);
-                Assert.assertTrue(!coordinateRet1.second.second);
-                coordinateRet1 = context.coordinateTwoCheckpointsIfNeeded(f1, checkpointIsReady);
-                Assert.assertTrue(!coordinateRet1.first);
-                Assert.assertTrue(coordinateRet1.second.first == ClusterSnapshotCheckpointContext.INVALID_JOURANL_ID);
-                Assert.assertTrue(!coordinateRet1.second.second);
-                coordinateRet1 = context.coordinateTwoCheckpointsIfNeeded(f1, checkpointIsReady);
-                Assert.assertTrue(!coordinateRet1.first);
-                Assert.assertTrue(coordinateRet1.second.first == ClusterSnapshotCheckpointContext.INVALID_JOURANL_ID);
-                Assert.assertTrue(!coordinateRet1.second.second);
-    
-                Assert.assertTrue(GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAutomatedSnapshot() == null);
-    
-                coordinateRet2 = context.coordinateTwoCheckpointsIfNeeded(f2, checkpointIsReady);
-                Assert.assertTrue(coordinateRet2.first);
-                Assert.assertTrue(coordinateRet2.second.first != ClusterSnapshotCheckpointContext.INVALID_JOURANL_ID);
-                Assert.assertTrue(coordinateRet2.second.second);
-                context.handleImageUpload(createImageRet, checkpointIsReady, f2 ? feImageDir : starMgrImageDir, f2);
-                Assert.assertTrue(GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAutomatedSnapshot() != null);
-                setAutomatedSnapshotOff(false);
-            }
-    
-            // case 4: error case, double upload failure, cross execution
-            {
-                new MockUp<ClusterSnapshotMgr>() {
-                    @Mock
-                    public Status actualUploadImageForSnapshot(boolean belongToGlobalStateMgr,
-                                                                String snapshotName, String localMetaDir) {
-                        return new Status(Status.ErrCode.COMMON_ERROR, "test error");
-                    }
-                };
-                boolean checkpointIsReady = true;
-    
-                setAutomatedSnapshotOn(false);
-                Assert.assertTrue(GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAutomatedSnapshot() == null);
-                coordinateRet1 = context.coordinateTwoCheckpointsIfNeeded(f1, checkpointIsReady);
-                coordinateRet2 = context.coordinateTwoCheckpointsIfNeeded(f2, checkpointIsReady);
-                Assert.assertTrue(coordinateRet1.first);
-                Assert.assertTrue(coordinateRet2.first);
-                Assert.assertTrue(coordinateRet1.second.first != ClusterSnapshotCheckpointContext.INVALID_JOURANL_ID);
-                Assert.assertTrue(coordinateRet2.second.first != ClusterSnapshotCheckpointContext.INVALID_JOURANL_ID);
-                Assert.assertTrue(coordinateRet1.second.second);
-                Assert.assertTrue(coordinateRet2.second.second);
-    
-                context.handleImageUpload(createImageRet, checkpointIsReady, f1 ? feImageDir : starMgrImageDir, f1);
-                context.handleImageUpload(createImageRet, checkpointIsReady, f2 ? feImageDir : starMgrImageDir, f2);
-    
-                coordinateRet1 = context.coordinateTwoCheckpointsIfNeeded(f1, checkpointIsReady);
-                Assert.assertTrue(!coordinateRet1.first);
-                Assert.assertTrue(coordinateRet1.second.first == ClusterSnapshotCheckpointContext.INVALID_JOURANL_ID);
-                Assert.assertTrue(!coordinateRet1.second.second);
-                coordinateRet1 = context.coordinateTwoCheckpointsIfNeeded(f1, checkpointIsReady);
-                Assert.assertTrue(!coordinateRet1.first);
-                Assert.assertTrue(coordinateRet1.second.first == ClusterSnapshotCheckpointContext.INVALID_JOURANL_ID);
-                Assert.assertTrue(!coordinateRet1.second.second);
-                coordinateRet1 = context.coordinateTwoCheckpointsIfNeeded(f1, checkpointIsReady);
-                Assert.assertTrue(!coordinateRet1.first);
-                Assert.assertTrue(coordinateRet1.second.first == ClusterSnapshotCheckpointContext.INVALID_JOURANL_ID);
-                Assert.assertTrue(!coordinateRet1.second.second);
-    
-                // reset by f2, and begin a new round
-                coordinateRet2 = context.coordinateTwoCheckpointsIfNeeded(f2, checkpointIsReady);
-                Assert.assertTrue(!coordinateRet2.first);
-                Assert.assertTrue(coordinateRet2.second.first == ClusterSnapshotCheckpointContext.INVALID_JOURANL_ID);
-                Assert.assertTrue(!coordinateRet2.second.second);
-    
-                new MockUp<ClusterSnapshotMgr>() {
-                    @Mock
-                    public Status actualUploadImageForSnapshot(boolean belongToGlobalStateMgr,
-                                                               String snapshotName, String localMetaDir) {
-                        return Status.OK;
-                    }
-                };
-    
-                // retry and success
-                Assert.assertTrue(GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAutomatedSnapshot() == null);
-                coordinateRet1 = context.coordinateTwoCheckpointsIfNeeded(f1, checkpointIsReady);
-                coordinateRet2 = context.coordinateTwoCheckpointsIfNeeded(f2, checkpointIsReady);
-                Assert.assertTrue(coordinateRet1.first);
-                Assert.assertTrue(coordinateRet2.first);
-                Assert.assertTrue(coordinateRet1.second.first != ClusterSnapshotCheckpointContext.INVALID_JOURANL_ID);
-                Assert.assertTrue(coordinateRet2.second.first != ClusterSnapshotCheckpointContext.INVALID_JOURANL_ID);
-                Assert.assertTrue(coordinateRet1.second.second);
-                Assert.assertTrue(coordinateRet2.second.second);
-    
-                context.handleImageUpload(createImageRet, checkpointIsReady, f1 ? feImageDir : starMgrImageDir, f1);
-                context.handleImageUpload(createImageRet, checkpointIsReady, f2 ? feImageDir : starMgrImageDir, f2);
-    
-                Assert.assertTrue(GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAutomatedSnapshot() != null);
-                setAutomatedSnapshotOff(false);
-            }
-    
-            // case 5: error case, leader upload failure, peer success
-            {
-                new MockUp<ClusterSnapshotMgr>() {
-                    @Mock
-                    public Status actualUploadImageForSnapshot(boolean belongToGlobalStateMgr,
-                                                               String snapshotName, String localMetaDir) {
-                        return new Status(Status.ErrCode.COMMON_ERROR, "test error");
-                    }
-                };
-                boolean checkpointIsReady = true;
-    
-                setAutomatedSnapshotOn(false);
-                Assert.assertTrue(GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAutomatedSnapshot() == null);
-    
-                coordinateRet1 = context.coordinateTwoCheckpointsIfNeeded(f1, checkpointIsReady);
-                Assert.assertTrue(coordinateRet1.first);
-                Assert.assertTrue(coordinateRet1.second.first != ClusterSnapshotCheckpointContext.INVALID_JOURANL_ID);
-                Assert.assertTrue(coordinateRet1.second.second);
-                context.handleImageUpload(createImageRet, checkpointIsReady, f1 ? feImageDir : starMgrImageDir, f1);
-    
-                coordinateRet1 = context.coordinateTwoCheckpointsIfNeeded(f1, checkpointIsReady);
-                Assert.assertTrue(!coordinateRet1.first);
-                Assert.assertTrue(coordinateRet1.second.first == ClusterSnapshotCheckpointContext.INVALID_JOURANL_ID);
-                Assert.assertTrue(!coordinateRet1.second.second);
-                coordinateRet1 = context.coordinateTwoCheckpointsIfNeeded(f1, checkpointIsReady);
-                Assert.assertTrue(!coordinateRet1.first);
-                Assert.assertTrue(coordinateRet1.second.first == ClusterSnapshotCheckpointContext.INVALID_JOURANL_ID);
-                Assert.assertTrue(!coordinateRet1.second.second);
-                coordinateRet1 = context.coordinateTwoCheckpointsIfNeeded(f1, checkpointIsReady);
-                Assert.assertTrue(!coordinateRet1.first);
-                Assert.assertTrue(coordinateRet1.second.first == ClusterSnapshotCheckpointContext.INVALID_JOURANL_ID);
-                Assert.assertTrue(!coordinateRet1.second.second);
-    
-                new MockUp<ClusterSnapshotMgr>() {
-                    @Mock
-                    public Status actualUploadImageForSnapshot(boolean belongToGlobalStateMgr,
-                                                               String snapshotName, String localMetaDir) {
-                        return Status.OK;
-                    }
-                };
-                coordinateRet2 = context.coordinateTwoCheckpointsIfNeeded(f2, checkpointIsReady);
-                Assert.assertTrue(coordinateRet2.first);
-                Assert.assertTrue(coordinateRet2.second.first != ClusterSnapshotCheckpointContext.INVALID_JOURANL_ID);
-                Assert.assertTrue(coordinateRet2.second.second);
-                context.handleImageUpload(createImageRet, checkpointIsReady, f2 ? feImageDir : starMgrImageDir, f2);
-    
-                Assert.assertTrue(GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAutomatedSnapshot() == null);
-    
-                // reset by f2, and begin a new round
-                coordinateRet2 = context.coordinateTwoCheckpointsIfNeeded(f2, checkpointIsReady);
-                Assert.assertTrue(!coordinateRet2.first);
-                Assert.assertTrue(coordinateRet2.second.first == ClusterSnapshotCheckpointContext.INVALID_JOURANL_ID);
-                Assert.assertTrue(!coordinateRet2.second.second);
-    
-                // retry and success
-                Assert.assertTrue(GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAutomatedSnapshot() == null);
-                coordinateRet1 = context.coordinateTwoCheckpointsIfNeeded(f1, checkpointIsReady);
-                coordinateRet2 = context.coordinateTwoCheckpointsIfNeeded(f2, checkpointIsReady);
-                Assert.assertTrue(coordinateRet1.first);
-                Assert.assertTrue(coordinateRet2.first);
-                Assert.assertTrue(coordinateRet1.second.first != ClusterSnapshotCheckpointContext.INVALID_JOURANL_ID);
-                Assert.assertTrue(coordinateRet2.second.first != ClusterSnapshotCheckpointContext.INVALID_JOURANL_ID);
-                Assert.assertTrue(coordinateRet1.second.second);
-                Assert.assertTrue(coordinateRet2.second.second);
-    
-                context.handleImageUpload(createImageRet, checkpointIsReady, f1 ? feImageDir : starMgrImageDir, f1);
-                context.handleImageUpload(createImageRet, checkpointIsReady, f2 ? feImageDir : starMgrImageDir, f2);
-    
-                Assert.assertTrue(GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAutomatedSnapshot() != null);
-                setAutomatedSnapshotOff(false);
-            }
-    
-            // case 6: error case, leader success, peer upload failure
-            {
-                new MockUp<ClusterSnapshotMgr>() {
-                    @Mock
-                    public Status actualUploadImageForSnapshot(boolean belongToGlobalStateMgr,
-                                                               String snapshotName, String localMetaDir) {
-                        return Status.OK;
-                    }
-                };
-                boolean checkpointIsReady = true;
-    
-                setAutomatedSnapshotOn(false);
-                Assert.assertTrue(GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAutomatedSnapshot() == null);
-    
-                coordinateRet1 = context.coordinateTwoCheckpointsIfNeeded(f1, checkpointIsReady);
-                Assert.assertTrue(coordinateRet1.first);
-                Assert.assertTrue(coordinateRet1.second.first != ClusterSnapshotCheckpointContext.INVALID_JOURANL_ID);
-                Assert.assertTrue(coordinateRet1.second.second);
-                context.handleImageUpload(createImageRet, checkpointIsReady, f1 ? feImageDir : starMgrImageDir, f1);
-                Assert.assertTrue(GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAutomatedSnapshot() == null);
-    
-                new MockUp<ClusterSnapshotMgr>() {
-                    @Mock
-                    public Status actualUploadImageForSnapshot(boolean belongToGlobalStateMgr,
-                                                               String snapshotName, String localMetaDir) {
-                        return new Status(Status.ErrCode.COMMON_ERROR, "test error");
-                    }
-                };
-    
-                coordinateRet2 = context.coordinateTwoCheckpointsIfNeeded(f2, checkpointIsReady);
-                Assert.assertTrue(coordinateRet2.first);
-                Assert.assertTrue(coordinateRet2.second.first != ClusterSnapshotCheckpointContext.INVALID_JOURANL_ID);
-                Assert.assertTrue(coordinateRet2.second.second);
-                context.handleImageUpload(createImageRet, checkpointIsReady, f2 ? feImageDir : starMgrImageDir, f2);
-    
-                Assert.assertTrue(GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAutomatedSnapshot() == null);
-    
-                coordinateRet1 = context.coordinateTwoCheckpointsIfNeeded(f1, checkpointIsReady);
-                Assert.assertTrue(!coordinateRet1.first);
-                Assert.assertTrue(coordinateRet1.second.first == ClusterSnapshotCheckpointContext.INVALID_JOURANL_ID);
-                Assert.assertTrue(!coordinateRet1.second.second);
-                coordinateRet1 = context.coordinateTwoCheckpointsIfNeeded(f1, checkpointIsReady);
-                Assert.assertTrue(!coordinateRet1.first);
-                Assert.assertTrue(coordinateRet1.second.first == ClusterSnapshotCheckpointContext.INVALID_JOURANL_ID);
-                Assert.assertTrue(!coordinateRet1.second.second);
-                coordinateRet1 = context.coordinateTwoCheckpointsIfNeeded(f1, checkpointIsReady);
-                Assert.assertTrue(!coordinateRet1.first);
-                Assert.assertTrue(coordinateRet1.second.first == ClusterSnapshotCheckpointContext.INVALID_JOURANL_ID);
-                Assert.assertTrue(!coordinateRet1.second.second);
-    
-                coordinateRet2 = context.coordinateTwoCheckpointsIfNeeded(f2, checkpointIsReady);
-                Assert.assertTrue(!coordinateRet2.first);
-                Assert.assertTrue(coordinateRet2.second.first == ClusterSnapshotCheckpointContext.INVALID_JOURANL_ID);
-                Assert.assertTrue(!coordinateRet2.second.second);
-                coordinateRet2 = context.coordinateTwoCheckpointsIfNeeded(f2, checkpointIsReady);
-                Assert.assertTrue(!coordinateRet2.first);
-                Assert.assertTrue(coordinateRet2.second.first == ClusterSnapshotCheckpointContext.INVALID_JOURANL_ID);
-                Assert.assertTrue(!coordinateRet2.second.second);
-                coordinateRet2 = context.coordinateTwoCheckpointsIfNeeded(f2, checkpointIsReady);
-                Assert.assertTrue(!coordinateRet2.first);
-                Assert.assertTrue(coordinateRet2.second.first == ClusterSnapshotCheckpointContext.INVALID_JOURANL_ID);
-                Assert.assertTrue(!coordinateRet2.second.second);
-    
-    
-                new MockUp<ClusterSnapshotMgr>() {
-                    @Mock
-                    public Status actualUploadImageForSnapshot(boolean belongToGlobalStateMgr,
-                                                               String snapshotName, String localMetaDir) {
-                        return Status.OK;
-                    }
-                };
-    
-                // reset by leader, and begin a new round
-                coordinateRet1 = context.coordinateTwoCheckpointsIfNeeded(f1, checkpointIsReady);
-                Assert.assertTrue(!coordinateRet1.first);
-                Assert.assertTrue(coordinateRet1.second.first == ClusterSnapshotCheckpointContext.INVALID_JOURANL_ID);
-                Assert.assertTrue(!coordinateRet1.second.second);
-    
-                // retry and success
-                Assert.assertTrue(GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAutomatedSnapshot() == null);
-                coordinateRet1 = context.coordinateTwoCheckpointsIfNeeded(f1, checkpointIsReady);
-                coordinateRet2 = context.coordinateTwoCheckpointsIfNeeded(f2, checkpointIsReady);
-                Assert.assertTrue(coordinateRet1.first);
-                Assert.assertTrue(coordinateRet2.first);
-                Assert.assertTrue(coordinateRet1.second.first != ClusterSnapshotCheckpointContext.INVALID_JOURANL_ID);
-                Assert.assertTrue(coordinateRet2.second.first != ClusterSnapshotCheckpointContext.INVALID_JOURANL_ID);
-                Assert.assertTrue(coordinateRet1.second.second);
-                Assert.assertTrue(coordinateRet2.second.second);
-    
-                context.handleImageUpload(createImageRet, checkpointIsReady, f1 ? feImageDir : starMgrImageDir, f1);
-                context.handleImageUpload(createImageRet, checkpointIsReady, f2 ? feImageDir : starMgrImageDir, f2);
-    
-                Assert.assertTrue(GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAutomatedSnapshot() != null);
-                setAutomatedSnapshotOff(false);
-            }
-        }
     }
 }

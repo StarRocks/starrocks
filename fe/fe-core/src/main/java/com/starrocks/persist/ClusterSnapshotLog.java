@@ -17,8 +17,6 @@ package com.starrocks.persist;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.lake.snapshot.ClusterSnapshot;
-import com.starrocks.lake.snapshot.ClusterSnapshotJob;
 import com.starrocks.persist.gson.GsonUtils;
 
 import java.io.DataInput;
@@ -26,7 +24,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 
 public class ClusterSnapshotLog implements Writable {
-    public enum ClusterSnapshotLogType { NONE, CREATE_SNAPSHOT_PREFIX, CREATE_SNAPSHOT, DROP_SNAPSHOT, UPDATE_SNAPSHOT_JOB }
+    public enum ClusterSnapshotLogType { NONE, CREATE_SNAPSHOT_PREFIX, DROP_SNAPSHOT }
     @SerializedName(value = "type")
     private ClusterSnapshotLogType type = ClusterSnapshotLogType.NONE;
     // For CREATE_SNAPSHOT_PREFIX
@@ -34,15 +32,9 @@ public class ClusterSnapshotLog implements Writable {
     private String createSnapshotNamePrefix = "";
     @SerializedName(value = "storageVolumeName")
     private String storageVolumeName = "";
-    // For CREATE_SNAPSHOT
-    @SerializedName(value = "snapshot")
-    private ClusterSnapshot snapshot = null;
     // For DROP_SNAPSHOT
     @SerializedName(value = "dropSnapshotName")
     private String dropSnapshotName = "";
-    // For UPDATE_SNAPSHOT_JOB
-    @SerializedName(value = "snapshotJob")
-    private ClusterSnapshotJob snapshotJob = null;
 
     public ClusterSnapshotLog() {}
 
@@ -52,19 +44,9 @@ public class ClusterSnapshotLog implements Writable {
         this.storageVolumeName = storageVolumeName;
     }
 
-    public void setCreateSnapshot(ClusterSnapshot snapshot) {
-        this.type = ClusterSnapshotLogType.CREATE_SNAPSHOT;
-        this.snapshot = snapshot;
-    }
-
     public void setDropSnapshot(String dropSnapshotName) {
         this.type = ClusterSnapshotLogType.DROP_SNAPSHOT;
         this.dropSnapshotName = dropSnapshotName;
-    }
-
-    public void setSnapshotJob(ClusterSnapshotJob job) {
-        this.type = ClusterSnapshotLogType.UPDATE_SNAPSHOT_JOB;
-        this.snapshotJob = job;
     }
 
     public ClusterSnapshotLogType getType() {
@@ -79,16 +61,8 @@ public class ClusterSnapshotLog implements Writable {
         return this.storageVolumeName;
     }
 
-    public ClusterSnapshot getSnapshot() {
-        return this.snapshot;
-    }
-
     public String getDropSnapshotName() {
         return this.dropSnapshotName;
-    }
-
-    public ClusterSnapshotJob getSnapshotJob() {
-        return this.snapshotJob;
     }
 
     public static ClusterSnapshotLog read(DataInput in) throws IOException {
