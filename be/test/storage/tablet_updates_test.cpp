@@ -3555,8 +3555,7 @@ TEST_F(TabletUpdatesTest, test_normal_apply_retry) {
         ASSERT_TRUE(_tablet->rowset_commit(version, rs).ok());
         ASSERT_EQ(version, _tablet->updates()->max_version());
 
-        // Wait for a short duration and check error state
-        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        read_tablet(_tablet, version);
         ASSERT_TRUE(_tablet->updates()->is_error());
 
         // Disable fail point and reset error
