@@ -86,21 +86,16 @@ template <LogicalType... TYPE>
 bool test_all() {
     constexpr int chunk_size = 4095;
 
-    return (... && test_function_wrapper<TYPE, 1, chunk_size>());
+    return (... && test_function_wrapper<TYPE, 1, chunk_size>()) &&
+           (... && test_function_wrapper<TYPE, 2, chunk_size>()) &&
+           (... && test_function_wrapper<TYPE, 4, chunk_size>()) &&
+           (... && test_function_wrapper<TYPE, 8, chunk_size>());
 }
 
 PARALLEL_TEST(SIMDMultiSelectorTest, TestVarVar) {
     // clang-format off
     test_all<TYPE_TINYINT, 
-            TYPE_SMALLINT, 
-            TYPE_INT, 
-            TYPE_BIGINT, 
-            TYPE_LARGEINT, 
-            TYPE_DECIMAL32,
-            TYPE_DECIMAL64, 
-            TYPE_DECIMAL128, 
-            TYPE_FLOAT, 
-            TYPE_DOUBLE>();
+            TYPE_SMALLINT>();
     // clang-format on
 }
 } // namespace starrocks

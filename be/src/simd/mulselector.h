@@ -165,6 +165,7 @@ public:
                             uint32_t select_mask = loaded_masks_value[i] & mask_table[data_size];
                             // all zero, skip this column
                             if (select_mask == 0) {
+                                loaded_masks_value[i] >>= each_loop_handle_sz;
                                 continue;
                             }
 
@@ -196,10 +197,8 @@ public:
                         _mm256_storeu_si256(reinterpret_cast<__m256i*>(dst.data() + processed_rows), selected_dst);
                         processed_rows += 16;
                         for (int i = 0; i < select_list_size; ++i) {
-                            for (int i = 0; i < select_list_size; ++i) {
-                                if (!then_column_is_const[i]) {
-                                    handle_select_data[i] += 16;
-                                }
+                            if (!then_column_is_const[i]) {
+                                handle_select_data[i] += 16;
                             }
                         }
                     }
