@@ -139,6 +139,7 @@ import com.starrocks.lake.StarMgrMetaSyncer;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.compaction.CompactionControlScheduler;
 import com.starrocks.lake.compaction.CompactionMgr;
+import com.starrocks.lake.snapshot.ClusterSnapshotMgr;
 import com.starrocks.lake.vacuum.AutovacuumDaemon;
 import com.starrocks.leader.CheckpointController;
 import com.starrocks.leader.TaskRunStateSynchronizer;
@@ -515,6 +516,8 @@ public class GlobalStateMgr {
     private final ExecutorService queryDeployExecutor;
     private final WarehouseIdleChecker warehouseIdleChecker;
 
+    private final ClusterSnapshotMgr clusterSnapshotMgr;
+
     public NodeMgr getNodeMgr() {
         return nodeMgr;
     }
@@ -815,7 +818,10 @@ public class GlobalStateMgr {
         this.queryDeployExecutor =
                 ThreadPoolManager.newDaemonFixedThreadPool(Config.query_deploy_threadpool_size, Integer.MAX_VALUE,
                         "query-deploy", true);
+
         this.warehouseIdleChecker = new WarehouseIdleChecker();
+
+        this.clusterSnapshotMgr = new ClusterSnapshotMgr();
     }
 
     public static void destroyCheckpoint() {
@@ -1056,6 +1062,10 @@ public class GlobalStateMgr {
 
     public GlobalConstraintManager getGlobalConstraintManager() {
         return globalConstraintManager;
+    }
+
+    public ClusterSnapshotMgr getClusterSnapshotMgr() {
+        return clusterSnapshotMgr;
     }
 
     // Use tryLock to avoid potential deadlock
@@ -1544,6 +1554,7 @@ public class GlobalStateMgr {
                 .put(SRMetaBlockID.KEY_MGR, keyMgr::load)
                 .put(SRMetaBlockID.PIPE_MGR, pipeManager.getRepo()::load)
                 .put(SRMetaBlockID.WAREHOUSE_MGR, warehouseMgr::load)
+                .put(SRMetaBlockID.CLUSTER_SNAPSHOT_MGR, clusterSnapshotMgr::load)
                 .build();
 
         Set<SRMetaBlockID> metaMgrMustExists = new HashSet<>(loadImages.keySet());

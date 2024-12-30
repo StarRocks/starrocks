@@ -426,6 +426,14 @@ public interface AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
+    default R visitAdminSetAutomatedSnapshotOnStatement(AdminSetAutomatedSnapshotOnStmt clause, C context) {
+        return visitDDLStatement(clause, context);
+    }
+
+    default R visitAdminSetAutomatedSnapshotOffStatement(AdminSetAutomatedSnapshotOffStmt clause, C context) {
+        return visitDDLStatement(clause, context);
+    }
+
     // ---------------------------------------- Cluster Management Statement -------------------------------------------
 
     default R visitAlterSystemStatement(AlterSystemStmt statement, C context) {
