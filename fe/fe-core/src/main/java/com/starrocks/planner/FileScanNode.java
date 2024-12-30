@@ -82,6 +82,7 @@ import com.starrocks.thrift.TBrokerScanRangeParams;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TFileScanNode;
+import com.starrocks.thrift.TFileScanType;
 import com.starrocks.thrift.TFileType;
 import com.starrocks.thrift.THdfsProperties;
 import com.starrocks.thrift.TNetworkAddress;
@@ -162,7 +163,14 @@ public class FileScanNode extends LoadScanNode {
     private boolean useVectorizedLoad;
 
     private LoadJob.JSONOptions jsonOptions = new LoadJob.JSONOptions();
+    
     private boolean flexibleColumnMapping = false;
+    // When column mismatch, files query/load and other type load have different behaviors.
+    // Query returns error, while load counts the filtered rows, and return error or not is based on max filter ratio,
+    // files load will not filter rows if file column count is larger that the schema,
+    // so need to check files query/load or other type load in scanner.
+    // Currently only used in csv scanner.
+    private TFileScanType fileScanType = TFileScanType.LOAD;
 
     private boolean nullExprInAutoIncrement;
 
@@ -225,8 +233,10 @@ public class FileScanNode extends LoadScanNode {
         }
     }
 
-    private boolean isLoad() {
-        return desc.getTable() == null;
+    // broker table is deprecated
+    // TODO: remove
+    private boolean isBrokerTable() {
+        return desc.getTable() != null;
     }
 
     @Deprecated
@@ -256,6 +266,10 @@ public class FileScanNode extends LoadScanNode {
 
     public void setFlexibleColumnMapping(boolean enable) {
         this.flexibleColumnMapping = enable;
+    }
+
+    public void setFileScanType(TFileScanType fileScanType) {
+        this.fileScanType = fileScanType;
     }
 
     public void setUseVectorizedLoad(boolean useVectorizedLoad) {
@@ -315,6 +329,7 @@ public class FileScanNode extends LoadScanNode {
         params.setEscape(fileGroup.getEscape());
         params.setJson_file_size_limit(Config.json_file_size_limit);
         params.setFlexible_column_mapping(flexibleColumnMapping);
+        params.setFile_scan_type(fileScanType);
         initColumns(context);
         initWhereExpr(fileGroup.getWhereExpr(), analyzer);
     }
@@ -339,7 +354,7 @@ public class FileScanNode extends LoadScanNode {
         // for query, there is no column exprs, they will be got from table's schema in "Load.initColumns"
         List<ImportColumnDesc> columnExprs = Lists.newArrayList();
         List<String> columnsFromPath = Lists.newArrayList();
-        if (isLoad()) {
+        if (!isBrokerTable()) {
             columnExprs = context.fileGroup.getColumnExprList();
             columnsFromPath = context.fileGroup.getColumnsFromPath();
         }
@@ -495,7 +510,7 @@ public class FileScanNode extends LoadScanNode {
         }
         Preconditions.checkState(fileStatusesList.size() == fileGroups.size());
 
-        if (isLoad() && filesAdded == 0) {
+        if (!isBrokerTable() && filesAdded == 0) {
             // return at most 3 paths to users
             int limit = 3;
             List<String> allFilePaths =
@@ -741,7 +756,7 @@ public class FileScanNode extends LoadScanNode {
     @Override
     protected String getNodeExplainString(String prefix, TExplainLevel detailLevel) {
         StringBuilder output = new StringBuilder();
-        if (!isLoad()) {
+        if (isBrokerTable()) {
             BrokerTable brokerTable = (BrokerTable) targetTable;
             output.append(prefix).append("TABLE: ").append(brokerTable.getName()).append("\n");
             output.append(prefix).append("PATH: ")
