@@ -28,10 +28,10 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-public class MvRewriteStrategyTest extends MvRewriteTestBase {
+public class MvRewriteStrategyTest extends MVTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
-        MvRewriteTestBase.beforeClass();
+        MVTestBase.beforeClass();
         starRocksAssert.withTable(cluster, "test_base_part");
         starRocksAssert.withTable(cluster, "table_with_partition");
     }

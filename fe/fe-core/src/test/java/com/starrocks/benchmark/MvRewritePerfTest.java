@@ -19,14 +19,15 @@ import com.carrotsearch.junitbenchmarks.BenchmarkRule;
 import com.starrocks.common.Config;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.MvRewriteTestBase;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TestRule;
 
-public class MvRewritePerfTest extends MvRewriteTestBase {
+public class MvRewritePerfTest extends MVTestBase {
 
     private static final int MV_NUM = 40;
 
@@ -35,7 +36,7 @@ public class MvRewritePerfTest extends MvRewriteTestBase {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        MvRewriteTestBase.beforeClass();
+        MVTestBase.beforeClass();
 
         // Env
         Config.mv_plan_cache_max_size = 1024;
@@ -69,11 +70,17 @@ public class MvRewritePerfTest extends MvRewriteTestBase {
 
     @Before
     public void before() {
+        super.before();
         starRocksAssert.getCtx().getSessionVariable().setEnableQueryDump(false);
         starRocksAssert.getCtx().getSessionVariable().setCboMaterializedViewRewriteRuleOutputLimit(
                 SessionVariable.DEFAULT_SESSION_VARIABLE.getCboMaterializedViewRewriteRuleOutputLimit());
         starRocksAssert.getCtx().getSessionVariable().setCboMaterializedViewRewriteCandidateLimit(
                 SessionVariable.DEFAULT_SESSION_VARIABLE.getCboMaterializedViewRewriteCandidateLimit());
+    }
+
+    @After
+    public void after() throws Exception {
+        super.after();
     }
 
     // round: 0.01 [+- 0.00], round.block: 0.00 [+- 0.00], round.gc: 0.00 [+- 0.00], GC.calls: 0, GC.time: 0.00,

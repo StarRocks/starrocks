@@ -17,42 +17,22 @@ package com.starrocks.sql.automv.lattice;
 import com.starrocks.common.Config;
 import com.starrocks.connector.iceberg.MockIcebergMetadata;
 import com.starrocks.qe.GlobalVariable;
-import com.starrocks.scheduler.MVRefreshTestBase;
 import com.starrocks.sql.automv.pn.TimeGranule;
 import com.starrocks.sql.automv.util.AutoMVUtil;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
-import org.junit.After;
-import org.junit.AfterClass;
-import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.time.Instant;
 import java.util.Map;
 
-import static com.starrocks.sql.plan.PlanTestBase.cleanupEphemeralMVs;
 
-public class AutoMVPartitionPolicyIcebergTest extends MVRefreshTestBase {
+public class AutoMVPartitionPolicyIcebergTest extends MVTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
-        MVRefreshTestBase.beforeClass();
+        MVTestBase.beforeClass();
         ConnectorPlanTestBase.mockCatalog(connectContext, MockIcebergMetadata.MOCKED_ICEBERG_CATALOG_NAME);
         Config.lock_manager_enabled = false;
-    }
-
-    @AfterClass
-    public static void afterClass() throws Exception {
-        cleanupEphemeralMVs(starRocksAssert, startSuiteTime);
-    }
-
-    @Before
-    public void before() {
-        startCaseTime = Instant.now().getEpochSecond();
-    }
-
-    @After
-    public void after() throws Exception {
-        cleanupEphemeralMVs(starRocksAssert, startCaseTime);
     }
 
     @Test
