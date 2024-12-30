@@ -23,6 +23,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.scheduler.TableWithPartitions;
 import com.starrocks.sql.common.PCell;
@@ -68,11 +69,12 @@ public final class MVTimelinessRangePartitionArbiter extends MVTimelinessArbiter
         boolean isRefreshBasedOnNonRefTables = needsRefreshOnNonRefBaseTables(refBaseTablePartitionColumns);
         logMVPrepare(mv, "MV refresh based on non-ref base table:{}", isRefreshBasedOnNonRefTables);
         if (isRefreshBasedOnNonRefTables) {
-            return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.FULL);
+            return MvUpdateInfo.fullRefresh(mv);
         }
 
         // record the relation of partitions between materialized view and base partition table
-        MvUpdateInfo mvTimelinessInfo = new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.PARTIAL);
+        MvUpdateInfo mvTimelinessInfo = MvUpdateInfo.partialRefresh(mv,
+                TableProperty.QueryRewriteConsistencyMode.CHECKED);
         // collect & update mv's to refresh partitions based on base table's partition changes
         Map<Table, Set<String>> baseChangedPartitionNames = collectBaseTableUpdatePartitionNames(refBaseTablePartitionColumns,
                 mvTimelinessInfo);
@@ -85,7 +87,7 @@ public final class MVTimelinessRangePartitionArbiter extends MVTimelinessArbiter
         Map<Table, Map<String, PCell>> basePartitionNameToRangeMap = syncBaseTablePartitions(mv);
         if (basePartitionNameToRangeMap == null) {
             logMVPrepare(mv, "Sync base table partition infos failed");
-            return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.FULL);
+            return MvUpdateInfo.fullRefresh(mv);
         }
 
         // If base table is materialized view, add partition name to cell mapping into base table partition mapping,
