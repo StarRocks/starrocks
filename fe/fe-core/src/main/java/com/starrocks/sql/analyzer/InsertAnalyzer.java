@@ -49,7 +49,6 @@ import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.QueryRelation;
-import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
@@ -336,6 +335,13 @@ public class InsertAnalyzer {
         if (session.getDumpInfo() != null) {
             session.getDumpInfo().addTable(insertStmt.getTableName().getDb(), table);
         }
+
+        // Set table function table used for load
+        List<FileTableFunctionRelation> relations =
+                AnalyzerUtils.collectFileTableFunctionRelation(insertStmt.getQueryStatement());
+        for (FileTableFunctionRelation relation : relations) {
+            ((TableFunctionTable) relation.getTable()).setFilesTableType(TableFunctionTable.FilesTableType.LOAD);
+        }
     }
 
     private static void analyzeProperties(InsertStmt insertStmt, ConnectContext session) {
@@ -361,15 +367,13 @@ public class InsertAnalyzer {
         }
 
         // push down some properties to file table function
-        QueryStatement queryStatement = insertStmt.getQueryStatement();
-        if (queryStatement != null) {
-            List<FileTableFunctionRelation> relations = AnalyzerUtils.collectFileTableFunctionRelation(queryStatement);
-            for (FileTableFunctionRelation relation : relations) {
-                Map<String, String> tableFunctionProperties = relation.getProperties();
-                for (String property : PUSH_DOWN_PROPERTIES_SET) {
-                    if (properties.containsKey(property)) {
-                        tableFunctionProperties.put(property, properties.get(property));
-                    }
+        List<FileTableFunctionRelation> relations =
+                AnalyzerUtils.collectFileTableFunctionRelation(insertStmt.getQueryStatement());
+        for (FileTableFunctionRelation relation : relations) {
+            Map<String, String> tableFunctionProperties = relation.getProperties();
+            for (String property : PUSH_DOWN_PROPERTIES_SET) {
+                if (properties.containsKey(property)) {
+                    tableFunctionProperties.put(property, properties.get(property));
                 }
             }
         }
