@@ -119,6 +119,8 @@ public class TableFunctionTable extends Table {
     public static final String PROPERTY_AUTO_DETECT_SAMPLE_FILES = "auto_detect_sample_files";
     public static final String PROPERTY_AUTO_DETECT_SAMPLE_ROWS = "auto_detect_sample_rows";
 
+    private static final String PROPERTY_FILL_MISMATCH_COLUMN_WITH = "fill_mismatch_column_with";
+
     public static final String PROPERTY_CSV_COLUMN_SEPARATOR = "csv.column_separator";
     public static final String PROPERTY_CSV_ROW_DELIMITER = "csv.row_delimiter";
     public static final String PROPERTY_CSV_SKIP_HEADER = "csv.skip_header";
@@ -130,18 +132,47 @@ public class TableFunctionTable extends Table {
     private static final String PROPERTY_LIST_FILES_ONLY = "list_files_only";
     private static final String PROPERTY_LIST_RECURSIVELY = "list_recursively";
 
+    public enum MisMatchFillValue {
+        NONE,       // error
+        NULL;
+
+        public static MisMatchFillValue fromString(String value) {
+            for (MisMatchFillValue fillValue : values()) {
+                if (fillValue.name().equalsIgnoreCase(value)) {
+                    return fillValue;
+                }
+            }
+            return null;
+        }
+
+        public static List<String> getCandidates() {
+            return Arrays.stream(values()).map(p -> p.name().toLowerCase()).collect(Collectors.toList());
+        }
+    }
+
+    public enum FilesTableType {
+        LOAD,
+        UNLOAD,
+        QUERY,
+        LIST
+    }
+
     private String path;
     private String format;
 
-    // for load data
-    private int autoDetectSampleFiles;
-    private int autoDetectSampleRows;
+    private FilesTableType filesTableType = FilesTableType.QUERY;
+
+    // for load/query data
+    private int autoDetectSampleFiles = DEFAULT_AUTO_DETECT_SAMPLE_FILES;
+    private int autoDetectSampleRows = DEFAULT_AUTO_DETECT_SAMPLE_ROWS;
 
     private List<String> columnsFromPath = new ArrayList<>();
     private boolean strictMode = false;
     private final Map<String, String> properties;
 
     private List<TBrokerFileStatus> fileStatuses = Lists.newArrayList();
+
+    private MisMatchFillValue misMatchFillValue = MisMatchFillValue.NONE;
 
     // for unload data
     private String compressionType;
@@ -164,12 +195,12 @@ public class TableFunctionTable extends Table {
     private boolean listFilesOnly = false;
     private boolean listRecursively = false;
 
-    // Ctor for load data / list files via table function
+    // Ctor for load data / query data / list files via table function
     public TableFunctionTable(Map<String, String> properties) throws DdlException {
         this(properties, null);
     }
 
-    // Ctor for load data / list files via table function
+    // Ctor for load data / query data / list files via table function
     public TableFunctionTable(Map<String, String> properties, Consumer<TableFunctionTable> pushDownSchemaFunc)
             throws DdlException {
         super(TableType.TABLE_FUNCTION);
@@ -180,9 +211,11 @@ public class TableFunctionTable extends Table {
         parseProperties();
 
         if (listFilesOnly) {
+            this.filesTableType = FilesTableType.LIST;
             setSchemaForListFiles();
         } else {
-            setSchemaForLoad();
+            // set filesTableType as LOAD in insert analyzer, and default is QUERY
+            setSchemaForLoadAndQuery();
         }
 
         if (pushDownSchemaFunc != null) {
@@ -196,12 +229,13 @@ public class TableFunctionTable extends Table {
         checkNotNull(properties, "properties is null");
         checkNotNull(sessionVariable, "sessionVariable is null");
         this.properties = properties;
+        this.filesTableType = FilesTableType.UNLOAD;
         parsePropertiesForUnload(columns, sessionVariable);
         setNewFullSchema(columns);
     }
 
-    private void setSchemaForLoad() throws DdlException {
-        parseFilesForLoad();
+    private void setSchemaForLoadAndQuery() throws DdlException {
+        parseFilesForLoadAndQuery();
 
         // infer schema from files
         List<Column> columns = new ArrayList<>();
@@ -338,6 +372,14 @@ public class TableFunctionTable extends Table {
         return path;
     }
 
+    public void setFilesTableType(FilesTableType filesTableType) {
+        this.filesTableType = filesTableType;
+    }
+
+    public boolean isLoadType() {
+        return filesTableType == FilesTableType.LOAD;
+    }
+
     public boolean isListFilesOnly() {
         return listFilesOnly;
     }
@@ -393,23 +435,34 @@ public class TableFunctionTable extends Table {
             strictMode = Boolean.parseBoolean(properties.get(PROPERTY_STRICT_MODE));
         }
 
-        if (!properties.containsKey(PROPERTY_AUTO_DETECT_SAMPLE_FILES)) {
-            autoDetectSampleFiles = DEFAULT_AUTO_DETECT_SAMPLE_FILES;
-        } else {
+        if (properties.containsKey(PROPERTY_AUTO_DETECT_SAMPLE_FILES)) {
+            String property = properties.get(PROPERTY_AUTO_DETECT_SAMPLE_FILES);
             try {
-                autoDetectSampleFiles = Integer.parseInt(properties.get(PROPERTY_AUTO_DETECT_SAMPLE_FILES));
+                autoDetectSampleFiles = Integer.parseInt(property);
             } catch (NumberFormatException e) {
-                throw new DdlException("failed to parse auto_detect_sample_files: ", e);
+                ErrorReport.reportDdlException(
+                        ErrorCode.ERR_INVALID_VALUE, PROPERTY_AUTO_DETECT_SAMPLE_FILES, property, "int number");
             }
         }
 
-        if (!properties.containsKey(PROPERTY_AUTO_DETECT_SAMPLE_ROWS)) {
-            autoDetectSampleRows = DEFAULT_AUTO_DETECT_SAMPLE_ROWS;
-        } else {
+        if (properties.containsKey(PROPERTY_FILL_MISMATCH_COLUMN_WITH)) {
+            String property = properties.get(PROPERTY_FILL_MISMATCH_COLUMN_WITH);
+            misMatchFillValue = MisMatchFillValue.fromString(property);
+            if (misMatchFillValue == null) {
+                String msg = String.format("%s (case insensitive)", String.join(", ", MisMatchFillValue.getCandidates()));
+                ErrorReport.reportSemanticException(
+                        ErrorCode.ERR_INVALID_VALUE, PROPERTY_FILL_MISMATCH_COLUMN_WITH, property, msg);
+            }
+        }
+
+        // csv properties
+        if (properties.containsKey(PROPERTY_AUTO_DETECT_SAMPLE_ROWS)) {
+            String property = properties.get(PROPERTY_AUTO_DETECT_SAMPLE_ROWS);
             try {
-                autoDetectSampleRows = Integer.parseInt(properties.get(PROPERTY_AUTO_DETECT_SAMPLE_ROWS));
+                autoDetectSampleRows = Integer.parseInt(property);
             } catch (NumberFormatException e) {
-                throw new DdlException("failed to parse auto_detect_sample_files: ", e);
+                ErrorReport.reportDdlException(
+                        ErrorCode.ERR_INVALID_VALUE, PROPERTY_AUTO_DETECT_SAMPLE_ROWS, property, "int number");
             }
         }
 
@@ -467,7 +520,7 @@ public class TableFunctionTable extends Table {
         }
     }
 
-    private void parseFilesForLoad() throws DdlException {
+    private void parseFilesForLoadAndQuery() throws DdlException {
         try {
             // fake:// is a faked path, for testing purpose
             if (path.startsWith("fake://")) {
@@ -633,6 +686,10 @@ public class TableFunctionTable extends Table {
 
     public boolean isStrictMode() {
         return strictMode;
+    }
+
+    public boolean isFlexibleColumnMapping() {
+        return misMatchFillValue != MisMatchFillValue.NONE;
     }
 
     @Override

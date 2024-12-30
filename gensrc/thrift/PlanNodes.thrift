@@ -209,6 +209,13 @@ struct THdfsProperties {
   12: optional CloudConfiguration.TCloudConfiguration cloud_configuration
 }
 
+enum TFileScanType {
+    // broker load, stream load, except insert from files
+    LOAD,
+    FILES_INSERT,
+    FILES_QUERY
+}
+
 struct TBrokerScanRangeParams {
     1: required i8 column_separator;
     2: required i8 row_delimiter;
@@ -271,6 +278,7 @@ struct TBrokerScanRangeParams {
     30: optional i64 schema_sample_file_count
     31: optional i64 schema_sample_file_row_count
     32: optional bool flexible_column_mapping
+    33: optional TFileScanType file_scan_type
 }
 
 // Broker scan range
