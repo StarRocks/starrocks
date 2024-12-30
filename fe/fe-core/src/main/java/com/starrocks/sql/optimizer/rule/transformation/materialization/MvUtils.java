@@ -1402,7 +1402,7 @@ public class MvUtils {
      *
      * @return the trimmed set.
      */
-    public static <K> Set<K> shrinkToSize(Set<K> set, int maxLength) {
+    public static <K> Collection<K> shrinkToSize(Collection<K> set, int maxLength) {
         if (set != null && set.size() > maxLength) {
             return set.stream().limit(maxLength).collect(Collectors.toSet());
         }
@@ -1460,6 +1460,7 @@ public class MvUtils {
         return baseTableInfos.stream().map(BaseTableInfo::getReadableString).collect(Collectors.joining(","));
     }
 
+<<<<<<< HEAD
     public static ScalarOperator convertPartitionKeyRangesToListPredicate(List<? extends ScalarOperator> partitionColRefs,
                                                                           Collection<PRangeCell> pRangeCells,
                                                                           boolean areAllRangePartitionsSingleton) {
@@ -1471,6 +1472,8 @@ public class MvUtils {
         return convertPartitionKeysToListPredicate(partitionColRefs, partitionRanges, areAllRangePartitionsSingleton);
     }
 
+=======
+>>>>>>> 6c1b836ff ([Refactor] Refactor mv partition compensate (#54387))
     public static ScalarOperator convertPartitionKeysToListPredicate(List<? extends ScalarOperator> partitionColRefs,
                                                                      Collection<PartitionKey> partitionRanges) {
         final List<ScalarOperator> values = Lists.newArrayList();

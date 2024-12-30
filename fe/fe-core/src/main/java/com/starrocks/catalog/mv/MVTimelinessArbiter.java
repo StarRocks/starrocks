@@ -284,12 +284,10 @@ public abstract class MVTimelinessArbiter {
      * Only need to check the mv partition existence.
      */
     public MvUpdateInfo getMVTimelinessUpdateInfoInLoose() {
-        MvUpdateInfo mvUpdateInfo = new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.PARTIAL,
-                TableProperty.QueryRewriteConsistencyMode.LOOSE);
         Map<Table, Map<String, PCell>> refBaseTablePartitionMap = syncBaseTablePartitions(mv);
         if (refBaseTablePartitionMap == null) {
             logMVPrepare(mv, "Sync base table partition infos failed");
-            return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.FULL);
+            return MvUpdateInfo.fullRefresh(mv);
         }
 
         PartitionDiff diff = getChangedPartitionDiff(mv, refBaseTablePartitionMap);
@@ -297,6 +295,7 @@ public abstract class MVTimelinessArbiter {
             return null;
         }
         Map<String, PCell> adds = diff.getAdds();
+        MvUpdateInfo mvUpdateInfo = MvUpdateInfo.partialRefresh(mv, TableProperty.QueryRewriteConsistencyMode.LOOSE);
         if (!CollectionUtils.sizeIsEmpty(adds)) {
             adds.keySet().stream().forEach(mvPartitionName ->
                     mvUpdateInfo.getMvToRefreshPartitionNames().add(mvPartitionName));
@@ -327,6 +326,19 @@ public abstract class MVTimelinessArbiter {
     }
 
     /**
+<<<<<<< HEAD
+=======
+     * TODO: Optimize performance in loos/force_mv mode
+     * TODO: in loose mode, ignore partition that both exists in baseTable and mv
+     */
+    protected void collectBaseTableUpdatePartitionNamesInLoose(MvUpdateInfo mvUpdateInfo) {
+        Map<Table, List<Column>> refBaseTableAndColumns = mv.getRefBaseTablePartitionColumns();
+        // collect & update mv's to refresh partitions based on base table's partition changes
+        collectBaseTableUpdatePartitionNames(refBaseTableAndColumns, mvUpdateInfo);
+    }
+
+    /**
+>>>>>>> 6c1b836ff ([Refactor] Refactor mv partition compensate (#54387))
      * In Force MV mode, do not to check mv's consistency with base table's partition's data if ttl is not expired.
      * - if mv contains no ttl, always no need to refresh;
      * - if mv contains ttl, no need to refresh if query's partitions is in ttl's lifecycle; and need to refresh if
@@ -335,15 +347,12 @@ public abstract class MVTimelinessArbiter {
     public MvUpdateInfo getMVTimelinessUpdateInfoInForceMVMode() {
         String retentionCondition = mv.getTableProperty().getPartitionRetentionCondition();
         if (Strings.isNullOrEmpty(retentionCondition)) {
-            return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.NO_REFRESH);
+            return MvUpdateInfo.noRefresh(mv);
         }
-        MvUpdateInfo mvUpdateInfo = new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.PARTIAL,
-                TableProperty.QueryRewriteConsistencyMode.FORCE_MV);
-
         Map<Table, Map<String, PCell>> refBaseTablePartitionMap = syncBaseTablePartitions(mv);
         if (refBaseTablePartitionMap == null) {
             logMVPrepare(mv, "Sync base table partition infos failed");
-            return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.FULL);
+            return MvUpdateInfo.fullRefresh(mv);
         }
 
         PartitionDiff diff = getChangedPartitionDiff(mv, refBaseTablePartitionMap);
@@ -354,18 +363,19 @@ public abstract class MVTimelinessArbiter {
         Map<String, PCell> adds = diff.getAdds();
         // no partition added
         if (CollectionUtils.sizeIsEmpty(adds)) {
-            return mvUpdateInfo;
+            return MvUpdateInfo.noRefresh(mv);
         }
         Set<String> retentionPartitionNames = getMVRetentionPartitionNames(mv, retentionCondition, adds);
         if (retentionPartitionNames == null) {
             logMVPrepare(mv, "Get expired partitions by retention condition failed");
             return null;
         }
+        MvUpdateInfo mvUpdateInfo = MvUpdateInfo.partialRefresh(mv, TableProperty.QueryRewriteConsistencyMode.FORCE_MV);
         adds.keySet().stream()
                 .filter(mvPartitionName -> !retentionPartitionNames.contains(mvPartitionName))
                 .forEach(mvPartitionName -> mvUpdateInfo.getMvToRefreshPartitionNames().add(mvPartitionName));
         if (CollectionUtils.isEmpty(mvUpdateInfo.getMvToRefreshPartitionNames())) {
-            return mvUpdateInfo;
+            return MvUpdateInfo.noRefresh(mv);
         }
         collectBaseTableUpdatePartitionNamesInLoose(mvUpdateInfo);
         // collect base table's partition infos

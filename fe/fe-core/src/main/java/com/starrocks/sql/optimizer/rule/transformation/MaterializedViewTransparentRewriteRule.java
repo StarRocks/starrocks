@@ -51,6 +51,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -201,7 +202,7 @@ public class MaterializedViewTransparentRewriteRule extends TransformationRule {
                                                    MvPlanContext mvPlanContext,
                                                    LogicalOlapScanOperator olapScanOperator,
                                                    Set<Table> queryTables) {
-        MvUpdateInfo mvUpdateInfo = new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.FULL);
+        MvUpdateInfo mvUpdateInfo = MvUpdateInfo.fullRefresh(mv);
         mvUpdateInfo.addMvToRefreshPartitionNames(mv.getPartitionNames());
 
         MaterializationContext mvContext = MvRewritePreprocessor.buildMaterializationContext(context,
@@ -233,16 +234,16 @@ public class MaterializedViewTransparentRewriteRule extends TransformationRule {
             return null;
         }
         MVCompensationBuilder mvCompensationBuilder = new MVCompensationBuilder(mvContext, mvUpdateInfo);
-        MVCompensation mvCompensation = mvCompensationBuilder.buildMvCompensation();
+        MVCompensation mvCompensation = mvCompensationBuilder.buildMvCompensation(Optional.empty());
         if (mvCompensation == null) {
             logMVRewrite(mvContext, "Failed to get mv compensation info: {}", mvContext.getMv().getName());
             return null;
         }
         logMVRewrite(mvContext, "Get mv compensation info: {}", mvCompensation);
-        if (mvCompensation.getState().isNoCompensate()) {
+        if (mvCompensation.isNoCompensate()) {
             return input;
         }
-        if (!mvCompensation.getState().isCompensate()) {
+        if (mvCompensation.isUncompensable()) {
             logMVRewrite(mvContext, "Return directly because mv compensation info cannot compensate: {}",
                     mvCompensation);
             return null;
