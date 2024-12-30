@@ -1176,17 +1176,6 @@ public class DDLStmtExecutor {
             });
             return null;
         }
-<<<<<<< HEAD
-=======
-
-        @Override
-        public ShowResultSet visitAlterWarehouseStatement(AlterWarehouseStmt stmt, ConnectContext context) {
-            ErrorReport.wrapWithRuntimeException(() -> {
-                WarehouseManager warehouseMgr = context.getGlobalStateMgr().getWarehouseMgr();
-                warehouseMgr.alterWarehouse(stmt);
-            });
-            return null;
-        }
 
         @Override
         public ShowResultSet visitAdminSetAutomatedSnapshotOnStatement(AdminSetAutomatedSnapshotOnStmt stmt,
@@ -1205,7 +1194,6 @@ public class DDLStmtExecutor {
             });
             return null;
         }
->>>>>>> be70af0d8 ([Feature] Support Cluster Snapshot Backup: SQL Interface and meta data (part 1) (#54447))
     }
 
 }
