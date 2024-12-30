@@ -102,8 +102,11 @@ public class MVTaskRunExtraMessage implements Writable {
     }
 
     public void setMvPartitionsToRefresh(Set<String> mvPartitionsToRefresh) {
-        this.mvPartitionsToRefresh = MvUtils.shrinkToSize(mvPartitionsToRefresh,
-                Config.max_mv_task_run_meta_message_values_length);
+        if (mvPartitionsToRefresh == null) {
+            return;
+        }
+        this.mvPartitionsToRefresh = Sets.newHashSet(MvUtils.shrinkToSize(mvPartitionsToRefresh,
+                Config.max_mv_task_run_meta_message_values_length));
     }
 
     public Map<String, Set<String>> getBasePartitionsToRefreshMap() {
