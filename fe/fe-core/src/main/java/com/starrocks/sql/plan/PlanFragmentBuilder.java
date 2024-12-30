@@ -3372,6 +3372,7 @@ public class PlanFragmentBuilder {
             // 2. if child isn't exchange node, meanings child satisfy gather property
             //   a. only limit and no offset, no need add exchange node, only need set limit on child
             //   b. has offset, need add exchange node, sr doesn't support a special node to handle offset
+
             if (limit.hasOffset()) {
                 if (!(child.getPlanRoot() instanceof ExchangeNode)) {
                     // use merge-exchange
@@ -3390,11 +3391,13 @@ public class PlanFragmentBuilder {
                     context.getFragments().add(fragment);
                     child = fragment;
                 }
-
                 ExchangeNode exchangeNode = (ExchangeNode) child.getPlanRoot();
                 SortInfo sortInfo = new SortInfo(Lists.newArrayList(), Operator.DEFAULT_LIMIT,
                         Lists.newArrayList(new IntLiteral(1)), Lists.newArrayList(true), Lists.newArrayList(false));
-                exchangeNode.setMergeInfo(sortInfo, limit.getOffset());
+                // we don't have to assign sort info when exchange node has already have sort info
+                if (!exchangeNode.isMerge()) {
+                    exchangeNode.setMergeInfo(sortInfo, limit.getOffset());
+                }
                 exchangeNode.computeStatistics(optExpression.getStatistics());
             }
 

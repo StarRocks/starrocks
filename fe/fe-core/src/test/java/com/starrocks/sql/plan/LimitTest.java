@@ -19,6 +19,7 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Replica;
 import com.starrocks.common.FeConstants;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import mockit.Expectations;
@@ -172,6 +173,7 @@ public class LimitTest extends PlanTestBase {
                 + "  |  \n"
                 + "  1:OlapScanNode"));
     }
+
 
     @Test
     public void testCountStarWithLimitForOneAggStage() throws Exception {
@@ -631,6 +633,18 @@ public class LimitTest extends PlanTestBase {
                 "     tabletList=\n" +
                 "     cardinality=1\n" +
                 "     avgRowSize=3.0\n"));
+    }
+
+    @Test
+    public void testOffsetWithSubTopN() throws Exception {
+        String sql = "select v1 from (\n" +
+                "  select * from (select v1, v2 from t0 order by v1 asc limit 1000, 600) l\n" +
+                "  left join (select null as cx, '1' as c1) r\n" +
+                "  on l.v1 =r.cx\n" +
+                ") b limit 600;";
+        String plan = getThriftPlan(sql);
+        assertContains(plan, "TExchangeNode(input_row_tuples:[1], sort_info:" +
+                "TSortInfo(ordering_exprs:[TExpr(nodes:[TExprNode(node_type:SLOT_REF");
     }
 
     @Test
