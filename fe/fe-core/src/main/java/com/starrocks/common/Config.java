@@ -1868,6 +1868,9 @@ public class Config extends ConfigBase {
     @ConfField
     public static long statistic_dict_columns = 100000;
 
+    @ConfField
+    public static int dict_collect_thread_pool_size = 16;
+
     /**
      * The column statistic cache update interval
      */
