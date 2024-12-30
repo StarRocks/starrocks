@@ -1771,7 +1771,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             if (db == null) {
                 throw new StarRocksException(String.format("unknown database [%s]", request.getDb()));
             }
-            Table table = globalStateMgr.getLocalMetastore().getTable(db.getFullName(), request.getTbl());
+            Table table = db.getTable(request.getTbl());
             if (table == null) {
                 throw new StarRocksException(String.format("unknown table [%s.%s]", request.getDb(), request.getTbl()));
             }
