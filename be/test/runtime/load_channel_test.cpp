@@ -655,12 +655,14 @@ TEST_F(LoadChannelTestForLakeTablet, test_final_profile) {
     RuntimeProfile* index_profile = channel_profile->get_child(0);
     ASSERT_NE(nullptr, profile);
     ASSERT_EQ(fmt::format("Index (id={})", kIndexId), index_profile->name());
-    ASSERT_EQ(4, index_profile->get_counter("TabletsNum")->value());
-    ASSERT_EQ(1, index_profile->get_counter("OpenCount")->value());
-    ASSERT_TRUE(index_profile->get_counter("OpenTime")->value() > 0);
-    ASSERT_EQ(1, index_profile->get_counter("AddChunkCount")->value());
-    ASSERT_TRUE(index_profile->get_counter("AddChunkTime")->value() > 0);
+    ASSERT_EQ(1, index_profile->get_counter("OpenRpcCount")->value());
+    ASSERT_TRUE(index_profile->get_counter("OpenRpcTime")->value() > 0);
+    ASSERT_EQ(1, index_profile->get_counter("AddChunkRpcCount")->value());
+    ASSERT_TRUE(index_profile->get_counter("AddChunkRpcTime")->value() > 0);
     ASSERT_EQ(chunk.num_rows(), index_profile->get_counter("AddRowNum")->value());
+    auto* replicas_profile = index_profile->get_child("PeerReplicas");
+    ASSERT_NE(nullptr, replicas_profile);
+    ASSERT_EQ(4, replicas_profile->get_counter("TabletsNum")->value());
 
     clear_response(&add_chunk_response);
 }

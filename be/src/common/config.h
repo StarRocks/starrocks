@@ -1079,7 +1079,7 @@ CONF_String(dependency_librdkafka_debug, "all");
 // DEBUG: 0, INFO: 1, WARN: 2, ERROR: 3, WARN by default
 CONF_mInt16(pulsar_client_log_level, "2");
 
-// max loop count when be waiting its fragments finish
+// max loop count when be waiting its fragments finish. It has no effect if the var is configured with value <= 0.
 CONF_Int64(loop_count_wait_fragments_finish, "0");
 
 // the maximum number of connections in the connection pool for a single jdbc url
@@ -1508,6 +1508,12 @@ CONF_mInt32(max_committed_without_schema_rowset, "1000");
 
 CONF_mInt32(apply_version_slow_log_sec, "30");
 
+// The time that stream load pipe waits for the input. The pipe will block the pipeline scan executor
+// util the input is available or the timeout is reached. Don't set this value too large to avoid
+// blocking the pipeline scan executor for a long time.
+CONF_mInt32(merge_commit_stream_load_pipe_block_wait_us, "500");
+// The maximum number of bytes that the merge commit stream load pipe can buffer.
+CONF_mInt64(merge_commit_stream_load_pipe_max_buffered_bytes, "1073741824");
 CONF_Int32(batch_write_thread_pool_num_min, "0");
 CONF_Int32(batch_write_thread_pool_num_max, "512");
 CONF_Int32(batch_write_thread_pool_queue_size, "4096");
