@@ -178,6 +178,9 @@ enum TSchemaTableType {
     
     SCH_COLUMN_STATS_USAGE,
     SCH_ANALYZE_STATUS,
+
+    SCH_CLUSTER_SNAPSHOTS,
+    SCH_CLUSTER_SNAPSHOT_JOBS,
 }
 
 enum THdfsCompression {
