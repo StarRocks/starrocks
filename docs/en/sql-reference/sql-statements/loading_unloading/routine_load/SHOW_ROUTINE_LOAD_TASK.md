@@ -21,7 +21,7 @@ Shows the execution information of load tasks within a Routine Load job.
 ```SQL
 SHOW ROUTINE LOAD TASK
 [  FROM <db_name>]
-[  WHERE JobName = <job_name> ]
+WHERE JobName = <job_name>
 ```
 
 :::note
@@ -35,7 +35,7 @@ You can add the `\G` option to the statement (such as `SHOW ROUTINE LOAD TASK WH
 | **Parameter** | **Required** | **Description**                                             |
 | ------------- | ------------ | ----------------------------------------------------------- |
 | db_name       | No           | The name of the database to which the Routine Load job belongs. |
-| JobName       | No           | The name of the Routine Load job.                               |
+| JobName       | Yes          | The name of the Routine Load job.                               |
 
 ## Output
 
