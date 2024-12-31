@@ -636,14 +636,23 @@ public class LimitTest extends PlanTestBase {
 
     @Test
     public void testOffsetWithSubTopN() throws Exception {
-        String sql = "select v1 from (\n" +
+        String sql;
+        String plan;
+        sql = "select v1 from (\n" +
                 "  select * from (select v1, v2 from t0 order by v1 asc limit 1000, 600) l\n" +
                 "  left join (select null as cx, '1' as c1) r\n" +
                 "  on l.v1 =r.cx\n" +
                 ") b limit 600;";
-        String plan = getThriftPlan(sql);
+        plan = getThriftPlan(sql);
         assertContains(plan, "TExchangeNode(input_row_tuples:[1], sort_info:" +
                 "TSortInfo(ordering_exprs:[TExpr(nodes:[TExprNode(node_type:SLOT_REF");
+
+        sql = "select * from (select v1, v2 from t0 order by v1 asc limit 1000, 600) l limit 200, 600";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "\n" +
+                "  2:MERGING-EXCHANGE\n" +
+                "     offset: 1200\n" +
+                "     limit: 400");
     }
 
     @Test
