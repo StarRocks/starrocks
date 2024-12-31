@@ -505,14 +505,6 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
         }
 
         if (columnDef.isGeneratedColumn()) {
-            if (!table.isOlapTable()) {
-                throw new SemanticException("Generated Column only support olap table");
-            }
-
-            if (table.isCloudNativeTable()) {
-                throw new SemanticException("Lake table does not support generated column");
-            }
-
             if (((OlapTable) table).getKeysType() == KeysType.AGG_KEYS) {
                 throw new SemanticException("Generated Column does not support AGG table");
             }
@@ -622,14 +614,6 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
 
             if (colDef.isGeneratedColumn()) {
                 hasGeneratedColumn = true;
-
-                if (!table.isOlapTable()) {
-                    throw new SemanticException("Generated Column only support olap table");
-                }
-
-                if (table.isCloudNativeTable()) {
-                    throw new SemanticException("Lake table does not support generated column");
-                }
 
                 if (((OlapTable) table).getKeysType() == KeysType.AGG_KEYS) {
                     throw new SemanticException("Generated Column does not support AGG table");
@@ -786,14 +770,6 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
         }
 
         if (columnDef.isGeneratedColumn()) {
-            if (!(table instanceof OlapTable)) {
-                throw new SemanticException("Generated Column only support olap table");
-            }
-
-            if (table.isCloudNativeTable()) {
-                throw new SemanticException("Lake table does not support generated column");
-            }
-
             if (((OlapTable) table).getKeysType() == KeysType.AGG_KEYS) {
                 throw new SemanticException("Generated Column does not support AGG table");
             }

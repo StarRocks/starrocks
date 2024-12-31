@@ -57,7 +57,7 @@ public class AlterReplicaTaskTest {
     @Test
     public void testAlterLakeTablet() {
         AlterReplicaTask task = AlterReplicaTask.alterLakeTablet(1, 2, 3, 4, 5, 6,
-                7, 8, 9, 10);
+                7, 8, 9, 10, null);
 
         Assert.assertEquals(1, task.getBackendId());
         Assert.assertEquals(2, task.getDbId());
