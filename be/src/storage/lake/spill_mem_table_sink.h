@@ -18,6 +18,7 @@
 #include "exec/spill/data_stream.h"
 #include "exec/spill/spiller_factory.h"
 #include "storage/memtable_sink.h"
+#include "util/runtime_profile.h"
 
 namespace starrocks {
 
@@ -52,7 +53,7 @@ private:
 
 class SpillMemTableSink : public MemTableSink {
 public:
-    SpillMemTableSink(LoadSpillBlockManager* block_manager, TabletWriter* w);
+    SpillMemTableSink(LoadSpillBlockManager* block_manager, TabletWriter* writer, RuntimeProfile* profile);
     ~SpillMemTableSink() override = default;
 
     Status flush_chunk(const Chunk& chunk, starrocks::SegmentPB* segment = nullptr, bool eos = false) override;
@@ -73,8 +74,10 @@ private:
     TabletWriter* _writer;
     // destroy spiller before runtime_state
     std::shared_ptr<RuntimeState> _runtime_state;
+    RuntimeProfile* _profile = nullptr;
     spill::SpillerFactoryPtr _spiller_factory;
     std::shared_ptr<spill::Spiller> _spiller;
+    SchemaPtr _schema;
 };
 
 } // namespace lake
