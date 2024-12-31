@@ -15,6 +15,7 @@
 #pragma once
 
 #include "exprs/agg/ds_hll_state.h"
+#include "exprs/agg/ds_quantile_state.h"
 #include "exprs/agg/ds_state.h"
 
 namespace starrocks {

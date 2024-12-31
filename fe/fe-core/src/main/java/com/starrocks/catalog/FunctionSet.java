@@ -1625,6 +1625,71 @@ public class FunctionSet {
                     Lists.newArrayList(t, Type.INT, Type.VARCHAR), Type.BIGINT, Type.VARBINARY,
                     true, false, true));
         }
+        
+        addBuiltin(AggregateFunction.createBuiltin(DS_QUANTILE,
+                Lists.newArrayList(Type.DOUBLE), Type.ARRAY_DOUBLE, Type.VARBINARY,
+                false, false, true));
+        addBuiltin(AggregateFunction.createBuiltin(DS_QUANTILE,
+                Lists.newArrayList(Type.FLOAT), Type.ARRAY_FLOAT, Type.VARBINARY,
+                false, false, true));
+        addBuiltin(AggregateFunction.createBuiltin(DS_QUANTILE,
+                Lists.newArrayList(Type.INT), Type.ARRAY_INT, Type.VARBINARY,
+                false, false, true));
+        addBuiltin(AggregateFunction.createBuiltin(DS_QUANTILE,
+                Lists.newArrayList(Type.BIGINT), Type.ARRAY_BIGINT, Type.VARBINARY,
+                false, false, true));
+
+        addBuiltin(AggregateFunction.createBuiltin(DS_QUANTILE,
+                Lists.newArrayList(Type.DOUBLE, Type.DOUBLE), Type.ARRAY_DOUBLE, Type.VARBINARY,
+                false, false, true));
+        addBuiltin(AggregateFunction.createBuiltin(DS_QUANTILE,
+                Lists.newArrayList(Type.FLOAT, Type.DOUBLE), Type.ARRAY_FLOAT, Type.VARBINARY,
+                false, false, true));
+        addBuiltin(AggregateFunction.createBuiltin(DS_QUANTILE,
+                Lists.newArrayList(Type.INT, Type.DOUBLE), Type.ARRAY_INT, Type.VARBINARY,
+                false, false, true));
+        addBuiltin(AggregateFunction.createBuiltin(DS_QUANTILE,
+                Lists.newArrayList(Type.BIGINT, Type.DOUBLE), Type.ARRAY_BIGINT, Type.VARBINARY,
+                false, false, true));
+
+        addBuiltin(AggregateFunction.createBuiltin(DS_QUANTILE,
+                Lists.newArrayList(Type.DOUBLE, Type.DOUBLE, Type.INT), Type.ARRAY_DOUBLE, Type.VARBINARY,
+                false, false, true));
+        addBuiltin(AggregateFunction.createBuiltin(DS_QUANTILE,
+                Lists.newArrayList(Type.FLOAT, Type.DOUBLE, Type.INT), Type.ARRAY_FLOAT, Type.VARBINARY,
+                false, false, true));
+        addBuiltin(AggregateFunction.createBuiltin(DS_QUANTILE,
+                Lists.newArrayList(Type.INT, Type.DOUBLE, Type.INT), Type.ARRAY_INT, Type.VARBINARY,
+                false, false, true));
+        addBuiltin(AggregateFunction.createBuiltin(DS_QUANTILE,
+                Lists.newArrayList(Type.BIGINT, Type.DOUBLE, Type.INT), Type.ARRAY_BIGINT, Type.VARBINARY,
+                false, false, true));
+
+        addBuiltin(AggregateFunction.createBuiltin(DS_QUANTILE,
+                Lists.newArrayList(Type.DOUBLE, Type.ARRAY_DOUBLE), Type.ARRAY_DOUBLE, Type.VARBINARY,
+                false, false, true));
+        addBuiltin(AggregateFunction.createBuiltin(DS_QUANTILE,
+                Lists.newArrayList(Type.FLOAT, Type.ARRAY_DOUBLE), Type.ARRAY_FLOAT, Type.VARBINARY,
+                false, false, true));
+        addBuiltin(AggregateFunction.createBuiltin(DS_QUANTILE,
+                Lists.newArrayList(Type.INT, Type.ARRAY_DOUBLE), Type.ARRAY_INT, Type.VARBINARY,
+                false, false, true));
+        addBuiltin(AggregateFunction.createBuiltin(DS_QUANTILE,
+                Lists.newArrayList(Type.BIGINT, Type.ARRAY_DOUBLE), Type.ARRAY_BIGINT, Type.VARBINARY,
+                false, false, true));
+
+        addBuiltin(AggregateFunction.createBuiltin(DS_QUANTILE,
+                Lists.newArrayList(Type.DOUBLE, Type.ARRAY_DOUBLE, Type.INT), Type.ARRAY_DOUBLE, Type.VARBINARY,
+                false, false, true));
+        addBuiltin(AggregateFunction.createBuiltin(DS_QUANTILE,
+                Lists.newArrayList(Type.FLOAT, Type.ARRAY_DOUBLE, Type.INT), Type.ARRAY_FLOAT, Type.VARBINARY,
+                false, false, true));
+        addBuiltin(AggregateFunction.createBuiltin(DS_QUANTILE,
+                Lists.newArrayList(Type.INT, Type.ARRAY_DOUBLE, Type.INT), Type.ARRAY_INT, Type.VARBINARY,
+                false, false, true));
+        addBuiltin(AggregateFunction.createBuiltin(DS_QUANTILE,
+                Lists.newArrayList(Type.BIGINT, Type.ARRAY_DOUBLE, Type.INT), Type.ARRAY_BIGINT, Type.VARBINARY,
+                false, false, true));
     }
 
     public static final java.util.function.Function<Type, ArrayType> DS_FREQUENT_RET_TYPE_BUILDER =
