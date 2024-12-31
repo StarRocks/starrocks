@@ -41,8 +41,10 @@
 #include <utility>
 
 #include "column/chunk.h"
+#include "exec/pipeline/query_context.h"
 #include "exec/sort_exec_exprs.h"
 #include "gen_cpp/data.pb.h"
+#include "gen_cpp/internal_service.pb.h"
 #include "runtime/chunk_cursor.h"
 #include "runtime/current_thread.h"
 #include "runtime/data_stream_mgr.h"
@@ -56,11 +58,6 @@
 #include "util/logging.h"
 #include "util/phmap/phmap.h"
 #include "util/runtime_profile.h"
-
-using std::list;
-using std::vector;
-using std::pair;
-using std::make_pair;
 
 namespace starrocks {
 
@@ -216,6 +213,12 @@ void DataStreamRecvr::bind_profile(int32_t driver_sequence, const std::shared_pt
             "PeakBufferMemoryBytes", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
 }
 
+void DataStreamRecvr::attach_query_ctx(pipeline::QueryContext* query_ctx) {
+    if (_query_ctx.use_count() == 0) {
+        _query_ctx = query_ctx->get_shared_ptr();
+    }
+}
+
 Status DataStreamRecvr::get_next(ChunkPtr* chunk, bool* eos) {
     DCHECK(_chunks_merger.get() != nullptr);
     return _chunks_merger->get_next(chunk, eos);
@@ -239,7 +242,12 @@ bool DataStreamRecvr::is_data_ready() {
 
 Status DataStreamRecvr::add_chunks(const PTransmitChunkParams& request, ::google::protobuf::Closure** done) {
     MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_instance_mem_tracker.get());
-    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+    DeferOp op([&] {
+        tls_thread_status.set_mem_tracker(prev_tracker);
+        DCHECK(prev_tracker == nullptr || prev_tracker == GlobalEnv::GetInstance()->process_mem_tracker());
+    });
+    // TODO: We just need to notify the affected channels.
+    auto notify = this->defer_notify();
 
     auto& metrics = get_metrics_round_robin();
     SCOPED_TIMER(metrics.process_total_timer);
@@ -256,17 +264,20 @@ Status DataStreamRecvr::add_chunks(const PTransmitChunkParams& request, ::google
 }
 
 void DataStreamRecvr::remove_sender(int sender_id, int be_number) {
+    auto notify = this->defer_notify();
     int use_sender_id = _is_merging ? sender_id : 0;
     _sender_queues[use_sender_id]->decrement_senders(be_number);
 }
 
 void DataStreamRecvr::cancel_stream() {
+    auto notify = this->defer_notify();
     for (auto& _sender_queue : _sender_queues) {
         _sender_queue->cancel();
     }
 }
 
 void DataStreamRecvr::close() {
+    auto notify = this->defer_notify();
     if (_closed) {
         return;
     }
@@ -300,6 +311,7 @@ Status DataStreamRecvr::get_chunk(std::unique_ptr<Chunk>* chunk) {
 }
 
 Status DataStreamRecvr::get_chunk_for_pipeline(std::unique_ptr<Chunk>* chunk, const int32_t driver_sequence) {
+    // TODO: notify here
     DCHECK(!_is_merging);
     DCHECK_EQ(_sender_queues.size(), 1);
     Chunk* tmp_chunk = nullptr;
@@ -309,6 +321,7 @@ Status DataStreamRecvr::get_chunk_for_pipeline(std::unique_ptr<Chunk>* chunk, co
 }
 
 void DataStreamRecvr::short_circuit_for_pipeline(const int32_t driver_sequence) {
+    auto notify = this->defer_notify();
     DCHECK(_is_pipeline);
     auto* sender_queue = static_cast<PipelineSenderQueue*>(_sender_queues[0]);
     return sender_queue->short_circuit(driver_sequence);

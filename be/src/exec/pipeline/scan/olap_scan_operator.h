@@ -43,6 +43,8 @@ public:
     TPartitionType::type partition_type() const override { return TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED; }
     const std::vector<ExprContext*>& partition_exprs() const override;
 
+    bool support_event_scheduler() const override { return true; }
+
 private:
     OlapScanContextFactoryPtr _ctx_factory;
 };
@@ -62,12 +64,14 @@ public:
     ChunkSourcePtr create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) override;
 
     int64_t get_scan_table_id() const override;
+    std::string get_name() const override;
 
 protected:
     void attach_chunk_source(int32_t source_index) override;
     void detach_chunk_source(int32_t source_index) override;
     bool has_shared_chunk_source() const override;
     BalancedChunkBuffer& get_chunk_buffer() const override;
+    bool need_notify_all() override;
 
 private:
     OlapScanContextPtr _ctx;

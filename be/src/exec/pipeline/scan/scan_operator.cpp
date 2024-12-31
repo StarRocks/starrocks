@@ -23,12 +23,14 @@
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
+#include "exec/pipeline/schedule/common.h"
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/work_group.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "util/debug/query_trace.h"
 #include "util/failpoint/fail_point.h"
+#include "util/race_detect.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks::pipeline {
@@ -172,6 +174,7 @@ bool ScanOperator::has_output() const {
 
     // Can pick up more morsels or submit more tasks
     if (!_morsel_queue->empty()) {
+        std::shared_lock guard(_task_mutex);
         auto status_or_is_ready = _morsel_queue->ready_for_next();
         if (status_or_is_ready.ok() && status_or_is_ready.value()) {
             return true;
@@ -241,6 +244,7 @@ void ScanOperator::update_exec_stats(RuntimeState* state) {
 }
 
 Status ScanOperator::set_finishing(RuntimeState* state) {
+    auto notify = scan_defer_notify(this);
     // check when expired, are there running io tasks or submitted tasks
     if (UNLIKELY(state != nullptr && state->query_ctx()->is_query_expired() &&
                  (_num_running_io_tasks > 0 || _submit_task_counter->value() == 0))) {
@@ -259,8 +263,9 @@ Status ScanOperator::set_finishing(RuntimeState* state) {
 }
 
 StatusOr<ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
+    RACE_DETECT(race_pull_chunk);
     RETURN_IF_ERROR(_get_scan_status());
-
+    auto defer = scan_defer_notify(this);
     _peak_buffer_size_counter->set(buffer_size());
     _peak_buffer_memory_usage->set(buffer_memory_usage());
 
@@ -431,11 +436,11 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
 #if !defined(ADDRESS_SANITIZER) && !defined(LEAK_SANITIZER) && !defined(THREAD_SANITIZER)
             FAIL_POINT_SCOPE(mem_alloc_error);
 #endif
-
             DeferOp timer_defer([chunk_source]() {
                 COUNTER_SET(chunk_source->scan_timer(),
                             chunk_source->io_task_wait_timer()->value() + chunk_source->io_task_exec_timer()->value());
             });
+            auto notify = scan_defer_notify(this);
             COUNTER_UPDATE(chunk_source->io_task_wait_timer(), MonotonicNanos() - io_task_start_nano);
             SCOPED_TIMER(chunk_source->io_task_exec_timer());
 

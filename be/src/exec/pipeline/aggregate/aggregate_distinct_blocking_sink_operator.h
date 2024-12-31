@@ -73,6 +73,8 @@ public:
 
     ~AggregateDistinctBlockingSinkOperatorFactory() override = default;
 
+    bool support_event_scheduler() const override { return true; }
+
     Status prepare(RuntimeState* state) override {
         RETURN_IF_ERROR(OperatorFactory::prepare(state));
         return Status::OK();

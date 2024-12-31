@@ -111,7 +111,9 @@ class LocalExchanger {
 public:
     explicit LocalExchanger(std::string name, std::shared_ptr<ChunkBufferMemoryManager> memory_manager,
                             LocalExchangeSourceOperatorFactory* source)
-            : _name(std::move(name)), _memory_manager(std::move(memory_manager)), _source(source) {}
+            : _name(std::move(name)), _memory_manager(std::move(memory_manager)), _source(source) {
+        source->set_exchanger(this);
+    }
 
     virtual ~LocalExchanger() = default;
 
@@ -131,14 +133,9 @@ public:
     }
 
     // All LocalExchangeSourceOperators have finished.
-    virtual bool is_all_sources_finished() const {
-        for (const auto& source_op : _source->get_sources()) {
-            if (!source_op->is_finished()) {
-                return false;
-            }
-        }
-        return true;
-    }
+    bool is_all_sources_finished() const { return _finished_source_number == _source->get_sources().size(); }
+
+    void finish_source() { _finished_source_number++; }
 
     void epoch_finish(RuntimeState* state) {
         if (incr_epoch_finished_sinker() == _sink_number) {
@@ -163,14 +160,30 @@ public:
 
     size_t get_memory_usage() const { return _memory_manager->get_memory_usage(); }
 
+    void attach_sink_observer(RuntimeState* state, pipeline::PipelineObserver* observer) {
+        _sink_observable.add_observer(state, observer);
+    }
+
+    auto defer_notify_sink() {
+        return DeferOp([this]() {
+            if (_memory_manager->full_events_changed() || is_all_sources_finished()) {
+                _sink_observable.notify_sink_observers();
+            }
+        });
+    }
+
 protected:
     const std::string _name;
     std::shared_ptr<ChunkBufferMemoryManager> _memory_manager;
     std::atomic<int32_t> _sink_number = 0;
+    std::atomic<int32_t> _finished_source_number = 0;
     LocalExchangeSourceOperatorFactory* _source;
 
     // Stream MV
     std::atomic<int32_t> _epoch_finished_sinker = 0;
+
+private:
+    Observable _sink_observable;
 };
 
 // Exchange the local data for shuffle
