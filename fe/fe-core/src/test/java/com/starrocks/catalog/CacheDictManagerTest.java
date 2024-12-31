@@ -12,20 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.connector.delta;
+package com.starrocks.catalog;
 
-import com.starrocks.catalog.Table;
-import com.starrocks.connector.metastore.IMetastore;
-import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.sql.optimizer.statistics.CacheDictManager;
+import mockit.Expectations;
+import org.junit.Test;
 
-import java.util.List;
+import java.util.Optional;
 
-public interface IDeltaLakeMetastore extends IMetastore, MemoryTrackable {
-    String getCatalogName();
-
-    Table getTable(String dbName, String tableName);
-
-    List<String> getPartitionKeys(String dbName, String tableName);
-
-    DeltaLakeSnapshot getLatestSnapshot(String dbName, String tableName);
+public class CacheDictManagerTest {
+    @Test
+    public void test() {
+        CacheDictManager manager = new CacheDictManager();
+        new Expectations(manager) {
+            {
+                manager.getGlobalDict(anyLong, ColumnId.create("val"));
+                result = Optional.empty();
+            }
+        };
+        manager.getGlobalDict(1, ColumnId.create("val"));
+    }
 }

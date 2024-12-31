@@ -84,7 +84,7 @@ public:
         return ctx;
     }
 
-    void test_append_data_sync_base(const Status& rpc_status, TTransactionStatus::type txn_status,
+    void test_append_data_sync_base(const Status& rpc_status, const TGetLoadTxnStatusResult& expect_result,
                                     const Status& expect_st);
 
 protected:
@@ -244,22 +244,30 @@ TEST_F(IsomorphicBatchWriteTest, append_data_async) {
 }
 
 TEST_F(IsomorphicBatchWriteTest, append_data_sync) {
-    test_append_data_sync_base(Status::InternalError("Artificial failure"), TTransactionStatus::UNKNOWN,
+    TGetLoadTxnStatusResult expect_result;
+    expect_result.__set_status(TTransactionStatus::UNKNOWN);
+    test_append_data_sync_base(Status::InternalError("Artificial failure"), expect_result,
                                Status::InternalError("Failed to get load status, Internal error: Artificial failure"));
-    test_append_data_sync_base(Status::OK(), TTransactionStatus::PREPARE,
-                               Status::TimedOut("load timeout, txn status: PREPARE"));
-    test_append_data_sync_base(Status::OK(), TTransactionStatus::PREPARED,
-                               Status::TimedOut("load timeout, txn status: PREPARED"));
-    test_append_data_sync_base(Status::OK(), TTransactionStatus::COMMITTED,
+    expect_result.__set_status(TTransactionStatus::PREPARE);
+    test_append_data_sync_base(Status::OK(), expect_result, Status::TimedOut("load timeout, txn status: PREPARE"));
+    expect_result.__set_status(TTransactionStatus::PREPARED);
+    test_append_data_sync_base(Status::OK(), expect_result, Status::TimedOut("load timeout, txn status: PREPARED"));
+    expect_result.__set_status(TTransactionStatus::COMMITTED);
+    test_append_data_sync_base(Status::OK(), expect_result,
                                Status::PublishTimeout("Load has not been published before timeout"));
-    test_append_data_sync_base(Status::OK(), TTransactionStatus::VISIBLE, Status::OK());
-    test_append_data_sync_base(Status::OK(), TTransactionStatus::ABORTED,
-                               Status::InternalError("Load is aborted because of failure"));
-    test_append_data_sync_base(Status::OK(), TTransactionStatus::UNKNOWN,
-                               Status::InternalError("Load status is unknown: UNKNOWN"));
+    expect_result.__set_status(TTransactionStatus::VISIBLE);
+    test_append_data_sync_base(Status::OK(), expect_result, Status::OK());
+    expect_result.__set_status(TTransactionStatus::ABORTED);
+    expect_result.__set_reason("artificial failure");
+    test_append_data_sync_base(Status::OK(), expect_result,
+                               Status::InternalError("Load is aborted, reason: artificial failure"));
+    expect_result.__set_status(TTransactionStatus::UNKNOWN);
+    expect_result.__set_reason("");
+    test_append_data_sync_base(Status::OK(), expect_result, Status::InternalError("Load status is unknown: UNKNOWN"));
 }
 
-void IsomorphicBatchWriteTest::test_append_data_sync_base(const Status& rpc_status, TTransactionStatus::type txn_status,
+void IsomorphicBatchWriteTest::test_append_data_sync_base(const Status& rpc_status,
+                                                          const TGetLoadTxnStatusResult& expect_result,
                                                           const Status& expect_st) {
     BatchWriteId batch_write_id{
             .db = "db", .table = "table", .load_params = {{HTTP_MERGE_COMMIT_ASYNC, "false"}, {HTTP_TIMEOUT, "1"}}};
@@ -310,7 +318,8 @@ void IsomorphicBatchWriteTest::test_append_data_sync_base(const Status& rpc_stat
                                           [&](void* arg) { *((Status*)arg) = rpc_status; });
     SyncPoint::GetInstance()->SetCallBack("IsomorphicBatchWrite::_wait_for_load_status::response", [&](void* arg) {
         TGetLoadTxnStatusResult* result = (TGetLoadTxnStatusResult*)arg;
-        result->__set_status(txn_status);
+        result->__set_status(expect_result.status);
+        result->__set_reason(expect_result.reason);
     });
     StreamLoadContext* data_ctx1 = build_data_context(batch_write_id, "data1");
     Status result = batch_write->append_data(data_ctx1);
