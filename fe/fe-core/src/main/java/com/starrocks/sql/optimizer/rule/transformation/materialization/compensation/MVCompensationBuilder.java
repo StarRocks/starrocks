@@ -134,11 +134,19 @@ public class MVCompensationBuilder {
      */
     public TableCompensation getRefBaseTableCompensationByPartitionKeys(Table refBaseTable,
                                                                         Optional<LogicalScanOperator> scanOperatorOpt) {
+        Set<String> toRefreshPartitionNames = mvUpdateInfo.getBaseTableToRefreshPartitionNames(refBaseTable);
+        if (toRefreshPartitionNames == null) {
+            return TableCompensation.unknown();
+        }
+        if (toRefreshPartitionNames.isEmpty()) {
+            return TableCompensation.noCompensation();
+        }
         if (refBaseTable.isNativeTableOrMaterializedView()) {
             return OlapTableCompensation.build(refBaseTable, mvUpdateInfo, scanOperatorOpt);
         } else if (MvPartitionCompensator.isSupportPartitionCompensate(refBaseTable)) {
             return ExternalTableCompensation.build(refBaseTable, mvUpdateInfo, scanOperatorOpt);
         } else {
+            // TODO: support more ref base table types
             logMVRewrite(mv.getName(), "Unsupported ref base table type: {}", refBaseTable.getName());
             return TableCompensation.unknown();
         }
