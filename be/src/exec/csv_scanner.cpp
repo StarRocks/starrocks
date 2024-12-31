@@ -65,7 +65,7 @@ static std::string make_column_count_not_matched_error_message_for_query(int exp
               << "Column separator: " << string_2_asc(parse_options.column_delimiter) << ", "
               << "Row delimiter: " << string_2_asc(parse_options.row_delimiter) << ", "
               << "Row: '" << row << "', File: " << filename << ". "
-              << "Consider setting 'fill_mismatch_column_with' = 'null'";
+              << "Consider setting 'fill_mismatch_column_with' = 'null' property";
     return error_msg.str();
 }
 
