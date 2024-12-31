@@ -342,7 +342,8 @@ public class FunctionAnalyzer {
                 || fnName.getFunction().equals(FunctionSet.MAX)
                 || fnName.getFunction().equals(FunctionSet.NDV)
                 || fnName.getFunction().equals(FunctionSet.APPROX_COUNT_DISTINCT)
-                || fnName.getFunction().equals(FunctionSet.DS_HLL_COUNT_DISTINCT))
+                || fnName.getFunction().equals(FunctionSet.DS_HLL_COUNT_DISTINCT)
+                || fnName.getFunction().equals(FunctionSet.DS_THETA))
                 && !arg.getType().canApplyToNumeric()) {
             throw new SemanticException(Type.NOT_SUPPORT_AGG_ERROR_MSG);
         }

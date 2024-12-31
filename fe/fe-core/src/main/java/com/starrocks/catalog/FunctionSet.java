@@ -1624,6 +1624,11 @@ public class FunctionSet {
             addBuiltin(AggregateFunction.createBuiltin(DS_HLL_COUNT_DISTINCT,
                     Lists.newArrayList(t, Type.INT, Type.VARCHAR), Type.BIGINT, Type.VARBINARY,
                     true, false, true));
+
+            // ds_theta(col)
+            addBuiltin(AggregateFunction.createBuiltin(DS_THETA,
+                    Lists.newArrayList(t), Type.BIGINT, Type.VARBINARY,
+                    true, false, true));
         }
     }
 
