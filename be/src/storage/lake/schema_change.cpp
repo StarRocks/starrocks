@@ -202,6 +202,12 @@ Status DirectSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_
             return Status::InternalError("failed to convert chunk data");
         }
 
+        if (auto st = _chunk_changer->fill_generated_columns(_new_chunk); !st.ok()) {
+            std::stringstream ss;
+            ss << "fill generated columns failed: " << st.message();
+            return Status::InternalError(ss.str());
+        }
+
         ChunkHelper::padding_char_columns(_char_field_indexes, _new_schema, _new_tablet_schema, _new_chunk.get());
         RETURN_IF_ERROR(writer->write(*_new_chunk));
     }
@@ -381,6 +387,25 @@ Status SchemaChangeHandler::do_process_alter_tablet(const TAlterTabletReqV2& req
                                                      sc_params.materialized_params_map, sc_params.where_expr,
                                                      has_delete_predicates, &sc_params.sc_sorting,
                                                      &sc_params.sc_directly, &generated_column_idxs));
+
+    if (request.__isset.materialized_column_req && request.materialized_column_req.mc_exprs.size() != 0) {
+        DCHECK_EQ(sc_params.sc_sorting, false);
+        // for cloud native table, schema change for generated column must be in directly mode
+        sc_params.sc_directly = true;
+
+        chunk_changer->init_runtime_state(request.materialized_column_req.query_options,
+                                          request.materialized_column_req.query_globals);
+
+        for (const auto& it : request.materialized_column_req.mc_exprs) {
+            ExprContext* ctx = nullptr;
+            RETURN_IF_ERROR(Expr::create_expr_tree(chunk_changer->get_object_pool(), it.second, &ctx,
+                                                   chunk_changer->get_runtime_state()));
+            RETURN_IF_ERROR(ctx->prepare(chunk_changer->get_runtime_state()));
+            RETURN_IF_ERROR(ctx->open(chunk_changer->get_runtime_state()));
+
+            chunk_changer->get_gc_exprs()->insert({it.first, ctx});
+        }
+    }
 
     // create txn log
     auto txn_log = std::make_shared<TxnLog>();
