@@ -368,7 +368,6 @@ public class StatisticUtils {
             isPrimaryEngine = KeysType.PRIMARY_KEYS.equals(((OlapTable) table).getKeysType());
         }
         List<String> columns = new ArrayList<>();
-        Set<String> partitionColumns = Sets.newHashSet(table.getPartitionColumnNames());
         for (Column column : table.getBaseSchema()) {
             // disable stats collection for auto generated columns, see SelectAnalyzer#analyzeSelect
             if (column.isGeneratedColumn() && column.getName().startsWith(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX)) {
