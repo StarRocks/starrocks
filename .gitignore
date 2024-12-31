@@ -75,6 +75,7 @@ be/.vscode
 be/src/gen_cpp/cmake-build*
 be/src/gen_cpp/*.cc
 be/src/gen_cpp/*.cpp
+!be/src/gen_cpp/thrift_types_customize_impl.cpp
 be/src/gen_cpp/*.h
 be/src/gen_cpp/opcode
 be/src/thirdparty/starcache/
