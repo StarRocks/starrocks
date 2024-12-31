@@ -16,7 +16,7 @@ VARCHAR TIME_FORMAT(TIME time, VARCHAR format)
 
 ## Parameters
 
-- `time` (Required): The time to be formatted.
+- `time` (Required): The time value (of the TIME type) to be formatted.
 - `format` (Required): The format to use. Valid values:
 
 ```Plain Text
