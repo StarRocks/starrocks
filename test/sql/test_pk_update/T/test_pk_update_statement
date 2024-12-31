@@ -1,0 +1,7 @@
+-- name: test_pk_update_columns_multiple_assignments
+CREATE TABLE tablepk (pkkey int, pkvalue int) PRIMARY KEY(pkkey);
+INSERT INTO tablepk VALUES (1, 10);
+INSERT INTO tablepk VALUES (2, 20);
+SELECT * FROM tablepk;
+UPDATE tablepk SET pkvalue = 100, pkvalue = 200 WHERE pkkey = 2;
+SELECT * FROM tablepk;
