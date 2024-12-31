@@ -18,8 +18,8 @@ add_library(Types STATIC
     array_type_info.cpp
     bitmap_value.cpp
     date_value.cpp
-    ds_sketch.cpp
     hll.cpp
+    hll_sketch.cpp
     large_int_value.cpp
     logical_type.cpp
     map_type_info.cpp

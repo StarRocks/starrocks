@@ -61,18 +61,6 @@ struct DataSketchesBuilder {
             resolver->add_aggregate_mapping<lt, TYPE_BIGINT, DSSketchState<lt, SketchType::HLL>>(
                     "ds_hll_count_distinct", false,
                     AggregateFactory::MakeDataSketchesAggregateFunction<lt, SketchType::HLL>());
-            resolver->add_aggregate_mapping<lt, TYPE_BIGINT, DSSketchState<lt, SketchType::THETA>>(
-                    "ds_theta", false, AggregateFactory::MakeDataSketchesAggregateFunction<lt, SketchType::THETA>());
-        }
-        if constexpr (lt_is_integer<lt> || lt_is_float<lt>) {
-            resolver->add_aggregate_mapping<lt, TYPE_ARRAY, DSSketchState<lt, SketchType::QUANTILE>>(
-                    "ds_quantile", false,
-                    AggregateFactory::MakeDataSketchesAggregateFunction<lt, SketchType::QUANTILE>());
-        }
-        if constexpr (lt_is_integer<lt> || lt_is_float<lt> || lt_is_string<lt>) {
-            resolver->add_aggregate_mapping<lt, TYPE_ARRAY, DSSketchState<lt, SketchType::FREQUENT>>(
-                    "ds_frequent", false,
-                    AggregateFactory::MakeDataSketchesAggregateFunction<lt, SketchType::FREQUENT>());
         }
     }
 };
