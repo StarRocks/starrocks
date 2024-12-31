@@ -20,6 +20,7 @@
 #include "exec/query_cache/cache_operator.h"
 #include "exec/query_cache/lane_arbiter.h"
 #include "exec/workgroup/work_group_fwd.h"
+#include "util/race_detect.h"
 #include "util/spinlock.h"
 
 namespace starrocks {
@@ -97,6 +98,20 @@ public:
     virtual int64_t get_scan_table_id() const { return -1; }
 
     void update_exec_stats(RuntimeState* state) override;
+
+    bool has_full_events() { return get_chunk_buffer().limiter()->has_full_events(); }
+    virtual bool need_notify_all() { return true; }
+
+    template <class NotifyAll>
+    auto defer_notify(NotifyAll notify_all) {
+        return DeferOp([this, notify_all]() {
+            if (notify_all()) {
+                _source_factory()->observes().notify_source_observers();
+            } else {
+                _observable.notify_source_observers();
+            }
+        });
+    }
 
 protected:
     static constexpr size_t kIOTaskBatchSize = 64;
@@ -218,6 +233,8 @@ private:
 
     RuntimeProfile::Counter* _prepare_chunk_source_timer = nullptr;
     RuntimeProfile::Counter* _submit_io_task_timer = nullptr;
+
+    DECLARE_RACE_DETECTOR(race_pull_chunk)
 };
 
 class ScanOperatorFactory : public SourceOperatorFactory {
@@ -247,6 +264,10 @@ protected:
 
     std::shared_ptr<workgroup::ScanTaskGroup> _scan_task_group;
 };
+
+inline auto scan_defer_notify(ScanOperator* scan_op) {
+    return scan_op->defer_notify([scan_op]() -> bool { return scan_op->need_notify_all(); });
+}
 
 pipeline::OpFactories decompose_scan_node_to_pipeline(std::shared_ptr<ScanOperatorFactory> factory, ScanNode* scan_node,
                                                       pipeline::PipelineBuilderContext* context);

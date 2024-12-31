@@ -39,6 +39,8 @@
 #include <unordered_map>
 
 #include "common/status.h"
+#include "exec/pipeline/pipeline_fwd.h"
+#include "exec/pipeline/schedule/pipeline_timer.h"
 #include "exec/query_cache/cache_manager.h"
 #include "exec/workgroup/work_group_fwd.h"
 #include "runtime/base_load_path_mgr.h"
@@ -92,6 +94,7 @@ namespace pipeline {
 class DriverExecutor;
 class QueryContextManager;
 class DriverLimiter;
+class PipelineTimer;
 } // namespace pipeline
 
 namespace lake {
@@ -318,6 +321,7 @@ public:
     pipeline::QueryContextManager* query_context_mgr() { return _query_context_mgr; }
 
     pipeline::DriverLimiter* driver_limiter() { return _driver_limiter; }
+    pipeline::PipelineTimer* pipeline_timer() const { return _pipeline_timer; }
 
     int64_t max_executor_threads() const { return _max_executor_threads; }
 
@@ -376,6 +380,7 @@ private:
     pipeline::QueryContextManager* _query_context_mgr = nullptr;
     std::unique_ptr<workgroup::WorkGroupManager> _workgroup_manager;
     pipeline::DriverLimiter* _driver_limiter = nullptr;
+    pipeline::PipelineTimer* _pipeline_timer = nullptr;
     int64_t _max_executor_threads = 0; // Max thread number of executor
 
     BaseLoadPathMgr* _load_path_mgr = nullptr;
