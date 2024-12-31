@@ -11,11 +11,14 @@ import com.starrocks.catalog.Table;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.ConnectorType;
+import com.starrocks.connector.DatabaseTableName;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.delta.CachingDeltaLakeMetastore;
 import com.starrocks.connector.delta.DeltaLakeCatalogProperties;
 import com.starrocks.connector.delta.DeltaLakeMetadata;
+import com.starrocks.connector.delta.DeltaLakeMetastore;
+import com.starrocks.connector.delta.DeltaLakeSnapshot;
 import com.starrocks.connector.delta.DeltaMetastoreOperations;
 import com.starrocks.connector.delta.DeltaUtils;
 import io.delta.kernel.Scan;
@@ -103,10 +106,17 @@ public class DeltaUnityMetadataTest {
 
     @Test
     public void testGetTable() {
+        new MockUp<CachingDeltaLakeMetastore>() {
+            @mockit.Mock
+            public DeltaLakeSnapshot getCachedSnapshot(DatabaseTableName databaseTableName) {
+                return new DeltaLakeSnapshot("db1", "table1", null, null,
+                        123, "s3://bucket/path/to/table");
+            }
+        };
+
         new MockUp<DeltaUtils>() {
             @Mock
-            public DeltaLakeTable convertDeltaToSRTable(String catalog, String dbName, String tblName, String path,
-                                                        Engine deltaEngine, long createTime) {
+            public DeltaLakeTable convertDeltaSnapshotToSRTable(String catalog, DeltaLakeSnapshot snapshot) {
                 return new DeltaLakeTable(1, "databricks0", "db1", "table1",
                         Lists.newArrayList(), Lists.newArrayList(), null, "s3://bucket/path/to/table", null,
                         0);
@@ -127,10 +137,17 @@ public class DeltaUnityMetadataTest {
     @Test
     public void testListPartitionNames(@Mocked SnapshotImpl snapshot, @Mocked ScanBuilder scanBuilder,
                                        @Mocked Scan scan) {
+        new MockUp<DeltaLakeMetastore>() {
+            @mockit.Mock
+            public DeltaLakeSnapshot getLatestSnapshot(String dbName, String tableName) {
+                return new DeltaLakeSnapshot("db1", "table1", null, null,
+                        123, "s3://bucket/path/to/table");
+            }
+        };
+
         new MockUp<DeltaUtils>() {
             @Mock
-            public DeltaLakeTable convertDeltaToSRTable(String catalog, String dbName, String tblName, String path,
-                                                        Engine deltaEngine, long createTime) {
+            public DeltaLakeTable convertDeltaSnapshotToSRTable(String catalog, DeltaLakeSnapshot deltaLakeSnapshot) {
                 return new DeltaLakeTable(1, "databricks0", "db1", "table1",
                         Lists.newArrayList(), Lists.newArrayList("ts"), snapshot,
                         "s3://bucket/path/to/table", null, 0);
