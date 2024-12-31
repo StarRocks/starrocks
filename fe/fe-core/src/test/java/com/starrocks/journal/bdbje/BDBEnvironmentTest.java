@@ -230,7 +230,7 @@ public class BDBEnvironmentTest {
                 findUnbindHostPort(),
                 leaderNodeHostPort,
                 false);
-        observerEnvironment.setup();
+        observerEnvironment.setup(true);
 
         // observer read
         Assert.assertEquals(1, observerEnvironment.getDatabaseNames().size());
