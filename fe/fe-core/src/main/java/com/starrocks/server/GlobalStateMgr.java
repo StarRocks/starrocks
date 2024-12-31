@@ -1245,6 +1245,7 @@ public class GlobalStateMgr {
         dominationStartTimeMs = System.currentTimeMillis();
 
         try {
+<<<<<<< HEAD
             // Log meta_version
             int starrocksMetaVersion = MetaContext.get().getStarRocksMetaVersion();
             if (starrocksMetaVersion < FeConstants.STARROCKS_META_VERSION) {
@@ -1262,6 +1263,9 @@ public class GlobalStateMgr {
             }
 
             if (Config.bdbje_reset_election_group) {
+=======
+            if (Config.bdbje_reset_election_group || nodeMgr.isFirstTimeStartUp()) {
+>>>>>>> d1c333520a ([Enhancement] Support fe starting with only image no bdb log (#54514))
                 nodeMgr.resetFrontends();
             }
 
