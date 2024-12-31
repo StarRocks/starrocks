@@ -74,7 +74,7 @@ public class StarOSAgentTest {
     @Before
     public void setUp() throws Exception {
         starosAgent = new StarOSAgent();
-        starosAgent.init(null);
+        starosAgent.initForTest();
         Config.cloud_native_storage_type = "S3";
     }
 
