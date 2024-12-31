@@ -87,7 +87,7 @@ public class BDBEnvironmentTest {
                 selfNodeHostPort,
                 selfNodeHostPort,
                 true);
-        environment.setup();
+        environment.setup(true);
 
         CloseSafeDatabase db = environment.openDatabase("testdb");
         DatabaseEntry key = randomEntry();
@@ -115,7 +115,7 @@ public class BDBEnvironmentTest {
                         selfNodeHostPort,
                         selfNodeHostPort,
                         true);
-                environment.setup();
+                environment.setup(true);
             }
             Assert.fail();
         } finally {
@@ -171,7 +171,7 @@ public class BDBEnvironmentTest {
                 leaderNodeHostPort,
                 leaderNodeHostPort,
                 true);
-        leaderEnvironment.setup();
+        leaderEnvironment.setup(true);
         Assert.assertEquals(0, leaderEnvironment.getDatabaseNames().size());
 
         // set up 2 followers
@@ -186,7 +186,7 @@ public class BDBEnvironmentTest {
                     leaderNodeHostPort,
                     true);
             followerEnvironments[i] = followerEnvironment;
-            followerEnvironment.setup();
+            followerEnvironment.setup(true);
             Assert.assertEquals(0, followerEnvironment.getDatabaseNames().size());
         }
         BDBEnvironment.RETRY_TIME = 3;
@@ -230,7 +230,7 @@ public class BDBEnvironmentTest {
                 findUnbindHostPort(),
                 leaderNodeHostPort,
                 false);
-        observerEnvironment.setup();
+        observerEnvironment.setup(true);
 
         // observer read
         Assert.assertEquals(1, observerEnvironment.getDatabaseNames().size());
@@ -299,7 +299,7 @@ public class BDBEnvironmentTest {
                 true);
         Assert.assertTrue(true);
         try {
-            maserEnvironment.setup();
+            maserEnvironment.setup(true);
         } catch (JournalException e) {
             LOG.warn("got Rollback Exception, as expect, ", e);
         }
@@ -324,7 +324,7 @@ public class BDBEnvironmentTest {
                 if (followerEnvironments[i].getReplicatedEnvironment().getState() == ReplicatedEnvironment.State.MASTER) {
                     newMasterEnvironment = followerEnvironments[i];
                     LOG.warn("=========> new leader is {}", newMasterEnvironment.getReplicatedEnvironment().getNodeName());
-                    newMasterEnvironment.setup();
+                    newMasterEnvironment.setup(true);
                     newMasterFollowerIndex = i;
                     break;
                 }
@@ -338,7 +338,7 @@ public class BDBEnvironmentTest {
                 leaderNodeHostPort,
                 leaderNodeHostPort,
                 true);
-        oldMasterEnvironment.setup();
+        oldMasterEnvironment.setup(true);
         LOG.warn("============> old leader is setup as follower");
         Thread.sleep(1000);
 
@@ -391,7 +391,7 @@ public class BDBEnvironmentTest {
                 true);
         LOG.warn("=========> start new follower for the first time");
         // should set up successfully as a standalone leader
-        newfollowerEnvironment.setup();
+        newfollowerEnvironment.setup(true);
         newfollowerEnvironment.close();
 
         // 2. bad new follower start for the second time
@@ -404,7 +404,7 @@ public class BDBEnvironmentTest {
                 true);
         LOG.warn("==========> start new follower for the second time");
         try {
-            newfollowerEnvironment.setup();
+            newfollowerEnvironment.setup(true);
         } catch (Exception e) {
             LOG.warn("===========> failed for the second time, as expect, ", e);
         }
@@ -426,7 +426,7 @@ public class BDBEnvironmentTest {
                 selfNodeHostPort,
                 selfNodeHostPort,
                 true);
-        environment.setup();
+        environment.setup(true);
 
         new MockUp<ReplicatedEnvironment>() {
             @Mock
