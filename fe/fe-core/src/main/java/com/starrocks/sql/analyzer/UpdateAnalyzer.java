@@ -45,6 +45,7 @@ import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.TypeManager;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -91,8 +92,10 @@ public class UpdateAnalyzer {
         }
 
         List<ColumnAssignment> assignmentList = updateStmt.getAssignments();
-        Map<String, ColumnAssignment> assignmentByColName =
-                assignmentList.stream().collect(Collectors.toMap(assign -> assign.getColumn().toLowerCase(), a -> a));
+        Map<String, ColumnAssignment> assignmentByColName = new HashMap<>();
+        for (ColumnAssignment col : assignmentList) {
+            assignmentByColName.put(col.getColumn().toLowerCase(), col);
+        }
         for (String colName : assignmentByColName.keySet()) {
             if (table.getColumn(colName) == null) {
                 throw new SemanticException("table '%s' do not existing column '%s'", tableName.getTbl(), colName);
