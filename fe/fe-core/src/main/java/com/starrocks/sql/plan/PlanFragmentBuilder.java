@@ -3369,10 +3369,13 @@ public class PlanFragmentBuilder {
             // now sr only support offset on merge-exchange node
             // 1. if child is exchange node, meanings child was enforced gather property
             //   a. only limit and no offset, only need set limit on child
-            //   b. has offset, should trans Exchange to Merge-Exchange node
+            //   b. has offset
+            //      b.1 not merge exchange should trans Exchange to Merge-Exchange node
+            //      b.2 is merge exchange update offset
             // 2. if child isn't exchange node, meanings child satisfy gather property
             //   a. only limit and no offset, no need add exchange node, only need set limit on child
             //   b. has offset, need add exchange node, sr doesn't support a special node to handle offset
+
             if (limit.hasOffset()) {
                 if (!(child.getPlanRoot() instanceof ExchangeNode)) {
                     // use merge-exchange
@@ -3391,11 +3394,17 @@ public class PlanFragmentBuilder {
                     context.getFragments().add(fragment);
                     child = fragment;
                 }
-
                 ExchangeNode exchangeNode = (ExchangeNode) child.getPlanRoot();
-                SortInfo sortInfo = new SortInfo(Lists.newArrayList(), Operator.DEFAULT_LIMIT,
-                        Lists.newArrayList(new IntLiteral(1)), Lists.newArrayList(true), Lists.newArrayList(false));
-                exchangeNode.setMergeInfo(sortInfo, limit.getOffset());
+                if (!exchangeNode.isMerge()) {
+                    SortInfo sortInfo = new SortInfo(Lists.newArrayList(), Operator.DEFAULT_LIMIT,
+                            Lists.newArrayList(new IntLiteral(1)), Lists.newArrayList(true), Lists.newArrayList(false));
+                    exchangeNode.setMergeInfo(sortInfo, limit.getOffset());
+                } else if (exchangeNode.getOffset() <= 0) {
+                    exchangeNode.setOffset(limit.getOffset());
+                } else if (exchangeNode.getOffset() > 0) {
+                    exchangeNode.setOffset(limit.getOffset() + exchangeNode.getOffset());
+                }
+
                 exchangeNode.computeStatistics(optExpression.getStatistics());
             }
 
