@@ -80,7 +80,8 @@ public:
                              bool miss_auto_increment_column, int64_t table_id, int64_t immutable_tablet_size,
                              MemTracker* mem_tracker, int64_t max_buffer_size, int64_t schema_id,
                              const PartialUpdateMode& partial_update_mode,
-                             const std::map<string, string>* column_to_expr_value, PUniqueId load_id)
+                             const std::map<string, string>* column_to_expr_value, PUniqueId load_id,
+                             RuntimeProfile* profile)
             : _tablet_manager(tablet_manager),
               _tablet_id(tablet_id),
               _txn_id(txn_id),
@@ -95,7 +96,8 @@ public:
               _miss_auto_increment_column(miss_auto_increment_column),
               _partial_update_mode(partial_update_mode),
               _column_to_expr_value(column_to_expr_value),
-              _load_id(std::move(load_id)) {}
+              _load_id(std::move(load_id)),
+              _profile(profile) {}
 
     ~DeltaWriterImpl() = default;
 
@@ -221,6 +223,7 @@ private:
     const std::map<string, string>* _column_to_expr_value = nullptr;
 
     PUniqueId _load_id;
+    RuntimeProfile* _profile = nullptr;
     // Used for maintain spill block for bulk load.
     std::unique_ptr<LoadSpillBlockManager> _load_spill_block_mgr;
     // End of data ingestion
@@ -271,7 +274,8 @@ Status DeltaWriterImpl::build_schema_and_writer() {
                 RETURN_IF_ERROR(_load_spill_block_mgr->init());
             }
             // Init SpillMemTableSink
-            _mem_table_sink = std::make_unique<SpillMemTableSink>(_load_spill_block_mgr.get(), _tablet_writer.get());
+            _mem_table_sink =
+                    std::make_unique<SpillMemTableSink>(_load_spill_block_mgr.get(), _tablet_writer.get(), _profile);
         } else {
             // Init normal TabletWriterSink
             _mem_table_sink = std::make_unique<TabletWriterSink>(_tablet_writer.get());
@@ -864,10 +868,10 @@ StatusOr<DeltaWriterBuilder::DeltaWriterPtr> DeltaWriterBuilder::build() {
     if (UNLIKELY(_schema_id == 0)) {
         return Status::InvalidArgument("schema_id not set");
     }
-    auto impl =
-            new DeltaWriterImpl(_tablet_mgr, _tablet_id, _txn_id, _partition_id, _slots, _merge_condition,
-                                _miss_auto_increment_column, _table_id, _immutable_tablet_size, _mem_tracker,
-                                _max_buffer_size, _schema_id, _partial_update_mode, _column_to_expr_value, _load_id);
+    auto impl = new DeltaWriterImpl(_tablet_mgr, _tablet_id, _txn_id, _partition_id, _slots, _merge_condition,
+                                    _miss_auto_increment_column, _table_id, _immutable_tablet_size, _mem_tracker,
+                                    _max_buffer_size, _schema_id, _partial_update_mode, _column_to_expr_value, _load_id,
+                                    _profile);
     return std::make_unique<DeltaWriter>(impl);
 }
 

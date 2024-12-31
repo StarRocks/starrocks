@@ -129,6 +129,10 @@ public:
     // allow to set custom tablet schema for writer, used in partial update
     void set_tablet_schema(TabletSchemaCSPtr schema) { _schema = std::move(schema); }
 
+    const starrocks::TabletSchemaCSPtr& tablet_schema() const { return _schema; }
+
+    void set_auto_flush(bool auto_flush) { _auto_flush = auto_flush; }
+
     void set_fs(const std::shared_ptr<FileSystem> fs) { _fs = std::move(fs); }
     void set_location_provider(const std::shared_ptr<LocationProvider> location_provider) {
         _location_provider = std::move(location_provider);
@@ -147,6 +151,7 @@ protected:
     int64_t _data_size = 0;
     uint32_t _seg_id = 0;
     bool _finished = false;
+    bool _auto_flush = true;
     std::shared_ptr<FileSystem> _fs;
     std::shared_ptr<LocationProvider> _location_provider;
     OlapWriterStatistics _stats;
