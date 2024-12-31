@@ -1245,7 +1245,6 @@ public class GlobalStateMgr {
         dominationStartTimeMs = System.currentTimeMillis();
 
         try {
-<<<<<<< HEAD
             // Log meta_version
             int starrocksMetaVersion = MetaContext.get().getStarRocksMetaVersion();
             if (starrocksMetaVersion < FeConstants.STARROCKS_META_VERSION) {
@@ -1253,19 +1252,7 @@ public class GlobalStateMgr {
                 MetaContext.get().setStarRocksMetaVersion(FeConstants.STARROCKS_META_VERSION);
             }
 
-            // Log the first frontend
-            if (nodeMgr.isFirstTimeStartUp()) {
-                // if isFirstTimeStartUp is true, frontends must contain this Node.
-                Frontend self = nodeMgr.getMySelf();
-                Preconditions.checkNotNull(self);
-                // OP_ADD_FIRST_FRONTEND is emitted, so it can write to BDBJE even if canWrite is false
-                editLog.logAddFirstFrontend(self);
-            }
-
-            if (Config.bdbje_reset_election_group) {
-=======
             if (Config.bdbje_reset_election_group || nodeMgr.isFirstTimeStartUp()) {
->>>>>>> d1c333520a ([Enhancement] Support fe starting with only image no bdb log (#54514))
                 nodeMgr.resetFrontends();
             }
 
