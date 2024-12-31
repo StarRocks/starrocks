@@ -1554,6 +1554,8 @@ CONF_mInt32(merge_commit_txn_state_poll_max_fail_times, "2");
 CONF_mBool(enable_load_spill, "false");
 // Max chunk bytes which allow to spill per flush. Default is 10MB.
 CONF_mInt64(load_spill_max_chunk_bytes, "10485760");
+// Max merge input bytes during spill merge. Default is 1024MB.
+CONF_mInt64(load_spill_max_merge_bytes, "1073741824");
 
 // ignore union type tag in avro kafka routine load
 CONF_mBool(avro_ignore_union_type_tag, "false");
