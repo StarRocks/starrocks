@@ -18,13 +18,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.Table;
-<<<<<<< HEAD
-=======
-import com.starrocks.connector.ConnectorMetadatRequestContext;
-import com.starrocks.connector.ConnectorProperties;
-import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.DatabaseTableName;
->>>>>>> bf3b2738dc ([BugFix] cache delta lake snapshot instead of table object (#54473))
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.hive.HiveMetaClient;
