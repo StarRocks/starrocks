@@ -1,0 +1,29 @@
+-- name: test_offset_with_sub_query_topn
+CREATE TABLE `tx3` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` varchar(20) NULL COMMENT "",
+  `c2` varchar(200) NULL COMMENT "",
+  `c3` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`, `c1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`, `c1`) BUCKETS 2
+PROPERTIES (
+"replication_num" = "1",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+insert into tx3 SELECT generate_series, generate_series, generate_series, generate_series FROM TABLE(generate_series(1,  1400));
+-- result:
+-- !result
+select sum(c0) from (
+select c0 from (
+  select * from (select c0, c1 from tx3 order by c0 asc limit 1000, 600) l
+  left join (select null as cx, '1' as c1) r
+  on l.c0 =r.cx
+) b limit 600
+) x ;
+-- result:
+480200
+-- !result
