@@ -71,7 +71,6 @@ import com.starrocks.replication.ReplicationTxnCommitAttachment;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.FeNameFormat;
-import com.starrocks.thrift.TTransactionStatus;
 import com.starrocks.thrift.TUniqueId;
 import io.opentelemetry.api.trace.Span;
 import org.apache.commons.collections4.CollectionUtils;
@@ -711,16 +710,17 @@ public class DatabaseTransactionMgr {
         info.add(txnState.getErrMsg());
     }
 
-    public TransactionStatus getLabelState(String label) {
+    public TransactionStateSnapshot getLabelState(String label) {
         readLock();
         try {
             Set<Long> existingTxnIds = unprotectedGetTxnIdsByLabel(label);
             if (existingTxnIds == null || existingTxnIds.isEmpty()) {
-                return TransactionStatus.UNKNOWN;
+                return new TransactionStateSnapshot(TransactionStatus.UNKNOWN, null);
             }
             // find the latest txn (which id is largest)
             long maxTxnId = existingTxnIds.stream().max(Comparator.comparingLong(Long::valueOf)).orElse(Long.MIN_VALUE);
-            return unprotectedGetTransactionState(maxTxnId).getTransactionStatus();
+            TransactionState transactionState = unprotectedGetTransactionState(maxTxnId);
+            return new TransactionStateSnapshot(transactionState.getTransactionStatus(), transactionState.getReason());
         } finally {
             readUnlock();
         }
@@ -2012,18 +2012,15 @@ public class DatabaseTransactionMgr {
         return stateListeners;
     }
 
-    public TTransactionStatus getTxnStatus(long txnId) {
-        TransactionState transactionState;
+    public TransactionStateSnapshot getTxnState(long txnId) {
         readLock();
         try {
-            transactionState = unprotectedGetTransactionState(txnId);
+            TransactionState transactionState = unprotectedGetTransactionState(txnId);
+            return transactionState == null ? new TransactionStateSnapshot(TransactionStatus.UNKNOWN, null)
+                    : new TransactionStateSnapshot(transactionState.getTransactionStatus(), transactionState.getReason());
         } finally {
             readUnlock();
         }
-        return Optional.ofNullable(transactionState)
-                .map(TransactionState::getTransactionStatus)
-                .map(TransactionStatus::toThrift)
-                .orElse(TTransactionStatus.UNKNOWN);
     }
 
     private void checkDatabaseDataQuota() throws AnalysisException {
