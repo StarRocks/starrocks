@@ -76,6 +76,7 @@ import com.starrocks.persist.BatchModifyPartitionsInfo;
 import com.starrocks.persist.CancelDecommissionDiskInfo;
 import com.starrocks.persist.CancelDisableDiskInfo;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
+import com.starrocks.persist.ClusterSnapshotLog;
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.persist.ColumnRenameInfo;
 import com.starrocks.persist.ConsistencyCheckInfo;
@@ -773,6 +774,10 @@ public class JournalEntity implements Writable {
                 break;
             case OperationType.OP_DROP_WAREHOUSE: {
                 data = DropWarehouseLog.read(in);
+                break;
+            }
+            case OperationType.OP_CLUSTER_SNAPSHOT_LOG: {
+                data = ClusterSnapshotLog.read(in);
                 break;
             }
             default: {

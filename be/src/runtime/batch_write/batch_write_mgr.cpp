@@ -223,6 +223,7 @@ void BatchWriteMgr::receive_stream_load_rpc(ExecEnv* exec_env, brpc::Controller*
     ctx->buffer->pos += io_buf.size();
     ctx->buffer->flip();
     ctx->receive_bytes = io_buf.size();
+    ctx->mc_read_data_cost_nanos = MonotonicNanos() - ctx->start_nanos;
     ctx->status = exec_env->batch_write_mgr()->append_data(ctx);
 }
 

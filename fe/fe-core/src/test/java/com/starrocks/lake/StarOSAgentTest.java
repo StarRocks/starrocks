@@ -28,12 +28,14 @@ import com.staros.proto.FileStoreInfo;
 import com.staros.proto.FileStoreType;
 import com.staros.proto.ReplicaInfo;
 import com.staros.proto.ReplicaRole;
+import com.staros.proto.ReplicationType;
 import com.staros.proto.S3FileStoreInfo;
 import com.staros.proto.ShardGroupInfo;
 import com.staros.proto.ShardInfo;
 import com.staros.proto.StarStatus;
 import com.staros.proto.StatusCode;
 import com.staros.proto.WorkerGroupDetailInfo;
+import com.staros.proto.WorkerGroupSpec;
 import com.staros.proto.WorkerInfo;
 import com.staros.proto.WorkerState;
 import com.starrocks.common.Config;
@@ -726,6 +728,25 @@ public class StarOSAgentTest {
         List<String> addresses = starosAgent.listWorkerGroupIpPort(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
         Assert.assertEquals("127.0.0.1:8090", addresses.get(0));
         Assert.assertEquals("127.0.0.2:8091", addresses.get(1));
+    }
+
+    @Test
+    public void testCreateWorkerGroup() throws StarClientException, DdlException, StarRocksException {
+        new MockUp<StarClient>() {
+            @Mock
+            public WorkerGroupDetailInfo createWorkerGroup(String serviceId, String owner, WorkerGroupSpec spec,
+                    Map<String, String> labels, Map<String, String> properties, int replicaNumber,
+                    ReplicationType replicationType) throws StarClientException {
+                return WorkerGroupDetailInfo.newBuilder().build();
+            }
+        };
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+        starosAgent.createWorkerGroup("size", 1, null);
+        starosAgent.createWorkerGroup("size", 1, "sync");
+        starosAgent.createWorkerGroup("size", 1, "async");
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Unknown replication type aaa",
+                () -> starosAgent.createWorkerGroup("size", 1, "aaa"));
     }
 
     private Set<Long> getBackendIdsByShard(long shardId, long workerGroupId) throws StarRocksException {
