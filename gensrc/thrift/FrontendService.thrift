@@ -1072,6 +1072,7 @@ struct TLoadTxnRollbackRequest {
 
 struct TGetLoadTxnStatusResult {
     1: required Status.TTransactionStatus status
+    2: optional string reason;
 }
 
 struct TGetLoadTxnStatusRequest {
