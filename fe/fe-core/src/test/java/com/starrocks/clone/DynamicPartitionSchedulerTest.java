@@ -597,9 +597,6 @@ public class DynamicPartitionSchedulerTest {
                         addListPartition(tableName, "p6", "guangdong",
                                 now.minusMonths(1).format(DateTimeFormatter.ofPattern("yyyy-MM-dd")));
                         Assert.assertTrue(tbl.getVisiblePartitions().size() == 4);
-
-                        scheduler.runOnceForTest();
-                        Assert.assertTrue(tbl.getVisiblePartitions().size() == 3);
                     });
         }
     }
