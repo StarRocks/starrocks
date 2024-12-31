@@ -1256,6 +1256,18 @@ public class ConnectContext {
         }
     }
 
+    @Override
+    public String toString() {
+        return "ConnectContext{remoteIP=" + remoteIP +
+                ", connectionId=" + connectionId +
+                ", closed=" + closed +
+                ", isKilled=" + isKilled +
+                ", queryId=" + queryId +
+                ", stmtId=" + stmtId +
+                ", forwardedStmtId=" + forwardedStmtId +
+                '}';
+    }
+
     /**
      * Set thread-local context for the scope, and remove it after leaving the scope
      */
