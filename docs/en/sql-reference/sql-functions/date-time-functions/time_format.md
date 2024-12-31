@@ -6,12 +6,18 @@ displayed_sidebar: docs
 
 
 
-The TIME_FORMAT() function formats the time in the specified format.
+Formats TIME-type values in the specified format.
 
-* The `date` parameter is a legal date.
-* `format` Specifies the output format of the date/time.
+## Syntax
 
-The formats that can be used are:
+```Haskell
+VARCHAR TIME_FORMAT(TIME time, VARCHAR format)
+```
+
+## Parameters
+
+- `time` (Required): The time to be formatted.
+- `format` (Required): The format to use. Valid values:
 
 ```Plain Text
 %f	Microseconds (000000 to 999999)
@@ -21,12 +27,6 @@ The formats that can be used are:
 %p	AM or PM
 %S	Seconds (00 to 59)
 %s	Seconds (00 to 59)
-```
-
-## Syntax
-
-```Haskell
-VARCHAR TIME_FORMAT(TIME time, VARCHAR format)
 ```
 
 ## Examples
