@@ -29,12 +29,19 @@ bool AggregateBlockingSourceOperator::is_finished() const {
 }
 
 Status AggregateBlockingSourceOperator::set_finished(RuntimeState* state) {
+    auto notify = _aggregator->defer_notify_sink();
     return _aggregator->set_finished();
 }
 
 void AggregateBlockingSourceOperator::close(RuntimeState* state) {
     _aggregator->unref(state);
     SourceOperator::close(state);
+}
+
+Status AggregateBlockingSourceOperator::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(SourceOperator::prepare(state));
+    _aggregator->attach_source_observer(state, this->_observer);
+    return Status::OK();
 }
 
 StatusOr<ChunkPtr> AggregateBlockingSourceOperator::pull_chunk(RuntimeState* state) {

@@ -61,12 +61,15 @@ Status ChunkSource::buffer_next_batch_chunks_blocking(RuntimeState* state, size_
         {
             SCOPED_RAW_TIMER(&time_spent_ns);
 
+            // TODO: process when buffer full
             if (_chunk_token == nullptr && (_chunk_token = _chunk_buffer.limiter()->pin(1)) == nullptr) {
                 break;
             }
 
             ChunkPtr chunk;
             _status = _read_chunk(state, &chunk);
+            // notify when generate new chunk
+            auto notify = scan_defer_notify(_scan_op);
             // we always output a empty chunk instead of nullptr, because we need set tablet_id and is_last_chunk flag
             // in the chunk.
             if (chunk == nullptr) {

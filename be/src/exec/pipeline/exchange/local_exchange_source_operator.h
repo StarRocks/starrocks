@@ -22,7 +22,7 @@
 #include "exec/pipeline/source_operator.h"
 
 namespace starrocks::pipeline {
-
+class LocalExchanger;
 class LocalExchangeSourceOperator final : public SourceOperator {
     class PartitionChunk {
     public:
@@ -72,6 +72,7 @@ public:
 
     Status set_finished(RuntimeState* state) override;
     Status set_finishing(RuntimeState* state) override {
+        auto notify = defer_notify();
         std::lock_guard<std::mutex> l(_chunk_lock);
         _is_finished = true;
         return Status::OK();
@@ -98,6 +99,8 @@ public:
     void enter_release_memory_mode() override;
     void set_execute_mode(int performance_level) override;
     void update_exec_stats(RuntimeState* state) override {}
+
+    std::string get_name() const override;
 
 private:
     ChunkPtr _pull_passthrough_chunk(RuntimeState* state);
@@ -153,9 +156,13 @@ public:
         return source;
     }
 
+    void set_exchanger(LocalExchanger* exchanger) { _exchanger = exchanger; }
+    LocalExchanger* exchanger() { return _exchanger; }
+
     std::vector<LocalExchangeSourceOperator*>& get_sources() { return _sources; }
 
 private:
+    LocalExchanger* _exchanger = nullptr;
     std::shared_ptr<ChunkBufferMemoryManager> _memory_manager;
     std::vector<LocalExchangeSourceOperator*> _sources;
 };

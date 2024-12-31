@@ -53,7 +53,14 @@ bool AggregateStreamingSourceOperator::is_finished() const {
 }
 
 Status AggregateStreamingSourceOperator::set_finished(RuntimeState* state) {
+    auto notify = _aggregator->defer_notify_sink();
     return _aggregator->set_finished();
+}
+
+Status AggregateStreamingSourceOperator::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(SourceOperator::prepare(state));
+    _aggregator->attach_source_observer(state, this->_observer);
+    return Status::OK();
 }
 
 void AggregateStreamingSourceOperator::close(RuntimeState* state) {
@@ -97,6 +104,7 @@ Status AggregateStreamingSourceOperator::_output_chunk_from_hash_map(ChunkPtr* c
         }
     });
 
+    // TODO: notify sink here
     if (need_reset_aggregator) {
         if (!_aggregator->is_sink_complete()) {
             RETURN_IF_ERROR(_aggregator->reset_state(state, {}, nullptr, false));
