@@ -72,6 +72,11 @@ public class AnalyzeUpdateTest {
     }
 
     @Test
+    public void testUpdateSingleColumnMultipleTimesInSingleUpdateStatement() {
+        analyzeSuccess("UPDATE tprimary set v1 = 'v1', v1 = 'v1v1' WHERE pk = 1");
+    }
+
+    @Test
     public void testMulti() {
         analyzeSuccess("update tprimary set v2 = tp2.v2 from tprimary2 tp2 where tprimary.pk = tp2.pk");
 
