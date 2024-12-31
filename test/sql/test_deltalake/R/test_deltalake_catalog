@@ -304,6 +304,12 @@ select a.c_int, b.c_map, b.c_nest.c_struct, a.c_nest.c_array[6] from delta_test_
 1	{1:{"c_date":"2001-01-03"}}	None	None
 3	{33:{"c_date":"2003-01-02"}}	None	None
 -- !result
+select a.c_int, b.c_map, b.c_nest.c_struct_new, a.c_nest.c_array[6] from delta_test_${uuid0}.delta_oss_db.delta_nested_type_par a join delta_test_${uuid0}.delta_oss_db.delta_nested_type_par b on a.c_int = b.c_nest.c_struct_new.c_int order by 1;
+-- result:
+1	{1:{"c_date":"2001-01-03"}}	{"c_int":1}	None
+1	{1:{"c_date":"2001-01-03"}}	{"c_int":1}	None
+3	{33:{"c_date":"2003-01-02"}}	{"c_int":3}	None
+-- !result
 drop catalog delta_test_${uuid0}
 -- result:
 -- !result
