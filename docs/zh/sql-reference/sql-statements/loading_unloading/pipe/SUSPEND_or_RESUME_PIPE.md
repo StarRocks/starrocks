@@ -16,7 +16,7 @@ displayed_sidebar: docs
 ## 语法
 
 ```SQL
-ALTER PIPE [ IF EXISTS ] <pipe_name> { SUSPEND | RESUME [ IF SUSPENDED ] }
+ALTER PIPE <pipe_name> { SUSPEND | RESUME [ IF SUSPENDED ] }
 ```
 
 ## 参数说明
