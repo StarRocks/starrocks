@@ -1535,4 +1535,20 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         }
     }
 
+    @Test
+    public void testGetCollectibleColumns() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE test.t_gen_col (" +
+                " c1 datetime NOT NULL," +
+                " c2 bigint," +
+                " c3 DATETIME NULL AS date_trunc('month', c1) " +
+                " ) " +
+                " DUPLICATE KEY(c1) " +
+                " PARTITION BY (c2, c3) " +
+                " PROPERTIES('replication_num'='1')");
+        Table table = starRocksAssert.getTable("test", "t_gen_col");
+        List<String> cols =  StatisticUtils.getCollectibleColumns(table);
+        Assert.assertTrue(cols.size() == 2);
+        Assert.assertTrue(!cols.contains("c3"));
+        starRocksAssert.dropTable("test.t_gen_col");
+    }
 }
