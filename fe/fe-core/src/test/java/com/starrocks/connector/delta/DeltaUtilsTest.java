@@ -97,7 +97,7 @@ public class DeltaUtilsTest {
                 new DeltaLakeSnapshot("db0", "table0", null, snapshot, 123, "path"));
         Assert.assertEquals(2, deltaLakeTable.getFullSchema().size());
         Assert.assertEquals("catalog0", deltaLakeTable.getCatalogName());
-        Assert.assertEquals("db0", deltaLakeTable.getCatalogDBName());
-        Assert.assertEquals("table0", deltaLakeTable.getCatalogTableName());
+        Assert.assertEquals("db0", deltaLakeTable.getDbName());
+        Assert.assertEquals("table0", deltaLakeTable.getTableName());
     }
 }
