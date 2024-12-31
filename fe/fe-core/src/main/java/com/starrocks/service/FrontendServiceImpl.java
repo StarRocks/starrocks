@@ -345,6 +345,7 @@ import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionNotFoundException;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TransactionStateSnapshot;
 import com.starrocks.transaction.TxnCommitAttachment;
 import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.WarehouseInfo;
@@ -1494,10 +1495,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
 
         try {
-            TTransactionStatus status =
-                    GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTxnStatus(db, request.getTxnId());
-            LOG.debug("txn {} status is {}", request.getTxnId(), status);
-            result.setStatus(status);
+            TransactionStateSnapshot transactionStateSnapshot =
+                    GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTxnState(db, request.getTxnId());
+            LOG.debug("txn {} status is {}", request.getTxnId(), transactionStateSnapshot);
+            result.setStatus(transactionStateSnapshot.getStatus().toThrift());
+            result.setReason(transactionStateSnapshot.getReason());
         } catch (Throwable e) {
             result.setStatus(TTransactionStatus.UNKNOWN);
             LOG.warn("catch unknown result.", e);
