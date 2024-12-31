@@ -544,7 +544,7 @@ public class FunctionAnalyzer {
                 }
             }
         }
-        
+
         if (fnName.getFunction().equals(FunctionSet.COVAR_POP) || fnName.getFunction().equals(FunctionSet.COVAR_SAMP) ||
                 fnName.getFunction().equals(FunctionSet.CORR)) {
             if (functionCallExpr.getChildren().size() != 2) {
