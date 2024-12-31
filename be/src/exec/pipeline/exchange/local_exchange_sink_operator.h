@@ -64,6 +64,8 @@ public:
 
     void update_exec_stats(RuntimeState* state) override {}
 
+    std::string get_name() const override;
+
 private:
     bool _is_finished = false;
     const std::shared_ptr<LocalExchanger>& _exchanger;

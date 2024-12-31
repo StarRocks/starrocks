@@ -21,7 +21,9 @@
 #include "column/column_access_path.h"
 #include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/context_with_dependency.h"
+#include "exec/pipeline/operator.h"
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
+#include "exec/pipeline/schedule/observer.h"
 #include "runtime/global_dict/parser.h"
 #include "storage/rowset/rowset.h"
 #include "util/phmap/phmap_fwd_decl.h"
@@ -124,6 +126,17 @@ public:
 
     int64_t get_scan_table_id() const { return _scan_table_id; }
 
+    void attach_observer(RuntimeState* state, PipelineObserver* observer) { _observable.add_observer(state, observer); }
+    void notify_observers() { _observable.notify_source_observers(); }
+    size_t only_one_observer() const { return _observable.num_observers() == 1; }
+    bool active_inputs_empty_event() {
+        if (!_active_inputs_empty.load(std::memory_order_acquire)) {
+            return false;
+        }
+        bool val = true;
+        return _active_inputs_empty.compare_exchange_strong(val, false);
+    }
+
 private:
     OlapScanNode* _scan_node;
     int64_t _scan_table_id;
@@ -142,7 +155,9 @@ private:
             typename std::allocator<ActiveInputKey>, NUM_LOCK_SHARD_LOG, std::mutex, true>;
     BalancedChunkBuffer& _chunk_buffer; // Shared Chunk buffer for all scan operators, owned by OlapScanContextFactory.
     ActiveInputSet _active_inputs;      // Maintain the active chunksource
-    bool _shared_scan;                  // Enable shared_scan
+    std::atomic_int _num_active_inputs{};
+    std::atomic_bool _active_inputs_empty{};
+    bool _shared_scan; // Enable shared_scan
 
     std::atomic<bool> _is_prepare_finished{false};
 
@@ -153,6 +168,9 @@ private:
     std::vector<TabletSharedPtr> _tablets;
     MultiRowsetReleaseGuard _rowset_release_guard;
     ConcurrentJitRewriter& _jit_rewriter;
+
+    // the scan operator observe when task finished
+    Observable _observable;
 };
 
 // OlapScanContextFactory creates different contexts for each scan operator, if _shared_scan is false.

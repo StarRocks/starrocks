@@ -729,10 +729,12 @@ bool Aggregator::is_chunk_buffer_empty() {
 }
 
 ChunkPtr Aggregator::poll_chunk_buffer() {
+    auto notify = defer_notify_sink();
     return _limited_buffer->pull();
 }
 
 void Aggregator::offer_chunk_to_buffer(const ChunkPtr& chunk) {
+    auto notify = defer_notify_source();
     _limited_buffer->push(chunk);
 }
 
