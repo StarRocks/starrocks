@@ -203,12 +203,16 @@ Status TabletMeta::save_meta(DataDir* data_dir, bool skip_tablet_schema) {
 }
 
 void TabletMeta::save_tablet_schema(const TabletSchemaCSPtr& tablet_schema, std::vector<RowsetSharedPtr>& committed_rs,
-                                    DataDir* data_dir) {
+                                    DataDir* data_dir, bool is_primary_key) {
     std::unique_lock wrlock(_meta_lock);
     _schema = tablet_schema;
     for (auto& rs : committed_rs) {
         RowsetMetaPB meta_pb;
         rs->rowset_meta()->get_full_meta_pb(&meta_pb);
+        if (is_primary_key && rs->rowset_meta()->rowset_state() == RowsetStatePB::VISIBLE) {
+            LOG(INFO) << "skip visible rowset: " << rs->rowset_meta()->rowset_id() << " of tablet: " << tablet_id();
+            continue;
+        }
         Status res = RowsetMetaManager::save(data_dir->get_meta(), tablet_uid(), meta_pb);
         LOG_IF(FATAL, !res.ok()) << "failed to save rowset " << rs->rowset_id() << " to local meta store: " << res;
         rs->rowset_meta()->set_skip_tablet_schema(false);
