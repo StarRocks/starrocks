@@ -893,7 +893,8 @@ public class SchemaChangeHandler extends AlterHandler {
         if (modColumn.isKey() || !modColumn.getType().isScalarType()
                 || oriColumn.isKey()
                 || !oriColumn.getType().isScalarType()
-                || oriColumn.getType().isDecimalOfAnyVersion()) {
+                || oriColumn.getType().isDecimalOfAnyVersion()
+                || oriColumn.isGeneratedColumn()) {
             fastSchemaEvolution = false;
         }
         return fastSchemaEvolution;
