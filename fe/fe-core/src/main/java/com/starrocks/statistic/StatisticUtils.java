@@ -369,6 +369,10 @@ public class StatisticUtils {
         }
         List<String> columns = new ArrayList<>();
         for (Column column : table.getBaseSchema()) {
+            // disable stats collection for generated columns
+            if (column.isGeneratedColumn()) {
+                continue;
+            }
             if (!column.isAggregated()) {
                 columns.add(column.getName());
             } else if (isPrimaryEngine && column.getAggregationType().equals(AggregateType.REPLACE)) {
