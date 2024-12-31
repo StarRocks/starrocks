@@ -248,7 +248,7 @@ public class Pipe implements GsonPostProcessable {
             if (StringUtils.isEmpty(file.insertLabel)) {
                 file.loadState = FileListRepo.PipeFileState.ERROR;
             } else {
-                TransactionStatus txnStatus = txnMgr.getLabelStatus(dbId, file.insertLabel);
+                TransactionStatus txnStatus = txnMgr.getLabelStatus(dbId, file.insertLabel).getStatus();
                 if (txnStatus == null || txnStatus.isFailed()) {
                     file.loadState = FileListRepo.PipeFileState.ERROR;
                 } else {
