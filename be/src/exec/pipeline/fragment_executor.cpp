@@ -975,7 +975,6 @@ Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const
     }
 
     if (params.__isset.node_to_per_driver_seq_scan_ranges) {
-        UnifiedExecPlanFragmentParams uf_request{request, request};
         for (const auto& [node_id, per_driver_scan_ranges] : params.node_to_per_driver_seq_scan_ranges) {
             auto iter = fragment_ctx->morsel_queue_factories().find(node_id);
             if (iter == fragment_ctx->morsel_queue_factories().end()) {
