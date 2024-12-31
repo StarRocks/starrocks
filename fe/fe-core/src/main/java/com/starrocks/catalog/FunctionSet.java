@@ -1625,6 +1625,29 @@ public class FunctionSet {
                     Lists.newArrayList(t, Type.INT, Type.VARCHAR), Type.BIGINT, Type.VARBINARY,
                     true, false, true));
         }
+        
+        ImmutableList<Type> DS_FREQUENT_SUPPORTED_TYPES =
+                ImmutableList.<Type>builder()
+                        .addAll(Type.FLOAT_TYPES)
+                        .addAll(Type.INTEGER_TYPES)
+                        .addAll(Type.STRING_TYPES)
+                        .addAll(Type.DATE_TYPES)
+                        .build();
+        for (Type type : DS_FREQUENT_SUPPORTED_TYPES) {
+            ArrayType retType = DS_FREQUENT_RET_TYPE_BUILDER.apply(type);
+            addBuiltin(AggregateFunction.createBuiltin(DS_FREQUENT,
+                    Lists.newArrayList(type), retType, Type.VARBINARY,
+                    false, true, true));
+            addBuiltin(AggregateFunction.createBuiltin(DS_FREQUENT,
+                    Lists.newArrayList(type, Type.BIGINT), retType, Type.VARBINARY,
+                    false, true, true));
+            addBuiltin(AggregateFunction.createBuiltin(DS_FREQUENT,
+                    Lists.newArrayList(type, Type.BIGINT, Type.INT), retType, Type.VARBINARY,
+                    false, true, true));
+            addBuiltin(AggregateFunction.createBuiltin(DS_FREQUENT,
+                    Lists.newArrayList(type, Type.BIGINT, Type.INT, Type.INT), retType, Type.VARBINARY,
+                    false, true, true));
+        }
     }
 
     public static final java.util.function.Function<Type, ArrayType> DS_FREQUENT_RET_TYPE_BUILDER =

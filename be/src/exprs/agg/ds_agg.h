@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "exprs/agg/ds_frequent_state.h"
 #include "exprs/agg/ds_hll_state.h"
 #include "exprs/agg/ds_state.h"
 
