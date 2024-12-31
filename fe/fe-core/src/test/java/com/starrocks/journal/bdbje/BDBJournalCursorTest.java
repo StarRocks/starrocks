@@ -85,7 +85,7 @@ public class BDBJournalCursorTest {
                 selfNodeHostPort,
                 selfNodeHostPort,
                 true);
-        environment.setup();
+        environment.setup(true);
         return environment;
     }
 
