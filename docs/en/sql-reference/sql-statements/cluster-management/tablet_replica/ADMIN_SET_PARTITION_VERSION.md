@@ -20,7 +20,7 @@ This operation requires the SYSTEM-level OPERATE privilege. You can follow the i
 
 ```sql
 ADMIN SET TABLE <table_name> PARTITION ( <partition_name> | <partition_id> ) 
-TO VERSION <version>
+VERSION TO <version>
 ```
 
 ## Parameters
@@ -35,17 +35,17 @@ TO VERSION <version>
 1. Set the version of the non-partitioned table `t1` to `10`.
 
     ```sql
-    ADMIN SET TABLE t1 PARTITION(t1) TO VERSION 10;
+    ADMIN SET TABLE t1 PARTITION(t1) VERSION TO 10;
     ```
 
 2. Set the version of partition `p1` in table `t2` to `10`.
 
     ```sql
-    ADMIN SET TABLE t2 PARTITION(p1) TO VERSION 10;
+    ADMIN SET TABLE t2 PARTITION(p1) VERSION TO 10;
     ```
 
 3. Set the version of the partition whose ID is `123456` to `10`. `t3` is a table with the random bucketing strategy.
 
     ```sql
-    ADMIN SET TABLE t3 PARTITION('123456') TO VERSION 10;
+    ADMIN SET TABLE t3 PARTITION('123456') VERSION TO 10;
     ```
