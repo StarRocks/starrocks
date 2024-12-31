@@ -486,7 +486,7 @@ Status IsomorphicBatchWrite::_wait_for_load_status(StreamLoadContext* data_ctx, 
     case TTransactionStatus::VISIBLE:
         return Status::OK();
     case TTransactionStatus::ABORTED:
-        return Status::InternalError("Load is aborted because of failure");
+        return Status::InternalError("Load is aborted, reason: " + response.reason);
     default:
         return Status::InternalError("Load status is unknown: " + to_string(response.status));
     }

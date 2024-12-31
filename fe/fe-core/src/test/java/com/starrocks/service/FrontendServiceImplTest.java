@@ -1106,16 +1106,25 @@ public class FrontendServiceImplTest {
         request.setTxnId(100);
         TGetLoadTxnStatusResult result1 = impl.getLoadTxnStatus(request);
         Assert.assertEquals(TTransactionStatus.UNKNOWN, result1.getStatus());
+        Assert.assertNull(result1.getReason());
         request.setDb("test");
         TGetLoadTxnStatusResult result2 = impl.getLoadTxnStatus(request);
         Assert.assertEquals(TTransactionStatus.UNKNOWN, result2.getStatus());
+        Assert.assertNull(result2.getReason());
         request.setTxnId(transactionId);
         GlobalStateMgr.getCurrentState().setFrontendNodeType(FrontendNodeType.FOLLOWER);
         TGetLoadTxnStatusResult result3 = impl.getLoadTxnStatus(request);
         Assert.assertEquals(TTransactionStatus.UNKNOWN, result3.getStatus());
+        Assert.assertNull(result3.getReason());
         GlobalStateMgr.getCurrentState().setFrontendNodeType(FrontendNodeType.LEADER);
         TGetLoadTxnStatusResult result4 = impl.getLoadTxnStatus(request);
         Assert.assertEquals(TTransactionStatus.PREPARE, result4.getStatus());
+        Assert.assertEquals("", result4.getReason());
+        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().abortTransaction(
+                db.getId(), transactionId, "artificial failure");
+        TGetLoadTxnStatusResult result5 = impl.getLoadTxnStatus(request);
+        Assert.assertEquals(TTransactionStatus.ABORTED, result5.getStatus());
+        Assert.assertEquals("artificial failure", result5.getReason());
     }
 
     @Test
