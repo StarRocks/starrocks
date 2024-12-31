@@ -37,11 +37,10 @@ public:
     // a normal implements
     static void multi_select_if(SelectVec __restrict select_vec[], int select_vec_size, Container& dst,
                                 Container* __restrict select_list[], int select_list_size,
-                                const std::vector<bool>& then_column_is_const) {
+                                const std::vector<bool>& then_column_is_const, const int row_sz) {
         DCHECK_GT(select_list_size, 0);
         DCHECK_EQ(select_vec_size + 1, select_list_size);
 
-        int row_sz = select_list[0]->size();
         int processed_rows = 0;
         SelectVec __restrict handle_select_vec[select_vec_size];
         // copy select vector pointer
@@ -115,7 +114,9 @@ public:
                 }
 
                 for (int i = 0; i < select_list_size; ++i) {
-                    handle_select_data[i] += 32;
+                    if (!then_column_is_const[i]) {
+                        handle_select_data[i] += 32;
+                    }
                 }
                 processed_rows += 32;
             }
@@ -231,15 +232,19 @@ public:
 #endif
 
         for (int i = processed_rows; i < row_sz; ++i) {
-            int index = 0;
+            int colIndex = 0;
             int j;
             for (j = 0; j < select_vec_size; ++j) {
                 if (select_vec[j][i]) {
                     break;
                 }
             }
-            index = j;
-            dst[i] = (*select_list[index])[i];
+            colIndex = j;
+            if (then_column_is_const[colIndex]) {
+                dst[i] = (*select_list[colIndex])[0];
+            } else {
+                dst[i] = (*select_list[colIndex])[i];
+            }
         }
     }
 };

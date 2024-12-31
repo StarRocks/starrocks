@@ -613,8 +613,8 @@ private:
                     auto& container = res->get_data();
                     container.resize(size);
                     SIMD_muti_selector<ResultType>::multi_select_if(select_vec, when_column_size, container,
-                                                                    select_list, then_column_size,
-                                                                    then_column_is_const);
+                                                                    select_list, then_column_size, then_column_is_const,
+                                                                    size);
                     return res;
                 }
             }
