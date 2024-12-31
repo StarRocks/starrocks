@@ -293,6 +293,28 @@ public class MysqlSchemaResolverTest {
     }
 
     @Test
+    public void testGetPartitionsRsNonRecord() {
+        try {
+            new Expectations() {
+                {
+                    preparedStatement.executeQuery();
+                    result = null;
+                    minTimes = 0;
+                }
+            };
+            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
+            JDBCTable jdbcTable = new JDBCTable(100000, "tbl1", Arrays.asList(new Column("d", Type.VARCHAR)),
+                    Arrays.asList(new Column("d", Type.VARCHAR)), "test", "catalog", properties);
+            Integer size = jdbcMetadata.getPartitions(jdbcTable, Arrays.asList("tbl1")).size();
+            Assert.assertTrue(size == 1);
+
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
+            Assert.fail();
+        }
+    }
+
+    @Test
     public void testMysqlInvalidPartition() {
         try {
             MockResultSet invalidPartition = new MockResultSet("partitions");
