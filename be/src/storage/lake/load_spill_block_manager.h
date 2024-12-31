@@ -29,6 +29,7 @@ public:
     bool empty();
     // No thread safe, UT only
     spill::BlockPtr get_block(size_t gid, size_t bid);
+    std::vector<spill::BlockGroup>& block_groups() { return _block_groups; }
 
 private:
     // Mutex for the container.
@@ -48,6 +49,9 @@ public:
 
     // Default destructor.
     ~LoadSpillBlockManager();
+
+    int64_t tablet_id() const { return _tablet_id; }
+    int64_t txn_id() const { return _txn_id; }
 
     // Initializes the LoadSpillBlockManager.
     Status init();
