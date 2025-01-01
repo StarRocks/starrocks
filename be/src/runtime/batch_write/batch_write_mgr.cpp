@@ -59,7 +59,7 @@ Status BatchWriteMgr::append_data(StreamLoadContext* data_ctx) {
 StatusOr<IsomorphicBatchWriteSharedPtr> BatchWriteMgr::_get_batch_write(const starrocks::BatchWriteId& batch_write_id,
                                                                         bool create_if_missing) {
     {
-        std::shared_lock<std::shared_mutex> lock(_mutex);
+        std::shared_lock<bthreads::BThreadSharedMutex> lock(_rw_mutex);
         auto it = _batch_write_map.find(batch_write_id);
         if (it != _batch_write_map.end()) {
             return it->second;
@@ -69,7 +69,7 @@ StatusOr<IsomorphicBatchWriteSharedPtr> BatchWriteMgr::_get_batch_write(const st
         return Status::NotFound("");
     }
 
-    std::unique_lock<std::shared_mutex> lock(_mutex);
+    std::unique_lock<bthreads::BThreadSharedMutex> lock(_rw_mutex);
     if (_stopped) {
         return Status::ServiceUnavailable("Batch write is stopped");
     }
@@ -92,7 +92,7 @@ StatusOr<IsomorphicBatchWriteSharedPtr> BatchWriteMgr::_get_batch_write(const st
 void BatchWriteMgr::stop() {
     std::vector<IsomorphicBatchWriteSharedPtr> stop_writes;
     {
-        std::unique_lock<std::shared_mutex> lock(_mutex);
+        std::unique_lock<bthreads::BThreadSharedMutex> lock(_rw_mutex);
         if (_stopped) {
             return;
         }

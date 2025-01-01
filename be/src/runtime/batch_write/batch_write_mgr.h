@@ -14,12 +14,12 @@
 
 #pragma once
 
-#include <shared_mutex>
 #include <unordered_map>
 
 #include "common/statusor.h"
 #include "runtime/batch_write/isomorphic_batch_write.h"
 #include "runtime/stream_load/stream_load_context.h"
+#include "util/bthreads/bthread_shared_mutex.h"
 #include "util/bthreads/executor.h"
 
 namespace brpc {
@@ -58,7 +58,7 @@ private:
                                                              bool create_if_missing);
 
     std::unique_ptr<bthreads::ThreadPoolExecutor> _executor;
-    std::shared_mutex _mutex;
+    bthreads::BThreadSharedMutex _rw_mutex;
     std::unordered_map<BatchWriteId, IsomorphicBatchWriteSharedPtr, BatchWriteIdHash, BatchWriteIdEqual>
             _batch_write_map;
     bool _stopped{false};
