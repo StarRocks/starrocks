@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # DROP REPOSITORY
 
-## Description
-
 Deletes a repository. Repositories are used to store data snapshots for data backup and restoration.
 
 > **CAUTION**

@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # SHOW BACKUP
 
-## 功能
-
 查看指定数据库中的备份任务。更多信息，请见 备份和恢复。
 
 > **说明**

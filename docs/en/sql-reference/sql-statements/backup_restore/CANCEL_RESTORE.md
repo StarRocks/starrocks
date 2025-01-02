@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # CANCEL RESTORE
 
-## Description
-
 Cancels an ongoing RESTORE task in a specified database.
 
 > **CAUTION**
