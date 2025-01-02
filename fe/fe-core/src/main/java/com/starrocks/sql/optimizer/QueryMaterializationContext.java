@@ -23,6 +23,7 @@ import com.google.api.client.util.Sets;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MvRefreshArbiter;
 import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.common.Config;
 import com.starrocks.common.profile.Tracers;
@@ -41,7 +42,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import static com.starrocks.catalog.MvRefreshArbiter.getMVTimelinessUpdateInfo;
 
 /**
  * Store materialized view context during the query lifecycle which is seperated from per materialized view's context.
@@ -69,6 +69,10 @@ public class QueryMaterializationContext {
     // It can be be used for more situations later.
     private Cache<Object, Object> mvQueryContextCache = null;
 
+    // mvQueryContextCache is enabled when related mv is more than 1 since the cache is used to
+    // cache query predicates rewrite for different mvs.
+    private boolean isEnableQueryContextCache = false;
+    // used to cache partition traits result for the connector
     private final QueryCacheStats queryCacheStats = new QueryCacheStats();
 
     /**
@@ -99,8 +103,12 @@ public class QueryMaterializationContext {
     public QueryMaterializationContext() {
     }
 
+    public void setEnableQueryContextCache(boolean enableQueryContextCache) {
+        isEnableQueryContextCache = enableQueryContextCache;
+    }
+
     public Cache<Object, Object> getMvQueryContextCache() {
-        if (mvQueryContextCache == null) {
+        if (isEnableQueryContextCache && mvQueryContextCache == null) {
             mvQueryContextCache = Caffeine.newBuilder()
                     .maximumSize(Config.mv_query_context_cache_max_size)
                     .recordStats()
@@ -112,16 +120,21 @@ public class QueryMaterializationContext {
     public PredicateSplit getPredicateSplit(Set<ScalarOperator> predicates,
                                             ReplaceColumnRefRewriter columnRefRewriter) {
         // Cache predicate split for predicates because it's time costing if there are too many materialized views.
-        Object cached = getMvQueryContextCache().getIfPresent(predicates);
-        if (cached != null) {
-            return (PredicateSplit) cached;
+        var cache = getMvQueryContextCache();
+        if (cache == null) {
+            return PredicateSplit.splitPredicate(rewriteOptExprCompoundPredicate(predicates, columnRefRewriter));
+        } else {
+            Object cached = cache.getIfPresent(predicates);
+            if (cached != null) {
+                return (PredicateSplit) cached;
+            }
+            ScalarOperator queryPredicate = rewriteOptExprCompoundPredicate(predicates, columnRefRewriter);
+            PredicateSplit predicateSplit = PredicateSplit.splitPredicate(queryPredicate);
+            if (predicateSplit != null) {
+                cache.put(predicates, predicateSplit);
+            }
+            return predicateSplit;
         }
-        ScalarOperator queryPredicate = rewriteOptExprCompoundPredicate(predicates, columnRefRewriter);
-        PredicateSplit predicateSplit = PredicateSplit.splitPredicate(queryPredicate);
-        if (predicateSplit != null) {
-            getMvQueryContextCache().put(predicates, predicateSplit);
-        }
-        return predicateSplit;
     }
 
     private ScalarOperator rewriteOptExprCompoundPredicate(Set<ScalarOperator> conjuncts,
@@ -139,15 +152,20 @@ public class QueryMaterializationContext {
             return null;
         }
 
-        return (ScalarOperator) getMvQueryContextCache().get(predicate, x -> {
-            ScalarOperator rewritten = new ScalarOperatorRewriter()
-                    .rewrite(predicate.clone(), ScalarOperatorRewriter.MV_SCALAR_REWRITE_RULES);
-            return rewritten;
-        });
+        var cache = getMvQueryContextCache();
+        if (cache == null) {
+            return new ScalarOperatorRewriter().rewrite(predicate.clone(), ScalarOperatorRewriter.MV_SCALAR_REWRITE_RULES);
+        } else {
+            return (ScalarOperator) getMvQueryContextCache().get(predicate, x -> {
+                ScalarOperator rewritten = new ScalarOperatorRewriter()
+                        .rewrite(predicate.clone(), ScalarOperatorRewriter.MV_SCALAR_REWRITE_RULES);
+                return rewritten;
+            });
+        }
     }
 
     public QueryCacheStats getQueryCacheStats() {
-        return queryCacheStats;
+        return mvQueryContextCache == null ? null : queryCacheStats;
     }
 
     public OptExpression getQueryOptPlanWithView() {
@@ -191,13 +209,8 @@ public class QueryMaterializationContext {
         if (mv == null) {
             return null;
         }
-        if (!mvTimelinessInfos.containsKey(mv)) {
-            MvUpdateInfo result = getMVTimelinessUpdateInfo(mv, true);
-            mvTimelinessInfos.put(mv, result);
-            return result;
-        } else {
-            return mvTimelinessInfos.get(mv);
-        }
+        return mvTimelinessInfos.computeIfAbsent(mv,
+                ignored -> MvRefreshArbiter.getMVTimelinessUpdateInfo(mv, true));
     }
 
     /**
