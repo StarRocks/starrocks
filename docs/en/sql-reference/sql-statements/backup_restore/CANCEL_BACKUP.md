@@ -4,9 +4,13 @@ displayed_sidebar: docs
 
 # CANCEL BACKUP
 
+<<<<<<< HEAD
 ## Description
 
 Cancels an on-going BACKUP task in a specified database. For more information, see [data backup and restoration](../../../administration/management/Backup_and_restore.md).
+=======
+Cancels an ongoing BACKUP task in a specified database.
+>>>>>>> dc79ada1d7 ([Doc] fix descriptions, add guide link (#54620))
 
 ## Syntax
 

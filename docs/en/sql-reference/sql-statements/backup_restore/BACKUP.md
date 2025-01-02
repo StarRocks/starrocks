@@ -4,10 +4,18 @@ displayed_sidebar: docs
 
 # BACKUP
 
+<<<<<<< HEAD
 ## Description
 
 Backs up data in a specified database, table, or partition. Currently, StarRocks only supports backing up data in OLAP tables. For more information, see [data backup and restoration](../../../administration/management/Backup_and_restore.md).
 
+=======
+Backs up data in a specified database, table, or partition. Currently, StarRocks only supports backing up data in OLAP tables.
+>>>>>>> dc79ada1d7 ([Doc] fix descriptions, add guide link (#54620))
+
+:::tip
+For an overview of backup and restore please see the [backup and restore guide](../../../administration/management/Backup_and_restore.md).
+:::
 
 BACKUP is an asynchronous operation. You can check the status of a BACKUP job status using [SHOW BACKUP](./SHOW_BACKUP.md), or cancel a BACKUP job using [CANCEL BACKUP](./CANCEL_BACKUP.md). You can view the snapshot information using [SHOW SNAPSHOT](./SHOW_SNAPSHOT.md).
 

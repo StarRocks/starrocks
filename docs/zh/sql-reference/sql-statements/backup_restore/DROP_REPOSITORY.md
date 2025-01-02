@@ -5,9 +5,13 @@ keywords: ['beifen']
 
 # DROP REPOSITORY
 
+<<<<<<< HEAD
 ## 功能
 
 删除一个仓库。仓库用于 [备份和恢复](../../../administration/management/Backup_and_restore.md) 数据库数据。
+=======
+删除一个仓库。仓库用于 备份和恢复 数据库数据。
+>>>>>>> dc79ada1d7 ([Doc] fix descriptions, add guide link (#54620))
 
 > **注意**
 >
