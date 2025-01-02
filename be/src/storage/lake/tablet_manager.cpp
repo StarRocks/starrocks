@@ -245,11 +245,12 @@ Status TabletManager::put_tablet_metadata(const TabletMetadata& metadata) {
 }
 
 StatusOr<TabletMetadataPtr> TabletManager::load_tablet_metadata(const string& metadata_location, bool fill_cache,
-                                                                int64_t expected_gtid) {
+                                                                int64_t expected_gtid,
+                                                                const std::shared_ptr<FileSystem>& fs) {
     TEST_ERROR_POINT("TabletManager::load_tablet_metadata");
     auto t0 = butil::gettimeofday_us();
     auto metadata = std::make_shared<TabletMetadataPB>();
-    ProtobufFile file(metadata_location);
+    ProtobufFile file(metadata_location, fs);
     auto s = file.load(metadata.get(), fill_cache);
     if (!s.ok()) {
         if (s.is_corruption() && config::lake_clear_corrupted_cache) {
@@ -289,27 +290,29 @@ TabletMetadataPtr TabletManager::get_latest_cached_tablet_metadata(int64_t table
 }
 
 StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(int64_t tablet_id, int64_t version, bool fill_cache,
-                                                               int64_t expected_gtid) {
+                                                               int64_t expected_gtid,
+                                                               const std::shared_ptr<FileSystem>& fs) {
     if (version <= kInitialVersion) {
         // Handle tablet initial metadata
         auto initial_metadata =
-                get_tablet_metadata(tablet_initial_metadata_location(tablet_id), fill_cache, expected_gtid);
+                get_tablet_metadata(tablet_initial_metadata_location(tablet_id), fill_cache, expected_gtid, fs);
         if (initial_metadata.ok()) {
             auto tablet_metadata = std::make_shared<TabletMetadata>(*initial_metadata.value());
             tablet_metadata->set_id(tablet_id);
             return tablet_metadata;
         }
     }
-    return get_tablet_metadata(tablet_metadata_location(tablet_id, version), fill_cache, expected_gtid);
+    return get_tablet_metadata(tablet_metadata_location(tablet_id, version), fill_cache, expected_gtid, fs);
 }
 
 StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(const string& path, bool fill_cache,
-                                                               int64_t expected_gtid) {
+                                                               int64_t expected_gtid,
+                                                               const std::shared_ptr<FileSystem>& fs) {
     if (auto ptr = _metacache->lookup_tablet_metadata(path); ptr != nullptr) {
         TRACE("got cached tablet metadata");
         return ptr;
     }
-    ASSIGN_OR_RETURN(auto ptr, load_tablet_metadata(path, fill_cache, expected_gtid));
+    ASSIGN_OR_RETURN(auto ptr, load_tablet_metadata(path, fill_cache, expected_gtid, fs));
     if (fill_cache) {
         _metacache->cache_tablet_metadata(path, ptr);
     }

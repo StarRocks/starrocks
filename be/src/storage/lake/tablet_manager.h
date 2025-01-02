@@ -83,11 +83,13 @@ public:
     // When using get_tablet_metadata to determine whether a new version exists in publish version,
     // a valid expected_gtid must be passed in.
     StatusOr<TabletMetadataPtr> get_tablet_metadata(int64_t tablet_id, int64_t version, bool fill_cache = true,
-                                                    int64_t expected_gtid = 0);
+                                                    int64_t expected_gtid = 0,
+                                                    const std::shared_ptr<FileSystem>& fs = nullptr);
 
     // Do not use this function except in a list dir
     StatusOr<TabletMetadataPtr> get_tablet_metadata(const std::string& path, bool fill_cache = true,
-                                                    int64_t expected_gtid = 0);
+                                                    int64_t expected_gtid = 0,
+                                                    const std::shared_ptr<FileSystem>& fs = nullptr);
 
     TabletMetadataPtr get_latest_cached_tablet_metadata(int64_t tablet_id);
 
@@ -221,7 +223,7 @@ private:
 
     Status put_tablet_metadata(const TabletMetadataPtr& metadata, const std::string& metadata_location);
     StatusOr<TabletMetadataPtr> load_tablet_metadata(const std::string& metadata_location, bool fill_cache,
-                                                     int64_t expected_gtid);
+                                                     int64_t expected_gtid, const std::shared_ptr<FileSystem>& fs);
     StatusOr<TxnLogPtr> load_txn_log(const std::string& txn_log_location, bool fill_cache);
     StatusOr<CombinedTxnLogPtr> load_combined_txn_log(const std::string& path, bool fill_cache);
 
