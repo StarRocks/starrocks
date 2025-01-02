@@ -229,7 +229,6 @@ Status ImmutableIndexShard::compress_and_write(const CompressionTypePB& compress
         return write(wb);
     }
 
-    
     if (npage() > 0) {
         const BlockCompressionCodec* codec = nullptr;
         RETURN_IF_ERROR(get_block_compression_codec(compression_type, &codec));
