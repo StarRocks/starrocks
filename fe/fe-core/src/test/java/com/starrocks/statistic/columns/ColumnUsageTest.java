@@ -138,6 +138,20 @@ class ColumnUsageTest extends PlanTestBase {
             // window
             "select max(v1) over (partition by v2 order by v3) from t0" +
                     "|analyze table t0 predicate columns|v2",
+
+            // union
+            "select max(v1) from (select v1,v2 from t0 union all select v4,v5 from t1) r group by v2" +
+                    "| analyze table t0 predicate columns | v2",
+            "select max(v1) from (select v1,v2 from t0 union all select v4,v5 from t1) r group by v2" +
+                    "| analyze table t1 predicate columns | v5",
+
+            // cte
+            "with cte1 as (select max(v1) v1 from t0 group by v2), cte2 as (select max(v4) v4 from t1 group by v5) " +
+                    "select * from cte1 join cte2 on cte1.v1 = cte2.v4 " +
+                    "| analyze table t0 predicate columns | v2",
+            "with cte1 as (select max(v1) v1 from t0 group by v2), cte2 as (select max(v4) v4 from t1 group by v5) " +
+                    "select * from cte1 join cte2 on cte1.v1 = cte2.v4 " +
+                    "| analyze table t1 predicate columns | v5",
     })
     public void testAnalyzePredicateColumns(String query, String analyzeStmt, String expectedColumns) throws Exception {
         AnalyzeTestUtil.init();

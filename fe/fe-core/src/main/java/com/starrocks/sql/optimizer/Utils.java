@@ -45,6 +45,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalPaimonScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalSetOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTreeAnchorOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
@@ -951,6 +952,23 @@ public class Utils {
             }
         }
 
+        // Consult the corresponding children
+        if (expr.getOp() instanceof LogicalSetOperator setOp) {
+            List<ColumnRefOperator> childrenRefs = setOp.resolveColumnRef(ref);
+            if (CollectionUtils.isNotEmpty(childrenRefs)) {
+                List<Pair<Table, Column>> result = Lists.newArrayList();
+                for (int i = 0; i < expr.getInputs().size(); i++) {
+                    List<Pair<Table, Column>> pairs =
+                            resolveColumnRefRecursive(childrenRefs.get(i), factory, expr.getInputs().get(i));
+                    if (CollectionUtils.isNotEmpty(pairs)) {
+                        result.addAll(pairs);
+                    }
+                }
+                return result;
+            }
+
+        }
+
         // consult children operators
         for (OptExpression child : expr.getInputs()) {
             List<Pair<Table, Column>> children = resolveColumnRefRecursive(ref, factory, child);
@@ -959,6 +977,6 @@ public class Utils {
             }
         }
 
-        throw new RuntimeException("cannot resolve column ref: " + ref);
+        return null;
     }
 }
