@@ -1535,5 +1535,5 @@ CONF_mBool(enable_hk_shuffle_sort, "false");
 
 CONF_mBool(enable_hk_string_select, "false");
 
-CONF_mBool(enable_aggregate_reserve, "false");
+CONF_mBool(enable_hk_aggregate_reserve, "false");
 } // namespace starrocks::config

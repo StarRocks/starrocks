@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <algorithm>
+
 #include "column/column_hash.h"
 #include "column/column_helper.h"
 #include "column/hash_set.h"
@@ -103,6 +105,12 @@ struct AggHashSet {
     size_t rehash_count() const {
         auto x = hash_set.infoz();
         return x.rehash_number;
+    }
+
+    void reserve(size_t n) {
+        using KeyType = typename HashSet::key_type;
+        size_t x = std::min(64 * 1024 / sizeof(KeyType), n);
+        hash_set.reserve(x);
     }
 
     ////// Common Methods ////////

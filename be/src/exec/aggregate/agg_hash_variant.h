@@ -488,7 +488,7 @@ struct AggHashMapVariant {
 
     size_t allocated_memory_usage(const MemPool* pool) const;
 
-    void reserve(int capacity) {}
+    void reserve(size_t capacity) {}
 
 private:
     Type _type = Type::phase1_slice;
@@ -600,7 +600,7 @@ struct AggHashSetVariant {
         return visit([](auto& hash_set_with_key) { return hash_set_with_key->rehash_count(); });
     }
 
-    void reserve(int capacity) {
+    void reserve(size_t capacity) {
         visit([&](auto& hash_set_with_key) { hash_set_with_key->reserve(capacity); });
     }
 

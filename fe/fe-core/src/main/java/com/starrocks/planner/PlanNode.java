@@ -521,7 +521,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         msg.node_id = id.asInt();
         msg.num_children = children.size();
         msg.limit = limit;
-        msg.predicted_rows = predictedRows;
+        msg.setPredicted_rows(predictedRows);
 
         for (TupleId tid : tupleIds) {
             msg.addToRow_tuples(tid.asInt());

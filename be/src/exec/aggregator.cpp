@@ -1367,10 +1367,6 @@ void Aggregator::_init_agg_hash_variant(HashVariantType& hash_variant) {
         }
     }
 
-    if (config::enable_aggregate_reserve) {
-        hash_variant.reserve(_params->predicted_rows / 2);
-    }
-
     VLOG_ROW << "hash type is "
              << static_cast<typename std::underlying_type<typename HashVariantType::Type>::type>(type);
     hash_variant.init(_state, type, _agg_stat);
@@ -1381,6 +1377,10 @@ void Aggregator::_init_agg_hash_variant(HashVariantType& hash_variant) {
             variant->fixed_byte_size = fixed_byte_size;
         }
     });
+
+    if (config::enable_hk_aggregate_reserve) {
+        hash_variant.reserve(_params->predicted_rows / 2);
+    }
 }
 
 void Aggregator::build_hash_map(size_t chunk_size, bool agg_group_by_with_limit) {
