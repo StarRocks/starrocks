@@ -36,6 +36,11 @@ public:
     bool is_constant() const override;
 
 private:
+<<<<<<< HEAD
+=======
+    StatusOr<std::shared_ptr<JavaUDFContext>> _build_udf_func_desc(FunctionContext::FunctionStateScope scope,
+                                                                   const std::string& libpath);
+>>>>>>> a29b2b6b33 ([BugFix] Fix UAF in shared UDF (#54592))
     void _call_udf_close();
     RuntimeState* _runtime_state = nullptr;
     std::shared_ptr<JavaUDFContext> _func_desc;
