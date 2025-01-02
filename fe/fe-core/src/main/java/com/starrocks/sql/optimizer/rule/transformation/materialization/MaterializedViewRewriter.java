@@ -1328,6 +1328,11 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
                 rewriteContext.getQueryPredicateSplit(),
                 rewriteContext.getMvPredicateSplit(),
                 true);
+        // check mv context again if mv can be applied for rewrite.
+        if (materializationContext.isNoRewrite()) {
+            logMVRewrite(mvRewriteContext, "MV cannot be applied for rewrite");
+            return null;
+        }
 
         MVCompensation mvCompensation = materializationContext.getMvCompensation();
         boolean isTransparentRewrite = mvCompensation.isTransparentRewrite();
