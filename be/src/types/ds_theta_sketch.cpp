@@ -75,8 +75,8 @@ bool DataSketchesTheta::deserialize(const Slice& slice) {
     try {
         auto sketch_warp = theta_wrapped_type::wrap((uint8_t*)slice.data, slice.size);
         if (_sketch_union == nullptr) {
-            _sketch_union = std::make_unique<theta_union_type>(
-                    theta_union_type::builder(alloc_type(_memory_usage)).build());
+            _sketch_union =
+                    std::make_unique<theta_union_type>(theta_union_type::builder(alloc_type(_memory_usage)).build());
         }
         _sketch_union->update(sketch_warp);
     } catch (std::logic_error& e) {

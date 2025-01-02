@@ -17,7 +17,6 @@
 #include "column/array_column.h"
 #include "column/column_helper.h"
 #include "exprs/agg/ds_state.h"
-
 #include "types/ds_theta_sketch.h"
 
 namespace starrocks {
