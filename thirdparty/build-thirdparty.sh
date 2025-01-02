@@ -652,18 +652,12 @@ build_flatbuffers() {
   cd $BUILD_DIR
   rm -rf CMakeCache.txt CMakeFiles/
 
-  # reset the optimization level to O2 to avoid "stringop-overread" warnings/errors
-  export CXXFLAGS="$CXXFLAGS -O2"
-  export CPPFLAGS="$CPPFLAGS -O2"
-
   LDFLAGS="-static-libstdc++ -static-libgcc" \
   ${CMAKE_CMD} .. -G "${CMAKE_GENERATOR}" -DFLATBUFFERS_BUILD_TESTS=OFF
   ${BUILD_SYSTEM} -j$PARALLEL
   cp flatc  $TP_INSTALL_DIR/bin/flatc
   cp -r ../include/flatbuffers  $TP_INCLUDE_DIR/flatbuffers
   cp libflatbuffers.a $TP_LIB_DIR/libflatbuffers.a
-
-  restore_compile_flags
 }
 
 build_brotli() {
