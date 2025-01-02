@@ -3181,4 +3181,5 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TClusterSnapshotJobsResponse getClusterSnapshotJobsInfo(TClusterSnapshotJobsRequest params) {
         return new TClusterSnapshotJobsResponse();
+    }
 }

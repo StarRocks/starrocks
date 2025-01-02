@@ -230,13 +230,14 @@ Status SchemaHelper::get_analyze_status(const SchemaScannerState& state, const T
 Status SchemaHelper::get_cluster_snapshots_info(const SchemaScannerState& state, const TClusterSnapshotsRequest& req,
                                                 TClusterSnapshotsResponse* res) {
     return _call_rpc(state,
-                     [&req, &res](FrontendServiceConnection& client)  { client->getClusterSnapshotsInfo(*res, req); });
+                     [&req, &res](FrontendServiceConnection& client) { client->getClusterSnapshotsInfo(*res, req); });
 }
 
-Status SchemaHelper::get_cluster_snapshot_jobs_info(const SchemaScannerState& state, const TClusterSnapshotJobsRequest& req,
+Status SchemaHelper::get_cluster_snapshot_jobs_info(const SchemaScannerState& state,
+                                                    const TClusterSnapshotJobsRequest& req,
                                                     TClusterSnapshotJobsResponse* res) {
     return _call_rpc(
-            state, [&req, &res](FrontendServiceConnection& client)  { client->getClusterSnapshotJobsInfo(*res, req); });
+            state, [&req, &res](FrontendServiceConnection& client) { client->getClusterSnapshotJobsInfo(*res, req); });
 }
 
 void fill_data_column_with_null(Column* data_column) {

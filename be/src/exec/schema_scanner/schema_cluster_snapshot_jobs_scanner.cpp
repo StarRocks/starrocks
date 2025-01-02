@@ -53,9 +53,8 @@ Status SchemaClusterSnapshotJobsScanner::_fill_chunk(ChunkPtr* chunk) {
     auto& slot_id_map = (*chunk)->get_slot_id_to_index_map();
     const TClusterSnapshotJobsItem& info = _result.items[_index];
     DatumArray datum_array{
-            Slice(info.snapshot_name), info.job_id,
-            info.created_time,         info.finished_time,
-            Slice(info.state),         Slice(info.detail_info),
+            Slice(info.snapshot_name), info.job_id,       info.created_time,
+            info.finished_time,        Slice(info.state), Slice(info.detail_info),
             Slice(info.error_message),
     };
     for (const auto& [slot_id, index] : slot_id_map) {
