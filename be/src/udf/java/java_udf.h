@@ -91,7 +91,7 @@ public:
     void batch_update_state(FunctionContext* ctx, jobject udaf, jobject update, jobject* input, int cols);
 
     // batch call evalute by callstub
-    jobject batch_call(BatchEvaluateStub* stub, jobject* input, int cols, int rows);
+    StatusOr<jobject> batch_call(BatchEvaluateStub* stub, jobject* input, int cols, int rows);
     // batch call method by reflect
     jobject batch_call(FunctionContext* ctx, jobject caller, jobject method, jobject* input, int cols, int rows);
     // batch call no-args function by reflect
@@ -347,14 +347,12 @@ public:
     static inline const char* stub_clazz_name = "com.starrocks.udf.gen.CallStub";
     static inline const char* batch_evaluate_method_name = "batchCallV";
 
-    BatchEvaluateStub(FunctionContext* ctx, jobject caller, JVMClass&& clazz, JavaGlobalRef&& method)
-            : _ctx(ctx), _caller(caller), _stub_clazz(std::move(clazz)), _stub_method(std::move(method)) {}
+    BatchEvaluateStub(jobject caller, JVMClass&& clazz, JavaGlobalRef&& method)
+            : _caller(caller), _stub_clazz(std::move(clazz)), _stub_method(std::move(method)) {}
 
-    FunctionContext* ctx() { return _ctx; }
-    jobject batch_evaluate(int num_rows, jobject* input, int cols);
+    StatusOr<jobject> batch_evaluate(int num_rows, jobject* input, int cols);
 
 private:
-    FunctionContext* _ctx;
     jobject _caller;
     JVMClass _stub_clazz;
     JavaGlobalRef _stub_method;
