@@ -45,11 +45,11 @@ public interface JoinReorderFactory {
             algorithms.add(new JoinReorderLeftDeep(context));
 
             SessionVariable sv = context.getSessionVariable();
-            if (multiJoinNode.getAtoms().size() <= sv.getCboMaxReorderNodeUseDP() && sv.isCboEnableDPJoinReorder()) {
+            if (sv.isCboEnableDPJoinReorder() && multiJoinNode.getAtoms().size() <= sv.getCboMaxReorderNodeUseDP()) {
                 algorithms.add(new JoinReorderDP(context));
             }
 
-            if (sv.isCboEnableGreedyJoinReorder()) {
+            if (sv.isCboEnableGreedyJoinReorder() && multiJoinNode.getAtoms().size() <= sv.getCboMaxReorderNodeUseGreedy()) {
                 algorithms.add(new JoinReorderGreedy(context));
             }
 

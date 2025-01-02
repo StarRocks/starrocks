@@ -347,6 +347,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_ENABLE_DP_JOIN_REORDER = "cbo_enable_dp_join_reorder";
     public static final String CBO_MAX_REORDER_NODE_USE_DP = "cbo_max_reorder_node_use_dp";
     public static final String CBO_ENABLE_GREEDY_JOIN_REORDER = "cbo_enable_greedy_join_reorder";
+    public static final String CBO_MAX_REORDER_NODE_USE_GREEDY = "cbo_max_reorder_node_use_greedy";
     public static final String CBO_ENABLE_REPLICATED_JOIN = "cbo_enable_replicated_join";
     public static final String CBO_USE_CORRELATED_JOIN_ESTIMATE = "cbo_use_correlated_join_estimate";
     public static final String ALWAYS_COLLECT_LOW_CARD_DICT = "always_collect_low_card_dict";
@@ -1336,6 +1337,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = CBO_MAX_REORDER_NODE_USE_DP)
     private long cboMaxReorderNodeUseDP = 10;
+
+    @VariableMgr.VarAttr(name = CBO_MAX_REORDER_NODE_USE_GREEDY)
+    private long cboMaxReorderNodeUseGreedy = 16;
 
     @VariableMgr.VarAttr(name = CBO_ENABLE_GREEDY_JOIN_REORDER, flag = VariableMgr.INVISIBLE)
     private boolean cboEnableGreedyJoinReorder = true;
@@ -3131,6 +3135,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isCboEnableGreedyJoinReorder() {
         return cboEnableGreedyJoinReorder;
+    }
+
+    public long getCboMaxReorderNodeUseGreedy() {
+        return cboMaxReorderNodeUseGreedy;
     }
 
     public void disableGreedyJoinReorder() {

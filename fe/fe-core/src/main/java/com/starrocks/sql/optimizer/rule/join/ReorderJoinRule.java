@@ -198,6 +198,12 @@ public class ReorderJoinRule extends Rule {
                     if (newChild.isEmpty()) {
                         break;
                     }
+                    // If there is no statistical information, the DP and greedy reorder algorithm are disabled,
+                    // and the query plan degenerates to the left deep tree
+                    if (Utils.hasUnknownColumnsStats(innerJoinRoot.first) &&
+                            (!FeConstants.runningUnitTest || FeConstants.isReplayFromQueryDump)) {
+                        break;
+                    }
                 }
 
                 if (newChild.isPresent()) {
@@ -249,7 +255,8 @@ public class ReorderJoinRule extends Rule {
                     enumerate(new JoinReorderDP(context), context, innerJoinRoot, multiJoinNode, true);
                 }
 
-                if (context.getSessionVariable().isCboEnableGreedyJoinReorder()) {
+                if (context.getSessionVariable().isCboEnableGreedyJoinReorder() &&
+                        multiJoinNode.getAtoms().size() <= context.getSessionVariable().getCboMaxReorderNodeUseGreedy()) {
                     enumerate(new JoinReorderGreedy(context), context, innerJoinRoot, multiJoinNode, true);
                 }
             }
