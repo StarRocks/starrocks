@@ -182,7 +182,15 @@ Status HiveDataSource::open(RuntimeState* state) {
         _no_data = true;
         return Status::OK();
     }
-    RETURN_IF_ERROR(_init_scanner(state));
+    auto st = _init_scanner(state);
+    if (config::ignore_four_bytes_parquet_file && st.is_corruption() &&
+        st.message().find("Parquet file size is 4 bytes, smaller than the minimum parquet file footer") !=
+                std::string_view::npos) {
+        _no_data = true;
+        LOG(WARNING) << "Corruption: " << st.message();
+        return Status::OK();
+    }
+    RETURN_IF_ERROR(st);
     return Status::OK();
 }
 
