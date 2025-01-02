@@ -74,10 +74,10 @@ public:
         if (UNLIKELY(!this->data(state).is_inited())) {
             column->append_default();
         } else {
-            size_t size = this->data(state).serialize_size();
-            uint8_t result[size];
-            size = this->data(state).serialize(result);
-            column->append(Slice(result, size));
+            size_t serialized_size = this->data(state).serialize_size();
+            std::vector<uint8_t> result(serialized_size);
+            size_t actual_size = this->data(state).serialize(result.data());
+            column->append(Slice(result.data(), actual_size));
         }
     }
 
