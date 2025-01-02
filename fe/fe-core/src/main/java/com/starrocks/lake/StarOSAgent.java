@@ -735,7 +735,7 @@ public class StarOSAgent {
         }
     }
 
-    public long createWorkerGroup(String size, int replicaNumber) throws DdlException {
+    public long createWorkerGroup(String size, int replicaNumber, String replicationTypeStr) throws DdlException {
         prepare();
 
         // size should be x0, x1, x2, x4...
@@ -744,8 +744,18 @@ public class StarOSAgent {
         String owner = "Starrocks";
         WorkerGroupDetailInfo result = null;
         try {
-            result = client.createWorkerGroup(serviceId, owner, spec, Collections.emptyMap(), Collections.emptyMap(),
-                    replicaNumber, ReplicationType.NO_REPLICATION);
+            ReplicationType replicationType = ReplicationType.NO_REPLICATION;
+            if (replicationTypeStr == null || replicationTypeStr.equalsIgnoreCase("NONE")) {
+                replicationType = ReplicationType.NO_REPLICATION;
+            } else if (replicationTypeStr.equalsIgnoreCase("SYNC")) {
+                replicationType = ReplicationType.SYNC;
+            } else if (replicationTypeStr.equalsIgnoreCase("ASYNC")) {
+                replicationType = ReplicationType.ASYNC;
+            } else {
+                throw new DdlException("Unknown replication type " + replicationTypeStr);
+            }
+            result = client.createWorkerGroup(serviceId, owner, spec, Collections.emptyMap(),
+                    Collections.emptyMap(), replicaNumber, replicationType);
         } catch (StarClientException e) {
             LOG.warn("Failed to create worker group. error: {}", e.getMessage());
             throw new DdlException("Failed to create worker group. error: " + e.getMessage());
