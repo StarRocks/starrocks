@@ -3140,7 +3140,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### lake_enable_ingest_slowdown
 
-- Default: false
+- Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
@@ -3180,7 +3180,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Long
 - Unit: -
 - Is mutable: Yes
-- Description: The upper limit of the Compaction Score for a partition in a shared-data cluster. `0` indicates no upper limit. This item only takes effect when `lake_enable_ingest_slowdown` is set to `true`. When the Compaction Score of a partition reaches or exceeds this upper limit, all loading tasks on that partition will be indefinitely delayed until the Compaction Score drops below this value or the task times out.
+- Description: The upper limit of the Compaction Score for a partition in a shared-data cluster. `0` indicates no upper limit. This item only takes effect when `lake_enable_ingest_slowdown` is set to `true`. When the Compaction Score of a partition reaches or exceeds this upper limit, arrival loading tasks will be rejected..
 - Introduced in: v3.2.0
 
 ##### lake_compaction_disable_tables
