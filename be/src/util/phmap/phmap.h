@@ -546,15 +546,7 @@ struct HashtableDebugAccess {
     // The default implementation uses the bucket api from the standard and thus
     // works for `std::unordered_*` containers.
     // --------------------------------------------------------------------------
-    static size_t GetNumProbes(const Container& c, const typename Container::key_type& key) {
-        if (!c.bucket_count()) return {};
-        size_t num_probes = 0;
-        size_t bucket = c.bucket(key);
-        for (auto it = c.begin(bucket), e = c.end(bucket);; ++it, ++num_probes) {
-            if (it == e) return num_probes;
-            if (c.key_eq()(key, GetKey<Container>(*it, 0))) return num_probes;
-        }
-    }
+    static size_t GetNumProbes(const Container& c, const typename Container::key_type& key) { return 0; }
 };
 
 } // namespace hashtable_debug_internal
@@ -577,7 +569,7 @@ static inline HashtablezInfo* SampleSlow(int64_t*) {
 }
 static inline void UnsampleSlow(HashtablezInfo*) {}
 
-// #define PHMAP_USE_CUSTOM_INFO_HANDLE
+#define PHMAP_USE_CUSTOM_INFO_HANDLE
 #ifndef PHMAP_USE_CUSTOM_INFO_HANDLE
 class HashtablezInfoHandle {
 public:
@@ -2330,6 +2322,9 @@ class parallel_hash_set {
     static_assert(N <= 12, "N = 12 means 4096 hash tables!");
     constexpr static size_t num_tables = 1 << N;
     constexpr static size_t mask = num_tables - 1;
+
+public:
+    const HashtablezInfoHandle infoz() const { return HashtablezInfoHandle(); }
 
 public:
     using EmbeddedSet = RefSet<Policy, Hash, Eq, Alloc>;

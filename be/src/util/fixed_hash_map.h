@@ -197,6 +197,31 @@ public:
 
     size_t capacity() { return hash_table_size; }
 
+    void reserve(int capacity) {}
+
+private:
+    struct HashtablezInfoHandle {
+    public:
+        inline void RecordStorageChanged(size_t, size_t) {}
+        inline void RecordRehash(size_t) { rehash_number += 1; }
+        inline void RecordInsert(size_t hash_val, size_t probe_length) {
+            insert_number += 1;
+            insert_probe_length += probe_length;
+        }
+        inline void RecordErase() {}
+        friend inline void swap(HashtablezInfoHandle& x, HashtablezInfoHandle& y) noexcept {
+            std::swap(x.insert_number, y.insert_number);
+            std::swap(x.insert_probe_length, y.insert_probe_length);
+            std::swap(x.rehash_number, y.rehash_number);
+        }
+        size_t insert_number = 0;
+        size_t insert_probe_length = 0;
+        size_t rehash_number = 0;
+    };
+
+public:
+    const HashtablezInfoHandle infoz() const { return HashtablezInfoHandle(); }
+
 private:
     size_t _size = 0;
     uint8_t _hash_table[hash_table_size + 1];

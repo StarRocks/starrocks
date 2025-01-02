@@ -121,6 +121,11 @@ AggregatorParamsPtr convert_to_aggregator_params(const TPlanNode& tnode) {
     auto params = std::make_shared<AggregatorParams>();
     params->conjuncts = tnode.conjuncts;
     params->limit = tnode.limit;
+    if (tnode.__isset.predicted_rows) {
+        params->predicted_rows = tnode.predicted_rows;
+    } else {
+        params->predicted_rows = 8;
+    }
 
     // TODO: STREAM_AGGREGATION_NODE will be added later.
     DCHECK_EQ(tnode.node_type, TPlanNodeType::AGGREGATION_NODE);
@@ -704,6 +709,8 @@ void Aggregator::close(RuntimeState* state) {
         }
 
         if (_is_only_group_by_columns) {
+            COUNTER_SET(_agg_stat->probe_step_counter, _hash_set_variant.probe_count());
+            COUNTER_SET(_agg_stat->rehash_counter, _hash_set_variant.rehash_count());
             _hash_set_variant.reset();
         } else {
             _hash_map_variant.reset();
@@ -1359,6 +1366,11 @@ void Aggregator::_init_agg_hash_variant(HashVariantType& hash_variant) {
             }
         }
     }
+
+    if (config::enable_aggregate_reserve) {
+        hash_variant.reserve(_params->predicted_rows / 2);
+    }
+
     VLOG_ROW << "hash type is "
              << static_cast<typename std::underlying_type<typename HashVariantType::Type>::type>(type);
     hash_variant.init(_state, type, _agg_stat);

@@ -488,6 +488,8 @@ struct AggHashMapVariant {
 
     size_t allocated_memory_usage(const MemPool* pool) const;
 
+    void reserve(int capacity) {}
+
 private:
     Type _type = Type::phase1_slice;
     AggStatistics* _agg_stat = nullptr;
@@ -589,6 +591,18 @@ struct AggHashSetVariant {
     size_t reserved_memory_usage(const MemPool* pool) const;
 
     size_t allocated_memory_usage(const MemPool* pool) const;
+
+    int64_t probe_count() const {
+        return visit([](auto& hash_set_with_key) { return hash_set_with_key->probe_count(); });
+    }
+
+    int64_t rehash_count() const {
+        return visit([](auto& hash_set_with_key) { return hash_set_with_key->rehash_count(); });
+    }
+
+    void reserve(int capacity) {
+        visit([&](auto& hash_set_with_key) { hash_set_with_key->reserve(capacity); });
+    }
 
 private:
     Type _type = Type::phase1_slice;

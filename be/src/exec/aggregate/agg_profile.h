@@ -35,6 +35,9 @@ struct AggStatistics {
         state_destroy_timer = ADD_TIMER(runtime_profile, "StateDestroy");
         allocate_state_timer = ADD_TIMER(runtime_profile, "StateAllocate");
 
+        probe_step_counter = ADD_COUNTER(runtime_profile, "ProbeStep", TUnit::UNIT);
+        rehash_counter = ADD_COUNTER(runtime_profile, "Rehash", TUnit::UNIT);
+
         chunk_buffer_peak_memory = ADD_PEAK_COUNTER(runtime_profile, "ChunkBufferPeakMem", TUnit::BYTES);
         chunk_buffer_peak_size = ADD_PEAK_COUNTER(runtime_profile, "ChunkBufferPeakSize", TUnit::UNIT);
     }
@@ -70,5 +73,9 @@ struct AggStatistics {
 
     RuntimeProfile::HighWaterMarkCounter* chunk_buffer_peak_memory{};
     RuntimeProfile::HighWaterMarkCounter* chunk_buffer_peak_size{};
+
+    RuntimeProfile::Counter* probe_step_counter{};
+
+    RuntimeProfile::Counter* rehash_counter{};
 };
 } // namespace starrocks

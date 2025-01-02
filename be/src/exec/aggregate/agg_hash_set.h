@@ -94,6 +94,16 @@ struct AggHashSet {
     AggHashSet() = default;
     using HHashSetType = HashSet;
     HashSet hash_set;
+    phmap::priv::hashtable_debug_internal::HashtableDebugAccess<HashSet> debug_access;
+
+    size_t _probes_step;
+
+    size_t probe_count() const { return _probes_step; }
+
+    size_t rehash_count() const {
+        auto x = hash_set.infoz();
+        return x.rehash_number;
+    }
 
     ////// Common Methods ////////
     void build_hash_set(size_t chunk_size, const Columns& key_columns, MemPool* pool) {
@@ -161,6 +171,7 @@ struct AggHashSetOfOneNumberKey : public AggHashSet<HashSet, AggHashSetOfOneNumb
             } else {
                 (*not_founds)[i] = !this->hash_set.contains(keys[i]);
             }
+            this->_probes_step += this->debug_access.GetNumProbes(this->hash_set, keys[i]);
         }
     }
 
@@ -178,6 +189,7 @@ struct AggHashSetOfOneNumberKey : public AggHashSet<HashSet, AggHashSetOfOneNumb
             } else {
                 (*not_founds)[i] = this->hash_set.find(keys[i], this->hashes[i]) == this->hash_set.end();
             }
+            this->_probes_step += this->debug_access.GetNumProbes(this->hash_set, keys[i]);
         }
     }
 
@@ -250,6 +262,7 @@ struct AggHashSetOfOneNullableNumberKey
                     } else {
                         (*not_founds)[i] = !this->hash_set.contains(keys[i]);
                     }
+                    this->_probes_step += this->debug_access.GetNumProbes(this->hash_set, keys[i]);
                 }
             }
         } else {
@@ -259,6 +272,7 @@ struct AggHashSetOfOneNullableNumberKey
                 } else {
                     (*not_founds)[i] = !this->hash_set.contains(keys[i]);
                 }
+                this->_probes_step += this->debug_access.GetNumProbes(this->hash_set, keys[i]);
             }
         }
     }
@@ -278,6 +292,7 @@ struct AggHashSetOfOneNullableNumberKey
             } else {
                 (*not_founds)[i] = this->hash_set.find(keys[i], hashes[i]) == this->hash_set.end();
             }
+            this->_probes_step += this->debug_access.GetNumProbes(this->hash_set, keys[i]);
         }
     }
 
@@ -338,6 +353,7 @@ struct AggHashSetOfOneStringKey : public AggHashSet<HashSet, AggHashSetOfOneStri
             } else {
                 (*not_founds)[i] = !this->hash_set.contains(tmp);
             }
+            this->_probes_step += this->debug_access.GetNumProbes(this->hash_set, tmp);
         }
     }
 
@@ -363,6 +379,7 @@ struct AggHashSetOfOneStringKey : public AggHashSet<HashSet, AggHashSetOfOneStri
             } else {
                 (*not_founds)[i] = this->hash_set.find(key, key.hash) == this->hash_set.end();
             }
+            this->_probes_step += this->debug_access.GetNumProbes(this->hash_set, key);
         }
     }
 
@@ -460,6 +477,7 @@ struct AggHashSetOfOneNullableStringKey : public AggHashSet<HashSet, AggHashSetO
             } else {
                 (*not_founds)[i] = this->hash_set.find(key, key.hash) == this->hash_set.end();
             }
+            this->_probes_step += this->debug_access.GetNumProbes(this->hash_set, key);
         }
     }
 
@@ -472,6 +490,7 @@ struct AggHashSetOfOneNullableStringKey : public AggHashSet<HashSet, AggHashSetO
             memcpy(pos, key.data, key.size);
             ctor(pos, key.size, key.hash);
         });
+        this->_probes_step += this->debug_access.GetNumProbes(this->hash_set, key);
     }
 
     void _handle_data_key_column(BinaryColumn* data_column, size_t row, Filter* not_founds) {
@@ -553,6 +572,7 @@ struct AggHashSetOfSerializedKey : public AggHashSet<HashSet, AggHashSetOfSerial
             } else {
                 (*not_founds)[i] = !this->hash_set.contains(tmp);
             }
+            this->_probes_step += this->debug_access.GetNumProbes(this->hash_set, tmp);
         }
     }
 
@@ -576,6 +596,7 @@ struct AggHashSetOfSerializedKey : public AggHashSet<HashSet, AggHashSetOfSerial
             } else {
                 (*not_founds)[i] = this->hash_set.find(key, key.hash) == this->hash_set.end();
             }
+            this->_probes_step += this->debug_access.GetNumProbes(this->hash_set, key);
         }
     }
 
@@ -699,6 +720,7 @@ struct AggHashSetOfSerializedKeyFixedSize : public AggHashSet<HashSet, AggHashSe
             } else {
                 (*not_founds)[i] = this->hash_set.find(keys[i], hashes[i]) == this->hash_set.end();
             }
+            this->_probes_step += this->debug_access.GetNumProbes(this->hash_set, keys[i]);
         }
     }
 

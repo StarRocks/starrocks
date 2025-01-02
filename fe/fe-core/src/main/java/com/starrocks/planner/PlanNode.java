@@ -141,6 +141,12 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
     // set if you want to collect execution statistics for this plan node
     protected boolean needCollectExecStats = false;
 
+    protected long predictedRows = 1;
+
+    public void setPredictedRows(long rows) {
+        this.predictedRows = rows;
+    }
+
     protected PlanNode(PlanNodeId id, ArrayList<TupleId> tupleIds, String planNodeName) {
         this.id = id;
         this.limit = -1;
@@ -515,6 +521,8 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         msg.node_id = id.asInt();
         msg.num_children = children.size();
         msg.limit = limit;
+        msg.predicted_rows = predictedRows;
+
         for (TupleId tid : tupleIds) {
             msg.addToRow_tuples(tid.asInt());
             msg.addToNullable_tuples(nullableTupleIds.contains(tid));

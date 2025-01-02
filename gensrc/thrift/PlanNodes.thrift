@@ -1288,6 +1288,8 @@ struct TPlanNode {
   // Produce data in compact format.
   8: required bool compact_data
 
+  9: optional i64 predicted_rows
+
   // one field per PlanNode subclass
   11: optional THashJoinNode hash_join_node
   12: optional TAggregationNode agg_node

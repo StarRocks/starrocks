@@ -2311,6 +2311,9 @@ public class PlanFragmentBuilder {
                 currentExecGroup.setColocateGroup();
             }
             currentExecGroup.add(aggregationNode);
+
+            aggregationNode.setPredictedRows((long) optExpr.getStatistics().getOutputRowCount());
+
             inputFragment.setPlanRoot(aggregationNode);
             inputFragment.getPlanRoot().forceCollectExecStats();
             inputFragment.mergeQueryDictExprs(originalInputFragment.getQueryGlobalDictExprs());

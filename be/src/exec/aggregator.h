@@ -215,6 +215,7 @@ struct AggregatorParams {
     bool needs_finalize;
     bool has_outer_join_child;
     int64_t limit;
+    int64_t predicted_rows;
     bool enable_pipeline_share_limit;
     TStreamingPreaggregationMode::type streaming_preaggregation_mode;
     TupleId intermediate_tuple_id;
