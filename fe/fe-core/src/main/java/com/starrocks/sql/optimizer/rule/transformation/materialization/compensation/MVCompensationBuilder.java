@@ -456,6 +456,12 @@ public class MVCompensationBuilder {
 
         Map<String, PCell> nameToPartitionKeys = baseTableUpdateInfo.getNameToPartKeys();
         List<PartitionKey> partitionKeys = Lists.newArrayList();
+        MaterializedView mv = mvContext.getMv();
+        Map<Table, List<Column>> refBaseTablePartitionColumns = mv.getRefBaseTablePartitionColumns();
+        if (!refBaseTablePartitionColumns.containsKey(refBaseTable)) {
+            return null;
+        }
+        List<Column> partitionColumns = refBaseTablePartitionColumns.get(refBaseTable);
         try {
             for (String partitionName : refTablePartitionNamesToRefresh) {
                 if (!nameToPartitionKeys.containsKey(partitionName)) {
@@ -465,7 +471,6 @@ public class MVCompensationBuilder {
                 if (pCell instanceof PRangeCell) {
                     partitionKeys.add(((PRangeCell) pCell).getRange().lowerEndpoint());
                 } else if (pCell instanceof PListCell) {
-                    List<Column> partitionColumns = refBaseTable.getPartitionColumns();
                     List<PartitionKey> keys = ((PListCell) pCell).toPartitionKeys(partitionColumns);
                     partitionKeys.addAll(keys);
                 }
