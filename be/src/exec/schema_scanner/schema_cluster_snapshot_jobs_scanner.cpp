@@ -23,14 +23,13 @@
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaClusterSnapshotJobsScanner::_s_columns[] = {
-        {"snapshot_name", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
-        {"job_id", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(long), true},
-        {"created_time", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(long), true},
-        {"finished_time", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(long), true},
-        {"state", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
-        {"detail_info", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
-        {"error_message", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
-
+        {"SNAPSHOT_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"JOB_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(long), true},
+        {"CREATED_TIME", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(long), true},
+        {"FINISHED_TIME", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(long), true},
+        {"STATE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"DETAIL_INFO", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"ERROR_MESSAGE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
 };
 
 SchemaClusterSnapshotJobsScanner::SchemaClusterSnapshotJobsScanner()

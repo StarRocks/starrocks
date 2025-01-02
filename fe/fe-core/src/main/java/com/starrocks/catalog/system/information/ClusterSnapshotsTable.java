@@ -33,7 +33,7 @@ public class ClusterSnapshotsTable {
                 builder()
                         .column("SNAPSHOT_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("SNAPSHOT_TYPE", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("CREATE_TIME", ScalarType.createType(PrimitiveType.BIGINT))
+                        .column("CREATED_TIME", ScalarType.createType(PrimitiveType.BIGINT))
                         .column("FINISHED_TIME", ScalarType.createType(PrimitiveType.BIGINT))
                         .column("FE_JOURNAL_ID", ScalarType.createType(PrimitiveType.BIGINT))
                         .column("STARMGR_JOURNAL_ID", ScalarType.createType(PrimitiveType.BIGINT))

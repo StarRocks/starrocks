@@ -23,16 +23,15 @@
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaClusterSnapshotsScanner::_s_columns[] = {
-        {"snapshot_name", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
-        {"snapshot_type", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
-        {"created_time", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(long), true},
-        {"finished_time", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(long), true},
-        {"fe_jouranl_id", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(long), true},
-        {"starmgr_jouranl_id", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(long), true},
-        {"properties", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
-        {"storage_volume", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
-        {"storage_path", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
-
+        {"SNAPSHOT_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"SNAPSHOT_TYPE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"CREATED_TIME", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(long), true},
+        {"FINISHED_TIME", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(long), true},
+        {"FE_JOURNAL_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(long), true},
+        {"STARMGR_JOURNAL_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(long), true},
+        {"PROPERTIES", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"STORAGE_VOLUME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"STORAGE_PATH", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
 };
 
 SchemaClusterSnapshotsScanner::SchemaClusterSnapshotsScanner()

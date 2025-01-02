@@ -33,7 +33,7 @@ public class ClusterSnapshotJobsTable {
                 builder()
                         .column("SNAPSHOT_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("JOB_ID", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("CREATE_TIME", ScalarType.createType(PrimitiveType.BIGINT))
+                        .column("CREATED_TIME", ScalarType.createType(PrimitiveType.BIGINT))
                         .column("FINISHED_TIME", ScalarType.createType(PrimitiveType.BIGINT))
                         .column("STATE", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("DETAIL_INFO", ScalarType.createVarchar(NAME_CHAR_LEN))
