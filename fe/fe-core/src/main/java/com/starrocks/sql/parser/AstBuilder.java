@@ -1642,13 +1642,25 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         TableName targetTableName = qualifiedNameToTableName(qualifiedName);
 
         List<ColWithComment> colWithComments = null;
-        if (context.columnNameWithComment().size() > 0) {
+        if (!context.columnNameWithComment().isEmpty()) {
             colWithComments = visit(context.columnNameWithComment(), ColWithComment.class);
         }
-        QueryStatement queryStatement = (QueryStatement) visit(context.queryStatement());
-        AlterClause alterClause = new AlterViewClause(colWithComments, queryStatement, createPos(context));
 
-        return new AlterViewStmt(targetTableName, alterClause, createPos(context));
+        boolean isSecurity = false;
+        if (context.SECURITY() != null) {
+            if (context.NONE() != null) {
+                isSecurity = false;
+            } else if (context.INVOKER() != null) {
+                isSecurity = true;
+            }
+
+            return new AlterViewStmt(targetTableName, isSecurity, null, createPos(context));
+        } else {
+            QueryStatement queryStatement = (QueryStatement) visit(context.queryStatement());
+            AlterClause alterClause = new AlterViewClause(colWithComments, queryStatement, createPos(context));
+
+            return new AlterViewStmt(targetTableName, isSecurity, alterClause, createPos(context));
+        }
     }
 
     @Override

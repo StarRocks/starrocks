@@ -154,7 +154,7 @@ public class ColumnPrivilege {
                                 List<TableName> allTables = view.getTableRefs();
                                 for (TableName t : allTables) {
                                     BasicTable basicTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getBasicTable(
-                                            t.getCatalog(), t.getDb(), t.getTbl());
+                                            InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, t.getDb(), t.getTbl());
 
                                     Authorizer.checkAnyActionOnTableLikeObject(context.getCurrentUserIdentity(),
                                             null, t.getDb(), basicTable);
