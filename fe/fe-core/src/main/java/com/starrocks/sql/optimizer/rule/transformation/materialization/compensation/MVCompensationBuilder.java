@@ -233,15 +233,17 @@ public class MVCompensationBuilder {
                 Preconditions.checkArgument(partitionInfo.isListPartition());
                 Map<String, PListCell> partitionNameWithLists = mvBaseTableUpdateInfo.getPartitionNameWithLists();
                 List<PartitionKey> partitionKeys = Lists.newArrayList();
+                MaterializedView mv = mvContext.getMv();
                 try {
                     List<Column> partitionCols = refBaseTable.getPartitionColumns();
                     for (String partitionName : refTablePartitionNamesToRefresh) {
                         Preconditions.checkState(partitionNameWithLists.containsKey(partitionName));
-                        PListCell pCell = partitionNameWithLists.get(partitionName);
                         // TODO: we are assuming PListCell's cells' order is by partition's columns order, we may introduce
                         // partition columns in PListCell.
-                        List<PartitionKey> keys = pCell.toPartitionKeys(partitionCols);
-                        partitionKeys.addAll(keys);
+                        partitionNameWithLists.get(partitionName)
+                                .toPartitionKeys(partitionCols)
+                                .stream()
+                                .forEach(partitionKeys::add);
                     }
                 } catch (Exception e) {
                     logMVRewrite("Failed to get partition keys for ref base table: {}", refBaseTable.getName(),
@@ -343,16 +345,7 @@ public class MVCompensationBuilder {
                         return MVCompensation.createUnkownState(sessionVariable);
                     }
                 }
-
-                // NOTE: ref base table's partition keys may contain multi columns, but mv may only contain one column.
-                List<Integer> colIndexes = PartitionUtil.getRefBaseTablePartitionColumIndexes(mv, refBaseTable);
-                if (colIndexes == null) {
-                    return MVCompensation.createUnkownState(sessionVariable);
-                }
-                List<PartitionKey> newPartitionKeys = selectPartitionKeys.stream()
-                        .map(partitionKey -> PartitionUtil.getSelectedPartitionKey(partitionKey, colIndexes))
-                        .collect(Collectors.toList());
-                Set<String> selectPartitionNames = newPartitionKeys.stream()
+                Set<String> selectPartitionNames = selectPartitionKeys.stream()
                         .map(PartitionUtil::generateMVPartitionName)
                         .collect(Collectors.toSet());
                 if (selectPartitionNames.stream().noneMatch(refTablePartitionNamesToRefresh::contains)) {
