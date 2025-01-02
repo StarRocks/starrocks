@@ -348,7 +348,8 @@ public:
     Status evaluate_agg_fn_exprs(Chunk* chunk, bool use_intermediate);
     Status evaluate_agg_input_column(Chunk* chunk, std::vector<ExprContext*>& agg_expr_ctxs, int i);
 
-    Status output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk, bool use_selection = false);
+    Status output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk);
+    Status output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk, size_t num_input_rows, bool use_selection);
 
     // convert input chunk to spill format
     Status convert_to_spill_format(Chunk* input_chunk, ChunkPtr* chunk);

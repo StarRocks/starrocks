@@ -939,7 +939,12 @@ Status Aggregator::evaluate_groupby_exprs(Chunk* chunk) {
     return _evaluate_group_by_exprs(chunk);
 }
 
-Status Aggregator::output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk, bool use_selection) {
+Status Aggregator::output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk) {
+    return output_chunk_by_streaming(input_chunk, chunk, input_chunk->num_rows(), false);
+}
+
+Status Aggregator::output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk, size_t num_input_rows,
+                                             bool use_selection) {
     // The input chunk is already intermediate-typed, so there is no need to convert it again.
     // Only when the input chunk is input-typed, we should convert it into intermediate-typed chunk.
     // is_passthrough is on indicate that the chunk is input-typed.
@@ -949,7 +954,6 @@ Status Aggregator::output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk
     DCHECK(!use_selection || !_group_by_columns.empty());
     // If using selection, then `_group_by_columns` has been filtered by `_streaming_selection`, and input_chunk has
     // not been filtered yet. `input_chunk` is filtered by `_streaming_selection` after `evaluate_agg_fn_exprs`.
-    const size_t num_input_rows = input_chunk->num_rows();
     const size_t num_rows = use_selection ? _group_by_columns[0]->size() : num_input_rows;
 
     // build group by columns
@@ -1064,7 +1068,7 @@ Status Aggregator::convert_to_spill_format(Chunk* input_chunk, ChunkPtr* chunk) 
 
 Status Aggregator::output_chunk_by_streaming_with_selection(Chunk* input_chunk, ChunkPtr* chunk) {
     // Streaming aggregate at least has one group by column
-    size_t chunk_size = _group_by_columns[0]->size();
+    const size_t num_input_rows = _group_by_columns[0]->size();
     for (auto& _group_by_column : _group_by_columns) {
         // Multi GroupColumn may be have the same SharedPtr
         // If ColumnSize and ChunkSize are not equal,
@@ -1073,12 +1077,12 @@ Status Aggregator::output_chunk_by_streaming_with_selection(Chunk* input_chunk, 
 
         // At present, the type of problem cannot be completely solved,
         // and a new solution needs to be designed to solve it completely
-        if (_group_by_column->size() == chunk_size) {
+        if (_group_by_column->size() == num_input_rows) {
             _group_by_column->filter(_streaming_selection);
         }
     }
 
-    RETURN_IF_ERROR(output_chunk_by_streaming(input_chunk, chunk, true));
+    RETURN_IF_ERROR(output_chunk_by_streaming(input_chunk, chunk, num_input_rows, true));
     return Status::OK();
 }
 
