@@ -18,6 +18,7 @@
 #pragma once
 
 #include <datasketches/quantiles_sketch.hpp>
+
 #include "runtime/memory/counting_allocator.h"
 #include "util/slice.h"
 
