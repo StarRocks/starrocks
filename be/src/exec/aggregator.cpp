@@ -939,15 +939,20 @@ Status Aggregator::evaluate_groupby_exprs(Chunk* chunk) {
     return _evaluate_group_by_exprs(chunk);
 }
 
-Status Aggregator::output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk) {
+Status Aggregator::output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk, bool use_selection) {
     // The input chunk is already intermediate-typed, so there is no need to convert it again.
     // Only when the input chunk is input-typed, we should convert it into intermediate-typed chunk.
     // is_passthrough is on indicate that the chunk is input-typed.
     auto use_intermediate_as_input = _use_intermediate_as_input();
     const auto& slots = _intermediate_tuple_desc->slots();
 
+    DCHECK(!use_selection || !_group_by_columns.empty());
+    // If using selection, then `_group_by_columns` has been filtered by `_streaming_selection`, and input_chunk has
+    // not been filtered yet. After input_chunk is filtered by `_streaming_selection` after `evaluate_agg_fn_exprs`.
+    const size_t num_input_rows = input_chunk->num_rows();
+    const size_t num_rows = use_selection ? _group_by_columns[0]->size() : num_input_rows;
+
     // build group by columns
-    size_t num_rows = input_chunk->num_rows();
     ChunkPtr result_chunk = std::make_shared<Chunk>();
     for (size_t i = 0; i < _group_by_columns.size(); i++) {
         DCHECK_EQ(num_rows, _group_by_columns[i]->size());
@@ -966,7 +971,23 @@ Status Aggregator::output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk
         DCHECK(!_group_by_columns.empty());
 
         RETURN_IF_ERROR(evaluate_agg_fn_exprs(input_chunk));
-        const auto num_rows = _group_by_columns[0]->size();
+        if (use_selection) {
+            for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
+                for (auto& agg_input_column : _agg_input_columns[i]) {
+                    // AggColumn and GroupColumn may be the same SharedPtr,
+                    // If ColumnSize and ChunkSize are not equal,
+                    // indicating that the Filter has been executed in GroupByColumn
+                    // e.g.: select c1, count(distinct c1) from t1 group by c1;
+
+                    // At present, the type of problem cannot be completely solved,
+                    // and a new solution needs to be designed to solve it completely
+                    if (agg_input_column != nullptr && agg_input_column->size() == num_input_rows) {
+                        agg_input_column->filter(_streaming_selection);
+                    }
+                }
+            }
+        }
+
         Columns agg_result_column = _create_agg_result_columns(num_rows, true);
         for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
             size_t id = _group_by_columns.size() + i;
@@ -1056,22 +1077,8 @@ Status Aggregator::output_chunk_by_streaming_with_selection(Chunk* input_chunk, 
             _group_by_column->filter(_streaming_selection);
         }
     }
-    for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
-        for (auto& agg_input_column : _agg_input_columns[i]) {
-            // AggColumn and GroupColumn may be the same SharedPtr,
-            // If ColumnSize and ChunkSize are not equal,
-            // indicating that the Filter has been executed in GroupByColumn
-            // e.g.: select c1, count(distinct c1) from t1 group by c1;
 
-            // At present, the type of problem cannot be completely solved,
-            // and a new solution needs to be designed to solve it completely
-            if (agg_input_column != nullptr && agg_input_column->size() == chunk_size) {
-                agg_input_column->filter(_streaming_selection);
-            }
-        }
-    }
-
-    RETURN_IF_ERROR(output_chunk_by_streaming(input_chunk, chunk));
+    RETURN_IF_ERROR(output_chunk_by_streaming(input_chunk, chunk, true));
     return Status::OK();
 }
 
