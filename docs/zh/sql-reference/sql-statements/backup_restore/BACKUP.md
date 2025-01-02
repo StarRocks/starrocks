@@ -5,9 +5,11 @@ keywords: ['beifen']
 
 # BACKUP
 
-## 功能
-
 备份指定数据库、表或分区的数据。当前 StarRocks 仅支持备份 OLAP 类型表。更多信息，请见 备份和恢复。
+
+:::tip
+有关备份和恢复的概述，请参阅 [备份和恢复指南](../../../administration/management/Backup_and_restore.md) 中。
+:::
 
 数据备份为异步操作。您可以通过 [SHOW BACKUP](./SHOW_BACKUP.md) 语句查看备份作业状态，或通过 [CANCEL BACKUP](./CANCEL_BACKUP.md) 语句取消备份作业。作业成功后，您可以通过 [SHOW SNAPSHOT](./SHOW_SNAPSHOT.md) 查看特定仓库对应的数据快照信息。
 
