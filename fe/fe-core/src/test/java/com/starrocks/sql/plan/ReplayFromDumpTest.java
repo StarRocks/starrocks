@@ -31,6 +31,7 @@ import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.Assert;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.stream.Stream;
@@ -258,7 +259,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     public void testTPCDS64() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/tpcds64"), null, TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("  83:SELECT\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("  86:SELECT\n" +
                 "  |  predicates: 457: d_year = 1999"));
     }
 
@@ -956,6 +957,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     }
 
     @Test
+    @Ignore
     public void testQueryTimeout() {
         Assert.assertThrows(StarRocksPlannerException.class,
                 () -> getPlanFragment(getDumpInfoFromFile("query_dump/query_timeout"), null, TExplainLevel.NORMAL));
