@@ -37,6 +37,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HivePartitionKey;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Table;
@@ -740,6 +741,42 @@ public class PartitionUtil {
             partitionListMap.put(mvPartitionName, new PListCell(partitionKeyList));
         }
         return partitionListMap;
+    }
+
+    /**
+     * Get MV's partition column indexes in ref base table's partition columns.
+     * NOTE:MV's partition columns may not be the same with ref base table's partition columns which may be less than ref base
+     * table's partition columns or not in the same order.
+     */
+    public static List<Integer> getRefBaseTablePartitionColumIndexes(MaterializedView mv,
+                                                                     Table refBaseTable) {
+        Map<Table, List<Column>> mvRefBaseTablePartitionColumns = mv.getRefBaseTablePartitionColumns();
+        if (!mvRefBaseTablePartitionColumns.containsKey(refBaseTable)) {
+            return null;
+        }
+        List<Column> mvRefBaseTablePartitionCols = mvRefBaseTablePartitionColumns.get(refBaseTable);
+        if (mvRefBaseTablePartitionCols.size() > refBaseTable.getPartitionColumns().size()) {
+            return null;
+        }
+        List<Column> refBaseTablePartitionColumns = refBaseTable.getPartitionColumns();
+        return mvRefBaseTablePartitionCols.stream()
+                .map(col -> refBaseTablePartitionColumns.indexOf(col))
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Return the partition key of the selected partition columns. colIndexes is the index of selected partition columns.
+     */
+    public static PartitionKey getSelectedPartitionKey(PartitionKey partitionKey,
+                                                       List<Integer> colIndexes) {
+        if (partitionKey.getKeys().size() <= 1 || colIndexes == null) {
+            return partitionKey;
+        }
+        List<LiteralExpr> newPartitionKeys =
+                colIndexes.stream().map(partitionKey.getKeys()::get).collect(Collectors.toList());
+        List<PrimitiveType> newPartitionTypes =
+                colIndexes.stream().map(partitionKey.getTypes()::get).collect(Collectors.toList());
+        return new PartitionKey(newPartitionKeys, newPartitionTypes);
     }
 
     private static List<List<String>> generateMVPartitionList(PartitionKey partitionKey) {
