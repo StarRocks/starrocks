@@ -94,7 +94,7 @@ select count(udtfstring) from t0, udtfstring(c1);
 -- !result
 select count(udtfstring_wrong_match) from t0, udtfstring_wrong_match(c1);
 -- result:
-E: (1064, 'Type not matched, expect class java.lang.Integer, but got class java.lang.String: BE:10004')
+[REGEX].*Type not matched, expect class java.lang.Integer, but got class java.lang.String.*
 -- !result
 select count(udtfint) from t0, udtfint(c1);
 -- result:
