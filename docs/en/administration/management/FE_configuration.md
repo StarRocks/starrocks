@@ -3176,7 +3176,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### lake_compaction_score_upper_bound
 
-- Default: 0
+- Default: 2000
 - Type: Long
 - Unit: -
 - Is mutable: Yes
