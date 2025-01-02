@@ -53,6 +53,16 @@ PROPERTIES
 "file" = "${udf_url}/starrocks-jdbc/ExceptionUDF2.jar"
 );
 
+CREATE FUNCTION shared_exception_test(string)
+RETURNS string
+PROPERTIES
+(
+"symbol" = "ExceptionUDF2", 
+"isolation"="shared",
+"type" = "StarrocksJar", 
+"file" = "${udf_url}/starrocks-jdbc/ExceptionUDF2.jar"
+);
+
 CREATE TABLE `t0` (
   `c0` int(11) NULL COMMENT "",
   `c1` varchar(20) NULL COMMENT "",
@@ -95,3 +105,6 @@ set spill_mode="force";
 select sum(delta), count(*), count(delta) from (select (sum(c3) - sumbigint(c3)) as delta from t0 group by c0,c1) tb;
 -- test udf exception case
 select count(*) from t0 where exception_test(c1) is null;
+-- run two times
+select count(*) from t0 where shared_exception_test(c1) is null;
+select count(*) from t0 where shared_exception_test(c1) is null;
