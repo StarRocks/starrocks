@@ -61,6 +61,17 @@ PROPERTIES
 );
 -- result:
 -- !result
+CREATE FUNCTION shared_exception_test(string)
+RETURNS string
+PROPERTIES
+(
+"symbol" = "ExceptionUDF2", 
+"isolation"="shared",
+"type" = "StarrocksJar", 
+"file" = "${udf_url}/starrocks-jdbc/ExceptionUDF2.jar"
+);
+-- result:
+-- !result
 CREATE TABLE `t0` (
   `c0` int(11) NULL COMMENT "",
   `c1` varchar(20) NULL COMMENT "",
@@ -83,7 +94,7 @@ select count(udtfstring) from t0, udtfstring(c1);
 -- !result
 select count(udtfstring_wrong_match) from t0, udtfstring_wrong_match(c1);
 -- result:
-[REGEX].*Type not matched, expect class java.lang.Integer, but got class java.lang.String.*
+E: (1064, 'Type not matched, expect class java.lang.Integer, but got class java.lang.String: BE:10004')
 -- !result
 select count(udtfint) from t0, udtfint(c1);
 -- result:
@@ -150,6 +161,14 @@ select sum(delta), count(*), count(delta) from (select (sum(c3) - sumbigint(c3))
 0	40960	40960
 -- !result
 select count(*) from t0 where exception_test(c1) is null;
+-- result:
+[REGEX].*java.lang.NullPointerException.*
+-- !result
+select count(*) from t0 where shared_exception_test(c1) is null;
+-- result:
+[REGEX].*java.lang.NullPointerException.*
+-- !result
+select count(*) from t0 where shared_exception_test(c1) is null;
 -- result:
 [REGEX].*java.lang.NullPointerException.*
 -- !result
