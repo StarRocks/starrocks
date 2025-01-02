@@ -229,20 +229,22 @@ Status ImmutableIndexShard::compress_and_write(const CompressionTypePB& compress
         return write(wb);
     }
 
+    
     if (npage() > 0) {
         const BlockCompressionCodec* codec = nullptr;
         RETURN_IF_ERROR(get_block_compression_codec(compression_type, &codec));
         int32_t offset = 0;
+        faststring compressed_body;
+        compressed_body.resize(codec->max_compressed_len(_page_size));
         for (int32_t i = 0; i < npage(); i++) {
             Slice input((uint8_t*)_pages.data() + i * _page_size, _page_size);
             *uncompressed_size += input.get_size();
-            faststring compressed_body;
-            compressed_body.resize(codec->max_compressed_len(_page_size));
             Slice compressed_slice(compressed_body);
             RETURN_IF_ERROR(codec->compress(input, &compressed_slice));
             RETURN_IF_ERROR(wb.append(compressed_slice));
             compressed_pages_off[i] = offset;
             offset += compressed_slice.get_size();
+            compressed_body.clear();
         }
         compressed_pages_off[npage()] = offset;
         return Status::OK();
