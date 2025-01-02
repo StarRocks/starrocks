@@ -36,8 +36,14 @@ package com.starrocks.common.util;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.StructField;
+import com.starrocks.catalog.StructType;
+import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.TimeoutException;
@@ -241,27 +247,53 @@ public class Util {
         return tokens;
     }
 
-    private static String columnHashString(Column column) {
-        Type type = column.getType();
+    private static String handleArrayType(ArrayType type) {
+        String itemTypeString = columnHashString(type.getItemType());
+        return itemTypeString == null ? null : type.prettyPrint();
+    }
+
+    private static String handleMapType(MapType type) {
+        String keyTypeString = columnHashString(type.getKeyType());
+        String valueTypeString = columnHashString(type.getValueType());
+        return (keyTypeString == null || valueTypeString == null) ? null : type.prettyPrint();
+    }
+
+    private static String handleStructType(StructType type) {
+        for (StructField field : type.getFields()) {
+            if (columnHashString(field.getType()) == null) {
+                return null;
+            }
+        }
+        return type.prettyPrint();
+    }
+
+    private static String columnHashString(Type type) {
         if (type.isScalarType()) {
             PrimitiveType primitiveType = type.getPrimitiveType();
             switch (primitiveType) {
                 case CHAR:
                 case VARCHAR:
                     return String.format(
-                            TYPE_STRING_MAP.get(primitiveType), column.getStrLen());
+                            TYPE_STRING_MAP.get(primitiveType), ((ScalarType) type).getLength());
                 case DECIMALV2:
                 case DECIMAL32:
                 case DECIMAL64:
                 case DECIMAL128:
                     return String.format(
-                            TYPE_STRING_MAP.get(primitiveType), column.getPrecision(),
-                            column.getScale());
+                            TYPE_STRING_MAP.get(primitiveType), 
+                            ((ScalarType) type).getScalarPrecision(),
+                            ((ScalarType) type).getScalarScale());
                 default:
                     return TYPE_STRING_MAP.get(primitiveType);
             }
+        } else if (type.isArrayType()) {
+            return handleArrayType((ArrayType) type);
+        } else if (type.isMapType()) {
+            return handleMapType((MapType) type);
+        } else if (type.isStructType()) {
+            return handleStructType((StructType) type);
         } else {
-            return type.prettyPrint();
+            return type.prettyPrint(); 
         }
     }
 
@@ -273,7 +305,7 @@ public class Util {
         // columns
         for (Column column : columns) {
             adler32.update(column.getName().getBytes(StandardCharsets.UTF_8));
-            String typeString = columnHashString(column);
+            String typeString = columnHashString(column.getType());
             if (typeString == null) {
                 throw new SemanticException("Type:%s of column:%s does not support",
                         column.getType().toString(), column.getName());
