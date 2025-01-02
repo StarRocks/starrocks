@@ -441,6 +441,9 @@ Status ParquetScanner::next_batch() {
                     _last_file_scan_bytes += incr_bytes;
                     _state->update_num_bytes_scan_from_source(incr_bytes);
                 }
+            } else if (status.is_not_found() && (_file_scan_type == TFileScanType::FILES_INSERT ||
+                                                 _file_scan_type == TFileScanType::FILES_QUERY)) {
+                status = status.clone_and_append("Consider setting 'fill_mismatch_column_with' = 'null' property");
             }
             return status;
         }

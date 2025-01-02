@@ -56,7 +56,7 @@ select * from files(
     "auto_detect_sample_files" = "1",
     "fill_mismatch_column_with" = "none");
 -- result:
-[REGEX].*Schema column count: 4 doesn't match source value column count: 3. Column separator: ',', Row delimiter: .*, Row: '4,Tom,30.4', File: .*basic0_column_mismatch.csv. Consider setting 'fill_mismatch_column_with' = 'null'.*
+[REGEX].*Schema column count: 4 doesn't match source value column count: 3. Column separator: ',', Row delimiter: .*, Row: '4,Tom,30.4', File: .*basic0_column_mismatch.csv. Consider setting 'fill_mismatch_column_with' = 'null' property.*
 -- !result
 
 
