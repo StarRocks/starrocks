@@ -383,6 +383,7 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
         }
         UPDATE_STARLET_CONFIG(s3_use_list_objects_v1, fslib_s3client_use_list_objects_v1);
         UPDATE_STARLET_CONFIG(starlet_delete_files_max_key_in_batch, delete_files_max_key_in_batch);
+        UPDATE_STARLET_CONFIG(starlet_starmgr_client_rpc_timeout_ms, starmgr_client_rpc_timeout_ms);
 #undef UPDATE_STARLET_CONFIG
 
 #ifndef BUILD_FORMAT_LIB

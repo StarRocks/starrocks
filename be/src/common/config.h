@@ -1133,6 +1133,8 @@ CONF_mInt32(starlet_delete_files_max_key_in_batch, "1000");
 CONF_mInt32(starlet_filesystem_instance_cache_capacity, "10000");
 CONF_mInt32(starlet_filesystem_instance_cache_ttl_sec, "86400");
 CONF_mBool(starlet_write_file_with_tag, "false");
+// rpc timeout between starlet and starmgr, default as 5s
+CONF_mInt32(starlet_starmgr_client_rpc_timeout_ms, "5000");
 #endif
 
 CONF_mInt64(lake_metadata_cache_limit, /*2GB=*/"2147483648");

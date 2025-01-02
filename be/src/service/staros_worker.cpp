@@ -56,6 +56,8 @@ DECLARE_bool(fslib_s3client_use_list_objects_v1);
 DECLARE_int32(fs_buffer_prefetch_threadpool_size);
 // switch to turn on/off buffer prefetch when read
 DECLARE_bool(fs_enable_buffer_prefetch);
+// starmgr grpc client deadline in milliseconds
+DECLARE_int32(starmgr_client_rpc_timeout_ms);
 
 namespace starrocks {
 
@@ -499,6 +501,10 @@ void init_staros_worker(const std::shared_ptr<starcache::StarCache>& star_cache)
                                                           std::to_string(config::starlet_fs_read_prefetch_enable));
     staros::starlet::common::GFlagsUtils::UpdateFlagValue(
             "fs_buffer_prefetch_threadpool_size", std::to_string(config::starlet_fs_read_prefetch_threadpool_size));
+    staros::starlet::common::GFlagsUtils::UpdateFlagValue("cachemgr_evict_interval",
+                                                          std::to_string(config::starlet_cache_evict_interval));
+    staros::starlet::common::GFlagsUtils::UpdateFlagValue(
+            "starmgr_client_rpc_timeout_ms", std::to_string(config::starlet_starmgr_client_rpc_timeout_ms));
 
     FLAGS_fslib_s3_virtual_address_domainlist = config::starlet_s3_virtual_address_domainlist;
     // use the same configuration as the external query
