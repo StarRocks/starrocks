@@ -4,9 +4,13 @@ displayed_sidebar: "English"
 
 # SHOW RESTORE
 
+<<<<<<< HEAD:docs/en/sql-reference/sql-statements/data-manipulation/SHOW_RESTORE.md
 ## Description
 
 Views the last RESTORE task in a specified database. For more information, see [data backup and restoration](../../../administration/Backup_and_restore.md).
+=======
+Views the last RESTORE task in a specified database.
+>>>>>>> dc79ada1d7 ([Doc] fix descriptions, add guide link (#54620)):docs/en/sql-reference/sql-statements/backup_restore/SHOW_RESTORE.md
 
 > **NOTE**
 >

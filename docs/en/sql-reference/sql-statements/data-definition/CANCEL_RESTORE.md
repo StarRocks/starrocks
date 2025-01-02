@@ -4,9 +4,13 @@ displayed_sidebar: "English"
 
 # CANCEL RESTORE
 
+<<<<<<< HEAD:docs/en/sql-reference/sql-statements/data-definition/CANCEL_RESTORE.md
 ## Description
 
 Cancels an on-going RESTORE task in a specified database. For more information, see [data backup and restoration](../../../administration/Backup_and_restore.md).
+=======
+Cancels an ongoing RESTORE task in a specified database.
+>>>>>>> dc79ada1d7 ([Doc] fix descriptions, add guide link (#54620)):docs/en/sql-reference/sql-statements/backup_restore/CANCEL_RESTORE.md
 
 > **CAUTION**
 >

@@ -4,9 +4,13 @@ displayed_sidebar: "English"
 
 # SHOW SNAPSHOT
 
+<<<<<<< HEAD:docs/en/sql-reference/sql-statements/data-manipulation/SHOW_SNAPSHOT.md
 ## Description
 
 Views data snapshots in a specified repository. For more information, see [data backup and restoration](../../../administration/Backup_and_restore.md).
+=======
+Views data snapshots in a specified repository. For more information, see [data backup and restoration](../../../administration/management/Backup_and_restore.md).
+>>>>>>> dc79ada1d7 ([Doc] fix descriptions, add guide link (#54620)):docs/en/sql-reference/sql-statements/backup_restore/SHOW_SNAPSHOT.md
 
 ## Syntax
 

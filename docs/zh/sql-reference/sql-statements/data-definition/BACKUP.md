@@ -4,11 +4,21 @@ displayed_sidebar: "Chinese"
 
 # BACKUP
 
+<<<<<<< HEAD:docs/zh/sql-reference/sql-statements/data-definition/BACKUP.md
 ## 功能
 
 备份指定数据库、表或分区的数据。当前 StarRocks 仅支持备份 OLAP 类型表。更多信息，请见 [备份和恢复](../../../administration/Backup_and_restore.md)。
 
 数据备份为异步操作。您可以通过 [SHOW BACKUP](../data-manipulation/SHOW_BACKUP.md) 语句查看备份作业状态，或通过 [CANCEL BACKUP](../data-definition/CANCEL_BACKUP.md) 语句取消备份作业。作业成功后，您可以通过 [SHOW SNAPSHOT](../data-manipulation/SHOW_SNAPSHOT.md) 查看特定仓库对应的数据快照信息。
+=======
+备份指定数据库、表或分区的数据。当前 StarRocks 仅支持备份 OLAP 类型表。更多信息，请见 备份和恢复。
+
+:::tip
+有关备份和恢复的概述，请参阅 [备份和恢复指南](../../../administration/management/Backup_and_restore.md) 中。
+:::
+
+数据备份为异步操作。您可以通过 [SHOW BACKUP](./SHOW_BACKUP.md) 语句查看备份作业状态，或通过 [CANCEL BACKUP](./CANCEL_BACKUP.md) 语句取消备份作业。作业成功后，您可以通过 [SHOW SNAPSHOT](./SHOW_SNAPSHOT.md) 查看特定仓库对应的数据快照信息。
+>>>>>>> dc79ada1d7 ([Doc] fix descriptions, add guide link (#54620)):docs/zh/sql-reference/sql-statements/backup_restore/BACKUP.md
 
 > **注意**
 >

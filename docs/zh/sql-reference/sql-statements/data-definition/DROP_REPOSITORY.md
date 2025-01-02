@@ -4,9 +4,13 @@ displayed_sidebar: "Chinese"
 
 # DROP REPOSITORY
 
+<<<<<<< HEAD:docs/zh/sql-reference/sql-statements/data-definition/DROP_REPOSITORY.md
 ## 功能
 
 删除一个仓库。仓库用于 [备份和恢复](../../../administration/Backup_and_restore.md) 数据库数据。
+=======
+删除一个仓库。仓库用于 备份和恢复 数据库数据。
+>>>>>>> dc79ada1d7 ([Doc] fix descriptions, add guide link (#54620)):docs/zh/sql-reference/sql-statements/backup_restore/DROP_REPOSITORY.md
 
 > **注意**
 >

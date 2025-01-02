@@ -4,11 +4,21 @@ displayed_sidebar: "English"
 
 # RESTORE
 
+<<<<<<< HEAD:docs/en/sql-reference/sql-statements/data-definition/RESTORE.md
 ## Description
 
 Restores data to a specified database, table, or partition. Currently, StarRocks only supports restoring data to OLAP tables. For more information, see [data backup and restoration](../../../administration/Backup_and_restore.md).
 
 RESTORE is an asynchronous operation. You can check the status of a RESTORE job using [SHOW RESTORE](../data-manipulation/SHOW_RESTORE.md), or cancel a RESTORE job using [CANCEL RESTORE](../data-definition/CANCEL_RESTORE.md).
+=======
+Restores data to a specified database, table, or partition. Currently, StarRocks only supports restoring data to OLAP tables.
+
+:::tip
+For an overview of backup and restore please see the [backup and restore guide](../../../administration/management/Backup_and_restore.md).
+:::
+
+RESTORE is an asynchronous operation. You can check the status of a RESTORE job using [SHOW RESTORE](./SHOW_RESTORE.md), or cancel a RESTORE job using [CANCEL RESTORE](./CANCEL_RESTORE.md).
+>>>>>>> dc79ada1d7 ([Doc] fix descriptions, add guide link (#54620)):docs/en/sql-reference/sql-statements/backup_restore/RESTORE.md
 
 > **CAUTION**
 >

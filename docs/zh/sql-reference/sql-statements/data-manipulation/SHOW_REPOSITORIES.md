@@ -4,8 +4,6 @@ displayed_sidebar: "Chinese"
 
 # SHOW REPOSITORIES
 
-## 功能
-
 查看当前已创建的仓库。
 
 ## 语法

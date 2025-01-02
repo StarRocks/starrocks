@@ -4,9 +4,13 @@ displayed_sidebar: "Chinese"
 
 # SHOW RESTORE
 
+<<<<<<< HEAD:docs/zh/sql-reference/sql-statements/data-manipulation/SHOW_RESTORE.md
 ## 功能
 
 查看指定数据库中的恢复任务。更多信息，请见 [备份和恢复](../../../administration/Backup_and_restore.md)。
+=======
+查看指定数据库中的恢复任务。更多信息，请见 备份和恢复。
+>>>>>>> dc79ada1d7 ([Doc] fix descriptions, add guide link (#54620)):docs/zh/sql-reference/sql-statements/backup_restore/SHOW_RESTORE.md
 
 > **说明**
 >

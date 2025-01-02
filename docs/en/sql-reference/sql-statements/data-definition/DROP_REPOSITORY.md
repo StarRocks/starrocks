@@ -4,9 +4,13 @@ displayed_sidebar: "English"
 
 # DROP REPOSITORY
 
+<<<<<<< HEAD:docs/en/sql-reference/sql-statements/data-definition/DROP_REPOSITORY.md
 ## Description
 
 Deletes a repository. Repositories are used to store data snapshots for [data backup and restoration](../../../administration/Backup_and_restore.md).
+=======
+Deletes a repository. Repositories are used to store data snapshots for data backup and restoration.
+>>>>>>> dc79ada1d7 ([Doc] fix descriptions, add guide link (#54620)):docs/en/sql-reference/sql-statements/backup_restore/DROP_REPOSITORY.md
 
 > **CAUTION**
 >

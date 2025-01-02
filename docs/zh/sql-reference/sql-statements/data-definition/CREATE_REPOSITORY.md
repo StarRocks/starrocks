@@ -4,9 +4,17 @@ displayed_sidebar: "Chinese"
 
 # CREATE REPOSITORY
 
+<<<<<<< HEAD:docs/zh/sql-reference/sql-statements/data-definition/CREATE_REPOSITORY.md
 ## 功能
 
 基于远端存储系统创建用于存储数据快照的仓库。仓库用于 [备份和恢复](../../../administration/Backup_and_restore.md) 数据库数据。
+=======
+基于远端存储系统创建用于存储数据快照的仓库。仓库用于 备份和恢复 数据库数据。
+>>>>>>> dc79ada1d7 ([Doc] fix descriptions, add guide link (#54620)):docs/zh/sql-reference/sql-statements/backup_restore/CREATE_REPOSITORY.md
+
+:::tip
+有关备份和恢复的概述，请参阅 [备份和恢复指南](../../../administration/management/Backup_and_restore.md) 中。
+:::
 
 > **注意**
 >

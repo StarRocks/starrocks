@@ -4,9 +4,13 @@ displayed_sidebar: "Chinese"
 
 # CANCEL BACKUP
 
+<<<<<<< HEAD:docs/zh/sql-reference/sql-statements/data-definition/CANCEL_BACKUP.md
 ## 功能
 
 取消指定数据库中一个正在进行的备份任务。更多信息，请见 [备份和恢复](../../../administration/Backup_and_restore.md)。
+=======
+取消指定数据库中一个正在进行的备份任务。更多信息，请见 备份和恢复。
+>>>>>>> dc79ada1d7 ([Doc] fix descriptions, add guide link (#54620)):docs/zh/sql-reference/sql-statements/backup_restore/CANCEL_BACKUP.md
 
 ## 语法
 

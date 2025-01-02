@@ -4,9 +4,17 @@ displayed_sidebar: "English"
 
 # CREATE REPOSITORY
 
+<<<<<<< HEAD:docs/en/sql-reference/sql-statements/data-definition/CREATE_REPOSITORY.md
 ## Description
 
 Creates a repository in a remote storage system that is used to store data snapshots for [backing up and restoring data](../../../administration/Backup_and_restore.md).
+=======
+Creates a repository in a remote storage system that is used to store data snapshots for backing up and restoring data.
+>>>>>>> dc79ada1d7 ([Doc] fix descriptions, add guide link (#54620)):docs/en/sql-reference/sql-statements/backup_restore/CREATE_REPOSITORY.md
+
+:::tip
+For an overview of backup and restore please see the [backup and restore guide](../../../administration/management/Backup_and_restore.md).
+:::
 
 > **CAUTION**
 >
