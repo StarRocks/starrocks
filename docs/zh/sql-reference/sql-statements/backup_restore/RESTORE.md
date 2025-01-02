@@ -5,9 +5,11 @@ keywords: ['beifen']
 
 # RESTORE
 
-## 功能
-
 恢复指定数据库、表或分区的数据。当前 StarRocks 仅支持恢复 OLAP 类型表。更多信息，请见 备份和恢复。
+
+:::tip
+有关备份和恢复的概述，请参阅 [备份和恢复指南](../../../administration/management/Backup_and_restore.md) 中。
+:::
 
 数据恢复为异步操作。您可以通过 [SHOW RESTORE](./SHOW_RESTORE.md) 语句查看恢复作业状态，或通过 [CANCEL RESTORE](./CANCEL_RESTORE.md) 语句取消恢复作业。
 
