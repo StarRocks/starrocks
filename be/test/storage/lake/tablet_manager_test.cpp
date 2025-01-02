@@ -87,7 +87,6 @@ TEST_F(LakeTabletManagerTest, tablet_meta_write_and_read) {
     rowset_meta_pb->set_data_size(1024);
     rowset_meta_pb->set_num_rows(5);
     EXPECT_OK(_tablet_manager->put_tablet_metadata(metadata));
-    EXPECT_OK(_tablet_manager->tablet_metadata_exists(12345, 2));
     string result;
     ASSERT_TRUE(execute_script("System.print(StorageEngine.get_lake_tablet_metadata_json(12345,2))", result).ok());
     auto res = _tablet_manager->get_tablet_metadata(12345, 2);
@@ -95,7 +94,6 @@ TEST_F(LakeTabletManagerTest, tablet_meta_write_and_read) {
     EXPECT_EQ(res.value()->id(), 12345);
     EXPECT_EQ(res.value()->version(), 2);
     EXPECT_OK(_tablet_manager->delete_tablet_metadata(12345, 2));
-    EXPECT_STATUS(Status::NotFound(""), _tablet_manager->tablet_metadata_exists(12345, 2));
     res = _tablet_manager->get_tablet_metadata(12345, 2);
     EXPECT_TRUE(res.status().is_not_found());
 }
