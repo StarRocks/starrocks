@@ -369,6 +369,10 @@ public class StatisticUtils {
         }
         List<String> columns = new ArrayList<>();
         for (Column column : table.getBaseSchema()) {
+            // disable stats collection for auto generated columns, see SelectAnalyzer#analyzeSelect
+            if (column.isGeneratedColumn() && column.getName().startsWith(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX)) {
+                continue;
+            }
             if (!column.isAggregated()) {
                 columns.add(column.getName());
             } else if (isPrimaryEngine && column.getAggregationType().equals(AggregateType.REPLACE)) {
