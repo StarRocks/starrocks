@@ -204,10 +204,15 @@ void LoadChannel::add_chunks(const PTabletWriterAddChunksRequest& req, PTabletWr
     watch.start();
     faststring uncompressed_buffer;
     std::unique_ptr<Chunk> chunk;
+    bool eos = false;
     for (int i = 0; i < req.requests_size(); i++) {
         auto& request = req.requests(i);
         VLOG_RPC << "tablet writer add chunk, id=" << print_id(request.id()) << ", index_id=" << request.index_id()
                  << ", sender_id=" << request.sender_id() << " request_index=" << i << " eos=" << request.eos();
+
+        if (request.eos()) {
+            eos = true;
+        }
 
         if (i == 0 && request.has_chunk()) {
             chunk = std::make_unique<Chunk>();
@@ -222,10 +227,11 @@ void LoadChannel::add_chunks(const PTabletWriterAddChunksRequest& req, PTabletWr
                          << ", index_id=" << request.index_id() << ", sender_id=" << request.sender_id()
                          << " request_index=" << i << " eos=" << request.eos()
                          << " err=" << response->status().error_msgs(0);
-            return;
+            break;
         }
     }
     StarRocksMetrics::instance()->load_channel_add_chunks_total.increment(1);
+    StarRocksMetrics::instance()->load_channel_add_chunks_eos_total.increment(eos ? 1 : 0);
     StarRocksMetrics::instance()->load_channel_add_chunks_duration_us.increment(watch.elapsed_time() / 1000);
     report_profile(response, config::pipeline_print_profile);
 }
