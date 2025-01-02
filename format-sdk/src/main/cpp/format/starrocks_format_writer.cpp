@@ -172,7 +172,7 @@ private:
         }
         std::sort(objects.begin(), objects.end());
         auto metadata_location = objects.back();
-        return _lake_tablet_manager->get_tablet_metadata(fs, metadata_location, true);
+        return _lake_tablet_manager->get_tablet_metadata(metadata_location, true, 0, fs);
     }
 
 private:

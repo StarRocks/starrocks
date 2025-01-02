@@ -80,23 +80,22 @@ public:
 
     Status put_tablet_metadata(const TabletMetadataPtr& metadata);
 
-    StatusOr<TabletMetadataPtr> get_tablet_metadata(int64_t tablet_id, int64_t version, bool fill_cache = true);
+    // When using get_tablet_metadata to determine whether a new version exists in publish version,
+    // a valid expected_gtid must be passed in.
+    StatusOr<TabletMetadataPtr> get_tablet_metadata(int64_t tablet_id, int64_t version, bool fill_cache = true,
+                                                    int64_t expected_gtid = 0,
+                                                    const std::shared_ptr<FileSystem>& fs = nullptr);
 
-    StatusOr<TabletMetadataPtr> get_tablet_metadata(const std::string& path, bool fill_cache = true);
-    StatusOr<TabletMetadataPtr> get_tablet_metadata(std::shared_ptr<FileSystem> fs, const std::string& path,
-                                                    bool fill_cache = true);
+    // Do not use this function except in a list dir
+    StatusOr<TabletMetadataPtr> get_tablet_metadata(const std::string& path, bool fill_cache = true,
+                                                    int64_t expected_gtid = 0,
+                                                    const std::shared_ptr<FileSystem>& fs = nullptr);
 
     TabletMetadataPtr get_latest_cached_tablet_metadata(int64_t tablet_id);
 
     StatusOr<TabletMetadataIter> list_tablet_metadata(int64_t tablet_id);
 
     Status delete_tablet_metadata(int64_t tablet_id, int64_t version);
-
-    // Use this function instead of get_tablet_metadata where you just need to check if tablet metadata exists
-    Status tablet_metadata_exists(int64_t tablet_id, int64_t version);
-
-    // Do not use this function except in a list dir
-    Status tablet_metadata_exists(const std::string& path);
 
     Status put_txn_log(const TxnLog& log);
 
@@ -217,17 +216,18 @@ private:
     static std::string global_schema_cache_key(int64_t index_id);
     static std::string tablet_schema_cache_key(int64_t tablet_id);
     static std::string tablet_latest_metadata_cache_key(int64_t tablet_id);
+    static Status drop_local_cache(const std::string& path);
 
     StatusOr<TabletSchemaPtr> load_and_parse_schema_file(const std::string& path);
     StatusOr<TabletSchemaPtr> get_tablet_schema_by_id(int64_t tablet_id, int64_t schema_id);
 
-    StatusOr<TabletMetadataPtr> load_tablet_metadata(std::shared_ptr<FileSystem> fs,
-                                                     const std::string& metadata_location, bool fill_cache);
     Status put_tablet_metadata(const TabletMetadataPtr& metadata, const std::string& metadata_location);
-    StatusOr<TabletMetadataPtr> load_tablet_metadata(const std::string& metadata_location, bool fill_cache);
+    StatusOr<TabletMetadataPtr> load_tablet_metadata(const std::string& metadata_location, bool fill_cache,
+                                                     int64_t expected_gtid, const std::shared_ptr<FileSystem>& fs);
     StatusOr<TxnLogPtr> load_txn_log(const std::string& txn_log_location, bool fill_cache);
     StatusOr<CombinedTxnLogPtr> load_combined_txn_log(const std::string& path, bool fill_cache);
 
+private:
     std::shared_ptr<LocationProvider> _location_provider;
     std::unique_ptr<Metacache> _metacache;
     std::unique_ptr<CompactionScheduler> _compaction_scheduler;
