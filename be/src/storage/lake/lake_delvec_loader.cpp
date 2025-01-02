@@ -38,7 +38,7 @@ Status LakeDelvecLoader::load_from_file(const TabletSegmentId& tsid, int64_t ver
     (*pdelvec).reset(new DelVector());
     // 2. find in delvec file
     ASSIGN_OR_RETURN(auto metadata,
-                     _tablet_manager->get_tablet_metadata(tsid.tablet_id, version, _fill_cache, 0, _lake_io_opts.fs));
+                     _tablet_manager->get_tablet_metadata(tsid.tablet_id, version, _fill_cache));
     RETURN_IF_ERROR(
             lake::get_del_vec(_tablet_manager, *metadata, tsid.segment_id, _fill_cache, _lake_io_opts, pdelvec->get()));
     return Status::OK();
