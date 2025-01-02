@@ -948,7 +948,7 @@ Status Aggregator::output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk
 
     DCHECK(!use_selection || !_group_by_columns.empty());
     // If using selection, then `_group_by_columns` has been filtered by `_streaming_selection`, and input_chunk has
-    // not been filtered yet. After input_chunk is filtered by `_streaming_selection` after `evaluate_agg_fn_exprs`.
+    // not been filtered yet. `input_chunk` is filtered by `_streaming_selection` after `evaluate_agg_fn_exprs`.
     const size_t num_input_rows = input_chunk->num_rows();
     const size_t num_rows = use_selection ? _group_by_columns[0]->size() : num_input_rows;
 
