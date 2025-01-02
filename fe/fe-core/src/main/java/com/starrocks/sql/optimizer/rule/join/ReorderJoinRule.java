@@ -202,7 +202,7 @@ public class ReorderJoinRule extends Rule {
                     // and the query plan degenerates to the left deep tree
                     if (Utils.hasUnknownColumnsStats(innerJoinRoot.first) &&
                             (!FeConstants.runningUnitTest || FeConstants.isReplayFromQueryDump)) {
-                        continue;
+                        break;
                     }
                 }
 
