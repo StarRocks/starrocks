@@ -26,7 +26,6 @@ import org.junit.Test;
 
 import java.util.Map;
 
-
 public class AutoMVPartitionPolicyIcebergTest extends MVTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {

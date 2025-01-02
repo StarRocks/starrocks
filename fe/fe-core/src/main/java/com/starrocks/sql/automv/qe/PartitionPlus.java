@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.automv.qe;
 
+import com.google.api.client.util.Lists;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
@@ -22,11 +23,15 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.ExpressionRangePartitionInfoV2;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
 import com.starrocks.connector.PartitionUtil;
+import com.starrocks.connector.iceberg.IcebergPartitionTransform;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.sql.automv.column.GenericColumn;
 import com.starrocks.sql.automv.column.OriginalColumn;
@@ -40,6 +45,8 @@ import com.starrocks.sql.automv.util.Util;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorFunctions;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
+import org.apache.iceberg.PartitionField;
+import org.apache.iceberg.PartitionSpec;
 
 import java.util.Collection;
 import java.util.Collections;
@@ -50,20 +57,105 @@ import java.util.Optional;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 public class PartitionPlus {
     private final TablePiece tablePiece;
     private final List<Pair<Integer, GenericColumn>> partitionColumns;
-    private final Op partitionOp;
+    private final List<Op> partitionOps;
     private final Map<String, List<Op>> partitions;
 
-    private PartitionPlus(TablePiece tablePiece, List<Pair<Integer, GenericColumn>> partitionColumns, Op partitionOp,
+    private PartitionPlus(TablePiece tablePiece,
+                          List<Pair<Integer, GenericColumn>> partitionColumns,
+                          List<Op> partitionOps,
                           Map<String, List<Op>> partitions) {
         this.tablePiece = Objects.requireNonNull(tablePiece);
         this.partitionColumns = Objects.requireNonNull(partitionColumns);
-        this.partitionOp = Objects.requireNonNull(partitionOp);
+        this.partitionOps = Objects.requireNonNull(partitionOps);
         this.partitions = Objects.requireNonNull(partitions);
+    }
+
+    public static Optional<List<Op>> getPartitionOpsForExpressionPartitionOfOlapTable(TablePiece tablePiece) {
+        Table table = tablePiece.getTable().getTable();
+        Optional<OlapTable> optOlapTable = Util.downcast(table, OlapTable.class);
+        if (!optOlapTable.isPresent()) {
+            return Optional.empty();
+        }
+        OlapTable olapTable = optOlapTable.get();
+
+        PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+        Optional<List<Expr>> optPartitionExprs = Util.downcast(partitionInfo, ExpressionRangePartitionInfo.class)
+                .map(info -> info.getPartitionExprs(table.getIdToColumn()));
+        if (!optPartitionExprs.isPresent()) {
+            optPartitionExprs = Util.downcast(partitionInfo, ExpressionRangePartitionInfoV2.class)
+                    .map(info -> info.getPartitionExprs(table.getIdToColumn()));
+        }
+
+        if (!optPartitionExprs.isPresent()) {
+            return Optional.empty();
+        }
+
+        Map<Integer, Integer> idReverseMap = tablePiece.getCommonState().getIdConverter().getReverseMap();
+        Map<String, Integer> columnToColumnRefIds = tablePiece.getColumns().entrySet().stream()
+                .map(e -> Pair.create(e.getKey(), e.getValue()))
+                .filter(p -> p.second.isOriginal())
+                .map(p -> Pair.create(p.first, p.second.mustCast(OriginalColumn.class)))
+                .collect(ImmutableMap.toImmutableMap(p -> p.second.getColumnName(), p -> idReverseMap.get(p.first)));
+
+        Function<Expr, Op> exprToOp = expr -> OpUtil.toOpConverter(
+                        tablePiece.getCommonState().getIdConverter(),
+                        tablePiece.getColumns())
+                .apply(SqlToScalarOperatorTranslator.translatePartitionBy(expr, columnToColumnRefIds));
+        return optPartitionExprs.map(exprs -> exprs.stream().map(exprToOp).collect(Collectors.toList()));
+    }
+
+    public static Optional<List<Op>> getPartitionOpsForTransformPartitionOfIcebergTable(
+            TablePiece tablePiece, List<Pair<Integer, GenericColumn>> partitionColumnIds) {
+        Table table = tablePiece.getTable().getTable();
+        if (!table.isIcebergTable()) {
+            return Optional.empty();
+        }
+        IcebergTable icebergTable = (IcebergTable) table;
+        org.apache.iceberg.Table nativeTable = icebergTable.getNativeTable();
+        PartitionSpec partitionSpec = nativeTable.spec();
+        if (partitionSpec.isUnpartitioned() || nativeTable.specs().size() > 1) {
+            return Optional.empty();
+        }
+
+        Map<String, Op> columnNameToVar = partitionColumnIds
+                .stream()
+                .collect(Collectors.toMap(
+                        p -> Objects.requireNonNull(p.second.getColumnName()),
+                        p -> OpUtil.columnToOp(p.first, p.second)));
+        List<Op> partitionOps = Lists.newArrayList();
+        for (PartitionField partitionField : partitionSpec.fields()) {
+            IcebergPartitionTransform transform =
+                    IcebergPartitionTransform.fromString(partitionField.transform().toString());
+            String partitionColumnName = nativeTable.schema().findColumnName(partitionField.sourceId());
+            Op var = Objects.requireNonNull(columnNameToVar.get(partitionColumnName));
+            Type type = var.getType();
+            if (!type.isFixedPointType() && !type.isDateType() && !type.isStringType()) {
+                return Optional.empty();
+            }
+            switch (transform) {
+                case YEAR:
+                case MONTH:
+                case DAY:
+                case HOUR:
+                    Op timeUnit = Op.val(ConstantOperator.createChar(transform.name().toLowerCase()));
+                    List<Op> args = ImmutableList.of(timeUnit, var);
+                    Op dateTruncOp = Op.apply(Type.DATE, FunctionKind.of(FunctionSet.DATE_TRUNC), true, args);
+                    partitionOps.add(dateTruncOp);
+                    break;
+                case IDENTITY:
+                    partitionOps.add(var);
+                    break;
+                default:
+                    return Optional.empty();
+            }
+        }
+        return Optional.of(partitionOps);
     }
 
     public static PartitionPlus of(TablePiece tablePiece, PartitionExtractor extractor) {
@@ -80,37 +172,22 @@ public class PartitionPlus {
                 .stream()
                 .map(getColumn)
                 .collect(Collectors.toList());
+        Optional<List<Op>> optPartitionOps = getPartitionOpsForExpressionPartitionOfOlapTable(tablePiece);
+        if (!optPartitionOps.isPresent()) {
+            optPartitionOps = getPartitionOpsForTransformPartitionOfIcebergTable(tablePiece, partitionColumnIds);
+        }
 
-        Map<Integer, Integer> idReserveMap = tablePiece.getCommonState().getIdConverter().getReverseMap();
-        Map<String, Integer> columnToColumnRefIds = tablePiece.getColumns().entrySet().stream()
-                .map(e -> Pair.create(e.getKey(), e.getValue()))
-                .filter(p -> p.second.isOriginal())
-                .map(p -> Pair.create(p.first, p.second.mustCast(OriginalColumn.class)))
-                .collect(ImmutableMap.toImmutableMap(p -> p.second.getColumnName(), p -> idReserveMap.get(p.first)));
-
-        Function<Expr, Op> exprToOp = expr -> OpUtil.toOpConverter(
-                        tablePiece.getCommonState().getIdConverter(),
-                        tablePiece.getColumns())
-                .apply(SqlToScalarOperatorTranslator.translatePartitionBy(expr, columnToColumnRefIds));
-
-        Op partitionOp = Util.downcast(table, OlapTable.class)
-                .map(OlapTable::getPartitionInfo)
-                .map(partitionInfo ->
-                        Util.downcast(partitionInfo, ExpressionRangePartitionInfo.class)
-                                .map(exprPartitionInfo -> exprPartitionInfo.getPartitionExprs(table.getIdToColumn()))
-                                .orElseGet(() -> Util.downcast(partitionInfo, ExpressionRangePartitionInfoV2.class)
-                                        .map(exprPartitionInfo -> exprPartitionInfo.getPartitionExprs(
-                                                table.getIdToColumn()))
-                                        .orElse(null)))
-                .map(exprs -> exprs.get(0))
-                .map(exprToOp)
-                .orElse(Val.NULL_VAL);
+        List<Op> partitionOps = optPartitionOps.orElseGet(() -> partitionColumnIds
+                .stream().map(p -> OpUtil.columnToOp(p.first, p.second)).collect(Collectors.toList()));
+        Preconditions.checkState(partitionOps.size() == partitionColumnIds.size());
+        Preconditions.checkState(partitionColumnIds.isEmpty() || IntStream.range(0, partitionColumnIds.size())
+                .anyMatch(i -> partitionOps.get(i).getIds().contains(partitionColumnIds.get(i).first)));
 
         Map<String, List<Op>> partitions =
                 Optional.ofNullable(extractor).map(e -> e.getCachedOrExtract(tablePiece.getTable()))
                         .orElseGet(Collections::emptyMap);
 
-        return new PartitionPlus(tablePiece, partitionColumnIds, partitionOp, partitions);
+        return new PartitionPlus(tablePiece, partitionColumnIds, partitionOps, partitions);
     }
 
     public TablePiece getTablePiece() {
@@ -121,8 +198,8 @@ public class PartitionPlus {
         return partitionColumns;
     }
 
-    public Op getPartitionOp() {
-        return partitionOp;
+    public List<Op> getPartitionOps() {
+        return partitionOps;
     }
 
     public Map<String, List<Op>> getPartitions() {
@@ -205,25 +282,20 @@ public class PartitionPlus {
         if (partitionColumns.isEmpty()) {
             return Optional.empty();
         }
-        if (!partitionOp.isNullVal()) {
-            Preconditions.checkState(partitionColumns.size() == 1);
-            return Optional.of(partitionOp);
+        Optional<Op> op = inferTimeFormat(getStringTimeFormats());
+        // only for external table, when prefer a range-partition, we use infer time format
+        if (op.isPresent() && isPreferRange()) {
+            return op;
+        } else if (op.isPresent()) {
+            // use the partition column directly
+            return op.get().collect(Op::isVar).stream().findFirst();
         } else {
-            Optional<Op> op = inferTimeFormat(getStringTimeFormats());
-            // only for external table, when prefer a range-partition, we use infer time format
-            if (op.isPresent() && isPreferRange()) {
-                return op;
-            } else if (op.isPresent()) {
-                // use the partition column directly
-                return op.get().collect(Op::isVar).stream().findFirst();
-            } else {
-                // prefer date/datetime partition column, then first partition column.
-                Pair<Integer, GenericColumn> idAndColumn = partitionColumns
-                        .stream().filter(p -> p.second.getType().isDateType())
-                        .findFirst()
-                        .orElse(partitionColumns.get(0));
-                return Optional.of(OpUtil.columnToOp(idAndColumn.first, idAndColumn.second));
-            }
+            // prefer date/datetime partition column, then first partition column.
+            Pair<Integer, GenericColumn> idAndColumn = partitionColumns
+                    .stream().filter(p -> p.second.getType().isDateType())
+                    .findFirst()
+                    .orElse(partitionColumns.get(0));
+            return Optional.of(OpUtil.columnToOp(idAndColumn.first, idAndColumn.second));
         }
     }
 }

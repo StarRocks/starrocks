@@ -15,6 +15,7 @@
 package com.starrocks.sql.automv.lattice;
 
 import com.starrocks.sql.automv.util.AutoMVUtil;
+import com.starrocks.sql.automv.util.Result;
 import org.apache.commons.io.IOUtils;
 import org.junit.Assert;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -23,6 +24,10 @@ import org.junit.jupiter.params.provider.MethodSource;
 
 import java.io.File;
 import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.PrintWriter;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.Random;
@@ -64,5 +69,33 @@ public class RecommendMVFromQueryDumpTest {
                 "tpch.tpch_1g_q14.json",
                 "tpch.tpch_1g_q17.json");
         Assert.assertTrue(noMVs.contains(testName) || !mvList.isEmpty());
+    }
+
+    public void analyzePredicates(String dirName, String name) throws Exception {
+        analyzePredicates(dirName, name, 0);
+    }
+
+    public void analyzePredicates(String dirName, String name, int start) throws Exception {
+        File dir = new File(dirName);
+        File[] dumpFiles = dir.listFiles(f -> f.getName().endsWith("_queryDump.json"));
+        int i = start;
+        while (i < dumpFiles.length) {
+            File outputFile = new File(name + i + ".sql");
+            FileWriter fileWriter = new FileWriter(outputFile);
+            PrintWriter ps = new PrintWriter(fileWriter);
+            List<File> dumpLists = Arrays.asList(dumpFiles);
+            List<File> subLists = dumpLists.subList(i, Math.min(i + 100, dumpFiles.length));
+            subLists.stream().flatMap(df -> {
+                System.out.println(df.getAbsolutePath());
+                return Result.wrap(() -> IOUtils.toString(new FileReader(df)))
+                        .bind(jsonStr -> {
+                            QueryDumpMVRecommender recommender = QueryDumpMVRecommender.of();
+                            return recommender.analyzePredicates(jsonStr, sv -> {
+                            });
+                        }).unwrap().orElseGet(Collections::emptyList).stream();
+            }).forEach(ps::println);
+            ps.flush();
+            ps.close();
+        }
     }
 }

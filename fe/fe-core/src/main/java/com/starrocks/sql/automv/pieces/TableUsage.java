@@ -209,7 +209,7 @@ public class TableUsage {
                 }
                 prevTbl = tbl;
             }
-            return Optional.of(Preconditions.checkNotNull(prevTbl));
+            return Optional.ofNullable(prevTbl);
         };
     }
 

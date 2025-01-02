@@ -19,6 +19,10 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
 import com.google.gson.Gson;
+import com.starrocks.analysis.BinaryPredicate;
+import com.starrocks.analysis.InPredicate;
+import com.starrocks.analysis.IsNullPredicate;
+import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.MvId;
 import com.starrocks.common.Config;
@@ -26,6 +30,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.connector.ConnectorTableInfo;
+import com.starrocks.planner.PlanFragment;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -46,6 +51,7 @@ import com.starrocks.sql.automv.util.Result;
 import com.starrocks.sql.automv.util.Util;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.ReplayWithMVFromDumpTest;
 import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.utframe.StarRocksAssert;
@@ -73,6 +79,7 @@ import java.util.stream.Stream;
 import static com.starrocks.sql.plan.ReplayFromDumpTestBase.getDumpInfoFromJson;
 
 public class QueryDumpMVRecommender {
+    public static Supplier<Integer> nextId = Util.nextIdGenerator();
     private final StarRocksAssert starRocksAssert;
 
     private QueryDumpMVRecommender(StarRocksAssert starRocksAssert) {
@@ -363,6 +370,82 @@ public class QueryDumpMVRecommender {
         String query = dumpInfo.getOriginStmt();
         return recommendAndValidate(starRocksAssert, query, sv -> {
         });
+    }
+
+    private List<String> analyzePredicates(StarRocksAssert starRocksAssert,
+                                           QueryDumpInfo dumpInfo) {
+        String query = dumpInfo.getOriginStmt();
+        Result<Pair<String, ExecPlan>> maybePlan =
+                Result.wrap(() -> UtFrameUtils.getPlanAndFragment(starRocksAssert.getCtx(), query));
+        if (maybePlan.maybeError().isPresent()) {
+            return Collections.emptyList();
+        }
+        List<PlanFragment> fragments = maybePlan.mustUnwrap().second.getFragments();
+        Pattern pattern = Pattern.compile("\\b\\d+\\b: (\\b\\w+\\b)");
+        Function<String, String> trimIdColon = s -> {
+            return s.replaceAll(pattern.pattern(), "$1");
+        };
+        return fragments.stream()
+                .flatMap(fragment -> fragment.collectScanNodes().values().stream())
+                .flatMap(scanNode -> {
+                    int id = nextId.get();
+                    return scanNode.getConjuncts()
+                            .stream()
+                            .map(expr -> {
+                                String tableName = scanNode.getTableName();
+                                List<String> usedColumns = expr.collectAllSlotRefs()
+                                        .stream()
+                                        .map(SlotRef::toSql)
+                                        .map(trimIdColon)
+                                        .sorted()
+                                        .distinct()
+                                        .collect(Collectors.toList());
+                                String pred = trimIdColon.apply(expr.toSql());
+                                String type = expr.getClass().getSimpleName();
+                                if (expr.getClass().equals(InPredicate.class)) {
+                                    InPredicate inPred = (InPredicate) expr;
+                                    type = inPred.isNotIn() ? "NOT_IN" : "IN";
+                                } else if (expr.getClass().equals(BinaryPredicate.class)) {
+                                    BinaryPredicate binPred = (BinaryPredicate) expr;
+                                    if (binPred.getOp().isEqual()) {
+                                        type = "EQ";
+                                    } else if (binPred.getOp().isNotEqual()) {
+                                        type = "NOT_EQ";
+                                    } else {
+                                        type = "RANGE";
+                                    }
+                                } else if (expr.getClass().equals(IsNullPredicate.class)) {
+                                    IsNullPredicate isNullPred = (IsNullPredicate) expr;
+                                    type = isNullPred.isNotNull() ? "IS_NOT_NULL" : "IS_NULL";
+                                }
+
+                                PrettyPrinter printer = new PrettyPrinter();
+                                printer.add("INSERT INTO predicate_analysis VALUES (")
+                                        .addSingleQuoted(tableName).add(", ")
+                                        .add(id).add(", ");
+                                List<PrettyPrinter> items = usedColumns.stream()
+                                        .map(col -> new PrettyPrinter().addSingleQuoted(col))
+                                        .collect(Collectors.toList());
+
+                                printer.add("[").addSuperSteps(", ", items).add("], ");
+                                printer.addSingleQuoted(type).add(", ");
+                                printer.addEscapedSingleQuoted(pred);
+                                printer.add(");");
+                                return printer.getResult();
+                            });
+                })
+                .collect(Collectors.toList());
+    }
+
+    public List<String> analyzePredicates(String dumpJson, Consumer<SessionVariable> svSetter) {
+        Result<String> maybeDumpJson = Result.wrap(() -> rectifyQueryDump(starRocksAssert, dumpJson));
+        Preconditions.checkArgument(maybeDumpJson.maybeError().isEmpty());
+        String newQueryDump = maybeDumpJson.mustUnwrap();
+        QueryDumpInfo dumpInfo = getDumpInfoFromJson(newQueryDump);
+        System.out.println(dumpInfo.getOriginStmt());
+        return Result.wrap(() ->
+                        UtFrameUtils.execInMockedEnv(starRocksAssert, dumpInfo, svSetter, this::analyzePredicates))
+                .mustUnwrap();
     }
 
     public List<MVResultWithRewriteTraceInfo> recommend(String dumpJson, Consumer<SessionVariable> svSetter)

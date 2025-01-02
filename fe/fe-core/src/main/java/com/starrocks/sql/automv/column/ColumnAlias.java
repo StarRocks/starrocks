@@ -18,6 +18,7 @@ import java.util.Objects;
 import javax.annotation.Nullable;
 
 public class ColumnAlias {
+    public static final String UNQUALIFIED = "UNQUALIFIED";
     private final String tableAlias;
     private final String name;
     private final String qualifiedName;
@@ -25,11 +26,15 @@ public class ColumnAlias {
     private ColumnAlias(String tableAlias, String name) {
         this.tableAlias = Objects.requireNonNull(tableAlias);
         this.name = Objects.requireNonNull(name);
-        this.qualifiedName = String.format("%s.%s", tableAlias, name);
+        this.qualifiedName = tableAlias.equals(UNQUALIFIED) ? name : String.format("%s.%s", tableAlias, name);
     }
 
     public static ColumnAlias of(String tableAlias, String name) {
         return new ColumnAlias(tableAlias, name);
+    }
+
+    public static ColumnAlias of(String name) {
+        return new ColumnAlias(UNQUALIFIED, name);
     }
 
     public String getQualifiedName() {

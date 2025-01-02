@@ -37,6 +37,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -64,19 +65,21 @@ public class PartitionPolicy {
         };
     }
 
-    private static List<Integer> getPartitionColumnsFor11MV(PlanPiece piece, PartitionExtractor partitionExtractor) {
+    private static List<Op> getPartitionColumnsFor11MV(PlanPiece piece, PartitionExtractor partitionExtractor) {
         Preconditions.checkState(piece.isTableScan());
         List<PartitionPlus> partitions = piece.getPartitionColumns(partitionExtractor);
         if (partitions.size() != 1) {
             return Collections.emptyList();
         }
         PartitionPlus partitionPlus = partitions.get(0);
+        List<Op> partitionOps = partitionPlus.getPartitionOps();
+        if (partitionOps.isEmpty()) {
+            return Collections.emptyList();
+        }
         if (partitionPlus.isRangePartitionOlapTable()) {
-            return Collections.singletonList(partitionPlus.getPartitionColumns().get(0).first);
+            return Collections.singletonList(partitionPlus.getPartitionOps().get(0));
         } else {
-            return partitionPlus.getPartitionColumns()
-                    .stream()
-                    .map(p -> p.first).collect(Collectors.toList());
+            return partitionPlus.getPartitionOps();
         }
     }
 
@@ -133,23 +136,29 @@ public class PartitionPolicy {
     public static Optional<PrettyPrinter> getPartitionClauseFor11MV(PlanPiece piece,
                                                                     PartitionExtractor extractor,
                                                                     TieredMap<Integer, ColumnAlias> columnAliases) {
-        List<Integer> partitionIds = getPartitionColumnsFor11MV(piece, extractor);
-        if (partitionIds.isEmpty()) {
+        List<Op> partitionOps = getPartitionColumnsFor11MV(piece, extractor);
+        if (partitionOps.isEmpty()) {
             return Optional.empty();
-        } else if (partitionIds.size() == 1) {
-            String alias = Objects.requireNonNull(columnAliases.get(partitionIds.get(0))).getName();
+        }
+        TieredMap<Integer, ColumnAlias> unqualifiedColumnAliases = columnAliases.entrySet().stream()
+                .collect(TieredMap.toMap(
+                        Map.Entry::getKey,
+                        e -> ColumnAlias.of(e.getValue().getName())));
+
+        Function<Op, String> toSqlConverter = OpUtil.toOpToSqlConverter(unqualifiedColumnAliases);
+        List<String> partitionExprs = partitionOps.stream().map(toSqlConverter).collect(Collectors.toList());
+
+        if (partitionExprs.size() == 1) {
+            String alias = Objects.requireNonNull(partitionExprs.get(0));
             PrettyPrinter printer = new PrettyPrinter()
                     .add("PARTITION BY ")
-                    .addBacktickQuoted(alias)
+                    .add(alias)
                     .newLine();
             return Optional.of(printer);
         } else {
-            List<String> aliases = partitionIds.stream()
-                    .map(id -> Objects.requireNonNull(columnAliases.get(id)).getName())
-                    .collect(Collectors.toList());
             PrettyPrinter printer = new PrettyPrinter()
                     .add("PARTITION BY (")
-                    .addItemsBacktickQuoted(",", aliases).add(")")
+                    .addItems(",", partitionExprs).add(")")
                     .newLine();
             return Optional.of(printer);
         }

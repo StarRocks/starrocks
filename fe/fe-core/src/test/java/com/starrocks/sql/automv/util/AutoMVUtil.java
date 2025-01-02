@@ -16,6 +16,7 @@ package com.starrocks.sql.automv.util;
 
 import com.google.api.client.util.Lists;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
@@ -34,6 +35,7 @@ import com.starrocks.sql.automv.estimation.MultiColumnCards;
 import com.starrocks.sql.automv.generator.AggregateMVGenerator;
 import com.starrocks.sql.automv.generator.MVGenerateContext;
 import com.starrocks.sql.automv.generator.MVName;
+import com.starrocks.sql.automv.generator.OneOneMVGenerator;
 import com.starrocks.sql.automv.generator.QueryGenerateResult;
 import com.starrocks.sql.automv.lattice.MVRecommendation;
 import com.starrocks.sql.automv.lifecycle.MVChangeLog;
@@ -47,6 +49,7 @@ import com.starrocks.sql.automv.pieces.FQTable;
 import com.starrocks.sql.automv.pieces.PlanPiece;
 import com.starrocks.sql.automv.pieces.PlanPieceBuilder;
 import com.starrocks.sql.automv.pieces.PlanPieceNormalizer;
+import com.starrocks.sql.automv.pieces.TableUsage;
 import com.starrocks.sql.automv.pn.TimeGranule;
 import com.starrocks.sql.automv.policies.AggregatePolicies;
 import com.starrocks.sql.automv.policies.AggregatePolicy;
@@ -73,6 +76,7 @@ import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.time.Month;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -324,6 +328,32 @@ public class AutoMVUtil {
                 .flatMap(p -> RboOptimizer.get11MVPlanPieces(p.first, p.second, ctx)
                         .stream()
                         .map(piece -> Pair.create(p.first, piece)))
+                .collect(Collectors.toList());
+    }
+
+    public static List<String> recommendOneOneMV(ConnectContext ctx, String query) {
+        List<Pair<String, PlanPiece>> pieces =
+                AutoMVUtil.get11MVPieces(ctx, ImmutableList.of(Pair.create("q", query)), a -> true);
+        List<TableUsage> tableUsages = pieces.stream()
+                .map(p -> p.second)
+                .map(TableUsage::analyzeUsage)
+                .flatMap(Collection::stream)
+                .collect(Collectors.toList());
+
+        return TableUsage.mergeUsages(tableUsages)
+                .stream()
+                .map(tu -> {
+                    AutoMVOptions options = AutoMVOptions.of(new PartitionExtractor(), ctx.getSessionVariable());
+                    ColumnRefToIdConverter idConverter = tu.getPiece().getCommonState().getIdConverter();
+                    MVGenerateContext mvGenerateContext = MVGenerateContext.builder()
+                            .setMvNameGenerator(q -> MVName.generateFromQuery(q).toString())
+                            .setNextId(idConverter::nextId)
+                            .setOptions(options)
+                            .build();
+                    return OneOneMVGenerator.generate(tu, mvGenerateContext)
+                            .map(r -> r.getSubquery().getResult());
+                }).filter(Optional::isPresent)
+                .map(Optional::get)
                 .collect(Collectors.toList());
     }
 

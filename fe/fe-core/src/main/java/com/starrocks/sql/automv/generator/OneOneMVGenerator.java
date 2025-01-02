@@ -15,12 +15,15 @@
 package com.starrocks.sql.automv.generator;
 
 import com.google.api.client.util.Lists;
+import com.google.common.base.Preconditions;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.automv.column.ColumnAlias;
 import com.starrocks.sql.automv.column.GenericColumn;
 import com.starrocks.sql.automv.pieces.PlanPiece;
+import com.starrocks.sql.automv.pieces.TablePiece;
 import com.starrocks.sql.automv.pieces.TableUsage;
 import com.starrocks.sql.automv.qe.PartitionExtractor;
+import com.starrocks.sql.automv.qe.PartitionPlus;
 import com.starrocks.sql.automv.util.PrettyPrinter;
 import com.starrocks.sql.automv.util.TieredMap;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -73,10 +76,32 @@ public class OneOneMVGenerator {
                 .findFirst();
     }
 
+    public static TablePiece addPartitionColumns(TablePiece tablePiece, PartitionExtractor extractor) {
+        List<PartitionPlus> partitions = tablePiece.getPartitionColumns(extractor);
+        Preconditions.checkState(partitions.size() == 1);
+        List<Pair<Integer, GenericColumn>> partitionColumns = partitions.get(0).getPartitionColumns();
+        ColumnRefSet newUsedColumns = tablePiece.getUsedColumns();
+        partitionColumns.forEach(p -> newUsedColumns.union(p.first));
+        TieredMap.Builder<Integer, GenericColumn> newColumnsBuilder = tablePiece.getColumns().newTier();
+        partitionColumns.forEach(p -> {
+            if (!tablePiece.getColumns().containsKey(p.first)) {
+                newColumnsBuilder.put(p.first, p.second);
+            }
+        });
+        TieredMap<Integer, GenericColumn> newColumns = newColumnsBuilder.build();
+        return tablePiece.builder().mustCast(TablePiece.Builder.class)
+                .setUsedColumns(newUsedColumns)
+                .setColumns(newColumns)
+                .build().cast();
+    }
+
     public static Optional<QueryGenerateResult> generate(TableUsage tableUsage, MVGenerateContext context) {
         PrettyPrinter mvSchema = new PrettyPrinter();
         QueryGenerateContext queryGenerateContext = QueryGenerateContext.of11MV(tableUsage);
-        PlanPiece tablePiece = tableUsage.getTablePiece().setConjuncts(tableUsage.getWhereConjuncts());
+        PartitionExtractor partitionExtractor = context.getOptions().getPartitionExtractor();
+        PlanPiece tablePiece =
+                addPartitionColumns(tableUsage.getTablePiece(), partitionExtractor)
+                        .setConjuncts(tableUsage.getWhereConjuncts());
         QueryGenerateResult result = QueryGenerator.generate(tablePiece, queryGenerateContext);
 
         TieredMap<Integer, ColumnAlias> columnAliases = result.getColumnAliases();

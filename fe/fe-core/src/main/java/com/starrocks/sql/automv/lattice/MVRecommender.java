@@ -231,7 +231,6 @@ public class MVRecommender {
             List<PartitionPlus> partitions = firstAggPiece.getPartitionColumns(extractor);
             ColumnRefSet partitionColumnIds = ColumnRefSet.of();
             partitions.stream()
-                    .filter(pp -> pp.getPartitionOp().isNullVal())
                     .map(pp -> pp.getPartitionColumns().stream().map(p -> p.first).collect(Collectors.toList()))
                     .map(ColumnRefSet::createByIds)
                     .forEach(partitionColumnIds::union);

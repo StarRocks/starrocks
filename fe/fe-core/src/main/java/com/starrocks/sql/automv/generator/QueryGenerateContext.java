@@ -34,6 +34,7 @@ public final class QueryGenerateContext {
     // only used in 11MV
     private final TableUsage tableUsage;
     private List<QueryGenerateResult> inputResults;
+
     private QueryGenerateContext(boolean trace, boolean reserveConjuncts, boolean newTableAliasForTopPiece,
                                  boolean rectifyTableName, List<Pair<Integer, GenericColumn>> outputColumns,
                                  ColumnRefSet inputColumnIds, TableUsage tableUsage) {
