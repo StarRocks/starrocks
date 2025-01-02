@@ -373,8 +373,6 @@ public class MvTimeSeriesRewriteWithOlapTest extends MVTestBase {
 
     @Test
     public void testAggTimeSeriesWithMultiRepeatedRollupFunctions() throws Exception {
-        UtFrameUtils.mockTimelinessForAsyncMVTest(connectContext);
-        UtFrameUtils.mockLogicalScanIsEmptyOutputRows(false);
         // one query contains multi same agg functions, all can be rewritten.
         String aggArg = "v1";
         List<String> aggFuncs = Lists.newArrayList();
@@ -399,6 +397,8 @@ public class MvTimeSeriesRewriteWithOlapTest extends MVTestBase {
                     "DISTRIBUTED BY RANDOM\n" +
                     "as select date_trunc('day', k1) as dt, %s " +
                     "from t0 group by date_trunc('day', k1);", agg));
+            UtFrameUtils.mockTimelinessForAsyncMVTest(connectContext);
+            UtFrameUtils.mockLogicalScanIsEmptyOutputRows(false);
             {
                 String query = String.format("select %s from t0 where k1 >= '2024-01-01 01:00:00'", agg);
                 String plan = getFragmentPlan(query);
