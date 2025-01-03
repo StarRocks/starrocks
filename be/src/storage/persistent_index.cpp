@@ -243,7 +243,6 @@ Status ImmutableIndexShard::compress_and_write(const CompressionTypePB& compress
             RETURN_IF_ERROR(wb.append(compressed_slice));
             compressed_pages_off[i] = offset;
             offset += compressed_slice.get_size();
-            compressed_body.clear();
         }
         compressed_pages_off[npage()] = offset;
         return Status::OK();
