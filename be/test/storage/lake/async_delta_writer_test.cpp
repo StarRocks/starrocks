@@ -556,4 +556,49 @@ TEST_F(LakeAsyncDeltaWriterTest, test_flush) {
     delta_writer->close();
 }
 
+TEST_F(LakeAsyncDeltaWriterTest, test_block_merger) {
+    // Prepare data for writing
+    static const int kChunkSize = 128;
+    auto chunk0 = generate_data(kChunkSize);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    auto txn_id = next_id();
+    auto tablet_id = _tablet_metadata->id();
+    CountDownLatch latch(10);
+    // flush multi times and generate spill blocks
+    int64_t old_val = config::write_buffer_size;
+    bool old_val2 = config::enable_load_spill;
+    config::write_buffer_size = 1;
+    config::enable_load_spill = true;
+    ASSIGN_OR_ABORT(auto delta_writer, AsyncDeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(_tablet_schema->id())
+                                               .build());
+    ASSERT_OK(delta_writer->open());
+    for (int i = 0; i < 10; i++) {
+        delta_writer->write(&chunk0, indexes.data(), indexes.size(), [&](const Status& st) { ASSERT_OK(st); });
+        delta_writer->flush([&](const Status& st) {
+            ASSERT_OK(st);
+            latch.count_down();
+        });
+    }
+    latch.wait();
+    config::write_buffer_size = old_val;
+    config::enable_load_spill = old_val2;
+    // finish
+    CountDownLatch latch2(1);
+    delta_writer->finish([&](StatusOr<TxnLogPtr> res) {
+        ASSERT_TRUE(res.ok()) << res.ok();
+        latch2.count_down();
+    });
+    latch2.wait();
+}
+
 } // namespace starrocks::lake

@@ -20,7 +20,22 @@
 
 namespace starrocks {
 
+class ThreadPool;
+
 namespace lake {
+
+class LoadSpillBlockMergeExecutor {
+public:
+    LoadSpillBlockMergeExecutor() {}
+    ~LoadSpillBlockMergeExecutor() {}
+    Status init();
+
+    ThreadPool* get_thread_pool() { return _merge_pool.get(); }
+
+private:
+    // ThreadPool for merge.
+    std::unique_ptr<ThreadPool> _merge_pool;
+};
 
 class LoadSpillBlockContainer {
 public:
@@ -63,6 +78,8 @@ public:
 
     spill::BlockManager* block_manager() { return _block_manager.get(); }
     LoadSpillBlockContainer* block_container() { return _block_container.get(); }
+
+    bool has_spill_block() const { return _block_container != nullptr && !_block_container->empty(); }
 
 private:
     TUniqueId _load_id;                                        // Unique ID for the load.
