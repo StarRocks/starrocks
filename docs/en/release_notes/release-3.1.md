@@ -16,7 +16,7 @@ Fixed the following issues:
 - BE in the target cluster might crash when synchronizing tables with DELETE operations using Cross-cluster Data Migration Tool. [#54081](https://github.com/StarRocks/starrocks/pull/54081)
 - A bug in the BDBJE handshake mechanism where Leader FE would reject reconnection attempts from Follower FE when connection is being re-established, causing Follower FE nodes to exit. [#50412](https://github.com/StarRocks/starrocks/pull/50412)
 - Duplicate memory statistics in FE leads to excessive memory usage. [#53055](https://github.com/StarRocks/starrocks/pull/53055)
-- The asynchronous materialized view refresh task statuses are inconsistent across multiple FE nodes, which lead to inaccurate states of the materialized view during queries. [#54236](https://github.com/StarRocks/starrocks/pull/54236)
+- The statuses of asynchronous materialized view refresh tasks are inconsistent across multiple FE nodes, which lead to inaccurate states of the materialized view during queries. [#54236](https://github.com/StarRocks/starrocks/pull/54236)
 
 ## 3.1.16
 
