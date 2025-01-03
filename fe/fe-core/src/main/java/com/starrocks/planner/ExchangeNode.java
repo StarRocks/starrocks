@@ -143,6 +143,13 @@ public class ExchangeNode extends PlanNode {
         return mergeInfo != null;
     }
 
+    public long getOffset() {
+        return offset;
+    }
+    public void setOffset(long offset) {
+        this.offset = offset;
+    }
+
     public void setReceiveColumns(List<Integer> receiveColumns) {
         this.receiveColumns = receiveColumns;
     }
