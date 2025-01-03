@@ -1,4 +1,4 @@
--- name: test_agg_state_with_async_mv
+-- name: test_agg_state_with_async_mv @slow
 CREATE TABLE t1 ( 
 k1  date, 
 c0 boolean,

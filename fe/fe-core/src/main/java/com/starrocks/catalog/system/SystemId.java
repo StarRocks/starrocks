@@ -122,4 +122,8 @@ public class SystemId {
     // ====================  Statistics  =========================== //
     public static final long COLUMN_STATS_USAGE = 150L;
     public static final long ANALYZE_STATUS = 151L;
+
+    // ==================  Cluster Snapshot  ======================= //
+    public static final long CLUSTER_SNAPSHOTS_ID = 160L;
+    public static final long CLUSTER_SNAPSHOT_JOBS_ID = 161L;
 }

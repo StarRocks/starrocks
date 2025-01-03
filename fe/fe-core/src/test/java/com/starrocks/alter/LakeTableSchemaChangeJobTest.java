@@ -106,7 +106,7 @@ public class LakeTableSchemaChangeJobTest {
         table = createTable(connectContext, "CREATE TABLE t0(c0 INT) duplicate key(c0) distributed by hash(c0) buckets "
                     + NUM_BUCKETS);
         Config.enable_fast_schema_evolution_in_share_data_mode = false;
-        alterTable(connectContext, "ALTER TABLE t0 ADD COLUMN c1 DOUBLE");
+        alterTable(connectContext, "ALTER TABLE t0 ADD COLUMN c1 BIGINT AS c0 + 2");
         schemaChangeJob = getAlterJob(table);
         Config.enable_fast_schema_evolution_in_share_data_mode = true;
     }

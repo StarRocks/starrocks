@@ -597,7 +597,9 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         native_file_path = file_path.native();
     }
     if (native_file_path.empty()) {
-        native_file_path = _hive_table->get_base_path() + scan_range.relative_path;
+        bool start_with_slash = !scan_range.relative_path.empty() && scan_range.relative_path.at(0) == '/';
+        native_file_path = _hive_table->get_base_path() +
+                           (start_with_slash ? scan_range.relative_path : "/" + scan_range.relative_path);
     }
 
     const auto& hdfs_scan_node = _provider->_hdfs_scan_node;

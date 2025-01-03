@@ -1208,6 +1208,9 @@ public class NodeMgr {
         frontends.clear();
         Frontend self = new Frontend(role, nodeName, selfNode.first, selfNode.second);
         frontends.put(self.getNodeName(), self);
+        // reset helper nodes
+        helperNodes.clear();
+        helperNodes.add(selfNode);
 
         GlobalStateMgr.getCurrentState().getEditLog().logResetFrontends(self);
     }
@@ -1215,6 +1218,9 @@ public class NodeMgr {
     public void replayResetFrontends(Frontend frontend) {
         frontends.clear();
         frontends.put(frontend.getNodeName(), frontend);
+        // reset helper nodes
+        helperNodes.clear();
+        helperNodes.add(Pair.create(frontend.getHost(), frontend.getEditLogPort()));
     }
 
     public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {

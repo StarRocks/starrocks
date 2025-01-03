@@ -5,8 +5,6 @@ keywords: ['beifen']
 
 # DROP REPOSITORY
 
-## 功能
-
 删除一个仓库。仓库用于 备份和恢复 数据库数据。
 
 > **注意**

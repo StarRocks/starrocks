@@ -46,7 +46,6 @@
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "gen_cpp/Types_types.h" // for TUniqueId
-#include "gen_cpp/internal_service.pb.h"
 #include "runtime/descriptors.h" // for PlanNodeId
 #include "runtime/local_pass_through_buffer.h"
 #include "runtime/mem_tracker.h"
