@@ -25,20 +25,36 @@
 
 namespace starrocks::lake {
 
-Status LoadSpillBlockMergeExecutor::init() {
+static int calc_max_merge_blocks_thread() {
+#ifndef BE_TEST
     // The starting point for setting the maximum number of threads for load spill:
-    // 1. Meet the memory limit requirements (by config::load_spill_memory_limit_percent) for load spill.
+    // 1. Meet the memory limit requirements (by config::load_spill_merge_memory_limit_percent) for load spill.
     // 2. Each thread can use 1GB(by config::load_spill_max_merge_bytes) of memory.
-    int max_merge_blocks_thread = (GlobalEnv::GetInstance()->process_mem_tracker()->limit() *
-                                   config::load_spill_memory_limit_percent / (int64_t)100) /
-                                  config::load_spill_max_merge_bytes;
-    int cpu_cores = CpuInfo::num_cores();
+    // 3. The maximum number of threads is limited by config::load_spill_merge_max_thread.
+    int64_t load_spill_merge_memory_limit_bytes = GlobalEnv::GetInstance()->process_mem_tracker()->limit() *
+                                                  config::load_spill_merge_memory_limit_percent / (int64_t)100;
+    int max_merge_blocks_thread = load_spill_merge_memory_limit_bytes / config::load_spill_max_merge_bytes;
+#else
+    int max_merge_blocks_thread = 1;
+#endif
+
+    return std::max<int>(1, std::min<int>(max_merge_blocks_thread, config::load_spill_merge_max_thread));
+}
+
+Status LoadSpillBlockMergeExecutor::init() {
     RETURN_IF_ERROR(ThreadPoolBuilder("load_spill_block_merge")
                             .set_min_threads(1)
-                            .set_max_threads(std::max<int>(1, std::min<int>(max_merge_blocks_thread, cpu_cores)))
+                            .set_max_threads(calc_max_merge_blocks_thread())
                             .set_max_queue_size(40960 /*a random chosen number that should big enough*/)
                             .set_idle_timeout(MonoDelta::FromMilliseconds(/*5 minutes=*/5 * 60 * 1000))
                             .build(&_merge_pool));
+    return Status::OK();
+}
+
+Status LoadSpillBlockMergeExecutor::refresh_max_thread_num() {
+    if (_merge_pool != nullptr) {
+        return _merge_pool->update_max_threads(calc_max_merge_blocks_thread());
+    }
     return Status::OK();
 }
 

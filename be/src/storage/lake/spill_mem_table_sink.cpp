@@ -78,6 +78,10 @@ SpillMemTableSink::SpillMemTableSink(LoadSpillBlockManager* block_manager, Table
     _profile = profile;
     _runtime_state = std::make_shared<RuntimeState>();
     _spiller_factory = spill::make_spilled_factory();
+    std::string tracker_label = "LoadSpillMerge-" + std::to_string(_block_manager->tablet_id()) + "-" +
+                                std::to_string(_block_manager->txn_id());
+    _merge_mem_tracker = std::make_unique<MemTracker>(MemTracker::COMPACTION, -1, std::move(tracker_label),
+                                                      GlobalEnv::GetInstance()->compaction_mem_tracker());
 }
 
 Status SpillMemTableSink::_prepare(const ChunkPtr& chunk_ptr) {
@@ -192,7 +196,7 @@ private:
 };
 
 Status SpillMemTableSink::merge_blocks_to_segments() {
-    SCOPED_THREAD_LOCAL_MEM_SETTER(GlobalEnv::GetInstance()->compaction_mem_tracker(), false);
+    SCOPED_THREAD_LOCAL_MEM_SETTER(_merge_mem_tracker.get(), false);
     auto& groups = _block_manager->block_container()->block_groups();
     RETURN_IF(groups.empty(), Status::OK());
 

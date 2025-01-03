@@ -17,11 +17,9 @@
 #include "exec/spill/block_manager.h"
 #include "exec/spill/dir_manager.h"
 #include "exec/spill/input_stream.h"
+#include "util/threadpool.h"
 
 namespace starrocks {
-
-class ThreadPool;
-
 namespace lake {
 
 class LoadSpillBlockMergeExecutor {
@@ -31,6 +29,7 @@ public:
     Status init();
 
     ThreadPool* get_thread_pool() { return _merge_pool.get(); }
+    Status refresh_max_thread_num();
 
 private:
     // ThreadPool for merge.

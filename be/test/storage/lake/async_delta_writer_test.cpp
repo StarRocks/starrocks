@@ -28,6 +28,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
+#include "storage/lake/load_spill_block_manager.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/txn_log.h"
 #include "storage/rowset/segment.h"
@@ -84,6 +85,7 @@ protected:
     std::shared_ptr<TabletMetadata> _tablet_metadata;
     std::shared_ptr<TabletSchema> _tablet_schema;
     std::shared_ptr<Schema> _schema;
+    RuntimeProfile _dummy_runtime_profile{"dummy"};
 };
 
 TEST_F(LakeAsyncDeltaWriterTest, test_open) {
@@ -567,6 +569,7 @@ TEST_F(LakeAsyncDeltaWriterTest, test_block_merger) {
 
     auto txn_id = next_id();
     auto tablet_id = _tablet_metadata->id();
+    StorageEngine::instance()->load_spill_block_merge_executor()->refresh_max_thread_num();
     CountDownLatch latch(10);
     // flush multi times and generate spill blocks
     int64_t old_val = config::write_buffer_size;
@@ -580,6 +583,7 @@ TEST_F(LakeAsyncDeltaWriterTest, test_block_merger) {
                                                .set_partition_id(_partition_id)
                                                .set_mem_tracker(_mem_tracker.get())
                                                .set_schema_id(_tablet_schema->id())
+                                               .set_profile(&_dummy_runtime_profile)
                                                .build());
     ASSERT_OK(delta_writer->open());
     for (int i = 0; i < 10; i++) {

@@ -72,7 +72,7 @@ class Executor;
 namespace starrocks::lake {
 class LocalPkIndexManager;
 class LoadSpillBlockMergeExecutor;
-}
+} // namespace starrocks::lake
 
 namespace starrocks {
 

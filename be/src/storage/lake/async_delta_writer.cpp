@@ -145,20 +145,15 @@ public:
             : _finish_task(std::move(finish_task)), _async_writer(async_writer) {}
 
     void run() override {
-        auto st = Status{};
         auto delta_writer = _async_writer->_writer.get();
         if (_async_writer->closed()) {
-            st.update(Status::InternalError("AsyncDeltaWriter has been closed"));
+            _finish_task->cb(Status::InternalError("AsyncDeltaWriter has been closed"));
+            return;
         }
-        if (st.ok()) {
-            auto res = delta_writer->finish_with_txnlog(_finish_task->finish_mode);
-            st.update(res.status());
-            LOG_IF(ERROR, !st.ok()) << "Fail to finish write. tablet_id: " << delta_writer->tablet_id()
-                                    << " txn_id: " << delta_writer->txn_id() << ": " << st;
-            _finish_task->cb(std::move(res));
-        } else {
-            _finish_task->cb(st);
-        }
+        auto res = delta_writer->finish_with_txnlog(_finish_task->finish_mode);
+        LOG_IF(ERROR, !res.ok()) << "Fail to finish write. tablet_id: " << delta_writer->tablet_id()
+                                 << " txn_id: " << delta_writer->txn_id() << ": " << res.status();
+        _finish_task->cb(std::move(res));
     }
 
 private:
@@ -206,7 +201,9 @@ inline int AsyncDeltaWriterImpl::execute(void* meta, bthread::TaskIterator<Async
         }
         case kFinishTask: {
             auto finish_task = std::static_pointer_cast<FinishTask>(task_ptr);
-            if (delta_writer->has_spill_block()) {
+            if (!st.ok()) {
+                finish_task->cb(st);
+            } else if (delta_writer->has_spill_block()) {
                 // If there are spill blocks, we merge them using another thread pool
                 auto merge_task = std::make_shared<MergeBlockTask>(finish_task, async_writer);
                 auto res = StorageEngine::instance()->load_spill_block_merge_executor()->get_thread_pool()->submit(
@@ -217,15 +214,11 @@ inline int AsyncDeltaWriterImpl::execute(void* meta, bthread::TaskIterator<Async
                     finish_task->cb(st);
                 }
             } else {
-                if (st.ok()) {
-                    auto res = delta_writer->finish_with_txnlog(finish_task->finish_mode);
-                    st.update(res.status());
-                    LOG_IF(ERROR, !st.ok()) << "Fail to finish write. tablet_id: " << delta_writer->tablet_id()
-                                            << " txn_id: " << delta_writer->txn_id() << ": " << st;
-                    finish_task->cb(std::move(res));
-                } else {
-                    finish_task->cb(st);
-                }
+                auto res = delta_writer->finish_with_txnlog(finish_task->finish_mode);
+                st.update(res.status());
+                LOG_IF(ERROR, !st.ok()) << "Fail to finish write. tablet_id: " << delta_writer->tablet_id()
+                                        << " txn_id: " << delta_writer->txn_id() << ": " << st;
+                finish_task->cb(std::move(res));
             }
             break;
         }
