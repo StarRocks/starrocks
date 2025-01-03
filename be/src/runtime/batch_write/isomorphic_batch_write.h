@@ -20,8 +20,6 @@
 
 #include <atomic>
 #include <map>
-#include <mutex>
-#include <shared_mutex>
 #include <string>
 #include <unordered_set>
 
@@ -73,8 +71,8 @@ private:
     bthreads::ThreadPoolExecutor* _executor;
     bool _batch_write_async{false};
 
-    std::mutex _mutex;
-    std::condition_variable _cv;
+    bthread::Mutex _mutex;
+    bthread::ConditionVariable _cv;
     std::unordered_set<StreamLoadContext*> _alive_stream_load_pipe_ctxs;
     std::unordered_set<StreamLoadContext*> _dead_stream_load_pipe_ctxs;
 
