@@ -152,6 +152,7 @@ import com.starrocks.sql.ast.pipe.CreatePipeStmt;
 import com.starrocks.sql.ast.pipe.DescPipeStmt;
 import com.starrocks.sql.ast.pipe.DropPipeStmt;
 import com.starrocks.sql.ast.pipe.ShowPipeStmt;
+import com.starrocks.sql.ast.translate.TranslateStmt;
 import com.starrocks.sql.ast.warehouse.CreateWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.DropWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.ResumeWarehouseStmt;
@@ -1073,6 +1074,13 @@ public class Analyzer {
 
         @Override
         public Void visitShowNodesStatement(ShowNodesStmt statement, ConnectContext context) {
+            return null;
+        }
+
+        // ---------------------------------------- Translate Statement --------------------------------------------------
+        @Override
+        public Void visitTranslateStatement(TranslateStmt statement, ConnectContext context) {
+            TranslateAnalyzer.analyze(statement, context);
             return null;
         }
     }
