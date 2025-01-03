@@ -114,6 +114,7 @@ import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
@@ -133,11 +134,13 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Queue;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
@@ -1392,6 +1395,8 @@ public class AnalyzerUtils {
             Map<String, String> partitionProperties =
                     ImmutableMap.of("replication_num", String.valueOf(replicationNum));
 
+            TreeMap<String, PListCell> tablePartitions = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+            tablePartitions.putAll(olapTable.getListPartitionItems());
             List<String> partitionColNames = Lists.newArrayList();
             List<PartitionDesc> partitionDescs = Lists.newArrayList();
             for (List<String> partitionValue : partitionValues) {
@@ -1400,7 +1405,9 @@ public class AnalyzerUtils {
                     String formatValue = getFormatPartitionValue(value);
                     formattedPartitionValue.add(formatValue);
                 }
+
                 String partitionName = DEFAULT_PARTITION_NAME_PREFIX + Joiner.on("_").join(formattedPartitionValue);
+
                 if (partitionName.length() > FeConstants.MAX_LIST_PARTITION_NAME_LENGTH) {
                     partitionName = partitionName.substring(0, FeConstants.MAX_LIST_PARTITION_NAME_LENGTH)
                             + "_" + Integer.toHexString(partitionName.hashCode());
@@ -1412,11 +1419,31 @@ public class AnalyzerUtils {
                     partitionName = partitionNamePrefix + PARTITION_NAME_PREFIX_SPLIT + partitionName;
                 }
                 if (!partitionColNames.contains(partitionName)) {
+                    // If the partition value is not in the table partition, add it to the table partition
+                    List<List<String>> partitionItems = Collections.singletonList(partitionValue);
+                    PListCell cell = new PListCell(partitionItems);
+                    if (tablePartitions.containsKey(partitionName)) {
+                        if (tablePartitions.get(partitionName).equals(cell)) {
+                            continue;
+                        } else {
+                            // change partition name, how to generate a unique partition name
+                            int diff = calculateStringDiff(partitionName, partitionName.toLowerCase(Locale.ROOT));
+                            partitionName = partitionName + "_" + Integer.toHexString(diff);
+                        }
+                    }
+
+                    // ensure partition name is unique with case-insensitive
+                    if (tablePartitions.containsKey(partitionName)) {
+                        throw new AnalysisException("partition name " + partitionName + " already exists.");
+                    }
                     MultiItemListPartitionDesc multiItemListPartitionDesc = new MultiItemListPartitionDesc(true,
-                            partitionName, Collections.singletonList(partitionValue), partitionProperties);
+                            partitionName, partitionItems, partitionProperties);
                     multiItemListPartitionDesc.setSystem(true);
                     partitionDescs.add(multiItemListPartitionDesc);
                     partitionColNames.add(partitionName);
+
+                    // update table partition
+                    tablePartitions.put(partitionName, cell);
                 }
             }
             ListPartitionDesc listPartitionDesc = new ListPartitionDesc(partitionColNames, partitionDescs);
@@ -1426,6 +1453,20 @@ public class AnalyzerUtils {
         } else {
             throw new AnalysisException("automatic partition only support partition by value.");
         }
+    }
+
+    private static int calculateStringDiff(String str1, String str2) {
+        if (str1 == null || str2 == null) {
+            return 0;
+        }
+        if (str1.length() != str2.length()) {
+            return 0;
+        }
+        int diff = 0;
+        for (int i = 0; i < str1.length(); i++) {
+            diff += str1.charAt(i) - str2.charAt(i);
+        }
+        return diff;
     }
 
     @VisibleForTesting
