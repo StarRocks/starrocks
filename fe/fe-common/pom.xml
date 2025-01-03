@@ -35,9 +35,6 @@ under the License.
     <packaging>jar</packaging>
 
     <properties>
-        <maven.compiler.source>8</maven.compiler.source>
-        <maven.compiler.target>8</maven.compiler.target>
-        <maven.compiler.release>8</maven.compiler.release>
         <starrocks.home>${basedir}/../../</starrocks.home>
         <!-- There is no unit tests for this project, ignore the error if no case found -->
         <failIfNoSpecifiedTests>false</failIfNoSpecifiedTests>
@@ -80,6 +77,14 @@ under the License.
                 <artifactId>maven-surefire-plugin</artifactId>
                 <configuration>
                     <failIfNoSpecifiedTests>${failIfNoSpecifiedTests}</failIfNoSpecifiedTests>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.13.0</version>
+                <configuration>
+                    <release>8</release>
                 </configuration>
             </plugin>
         </plugins>
