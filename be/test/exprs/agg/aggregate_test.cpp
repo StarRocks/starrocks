@@ -2820,14 +2820,16 @@ TEST_F(AggregateTest, test_ds_theta) {
     const AggregateFunction* str_arg_func = get_aggregate_function("ds_theta", TYPE_VARCHAR, TYPE_BIGINT, false);
     auto ubswf_state = ManagedAggrState::create(ctx, str_arg_func);
     std::vector<TypeDescriptor> str_arg_types = {TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
-    std::unique_ptr<FunctionContext> str_local_ctx(FunctionContext::create_test_context(std::move(str_arg_types), return_type));
+    std::unique_ptr<FunctionContext> str_local_ctx(
+            FunctionContext::create_test_context(std::move(str_arg_types), return_type));
     auto ubswf_data_column = BinaryColumn::create();
     ubswf_data_column->append("abc");
     ubswf_data_column->append("bcd");
     std::vector<const Column*> ubswf_raw_columns;
     ubswf_raw_columns.resize(1);
     ubswf_raw_columns[0] = ubswf_data_column.get();
-    str_arg_func->update_batch_single_state_with_frame(str_local_ctx.get(), ubswf_state->state(), ubswf_raw_columns.data(), 0, 0, 0,2);
+    str_arg_func->update_batch_single_state_with_frame(str_local_ctx.get(), ubswf_state->state(),
+                                                       ubswf_raw_columns.data(), 0, 0, 0, 2);
 
     auto data_column1 = DoubleColumn::create();
     data_column1->append(2.0);
