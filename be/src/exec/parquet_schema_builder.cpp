@@ -58,8 +58,8 @@ static Status get_parquet_type_from_primitive(const ::parquet::schema::NodePtr& 
             *type_desc = TypeDescriptor(TYPE_TIME);
         } else if (logical_type->is_decimal()) {
             auto decimal_logical_type = std::dynamic_pointer_cast<const parquet::DecimalLogicalType>(logical_type);
-            *type_desc = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, decimal_logical_type->precision(),
-                                                               decimal_logical_type->scale());
+            *type_desc = TypeDescriptor::promote_decimal_type(decimal_logical_type->precision(),
+                                                              decimal_logical_type->scale());
         } else {
             *type_desc = TypeDescriptor(TYPE_INT);
         }
@@ -73,8 +73,8 @@ static Status get_parquet_type_from_primitive(const ::parquet::schema::NodePtr& 
             *type_desc = TypeDescriptor(TYPE_DATETIME);
         } else if (logical_type->is_decimal()) {
             auto decimal_logical_type = std::dynamic_pointer_cast<const parquet::DecimalLogicalType>(logical_type);
-            *type_desc = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL64, decimal_logical_type->precision(),
-                                                               decimal_logical_type->scale());
+            *type_desc = TypeDescriptor::promote_decimal_type(decimal_logical_type->precision(),
+                                                              decimal_logical_type->scale());
         } else {
             *type_desc = TypeDescriptor(TYPE_BIGINT);
         }
@@ -87,8 +87,8 @@ static Status get_parquet_type_from_primitive(const ::parquet::schema::NodePtr& 
             *type_desc = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
         } else if (logical_type->is_decimal()) {
             auto decimal_logical_type = std::dynamic_pointer_cast<const parquet::DecimalLogicalType>(logical_type);
-            *type_desc = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, decimal_logical_type->precision(),
-                                                               decimal_logical_type->scale());
+            *type_desc = TypeDescriptor::promote_decimal_type(decimal_logical_type->precision(),
+                                                              decimal_logical_type->scale());
         } else if (logical_type->is_JSON()) {
             *type_desc = TypeDescriptor::create_json_type();
         } else {
@@ -98,8 +98,8 @@ static Status get_parquet_type_from_primitive(const ::parquet::schema::NodePtr& 
     case parquet::Type::FIXED_LEN_BYTE_ARRAY: {
         if (logical_type->is_decimal()) {
             auto decimal_logical_type = std::dynamic_pointer_cast<const parquet::DecimalLogicalType>(logical_type);
-            *type_desc = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, decimal_logical_type->precision(),
-                                                               decimal_logical_type->scale());
+            *type_desc = TypeDescriptor::promote_decimal_type(decimal_logical_type->precision(),
+                                                              decimal_logical_type->scale());
         } else {
             *type_desc = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
         }
