@@ -140,7 +140,7 @@ Status IsomorphicBatchWrite::init() {
 
 void IsomorphicBatchWrite::stop() {
     {
-        std::unique_lock<std::mutex> lock(_mutex);
+        std::unique_lock<bthread::Mutex> lock(_mutex);
         if (_stopped) {
             return;
         }
@@ -155,7 +155,7 @@ void IsomorphicBatchWrite::stop() {
 
     std::vector<StreamLoadContext*> release_contexts;
     {
-        std::unique_lock<std::mutex> lock(_mutex);
+        std::unique_lock<bthread::Mutex> lock(_mutex);
         release_contexts.insert(release_contexts.end(), _alive_stream_load_pipe_ctxs.begin(),
                                 _alive_stream_load_pipe_ctxs.end());
         release_contexts.insert(release_contexts.end(), _dead_stream_load_pipe_ctxs.begin(),
@@ -172,7 +172,7 @@ void IsomorphicBatchWrite::stop() {
 }
 
 Status IsomorphicBatchWrite::register_stream_load_pipe(StreamLoadContext* pipe_ctx) {
-    std::unique_lock<std::mutex> lock(_mutex);
+    std::unique_lock<bthread::Mutex> lock(_mutex);
     if (_stopped.load(std::memory_order_acquire)) {
         return Status::ServiceUnavailable("Batch write is stopped");
     }
@@ -188,7 +188,7 @@ Status IsomorphicBatchWrite::register_stream_load_pipe(StreamLoadContext* pipe_c
 void IsomorphicBatchWrite::unregister_stream_load_pipe(StreamLoadContext* pipe_ctx) {
     bool find = false;
     {
-        std::unique_lock<std::mutex> lock(_mutex);
+        std::unique_lock<bthread::Mutex> lock(_mutex);
         find = _alive_stream_load_pipe_ctxs.erase(pipe_ctx) > 0;
         if (!find) {
             find = _dead_stream_load_pipe_ctxs.erase(pipe_ctx) > 0;
@@ -202,7 +202,7 @@ void IsomorphicBatchWrite::unregister_stream_load_pipe(StreamLoadContext* pipe_c
 }
 
 bool IsomorphicBatchWrite::contain_pipe(StreamLoadContext* pipe_ctx) {
-    std::unique_lock<std::mutex> lock(_mutex);
+    std::unique_lock<bthread::Mutex> lock(_mutex);
     auto it = _alive_stream_load_pipe_ctxs.find(pipe_ctx);
     if (it != _alive_stream_load_pipe_ctxs.end()) {
         return true;
@@ -211,7 +211,7 @@ bool IsomorphicBatchWrite::contain_pipe(StreamLoadContext* pipe_ctx) {
 }
 
 bool IsomorphicBatchWrite::is_pipe_alive(starrocks::StreamLoadContext* pipe_ctx) {
-    std::unique_lock<std::mutex> lock(_mutex);
+    std::unique_lock<bthread::Mutex> lock(_mutex);
     auto it = _alive_stream_load_pipe_ctxs.find(pipe_ctx);
     return it != _alive_stream_load_pipe_ctxs.end();
 }
@@ -322,9 +322,10 @@ Status IsomorphicBatchWrite::_execute_write(AsyncAppendDataContext* async_ctx) {
         }
         {
             SCOPED_RAW_TIMER(&wait_pipe_cost_ns);
-            std::unique_lock<std::mutex> lock(_mutex);
-            _cv.wait_for(lock, std::chrono::milliseconds(config::batch_write_rpc_request_retry_interval_ms),
-                         [&]() { return !_alive_stream_load_pipe_ctxs.empty(); });
+            std::unique_lock<bthread::Mutex> lock(_mutex);
+            if (_alive_stream_load_pipe_ctxs.empty()) {
+                _cv.wait_for(lock, config::batch_write_rpc_request_retry_interval_ms * 1000);
+            }
         }
     }
     async_ctx->append_pipe_cost_ns.store(write_data_cost_ns);
@@ -346,7 +347,7 @@ Status IsomorphicBatchWrite::_write_data_to_pipe(AsyncAppendDataContext* async_c
     while (true) {
         StreamLoadContext* pipe_ctx;
         {
-            std::unique_lock<std::mutex> lock(_mutex);
+            std::unique_lock<bthread::Mutex> lock(_mutex);
             if (!_alive_stream_load_pipe_ctxs.empty()) {
                 pipe_ctx = *(_alive_stream_load_pipe_ctxs.begin());
                 // take a reference to avoid being released when appending data to the pipe outside the lock
@@ -372,7 +373,7 @@ Status IsomorphicBatchWrite::_write_data_to_pipe(AsyncAppendDataContext* async_c
         // if failed, the pipe can't be appended anymore and move it from
         // the alive to the dead, and wait for being unregistered
         {
-            std::unique_lock<std::mutex> lock(_mutex);
+            std::unique_lock<bthread::Mutex> lock(_mutex);
             if (_alive_stream_load_pipe_ctxs.erase(pipe_ctx)) {
                 _dead_stream_load_pipe_ctxs.emplace(pipe_ctx);
             }
