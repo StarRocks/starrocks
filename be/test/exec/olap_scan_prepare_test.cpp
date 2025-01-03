@@ -230,11 +230,8 @@ TEST_F(ChunkPredicateBuilderTest, normalized_not_in_has_null) {
     _expr_containers.emplace_back(BoxedExprContext(_expr_ctxs[0]));
 
     ChunkPredicateBuilder<BoxedExprContext, CompoundNodeType::AND> builder(_opts, _expr_containers, true);
-    ASSIGN_OR_ASSERT_FAIL(auto normalized, builder.parse_conjuncts());
-    ASSERT_TRUE(normalized);
-
-    ASSIGN_OR_ASSERT_FAIL(auto pred, builder.get_predicate_tree_root(_int_pred_parser, _predicate_free_pool));
-    ASSERT_EQ(pred.debug_string(), "{\"and\":[]}");
+    auto ret = builder.parse_conjuncts();
+    ASSERT_TRUE(ret.status().is_end_of_file());
 }
 
 TEST_F(ChunkPredicateBuilderTest, normalize_or_not_in_has_null) {
