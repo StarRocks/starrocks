@@ -108,6 +108,9 @@ public abstract class ConnectorPartitionTraits {
         if (Config.enable_mv_query_context_cache && ctx != null && ctx.getQueryMVContext() != null) {
             QueryMaterializationContext queryMVContext = ctx.getQueryMVContext();
             Cache<Object, Object> cache = queryMVContext.getMvQueryContextCache();
+            if (cache == null || queryMVContext.getQueryCacheStats() == null) {
+                return delegate;
+            }
             return new CachedPartitionTraits(cache, delegate, queryMVContext.getQueryCacheStats(), mv);
         } else {
             return delegate;
