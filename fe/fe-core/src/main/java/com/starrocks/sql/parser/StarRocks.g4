@@ -2055,28 +2055,6 @@ showNodesStatement
     | SHOW NODES FROM WAREHOUSE identifier
     ;
 
-<<<<<<< HEAD
-=======
-alterWarehouseStatement
-    : ALTER WAREHOUSE warehouseName=identifierOrString modifyPropertiesClause
-    ;
-
-// ------------------------------------------- Transaction Statement ---------------------------------------------------
-
-beginStatement
-    : START TRANSACTION (WITH CONSISTENT SNAPSHOT)?
-    | BEGIN WORK?
-    ;
-
-commitStatement
-    : COMMIT WORK? (AND NO? CHAIN)? (NO? RELEASE)?
-    ;
-
-rollbackStatement
-    : ROLLBACK WORK? (AND NO? CHAIN)? (NO? RELEASE)?
-    ;
-
-
 // ------------------------------------------- Translate Statement -----------------------------------------------------
 translateStatement
     : TRANSLATE dialect translateSQL
@@ -2090,7 +2068,6 @@ translateSQL
     : .+
     ;
 
->>>>>>> bce3ff807 ([Feature] Support translate Trino query to StarRocks Query (#54185))
 // ------------------------------------------- Query Statement ---------------------------------------------------------
 
 queryStatement

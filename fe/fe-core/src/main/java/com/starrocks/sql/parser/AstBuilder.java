@@ -477,14 +477,7 @@ import com.starrocks.sql.ast.pipe.DescPipeStmt;
 import com.starrocks.sql.ast.pipe.DropPipeStmt;
 import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.sql.ast.pipe.ShowPipeStmt;
-<<<<<<< HEAD
-=======
 import com.starrocks.sql.ast.translate.TranslateStmt;
-import com.starrocks.sql.ast.txn.BeginStmt;
-import com.starrocks.sql.ast.txn.CommitStmt;
-import com.starrocks.sql.ast.txn.RollbackStmt;
-import com.starrocks.sql.ast.warehouse.AlterWarehouseStmt;
->>>>>>> bce3ff807 ([Feature] Support translate Trino query to StarRocks Query (#54185))
 import com.starrocks.sql.ast.warehouse.CreateWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.DropWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.ResumeWarehouseStmt;
@@ -5065,37 +5058,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new ShowNodesStmt(warehouseName, pattern, createPos(context));
     }
 
-<<<<<<< HEAD
-=======
-    @Override
-    public ParseNode visitAlterWarehouseStatement(StarRocksParser.AlterWarehouseStatementContext context) {
-        Identifier identifier = (Identifier) visit(context.identifierOrString());
-        String whName = identifier.getValue();
-        Map<String, String> properties = new HashMap<>();
-        if (context.modifyPropertiesClause() != null) {
-            ModifyTablePropertiesClause clause = (ModifyTablePropertiesClause) visit(context.modifyPropertiesClause());
-            properties = clause.getProperties();
-        }
-        return new AlterWarehouseStmt(whName, properties, createPos(context));
-    }
-
-    // ------------------------------------------- Transaction Statement ---------------------------------------------------
-
-    @Override
-    public ParseNode visitBeginStatement(StarRocksParser.BeginStatementContext context) {
-        return new BeginStmt(createPos(context));
-    }
-
-    @Override
-    public ParseNode visitCommitStatement(StarRocksParser.CommitStatementContext context) {
-        return new CommitStmt(createPos(context));
-    }
-
-    @Override
-    public ParseNode visitRollbackStatement(StarRocksParser.RollbackStatementContext context) {
-        return new RollbackStmt(createPos(context));
-    }
-
     // ------------------------------------------- Translate Statement -------------------------------------------------
     @Override
     public ParseNode visitTranslateStatement(StarRocksParser.TranslateStatementContext context) {
@@ -5115,7 +5077,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new StringLiteral(buf.toString(), createPos(context));
     }
 
->>>>>>> bce3ff807 ([Feature] Support translate Trino query to StarRocks Query (#54185))
     // ------------------------------------------- Query Statement -----------------------------------------------------
 
     @Override

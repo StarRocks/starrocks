@@ -1094,15 +1094,9 @@ public class AggStateCombinatorTest extends MVTestBase {
         // create async mv with all agg functions
         String sql1 = "CREATE MATERIALIZED VIEW test_mv1 REFRESH MANUAL as select k1, " +
                 Joiner.on(", ").join(stateColumns) + " from t1 group by k1;";
-<<<<<<< HEAD
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(10000);
         starRocksAssert.withMaterializedView(sql1);
 
-=======
-        System.out.println(sql1);
-        starRocksAssert.withRefreshedMaterializedView(sql1);
-        connectContext.getSessionVariable().setOptimizerExecuteTimeout(10000);
->>>>>>> bce3ff807 ([Feature] Support translate Trino query to StarRocks Query (#54185))
         // no rollup
         {
             String query = String.format("select k1, %s from t1 group by k1;", Joiner.on(", ").join(queryColumns));
