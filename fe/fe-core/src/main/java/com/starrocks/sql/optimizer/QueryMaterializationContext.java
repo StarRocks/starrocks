@@ -20,6 +20,7 @@ import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.google.api.client.util.Lists;
 import com.google.api.client.util.Sets;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.MaterializedView;
@@ -107,8 +108,13 @@ public class QueryMaterializationContext {
         isEnableQueryContextCache = enableQueryContextCache;
     }
 
+    @VisibleForTesting
+    public boolean isEnableQueryContextCache() {
+        return isEnableQueryContextCache;
+    }
+
     public Cache<Object, Object> getMvQueryContextCache() {
-        if (isEnableQueryContextCache && mvQueryContextCache == null) {
+        if (isEnableQueryContextCache() && mvQueryContextCache == null) {
             mvQueryContextCache = Caffeine.newBuilder()
                     .maximumSize(Config.mv_query_context_cache_max_size)
                     .recordStats()
