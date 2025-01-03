@@ -175,6 +175,15 @@ enum TSchemaTableType {
     SCH_PARTITIONS_META,
     SCH_BE_DATACACHE_METRICS,
     SCH_TEMP_TABLES,
+<<<<<<< HEAD
+=======
+    
+    SCH_COLUMN_STATS_USAGE,
+    SCH_ANALYZE_STATUS,
+
+    SCH_CLUSTER_SNAPSHOTS,
+    SCH_CLUSTER_SNAPSHOT_JOBS,
+>>>>>>> f43707f4b ([Feature] Support Cluster Snapshot Backup: support system table for cluster snapshot backup (part2) (#54508))
 }
 
 enum THdfsCompression {

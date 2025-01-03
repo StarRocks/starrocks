@@ -118,4 +118,15 @@ public class SystemId {
     // Remain for other datacache manage table
 
     public static final long PARTITIONS_META_ID = 140L;
+<<<<<<< HEAD
+=======
+
+    // ====================  Statistics  =========================== //
+    public static final long COLUMN_STATS_USAGE = 150L;
+    public static final long ANALYZE_STATUS = 151L;
+
+    // ==================  Cluster Snapshot  ======================= //
+    public static final long CLUSTER_SNAPSHOTS_ID = 160L;
+    public static final long CLUSTER_SNAPSHOT_JOBS_ID = 161L;
+>>>>>>> f43707f4b ([Feature] Support Cluster Snapshot Backup: support system table for cluster snapshot backup (part2) (#54508))
 }

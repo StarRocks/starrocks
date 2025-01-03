@@ -178,6 +178,10 @@ import com.starrocks.thrift.TBatchReportExecStatusParams;
 import com.starrocks.thrift.TBatchReportExecStatusResult;
 import com.starrocks.thrift.TBeginRemoteTxnRequest;
 import com.starrocks.thrift.TBeginRemoteTxnResponse;
+import com.starrocks.thrift.TClusterSnapshotJobsRequest;
+import com.starrocks.thrift.TClusterSnapshotJobsResponse;
+import com.starrocks.thrift.TClusterSnapshotsRequest;
+import com.starrocks.thrift.TClusterSnapshotsResponse;
 import com.starrocks.thrift.TColumnDef;
 import com.starrocks.thrift.TColumnDesc;
 import com.starrocks.thrift.TCommitRemoteTxnRequest;
@@ -3017,4 +3021,121 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             return response;
         }
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    public TPartitionMetaResponse getPartitionMeta(TPartitionMetaRequest request) throws TException {
+        TPartitionMetaResponse response = new TPartitionMetaResponse();
+        if (!request.isSetTablet_ids() || request.getTablet_ids().isEmpty()) {
+            String errMsg = "Invalid parameter from getPartitionMeta request, tablet_ids is required";
+            LOG.info(errMsg);
+            TStatus status = new TStatus(TStatusCode.INVALID_ARGUMENT);
+            status.addToError_msgs(errMsg);
+            response.setStatus(status);
+            return response;
+        }
+
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        TabletInvertedIndex invertedIndex = globalStateMgr.getTabletInvertedIndex();
+
+        Map<Long, TabletMeta> tabletMetas = new HashMap<>();
+        List<Long> tabletIds = request.getTablet_ids();
+        tabletIds.forEach(id -> tabletMetas.put(id, invertedIndex.getTabletMeta(id)));
+        // build a list of the partitionMeta from the tabletMetaList
+        List<TPartitionMeta> partitionMetaList = getPartitionMetaImpl(tabletMetas.values());
+        if (partitionMetaList.isEmpty()) {
+            TStatus status = new TStatus(TStatusCode.NOT_FOUND);
+            response.setStatus(status);
+            return response;
+        }
+
+        // build the index for partitionId -> offset of partitionMeta array
+        Map<Long, Integer> partitionId2ArrayIndex = new HashMap<>();
+        for (int i = 0; i < partitionMetaList.size(); ++i) {
+            partitionId2ArrayIndex.put(partitionMetaList.get(i).getPartition_id(), i);
+        }
+        // build tabletId -> offset of partitionMeta array
+        Map<Long, Integer> tabletIdMetaIndex = new HashMap<>();
+        tabletMetas.forEach((key, value) -> {
+            if (value != null) {
+                long phyPartitionId = value.getPhysicalPartitionId();
+                if (partitionId2ArrayIndex.containsKey(phyPartitionId)) {
+                    tabletIdMetaIndex.put(key, partitionId2ArrayIndex.get(phyPartitionId));
+                }
+            }
+        });
+        response.setTablet_id_partition_meta_index(tabletIdMetaIndex);
+        response.setPartition_metas(partitionMetaList);
+        response.setStatus(new TStatus(OK));
+        return response;
+    }
+
+    static List<TPartitionMeta> getPartitionMetaImpl(Collection<TabletMeta> tabletMetas) {
+        List<TPartitionMeta> result = new ArrayList<>();
+        Set<Long> donePartitionIds = new HashSet<>();
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        for (TabletMeta tabletMeta : tabletMetas) {
+            if (tabletMeta == null) {
+                continue;
+            }
+            long partitionId = tabletMeta.getPhysicalPartitionId();
+            if (donePartitionIds.contains(partitionId)) {
+                continue;
+            }
+            long dbId = tabletMeta.getDbId();
+            long tableId = tabletMeta.getTableId();
+
+            Locker locker = new Locker();
+            locker.lockTableWithIntensiveDbLock(dbId, tableId, LockType.READ);
+            try {
+                Database db = metastore.getDb(dbId);
+                if (db == null) {
+                    donePartitionIds.add(partitionId);
+                    continue;
+                }
+                Table table = db.getTable(tableId);
+                if (table == null) {
+                    donePartitionIds.add(partitionId);
+                    continue;
+                }
+                OlapTable olapTable = (OlapTable) table;
+                PhysicalPartition physicalPartition = olapTable.getPhysicalPartition(partitionId);
+                if (physicalPartition == null) {
+                    donePartitionIds.add(partitionId);
+                    continue;
+                }
+                long parentPartitionId = physicalPartition.getParentId();
+                Partition partition = olapTable.getPartition(parentPartitionId);
+                if (partition == null) {
+                    donePartitionIds.add(partitionId);
+                    continue;
+                }
+                TPartitionMeta partitionMeta = new TPartitionMeta();
+                partitionMeta.setPartition_id(partitionId);
+                partitionMeta.setPartition_name(physicalPartition.getName());
+                partitionMeta.setState(partition.getState().name());
+                partitionMeta.setVisible_version(physicalPartition.getVisibleVersion());
+                partitionMeta.setVisible_time(physicalPartition.getVisibleVersionTime());
+                partitionMeta.setNext_version(physicalPartition.getNextVersion());
+                partitionMeta.setIs_temp(olapTable.isTempPartition(parentPartitionId));
+                result.add(partitionMeta);
+                donePartitionIds.add(partitionId);
+            } finally {
+                locker.unLockTableWithIntensiveDbLock(dbId, tableId, LockType.READ);
+            }
+        }
+        return result;
+    }
+
+    @Override
+    public TClusterSnapshotsResponse getClusterSnapshotsInfo(TClusterSnapshotsRequest params) {
+        return new TClusterSnapshotsResponse();
+    }
+
+    @Override
+    public TClusterSnapshotJobsResponse getClusterSnapshotJobsInfo(TClusterSnapshotJobsRequest params) {
+        return new TClusterSnapshotJobsResponse();
+    }
+>>>>>>> f43707f4b ([Feature] Support Cluster Snapshot Backup: support system table for cluster snapshot backup (part2) (#54508))
 }

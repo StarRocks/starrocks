@@ -88,6 +88,13 @@ public class InfoSchemaDb extends Database {
             super.registerTableUnlocked(BeDataCacheMetricsTable.create());
             super.registerTableUnlocked(PartitionsMetaSystemTable.create());
             super.registerTableUnlocked(TemporaryTablesTable.create());
+<<<<<<< HEAD
+=======
+            super.registerTableUnlocked(ColumnStatsUsageSystemTable.create());
+            super.registerTableUnlocked(AnalyzeStatusSystemTable.create());
+            super.registerTableUnlocked(ClusterSnapshotsTable.create());
+            super.registerTableUnlocked(ClusterSnapshotJobsTable.create());
+>>>>>>> f43707f4b ([Feature] Support Cluster Snapshot Backup: support system table for cluster snapshot backup (part2) (#54508))
         }
     }
 

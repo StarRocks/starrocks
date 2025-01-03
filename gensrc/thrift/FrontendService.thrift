@@ -1889,6 +1889,60 @@ struct TFinishCheckpointResponse {
     1: optional Status.TStatus status;
 }
 
+<<<<<<< HEAD
+=======
+// Batch fetching partition meta info by a list of tablet ids
+// FIXME: add auth info to the request, so the API will be secured
+struct TPartitionMetaRequest {
+    1: optional list<i64> tablet_ids;
+}
+
+struct TPartitionMetaResponse {
+    1: optional Status.TStatus status;
+    // (tablet_id -> array index in partition_metas)
+    // In case of partial failure, the failed tablet_id will not be in the map
+    2: optional map<i64,i32> tablet_id_partition_meta_index;
+    // all the partition meta info found for the tablets
+    3: optional list<TPartitionMeta> partition_metas;
+}
+
+struct TClusterSnapshotsItem {
+    1: optional string snapshot_name;
+    2: optional string snapshot_type;
+    3: optional i64 created_time;
+    4: optional i64 finished_time;
+    5: optional i64 fe_jouranl_id;
+    6: optional i64 starmgr_jouranl_id;
+    7: optional string properties;
+    8: optional string storage_volume;
+    9: optional string storage_path;
+}
+
+struct TClusterSnapshotsRequest {
+}
+
+struct TClusterSnapshotsResponse {
+    1: optional list<TClusterSnapshotsItem> items;
+}
+
+struct TClusterSnapshotJobsItem {
+    1: optional string snapshot_name;
+    2: optional i64 job_id;
+    3: optional i64 created_time;
+    4: optional i64 finished_time;
+    5: optional string state;
+    6: optional string detail_info;
+    7: optional string error_message;
+}
+
+struct TClusterSnapshotJobsRequest {
+}
+
+struct TClusterSnapshotJobsResponse {
+    1: optional list<TClusterSnapshotJobsItem> items;
+}
+
+>>>>>>> f43707f4b ([Feature] Support Cluster Snapshot Backup: support system table for cluster snapshot backup (part2) (#54508))
 service FrontendService {
     TGetDbsResult getDbNames(1:TGetDbsParams params)
     TGetTablesResult getTableNames(1:TGetTablesParams params)
@@ -2008,5 +2062,13 @@ service FrontendService {
     TStartCheckpointResponse startCheckpoint(1: TStartCheckpointRequest request)
 
     TFinishCheckpointResponse finishCheckpoint(1: TFinishCheckpointRequest request)
+<<<<<<< HEAD
+=======
+
+    TPartitionMetaResponse getPartitionMeta(TPartitionMetaRequest request)
+
+    TClusterSnapshotsResponse getClusterSnapshotsInfo(1: TClusterSnapshotsRequest request)
+    TClusterSnapshotJobsResponse getClusterSnapshotJobsInfo(1: TClusterSnapshotJobsRequest request)
+>>>>>>> f43707f4b ([Feature] Support Cluster Snapshot Backup: support system table for cluster snapshot backup (part2) (#54508))
 }
 
