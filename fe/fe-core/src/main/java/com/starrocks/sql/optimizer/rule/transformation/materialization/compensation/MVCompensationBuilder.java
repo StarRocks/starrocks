@@ -331,7 +331,15 @@ public class MVCompensationBuilder {
         try {
             ScanOperatorPredicates scanOperatorPredicates = refScanOperator.getScanOperatorPredicates();
             Collection<Long> selectPartitionIds = scanOperatorPredicates.getSelectedPartitionIds();
-            List<PartitionKey> selectPartitionKeys = scanOperatorPredicates.getSelectedPartitionKeys();
+            // NOTE: ref base table's partition keys may contain multi columns, but mv may only contain one column.
+            List<Integer> colIndexes = PartitionUtil.getRefBaseTablePartitionColumIndexes(mv, refBaseTable);
+            if (colIndexes == null) {
+                return MVCompensation.createUnkownState(sessionVariable);
+            }
+            List<PartitionKey> selectPartitionKeys = scanOperatorPredicates.getSelectedPartitionKeys()
+                    .stream()
+                    .map(partitionKey -> PartitionUtil.getSelectedPartitionKey(partitionKey, colIndexes))
+                    .collect(Collectors.toList());
             // For scan operator which support prune partitions with OptExternalPartitionPruner,
             // we could only compensate partitions which selected partitions need to refresh.
             if (SUPPORTED_PARTITION_PRUNE_EXTERNAL_SCAN_TYPES.contains(refScanOperator.getOpType())) {
@@ -344,16 +352,7 @@ public class MVCompensationBuilder {
                         return MVCompensation.createUnkownState(sessionVariable);
                     }
                 }
-
-                // NOTE: ref base table's partition keys may contain multi columns, but mv may only contain one column.
-                List<Integer> colIndexes = PartitionUtil.getRefBaseTablePartitionColumIndexes(mv, refBaseTable);
-                if (colIndexes == null) {
-                    return MVCompensation.createUnkownState(sessionVariable);
-                }
-                List<PartitionKey> newPartitionKeys = selectPartitionKeys.stream()
-                        .map(partitionKey -> PartitionUtil.getSelectedPartitionKey(partitionKey, colIndexes))
-                        .collect(Collectors.toList());
-                Set<String> selectPartitionNames = newPartitionKeys.stream()
+                Set<String> selectPartitionNames = selectPartitionKeys.stream()
                         .map(PartitionUtil::generateMVPartitionName)
                         .collect(Collectors.toSet());
                 if (selectPartitionNames.stream().noneMatch(refTablePartitionNamesToRefresh::contains)) {
@@ -362,7 +361,7 @@ public class MVCompensationBuilder {
             }
             // if mv's to refresh partitions contains any of query's select partition ids, then rewrite with compensation.
             List<PartitionKey> toRefreshRefTablePartitions = getMVCompensatePartitionsOfExternal(refBaseTable,
-                    refTablePartitionNamesToRefresh, refScanOperator);
+                    selectPartitionKeys, refTablePartitionNamesToRefresh, refScanOperator);
             if (toRefreshRefTablePartitions == null) {
                 return MVCompensation.createUnkownState(sessionVariable);
             }
@@ -407,37 +406,25 @@ public class MVCompensationBuilder {
     }
 
     private List<PartitionKey> getMVCompensatePartitionsOfExternal(Table refBaseTable,
+                                                                   List<PartitionKey> selectPartitionKeys,
                                                                    Set<String> refTablePartitionNamesToRefresh,
                                                                    LogicalScanOperator refScanOperator)
             throws AnalysisException {
         if (SUPPORTED_PARTITION_PRUNE_EXTERNAL_SCAN_TYPES.contains(refScanOperator.getOpType())) {
             // For external table which support partition prune with OptExternalPartitionPruner,
             // could use selectPartitionKeys to get the compensate partitions.
-            return getMVCompensatePartitionsOfExternalWithPartitionPruner(refTablePartitionNamesToRefresh,
-                    refScanOperator);
+            return getMVCompensatePartitionsOfExternalWithPartitionPruner(selectPartitionKeys,
+                    refTablePartitionNamesToRefresh, refScanOperator);
         } else {
             return getMVCompensatePartitionsOfExternalWithoutPartitionPruner(refBaseTable, refTablePartitionNamesToRefresh);
         }
     }
 
     private List<PartitionKey> getMVCompensatePartitionsOfExternalWithPartitionPruner(
+            List<PartitionKey> selectPartitionKeys,
             Set<String> refTablePartitionNamesToRefresh,
             LogicalScanOperator refScanOperator) {
         List<PartitionKey> refTableCompensatePartitionKeys = Lists.newArrayList();
-        ScanOperatorPredicates scanOperatorPredicates = null;
-        try {
-            scanOperatorPredicates = refScanOperator.getScanOperatorPredicates();
-        } catch (Exception e) {
-            return null;
-        }
-        if (scanOperatorPredicates == null) {
-            return null;
-        }
-        List<PartitionKey> selectPartitionKeys = scanOperatorPredicates.getSelectedPartitionKeys();
-        // different behavior for different external table types
-        if (selectPartitionKeys.isEmpty() && refScanOperator.getOpType() != OperatorType.LOGICAL_HIVE_SCAN) {
-            return null;
-        }
         for (PartitionKey partitionKey : selectPartitionKeys) {
             String partitionName = generateMVPartitionName(partitionKey);
             if (refTablePartitionNamesToRefresh.contains(partitionName)) {
