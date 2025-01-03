@@ -32,8 +32,16 @@ import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TGetTasksParams;
+<<<<<<< HEAD
 import org.junit.After;
 import org.junit.AfterClass;
+=======
+import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+>>>>>>> cadb57f434 ([BugFix] Only enable query context cache when there are more than one related mvs (#54627))
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.FixMethodOrder;
@@ -248,6 +256,7 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVRefreshTest
                         "refresh deferred manual\n" +
                         "as select k1, k2, sum(v1) as total from tbl1 group by k1, k2;",
                 () -> {
+                    UtFrameUtils.mockEnableQueryContextCache();
                     executeInsertSql(connectContext, "insert into tbl1 values(\"2022-02-20\", 1, 10)");
                     OlapTable table = (OlapTable) getTable("test", "tbl1");
                     MaterializedView mv = getMv("test", "test_mv1");
