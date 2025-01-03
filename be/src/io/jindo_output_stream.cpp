@@ -57,14 +57,23 @@ Status JindoOutputStream::flush() {
 }
 
 Status JindoOutputStream::close() {
-    auto jdo_ctx = jdo_createHandleCtx2(*(_jindo_client->jdo_store), _write_handle);
-    jdo_close(jdo_ctx, nullptr);
-    Status status = io::check_jindo_status(jdo_ctx);
-    jdo_freeHandleCtx(jdo_ctx);
-    if (UNLIKELY(!status.ok())) {
-        LOG(ERROR) << "Failed to execute jdo_close";
+    if (_write_handle != nullptr) {
+        auto jdo_ctx = jdo_createHandleCtx2(*(_jindo_client->jdo_store), _write_handle);
+        jdo_close(jdo_ctx, nullptr);
+        Status status = io::check_jindo_status(jdo_ctx);
+        jdo_freeHandleCtx(jdo_ctx);
+        if (UNLIKELY(!status.ok())) {
+            LOG(ERROR) << "Failed to execute jdo_close";
+        } else {
+            jdo_freeIOContext(_write_handle);
+            _write_handle = nullptr;
+            _jindo_client.reset();
+        }
+
+        return status;
     }
-    return status;
+
+    return Status::OK();
 }
 
 } // namespace starrocks::io
