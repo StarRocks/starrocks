@@ -176,14 +176,7 @@ import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.UseCatalogStmt;
 import com.starrocks.sql.ast.UseDbStmt;
 import com.starrocks.sql.ast.UserVariable;
-<<<<<<< HEAD
-=======
-import com.starrocks.sql.ast.feedback.PlanAdvisorStmt;
 import com.starrocks.sql.ast.translate.TranslateStmt;
-import com.starrocks.sql.ast.txn.BeginStmt;
-import com.starrocks.sql.ast.txn.CommitStmt;
-import com.starrocks.sql.ast.txn.RollbackStmt;
->>>>>>> bce3ff8074 ([Feature] Support translate Trino query to StarRocks Query (#54185))
 import com.starrocks.sql.ast.warehouse.SetWarehouseStmt;
 import com.starrocks.sql.common.AuditEncryptionChecker;
 import com.starrocks.sql.common.DmlException;
@@ -768,17 +761,8 @@ public class StmtExecutor {
                 handleAddBackendBlackListStmt();
             } else if (parsedStmt instanceof DelBackendBlackListStmt) {
                 handleDelBackendBlackListStmt();
-<<<<<<< HEAD
-=======
-            } else if (parsedStmt instanceof PlanAdvisorStmt) {
-                handlePlanAdvisorStmt();
-            } else if (parsedStmt instanceof BeginStmt
-                    || parsedStmt instanceof CommitStmt
-                    || parsedStmt instanceof RollbackStmt) {
-                handleUnsupportedStmt();
             } else if (parsedStmt instanceof TranslateStmt) {
                 handleTranslateStmt();
->>>>>>> bce3ff8074 ([Feature] Support translate Trino query to StarRocks Query (#54185))
             } else {
                 context.getState().setError("Do not support this query.");
             }

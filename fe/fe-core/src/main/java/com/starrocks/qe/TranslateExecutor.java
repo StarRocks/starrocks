@@ -16,6 +16,7 @@ package com.starrocks.qe;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Type;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.translate.TranslateStmt;
@@ -31,7 +32,8 @@ public class TranslateExecutor {
     public static ShowResultSet execute(TranslateStmt stmt) {
         String dialect = stmt.getDialect();
         String translateSQL = stmt.getTranslateSQL();
-        SessionVariable sessionVariable = ConnectContext.getSessionVariableOrDefault();
+        SessionVariable sessionVariable = ConnectContext.get() != null ? ConnectContext.get().getSessionVariable() :
+                GlobalStateMgr.getCurrentState().getVariableMgr().getDefaultSessionVariable();
         sessionVariable.setSqlDialect(dialect);
         List<StatementBase> statementBases = SqlParser.parse(translateSQL, sessionVariable);
 

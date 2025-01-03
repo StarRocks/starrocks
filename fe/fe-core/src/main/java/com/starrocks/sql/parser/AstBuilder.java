@@ -451,14 +451,7 @@ import com.starrocks.sql.ast.pipe.DescPipeStmt;
 import com.starrocks.sql.ast.pipe.DropPipeStmt;
 import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.sql.ast.pipe.ShowPipeStmt;
-<<<<<<< HEAD
-=======
 import com.starrocks.sql.ast.translate.TranslateStmt;
-import com.starrocks.sql.ast.txn.BeginStmt;
-import com.starrocks.sql.ast.txn.CommitStmt;
-import com.starrocks.sql.ast.txn.RollbackStmt;
-import com.starrocks.sql.ast.warehouse.AlterWarehouseStmt;
->>>>>>> bce3ff8074 ([Feature] Support translate Trino query to StarRocks Query (#54185))
 import com.starrocks.sql.ast.warehouse.CreateWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.DropWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.ResumeWarehouseStmt;
@@ -3145,83 +3138,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     // ------------------------------------------- Backup Store Statement ----------------------------------------------
-<<<<<<< HEAD
-=======
-    private ParseNode getFunctionRef(StarRocksParser.QualifiedNameContext qualifiedNameContext,
-                                     String alias, NodePosition position) {
-        String functionName = getQualifiedName(qualifiedNameContext).toString();
-        FunctionName fnName = FunctionName.createFnName(functionName);
-        return new FunctionRef(fnName, alias, position);
-    }
-
-    private ParseNode getTableRef(StarRocksParser.QualifiedNameContext qualifiedNameContext,
-                                  StarRocksParser.PartitionNamesContext partitionNamesContext,
-                                  String alias, NodePosition position) {
-        TableName tableName = qualifiedNameToTableName(getQualifiedName(qualifiedNameContext));
-        PartitionNames partitionNames = null;
-        if (partitionNamesContext != null) {
-            partitionNames = (PartitionNames) visit(partitionNamesContext);
-        }
-        return new TableRef(tableName, alias, partitionNames, position);
-    }
-
-    private ParseNode parseBackupRestoreStatement(ParserRuleContext context) {
-        StarRocksParser.BackupStatementContext backupContext = null;
-        StarRocksParser.RestoreStatementContext restoreContext = null;
-
-        if (context instanceof StarRocksParser.RestoreStatementContext) {
-            restoreContext = (StarRocksParser.RestoreStatementContext) context;
-        } else {
-            backupContext = (StarRocksParser.BackupStatementContext) context;
-        }
-
-        List<CatalogRef> externalCatalogRefs = new ArrayList<>();
-        boolean allExternalCatalog = backupContext != null ?
-                (backupContext.ALL() != null) : (restoreContext.ALL() != null);
-        if (!allExternalCatalog && (backupContext != null ?
-                (backupContext.CATALOG() != null || backupContext.CATALOGS() != null) :
-                (restoreContext.CATALOG() != null || restoreContext.CATALOGS() != null))) {
-            if (backupContext != null) {
-                StarRocksParser.IdentifierListContext identifierListContext = backupContext.identifierList();
-                externalCatalogRefs = visit(identifierListContext.identifier(), Identifier.class)
-                        .stream().map(Identifier::getValue)
-                        .map(x -> new CatalogRef(x)).collect(Collectors.toList());
-            } else {
-                List<StarRocksParser.IdentifierWithAliasContext> identifierWithAliasList =
-                        restoreContext.identifierWithAliasList().identifierWithAlias();
-                for (StarRocksParser.IdentifierWithAliasContext identifierWithAliasContext : identifierWithAliasList) {
-                    String originalName = getIdentifierName(identifierWithAliasContext.originalName);
-                    String alias = identifierWithAliasContext.AS() != null ?
-                            getIdentifierName(identifierWithAliasContext.alias) : "";
-                    externalCatalogRefs.add(new CatalogRef(originalName, alias));
-                }
-            }
-        }
-        boolean containsExternalCatalog = allExternalCatalog || !externalCatalogRefs.isEmpty();
-
-        boolean specifyDbExplicitly =
-                backupContext != null ? (backupContext.DATABASE() != null) : (restoreContext.DATABASE() != null);
-
-        if (specifyDbExplicitly && containsExternalCatalog) {
-            throw new ParsingException(PARSER_ERROR_MSG.unsupportedSepcifyDbForExternalCatalog());
-        }
-
-        LabelName labelName = null;
-        String repoName = null;
-        // db which the snapshot should be restored in
-        String dbAlias = null;
-        // db name in snapshot meta data
-        String originDb = null;
-
-        boolean withOnClause = false;
->>>>>>> bce3ff8074 ([Feature] Support translate Trino query to StarRocks Query (#54185))
-
     @Override
     public ParseNode visitBackupStatement(StarRocksParser.BackupStatementContext context) {
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
         LabelName labelName = qualifiedNameToLabelName(qualifiedName);
         List<TableRef> tblRefs = new ArrayList<>();
-<<<<<<< HEAD
         for (StarRocksParser.TableDescContext tableDescContext : context.tableDesc()) {
             StarRocksParser.QualifiedNameContext qualifiedNameContext = tableDescContext.qualifiedName();
             qualifiedName = getQualifiedName(qualifiedNameContext);
@@ -3229,122 +3150,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             PartitionNames partitionNames = null;
             if (tableDescContext.partitionNames() != null) {
                 partitionNames = (PartitionNames) visit(tableDescContext.partitionNames());
-=======
-        List<TableRef> mvRefs = new ArrayList<>();
-        List<TableRef> viewRefs = new ArrayList<>();
-        List<TableRef> mixTblRefs = new ArrayList<>();
-        List<FunctionRef> fnRefs = new ArrayList<>();
-        Set<BackupObjectType> allMarker = Sets.newHashSet();
-
-        if (allExternalCatalog) {
-            allMarker.add(BackupObjectType.EXTERNAL_CATALOG);
-        }
-
-        labelName = qualifiedNameToLabelName(getQualifiedName(backupContext != null ?
-                backupContext.qualifiedName() : restoreContext.qualifiedName()));
-        if (specifyDbExplicitly) {
-            if (labelName.getDbName() != null) {
-                throw new ParsingException(PARSER_ERROR_MSG.unsupportedSepcifyDbNameAfterSnapshotName());
->>>>>>> bce3ff8074 ([Feature] Support translate Trino query to StarRocks Query (#54185))
             }
             TableRef tableRef = new TableRef(tableName, null, partitionNames, createPos(tableDescContext));
             tblRefs.add(tableRef);
         }
-<<<<<<< HEAD
 
         Map<String, String> properties = null;
         if (context.propertyList() != null) {
-=======
-        repoName = getIdentifierName(backupContext != null ? backupContext.repoName : restoreContext.repoName);
-
-        List<StarRocksParser.BackupRestoreObjectDescContext> backupRestoreObjectDescContexts =
-                backupContext != null ? backupContext.backupRestoreObjectDesc() : restoreContext.backupRestoreObjectDesc();
-
-        for (StarRocksParser.BackupRestoreObjectDescContext backupRestoreObjectDescContext : backupRestoreObjectDescContexts) {
-            boolean specifiedFunction = backupRestoreObjectDescContext.FUNCTION() != null ||
-                    backupRestoreObjectDescContext.FUNCTIONS() != null;
-            boolean specifiedMV = backupRestoreObjectDescContext.MATERIALIZED() != null;
-            boolean specifiedView = !specifiedMV && (backupRestoreObjectDescContext.VIEW() != null ||
-                    backupRestoreObjectDescContext.VIEWS() != null);
-            boolean specifiedTable = backupRestoreObjectDescContext.TABLE() != null ||
-                    backupRestoreObjectDescContext.TABLES() != null;
-
-            if (backupContext != null && (backupRestoreObjectDescContext.AS() != null ||
-                    (backupRestoreObjectDescContext.backupRestoreTableDesc() != null &&
-                            backupRestoreObjectDescContext.backupRestoreTableDesc().AS() != null))) {
-                throw new ParsingException(PARSER_ERROR_MSG.unsupportedSepcifyAliasInBackupStmt());
-            }
-
-            withOnClause = true;
-
-            String alias = null;
-            if (restoreContext != null) {
-                if (backupRestoreObjectDescContext.AS() != null) {
-                    alias = getIdentifierName(backupRestoreObjectDescContext.identifier());
-                } else if (backupRestoreObjectDescContext.backupRestoreTableDesc() != null &&
-                        backupRestoreObjectDescContext.backupRestoreTableDesc().AS() != null) {
-                    alias = getIdentifierName(backupRestoreObjectDescContext.backupRestoreTableDesc().identifier());
-                }
-            }
-
-            if (specifiedFunction) {
-                if (backupRestoreObjectDescContext.ALL() != null) {
-                    allMarker.add(BackupObjectType.FUNCTION);
-                    continue;
-                }
-
-                fnRefs.add((FunctionRef) getFunctionRef(backupRestoreObjectDescContext.qualifiedName(),
-                        alias, createPos(backupRestoreObjectDescContext)));
-            } else if (specifiedMV) {
-                if (backupRestoreObjectDescContext.ALL() != null) {
-                    allMarker.add(BackupObjectType.MV);
-                    continue;
-                }
-
-                mvRefs.add((TableRef) getTableRef(backupRestoreObjectDescContext.qualifiedName(),
-                        null, alias, createPos(backupRestoreObjectDescContext)));
-            } else if (specifiedView) {
-                if (backupRestoreObjectDescContext.ALL() != null) {
-                    allMarker.add(BackupObjectType.VIEW);
-                    continue;
-                }
-
-                viewRefs.add((TableRef) getTableRef(backupRestoreObjectDescContext.qualifiedName(),
-                        null, alias, createPos(backupRestoreObjectDescContext)));
-            } else if (specifiedTable) {
-                if (backupRestoreObjectDescContext.ALL() != null) {
-                    allMarker.add(BackupObjectType.TABLE);
-                    continue;
-                }
-
-                tblRefs.add((TableRef) getTableRef(backupRestoreObjectDescContext.backupRestoreTableDesc().qualifiedName(),
-                        backupRestoreObjectDescContext.backupRestoreTableDesc().partitionNames(),
-                        alias, createPos(backupRestoreObjectDescContext)));
-            } else {
-                mixTblRefs.add((TableRef) getTableRef(backupRestoreObjectDescContext.backupRestoreTableDesc().qualifiedName(),
-                        backupRestoreObjectDescContext.backupRestoreTableDesc().partitionNames(),
-                        alias, createPos(backupRestoreObjectDescContext)));
-            }
-        }
-
-        if (restoreContext != null && withOnClause && labelName.getDbName() == null) {
-            throw new ParsingException(PARSER_ERROR_MSG.unsupportedOnClauseWithoutAnyDbNameInRestoreStmt());
-        }
-
-        if (withOnClause && containsExternalCatalog) {
-            throw new ParsingException(PARSER_ERROR_MSG.unsupportedOnForExternalCatalog());
-        }
-
-        // merge mv, view, table
-        mixTblRefs.addAll(mvRefs);
-        mixTblRefs.addAll(viewRefs);
-        mixTblRefs.addAll(tblRefs);
-
-        Map<String, String> properties = null;
-        StarRocksParser.PropertyListContext contextProperties =
-                (backupContext != null) ? backupContext.propertyList() : restoreContext.propertyList();
-        if (contextProperties != null) {
->>>>>>> bce3ff8074 ([Feature] Support translate Trino query to StarRocks Query (#54185))
             properties = new HashMap<>();
             List<Property> propertyList = visit(context.propertyList().property(), Property.class);
             for (Property property : propertyList) {
@@ -3352,26 +3164,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
         }
 
-<<<<<<< HEAD
         String repoName = ((Identifier) visit(context.identifier())).getValue();
         return new BackupStmt(labelName, repoName, tblRefs, properties, createPos(context));
-=======
-        AbstractBackupStmt stmt = null;
-        if (backupContext != null) {
-            stmt = new BackupStmt(labelName, repoName, mixTblRefs, fnRefs, externalCatalogRefs, allMarker, withOnClause,
-                    originDb != null ? originDb : "", properties, createPos(backupContext));
-        } else {
-            stmt = new RestoreStmt(labelName, repoName, mixTblRefs, fnRefs, externalCatalogRefs, allMarker, withOnClause,
-                    originDb != null ? originDb : "", properties, createPos(restoreContext));
-        }
-
-        return stmt;
-    }
-
-    @Override
-    public ParseNode visitBackupStatement(StarRocksParser.BackupStatementContext context) {
-        return parseBackupRestoreStatement(context);
->>>>>>> bce3ff8074 ([Feature] Support translate Trino query to StarRocks Query (#54185))
     }
 
     @Override
@@ -3433,13 +3227,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (context.identifier() == null) {
             throw new ParsingException(PARSER_ERROR_MSG.nullIdentifierCancelBackupRestore());
         }
-<<<<<<< HEAD
         return new CancelBackupStmt(((Identifier) visit(context.identifier())).getValue(), true,
                 createPos(context));
-=======
-        return new CancelBackupStmt(context.CATALOG() != null ? "" : ((Identifier) visit(context.identifier())).getValue(),
-                true, context.CATALOG() != null, createPos(context));
->>>>>>> bce3ff8074 ([Feature] Support translate Trino query to StarRocks Query (#54185))
     }
 
     @Override
@@ -4803,37 +4592,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new ShowNodesStmt(warehouseName, pattern, createPos(context));
     }
 
-<<<<<<< HEAD
-=======
-    @Override
-    public ParseNode visitAlterWarehouseStatement(StarRocksParser.AlterWarehouseStatementContext context) {
-        Identifier identifier = (Identifier) visit(context.identifierOrString());
-        String whName = identifier.getValue();
-        Map<String, String> properties = new HashMap<>();
-        if (context.modifyPropertiesClause() != null) {
-            ModifyTablePropertiesClause clause = (ModifyTablePropertiesClause) visit(context.modifyPropertiesClause());
-            properties = clause.getProperties();
-        }
-        return new AlterWarehouseStmt(whName, properties, createPos(context));
-    }
-
-    // ------------------------------------------- Transaction Statement ---------------------------------------------------
-
-    @Override
-    public ParseNode visitBeginStatement(StarRocksParser.BeginStatementContext context) {
-        return new BeginStmt(createPos(context));
-    }
-
-    @Override
-    public ParseNode visitCommitStatement(StarRocksParser.CommitStatementContext context) {
-        return new CommitStmt(createPos(context));
-    }
-
-    @Override
-    public ParseNode visitRollbackStatement(StarRocksParser.RollbackStatementContext context) {
-        return new RollbackStmt(createPos(context));
-    }
-
     // ------------------------------------------- Translate Statement -------------------------------------------------
     @Override
     public ParseNode visitTranslateStatement(StarRocksParser.TranslateStatementContext context) {
@@ -4853,7 +4611,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new StringLiteral(buf.toString(), createPos(context));
     }
 
->>>>>>> bce3ff8074 ([Feature] Support translate Trino query to StarRocks Query (#54185))
     // ------------------------------------------- Query Statement -----------------------------------------------------
 
     @Override
