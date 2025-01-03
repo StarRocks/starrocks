@@ -712,8 +712,24 @@ TEST_F(TypeDescriptorTest, test_promote_types) {
              TypeDescriptor::from_logical_type(TYPE_DOUBLE)},
 
             {TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 5, 2),
-             TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 4, 3),
-             TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 5, 3)},
+             TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 4, 3),
+             TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 6, 3)},
+
+            {TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 5, 2),
+             TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 4, 1),
+             TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 5, 2)},
+
+            {TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 5, 2),
+             TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL64, 17, 1),
+             TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL64, 18, 2)},
+
+            {TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 5, 2),
+             TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL64, 17, 0),
+             TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 19, 2)},
+
+            {TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 38, 38),
+             TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 38, 0),
+             TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH)},
 
             {TypeDescriptor::create_varchar_type(10), TypeDescriptor::create_varchar_type(20),
              TypeDescriptor::create_varchar_type(20)},

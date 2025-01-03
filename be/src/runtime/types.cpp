@@ -42,6 +42,7 @@
 #include "storage/types.h"
 #include "types/array_type_info.h"
 #include "types/logical_type.h"
+#include "util/decimal_types.h"
 
 namespace starrocks {
 
@@ -422,15 +423,14 @@ TypeDescriptor TypeDescriptor::promote_types(const TypeDescriptor& type1, const 
         // if one is float and other is integer, promote to double
         return TypeDescriptor::from_logical_type(TYPE_DOUBLE);
     } else if (type1.is_decimal_type() && type2.is_decimal_type()) {
-        // decimal v3 only
-        auto tp = type1.type > type2.type ? type1.type : type2.type;
-        if (tp > TYPE_DECIMAL128) tp = TYPE_DECIMAL128;
-        if (tp < TYPE_DECIMAL32) tp = TYPE_DECIMAL32;
-        auto precision = type1.precision > type2.precision ? type1.precision : type2.precision;
-        if (precision > MAX_PRECISION) precision = MAX_PRECISION;
-        auto scale = type1.scale > type2.scale ? type1.scale : type2.scale;
-        if (scale > MAX_SCALE) scale = MAX_SCALE;
-        return TypeDescriptor::create_decimalv3_type(tp, precision, scale);
+        auto precision1 = type1.precision;
+        auto scale1 = type1.scale;
+        auto precision2 = type2.precision;
+        auto scale2 = type2.scale;
+        int final_scale = std::max(scale1, scale2);
+        int max_int_length = std::max(precision1 - scale1, precision2 - scale2);
+        int final_precision = max_int_length + final_scale;
+        return promote_decimal_type(final_precision, final_scale);
     } else if (type1.type == TYPE_VARCHAR && type2.type == TYPE_VARCHAR) {
         auto len = type1.len > type2.len ? type1.len : type2.len;
         return TypeDescriptor::create_varchar_type(len);
@@ -443,6 +443,22 @@ TypeDescriptor TypeDescriptor::promote_types(const TypeDescriptor& type1, const 
     }
     // treat other conflicted types as varchar.
     return TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+}
+
+TypeDescriptor TypeDescriptor::promote_decimal_type(int precision, int scale) {
+    // decimal v3 only
+    if (precision <= 0 || precision > decimal_precision_limit<int128_t>) {
+        // if precision is invalid, use varchar
+        LOG(WARNING) << "failed to promote decimal type, use varchar. precision: " << precision;
+        return TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+    } else if (precision <= decimal_precision_limit<int32_t>) {
+        return TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, precision, scale);
+    } else if (precision <= decimal_precision_limit<int64_t>) {
+        return TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL64, precision, scale);
+    } else {
+        DCHECK_LE(precision, decimal_precision_limit<int128_t>);
+        return TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, precision, scale);
+    }
 }
 
 } // namespace starrocks

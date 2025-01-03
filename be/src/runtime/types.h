@@ -351,6 +351,7 @@ struct TypeDescriptor {
     size_t get_array_depth_limit() const;
 
     static TypeDescriptor promote_types(const TypeDescriptor& type1, const TypeDescriptor& type2);
+    static TypeDescriptor promote_decimal_type(int precision, int scale);
 
 private:
     /// Used to create a possibly nested type from the flattened Thrift representation.
