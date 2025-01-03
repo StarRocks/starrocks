@@ -21,6 +21,7 @@
 #include "column/vectorized_fwd.h"
 #include "exprs/column_ref.h"
 #include "runtime/buffer_control_block.h"
+#include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "testutil/assert.h"
 #include "util/uid_util.h"
