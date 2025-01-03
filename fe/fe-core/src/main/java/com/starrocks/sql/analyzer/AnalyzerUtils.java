@@ -1395,6 +1395,7 @@ public class AnalyzerUtils {
             Map<String, String> partitionProperties =
                     ImmutableMap.of("replication_num", String.valueOf(replicationNum));
 
+            // table partitions for check
             TreeMap<String, PListCell> tablePartitions = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
             tablePartitions.putAll(olapTable.getListPartitionItems());
             List<String> partitionColNames = Lists.newArrayList();
@@ -1407,7 +1408,6 @@ public class AnalyzerUtils {
                 }
 
                 String partitionName = DEFAULT_PARTITION_NAME_PREFIX + Joiner.on("_").join(formattedPartitionValue);
-
                 if (partitionName.length() > FeConstants.MAX_LIST_PARTITION_NAME_LENGTH) {
                     partitionName = partitionName.substring(0, FeConstants.MAX_LIST_PARTITION_NAME_LENGTH)
                             + "_" + Integer.toHexString(partitionName.hashCode());
@@ -1419,22 +1419,17 @@ public class AnalyzerUtils {
                     partitionName = partitionNamePrefix + PARTITION_NAME_PREFIX_SPLIT + partitionName;
                 }
                 if (!partitionColNames.contains(partitionName)) {
-                    // If the partition value is not in the table partition, add it to the table partition
                     List<List<String>> partitionItems = Collections.singletonList(partitionValue);
                     PListCell cell = new PListCell(partitionItems);
-                    if (tablePartitions.containsKey(partitionName)) {
-                        if (tablePartitions.get(partitionName).equals(cell)) {
-                            continue;
-                        } else {
-                            // change partition name, how to generate a unique partition name
-                            int diff = calculateStringDiff(partitionName, partitionName.toLowerCase(Locale.ROOT));
-                            partitionName = partitionName + "_" + Integer.toHexString(diff);
+                    // If partition name already exists and their partition values are not the same, change partition name.
+                    if (tablePartitions.containsKey(partitionName) && !tablePartitions.get(partitionName).equals(cell)) {
+                        // change partition name, how to generate a unique partition name
+                        int diff = calculateStringDiff(partitionName, partitionName.toLowerCase(Locale.ROOT));
+                        partitionName = partitionName + "_" + Integer.toHexString(diff);
+                        // ensure partition name is unique with case-insensitive
+                        if (tablePartitions.containsKey(partitionName)) {
+                            throw new AnalysisException("partition name " + partitionName + " already exists.");
                         }
-                    }
-
-                    // ensure partition name is unique with case-insensitive
-                    if (tablePartitions.containsKey(partitionName)) {
-                        throw new AnalysisException("partition name " + partitionName + " already exists.");
                     }
                     MultiItemListPartitionDesc multiItemListPartitionDesc = new MultiItemListPartitionDesc(true,
                             partitionName, partitionItems, partitionProperties);
@@ -1455,6 +1450,9 @@ public class AnalyzerUtils {
         }
     }
 
+    /**
+     * Calculate the difference between two strings which have the same length.
+     */
     private static int calculateStringDiff(String str1, String str2) {
         if (str1 == null || str2 == null) {
             return 0;
