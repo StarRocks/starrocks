@@ -3133,11 +3133,11 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 
 ##### lake_enable_ingest_slowdown
 
-- 默认值：false
+- 默认值：true
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：是否为存算分离集群开启导入限速功能。开启导入限速功能后，当某个表分区的 Compaction Score 超过了 `lake_ingest_slowdown_threshold`，该表分区上的导入任务将会被限速。只有当 `run_mode` 设置为 `shared_data` 后，该配置项才会生效。
+- 描述：是否为存算分离集群开启导入限速功能。开启导入限速功能后，当某个表分区的 Compaction Score 超过了 `lake_ingest_slowdown_threshold`，该表分区上的导入任务将会被限速。只有当 `run_mode` 设置为 `shared_data` 后，该配置项才会生效。自 v3.3.6 起，默认值由 `false` 变为 `true`。
 - 引入版本：v3.2.0
 
 ##### lake_ingest_slowdown_threshold
@@ -3173,11 +3173,11 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 
 ##### lake_compaction_score_upper_bound
 
-- 默认值：0
+- 默认值：2000
 - 类型：Long
 - 单位：-
 - 是否动态：是
-- 描述：表分区的 Compaction Score 的上限, `0` 表示没有上限。只有当 `lake_enable_ingest_slowdown` 设置为 `true` 后，该配置项才会生效。当表分区 Compaction Score 达到或超过该上限后，所有涉及到该分区的导入任务将会被无限延迟提交，直到 Compaction Score 降到该值以下或者任务超时。
+- 描述：表分区的 Compaction Score 的上限, `0` 表示没有上限。只有当 `lake_enable_ingest_slowdown` 设置为 `true` 后，该配置项才会生效。当表分区 Compaction Score 达到或超过该上限后，新的导入会被拒绝。自 v3.3.6 起，默认值由 `0` 变为 `2000`。
 - 引入版本：v3.2.0
 
 ##### lake_compaction_disable_tables
