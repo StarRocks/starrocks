@@ -803,9 +803,8 @@ Status ChunkPredicateBuilder<E, Type>::normalize_not_in_or_not_equal_predicate(
                     }
                     if constexpr (!Negative) {
                         // and col not in (v1, v2, v3, null)
-                        if (range->add_fixed_values(FILTER_IN, values).ok()) {
-                            _normalized_exprs[i] = true;
-                        }
+                        range->clear_to_empty();
+                        _normalized_exprs[i] = true;
                         continue;
                     } else {
                         // or col in (v1, v2, v3, null)
