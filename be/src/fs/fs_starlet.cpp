@@ -291,6 +291,7 @@ public:
         auto opt = ReadOptions();
         opt.skip_fill_local_cache = opts.skip_fill_local_cache;
         opt.buffer_size = opts.buffer_size;
+        opt.skip_read_local_cache = opts.skip_disk_cache;
         if (info.size.has_value()) {
             opt.file_size = info.size.value();
         }

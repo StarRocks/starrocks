@@ -64,6 +64,9 @@ struct TabletReaderParams {
     // Options only applies to cloud-native table r/w IO
     LakeIOOptions lake_io_opts{.fill_data_cache = true, .fill_metadata_cache = true};
 
+    // Disable local disk cache or not
+    bool skip_disk_cache = false;
+
     RangeStartOperation range = RangeStartOperation::GT;
     RangeEndOperation end_range = RangeEndOperation::LT;
     std::vector<OlapTuple> start_key;
