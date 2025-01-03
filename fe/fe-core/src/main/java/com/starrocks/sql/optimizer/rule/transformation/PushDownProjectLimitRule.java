@@ -54,6 +54,11 @@ public class PushDownProjectLimitRule extends TransformationRule {
     @Override
     public List<OptExpression> transform(OptExpression project, OptimizerContext context) {
         LogicalLimitOperator limit = (LogicalLimitOperator) project.getInputs().get(0).getOp();
+        if (project.getOp().hasLimit() && limit.hasOffset()) {
+            long projectLimit = project.getOp().getLimit();
+            project.getOp().setLimit(limit.getOffset() + limit.getLimit());
+            limit.setLimit(Math.min(projectLimit, limit.getLimit()));
+        }
         return Lists.newArrayList(OptExpression.create(limit,
                 OptExpression.create(project.getOp(), project.getInputs().get(0).getInputs())));
     }
