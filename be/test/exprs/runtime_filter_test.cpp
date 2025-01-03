@@ -55,6 +55,10 @@ TEST_F(RuntimeBloomFilterTest, filter_zonemap_with_min_max) {
     max = 10;
     ASSERT_FALSE(rf->filter_zonemap_with_min_max(&min, &max));
 
+    min = 5;
+    max = 9;
+    ASSERT_TRUE(rf->filter_zonemap_with_min_max(&min, &max));
+
     // < 10
     rf = Int32RF::create_with_range<false>(&_pool, 10, false);
     min = 10;
@@ -66,6 +70,10 @@ TEST_F(RuntimeBloomFilterTest, filter_zonemap_with_min_max) {
     min = 10;
     max = 15;
     ASSERT_FALSE(rf->filter_zonemap_with_min_max(&min, &max));
+
+    min = 11;
+    max = 15;
+    ASSERT_TRUE(rf->filter_zonemap_with_min_max(&min, &max));
 }
 
 TEST_F(RuntimeBloomFilterTest, create_with_empty_range) {
