@@ -4,6 +4,20 @@ displayed_sidebar: docs
 
 # StarRocks version 3.1
 
+## 3.1.17
+
+发布日期：2025 年 01 月 03 日
+
+### 问题修复
+
+修复了如下问题：
+
+- 跨集群数据迁移工具在迁移数据时，由于未考虑目标集群分区删除的情况，在同步数据并做 Commit 时导致 Follower FE Crash。[#54061](https://github.com/StarRocks/starrocks/pull/54061)
+- 使用跨集群数据迁移工具同步有过 DELETE 操作的表时，目标集群的 BE 可能会 Crash。[#54081](https://github.com/StarRocks/starrocks/pull/54081)
+- BDBJE 的 Handshake 存在 Bug，导致 Leader FE 和 Follower FE 链接重连的时候会被 Leader FE 拒绝，从而导致 Follwer FE 节点退出。[#50412](https://github.com/StarRocks/starrocks/pull/50412)
+- FE 中内存统计有重复统计的情况，会导致消耗大量内存。[#53055](https://github.com/StarRocks/starrocks/pull/53055)
+- 异步物化视图刷新时的任务状态在多个 FE 之间不一致，导致查询时的状态不准确。[#54236](https://github.com/StarRocks/starrocks/pull/54236)
+
 ## 3.1.16
 
 发布日期：2024 年 12 月 16 日
