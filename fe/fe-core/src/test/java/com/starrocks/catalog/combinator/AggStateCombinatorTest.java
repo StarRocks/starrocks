@@ -1109,6 +1109,7 @@ public class AggStateCombinatorTest extends MVTestBase {
             String plan = getFragmentPlan(query);
             PlanTestBase.assertContains(plan, "test_mv1");
         }
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(3000);
         starRocksAssert.dropTable("t1");
         starRocksAssert.dropMaterializedView("test_mv1");
     }

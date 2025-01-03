@@ -319,6 +319,9 @@ statement
     | showClustersStatement
     | showNodesStatement
 
+    // Translate Statement
+    | translateStatement
+
     // Unsupported Statement
     | unsupportedStatement
     ;
@@ -2050,6 +2053,19 @@ showClustersStatement
 showNodesStatement
     : SHOW NODES FROM WAREHOUSES (LIKE pattern=string)?
     | SHOW NODES FROM WAREHOUSE identifier
+    ;
+
+// ------------------------------------------- Translate Statement -----------------------------------------------------
+translateStatement
+    : TRANSLATE dialect translateSQL
+    ;
+
+dialect
+    : identifier
+    ;
+
+translateSQL
+    : .+
     ;
 
 // ------------------------------------------- Query Statement ---------------------------------------------------------
