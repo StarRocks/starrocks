@@ -768,7 +768,8 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
     iter_opts.has_preaggregation = _opts.has_preaggregation;
 
     RandomAccessFileOptions opts{.skip_fill_local_cache = !_opts.lake_io_opts.fill_data_cache,
-                                 .buffer_size = _opts.lake_io_opts.buffer_size};
+                                 .buffer_size = _opts.lake_io_opts.buffer_size,
+                                 .skip_disk_cache = _opts.lake_io_opts.skip_disk_cache};
 
     ColumnAccessPath* access_path = nullptr;
     if (_column_access_paths.find(cid) != _column_access_paths.end()) {

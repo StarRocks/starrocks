@@ -77,7 +77,7 @@ public:
     bool use_page_cache = false;
     // temporary data does not allow caching
     bool temporary_data = false;
-    LakeIOOptions lake_io_opts{.fill_data_cache = true};
+    LakeIOOptions lake_io_opts{.fill_data_cache = true, .skip_disk_cache = false};
 
     ReaderType reader_type = READER_QUERY;
     int chunk_size = DEFAULT_CHUNK_SIZE;
