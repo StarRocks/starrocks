@@ -136,6 +136,10 @@ public class SystemInfoService implements GsonPostProcessable {
         }
 
         for (Pair<String, Integer> pair : addComputeNodeClause.getHostPortPairs()) {
+            checkSameNodeExist(pair.first, pair.second);
+        }
+
+        for (Pair<String, Integer> pair : addComputeNodeClause.getHostPortPairs()) {
             addComputeNode(pair.first, pair.second, addComputeNodeClause.getWarehouse());
         }
     }
