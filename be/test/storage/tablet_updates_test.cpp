@@ -3681,6 +3681,7 @@ TEST_F(TabletUpdatesTest, test_compaction_apply_retry) {
     fp->setMode(trigger_mode);
 
     auto test_fail_point = [&](const std::string& fp_name1, const std::string& fp_name2) {
+        _tablet->updates()->stop_apply(false);
         // Enable fail point
         trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
         auto fp1 = starrocks::failpoint::FailPointRegistry::GetInstance()->get(fp_name1);
@@ -3694,7 +3695,7 @@ TEST_F(TabletUpdatesTest, test_compaction_apply_retry) {
         _tablet->updates()->check_for_apply();
 
         // Verify the read result
-        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        _tablet->updates()->stop_and_wait_apply_done();
         ASSERT_TRUE(_tablet->updates()->is_error());
         ASSERT_TRUE(!_tablet->updates()->compaction_running());
     };

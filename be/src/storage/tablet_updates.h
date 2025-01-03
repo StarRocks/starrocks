@@ -507,6 +507,7 @@ private:
             _last_compaction_time_ms = UnixMillis();
         }
     }
+    void stop_and_wait_apply_done() { _stop_and_wait_apply_done(); }
     bool is_apply_stop() { return _apply_stopped.load(); }
 
     bool compaction_running() { return _compaction_running; }
