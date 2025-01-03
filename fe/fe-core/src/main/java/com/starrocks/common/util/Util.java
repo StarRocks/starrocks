@@ -247,26 +247,6 @@ public class Util {
         return tokens;
     }
 
-    private static String handleArrayType(ArrayType type) {
-        String itemTypeString = columnHashString(type.getItemType());
-        return itemTypeString == null ? null : type.prettyPrint();
-    }
-
-    private static String handleMapType(MapType type) {
-        String keyTypeString = columnHashString(type.getKeyType());
-        String valueTypeString = columnHashString(type.getValueType());
-        return (keyTypeString == null || valueTypeString == null) ? null : type.prettyPrint();
-    }
-
-    private static String handleStructType(StructType type) {
-        for (StructField field : type.getFields()) {
-            if (columnHashString(field.getType()) == null) {
-                return null;
-            }
-        }
-        return type.prettyPrint();
-    }
-
     private static String columnHashString(Type type) {
         if (type.isScalarType()) {
             PrimitiveType primitiveType = type.getPrimitiveType();
@@ -286,12 +266,6 @@ public class Util {
                 default:
                     return TYPE_STRING_MAP.get(primitiveType);
             }
-        } else if (type.isArrayType()) {
-            return handleArrayType((ArrayType) type);
-        } else if (type.isMapType()) {
-            return handleMapType((MapType) type);
-        } else if (type.isStructType()) {
-            return handleStructType((StructType) type);
         } else {
             return type.prettyPrint(); 
         }
@@ -344,6 +318,38 @@ public class Util {
 
     public static int generateSchemaHash() {
         return Math.abs(ThreadLocalRandom.current().nextInt(Integer.MAX_VALUE));
+    }
+
+    public static boolean checkTypeSupported(Type type) {
+        if (type.isScalarType()) {
+            if (TYPE_STRING_MAP.get(type.getPrimitiveType()) == null) {
+                return false;
+            }
+        } else if (type.isArrayType()) {
+            return checkTypeSupported(((ArrayType) type).getItemType());
+        } else if (type.isMapType()) {
+            Type keyType = ((MapType) type).getKeyType();
+            Type valueType = ((MapType) type).getValueType();
+            return checkTypeSupported(keyType) && checkTypeSupported(valueType);
+        } else if (type.isStructType()) {
+            for (StructField field : ((StructType) type).getFields()) {
+                if (!checkTypeSupported(field.getType())) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    public static boolean checkColumnSupported(List<Column> columns) {
+        for (Column column : columns) {
+            Type type = column.getType();
+            if (!checkTypeSupported(type)) {
+                throw new SemanticException("Type:%s of column:%s does not support",
+                        column.getType().toString(), column.getName());
+            }
+        }
+        return true;
     }
 
     // get response body as a string from the given url.
