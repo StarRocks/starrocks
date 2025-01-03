@@ -335,6 +335,7 @@ public class PartitionBasedMvRefreshProcessorIcebergTest extends MVTestBase {
                                 "REFRESH DEFERRED MANUAL\n" +
                                 "AS SELECT id, data, date  FROM `iceberg0`.`partitioned_db`.`t1` as a;",
                     () -> {
+                        UtFrameUtils.mockEnableQueryContextCache();
                         MaterializedView mv = getMv("test", "test_mv1");
                         PartitionBasedMvRefreshProcessor processor = refreshMV("test", mv);
                         RuntimeProfile runtimeProfile = processor.getRuntimeProfile();
