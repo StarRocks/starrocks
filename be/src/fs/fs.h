@@ -107,6 +107,7 @@ struct SequentialFileOptions {
     // Specify different buffer size for different read scenarios
     int64_t buffer_size = -1;
     FileEncryptionInfo encryption_info;
+    bool skip_disk_cache = false;
 };
 
 struct RandomAccessFileOptions {
@@ -116,6 +117,7 @@ struct RandomAccessFileOptions {
     // Specify different buffer size for different read scenarios
     int64_t buffer_size = -1;
     FileEncryptionInfo encryption_info;
+    bool skip_disk_cache = false;
 };
 
 struct DirEntry {
