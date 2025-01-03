@@ -233,16 +233,25 @@ public class MvRewritePreprocessor {
             try {
                 // 1. get related mvs for all input tables
                 Set<MaterializedView> relatedMVs = getRelatedMVs(queryTables, context.getOptimizerConfig().isRuleBased());
+                if (relatedMVs.isEmpty()) {
+                    return;
+                }
 
                 // filter mvs which is set by config: including/excluding mvs
                 Set<MaterializedView> selectedRelatedMVs = getRelatedMVsByConfig(relatedMVs);
                 logMVPrepare(connectContext, "Choose {}/{} mvs after user config", selectedRelatedMVs.size(), relatedMVs.size());
                 // add into queryMaterializationContext for later use
                 this.queryMaterializationContext.addRelatedMVs(selectedRelatedMVs);
+                if (selectedRelatedMVs.isEmpty()) {
+                    return;
+                }
 
                 // 2. choose best related mvs by user's config or related mv limit
                 try (Timer t1 = Tracers.watchScope("MVChooseCandidates")) {
                     selectedRelatedMVs = chooseBestRelatedMVs(queryTables, selectedRelatedMVs, queryOptExpression);
+                }
+                if (selectedRelatedMVs.isEmpty()) {
+                    return;
                 }
 
                 // 3. convert to mv with planContext, skip if mv has no valid plan(not SPJG)
@@ -250,9 +259,12 @@ public class MvRewritePreprocessor {
                 try (Timer t2 = Tracers.watchScope("MVGenerateMvPlan")) {
                     mvWithPlanContexts = getMvWithPlanContext(selectedRelatedMVs);
                 }
+                if (mvWithPlanContexts.isEmpty()) {
+                    return;
+                }
 
                 // 4. process related mvs to candidates
-                try (Timer t3 = Tracers.watchScope("MVValidateMv")) {
+                try (Timer t3 = Tracers.watchScope("MVPrepareRelatedMVs")) {
                     prepareRelatedMVs(queryTables, mvWithPlanContexts);
                 }
 
@@ -268,6 +280,10 @@ public class MvRewritePreprocessor {
                 try (Timer t4 = Tracers.watchScope("MVProcessWithView")) {
                     processPlanWithView(queryMaterializationContext, connectContext, queryOptExpression,
                             queryColumnRefFactory, requiredColumns);
+                }
+
+                if (queryMaterializationContext.getValidCandidateMVs().size() > 1) {
+                    queryMaterializationContext.setEnableQueryContextCache(true);
                 }
             } catch (Exception e) {
                 List<String> tableNames = queryTables.stream().map(Table::getName).collect(Collectors.toList());
