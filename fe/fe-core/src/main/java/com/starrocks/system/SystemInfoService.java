@@ -131,7 +131,6 @@ public class SystemInfoService implements GsonPostProcessable {
 
     public void addComputeNodes(AddComputeNodeClause addComputeNodeClause)
             throws DdlException {
-
         for (Pair<String, Integer> pair : addComputeNodeClause.getHostPortPairs()) {
             checkSameNodeExist(pair.first, pair.second);
         }
@@ -169,11 +168,12 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     // Final entry of adding compute node
-    private void addComputeNode(String host, int heartbeatPort, String warehouse) throws DdlException {
+    public void addComputeNode(String host, int heartbeatPort, String warehouse) throws DdlException {
         ComputeNode newComputeNode = new ComputeNode(GlobalStateMgr.getCurrentState().getNextId(), host, heartbeatPort);
-        idToComputeNodeRef.put(newComputeNode.getId(), newComputeNode);
         setComputeNodeOwner(newComputeNode);
         addComputeNodeToWarehouse(newComputeNode, warehouse);
+
+        idToComputeNodeRef.put(newComputeNode.getId(), newComputeNode);
 
         // log
         GlobalStateMgr.getCurrentState().getEditLog().logAddComputeNode(newComputeNode);
@@ -246,6 +246,10 @@ public class SystemInfoService implements GsonPostProcessable {
     // Final entry of adding backend
     private void addBackend(String host, int heartbeatPort, String warehouse) throws DdlException {
         Backend newBackend = new Backend(GlobalStateMgr.getCurrentState().getNextId(), host, heartbeatPort);
+        // add backend to DEFAULT_CLUSTER
+        setBackendOwner(newBackend);
+        addComputeNodeToWarehouse(newBackend, warehouse);
+
         // update idToBackend
         idToBackendRef.put(newBackend.getId(), newBackend);
 
@@ -253,10 +257,6 @@ public class SystemInfoService implements GsonPostProcessable {
         Map<Long, AtomicLong> copiedReportVersions = Maps.newHashMap(idToReportVersionRef);
         copiedReportVersions.put(newBackend.getId(), new AtomicLong(0L));
         idToReportVersionRef = ImmutableMap.copyOf(copiedReportVersions);
-
-        // add backend to DEFAULT_CLUSTER
-        setBackendOwner(newBackend);
-        addComputeNodeToWarehouse(newBackend, warehouse);
 
         // log
         GlobalStateMgr.getCurrentState().getEditLog().logAddBackend(newBackend);
