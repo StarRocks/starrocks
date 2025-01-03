@@ -3140,11 +3140,11 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### lake_enable_ingest_slowdown
 
-- Default: false
+- Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether to enable Data Ingestion Slowdown in a shared-data cluster. When Data Ingestion Slowdown is enabled, if the Compaction Score of a partition exceeds `lake_ingest_slowdown_threshold`, loading tasks on that partition will be throttled down. This configuration only takes effect when `run_mode` is set to `shared_data`.
+- Description: Whether to enable Data Ingestion Slowdown in a shared-data cluster. When Data Ingestion Slowdown is enabled, if the Compaction Score of a partition exceeds `lake_ingest_slowdown_threshold`, loading tasks on that partition will be throttled down. This configuration only takes effect when `run_mode` is set to `shared_data`. From v3.3.6 onwards, the default value is chenged from `false` to `true`.
 - Introduced in: v3.2.0
 
 ##### lake_ingest_slowdown_threshold
@@ -3176,11 +3176,11 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### lake_compaction_score_upper_bound
 
-- Default: 0
+- Default: 2000
 - Type: Long
 - Unit: -
 - Is mutable: Yes
-- Description: The upper limit of the Compaction Score for a partition in a shared-data cluster. `0` indicates no upper limit. This item only takes effect when `lake_enable_ingest_slowdown` is set to `true`. When the Compaction Score of a partition reaches or exceeds this upper limit, all loading tasks on that partition will be indefinitely delayed until the Compaction Score drops below this value or the task times out.
+- Description: The upper limit of the Compaction Score for a partition in a shared-data cluster. `0` indicates no upper limit. This item only takes effect when `lake_enable_ingest_slowdown` is set to `true`. When the Compaction Score of a partition reaches or exceeds this upper limit, incoming loading tasks will be rejected. From v3.3.6 onwards, the default value is changed from `0` to `2000`.
 - Introduced in: v3.2.0
 
 ##### lake_compaction_disable_tables
