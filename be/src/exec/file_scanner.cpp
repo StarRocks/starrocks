@@ -447,6 +447,11 @@ Status FileScanner::sample_schema(RuntimeState* state, const TBrokerScanRange& s
             break;
 
         case TFileFormatType::FORMAT_CSV_PLAIN:
+        case TFileFormatType::FORMAT_CSV_GZ:
+        case TFileFormatType::FORMAT_CSV_BZ2:
+        case TFileFormatType::FORMAT_CSV_LZ4_FRAME:
+        case TFileFormatType::FORMAT_CSV_DEFLATE:
+        case TFileFormatType::FORMAT_CSV_ZSTD:
             p_scanner = std::make_unique<CSVScanner>(state, &profile, sample_range, &counter, true);
             break;
 
