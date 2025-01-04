@@ -42,6 +42,40 @@ protected:
     ObjectPool _pool;
 };
 
+TEST_F(RuntimeBloomFilterTest, filter_zonemap_with_min_max) {
+    // > 10
+    auto* rf = Int32RF::create_with_range<true>(&_pool, 10, false);
+    int32_t min = 5;
+    int32_t max = 10;
+    ASSERT_TRUE(rf->filter_zonemap_with_min_max(&min, &max));
+
+    // >= 10
+    rf = Int32RF::create_with_range<true>(&_pool, 10, true);
+    min = 5;
+    max = 10;
+    ASSERT_FALSE(rf->filter_zonemap_with_min_max(&min, &max));
+
+    min = 5;
+    max = 9;
+    ASSERT_TRUE(rf->filter_zonemap_with_min_max(&min, &max));
+
+    // < 10
+    rf = Int32RF::create_with_range<false>(&_pool, 10, false);
+    min = 10;
+    max = 15;
+    ASSERT_TRUE(rf->filter_zonemap_with_min_max(&min, &max));
+
+    // <= 10
+    rf = Int32RF::create_with_range<false>(&_pool, 10, true);
+    min = 10;
+    max = 15;
+    ASSERT_FALSE(rf->filter_zonemap_with_min_max(&min, &max));
+
+    min = 11;
+    max = 15;
+    ASSERT_TRUE(rf->filter_zonemap_with_min_max(&min, &max));
+}
+
 TEST_F(RuntimeBloomFilterTest, create_with_empty_range) {
     auto* rf = Int32RF::create_with_empty_range_without_null(&_pool);
     ASSERT_TRUE(rf->is_empty_range());
