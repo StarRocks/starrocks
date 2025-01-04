@@ -123,6 +123,8 @@ import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.statistic.StatsConstants;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -147,6 +149,7 @@ import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 import static com.starrocks.statistic.StatsConstants.STATISTICS_DB_NAME;
 
 public class AnalyzerUtils {
+    private static final Logger LOG = LogManager.getLogger(AnalyzerUtils.class);
 
     // The partition format supported by date_trunc
     public static final Set<String> DATE_TRUNC_SUPPORTED_PARTITION_FORMAT =
@@ -1426,7 +1429,7 @@ public class AnalyzerUtils {
                         // change partition name, how to generate a unique partition name
                         partitionName = calculateUniquePartitionName(partitionName, tablePartitions);
                         if (tablePartitions.containsKey(partitionName)) {
-                            throw new AnalysisException("partition name " + partitionName + " already exists.");
+                            LOG.warn("partition name " + partitionName + " already exists.");
                         }
                     }
                     MultiItemListPartitionDesc multiItemListPartitionDesc = new MultiItemListPartitionDesc(true,
@@ -1461,10 +1464,7 @@ public class AnalyzerUtils {
             int i = 0;
             do {
                 newPartitionName = partitionName + "_" + Integer.toHexString(diff + (i++));
-                if (i > 100) {
-                    break;
-                }
-            } while (tablePartitions.containsKey(newPartitionName));
+            } while (tablePartitions.containsKey(newPartitionName) && i < 100);
         }
         return newPartitionName;
     }
