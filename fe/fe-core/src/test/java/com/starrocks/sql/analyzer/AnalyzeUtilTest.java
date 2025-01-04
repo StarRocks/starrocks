@@ -32,6 +32,7 @@ import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.utframe.UtFrameUtils;
+import org.apache.hadoop.util.Sets;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -420,7 +421,7 @@ public class AnalyzeUtilTest {
     @Test
     public void testCalculateStringDiff() throws Exception {
         OlapTable t1 = (OlapTable) starRocksAssert.getTable(DB_NAME, "auto_tbl1");
-        List<String> combinations = generateCaseCombinations("abc_def?ghi|g.com");
+        List<String> combinations = generateCaseCombinations("aac_def?gHi|Gx.com");
         List<List<String>> partitionValues = combinations.stream()
                 .map(s -> Lists.newArrayList(s))
                 .collect(Collectors.toList());
@@ -457,6 +458,18 @@ public class AnalyzeUtilTest {
             for (PartitionDesc desc : descs) {
                 Assert.assertTrue(partitionNames.get(desc.getPartitionName()) != null);
             }
+        }
+    }
+
+    @Test
+    public void testIntToHexString() {
+        int j = Integer.MAX_VALUE - 50;
+        Set<String> values = Sets.newTreeSet();
+        for (int i = 0; i < 100; i++) {
+            j += 1;
+            String v = Integer.toHexString(j);
+            Assert.assertTrue(!values.contains(v));
+            values.add(v);
         }
     }
 

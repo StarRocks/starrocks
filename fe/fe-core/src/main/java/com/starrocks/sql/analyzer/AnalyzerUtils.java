@@ -136,7 +136,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -1424,12 +1423,12 @@ public class AnalyzerUtils {
                 if (!partitionColNames.contains(partitionName)) {
                     List<List<String>> partitionItems = Collections.singletonList(partitionValue);
                     PListCell cell = new PListCell(partitionItems);
-                    // If partition name already exists and their partition values are different, change partition name.
+                    // If the partition name already exists and their partition values are different, change the partition name.
                     if (tablePartitions.containsKey(partitionName) && !tablePartitions.get(partitionName).equals(cell)) {
-                        // change partition name, how to generate a unique partition name
                         partitionName = calculateUniquePartitionName(partitionName, tablePartitions);
                         if (tablePartitions.containsKey(partitionName)) {
-                            LOG.warn("partition name " + partitionName + " already exists.");
+                            throw new AnalysisException(String.format("partition name %s already exists in table " +
+                                    "%s.", partitionName, olapTable.getName()));
                         }
                     }
                     MultiItemListPartitionDesc multiItemListPartitionDesc = new MultiItemListPartitionDesc(true,
@@ -1456,31 +1455,17 @@ public class AnalyzerUtils {
      */
     private static String calculateUniquePartitionName(String partitionName,
                                                        Map<String, PListCell> tablePartitions) {
-        // change partition name, how to generate a unique partition name
-        String newPartitionName = partitionName + "_" + Integer.toHexString(partitionName.hashCode());
         // ensure partition name is unique with case-insensitive
+        int diff = partitionName.hashCode();
+        String newPartitionName = partitionName + "_" + Integer.toHexString(diff);
         if (tablePartitions.containsKey(newPartitionName)) {
-            int diff = calculateStringDiff(partitionName, partitionName.toUpperCase(Locale.ROOT));
             int i = 0;
             do {
-                newPartitionName = partitionName + "_" + Integer.toHexString(diff + (i++));
-            } while (tablePartitions.containsKey(newPartitionName) && i < 100);
+                diff += 1;
+                newPartitionName = partitionName + "_" + Integer.toHexString(diff);
+            } while (i++ < 100 && tablePartitions.containsKey(newPartitionName));
         }
         return newPartitionName;
-    }
-
-    private static int calculateStringDiff(String str1, String str2) {
-        if (str1 == null || str2 == null) {
-            return 0;
-        }
-        if (str1.length() != str2.length()) {
-            return 0;
-        }
-        int diff = 0;
-        for (int i = 0; i < str1.length(); i++) {
-            diff += str1.charAt(i) - str2.charAt(i);
-        }
-        return diff;
     }
 
     @VisibleForTesting
