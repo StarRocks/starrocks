@@ -67,14 +67,16 @@ public class DataCacheStmtAnalyzerTest {
 
     @Test
     public void testForNoneBlackListRule() {
-        analyzeFail("create datacache rule hive0.partitioned_db.orders priority = 0", "DataCache only support priority = -1 (aka BlackList) now");
-        analyzeFail("create datacache rule hive0.partitioned_db.orders priority = 1", "DataCache only support priority = -1 (aka BlackList) now");
+        analyzeFail("create datacache rule hive0.partitioned_db.orders priority = 0",
+                "DataCache only support priority = -1 (aka BlackList) now");
+        analyzeFail("create datacache rule hive0.partitioned_db.orders priority = 1",
+                "DataCache only support priority = -1 (aka BlackList) now");
     }
 
     @Test
     public void testAddProperties() {
         analyzeFail("create datacache rule hive0.partitioned_db.orders priority = -1 " +
-                        "properties(\"a\"=\"b\")", "DataCache don't support specify properties now");
+                "properties(\"a\"=\"b\")", "DataCache don't support specify properties now");
     }
 
     @Test
@@ -83,8 +85,10 @@ public class DataCacheStmtAnalyzerTest {
         analyzeFail("create datacache rule *.a.b priority = -1", "Catalog is *, database and table must use * either");
         analyzeFail("create datacache rule a.*.b priority = -1", "Database is *, table must use * either");
         analyzeFail("create datacache rule catalog.a.b priority = -1", "DataCache target catalog: catalog does not exist.");
-        analyzeFail("create datacache rule hive0.partitioned_db.b priority = -1", "DataCache target table: b does not exist in [catalog: hive0, database: partitioned_db]");
-        analyzeFail("create datacache rule hive0.partitioned_db.* WHERE dt>'2042' priority = -1", "You must have a specific table when using where clause");
+        analyzeFail("create datacache rule hive0.partitioned_db.b priority = -1",
+                "DataCache target table: b does not exist in [catalog: hive0, database: partitioned_db]");
+        analyzeFail("create datacache rule hive0.partitioned_db.* WHERE dt>'2042' priority = -1",
+                "You must have a specific table when using where clause");
     }
 
     @Test
@@ -107,19 +111,33 @@ public class DataCacheStmtAnalyzerTest {
     @Test
     public void testCreateRuleWithPredicates() {
         CreateDataCacheRuleStmt stmt = (CreateDataCacheRuleStmt)
-                analyzeSuccess("create datacache rule hive0.datacache_db.multi_partition_table where l_shipdate > '2012-1-1' priority = -1");
+                analyzeSuccess(
+                        "create datacache rule hive0.datacache_db.multi_partition_table where l_shipdate > '2012-1-1' priority " +
+                                "= -1");
         DATACACHE_MGR.createCacheRule(stmt.getTarget(), stmt.getPredicates(), stmt.getPriority(), stmt.getProperties());
         Optional<DataCacheRule> dataCacheRule = DataCacheMgr.getInstance().getCacheRule(stmt.getTarget());
         Assert.assertTrue(dataCacheRule.isPresent());
-        Assert.assertEquals("[id = 0, target = hive0.datacache_db.multi_partition_table, predicates = `hive0`.`datacache_db`.`multi_partition_table`.`l_shipdate` > '2012-1-1', priority = -1, properties = NULL]", dataCacheRule.get().toString());
+        Assert.assertEquals(
+                "[id = 0, target = hive0.datacache_db.multi_partition_table, predicates = `hive0`.`datacache_db`" +
+                        ".`multi_partition_table`.`l_shipdate` > '2012-1-1', priority = -1, properties = NULL]",
+                dataCacheRule.get().toString());
     }
 
     @Test
     public void testCacheSelect() throws Exception {
-        DataCacheSelectStatement stmt = (DataCacheSelectStatement) analyzeSuccess(
-                "cache select * from hive0.datacache_db.multi_partition_table");
-        Assert.assertEquals("black_hole_catalog.black_hole_db.black_hole_table",
-                stmt.getInsertStmt().getTableName().toString());
+        {
+            DataCacheSelectStatement stmt = (DataCacheSelectStatement) analyzeSuccess(
+                    "cache select * from hive0.datacache_db.multi_partition_table");
+            Assert.assertEquals("black_hole_catalog.black_hole_db.black_hole_table",
+                    stmt.getInsertStmt().getTableName().toString());
+        }
+        {
+            DataCacheSelectStatement stmt = (DataCacheSelectStatement) analyzeSuccess(
+                    "cache  select /*+ set_var(query_timeout=30) */  * from hive0.datacache_db.multi_partition_table where " +
+                            "l_shipdate > '2012-1-1'");
+            Assert.assertEquals(1, stmt.getAllQueryScopeHints().size());
+            Assert.assertEquals("30", stmt.getAllQueryScopeHints().get(0).getValue().get("query_timeout"));
+        }
         analyzeSuccess("cache select * from hive0.datacache_db.multi_partition_table where l_shipdate > '2012-1-1'");
         analyzeFail("cache select * from hive0.datacache_db.not_existed");
         analyzeFail("cache select * from default_catalog.test.t0",
@@ -151,7 +169,8 @@ public class DataCacheStmtAnalyzerTest {
         Assert.assertEquals(24 * 3600, stmt.getTTLSeconds());
 
         stmt = (DataCacheSelectStatement) analyzeSuccess(
-                "cache select * from hive0.datacache_db.multi_partition_table properties(\"priority\"=\"1\", \"TTL\"=\"P1DT1S\")");
+                "cache select * from hive0.datacache_db.multi_partition_table properties(\"priority\"=\"1\", " +
+                        "\"TTL\"=\"P1DT1S\")");
         Assert.assertEquals(1, stmt.getPriority());
         Assert.assertEquals(24 * 3600 + 1, stmt.getTTLSeconds());
     }
