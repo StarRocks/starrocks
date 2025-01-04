@@ -59,7 +59,7 @@ public class MVCompensationPruneUnionRule extends TransformationRule {
         if (scanOperators.get(0) instanceof LogicalScanOperator &&
                 MvPartitionCompensator.isUnSupportedPartitionPruneExternalScanType(scanOperators.get(1).getOpType())) {
             return isMVPartitionSatisfied(scanOperators.get(0));
-        } else if (scanOperators.get(1) instanceof LogicalScanOperator&&
+        } else if (scanOperators.get(1) instanceof LogicalScanOperator &&
                 MvPartitionCompensator.isUnSupportedPartitionPruneExternalScanType(scanOperators.get(0).getOpType())) {
             return isMVPartitionSatisfied(scanOperators.get(1));
         } else {
