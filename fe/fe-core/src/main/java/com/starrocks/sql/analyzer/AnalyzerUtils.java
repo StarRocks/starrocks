@@ -1421,12 +1421,10 @@ public class AnalyzerUtils {
                 if (!partitionColNames.contains(partitionName)) {
                     List<List<String>> partitionItems = Collections.singletonList(partitionValue);
                     PListCell cell = new PListCell(partitionItems);
-                    // If partition name already exists and their partition values are not the same, change partition name.
+                    // If partition name already exists and their partition values are different, change partition name.
                     if (tablePartitions.containsKey(partitionName) && !tablePartitions.get(partitionName).equals(cell)) {
                         // change partition name, how to generate a unique partition name
-                        int diff = calculateStringDiff(partitionName, partitionName.toLowerCase(Locale.ROOT));
-                        partitionName = partitionName + "_" + Integer.toHexString(diff);
-                        // ensure partition name is unique with case-insensitive
+                        partitionName = calculateUniquePartitionName(partitionName, tablePartitions);
                         if (tablePartitions.containsKey(partitionName)) {
                             throw new AnalysisException("partition name " + partitionName + " already exists.");
                         }
@@ -1451,8 +1449,26 @@ public class AnalyzerUtils {
     }
 
     /**
-     * Calculate the difference between two strings which have the same length.
+     * Calculate the unique partition name for list partition.
      */
+    private static String calculateUniquePartitionName(String partitionName,
+                                                       Map<String, PListCell> tablePartitions) {
+        // change partition name, how to generate a unique partition name
+        String newPartitionName = partitionName + "_" + Integer.toHexString(partitionName.hashCode());
+        // ensure partition name is unique with case-insensitive
+        if (tablePartitions.containsKey(newPartitionName)) {
+            int diff = calculateStringDiff(partitionName, partitionName.toUpperCase(Locale.ROOT));
+            int i = 0;
+            do {
+                newPartitionName = partitionName + "_" + Integer.toHexString(diff + (i++));
+                if (i > 100) {
+                    break;
+                }
+            } while (tablePartitions.containsKey(newPartitionName));
+        }
+        return newPartitionName;
+    }
+
     private static int calculateStringDiff(String str1, String str2) {
         if (str1 == null || str2 == null) {
             return 0;
