@@ -224,6 +224,8 @@ public:
 
     ~ExchangeSinkOperatorFactory() override = default;
 
+    bool support_event_scheduler() const override { return true; }
+
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
 
     Status prepare(RuntimeState* state) override;

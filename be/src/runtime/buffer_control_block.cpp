@@ -249,6 +249,7 @@ void BufferControlBlock::cancel_pending_rpc() {
 
 // seems no use?
 Status BufferControlBlock::get_batch(TFetchDataResult* result) {
+    auto notify = defer_notify();
     std::unique_ptr<SerializeRes> ser = nullptr;
     {
         std::unique_lock<std::mutex> l(_lock);
@@ -297,6 +298,7 @@ Status BufferControlBlock::get_batch(TFetchDataResult* result) {
 }
 
 void BufferControlBlock::get_batch(GetResultBatchCtx* ctx) {
+    auto notify = defer_notify();
     std::unique_lock<std::mutex> l(_lock);
     if (!_status.ok()) {
         ctx->on_failure(_status);

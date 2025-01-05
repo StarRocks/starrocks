@@ -37,6 +37,7 @@
 #include <iostream>
 #include <utility>
 
+#include "gen_cpp/internal_service.pb.h"
 #include "glog/logging.h"
 #include "runtime/current_thread.h"
 #include "runtime/data_stream_recvr.h"

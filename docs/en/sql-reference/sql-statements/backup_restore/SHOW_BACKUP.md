@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # SHOW BACKUP
 
-## Description
-
 Views the last BACKUP task in a specified database.
 
 > **NOTE**

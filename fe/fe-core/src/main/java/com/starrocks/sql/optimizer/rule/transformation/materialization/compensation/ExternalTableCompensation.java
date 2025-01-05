@@ -277,6 +277,12 @@ public final class ExternalTableCompensation extends TableCompensation {
         }
         // use update info's partition to cells since it's accurate.
         Map<String, PCell> nameToPartitionKeys = baseTableUpdateInfo.getPartitionToCells();
+        MaterializedView mv = mvUpdateInfo.getMv();
+        Map<Table, List<Column>> refBaseTablePartitionColumns = mv.getRefBaseTablePartitionColumns();
+        if (!refBaseTablePartitionColumns.containsKey(refBaseTable)) {
+            return null;
+        }
+        List<Column> partitionColumns = refBaseTablePartitionColumns.get(refBaseTable);
         try {
             for (String partitionName : toRefreshPartitionNames) {
                 if (!nameToPartitionKeys.containsKey(partitionName)) {
@@ -286,7 +292,6 @@ public final class ExternalTableCompensation extends TableCompensation {
                 if (pCell instanceof PRangeCell) {
                     toRefreshPartitionKeys.add(((PRangeCell) pCell).getRange().lowerEndpoint());
                 } else if (pCell instanceof PListCell) {
-                    List<Column> partitionColumns = refBaseTable.getPartitionColumns();
                     List<PartitionKey> keys = ((PListCell) pCell).toPartitionKeys(partitionColumns);
                     toRefreshPartitionKeys.addAll(keys);
                 }
@@ -376,7 +381,4 @@ public final class ExternalTableCompensation extends TableCompensation {
                 .forEach(toRefreshPartitionKeys::add);
         return MVTransparentState.COMPENSATE;
     }
-
 }
-
-
