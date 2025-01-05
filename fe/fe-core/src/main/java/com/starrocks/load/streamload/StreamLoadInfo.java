@@ -70,6 +70,7 @@ public class StreamLoadInfo {
     private boolean trimSpace;
     private byte enclose;
     private byte escape;
+    private boolean flexibleColumnMapping = false;
     private PartitionNames partitions;
     private String path;
     private boolean negative = false;
@@ -174,6 +175,10 @@ public class StreamLoadInfo {
 
     public byte getEscape() {
         return escape;
+    }
+
+    public boolean getFlexibleColumnMapping() {
+        return flexibleColumnMapping;
     }
 
     public PartitionNames getPartitions() {
@@ -522,6 +527,7 @@ public class StreamLoadInfo {
         enclose = routineLoadJob.getEnclose();
         escape = routineLoadJob.getEscape();
         warehouseId = routineLoadJob.getWarehouseId();
+        flexibleColumnMapping = routineLoadJob.getMisMatchFillValue().equals("NULL");
     }
 
     // used for stream load

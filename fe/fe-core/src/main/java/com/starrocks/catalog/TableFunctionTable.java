@@ -138,6 +138,24 @@ public class TableFunctionTable extends Table {
 
     private List<TBrokerFileStatus> fileStatuses = Lists.newArrayList();
 
+    public enum MisMatchFillValue {
+        NONE,       // error
+        NULL;
+
+        public static MisMatchFillValue fromString(String value) {
+            for (MisMatchFillValue fillValue : values()) {
+                if (fillValue.name().equalsIgnoreCase(value)) {
+                    return fillValue;
+                }
+            }
+            return null;
+        }
+
+        public static List<String> getCandidates() {
+            return Arrays.stream(values()).map(p -> p.name().toLowerCase()).collect(Collectors.toList());
+        }
+    }
+
     // Ctor for load data via table function
     public TableFunctionTable(Map<String, String> properties) throws DdlException {
         super(TableType.TABLE_FUNCTION);

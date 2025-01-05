@@ -1,0 +1,33 @@
+-- name: test_fill_mismatch_routine_load
+create database test_fill_mismatch;
+
+use test_fill_mismatch;
+
+create table t (
+    col_0 bigint,
+    col_1 bigint,
+    col_2 bigint,
+    col_3 bigint,
+    col_4 bigint
+) PROPERTIES ( "replication_num" = "1");
+
+CREATE ROUTINE LOAD rl_test_fill_mismatch on t
+COLUMNS TERMINATED BY ',',
+COLUMNS (col_0, col_1, col_2, col_3, col_4)
+PROPERTIES (
+"fill_mismatch_column_with"="NULL",
+"format"="csv") 
+FROM KAFKA (
+"kafka_broker_list"="172.26.194.239:9092",
+"kafka_topic"="mismatch-topic",
+"kafka_partitions"="0",
+"kafka_offsets"="OFFSET_BEGINNING"
+);
+
+SELECT sleep(30);
+
+SHOW ROUTINE LOAD FOR rl_test_fill_mismatch;
+
+select * from t;
+
+STOP ROUTINE LOAD for rl_test_fill_mismatch;

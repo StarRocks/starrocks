@@ -224,6 +224,7 @@ public class StreamLoadScanNode extends LoadScanNode {
         } else {
             params.setRow_delimiter((byte) '\n');
         }
+        params.setFlexible_column_mapping(streamLoadInfo.getFlexibleColumnMapping());
         params.setTrim_space(streamLoadInfo.getTrimSpace());
         params.setSkip_header(streamLoadInfo.getSkipHeader());
         params.setEnclose(streamLoadInfo.getEnclose());

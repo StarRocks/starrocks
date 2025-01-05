@@ -1,0 +1,64 @@
+-- name: test_fill_mismatch_routine_load
+create database test_fill_mismatch;
+-- result:
+-- !result
+use test_fill_mismatch;
+-- result:
+-- !result
+create table t (
+    col_0 bigint,
+    col_1 bigint,
+    col_2 bigint,
+    col_3 bigint,
+    col_4 bigint
+) PROPERTIES ( "replication_num" = "1");
+-- result:
+-- !result
+CREATE ROUTINE LOAD rl_test_fill_mismatch on t
+COLUMNS TERMINATED BY ',',
+COLUMNS (col_0, col_1, col_2, col_3, col_4)
+PROPERTIES (
+"fill_mismatch_column_with"="NULL",
+"format"="csv") 
+FROM KAFKA (
+"kafka_broker_list"="172.26.194.239:9092",
+"kafka_topic"="mismatch-topic",
+"kafka_partitions"="0",
+"kafka_offsets"="OFFSET_BEGINNING"
+);
+-- result:
+-- !result
+SELECT sleep(30);
+-- result:
+1
+-- !result
+SHOW ROUTINE LOAD FOR rl_test_fill_mismatch;
+-- result:
+[REGEX].*RUNNING.*
+-- !result
+select * from t;
+-- result:
+2913697060	3710358044	4364419130	None	None
+5738781243	None	None	None	None
+7316015210	3528441155	None	None	None
+7887069599	6580857702	9594930900	None	None
+8035138182	2554449249	8284765851	None	None
+8326435033	None	None	None	None
+1555707001	9534147277	6909164330	6518747110	9183074892
+1902037099	6977798638	3256890873	None	None
+3233575927	None	None	None	None
+6398760270	4981551709	1595579143	3783869166	None
+7743446732	2935722030	3656281032	3671457679	6368402155
+8680298587	6575615080	2882468133	3122332472	6327968871
+9785605139	7615252309	9071284279	5942487738	None
+1296829237	4613681152	9841520329	7019136721	6408610277
+2971182773	7691735621	9783529549	7486986385	2625572879
+4803803055	9998713179	6515538281	6218862683	None
+5383980699	2713161543	5845452286	None	None
+6587685321	2849333283	1550998679	1736369160	1988545823
+7180596148	1287541688	None	None	None
+9269255235	8413718101	None	None	None
+-- !result
+STOP ROUTINE LOAD for rl_test_fill_mismatch;
+-- result:
+-- !result
