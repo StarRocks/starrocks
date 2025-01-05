@@ -1627,16 +1627,6 @@ public class FunctionSet {
         }
     }
 
-    public static final java.util.function.Function<Type, ArrayType> DS_FREQUENT_RET_TYPE_BUILDER =
-            (Type itemType) -> {
-                List<StructField> fields = Lists.newArrayList();
-                fields.add(new StructField("value", itemType));
-                fields.add(new StructField("count", Type.BIGINT));
-                fields.add(new StructField("lower_bound", Type.BIGINT));
-                fields.add(new StructField("upper_bound", Type.BIGINT));
-                return new ArrayType(new StructType(fields, true));
-            };
-
     public List<Function> getBuiltinFunctions() {
         List<Function> builtinFunctions = Lists.newArrayList();
         for (Map.Entry<String, List<Function>> entry : vectorizedFunctions.entrySet()) {
