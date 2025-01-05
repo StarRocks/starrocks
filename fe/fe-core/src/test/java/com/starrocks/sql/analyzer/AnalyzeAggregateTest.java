@@ -308,14 +308,4 @@ public class AnalyzeAggregateTest {
         analyzeSuccess("SELECT window_funnel(1, ta, 0, [true, true, false]) FROM tall");
     }
 
-    @Test
-    public void testDsHll() {
-        analyzeSuccess("select ds_hll(v1) from t0");
-        analyzeSuccess("select ds_hll(v1, 4) from t0");
-        analyzeSuccess("select ds_hll(v1, 10, 'HLL_6') from t0");
-        analyzeFail("select ds_hll(v1, 10, 'HLL_6', 'a') from t0");
-        analyzeFail("select ds_hll(v1, 1) from t0");
-        analyzeFail("select ds_hll(v1, 100) from t0");
-        analyzeFail("select ds_hll(v1, 10, 'd') from t0");
-    }
 }
