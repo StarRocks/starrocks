@@ -61,6 +61,8 @@ struct DataSketchesBuilder {
             resolver->add_aggregate_mapping<lt, TYPE_BIGINT, DSSketchState<lt, SketchType::HLL>>(
                     "ds_hll_count_distinct", false,
                     AggregateFactory::MakeDataSketchesAggregateFunction<lt, SketchType::HLL>());
+            resolver->add_aggregate_mapping<lt, TYPE_BIGINT, DSSketchState<lt, SketchType::THETA>>(
+                    "ds_theta", false, AggregateFactory::MakeDataSketchesAggregateFunction<lt, SketchType::THETA>());
         }
     }
 };
