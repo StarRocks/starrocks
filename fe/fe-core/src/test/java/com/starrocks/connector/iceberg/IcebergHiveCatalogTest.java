@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.iceberg;
 
 import com.google.common.collect.ImmutableList;
@@ -60,6 +59,7 @@ public class IcebergHiveCatalogTest {
     public static final IcebergCatalogProperties DEFAULT_CATALOG_PROPERTIES;
 
     public static final HdfsEnvironment HDFS_ENVIRONMENT = new HdfsEnvironment();
+
     static {
         DEFAULT_CONFIG.put(HIVE_METASTORE_URIS, "thrift://188.122.12.1:8732"); // non-exist ip, prevent to connect local service
         DEFAULT_CONFIG.put(ICEBERG_CATALOG_TYPE, "hive");
@@ -129,7 +129,7 @@ public class IcebergHiveCatalogTest {
         };
 
         CreateViewStmt stmt = new CreateViewStmt(false, false, new TableName("catalog", "db", "table"),
-                Lists.newArrayList(new ColWithComment("k1", "", NodePosition.ZERO)), "", null, NodePosition.ZERO);
+                Lists.newArrayList(new ColWithComment("k1", "", NodePosition.ZERO)), "", false, null, NodePosition.ZERO);
         stmt.setColumns(Lists.newArrayList(new Column("k1", INT)));
         metadata.createView(stmt);
 
