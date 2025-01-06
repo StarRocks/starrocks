@@ -519,6 +519,7 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
                                         transport, MetaStoreUtils.getMetaStoreSaslProperties(conf, useSSL));
                             }
                         } catch (IOException ioe) {
+                            tte = new TTransportException(ioe);
                             LOG.error("Couldn't create client transport", ioe);
                             throw new MetaException(ioe.toString());
                         }
