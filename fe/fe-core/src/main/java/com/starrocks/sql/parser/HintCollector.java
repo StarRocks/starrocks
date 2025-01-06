@@ -73,6 +73,12 @@ public class HintCollector extends StarRocksBaseVisitor<Void> {
     }
 
     @Override
+    public Void visitDataCacheSelectStatement(StarRocksParser.DataCacheSelectStatementContext context) {
+        extractHintToRight(context, context.SELECT().getSymbol().getTokenIndex());
+        return null;
+    }
+
+    @Override
     public Void visitSubmitTaskStatement(StarRocksParser.SubmitTaskStatementContext context) {
         extractHintToRight(context);
         if (context.createTableAsSelectStatement() != null) {
