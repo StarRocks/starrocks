@@ -519,6 +519,7 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
                                         transport, MetaStoreUtils.getMetaStoreSaslProperties(conf, useSSL));
                             }
                         } catch (IOException ioe) {
+                            tte = new TTransportException(ioe);
                             LOG.error("Couldn't create client transport", ioe);
                             throw new MetaException(ioe.toString());
                         }
@@ -571,7 +572,14 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
                                     + "Continuing without it.", e);
                         }
                     }
+<<<<<<< HEAD
                 } catch (MetaException e) {
+=======
+                } catch (MetaException | TTransportException e) {
+                    if (e instanceof TTransportException) {
+                        tte = (TTransportException) e;
+                    }
+>>>>>>> dedb9b9e6a ([BugFix] avoid tte is null in `openInternal` in HiveMetaStoreClient (#54696))
                     LOG.error("Unable to connect to metastore with URI " + store
                             + " in attempt " + attempt, e);
                 }
