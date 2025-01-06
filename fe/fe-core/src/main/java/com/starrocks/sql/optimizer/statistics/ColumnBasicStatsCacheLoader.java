@@ -66,7 +66,8 @@ public class ColumnBasicStatsCacheLoader implements AsyncCacheLoader<ColumnStats
                     return Optional.empty();
                 }
             } catch (RuntimeException e) {
-                throw e;
+                LOG.error(e);
+                return Optional.empty();
             } catch (Exception e) {
                 throw new CompletionException(e);
             } finally {
@@ -79,6 +80,12 @@ public class ColumnBasicStatsCacheLoader implements AsyncCacheLoader<ColumnStats
     public CompletableFuture<Map<@NonNull ColumnStatsCacheKey, @NonNull Optional<ColumnStatistic>>> asyncLoadAll(
             @NonNull Iterable<? extends @NonNull ColumnStatsCacheKey> keys, @NonNull Executor executor) {
         return CompletableFuture.supplyAsync(() -> {
+            Map<ColumnStatsCacheKey, Optional<ColumnStatistic>> result = new HashMap<>();
+            // There may be no statistics for the column in BE
+            // Complete the list of statistics information, otherwise the columns without statistics may be called repeatedly
+            for (ColumnStatsCacheKey cacheKey : keys) {
+                result.put(cacheKey, Optional.empty());
+            }
 
             try {
                 long tableId = -1;
@@ -90,13 +97,8 @@ public class ColumnBasicStatsCacheLoader implements AsyncCacheLoader<ColumnStats
 
                 ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
                 statsConnectCtx.setThreadLocalInfo();
+
                 List<TStatisticData> statisticData = queryStatisticsData(statsConnectCtx, tableId, columns);
-                Map<ColumnStatsCacheKey, Optional<ColumnStatistic>> result = new HashMap<>();
-                // There may be no statistics for the column in BE
-                // Complete the list of statistics information, otherwise the columns without statistics may be called repeatedly
-                for (ColumnStatsCacheKey cacheKey : keys) {
-                    result.put(cacheKey, Optional.empty());
-                }
 
                 for (TStatisticData data : statisticData) {
                     ColumnStatistic columnStatistic = convert2ColumnStatistics(data);
@@ -105,7 +107,8 @@ public class ColumnBasicStatsCacheLoader implements AsyncCacheLoader<ColumnStats
                 }
                 return result;
             } catch (RuntimeException e) {
-                throw e;
+                LOG.error(e);
+                return result;
             } catch (Exception e) {
                 throw new CompletionException(e);
             } finally {
