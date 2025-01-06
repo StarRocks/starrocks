@@ -23,8 +23,7 @@
 #ifdef __AVX2__
 #include <emmintrin.h>
 #include <immintrin.h>
-#endif
-#if defined(__ARM_NEON) && defined(__aarch64__)
+#elif defined(__ARM_NEON) && defined(__aarch64__)
 #include <arm_acle.h>
 #include <arm_neon.h>
 #endif

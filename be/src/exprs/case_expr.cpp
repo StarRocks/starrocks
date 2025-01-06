@@ -574,10 +574,6 @@ private:
                 if (check_could_use_multi_simd_selector) {
                     int then_column_size = then_columns.size();
                     int when_column_size = when_columns.size();
-                    // TODO: avoid unpack const column
-                    // for (int i = 0; i < then_column_size; ++i) {
-                    //     then_columns[i] = ColumnHelper::unpack_and_duplicate_const_column(size, then_columns[i]);
-                    // }
                     std::vector<bool> then_column_is_const(then_column_size);
                     for (int i = 0; i < then_column_size; ++i) {
                         then_column_is_const[i] = then_columns[i]->is_constant();
