@@ -13,7 +13,7 @@
 
     <properties>
         <java-extensions.home>${basedir}/../</java-extensions.home>
-        <avro.version>1.11.3</avro.version>
+        <avro.version>1.11.4</avro.version>
     </properties>
 
     <dependencies>
