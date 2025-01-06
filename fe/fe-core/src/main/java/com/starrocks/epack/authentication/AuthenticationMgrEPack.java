@@ -72,6 +72,10 @@ public class AuthenticationMgrEPack extends AuthenticationMgr {
         readLock();
         try {
             UserAuthenticationInfo userAuthenticationInfo = getUserAuthenticationInfoByUserIdentity(userIdentity);
+            // Only plain password authentication has user info
+            if (userAuthenticationInfo == null) {
+                return false;
+            }
             return userAuthenticationInfo.isLock();
         } finally {
             readUnlock();
