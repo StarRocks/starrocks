@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.hive;
 
+import com.google.common.annotations.GwtIncompatible;
 import com.google.common.base.Preconditions;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheLoader;
@@ -117,7 +118,8 @@ public class CachingHiveMetastore extends CachingMetastore implements IHiveMetas
         }
 
         hmsExternalTableCache = newCacheBuilder(expireAfterWriteSec, NEVER_REFRESH, maxSize).build();
-        partitionCache = newCacheBuilder(expireAfterWriteSec, refreshIntervalSec, maxSize)
+        // The refresh internal second can be double because partition not need to fresh so frequently
+        partitionCache = newCacheBuilder(expireAfterWriteSec, refreshIntervalSec * 2, maxSize)
                 .build(asyncReloading(new CacheLoader<HivePartitionName, Partition>() {
                     @Override
                     public Partition load(@NotNull HivePartitionName key) {
@@ -125,9 +127,10 @@ public class CachingHiveMetastore extends CachingMetastore implements IHiveMetas
                     }
 
                     @Override
+                    @GwtIncompatible
                     public ListenableFuture<Partition> reload(
                             @NotNull HivePartitionName key, @NotNull Partition oldValue) {
-                        if (hmsExternalTableCache.asMap().containsKey(key.getDatabaseTableName())) {
+                        if (isCachedExternalTable(key.getDatabaseTableName())) {
                             return Futures.immediateFuture(loadPartition(key));
                         }
                         return Futures.immediateFuture(oldValue);
@@ -678,6 +681,10 @@ public class CachingHiveMetastore extends CachingMetastore implements IHiveMetas
 
     public boolean isPartitionPresent(HivePartitionName hivePartitionName) {
         return partitionCache.getIfPresent(hivePartitionName) != null;
+    }
+
+    public boolean isCachedExternalTable(DatabaseTableName tableName) {
+        return hmsExternalTableCache.asMap().containsKey(tableName);
     }
 
     public synchronized void refreshTableByEvent(HiveTable updatedHiveTable, HiveCommonStats commonStats, Partition partition) {

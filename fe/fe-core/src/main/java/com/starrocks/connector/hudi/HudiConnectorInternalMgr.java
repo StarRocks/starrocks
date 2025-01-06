@@ -121,7 +121,8 @@ public class HudiConnectorInternalMgr {
             baseHiveMetastore = CachingHiveMetastore.createCatalogLevelInstance(
                     hiveMetastore,
                     new ReentrantExecutor(refreshHiveMetastoreExecutor, hmsConf.getCacheRefreshThreadMaxNum()),
-                    new ReentrantExecutor(refreshHudiExternalTableExecutor, hmsConf.getCacheRefreshThreadMaxNum()),
+                    // As there are many managed table the max threads for the external table refresher can be double
+                    new ReentrantExecutor(refreshHudiExternalTableExecutor, hmsConf.getCacheRefreshThreadMaxNum() * 2),
                     hmsConf.getCacheTtlSec(),
                     hmsConf.getCacheRefreshIntervalSec(),
                     hmsConf.getCacheMaxNum(),
