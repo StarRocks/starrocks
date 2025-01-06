@@ -469,4 +469,16 @@ public class ReportHandlerTest {
         ready = ReportHandler.checkReadyToBeDropped(tabletId, backendId);
         Assert.assertTrue(ready);
     }
+
+    @Test
+    public void testGetPendingTabletReportTaskCnt() throws Exception {
+        ReportHandler reportHandler = new ReportHandler();
+        Assert.assertEquals(0, reportHandler.getPendingTabletReportTaskCnt());
+        reportHandler.putTabletReportTask(1L, 1L, new HashMap<>());
+        Assert.assertEquals(1, reportHandler.getPendingTabletReportTaskCnt());
+        reportHandler.putTabletReportTask(1L, 1L, new HashMap<>());
+        Assert.assertEquals(1, reportHandler.getPendingTabletReportTaskCnt());
+        reportHandler.putTabletReportTask(2L, 1L, new HashMap<>());
+        Assert.assertEquals(2, reportHandler.getPendingTabletReportTaskCnt());
+    }
 }

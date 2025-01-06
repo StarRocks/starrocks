@@ -143,6 +143,8 @@ import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.lake.snapshot.ClusterSnapshotMgr;
 import com.starrocks.lake.vacuum.AutovacuumDaemon;
 import com.starrocks.leader.CheckpointController;
+import com.starrocks.leader.ReportHandler;
+import com.starrocks.leader.TabletCollector;
 import com.starrocks.leader.TaskRunStateSynchronizer;
 import com.starrocks.listener.GlobalLoadJobListenerBus;
 import com.starrocks.load.DeleteMgr;
@@ -521,6 +523,8 @@ public class GlobalStateMgr {
     private final ClusterSnapshotMgr clusterSnapshotMgr;
 
     private final SqlBlackList sqlBlackList;
+    private final ReportHandler reportHandler;
+    private final TabletCollector tabletCollector;
 
     public NodeMgr getNodeMgr() {
         return nodeMgr;
@@ -827,6 +831,9 @@ public class GlobalStateMgr {
                         "query-deploy", true);
 
         this.warehouseIdleChecker = new WarehouseIdleChecker();
+
+        this.reportHandler = new ReportHandler();
+        this.tabletCollector = new TabletCollector();
     }
 
     public static void destroyCheckpoint() {
@@ -1434,6 +1441,8 @@ public class GlobalStateMgr {
             clusterSnapshotMgr.startCheckpointScheduler(checkpointController,
                                                         StarMgrServer.getCurrentState().getCheckpointController());
         }
+        reportHandler.start();
+        tabletCollector.start();
     }
 
     // start threads that should run on all FE
@@ -2710,5 +2719,9 @@ public class GlobalStateMgr {
     public void shutdown() {
         // in a single thread.
         connectorMgr.shutdown();
+    }
+
+    public ReportHandler getReportHandler() {
+        return reportHandler;
     }
 }
