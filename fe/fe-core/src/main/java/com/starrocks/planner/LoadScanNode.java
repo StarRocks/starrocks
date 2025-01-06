@@ -106,8 +106,8 @@ public abstract class LoadScanNode extends ScanNode {
     }
 
     // Return all available nodes under the warehouse to run load scan. Should consider different deployment modes
-    // 1. Shared-nothing: only backends can be used for scan
-    // 2. Shared-data: both backends and compute nodes can be used for scan
+    // 1. Share-nothing: only backends can be used for scan
+    // 2. Share-data: both backends and compute nodes can be used for scan
     public static List<ComputeNode> getAvailableComputeNodes(long warehouseId) {
         List<ComputeNode> nodes = Lists.newArrayList();
         // TODO: need to refactor after be split into cn + dn
