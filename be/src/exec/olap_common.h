@@ -130,6 +130,7 @@ public:
     TCondition to_olap_not_null_filter() const;
 
     void clear();
+    void clear_to_empty();
 
 private:
     std::string _column_name;

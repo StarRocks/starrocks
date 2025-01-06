@@ -25,5 +25,6 @@ add_library(TestUtil
     sync_point_impl.cc
     schema_test_helper.cpp
     tablet_test_helper.cpp
+    exprs_test_helper.cpp
 )
 

@@ -177,6 +177,17 @@ void ColumnValueRange<T>::clear() {
     _empty_range = false;
 }
 
+template <class T>
+void ColumnValueRange<T>::clear_to_empty() {
+    _fixed_values.clear();
+    _low_value = _type_max;
+    _high_value = _type_min;
+    _low_op = FILTER_LARGER_OR_EQUAL;
+    _high_op = FILTER_LESS_OR_EQUAL;
+    _fixed_op = FILTER_IN;
+    _empty_range = true;
+}
+
 Status OlapScanKeys::get_key_range(std::vector<std::unique_ptr<OlapScanRange>>* key_range) {
     key_range->clear();
 
