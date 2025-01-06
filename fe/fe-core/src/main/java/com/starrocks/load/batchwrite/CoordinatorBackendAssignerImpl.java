@@ -16,8 +16,7 @@ package com.starrocks.load.batchwrite;
 
 import com.starrocks.common.Config;
 import com.starrocks.common.ThreadPoolManager;
-import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.RunMode;
+import com.starrocks.planner.LoadScanNode;
 import com.starrocks.system.ComputeNode;
 import org.apache.arrow.util.VisibleForTesting;
 import org.slf4j.Logger;
@@ -682,19 +681,7 @@ public final class CoordinatorBackendAssignerImpl implements CoordinatorBackendA
 
     // Note that warehouse id may be invalid after the warehouse is dropped, and an exception can be thrown
     List<ComputeNode> getAvailableNodes(long warehouseId) throws Exception {
-        List<ComputeNode> nodes = new ArrayList<>();
-        if (RunMode.isSharedDataMode()) {
-            List<Long> computeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseId);
-            for (long nodeId : computeIds) {
-                ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId);
-                if (node != null && node.isAvailable()) {
-                    nodes.add(node);
-                }
-            }
-        } else {
-            nodes.addAll(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getAvailableBackends());
-        }
-        return nodes;
+        return LoadScanNode.getAvailableComputeNodes(warehouseId);
     }
 
     @VisibleForTesting

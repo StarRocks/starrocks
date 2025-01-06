@@ -267,9 +267,11 @@ public class StreamLoadScanNode extends LoadScanNode {
     }
 
     private void assignBackends() throws StarRocksException {
-        computeNodes = Lists.newArrayList();
         if (enableBatchWrite) {
+            computeNodes = Lists.newArrayList();
             for (long backendId : batchWriteBackendIds) {
+                // backendId is assigned by CoordinatorBackendAssignerImpl which have considered to use
+                // backend or cn for different deployment mode. Here just try to get the node from both
                 ComputeNode computeNode = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(backendId);
                 if (computeNode == null) {
                     throw new StarRocksException(String.format("Can't find batch write backend [%s]", backendId));
@@ -280,8 +282,7 @@ public class StreamLoadScanNode extends LoadScanNode {
                 computeNodes.add(computeNode);
             }
         } else {
-            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().backendAndComputeNodeStream()
-                    .filter(ComputeNode::isAvailable).forEach(computeNodes::add);
+            computeNodes = getAvailableComputeNodes(warehouseId);
             Collections.shuffle(computeNodes, random);
         }
         if (computeNodes.isEmpty()) {

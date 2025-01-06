@@ -45,7 +45,10 @@ import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.system.ComputeNode;
 
 import java.util.List;
 import java.util.Map;
@@ -100,6 +103,30 @@ public abstract class LoadScanNode extends ScanNode {
                 throw new AnalysisException(errorMsg);
             }
         }
+    }
+
+    // Return all available nodes under the warehouse to run load scan. Should consider different deployment modes
+    // 1. Shared-nothing: only backends can be used for scan
+    // 2. Shared-data: both backends and compute nodes can be used for scan
+    public static List<ComputeNode> getAvailableComputeNodes(long warehouseId) {
+        List<ComputeNode> nodes = Lists.newArrayList();
+        // TODO: need to refactor after be split into cn + dn
+        if (RunMode.isSharedDataMode()) {
+            List<Long> computeNodeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseId);
+            for (long cnId : computeNodeIds) {
+                ComputeNode cn = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(cnId);
+                if (cn != null && cn.isAvailable()) {
+                    nodes.add(cn);
+                }
+            }
+        } else {
+            for (ComputeNode be : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdToBackend().values()) {
+                if (be.isAvailable()) {
+                    nodes.add(be);
+                }
+            }
+        }
+        return nodes;
     }
 
 }
