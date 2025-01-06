@@ -49,6 +49,7 @@ void QuerySharedDriverQueue::put_back(const DriverRawPtr driver) {
     driver->set_driver_queue_level(level);
     {
         std::lock_guard<std::mutex> lock(_global_mutex);
+        DCHECK(!driver->is_in_ready());
         _queues[level].put(driver);
         driver->set_in_ready(true);
         driver->set_in_queue(this);

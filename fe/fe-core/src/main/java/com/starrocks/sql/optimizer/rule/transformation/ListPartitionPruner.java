@@ -438,8 +438,10 @@ public class ListPartitionPruner implements PartitionPruner {
             return null;
         }
 
-        // Fold constants
         ScalarOperatorRewriter rewriter = new ScalarOperatorRewriter();
+        // implicit cast
+        result = rewriter.rewrite(result, ScalarOperatorRewriter.DEFAULT_TYPE_CAST_RULE);
+        // fold constant
         result = rewriter.rewrite(result, ScalarOperatorRewriter.FOLD_CONSTANT_RULES);
         return result;
     }

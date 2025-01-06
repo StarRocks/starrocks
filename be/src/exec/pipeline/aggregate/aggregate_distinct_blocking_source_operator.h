@@ -34,6 +34,7 @@ public:
 
     bool has_output() const override;
     bool is_finished() const override;
+    Status prepare(RuntimeState* state) override;
 
     Status set_finished(RuntimeState* state) override;
 

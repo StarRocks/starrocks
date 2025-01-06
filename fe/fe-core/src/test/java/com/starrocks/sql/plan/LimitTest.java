@@ -173,6 +173,7 @@ public class LimitTest extends PlanTestBase {
                 + "  1:OlapScanNode"));
     }
 
+
     @Test
     public void testCountStarWithLimitForOneAggStage() throws Exception {
         connectContext.getSessionVariable().setNewPlanerAggStage(2);
@@ -631,6 +632,27 @@ public class LimitTest extends PlanTestBase {
                 "     tabletList=\n" +
                 "     cardinality=1\n" +
                 "     avgRowSize=3.0\n"));
+    }
+
+    @Test
+    public void testOffsetWithSubTopN() throws Exception {
+        String sql;
+        String plan;
+        sql = "select v1 from (\n" +
+                "  select * from (select v1, v2 from t0 order by v1 asc limit 1000, 600) l\n" +
+                "  left join (select null as cx, '1' as c1) r\n" +
+                "  on l.v1 =r.cx\n" +
+                ") b limit 600;";
+        plan = getThriftPlan(sql);
+        assertContains(plan, "TExchangeNode(input_row_tuples:[1], sort_info:" +
+                "TSortInfo(ordering_exprs:[TExpr(nodes:[TExprNode(node_type:SLOT_REF");
+
+        sql = "select * from (select v1, v2 from t0 order by v1 asc limit 1000, 600) l limit 200, 600";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "\n" +
+                "  2:MERGING-EXCHANGE\n" +
+                "     offset: 1200\n" +
+                "     limit: 400");
     }
 
     @Test

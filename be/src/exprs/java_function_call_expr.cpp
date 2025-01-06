@@ -73,14 +73,9 @@ struct UDFFunctionCallHelper {
         RETURN_IF_UNLIKELY(!st.ok(), ColumnHelper::create_const_null_column(size));
 
         // call UDF method
-        jobject res = helper.batch_call(fn_desc->call_stub.get(), input_col_objs.data(), input_col_objs.size(), size);
-        // The ctx of the current function argument is not the same as the ctx of fn_desc->call_stub.
-        // The latter is created in JavaFunctionCallExpr::prepare and used in java udf, so we should
-        // use it to determine whether an exception has occurred.
-        FunctionContext* java_udf_ctx = fn_desc->call_stub.get()->ctx();
-        if (java_udf_ctx != nullptr && java_udf_ctx->has_error()) {
-            return Status::RuntimeError(java_udf_ctx->error_msg());
-        }
+        ASSIGN_OR_RETURN(auto res, helper.batch_call(fn_desc->call_stub.get(), input_col_objs.data(),
+                                                     input_col_objs.size(), size));
+
         RETURN_IF_UNLIKELY_NULL(res, ColumnHelper::create_const_null_column(size));
         // get result
         auto result_cols = get_boxed_result(ctx, res, size);
@@ -165,7 +160,7 @@ bool JavaFunctionCallExpr::is_constant() const {
 }
 
 StatusOr<std::shared_ptr<JavaUDFContext>> JavaFunctionCallExpr::_build_udf_func_desc(
-        ExprContext* context, FunctionContext::FunctionStateScope scope, const std::string& libpath) {
+        FunctionContext::FunctionStateScope scope, const std::string& libpath) {
     auto desc = std::make_shared<JavaUDFContext>();
     // init class loader and analyzer
     desc->udf_classloader = std::make_unique<ClassLoader>(std::move(libpath));
@@ -208,9 +203,8 @@ StatusOr<std::shared_ptr<JavaUDFContext>> JavaFunctionCallExpr::_build_udf_func_
     ASSIGN_OR_RETURN(auto update_stub_clazz, desc->udf_classloader->genCallStub(stub_clazz, udf_clazz, update_method,
                                                                                 ClassLoader::BATCH_EVALUATE));
     ASSIGN_OR_RETURN(auto method, desc->analyzer->get_method_object(update_stub_clazz.clazz(), stub_method_name));
-    auto function_ctx = context->fn_context(_fn_context_index);
-    desc->call_stub = std::make_unique<BatchEvaluateStub>(
-            function_ctx, desc->udf_handle.handle(), std::move(update_stub_clazz), JavaGlobalRef(std::move(method)));
+    desc->call_stub = std::make_unique<BatchEvaluateStub>(desc->udf_handle.handle(), std::move(update_stub_clazz),
+                                                          JavaGlobalRef(std::move(method)));
 
     if (desc->prepare != nullptr) {
         // we only support fragment local scope to call prepare
@@ -238,10 +232,10 @@ Status JavaFunctionCallExpr::open(RuntimeState* state, ExprContext* context,
     }
     // cacheable
     if (scope == FunctionContext::FRAGMENT_LOCAL) {
-        auto get_func_desc = [this, scope, context, state](const std::string& lib) -> StatusOr<std::any> {
+        auto get_func_desc = [this, scope, state](const std::string& lib) -> StatusOr<std::any> {
             std::any func_desc;
             auto call = [&]() {
-                ASSIGN_OR_RETURN(func_desc, _build_udf_func_desc(context, scope, lib));
+                ASSIGN_OR_RETURN(func_desc, _build_udf_func_desc(scope, lib));
                 return Status::OK();
             };
             RETURN_IF_ERROR(call_function_in_pthread(state, call)->get_future().get());

@@ -413,8 +413,9 @@ Status EngineCloneTask::_clone_copy(DataDir& data_dir, const string& local_data_
         st = _download_files(&data_dir, download_url, local_path);
         (void)_release_snapshot(src.host, src.be_port, snapshot_path);
         if (!st.ok()) {
-            LOG(WARNING) << "Fail to download snapshot from " << download_url << ": " << st.to_string()
-                         << " tablet:" << _clone_req.tablet_id;
+            LOG(WARNING) << "Fail to download snapshot " << snapshot_path << " from "
+                         << get_host_port(src.host, src.http_port) << ", status: " << st
+                         << ", tablet_id:" << _clone_req.tablet_id << ", schema_hash:" << _clone_req.schema_hash;
             error_msgs->push_back("download snapshot failed. backend_ip: " + src.host);
             continue;
         }
@@ -433,7 +434,8 @@ Status EngineCloneTask::_clone_copy(DataDir& data_dir, const string& local_data_
             error_msgs->push_back("convert rowset id failed. backend_ip: " + src.host);
             continue;
         }
-        LOG(INFO) << "Cloned snapshot from " << download_url << " to " << local_data_path;
+        LOG(INFO) << "Cloned snapshot " << snapshot_path << " from " << get_host_port(src.host, src.http_port) << " to "
+                  << local_data_path;
         break;
     }
     return st;
@@ -616,7 +618,7 @@ Status EngineCloneTask::_download_files(DataDir* data_dir, const std::string& re
 
         std::string local_file_path = local_path + file_name;
 
-        VLOG(2) << "Downloading " << remote_file_url << " to " << local_path << ". bytes=" << file_size
+        VLOG(2) << "Downloading " << file_name << " to " << local_path << ". bytes=" << file_size
                 << " timeout=" << estimate_timeout;
 
         auto download_cb = [&remote_file_url, estimate_timeout, &local_file_path, file_size](HttpClient* client) {
@@ -627,8 +629,8 @@ Status EngineCloneTask::_download_files(DataDir* data_dir, const std::string& re
             // Check file length
             uint64_t local_file_size = std::filesystem::file_size(local_file_path);
             if (local_file_size != file_size) {
-                LOG(WARNING) << "Fail to download " << remote_file_url << ". file_size=" << local_file_size << "/"
-                             << file_size;
+                LOG(WARNING) << "Mismatched file size, downloaded file: " << local_file_path
+                             << ", file_size: " << local_file_size << "/" << file_size;
                 return Status::InternalError("mismatched file size");
             }
             chmod(local_file_path.c_str(), S_IRUSR | S_IWUSR);
