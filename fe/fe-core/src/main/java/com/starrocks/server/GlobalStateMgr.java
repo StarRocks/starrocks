@@ -1197,6 +1197,10 @@ public class GlobalStateMgr {
         }
     }
 
+    public static String getImageDirPath() {
+        return Config.meta_dir + IMAGE_DIR;
+    }
+
     public String getImageDir() {
         return imageDir;
     }
