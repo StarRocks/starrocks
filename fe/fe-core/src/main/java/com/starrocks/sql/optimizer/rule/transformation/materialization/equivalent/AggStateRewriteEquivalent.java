@@ -14,22 +14,27 @@
 package com.starrocks.sql.optimizer.rule.transformation.materialization.equivalent;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.analysis.Expr;
+import com.google.common.collect.Lists;
+import com.starrocks.analysis.FunctionParams;
+import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.catalog.combinator.AggStateCombinator;
+import com.starrocks.catalog.combinator.AggStateMergeCombinator;
 import com.starrocks.catalog.combinator.AggStateUnionCombinator;
 import com.starrocks.catalog.combinator.AggStateUtils;
 import com.starrocks.common.Pair;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.FunctionAnalyzer;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Arrays;
 import java.util.List;
 
-import static com.starrocks.catalog.Function.CompareMode.IS_IDENTICAL;
 import static com.starrocks.catalog.FunctionSet.AGG_STATE_SUFFIX;
 
 public class AggStateRewriteEquivalent extends IAggregateRewriteEquivalent {
@@ -109,6 +114,8 @@ public class AggStateRewriteEquivalent extends IAggregateRewriteEquivalent {
         }
 
         List<ScalarOperator> eqArgs = eqAggState.getChildren();
+        AggregateFunction aggregateFunction = (AggregateFunction) aggFunc.getFunction();
+        List<Type> argTypes = aggFunc.getChildren().stream().map(ScalarOperator::getType).toList();
         if (aggFuncName.equalsIgnoreCase(realAggFuncName)) {
             // query's agg function, mv: avg_union(avg_state(x)), query: avg(x)
             // check all input arguments are the same.
@@ -120,6 +127,8 @@ public class AggStateRewriteEquivalent extends IAggregateRewriteEquivalent {
                     return null;
                 }
             }
+
+            return rewriteImpl(shuttleContext, aggFunc, replace);
         } else {
             // query's agg_merge function, mv: avg_union(avg_state(x)), query: avg_merge(avg_state(x))
             ScalarOperator queryArg0 = aggFunc.getChild(0);
@@ -143,61 +152,72 @@ public class AggStateRewriteEquivalent extends IAggregateRewriteEquivalent {
                     return null;
                 }
             }
-        }
 
-        if (shuttleContext.isRollup()) {
-            return makeAggStateRollupFunc(replace, realAggFuncName, aggFunc.getType());
-        } else {
-            return makeAggStateMergeFunc(replace, realAggFuncName, aggFunc.getType());
+            return rewriteImpl(shuttleContext, aggFunc, replace);
         }
-    }
-
-    private CallOperator makeAggStateRollupFunc(ScalarOperator replace,
-                                                String realAggFuncName,
-                                                Type aggReturnType) {
-        CallOperator aggUnionRollup = makeAggStateUnionFunc(replace, realAggFuncName);
-        return makeAggStateMergeFunc(aggUnionRollup, realAggFuncName, aggReturnType);
     }
 
     private CallOperator makeAggStateUnionFunc(ScalarOperator replace,
-                                               String realAggFuncName) {
-        String aggUnionFuncName = FunctionSet.getAggStateUnionName(realAggFuncName);
-
+                                               String realAggFuncName,
+                                               List<Type> realArgTypes) {
         // agg_state_union(input), its type is the same as input
-        Type intermediateType = replace.getType();
-        Function aggUnionFn = Expr.getBuiltinFunction(aggUnionFuncName, new Type[] { intermediateType },
-                IS_IDENTICAL);
-        Preconditions.checkState(aggUnionFn != null);
-        return new CallOperator(aggUnionFuncName, intermediateType, Arrays.asList(replace), aggUnionFn);
+        Function aggFn = getAnalyzedFunction(realAggFuncName, realArgTypes);
+        Preconditions.checkArgument(aggFn instanceof AggregateFunction);
+        return AggStateUnionCombinator.of((AggregateFunction) aggFn)
+                .map(aggUnionFunc -> new CallOperator(aggUnionFunc.functionName(),
+                        aggUnionFunc.getReturnType(), Arrays.asList(replace), aggUnionFunc))
+                .orElse(null);
     }
 
     private CallOperator makeAggStateMergeFunc(ScalarOperator input,
                                                String realAggFuncName,
-                                               Type aggReturnType) {
-        Type intermediateType = input.getType();
+                                               List<Type> realArgTypes) {
         // agg_state_merge(agg_state_union(input)), its type is the same as input
-        String aggMergeFuncName = FunctionSet.getAggStateMergeName(realAggFuncName);
-        Function aggMergeFn = Expr.getBuiltinFunction(aggMergeFuncName,
-                new Type[] { intermediateType }, Function.CompareMode.IS_IDENTICAL);
-        Preconditions.checkState(aggMergeFn != null);
-        return new CallOperator(aggMergeFuncName, aggReturnType,
-                Arrays.asList(input), aggMergeFn);
+        Function aggFn = getAnalyzedFunction(realAggFuncName, realArgTypes);
+        Preconditions.checkArgument(aggFn instanceof AggregateFunction);
+        return AggStateMergeCombinator.of((AggregateFunction) aggFn)
+                .map(aggMergeFunc -> new CallOperator(aggMergeFunc.functionName(),
+                        aggMergeFunc.getReturnType(), Arrays.asList(input), aggMergeFunc))
+                .orElse(null);
+    }
+
+    private Function getAnalyzedFunction(String functionName,
+                                         List<Type> argTypes) {
+        ConnectContext connectContext = ConnectContext.get() != null ? ConnectContext.get() : new ConnectContext();
+        FunctionParams params = new FunctionParams(false, Lists.newArrayList());
+        Type[] argumentTypes = argTypes.toArray(Type[]::new);
+        Boolean[] isArgumentConstants = argTypes.stream().map(x -> false).toArray(Boolean[]::new);
+        Function aggFn = FunctionAnalyzer.getAnalyzedAggregateFunction(connectContext, functionName,
+                params, argumentTypes, isArgumentConstants, NodePosition.ZERO);
+        Preconditions.checkState(aggFn != null);
+        return aggFn;
     }
 
     @Override
     public ScalarOperator rewriteRollupAggregateFunc(EquivalentShuttleContext shuttleContext,
                                                      CallOperator aggFunc,
                                                      ColumnRefOperator replace) {
+        List<Type> argTypes = aggFunc.getChildren().stream().map(ScalarOperator::getType).toList();
         String realAggFuncName = AggStateUtils.getAggFuncNameOfCombinator(aggFunc.getFnName());
-        return makeAggStateUnionFunc(replace, realAggFuncName);
+
+        AggregateFunction aggregateFunction = (AggregateFunction) aggFunc.getFunction();
+        if (aggregateFunction instanceof AggStateUnionCombinator) {
+            return makeAggStateUnionFunc(replace, realAggFuncName, argTypes);
+        } else if (aggregateFunction instanceof AggStateMergeCombinator) {
+            return makeAggStateMergeFunc(replace, realAggFuncName, argTypes);
+        } else {
+            return makeAggStateMergeFunc(replace, realAggFuncName, argTypes);
+        }
     }
 
     @Override
-    public ScalarOperator rewriteAggregateFunc(EquivalentShuttleContext shuttleContext,
-                                               CallOperator aggFunc,
-                                               ColumnRefOperator replace) {
-        String realAggFuncName = AggStateUtils.getAggFuncNameOfCombinator(aggFunc.getFnName());
-        return makeAggStateMergeFunc(replace, realAggFuncName, aggFunc.getType());
+    public ScalarOperator rewriteAggregateFuncWithoutRollup(EquivalentShuttleContext shuttleContext,
+                                                            CallOperator aggFunc,
+                                                            ColumnRefOperator replace) {
+        // List<Type> argTypes = aggFunc.getChildren().stream().map(ScalarOperator::getType).toList();
+        // String realAggFuncName = AggStateUtils.getAggFuncNameOfCombinator(aggFunc.getFnName());
+        // return makeAggStateMergeFunc(replace, realAggFuncName, argTypes);
+        return null;
     }
 
     @Override
@@ -205,8 +225,9 @@ public class AggStateRewriteEquivalent extends IAggregateRewriteEquivalent {
                                                                                CallOperator aggFunc,
                                                                                ColumnRefOperator replace) {
         String realAggFuncName = AggStateUtils.getAggFuncNameOfCombinator(aggFunc.getFnName());
-        CallOperator partialFn = makeAggStateUnionFunc(replace, realAggFuncName);
-        CallOperator finalFn = makeAggStateMergeFunc(replace, realAggFuncName, aggFunc.getType());
+        List<Type> argTypes = aggFunc.getChildren().stream().map(ScalarOperator::getType).toList();
+        CallOperator partialFn = makeAggStateUnionFunc(replace, realAggFuncName, argTypes);
+        CallOperator finalFn = makeAggStateMergeFunc(replace, realAggFuncName, Lists.newArrayList(partialFn.getType()));
         return Pair.create(partialFn, finalFn);
     }
 }
