@@ -16,6 +16,7 @@ package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
@@ -34,6 +35,7 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -85,11 +87,23 @@ public class PushDownPredicateScanRule extends TransformationRule {
         OptExpression scan = input.getInputs().get(0);
         LogicalScanOperator logicalScanOperator = (LogicalScanOperator) scan.getOp();
 
-        ScalarOperator scanPredicate = logicalScanOperator.getPredicate();
-        ScalarOperator filterPredicate = lfo.getPredicate();
-
         ScalarOperatorRewriter scalarOperatorRewriter = new ScalarOperatorRewriter();
-        ScalarOperator predicates = Utils.compoundAnd(lfo.getPredicate(), logicalScanOperator.getPredicate());
+
+        Set<ScalarOperator> set = Sets.newLinkedHashSet();
+        set.addAll(Utils.extractConjuncts(lfo.getPredicate()));
+        final List<ScalarOperator> scanPredicates = Utils.extractConjuncts(logicalScanOperator.getPredicate());
+        for (ScalarOperator scanPredicate : scanPredicates) {
+            if (set.contains(scanPredicate)) {
+                if (!scanPredicate.isPushdown() && !scanPredicate.isRedundant()) {
+                    // same value will not add to set, so need remove old and add new
+                    set.remove(scanPredicate);
+                    set.add(scanPredicate);
+                }
+            } else {
+                set.add(scanPredicate);
+            }
+        }
+        ScalarOperator predicates = Utils.compoundAnd(Lists.newArrayList(set));
 
         predicates = ScalarOperatorRewriter.simplifyCaseWhen(predicates);
 
