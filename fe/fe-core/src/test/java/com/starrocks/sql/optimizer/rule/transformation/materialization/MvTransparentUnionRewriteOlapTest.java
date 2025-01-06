@@ -185,7 +185,7 @@ public class MvTransparentUnionRewriteOlapTest extends MVTestBase {
                                 "     tabletRatio=1/3",
                         "     TABLE: m1\n" +
                                 "     PREAGGREGATION: ON\n" +
-                                "     PREDICATES: 1: k1 > 3, 2: k2 LIKE 'a%'\n" +
+                                "     PREDICATES: 1: k1 > 3, 1: k1 < 6, 2: k2 LIKE 'a%'\n" +
                                 "     partitions=1/3\n" +
                                 "     rollup: m1\n" +
                                 "     tabletRatio=3/3",
@@ -215,30 +215,30 @@ public class MvTransparentUnionRewriteOlapTest extends MVTestBase {
                 String[] expectPlans = {
                         "     TABLE: m1\n" +
                                 "     PREAGGREGATION: ON\n" +
-                                "     PREDICATES: 14: k2 LIKE 'a%'\n" +
+                                "     PREDICATES: 13: k1 < 6, 14: k2 LIKE 'a%'\n" +
                                 "     partitions=1/3",
                         "     TABLE: mv0\n" +
                                 "     PREAGGREGATION: ON\n" +
-                                "     PREDICATES: 10: k2 LIKE 'a%'\n" +
+                                "     PREDICATES: 9: k1 < 6, 10: k2 LIKE 'a%'\n" +
                                 "     partitions=1/1", // case 1
                         "     TABLE: m1\n" +
                                 "     PREAGGREGATION: ON\n" +
-                                "     PREDICATES: 13: k1 > 0, 14: k2 LIKE 'a%'\n" +
+                                "     PREDICATES: 13: k1 > 0, 13: k1 < 6, 14: k2 LIKE 'a%'\n" +
                                 "     partitions=1/3",
                         "     TABLE: mv0\n" +
                                 "     PREAGGREGATION: ON\n" +
-                                "     PREDICATES: 9: k1 > 0, 10: k2 LIKE 'a%'\n" +
+                                "     PREDICATES: 9: k1 > 0, 9: k1 < 6, 10: k2 LIKE 'a%'\n" +
                                 "     partitions=1/1\n" +
                                 "     rollup: mv0", // case 2
                         "     TABLE: m1\n" +
                                 "     PREAGGREGATION: ON\n" +
-                                "     PREDICATES: 13: k1 > 1, 14: k2 LIKE 'a%'\n" +
+                                "     PREDICATES: 13: k1 > 1, 13: k1 < 6, 14: k2 LIKE 'a%'\n" +
                                 "     partitions=1/3\n" +
                                 "     rollup: m1\n" +
                                 "     tabletRatio=3/3",
                         "     TABLE: mv0\n" +
                                 "     PREAGGREGATION: ON\n" +
-                                "     PREDICATES: 9: k1 > 1, 10: k2 LIKE 'a%'\n" +
+                                "     PREDICATES: 9: k1 > 1, 9: k1 < 6, 10: k2 LIKE 'a%'\n" +
                                 "     partitions=1/1\n" +
                                 "     rollup: mv0\n" +
                                 "     tabletRatio=3/3", // case 3
