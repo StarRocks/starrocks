@@ -26,7 +26,7 @@ LocalPartitionTopnSinkOperator::LocalPartitionTopnSinkOperator(OperatorFactory* 
 
 Status LocalPartitionTopnSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
-    _partition_topn_ctx->observable().attach_source_observer(state, observer());
+    _partition_topn_ctx->observable().attach_sink_observer(state, observer());
     return _partition_topn_ctx->prepare(state, _unique_metrics.get());
 }
 
