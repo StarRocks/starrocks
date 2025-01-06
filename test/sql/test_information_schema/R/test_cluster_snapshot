@@ -1,0 +1,7 @@
+-- name: test_cluster_snapshot
+SELECT * FROM  INFORMATION_SCHEMA.CLUSTER_SNAPSHOTS;
+-- result:
+-- !result
+SELECT * FROM  INFORMATION_SCHEMA.CLUSTER_SNAPSHOT_JOBS;
+-- result:
+-- !result

@@ -4,9 +4,11 @@ displayed_sidebar: docs
 
 # CREATE REPOSITORY
 
-## Description
-
 Creates a repository in a remote storage system that is used to store data snapshots for backing up and restoring data.
+
+:::tip
+For an overview of backup and restore please see the [backup and restore guide](../../../administration/management/Backup_and_restore.md).
+:::
 
 > **CAUTION**
 >

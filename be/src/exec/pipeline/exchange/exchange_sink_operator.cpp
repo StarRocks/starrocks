@@ -455,7 +455,7 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
 
     _shuffle_channel_ids.resize(state->chunk_size());
     _row_indexes.resize(state->chunk_size());
-
+    _buffer->attach_observer(state, observer());
     return Status::OK();
 }
 
