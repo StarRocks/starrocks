@@ -165,7 +165,7 @@ TEST_F(ChunkPredicateBuilderTest, normalized_in_has_null_larger_than_1024) {
     _opts.tuple_desc = parquet::Utils::create_tuple_descriptor(&_runtime_state, &_pool, slot_descs);
 
     std::vector<int32_t> values;
-    for (int32_t i=0; i < 2048; i++) {
+    for (int32_t i = 0; i < 2048; i++) {
         values.emplace_back(i);
     }
     _texprs.emplace_back(ExprsTestHelper::create_in_pred_texpr<TYPE_INT, int32_t>(slot_id, values, true));
@@ -307,7 +307,7 @@ TEST_F(ChunkPredicateBuilderTest, normalized_not_in_has_null_larger_than_1024) {
     _opts.tuple_desc = parquet::Utils::create_tuple_descriptor(&_runtime_state, &_pool, slot_descs);
 
     std::vector<int32_t> values;
-    for (int32_t i=0; i < 2048; i++) {
+    for (int32_t i = 0; i < 2048; i++) {
         values.emplace_back(i);
     }
 
