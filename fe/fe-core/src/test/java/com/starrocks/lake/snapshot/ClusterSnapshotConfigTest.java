@@ -25,6 +25,20 @@ public class ClusterSnapshotConfigTest {
     @Test
     public void testLoadFromFile() {
         ClusterSnapshotConfig config = ClusterSnapshotConfig.load("src/test/resources/conf/cluster_snapshot.yaml");
+
+        ClusterSnapshotConfig.ClusterSnapshot clusterSnapshot = config.getClusterSnapshot();
+        Assert.assertNotNull(clusterSnapshot);
+        Assert.assertEquals("my_s3_volume", clusterSnapshot.getStorageVolumeName());
+        Assert.assertNotNull(clusterSnapshot.getStorageVolume());
+        Assert.assertEquals("f7265e80-631c-44d3-a8ac-cf7cdc7adec811019",
+                clusterSnapshot.getClusterServiceId());
+        Assert.assertEquals("automated_cluster_snapshot_1704038400000",
+                clusterSnapshot.getClusterSnapshotName());
+
+        clusterSnapshot.setStorageVolumeName(clusterSnapshot.getStorageVolumeName());
+        clusterSnapshot.setClusterServiceId(clusterSnapshot.getClusterServiceId());
+        clusterSnapshot.setClusterSnapshotName(clusterSnapshot.getClusterSnapshotName());
+
         Assert.assertEquals(2, config.getFrontends().size());
         Assert.assertEquals(2, config.getComputeNodes().size());
         Assert.assertEquals(2, config.getStorageVolumes().size());
