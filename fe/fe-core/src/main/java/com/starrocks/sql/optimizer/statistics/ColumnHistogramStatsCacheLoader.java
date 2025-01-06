@@ -63,7 +63,8 @@ public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<ColumnS
                     return Optional.empty();
                 }
             } catch (RuntimeException e) {
-                throw e;
+                LOG.error(e);
+                return Optional.empty();
             } catch (Exception e) {
                 throw new CompletionException(e);
             } finally {
@@ -77,14 +78,15 @@ public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<ColumnS
             @NonNull Iterable<? extends @NonNull ColumnStatsCacheKey> keys, @NonNull Executor executor) {
         return CompletableFuture.supplyAsync(() -> {
             Map<ColumnStatsCacheKey, Optional<Histogram>> result = new HashMap<>();
+            long tableId = -1;
+            List<String> columns = new ArrayList<>();
+            for (ColumnStatsCacheKey key : keys) {
+                tableId = key.tableId;
+                columns.add(key.column);
+                result.put(key, Optional.empty());
+            }
+
             try {
-                long tableId = -1;
-                List<String> columns = new ArrayList<>();
-                for (ColumnStatsCacheKey key : keys) {
-                    tableId = key.tableId;
-                    columns.add(key.column);
-                    result.put(key, Optional.empty());
-                }
                 ConnectContext connectContext = StatisticUtils.buildConnectContext();
                 connectContext.setThreadLocalInfo();
 
@@ -97,7 +99,8 @@ public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<ColumnS
 
                 return result;
             } catch (RuntimeException e) {
-                throw e;
+                LOG.error(e);
+                return result;
             } catch (Exception e) {
                 throw new CompletionException(e);
             } finally {
