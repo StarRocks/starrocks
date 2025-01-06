@@ -2809,6 +2809,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "True to start warehouse idle checker")
     public static boolean warehouse_idle_check_enable = false;
 
+    @ConfField(mutable = true)
+    public static boolean lake_enable_bind_compaction_with_load_warehouse = true;
+
     // e.g. "tableId1;tableId2"
     @ConfField(mutable = true)
     public static String lake_compaction_disable_tables = "";

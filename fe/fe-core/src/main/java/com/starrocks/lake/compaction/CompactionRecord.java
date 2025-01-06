@@ -15,6 +15,9 @@
 package com.starrocks.lake.compaction;
 
 import com.google.common.base.Strings;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.warehouse.Warehouse;
 
 import java.util.Objects;
 import java.util.Optional;
@@ -26,6 +29,7 @@ public class CompactionRecord {
     private final long finishTs;
     private final String partitionName;
     private final String errorMessage;
+    private final long warehouseId;
     private final String executionProfile;
 
     private CompactionRecord(CompactionJob context, String errorMessage) {
@@ -36,6 +40,7 @@ public class CompactionRecord {
         this.finishTs = context.getFinishTs();
         this.partitionName = context.getFullPartitionName();
         this.errorMessage = errorMessage;
+        this.warehouseId = context.getWarehouseId();
         this.executionProfile = context.getExecutionProfile();
     }
 
@@ -69,6 +74,16 @@ public class CompactionRecord {
 
     public Optional<String> getErrorMessage() {
         return errorMessage != null ? Optional.of(errorMessage) : Optional.empty();
+    }
+
+    public String getWarehouseName() {
+        WarehouseManager warehouseMgr = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        Warehouse warehouse = warehouseMgr.getWarehouseIgnoreError(warehouseId);
+        if (warehouse == null) {
+            return warehouseMgr.getCompactionWarehouse().getName();
+        } else {
+            return warehouse.getName();
+        }
     }
 
     public Optional<String> getExecutionProfile() {

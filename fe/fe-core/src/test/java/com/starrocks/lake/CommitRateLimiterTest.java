@@ -37,6 +37,7 @@ public class CommitRateLimiterTest {
     private final long dbId = 1;
     private final long tableId = 2;
     private final long timeoutMs = 60_000;
+    private final long warehouseId = 0;
     private CompactionMgr compactionMgr;
     private TransactionState transactionState;
     private CommitRateLimiter limiter;
@@ -79,7 +80,7 @@ public class CommitRateLimiterTest {
         Assert.assertTrue(threshold > 0);
 
         compactionMgr.handleLoadingFinished(new PartitionIdentifier(dbId, tableId, partitionId), 3, currentTimeMs,
-                Quantiles.compute(Lists.newArrayList(threshold)));
+                Quantiles.compute(Lists.newArrayList(threshold)), warehouseId);
 
         limiter.check(partitions, currentTimeMs);
         Assert.assertEquals(transactionState.getWriteEndTimeMs(), transactionState.getAllowCommitTimeMs());
@@ -98,7 +99,7 @@ public class CommitRateLimiterTest {
         Assert.assertTrue(threshold > 0);
 
         compactionMgr.handleLoadingFinished(new PartitionIdentifier(dbId, tableId, partitionId), 3, currentTimeMs,
-                Quantiles.compute(Lists.newArrayList(threshold + 1.0)));
+                Quantiles.compute(Lists.newArrayList(threshold + 1.0)), warehouseId);
 
         CommitRateExceededException e1 =
                 Assert.assertThrows(CommitRateExceededException.class, () -> limiter.check(partitions, currentTimeMs));
@@ -106,7 +107,7 @@ public class CommitRateLimiterTest {
 
         // test retry after compaction score changed
         compactionMgr.handleLoadingFinished(new PartitionIdentifier(dbId, tableId, partitionId), 4, currentTimeMs,
-                Quantiles.compute(Lists.newArrayList(threshold + 10.0)));
+                Quantiles.compute(Lists.newArrayList(threshold + 10.0)), warehouseId);
 
         CommitRateExceededException e2 =
                 Assert.assertThrows(CommitRateExceededException.class, () -> limiter.check(partitions, currentTimeMs));
@@ -129,7 +130,7 @@ public class CommitRateLimiterTest {
         Assert.assertTrue(threshold > 0);
 
         compactionMgr.handleLoadingFinished(new PartitionIdentifier(dbId, tableId, partitionId), 3, currentTimeMs,
-                Quantiles.compute(Lists.newArrayList(threshold + 1.0)));
+                Quantiles.compute(Lists.newArrayList(threshold + 1.0)), warehouseId);
 
         CommitRateExceededException e1 =
                 Assert.assertThrows(CommitRateExceededException.class, () -> limiter.check(partitions, currentTimeMs));
@@ -138,7 +139,7 @@ public class CommitRateLimiterTest {
 
         // test retry after compaction score changed
         compactionMgr.handleLoadingFinished(new PartitionIdentifier(dbId, tableId, partitionId), 4, currentTimeMs,
-                Quantiles.compute(Lists.newArrayList(threshold + 10.0)));
+                Quantiles.compute(Lists.newArrayList(threshold + 10.0)), warehouseId);
 
         CommitRateExceededException e2 =
                 Assert.assertThrows(CommitRateExceededException.class, () -> limiter.check(partitions, currentTimeMs));
@@ -159,7 +160,7 @@ public class CommitRateLimiterTest {
         Assert.assertTrue(threshold > 0);
 
         compactionMgr.handleLoadingFinished(new PartitionIdentifier(dbId, tableId, partitionId), 3, currentTimeMs,
-                Quantiles.compute(Lists.newArrayList(threshold + 10.0)));
+                Quantiles.compute(Lists.newArrayList(threshold + 10.0)), warehouseId);
 
         CommitFailedException e1 =
                 Assert.assertThrows(CommitFailedException.class, () -> limiter.check(partitions, currentTimeMs));
@@ -200,7 +201,7 @@ public class CommitRateLimiterTest {
         Assert.assertTrue(threshold > 0);
 
         compactionMgr.handleLoadingFinished(new PartitionIdentifier(dbId, tableId, partitionId), 3, currentTimeMs,
-                Quantiles.compute(Lists.newArrayList(threshold + 100)));
+                Quantiles.compute(Lists.newArrayList(threshold + 100)), warehouseId);
 
         limiter.check(partitions, currentTimeMs);
     }
@@ -227,7 +228,7 @@ public class CommitRateLimiterTest {
         // lake_compaction_score_upper_bound < compactionScore < lake_ingest_slowdown_threshold
         double compactionScore = threshold - 5;
         compactionMgr.handleLoadingFinished(new PartitionIdentifier(dbId, tableId, partitionId), 3, currentTimeMs,
-                Quantiles.compute(Lists.newArrayList(compactionScore)));
+                Quantiles.compute(Lists.newArrayList(compactionScore)), warehouseId);
 
         Assert.assertThrows(CommitFailedException.class, () -> limiter.check(partitions, currentTimeMs));
     }
@@ -254,7 +255,7 @@ public class CommitRateLimiterTest {
         // lake_ingest_slowdown_threshold < compactionScore < lake_compaction_score_upper_bound
         double compactionScore = threshold + 5;
         compactionMgr.handleLoadingFinished(new PartitionIdentifier(dbId, tableId, partitionId), 3, currentTimeMs,
-                Quantiles.compute(Lists.newArrayList(compactionScore)));
+                Quantiles.compute(Lists.newArrayList(compactionScore)), warehouseId);
 
         // Commit should be denied by lake_ingest_slowdown_threshold
         CommitRateExceededException e =
@@ -266,7 +267,7 @@ public class CommitRateLimiterTest {
         // Update the compaction score, make it greater than the lake_compaction_score_upper_bound
         compactionScore = threshold + 15;
         compactionMgr.handleLoadingFinished(new PartitionIdentifier(dbId, tableId, partitionId), 4, newCurrentTimeMs,
-                Quantiles.compute(Lists.newArrayList(compactionScore)));
+                Quantiles.compute(Lists.newArrayList(compactionScore)), warehouseId);
 
         // This time commit should be denied by the lake_compaction_score_upper_bound
         Assert.assertThrows(CommitFailedException.class,

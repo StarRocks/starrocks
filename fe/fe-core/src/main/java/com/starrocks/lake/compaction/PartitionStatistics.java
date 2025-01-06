@@ -36,6 +36,9 @@ public class PartitionStatistics {
     private volatile CompactionPriority priority = CompactionPriority.DEFAULT;
     // not persist on purpose, used to control the interval of continuous partial success compaction
     private int punishFactor = 1;
+    // record the warehouse within which the most recent load transaction happened
+    @SerializedName(value = "warehouseId")
+    private long warehouseId = -1;
 
     public enum CompactionPriority {
         DEFAULT(0),
@@ -99,6 +102,13 @@ public class PartitionStatistics {
         return punishFactor;
     }
 
+    public void setWarehouseId(long warehouseId) {
+        this.warehouseId = warehouseId;
+    }
+
+    public long getWarehouseId() {
+        return warehouseId;
+    }
     private void adjustPunishFactor(Quantiles newCompactionScore) {
         if (compactionScore != null && newCompactionScore != null) {
             if (compactionScore.getMax() == newCompactionScore.getMax()) {

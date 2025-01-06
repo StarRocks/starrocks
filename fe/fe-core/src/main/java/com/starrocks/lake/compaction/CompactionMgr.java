@@ -130,7 +130,7 @@ public class CompactionMgr implements MemoryTrackable {
     }
 
     public void handleLoadingFinished(PartitionIdentifier partition, long version, long versionTime,
-                                      Quantiles compactionScore) {
+                                      Quantiles compactionScore, long warehouseId) {
         PartitionVersion currentVersion = new PartitionVersion(version, versionTime);
         PartitionStatistics statistics = partitionStatisticsHashMap.compute(partition, (k, v) -> {
             if (v == null) {
@@ -138,6 +138,7 @@ public class CompactionMgr implements MemoryTrackable {
             }
             v.setCurrentVersion(currentVersion);
             v.setCompactionScore(compactionScore);
+            v.setWarehouseId(warehouseId);
             return v;
         });
         if (LOG.isDebugEnabled()) {
@@ -273,7 +274,7 @@ public class CompactionMgr implements MemoryTrackable {
         return partitionStatisticsHashMap.size();
     }
 
-    public PartitionStatistics triggerManualCompaction(PartitionIdentifier partition) {
+    public PartitionStatistics triggerManualCompaction(PartitionIdentifier partition, long warehouseId) {
         PartitionStatistics statistics = partitionStatisticsHashMap.compute(partition, (k, v) -> {
             if (v == null) {
                 v = new PartitionStatistics(partition);

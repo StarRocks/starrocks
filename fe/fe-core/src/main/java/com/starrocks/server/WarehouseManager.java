@@ -111,6 +111,12 @@ public class WarehouseManager implements Writable {
         }
     }
 
+    public Warehouse getWarehouseIgnoreError(long warehouseId) {
+        try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
+            return idToWh.get(warehouseId);
+        }
+    }
+
     public Warehouse getWarehouseAllowNull(String warehouseName) {
         try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
             return nameToWh.get(warehouseName);
@@ -257,6 +263,10 @@ public class WarehouseManager implements Writable {
 
     public Warehouse getCompactionWarehouse() {
         return getWarehouse(DEFAULT_WAREHOUSE_ID);
+    }
+
+    public long getCompactionWarehouseID() {
+        return DEFAULT_WAREHOUSE_ID;
     }
 
     public Warehouse getBackgroundWarehouse() {
