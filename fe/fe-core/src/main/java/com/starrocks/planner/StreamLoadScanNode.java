@@ -62,7 +62,7 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.load.Load;
 import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TBrokerRangeDesc;
 import com.starrocks.thrift.TBrokerScanRange;
 import com.starrocks.thrift.TBrokerScanRangeParams;
@@ -125,7 +125,7 @@ public class StreamLoadScanNode extends LoadScanNode {
     private ImmutableMap<String, String> batchWriteParameters;
     private Set<Long> batchWriteBackendIds;
 
-    private List<Backend> backends;
+    private List<ComputeNode> computeNodes;
     private int nextBe = 0;
     private final Random random = new Random(System.currentTimeMillis());
     private String dbName;
@@ -267,27 +267,24 @@ public class StreamLoadScanNode extends LoadScanNode {
     }
 
     private void assignBackends() throws StarRocksException {
-        backends = Lists.newArrayList();
+        computeNodes = Lists.newArrayList();
         if (enableBatchWrite) {
             for (long backendId : batchWriteBackendIds) {
-                Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(backendId);
-                if (backend == null) {
+                ComputeNode computeNode = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(backendId);
+                if (computeNode == null) {
                     throw new StarRocksException(String.format("Can't find batch write backend [%s]", backendId));
                 }
-                if (!backend.isAvailable()) {
+                if (!computeNode.isAvailable()) {
                     throw new StarRocksException(String.format("Batch write backend [%s] is not available", backendId));
                 }
-                backends.add(backend);
+                computeNodes.add(computeNode);
             }
         } else {
-            for (Backend be : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdToBackend().values()) {
-                if (be.isAvailable()) {
-                    backends.add(be);
-                }
-            }
-            Collections.shuffle(backends, random);
+            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().backendAndComputeNodeStream()
+                    .filter(ComputeNode::isAvailable).forEach(computeNodes::add);
+            Collections.shuffle(computeNodes, random);
         }
-        if (backends.isEmpty()) {
+        if (computeNodes.isEmpty()) {
             throw new StarRocksException("No available backends");
         }
     }
@@ -437,8 +434,8 @@ public class StreamLoadScanNode extends LoadScanNode {
             locations.setScan_range(scanRange);
 
             if (needAssignBE) {
-                Backend selectedBackend = backends.get(nextBe++);
-                nextBe = nextBe % backends.size();
+                ComputeNode selectedBackend = computeNodes.get(nextBe++);
+                nextBe = nextBe % computeNodes.size();
                 TScanRangeLocation location = new TScanRangeLocation();
                 location.setBackend_id(selectedBackend.getId());
                 location.setServer(new TNetworkAddress(selectedBackend.getHost(), selectedBackend.getBePort()));
