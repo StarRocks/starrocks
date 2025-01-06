@@ -17,6 +17,7 @@ package com.starrocks.connector;
 import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TScanRangeLocations;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.function.Predicate;
 
@@ -81,6 +82,7 @@ public class RemoteFilesSampleStrategy {
                 }
                 int s = Math.max(0, Math.min(input.size(), limit - sampled));
                 sampled += s;
+                Collections.shuffle(input);
                 return input.subList(0, s);
             }
             case SPECIFIC -> {
