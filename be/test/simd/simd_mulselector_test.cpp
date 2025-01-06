@@ -58,7 +58,7 @@ void test_simd_multi_select_if() {
         DataInit::init(dst);
         std::vector<bool> is_const(CASE_SIZE + 1, false);
         if constexpr (IS_CONST) {
-            for(int i = 0; i < CASE_SIZE + 1; i++) {
+            for (int i = 0; i < CASE_SIZE + 1; i++) {
                 is_const[i] = true;
             }
         }
