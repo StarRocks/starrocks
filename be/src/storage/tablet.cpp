@@ -174,6 +174,14 @@ Status Tablet::revise_tablet_meta(const std::vector<RowsetMetaSharedPtr>& rowset
         return Status::NotSupported("updatable does not support revise_tablet_meta");
     }
 
+    {
+        // check rs
+        for (const auto& [_, rs] : _rs_version_map) {
+            rs->rowset_meta()->version();
+        }
+        LOG(INFO) << "all rs in _rs_version_map safe, tablet: " << tablet_id();
+    }
+
     Status st;
     do {
         // load new local tablet_meta to operate on
@@ -230,6 +238,14 @@ Status Tablet::revise_tablet_meta(const std::vector<RowsetMetaSharedPtr>& rowset
             return st;
         }
         _rs_version_map[version] = std::move(rowset);
+    }
+
+    {
+        // check rs
+        for (const auto& [_, rs] : _rs_version_map) {
+            rs->rowset_meta()->version();
+        }
+        LOG(INFO) << "all rs in _rs_version_map after update safe, tablet: " << tablet_id();
     }
 
     if (config::enable_event_based_compaction_framework) {
