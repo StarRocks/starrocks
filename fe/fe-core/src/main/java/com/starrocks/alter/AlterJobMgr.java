@@ -80,7 +80,6 @@ import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.mv.MVTimelinessMgr;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -513,7 +512,7 @@ public class AlterJobMgr {
         }
     }
 
-    public void alterView(AlterViewInfo alterViewInfo) {
+    public void alterView(AlterViewInfo alterViewInfo, boolean isReplay) {
         long dbId = alterViewInfo.getDbId();
         long tableId = alterViewInfo.getTableId();
         String inlineViewDef = alterViewInfo.getInlineViewDef();
@@ -535,8 +534,8 @@ public class AlterJobMgr {
             }
             view.setNewFullSchema(newFullSchema);
             view.setComment(comment);
-            LocalMetastore.inactiveRelatedMaterializedView(db, view,
-                    MaterializedViewExceptions.inactiveReasonForBaseViewChanged(viewName));
+            AlterMVJobExecutor.inactiveRelatedMaterializedView(db, view,
+                    MaterializedViewExceptions.inactiveReasonForBaseViewChanged(viewName), isReplay);
             db.dropTable(viewName);
             db.registerTableUnlocked(view);
 
