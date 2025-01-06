@@ -38,4 +38,27 @@ public:
 };
 } // namespace starrocks
 
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+#include <arm_acle.h>
+#include <arm_neon.h>
+namespace starrocks {
+class SIMDUtils {
+public:
+    template <class T>
+    static uint8x16_t set_data(T data) {
+        if constexpr (sizeof(T) == 1) {
+            return vdupq_n_u8(data);
+        } else if constexpr (sizeof(T) == 2) {
+            return vdupq_n_u16(data);
+        } else if constexpr (sizeof(T) == 4) {
+            return vdupq_n_u32(*reinterpret_cast<uint32_t*>(&data));
+        } else if constexpr (sizeof(T) == 8) {
+            return vdupq_n_u64(*reinterpret_cast<uint64_t*>(&data));
+        } else {
+            static_assert(sizeof(T) > 8, "only support sizeof type LE than 8");
+        }
+    }
+};
+} // namespace starrocks
+
 #endif

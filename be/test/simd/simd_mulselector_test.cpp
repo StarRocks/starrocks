@@ -62,7 +62,7 @@ void test_simd_multi_select_if() {
             }
         }
 
-        SIMD_muti_selector<TYPE>::multi_select_if(select_vecs, CASE_SIZE, dst, select_lists, CASE_SIZE + 1, is_const);
+        SIMD_muti_selector<TYPE>::multi_select_if(select_vecs, CASE_SIZE, dst, select_lists, CASE_SIZE + 1, is_const, selectors[0].size());
 
         for (int i = 0; i < TEST_SIZE; i++) {
             int index = 0;
