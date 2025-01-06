@@ -273,7 +273,7 @@ public:
                 for (int i = 0; i < select_vec_size; ++i) {
                     loaded_masks[i] = vld1q_u8(handle_select_vec[i]);
                     // loaded_mask[i] = selector[i] != 0 ? 0xFF : 0x00
-                    loaded_mask[i] = vtstq_u8(loaded_masks[i], loaded_masks[i]);
+                    loaded_masks[i] = vtstq_u8(loaded_masks[i], loaded_masks[i]);
                 }
 
                 // load select data
@@ -345,7 +345,7 @@ public:
                 for (int i = 0; i < select_vec_size; ++i) {
                     loaded_masks[i] = vld1q_u8(handle_select_vec[i]);
                     // loaded_mask[i] = selector[i] != 0 ? 0xFF : 0x00
-                    loaded_mask[i] = vtstq_u8(loaded_masks[i], loaded_masks[i]);
+                    loaded_masks[i] = vtstq_u8(loaded_masks[i], loaded_masks[i]);
                 }
 
                 constexpr uint8_t each_loop_handle_sz = 16 / sizeof(RunTimeCppType<TYPE>);
@@ -354,7 +354,7 @@ public:
                     // load select data
                     for (int i = 0; i < select_list_size; ++i) {
                         // date columns except the last column, if mask is zero, no need to load it
-                        if (i < select_list_size - 1 && vmaxvq_u8(loaded_mask[i]) == 0) {
+                        if (i < select_list_size - 1 && vmaxvq_u8(loaded_masks[i]) == 0) {
                             continue;
                         }
 
@@ -365,7 +365,7 @@ public:
                         }
 
                         // if all 1, no need to load left data columns because they won't be selected
-                        if (i < select_list_size - 1 && vminvq_u8(loaded_mask[i])) {
+                        if (i < select_list_size - 1 && vminvq_u8(loaded_masks[i])) {
                             break;
                         }
                     }
@@ -375,26 +375,28 @@ public:
                     bool all_selected = false;
                     // let the default value be the last data column, which is 'else' column
                     uint16x8_t selected_dst = loaded_datas[select_list_size - 1];
-                    cosnt uint8x16_t index = {0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7};
+                    const uint8x16_t index = {0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7};
                     for (int i = 0; i < select_list_size - 1; ++i) {
-                        uint16x8_t expand_mask = vqtbl1q_u8(loaded_mask[i], index);
+                        uint8x16_t expand_mask = vqtbl1q_u8(loaded_masks[i], index);
 
                         if (vmaxvq_u8(expand_mask) == 0 || all_selected) {
-                            loaded_mask[i] = vextq_u8(loaded_mask[i], loaded_mask[i], 8);
+                            loaded_masks[i] = vextq_u8(loaded_masks[i], loaded_masks[i], 8);
                             continue;
                         }
 
                         // get will select vector in this loop
                         uint16x8_t not_selected_vec = ~selected_vec;
-                        uint16x8_t will_select = not_selected_vec & expand_mask;
+                        uint16x8_t will_select = not_selected_vec & vreinterpretq_u16_u8(expand_mask);
 
                         // select if: will_select[i] ? loaded_datas[i] : selected_dst
                         selected_dst = vbslq_u16(will_select, loaded_datas[i], selected_dst);
                         // update select_vec
                         selected_vec |= will_select;
 
-                        //
-                        all_selected = vminvq_u8(selected_vec);
+                        // right shift mask
+                        loaded_masks[i] = vextq_u8(loaded_masks[i], loaded_masks[i], 8);
+
+                        all_selected = vminvq_u16(selected_vec);
                     }
                     vst1q_u16(reinterpret_cast<uint16_t*>(dst.data() + processed_rows), selected_dst);
                     processed_rows += each_loop_handle_sz;
@@ -421,7 +423,7 @@ public:
                 for (int i = 0; i < select_vec_size; ++i) {
                     loaded_masks[i] = vld1q_u8(handle_select_vec[i]);
                     // loaded_mask[i] = selector[i] != 0 ? 0xFF : 0x00
-                    loaded_mask[i] = vtstq_u8(loaded_masks[i], loaded_masks[i]);
+                    loaded_masks[i] = vtstq_u8(loaded_masks[i], loaded_masks[i]);
                 }
 
                 constexpr uint8_t each_loop_handle_sz = 16 / sizeof(RunTimeCppType<TYPE>);
@@ -430,7 +432,7 @@ public:
                     // load select data
                     for (int i = 0; i < select_list_size; ++i) {
                         // date columns except the last column, if mask is zero, no need to load it
-                        if (i < select_list_size - 1 && vmaxvq_u8(loaded_mask[i]) == 0) {
+                        if (i < select_list_size - 1 && vmaxvq_u8(loaded_masks[i]) == 0) {
                             continue;
                         }
 
@@ -441,7 +443,7 @@ public:
                         }
 
                         // if all 1, no need to load left data columns because they won't be selected
-                        if (i < select_list_size - 1 && vminvq_u8(loaded_mask[i])) {
+                        if (i < select_list_size - 1 && vminvq_u8(loaded_masks[i])) {
                             break;
                         }
                     }
@@ -453,16 +455,16 @@ public:
                     uint32x4_t selected_dst = loaded_datas[select_list_size - 1];
                     const uint8x16_t index = {0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3};
                     for (int i = 0; i < select_list_size - 1; ++i) {
-                        uint16x8_t expand_mask = vqtbl1q_u8(loaded_mask[i], index);
+                        uint8x16_t expand_mask = vqtbl1q_u8(loaded_mask[i], index);
 
                         if (vmaxvq_u8(expand_mask) == 0 || all_selected) {
-                            loaded_mask[i] = vextq_u8(loaded_mask[i], loaded_mask[i], 4);
+                            loaded_masks[i] = vextq_u8(loaded_masks[i], loaded_masks[i], 4);
                             continue
                         }
 
                         // get will select vector in this loop
                         uint32x4_t not_selected_vec = ~selected_vec;
-                        uint32x4_t will_select = not_selected_vec & expand_mask;
+                        uint32x4_t will_select = not_selected_vec & vreinterpretq_u32_u8(expand_mask);
 
                         // select if: will_select[i] ? loaded_datas[i] : selected_dst
                         selected_dst = vbslq_u32(will_select, loaded_datas[i], selected_dst);
@@ -470,12 +472,12 @@ public:
                         selected_vec |= will_select;
 
                         // right shift mask
-                        loaded_mask[i] = vextq_u8(loaded_mask[i], loaded_mask[i], 4);
+                        loaded_masks[i] = vextq_u8(loaded_masks[i], loaded_masks[i], 4);
 
                         // all 1
-                        all_selected = vminvq_u8(selected_vec);
+                        all_selected = vminvq_u32(selected_vec);
                     }
-                    vst1q_u32(reinterpret_cast<uint16_t*>(dst.data() + processed_rows), selected_dst);
+                    vst1q_u32(reinterpret_cast<uint32_t*>(dst.data() + processed_rows), selected_dst);
                     processed_rows += each_loop_handle_sz;
                     for (int i = 0; i < select_list_size; ++i) {
                         if (!then_column_is_const[i]) {
@@ -500,7 +502,7 @@ public:
                 for (int i = 0; i < select_vec_size; ++i) {
                     loaded_masks[i] = vld1q_u8(handle_select_vec[i]);
                     // loaded_mask[i] = selector[i] != 0 ? 0xFF : 0x00
-                    loaded_mask[i] = vtstq_u8(loaded_masks[i], loaded_masks[i]);
+                    loaded_masks[i] = vtstq_u8(loaded_masks[i], loaded_masks[i]);
                 }
 
                 constexpr uint8_t each_loop_handle_sz = 16 / sizeof(RunTimeCppType<TYPE>);
@@ -509,7 +511,7 @@ public:
                     // load select data
                     for (int i = 0; i < select_list_size; ++i) {
                         // date columns except the last column, if mask is zero, no need to load it
-                        if (i < select_list_size - 1 && vmaxvq_u8(loaded_mask[i]) == 0) {
+                        if (i < select_list_size - 1 && vmaxvq_u8(loaded_masks[i]) == 0) {
                             continue;
                         }
 
@@ -520,7 +522,7 @@ public:
                         }
 
                         // if all 1, no need to load left data columns because they won't be selected
-                        if (i < select_list_size - 1 && vminvq_u8(loaded_mask[i])) {
+                        if (i < select_list_size - 1 && vminvq_u8(loaded_masks[i])) {
                             break;
                         }
                     }
@@ -533,16 +535,16 @@ public:
                     uint64x2_t selected_dst = loaded_datas[select_list_size - 1];
                     const uint8x16_t index = {0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1};
                     for (int i = 0; i < select_list_size - 1; ++i) {
-                        uint16x8_t expand_mask = vqtbl1q_u8(loaded_mask[i], index);
+                        uint8x16_t expand_mask = vqtbl1q_u8(loaded_masks[i], index);
 
                         if (vmaxvq_u8(expand_mask) == 0 || all_selected) {
-                            loaded_mask[i] = vextq_u8(loaded_mask[i], loaded_mask[i], 2);
+                            loaded_masks[i] = vextq_u8(loaded_masks[i], loaded_masks[i], 2);
                             continue
                         }
 
                         // get will select vector in this loop
                         uint64x2_t not_selected_vec = ~selected_vec;
-                        uint64x2_t will_select = not_selected_vec & expand_mask;
+                        uint64x2_t will_select = not_selected_vec & vreinterpretq_u64_u8(expand_mask);
 
                         // select if: will_select[i] ? loaded_datas[i] : selected_dst
                         selected_dst = vbslq_u64(will_select, loaded_datas[i], selected_dst);
@@ -550,12 +552,12 @@ public:
                         selected_vec |= will_select;
 
                         // right shift mask 2 bytes, becasue we consumed 2 mask
-                        loaded_mask[i] = vextq_u8(loaded_mask[i], loaded_mask[i], 2);
+                        loaded_masks[i] = vextq_u8(loaded_masks[i], loaded_masks[i], 2);
 
                         // all 1
-                        all_selected = vminvq_u8(selected_vec);
+                        all_selected = vminvq_u64(selected_vec);
                     }
-                    vst1q_u32(reinterpret_cast<uint16_t*>(dst.data() + processed_rows), selected_dst);
+                    vst1q_u64(reinterpret_cast<uint64_t*>(dst.data() + processed_rows), selected_dst);
                     processed_rows += each_loop_handle_sz;
                     for (int i = 0; i < select_list_size; ++i) {
                         if (!then_column_is_const[i]) {
