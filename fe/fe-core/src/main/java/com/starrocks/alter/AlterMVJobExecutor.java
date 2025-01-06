@@ -79,6 +79,7 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
 
+import static com.starrocks.alter.AlterJobMgr.MANUAL_INACTIVE_MV_REASON;
 import static com.starrocks.catalog.TableProperty.INVALID;
 
 public class AlterMVJobExecutor extends AlterJobExecutor {
@@ -453,7 +454,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 }
 
                 GlobalStateMgr.getCurrentState().getAlterJobMgr().
-                        alterMaterializedViewStatus(materializedView, status, false);
+                        alterMaterializedViewStatus(materializedView, status, "", false);
                 // for manual refresh type, do not refresh
                 if (materializedView.getRefreshScheme().getType() != MaterializedView.RefreshType.MANUAL) {
                     GlobalStateMgr.getCurrentState().getLocalMetastore()
@@ -468,12 +469,12 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                                 "user use alter materialized view set status to inactive",
                         materializedView.getName(), materializedView.getId());
                 GlobalStateMgr.getCurrentState().getAlterJobMgr().
-                        alterMaterializedViewStatus(materializedView, status, false);
+                        alterMaterializedViewStatus(materializedView, status, MANUAL_INACTIVE_MV_REASON, false);
             } else {
                 throw new AlterJobException("Unsupported modification materialized view status:" + status);
             }
             AlterMaterializedViewStatusLog log = new AlterMaterializedViewStatusLog(materializedView.getDbId(),
-                    materializedView.getId(), status);
+                    materializedView.getId(), status, MANUAL_INACTIVE_MV_REASON);
             GlobalStateMgr.getCurrentState().getEditLog().logAlterMvStatus(log);
             return null;
         } catch (DdlException | MetaNotFoundException e) {
@@ -513,11 +514,13 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 LOG.warn("Inactive MV {}/{} because {}", mv.getName(), mv.getId(), reason);
                 // inactive mv by reason
                 if (mv.isActive()) {
-                    mv.setInactiveAndReason(reason);
                     // log edit log
                     String status = AlterMaterializedViewStatusClause.INACTIVE;
                     GlobalStateMgr.getCurrentState().getAlterJobMgr().
-                            alterMaterializedViewStatus(mv, status, false);
+                            alterMaterializedViewStatus(mv, status, reason, false);
+                    AlterMaterializedViewStatusLog log = new AlterMaterializedViewStatusLog(mv.getDbId(),
+                            mv.getId(), status, MANUAL_INACTIVE_MV_REASON);
+                    GlobalStateMgr.getCurrentState().getEditLog().logAlterMvStatus(log);
                 } else {
                     mv.setInactiveAndReason(reason);
                 }
