@@ -1,7 +1,11 @@
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.Table;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 
 public class PinotFunctionSet {
     public static final String DATETRUNC = "datetrunc";
@@ -10,6 +14,11 @@ public class PinotFunctionSet {
     public static final String FROMDATETIME = "fromdatetime";
 
     private static final Map<String, String> formatMapping = new HashMap<>();
+
+    private static final Set<String> dateFunctions = Set.of(FunctionSet.STR_TO_DATE, FunctionSet.DATE_SUB, FunctionSet.DATE_ADD, FunctionSet.TO_DATE, FunctionSet.DAYS_SUB, FunctionSet.TIMEDIFF,
+            FunctionSet.DATE_TRUNC, FunctionSet.CURRENT_TIMESTAMP, FunctionSet.NOW, FunctionSet.LOCALTIME, FunctionSet.LOCALTIMESTAMP, FunctionSet.TIMESTAMPADD, FunctionSet.YEARS_ADD, FunctionSet.WEEKS_SUB,
+            FunctionSet.WEEKS_ADD, FunctionSet.TIMESTAMP, FunctionSet.TIME_SLICE, FunctionSet.SECONDS_SUB, FunctionSet.SECONDS_ADD, FunctionSet.MONTHS_SUB, FunctionSet.MONTHS_ADD, FunctionSet.MINUTES_SUB, FunctionSet.MINUTES_ADD,
+            FunctionSet.MICROSECONDS_SUB, FunctionSet.MICROSECONDS_ADD, FunctionSet.HOURS_SUB, FunctionSet.HOURS_ADD, FunctionSet.CONVERT_TZ, FunctionSet.ADD_MONTHS);
 
     static {
         formatMapping.put("yyyy", "%Y");
@@ -77,5 +86,56 @@ public class PinotFunctionSet {
         }
 
         return specifiedFormat.toString();
+    }
+
+    public static boolean isBigIntReturned(String nodeContent, Table table) {
+        if (table.containColumn(nodeContent)) {
+            PrimitiveType type = table.getColumn(nodeContent).getPrimitiveType();
+            return type == PrimitiveType.BIGINT;
+        }
+
+        if (isBigIntConstant(nodeContent) || isDatetimeConstant(nodeContent)) {
+            return isBigIntConstant(nodeContent);
+        }
+
+        if (isFunctionString(nodeContent)) {
+            return nodeContent.equalsIgnoreCase(DATETRUNC) || nodeContent.equalsIgnoreCase(DATETIMECONVERT);
+
+        }
+        return false;
+    }
+
+    public static boolean isDateTimeReturned(String nodeContent, Table table) {
+        if (table.containColumn(nodeContent)) {
+            PrimitiveType type = table.getColumn(nodeContent).getPrimitiveType();
+            return type == PrimitiveType.DATETIME;
+        }
+
+        if (isBigIntConstant(nodeContent) || isDatetimeConstant(nodeContent)) {
+            return isDatetimeConstant(nodeContent);
+        }
+
+        if (isFunctionString(nodeContent)) {
+            return dateFunctions.contains(nodeContent.toLowerCase());
+
+        }
+        return false;
+    }
+
+    private static boolean isBigIntConstant(String value) {
+        try {
+            Long.parseLong(value);
+            return true;
+        } catch (NumberFormatException e) {
+            return false;
+        }
+    }
+
+    private static boolean isDatetimeConstant(String value) {
+        return value.matches("(\\d{4}-\\d{2}-\\d{2}( \\d{2}:\\d{2}:\\d{2})?)");
+    }
+
+    private static boolean isFunctionString(String value) {
+        return !isBigIntConstant(value) && !isDatetimeConstant(value) && value.matches("\\w+");
     }
 }
