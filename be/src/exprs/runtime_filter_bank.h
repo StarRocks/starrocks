@@ -285,10 +285,8 @@ public:
     }
 
 private:
-    void update_selectivity(Chunk* chunk);
     void update_selectivity(Chunk* chunk, RuntimeBloomFilterEvalContext& eval_context);
     // TODO: return a funcion call status
-    void do_evaluate(Chunk* chunk);
     void do_evaluate(Chunk* chunk, RuntimeBloomFilterEvalContext& eval_context);
     void do_evaluate_partial_chunk(Chunk* partial_chunk, RuntimeBloomFilterEvalContext& eval_context);
     // mapping from filter id to runtime filter descriptor.

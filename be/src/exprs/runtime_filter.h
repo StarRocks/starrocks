@@ -598,6 +598,8 @@ public:
 
     CppType max_value() const { return _max; }
 
+    void set_left_close_interval(bool close_interval) { _left_close_interval = close_interval; }
+    void set_right_close_interval(bool close_interval) { _right_close_interval = close_interval; }
     bool left_close_interval() const { return _left_close_interval; }
     bool right_close_interval() const { return _right_close_interval; }
 
@@ -888,8 +890,26 @@ private:
     void _evaluate_min_max(const ContainerType& values, uint8_t* selection, size_t size) const {
         if constexpr (!IsSlice<CppType>) {
             const auto* data = values.data();
-            for (size_t i = 0; i < size; i++) {
-                selection[i] = (data[i] >= _min && data[i] <= _max);
+            if (_left_close_interval) {
+                if (_right_close_interval) {
+                    for (size_t i = 0; i < size; i++) {
+                        selection[i] = (data[i] >= _min && data[i] <= _max);
+                    }
+                } else {
+                    for (size_t i = 0; i < size; i++) {
+                        selection[i] = (data[i] >= _min && data[i] < _max);
+                    }
+                }
+            } else {
+                if (_right_close_interval) {
+                    for (size_t i = 0; i < size; i++) {
+                        selection[i] = (data[i] > _min && data[i] <= _max);
+                    }
+                } else {
+                    for (size_t i = 0; i < size; i++) {
+                        selection[i] = (data[i] > _min && data[i] < _max);
+                    }
+                }
             }
         } else {
             memset(selection, 0x1, size);
