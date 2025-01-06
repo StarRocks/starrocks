@@ -284,7 +284,7 @@ public:
                     }
 
                     if (then_column_is_const[i]) {
-                        loaded_datas[i] = SIMDUtils::set_data(handle_select_data[i][0]);
+                        loaded_datas[i] = vdupq_n_u8(handle_select_data[i][0]);
                     } else {
                         loaded_datas[i] = vld1q_u8(handle_select_data[i]);
                     }
@@ -359,7 +359,7 @@ public:
                         }
 
                         if (then_column_is_const[i]) {
-                            loaded_datas[i] = SIMDUtils::set_data(handle_select_data[i][0]);
+                            loaded_datas[i] = vdupq_n_u16(handle_select_data[i][0]);
                         } else {
                             loaded_datas[i] = vld1q_u16(handle_select_data[i]);
                         }
@@ -435,7 +435,7 @@ public:
                         }
 
                         if (then_column_is_const[i]) {
-                            loaded_datas[i] = SIMDUtils::set_data(handle_select_data[i][0]);
+                            loaded_datas[i] = vdupq_n_u32(handle_select_data[i][0]);
                         } else {
                             loaded_datas[i] = vld1q_u32(handle_select_data[i]);
                         }
@@ -514,7 +514,7 @@ public:
                         }
 
                         if (then_column_is_const[i]) {
-                            loaded_datas[i] = SIMDUtils::set_data(handle_select_data[i][0]);
+                            loaded_datas[i] = vdupq_n_u64(handle_select_data[i][0]);
                         } else {
                             loaded_datas[i] = vld1q_u64(handle_select_data[i]);
                         }
