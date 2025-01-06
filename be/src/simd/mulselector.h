@@ -437,7 +437,7 @@ public:
                         }
 
                         if (then_column_is_const[i]) {
-                            loaded_datas[i] = vdupq_n_u32(handle_select_data[i][0]);
+                            loaded_datas[i] = vdupq_n_u32(*reinterpret_cast<const uint32_t*>(handle_select_data[i]));
                         } else {
                             loaded_datas[i] = vld1q_u32(reinterpret_cast<const uint32_t*>(handle_select_data[i]));
                         }
@@ -516,7 +516,7 @@ public:
                         }
 
                         if (then_column_is_const[i]) {
-                            loaded_datas[i] = vdupq_n_u64(handle_select_data[i][0]);
+                            loaded_datas[i] = vdupq_n_u64(*reinterpret_cast<const uint64_t*>(handle_select_data[i]));
                         } else {
                             loaded_datas[i] = vld1q_u64(reinterpret_cast<const uint64_t*>(handle_select_data[i]));
                         }
