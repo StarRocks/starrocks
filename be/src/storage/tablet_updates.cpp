@@ -1021,12 +1021,16 @@ void TabletUpdates::do_apply() {
     _apply_stopped_cond.notify_all();
 }
 
-void TabletUpdates::_stop_and_wait_apply_done() {
-    _apply_stopped = true;
+void TabletUpdates::_wait_apply_done() {
     std::unique_lock<std::mutex> ul(_apply_running_lock);
     while (_apply_running) {
         _apply_stopped_cond.wait(ul);
     }
+}
+
+void TabletUpdates::_stop_and_wait_apply_done() {
+    _apply_stopped = true;
+    _wait_apply_done();
 }
 
 Status TabletUpdates::get_latest_applied_version(EditVersion* latest_applied_version) {
