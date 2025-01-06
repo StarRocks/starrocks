@@ -118,8 +118,7 @@ public class CachingHiveMetastore extends CachingMetastore implements IHiveMetas
         }
 
         hmsExternalTableCache = newCacheBuilder(expireAfterWriteSec, NEVER_REFRESH, maxSize).build();
-        // The refresh internal second can be double because partition not need to fresh so frequently
-        partitionCache = newCacheBuilder(expireAfterWriteSec, refreshIntervalSec * 2, maxSize)
+        partitionCache = newCacheBuilder(expireAfterWriteSec, refreshIntervalSec, maxSize)
                 .build(asyncReloading(new CacheLoader<HivePartitionName, Partition>() {
                     @Override
                     public Partition load(@NotNull HivePartitionName key) {

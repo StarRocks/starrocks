@@ -127,8 +127,7 @@ public class HiveConnectorInternalMgr {
             baseHiveMetastore = CachingHiveMetastore.createCatalogLevelInstance(
                     hiveMetastore,
                     new ReentrantExecutor(refreshHiveMetastoreExecutor, hmsConf.getCacheRefreshThreadMaxNum()),
-                    // As there are many managed table the max threads for the external table refresher can be double
-                    new ReentrantExecutor(refreshHiveExternalTableExecutor, hmsConf.getCacheRefreshThreadMaxNum() * 2),
+                    new ReentrantExecutor(refreshHiveExternalTableExecutor, hmsConf.getCacheRefreshThreadMaxNum()),
                     hmsConf.getCacheTtlSec(),
                     enableHmsEventsIncrementalSync ? NEVER_REFRESH : hmsConf.getCacheRefreshIntervalSec(),
                     hmsConf.getCacheMaxNum(),

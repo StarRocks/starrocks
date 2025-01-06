@@ -329,6 +329,7 @@ public class HudiTable extends Table {
     public boolean isHMSExternalTable() {
         return hudiProperties.get(HUDI_HMS_TABLE_TYPE).equals("EXTERNAL_TABLE");
     }
+
     @Override
     public String toString() {
         final StringBuilder sb = new StringBuilder("HudiTable{");
