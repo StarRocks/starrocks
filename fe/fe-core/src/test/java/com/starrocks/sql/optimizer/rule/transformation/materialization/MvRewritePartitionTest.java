@@ -246,8 +246,8 @@ public class MvRewritePartitionTest extends MVTestBase {
             PlanTestBase.assertContains(plan, "AGGREGATE");
             PlanTestBase.assertContains(plan, "TABLE: test_partition_tbl_mv1\n" +
                     "     PREAGGREGATION: ON\n" +
-                    "     partitions=5/6\n" +
-                    "     rollup: test_partition_tbl_mv1");
+                    "     PREDICATES: 5: k1 >= '2020-01-01'\n" +
+                    "     partitions=5/6");
         }
         starRocksAssert.dropMaterializedView("test_partition_tbl_mv1");
     }
@@ -496,7 +496,7 @@ public class MvRewritePartitionTest extends MVTestBase {
                     "on a.k1=b.k1  where a.k1 >= '2020-01-01' and b.k1 >= '2020-01-01' group by a.v1, a.v2, b.v1;";
             String plan = getFragmentPlan(query);
             PlanTestBase.assertContains(plan, "AGGREGATE");
-            PlanTestBase.assertContains(plan, "PREDICATES: 9: b_k1 IS NOT NULL\n" +
+            PlanTestBase.assertContains(plan, "PREDICATES: 8: k1 >= '2020-01-01', 9: b_k1 IS NOT NULL\n" +
                     "     partitions=5/6\n" +
                     "     rollup: test_partition_tbl_mv2");
         }
