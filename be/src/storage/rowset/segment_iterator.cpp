@@ -710,6 +710,7 @@ Status SegmentIterator::_try_to_update_ranges_by_runtime_filter() {
                 _opts.stats->runtime_stats_filtered += (prev_size - _scan_range.span_size());
                 return Status::OK();
             },
+            false,
             _opts.stats->raw_rows_read);
 }
 

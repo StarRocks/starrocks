@@ -116,6 +116,7 @@ TEST_F(OlapRuntimeRangePrunerTest, update_1) {
                 pred_size = predicates.size();
                 return Status::OK();
             },
+            false,
             100000));
     ASSERT_EQ(pred_size, 0);
 
@@ -133,6 +134,7 @@ TEST_F(OlapRuntimeRangePrunerTest, update_1) {
                 pred_2 = predicates[1]->debug_string();
                 return Status::OK();
             },
+            false,
             200000));
     ASSERT_EQ(pred_size, 2);
     ASSERT_EQ(pred_1, "(columnId(0)>=10)");
@@ -149,6 +151,7 @@ TEST_F(OlapRuntimeRangePrunerTest, update_1) {
                 pred_2 = predicates[1]->debug_string();
                 return Status::OK();
             },
+            false,
             300000));
     ASSERT_EQ(pred_size, 2);
     ASSERT_EQ(pred_1, "(columnId(0)>=11)");
@@ -174,6 +177,7 @@ TEST_F(OlapRuntimeRangePrunerTest, update_has_null) {
                 pred_size = predicates.size();
                 return Status::OK();
             },
+            false,
             100000));
     ASSERT_EQ(pred_size, 0);
 
@@ -191,6 +195,7 @@ TEST_F(OlapRuntimeRangePrunerTest, update_has_null) {
                 pred = predicates[0]->debug_string();
                 return Status::OK();
             },
+            false,
             200000));
     ASSERT_EQ(pred_size, 1);
     ASSERT_EQ(pred, "OR(0:AND(0:(columnId(0)>=10), 1:(columnId(0)<=20)), 1:(ColumnId(0) IS NULL))");
@@ -206,6 +211,7 @@ TEST_F(OlapRuntimeRangePrunerTest, update_has_null) {
                 pred = predicates[0]->debug_string();
                 return Status::OK();
             },
+            false,
             300000));
     ASSERT_EQ(pred_size, 1);
     ASSERT_EQ(pred, "OR(0:AND(0:(columnId(0)>=11), 1:(columnId(0)<=15)), 1:(ColumnId(0) IS NULL))");
