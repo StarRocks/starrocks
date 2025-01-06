@@ -204,22 +204,19 @@ select count(*), sum(c0) from (select c0 from t0 where c1 >= 1 except select c0 
 -- result:
 409600	83886284800
 -- !result
-select count(*), sum(rk) from (select c1, rank() over(partition by c0) rk from (select c0,c1 from t1 limit 10)t) t;
+select count(*), sum(rk) from (select c1, rank() over(partition by c0) rk from (select c0,c1 from t1 order by 1,2 limit 10)t) t;
 -- result:
 10	10
 -- !result
-select * from (select c1, rk from (select c1, rank() over(partition by c0) rk from (select c0,c1 from t1 limit 10)t)t)t where rk <=2  order by 1;
+select * from (select c1, rk from (select c1, rank() over(partition by c0) rk from (select c0,c1 from t1)t)t)t where rk <=2  order by 2,1 limit 3;
 -- result:
-6	1
-10	1
-12	1
-18	1
-20	1
-24	1
-30	1
-35	1
-37	1
-41	1
+1	1
+2	1
+3	1
+-- !result
+select sum(rk) from (select c1, rank() over(partition by c0) rk from t0) t;
+-- result:
+409604
 -- !result
 with agged_table as ( select distinct c0, c1 from t0) select /*+SET_VAR(cbo_cte_reuse_rate=0) */ count(*) ,sum(l.c0), sum(r.c0), sum(l.c1), sum(r.c1) from agged_table l join [colocate] agged_table r on l.c0 = r.c0 and l.c1 = r.c1;
 -- result:
