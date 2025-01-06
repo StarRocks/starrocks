@@ -32,9 +32,10 @@ void test_simd_multi_select_if() {
     using Container = typename SIMD_muti_selector<TYPE>::Container;
     using SelectorContainer = typename BooleanColumn::Container;
     using RuntimeCppType = typename SIMD_muti_selector<TYPE>::CppType;
-    using DataInit = std::conditional_t<IS_CONST,
-                                        ContainerIniter<RandomConstGenerator<RuntimeCppType, 128>, Container, TEST_SIZE>,
-                                        ContainerIniter<RandomGenerator<RuntimeCppType, 128>, Container, TEST_SIZE>>;
+    using DataInit =
+            std::conditional_t<IS_CONST,
+                               ContainerIniter<RandomConstGenerator<RuntimeCppType, 128>, Container, TEST_SIZE>,
+                               ContainerIniter<RandomGenerator<RuntimeCppType, 128>, Container, TEST_SIZE>>;
 
     {
         SelectorContainer selectors[CASE_SIZE];
@@ -56,13 +57,14 @@ void test_simd_multi_select_if() {
         }
         DataInit::init(dst);
         std::vector<bool> is_const(CASE_SIZE + 1, false);
-        if constexpr(IS_CONST) {
+        if constexpr (IS_CONST) {
             for(int i = 0; i < CASE_SIZE + 1; i++) {
                 is_const[i] = true;
             }
         }
 
-        SIMD_muti_selector<TYPE>::multi_select_if(select_vecs, CASE_SIZE, dst, select_lists, CASE_SIZE + 1, is_const, selectors[0].size());
+        SIMD_muti_selector<TYPE>::multi_select_if(select_vecs, CASE_SIZE, dst, select_lists, CASE_SIZE + 1, is_const,
+                                                  selectors[0].size());
 
         for (int i = 0; i < TEST_SIZE; i++) {
             int index = 0;
