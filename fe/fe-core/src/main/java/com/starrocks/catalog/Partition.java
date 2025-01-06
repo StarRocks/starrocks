@@ -673,14 +673,16 @@ public class Partition extends MetaObject implements PhysicalPartition, GsonPost
                 this.isImmutable.set(physicalPartition.isImmutable());
                 this.baseIndex = physicalPartition.getBaseIndex();
 
+                this.idToVisibleRollupIndex.clear();
                 for (MaterializedIndex materializedIndex : physicalPartition.getMaterializedIndices(
                         IndexExtState.VISIBLE)) {
                     if (materializedIndex.getId() == baseIndex.getId()) {
                         continue;
                     }
-                    this.idToShadowIndex.put(materializedIndex.getId(), materializedIndex);
+                    this.idToVisibleRollupIndex.put(materializedIndex.getId(), materializedIndex);
                 }
 
+                this.idToShadowIndex.clear();
                 for (MaterializedIndex materializedIndex : physicalPartition.getMaterializedIndices(
                         IndexExtState.SHADOW)) {
                     this.idToShadowIndex.put(materializedIndex.getId(), materializedIndex);
