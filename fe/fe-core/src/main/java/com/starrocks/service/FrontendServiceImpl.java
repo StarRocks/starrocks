@@ -565,7 +565,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         View view = (View) table;
                         String ddlSql = view.getInlineViewDef();
 
-                        ConnectContext connectContext = new ConnectContext();
+                        ConnectContext connectContext = ConnectContext.buildInner();
                         connectContext.setQualifiedUser(AuthenticationMgr.ROOT_USER);
                         connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
                         connectContext.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
