@@ -318,7 +318,6 @@ public class Util {
         return Math.abs(ThreadLocalRandom.current().nextInt(Integer.MAX_VALUE));
     }
 
-<<<<<<< HEAD
     public static String dumpThread(Thread t, int lineNum) {
         return dumpThread(t.getName(), t.getId(), t.getStackTrace(), lineNum);
     }
@@ -339,7 +338,8 @@ public class Util {
             --count;
         }
         return sb.toString();
-=======
+    }
+    
     public static boolean checkTypeSupported(Type type) {
         if (type.isScalarType()) {
             if (TYPE_STRING_MAP.get(type.getPrimitiveType()) == null) {
@@ -370,7 +370,6 @@ public class Util {
             }
         }
         return true;
->>>>>>> 6bf93836b2 ([BugFix] Reject table create request with time type in complex type (#54601))
     }
 
     // get response body as a string from the given url.
