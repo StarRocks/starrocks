@@ -62,6 +62,11 @@ struct DataSketchesBuilder {
                     "ds_hll_count_distinct", false,
                     AggregateFactory::MakeDataSketchesAggregateFunction<lt, SketchType::HLL>());
         }
+        if constexpr (lt_is_integer<lt> || lt_is_float<lt> || lt_is_string<lt>) {
+            resolver->add_aggregate_mapping<lt, TYPE_ARRAY, DSSketchState<lt, SketchType::FREQUENT>>(
+                    "ds_frequent", false,
+                    AggregateFactory::MakeDataSketchesAggregateFunction<lt, SketchType::FREQUENT>());
+        }
     }
 };
 
