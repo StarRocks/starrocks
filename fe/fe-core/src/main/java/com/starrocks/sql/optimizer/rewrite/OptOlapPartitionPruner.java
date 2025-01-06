@@ -278,7 +278,9 @@ public class OptOlapPartitionPruner {
             return null;
         }
 
-        scanPredicates.removeAll(prunedPartitionPredicates);
+        if (!table.getDistributionColumnNames().contains(columnName)) {
+            scanPredicates.removeAll(prunedPartitionPredicates);
+        }
 
         if (column.isAllowNull() && containsNullValue(minRange)
                 && !checkFilterNullValue(scanPredicates, logicalOlapScanOperator.getPredicate().clone())) {
