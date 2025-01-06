@@ -14,6 +14,7 @@
 
 package com.starrocks.lake.snapshot;
 
+import com.starrocks.common.UserException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
@@ -30,8 +31,20 @@ public class RestoreClusterSnapshotMgrTest {
     }
 
     @Test
-    public void testRestoreClusterSnapshotMgr() throws Exception {
-        RestoreClusterSnapshotMgr.init("src/test/resources/conf/cluster_snapshot.yaml",
+    public void testDownloadSnapshotFaied() throws Exception {
+        Assert.assertThrows(UserException.class, () -> {
+            RestoreClusterSnapshotMgr.init("src/test/resources/conf/cluster_snapshot.yaml",
+                    new String[] { "-cluster_snapshot" });
+        });
+
+        Assert.assertFalse(RestoreClusterSnapshotMgr.isRestoring());
+        RestoreClusterSnapshotMgr.finishRestoring();
+        Assert.assertFalse(RestoreClusterSnapshotMgr.isRestoring());
+    }
+
+    @Test
+    public void testNormal() throws Exception {
+        RestoreClusterSnapshotMgr.init("src/test/resources/conf/cluster_snapshot2.yaml",
                 new String[] { "-cluster_snapshot" });
         Assert.assertTrue(RestoreClusterSnapshotMgr.isRestoring());
 

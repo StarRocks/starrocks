@@ -15,8 +15,10 @@
 package com.starrocks.lake.snapshot;
 
 import com.starrocks.common.Config;
-import com.starrocks.common.DdlException;
+import com.starrocks.common.UserException;
+import com.starrocks.fs.HdfsUtil;
 import com.starrocks.ha.FrontendNodeType;
+import com.starrocks.journal.bdbje.BDBEnvironment;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.server.StorageVolumeMgr;
@@ -25,11 +27,14 @@ import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
+import org.apache.commons.io.FileUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.File;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 public class RestoreClusterSnapshotMgr {
     private static final Logger LOG = LogManager.getLogger(RestoreClusterSnapshotMgr.class);
@@ -40,18 +45,13 @@ public class RestoreClusterSnapshotMgr {
     private boolean oldStartWithIncompleteMeta;
     private boolean oldResetElectionGroup;
 
-    private RestoreClusterSnapshotMgr(String clusterSnapshotYamlFile) {
+    private RestoreClusterSnapshotMgr(String clusterSnapshotYamlFile) throws UserException {
         config = ClusterSnapshotConfig.load(clusterSnapshotYamlFile);
-        // Save the old config
-        oldStartWithIncompleteMeta = Config.start_with_incomplete_meta;
-        // Allow starting with only image and no log
-        Config.start_with_incomplete_meta = true;
-        // Save the old config
-        oldResetElectionGroup = Config.bdbje_reset_election_group;
-        Config.bdbje_reset_election_group = true;
+        downloadSnapshot();
+        updateConfig();
     }
 
-    public static void init(String clusterSnapshotYamlFile, String[] args) {
+    public static void init(String clusterSnapshotYamlFile, String[] args) throws UserException {
         for (String arg : args) {
             if (arg.equalsIgnoreCase("-cluster_snapshot")) {
                 LOG.info("FE start to restore from a cluster snapshot");
@@ -73,7 +73,7 @@ public class RestoreClusterSnapshotMgr {
         return self.config;
     }
 
-    public static void finishRestoring() throws DdlException {
+    public static void finishRestoring() throws UserException {
         RestoreClusterSnapshotMgr self = instance;
         if (self == null) {
             return;
@@ -81,20 +81,57 @@ public class RestoreClusterSnapshotMgr {
 
         try {
             self.updateFrontends();
-
             self.updateComputeNodes();
-
             self.updateStorageVolumes();
         } finally {
-            // Rollback config
-            Config.start_with_incomplete_meta = self.oldStartWithIncompleteMeta;
-            Config.bdbje_reset_election_group = self.oldResetElectionGroup;
-
+            self.rollbackConfig();
             instance = null;
         }
     }
 
-    private void updateFrontends() throws DdlException {
+    private void updateConfig() {
+        // Save the old config
+        oldStartWithIncompleteMeta = Config.start_with_incomplete_meta;
+        // Allow starting with only image no bdb log
+        Config.start_with_incomplete_meta = true;
+        // Save the old config
+        oldResetElectionGroup = Config.bdbje_reset_election_group;
+        // Reset election group
+        Config.bdbje_reset_election_group = true;
+    }
+
+    private void rollbackConfig() {
+        Config.start_with_incomplete_meta = oldStartWithIncompleteMeta;
+        Config.bdbje_reset_election_group = oldResetElectionGroup;
+    }
+
+    private void downloadSnapshot() throws UserException {
+        ClusterSnapshotConfig.ClusterSnapshot clusterSnapshot = config.getClusterSnapshot();
+        if (clusterSnapshot == null) {
+            return;
+        }
+
+        String localImagePath = GlobalStateMgr.getImageDirPath();
+        String localBdbPath = BDBEnvironment.getBdbDir();
+
+        if (FileUtils.deleteQuietly(new File(localImagePath))) {
+            LOG.info("Deleted image dir {}", localImagePath);
+        }
+        if (FileUtils.deleteQuietly(new File(localBdbPath))) {
+            LOG.info("Deleted bdb {}", localBdbPath);
+        }
+
+        ClusterSnapshotConfig.StorageVolume storageVolume = clusterSnapshot.getStorageVolume();
+        // TODO: use constant and support no snapshot name
+        String snapshotImagePath = String.join("/", storageVolume.getLocation(), clusterSnapshot.getClusterServiceId(),
+                "meta/image", clusterSnapshot.getClusterSnapshotName());
+        Map<String, String> properties = storageVolume.getProperties();
+
+        LOG.info("Copy snapshot image {} to local dir {}", snapshotImagePath, localImagePath);
+        HdfsUtil.copyToLocal(snapshotImagePath, localImagePath, properties);
+    }
+
+    private void updateFrontends() throws UserException {
         List<ClusterSnapshotConfig.Frontend> frontends = config.getFrontends();
         if (frontends == null) {
             return;
@@ -115,7 +152,7 @@ public class RestoreClusterSnapshotMgr {
         }
     }
 
-    private void updateComputeNodes() throws DdlException {
+    private void updateComputeNodes() throws UserException {
         List<ClusterSnapshotConfig.ComputeNode> computeNodes = config.getComputeNodes();
         if (computeNodes == null) {
             return;
@@ -143,7 +180,7 @@ public class RestoreClusterSnapshotMgr {
         }
     }
 
-    private void updateStorageVolumes() throws DdlException {
+    private void updateStorageVolumes() throws UserException {
         List<ClusterSnapshotConfig.StorageVolume> storageVolumes = config.getStorageVolumes();
         if (storageVolumes == null) {
             return;
@@ -151,6 +188,7 @@ public class RestoreClusterSnapshotMgr {
 
         StorageVolumeMgr storageVolumeMgr = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
         for (ClusterSnapshotConfig.StorageVolume storageVolume : storageVolumes) {
+            LOG.info("Update storage volume {}", storageVolume.getName());
             storageVolumeMgr.updateStorageVolume(storageVolume.getName(), storageVolume.getType(),
                     Collections.singletonList(storageVolume.getLocation()), storageVolume.getProperties(),
                     storageVolume.getComment());

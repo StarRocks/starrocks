@@ -1197,6 +1197,21 @@ public class HdfsFsManager {
         getFileSystem(path, loadProperties, tProperties);
     }
 
+    public void copyToLocal(String srcPath, String destPath, Map<String, String> properties) throws UserException {
+        HdfsFs fileSystem = getFileSystem(srcPath, properties, null);
+        try {
+            fileSystem.getDFSFileSystem().copyToLocalFile(false, new Path(new WildcardURI(srcPath).getPath()),
+                    new Path(destPath), true);
+        } catch (InterruptedIOException e) {
+            Thread.interrupted(); // clear interrupted flag
+            LOG.error("Interrupted while copy {} to local {} ", srcPath, destPath, e);
+            throw new UserException("Failed to copy " + srcPath + "to local " + destPath, e);
+        } catch (Exception e) {
+            LOG.error("Exception while copy {} to local {} ", srcPath, destPath, e);
+            throw new UserException("Failed to copy " + srcPath + "to local " + destPath, e);
+        }
+    }
+
     public List<FileStatus> listFileMeta(String path, Map<String, String> properties) throws UserException {
         WildcardURI pathUri = new WildcardURI(path);
         HdfsFs fileSystem = getFileSystem(path, properties, null);

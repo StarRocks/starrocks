@@ -54,6 +54,11 @@ public class HdfsService {
         fileSystemManager.getTProperties(path, loadProperties, tProperties);
     }
 
+    public void copyToLocal(String srcPath, String destPath, Map<String, String> properties) throws UserException {
+        fileSystemManager.copyToLocal(srcPath, destPath, properties);
+        LOG.info("Copied {} to local {}", srcPath, destPath);
+    }
+
     public void listPath(TBrokerListPathRequest request, List<TBrokerFileStatus> fileStatuses, boolean skipDir,
                          boolean fileNameOnly) throws UserException {
         LOG.info("receive a list path request, path: {}", request.path);

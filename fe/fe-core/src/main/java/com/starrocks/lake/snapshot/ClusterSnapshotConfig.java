@@ -28,6 +28,7 @@ import com.fasterxml.jackson.databind.JsonDeserializer;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import com.google.common.base.Preconditions;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -39,6 +40,51 @@ import java.util.Map;
 
 public class ClusterSnapshotConfig {
     private static final Logger LOG = LogManager.getLogger(ClusterSnapshotConfig.class);
+
+    public static class ClusterSnapshot {
+        @JsonProperty("storage_volume_name")
+        private String storageVolumeName;
+
+        private StorageVolume storageVolume;
+
+        @JsonProperty("cluster_service_id")
+        private String clusterServiceId;
+
+        @JsonProperty("cluster_snapshot_name")
+        private String clusterSnapshotName;
+
+        public String getStorageVolumeName() {
+            return storageVolumeName;
+        }
+
+        public void setStorageVolumeName(String storageVolumeName) {
+            this.storageVolumeName = storageVolumeName;
+        }
+
+        public StorageVolume getStorageVolume() {
+            return storageVolume;
+        }
+
+        public void setStorageVolume(StorageVolume storageVolume) {
+            this.storageVolume = storageVolume;
+        }
+
+        public String getClusterServiceId() {
+            return clusterServiceId;
+        }
+
+        public void setClusterServiceId(String clusterServiceId) {
+            this.clusterServiceId = clusterServiceId;
+        }
+
+        public String getClusterSnapshotName() {
+            return clusterSnapshotName;
+        }
+
+        public void setClusterSnapshotName(String clusterSnapshotName) {
+            this.clusterSnapshotName = clusterSnapshotName;
+        }
+    }
 
     public static class Frontend {
         public static enum FrontendType {
@@ -215,6 +261,9 @@ public class ClusterSnapshotConfig {
         }
     }
 
+    @JsonProperty("cluster_snapshot")
+    private ClusterSnapshot clusterSnapshot;
+
     @JsonProperty("frontends")
     private List<Frontend> frontends;
 
@@ -223,6 +272,10 @@ public class ClusterSnapshotConfig {
 
     @JsonProperty("storage_volumes")
     private List<StorageVolume> storageVolumes;
+
+    public ClusterSnapshot getClusterSnapshot() {
+        return clusterSnapshot;
+    }
 
     public List<Frontend> getFrontends() {
         return frontends;
@@ -236,6 +289,23 @@ public class ClusterSnapshotConfig {
         return storageVolumes;
     }
 
+    private void onLoad() {
+        if (clusterSnapshot != null) {
+            Preconditions.checkNotNull(storageVolumes,
+                    "Storage volume " + clusterSnapshot.getStorageVolumeName() + " not found");
+
+            StorageVolume storageVolume = storageVolumes.stream()
+                    .filter(sv -> sv.getName().equals(clusterSnapshot.getStorageVolumeName()))
+                    .findFirst()
+                    .orElse(null);
+
+            Preconditions.checkNotNull(storageVolume,
+                    "Storage volume " + clusterSnapshot.getStorageVolumeName() + " not found");
+
+            clusterSnapshot.setStorageVolume(storageVolume);
+        }
+    }
+
     public static ClusterSnapshotConfig load(String clusterSnapshotYamlFile) {
         try {
             ObjectMapper objectMapper = new ObjectMapper(new YAMLFactory());
@@ -245,6 +315,7 @@ public class ClusterSnapshotConfig {
                 // Empty config file
                 config = new ClusterSnapshotConfig();
             }
+            config.onLoad();
             return config;
         } catch (Exception e) {
             LOG.warn("Failed to load cluster snapshot config {} ", clusterSnapshotYamlFile, e);
