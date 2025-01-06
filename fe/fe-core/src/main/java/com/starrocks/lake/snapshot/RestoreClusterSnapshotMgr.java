@@ -15,7 +15,7 @@
 package com.starrocks.lake.snapshot;
 
 import com.starrocks.common.Config;
-import com.starrocks.common.StarRocksException;
+import com.starrocks.common.UserException;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.journal.bdbje.BDBEnvironment;
@@ -45,13 +45,13 @@ public class RestoreClusterSnapshotMgr {
     private boolean oldStartWithIncompleteMeta;
     private boolean oldResetElectionGroup;
 
-    private RestoreClusterSnapshotMgr(String clusterSnapshotYamlFile) throws StarRocksException {
+    private RestoreClusterSnapshotMgr(String clusterSnapshotYamlFile) throws UserException {
         config = ClusterSnapshotConfig.load(clusterSnapshotYamlFile);
         downloadSnapshot();
         updateConfig();
     }
 
-    public static void init(String clusterSnapshotYamlFile, String[] args) throws StarRocksException {
+    public static void init(String clusterSnapshotYamlFile, String[] args) throws UserException {
         for (String arg : args) {
             if (arg.equalsIgnoreCase("-cluster_snapshot")) {
                 LOG.info("FE start to restore from a cluster snapshot");
@@ -73,7 +73,7 @@ public class RestoreClusterSnapshotMgr {
         return self.config;
     }
 
-    public static void finishRestoring() throws StarRocksException {
+    public static void finishRestoring() throws UserException {
         RestoreClusterSnapshotMgr self = instance;
         if (self == null) {
             return;
@@ -105,7 +105,7 @@ public class RestoreClusterSnapshotMgr {
         Config.bdbje_reset_election_group = oldResetElectionGroup;
     }
 
-    private void downloadSnapshot() throws StarRocksException {
+    private void downloadSnapshot() throws UserException {
         ClusterSnapshotConfig.ClusterSnapshot clusterSnapshot = config.getClusterSnapshot();
         if (clusterSnapshot == null) {
             return;
@@ -131,7 +131,7 @@ public class RestoreClusterSnapshotMgr {
         HdfsUtil.copyToLocal(snapshotImagePath, localImagePath, properties);
     }
 
-    private void updateFrontends() throws StarRocksException {
+    private void updateFrontends() throws UserException {
         List<ClusterSnapshotConfig.Frontend> frontends = config.getFrontends();
         if (frontends == null) {
             return;
@@ -152,7 +152,7 @@ public class RestoreClusterSnapshotMgr {
         }
     }
 
-    private void updateComputeNodes() throws StarRocksException {
+    private void updateComputeNodes() throws UserException {
         List<ClusterSnapshotConfig.ComputeNode> computeNodes = config.getComputeNodes();
         if (computeNodes == null) {
             return;
@@ -180,7 +180,7 @@ public class RestoreClusterSnapshotMgr {
         }
     }
 
-    private void updateStorageVolumes() throws StarRocksException {
+    private void updateStorageVolumes() throws UserException {
         List<ClusterSnapshotConfig.StorageVolume> storageVolumes = config.getStorageVolumes();
         if (storageVolumes == null) {
             return;

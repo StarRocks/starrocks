@@ -1197,10 +1197,7 @@ public class HdfsFsManager {
         getFileSystem(path, loadProperties, tProperties);
     }
 
-<<<<<<< HEAD
-    public List<FileStatus> listFileMeta(String path, Map<String, String> properties) throws UserException {
-=======
-    public void copyToLocal(String srcPath, String destPath, Map<String, String> properties) throws StarRocksException {
+    public void copyToLocal(String srcPath, String destPath, Map<String, String> properties) throws UserException {
         HdfsFs fileSystem = getFileSystem(srcPath, properties, null);
         try {
             fileSystem.getDFSFileSystem().copyToLocalFile(false, new Path(new WildcardURI(srcPath).getPath()),
@@ -1208,15 +1205,14 @@ public class HdfsFsManager {
         } catch (InterruptedIOException e) {
             Thread.interrupted(); // clear interrupted flag
             LOG.error("Interrupted while copy {} to local {} ", srcPath, destPath, e);
-            throw new StarRocksException("Failed to copy " + srcPath + "to local " + destPath, e);
+            throw new UserException("Failed to copy " + srcPath + "to local " + destPath, e);
         } catch (Exception e) {
             LOG.error("Exception while copy {} to local {} ", srcPath, destPath, e);
-            throw new StarRocksException("Failed to copy " + srcPath + "to local " + destPath, e);
+            throw new UserException("Failed to copy " + srcPath + "to local " + destPath, e);
         }
     }
 
-    public List<FileStatus> listFileMeta(String path, Map<String, String> properties) throws StarRocksException {
->>>>>>> 9bf575030 ([Feature] Support restoring from a cluster snapshot for shared-data mode (part 5, support downloading image) (#54651))
+    public List<FileStatus> listFileMeta(String path, Map<String, String> properties) throws UserException {
         WildcardURI pathUri = new WildcardURI(path);
         HdfsFs fileSystem = getFileSystem(path, properties, null);
         Path pathPattern = new Path(pathUri.getPath());
