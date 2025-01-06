@@ -1818,8 +1818,15 @@ public class SchemaChangeHandler extends AlterHandler {
                 // modify column
                 fastSchemaEvolution &= processModifyColumn(modifyColumnClause, olapTable, indexSchemaMap);
             } else if (alterClause instanceof AddFieldClause) {
+<<<<<<< HEAD
                 if (RunMode.isSharedDataMode()) {
                     throw new DdlException("Add field for struct column not support shared-data mode so far");
+=======
+                if (RunMode.isSharedDataMode() && !Config.enable_alter_struct_column) {
+                    throw new DdlException("Add field for struct column is disable in shared-data mode, " +
+                            "please check `enable_alter_struct_column` in FE configure and `lake_enable_alter_struct` " +
+                            "in all BE/CN configure");
+>>>>>>> 20fe30a9f3 ([Refactor] refactor some log (#54479))
                 }
                 if (!fastSchemaEvolution) {
                     throw new DdlException("Add field for struct column require table enable fast schema evolution");
@@ -1831,8 +1838,15 @@ public class SchemaChangeHandler extends AlterHandler {
                 int id = olapTable.incAndGetMaxColUniqueId();
                 processAddField((AddFieldClause) alterClause, olapTable, indexSchemaMap, id, newIndexes);
             } else if (alterClause instanceof DropFieldClause) {
+<<<<<<< HEAD
                 if (RunMode.isSharedDataMode()) {
                     throw new DdlException("Drop field for struct column not support shared-data mode so far");
+=======
+                if (RunMode.isSharedDataMode() && !Config.enable_alter_struct_column) {
+                    throw new DdlException("Drop field for struct column is disable in shared-data mode, " +
+                            "please check `enable_alter_struct_column` in FE configure and `lake_enable_alter_struct` " +
+                            "in all BE/CN configure");
+>>>>>>> 20fe30a9f3 ([Refactor] refactor some log (#54479))
                 }
                 if (!fastSchemaEvolution) {
                     throw new DdlException("Drop field for struct column require table enable fast schema evolution");

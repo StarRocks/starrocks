@@ -640,7 +640,12 @@ public class OlapTable extends Table {
             maxColUniqueId = Math.max(maxColUniqueId, column.getMaxUniqueId());
         }
         setMaxColUniqueId(maxColUniqueId);
+<<<<<<< HEAD
         LOG.debug("after rebuild full schema. table {}, schema: {}", id, fullSchema);
+=======
+        LOG.debug("after rebuild full schema. table {}, schema: {}, max column unique id: {}",
+                 name, fullSchema, maxColUniqueId);
+>>>>>>> 20fe30a9f3 ([Refactor] refactor some log (#54479))
     }
 
     public boolean deleteIndexInfo(String indexName) {
