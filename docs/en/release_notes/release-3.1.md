@@ -4,6 +4,20 @@ displayed_sidebar: docs
 
 # StarRocks version 3.1
 
+## 3.1.17
+
+Release Date: January 3, 2025
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- Cross-cluster Data Migration Tool caused the Follower FE to crash during data synchronization and commit, due to not accounting for the deletion of partitions in the target cluster. [#54061](https://github.com/StarRocks/starrocks/pull/54061)
+- BE in the target cluster might crash when synchronizing tables with DELETE operations using Cross-cluster Data Migration Tool. [#54081](https://github.com/StarRocks/starrocks/pull/54081)
+- A bug in the BDBJE handshake mechanism where Leader FE would reject reconnection attempts from Follower FE when connection is being re-established, causing Follower FE nodes to exit. [#50412](https://github.com/StarRocks/starrocks/pull/50412)
+- Duplicate memory statistics in FE leads to excessive memory usage. [#53055](https://github.com/StarRocks/starrocks/pull/53055)
+- The statuses of asynchronous materialized view refresh tasks are inconsistent across multiple FE nodes, which lead to inaccurate states of the materialized view during queries. [#54236](https://github.com/StarRocks/starrocks/pull/54236)
+
 ## 3.1.16
 
 Release date: December 16, 2024

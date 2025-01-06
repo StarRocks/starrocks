@@ -1021,12 +1021,16 @@ void TabletUpdates::do_apply() {
     _apply_stopped_cond.notify_all();
 }
 
-void TabletUpdates::_stop_and_wait_apply_done() {
-    _apply_stopped = true;
+void TabletUpdates::_wait_apply_done() {
     std::unique_lock<std::mutex> ul(_apply_running_lock);
     while (_apply_running) {
         _apply_stopped_cond.wait(ul);
     }
+}
+
+void TabletUpdates::_stop_and_wait_apply_done() {
+    _apply_stopped = true;
+    _wait_apply_done();
 }
 
 Status TabletUpdates::get_latest_applied_version(EditVersion* latest_applied_version) {
@@ -1792,7 +1796,7 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
     std::string msg_part3 = strings::Substitute("duration:$0ms($1/$2/$3/$4)", t_write - t_start, t_apply - t_start,
                                                 t_index - t_apply, t_delvec - t_index, t_write - t_delvec);
 
-    bool is_slow = t_apply - t_start > config::apply_version_slow_log_sec * 1000;
+    bool is_slow = t_write - t_start > config::apply_version_slow_log_sec * 1000;
     if (is_slow) {
         LOG(INFO) << msg_part1 << msg_part2 << msg_part3;
     } else {

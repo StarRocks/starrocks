@@ -439,6 +439,7 @@ private:
     Status _commit_compaction(std::unique_ptr<CompactionInfo>* info, const RowsetSharedPtr& rowset,
                               EditVersion* commit_version);
 
+    void _wait_apply_done();
     void _stop_and_wait_apply_done();
 
     Status _do_compaction(std::unique_ptr<CompactionInfo>* pinfo);
@@ -507,6 +508,7 @@ private:
             _last_compaction_time_ms = UnixMillis();
         }
     }
+    void wait_apply_done() { _wait_apply_done(); }
     bool is_apply_stop() { return _apply_stopped.load(); }
 
     bool compaction_running() { return _compaction_running; }

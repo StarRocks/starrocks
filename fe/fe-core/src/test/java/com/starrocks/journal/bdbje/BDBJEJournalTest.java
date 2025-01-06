@@ -88,7 +88,7 @@ public class BDBJEJournalTest {
                 selfNodeHostPort,
                 selfNodeHostPort,
                 true);
-        environment.setup();
+        environment.setup(true);
         return environment;
     }
 
