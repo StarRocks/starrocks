@@ -48,7 +48,6 @@ import com.starrocks.journal.bdbje.BDBEnvironment;
 import com.starrocks.journal.bdbje.BDBJEJournal;
 import com.starrocks.journal.bdbje.BDBTool;
 import com.starrocks.journal.bdbje.BDBToolOptions;
-import com.starrocks.lake.StarOSAgent;
 import com.starrocks.leader.MetaHelper;
 import com.starrocks.qe.CoordinatorMonitor;
 import com.starrocks.qe.QeService;
@@ -153,16 +152,6 @@ public class StarRocksFE {
 
             // wait globalStateMgr to be ready
             GlobalStateMgr.getCurrentState().waitForReady();
-
-            // Fully set up the starOsAgent so that we don't need to call `StarOSAgent.prepare` elsewhere.
-            // This needs to happen after the FE is synced with the Leader, which guarantees that the leader has registered and
-            // bootstrapped the service with starMgr.
-            if (RunMode.isSharedDataMode()) {
-                StarOSAgent starOsAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
-                if (starOsAgent != null) {
-                    starOsAgent.prepare();
-                }
-            }
 
             FrontendOptions.saveStartType();
 
