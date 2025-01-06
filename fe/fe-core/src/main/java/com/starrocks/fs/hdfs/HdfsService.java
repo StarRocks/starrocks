@@ -54,7 +54,7 @@ public class HdfsService {
         fileSystemManager.getTProperties(path, loadProperties, tProperties);
     }
 
-    public void copyToLocal(String srcPath, String destPath, Map<String, String> properties) throws StarRocksException {
+    public void copyToLocal(String srcPath, String destPath, Map<String, String> properties) throws UserException {
         fileSystemManager.copyToLocal(srcPath, destPath, properties);
         LOG.info("Copied {} to local {}", srcPath, destPath);
     }

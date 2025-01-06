@@ -66,7 +66,7 @@ public class HdfsUtil {
     }
 
     public static void copyToLocal(String srcPath, String destPath, Map<String, String> properties)
-            throws StarRocksException {
+            throws UserException {
         hdfsService.copyToLocal(srcPath, destPath, properties);
     }
 
