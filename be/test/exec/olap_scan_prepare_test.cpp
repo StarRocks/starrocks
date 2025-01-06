@@ -159,6 +159,51 @@ TEST_F(ChunkPredicateBuilderTest, normalized_in_has_null) {
     ASSERT_EQ(pred.debug_string(), "{\"and\":[{\"pred\":\"((columnId=1)IN(9,5,1,7,3))\"}]}");
 }
 
+TEST_F(ChunkPredicateBuilderTest, normalized_in_has_null_larger_than_1024) {
+    SlotId slot_id = 1;
+    parquet::Utils::SlotDesc slot_descs[] = {{"c1", TYPE_INT_DESC, 1}, {"c2", TYPE_INT_DESC, 2}, {""}};
+    _opts.tuple_desc = parquet::Utils::create_tuple_descriptor(&_runtime_state, &_pool, slot_descs);
+
+    std::vector<int32_t> values;
+    for (int32_t i=0; i < 2048; i++) {
+        values.emplace_back(i);
+    }
+    _texprs.emplace_back(ExprsTestHelper::create_in_pred_texpr<TYPE_INT, int32_t>(slot_id, values, true));
+    ASSERT_OK(ExprsTestHelper::create_and_open_conjunct_ctxs(&_pool, &_runtime_state, &_texprs, &_expr_ctxs));
+    ASSERT_EQ(_expr_ctxs.size(), 1);
+
+    _expr_containers.emplace_back(BoxedExprContext(_expr_ctxs[0]));
+
+    ChunkPredicateBuilder<BoxedExprContext, CompoundNodeType::AND> builder(_opts, _expr_containers, true);
+    ASSIGN_OR_ASSERT_FAIL(auto normalized, builder.parse_conjuncts());
+    ASSERT_TRUE(normalized);
+
+    ASSIGN_OR_ASSERT_FAIL(auto pred, builder.get_predicate_tree_root(_int_pred_parser, _predicate_free_pool));
+    ASSERT_EQ(pred.debug_string(), "{\"and\":[]}");
+}
+
+TEST_F(ChunkPredicateBuilderTest, normalized_in_has_null_null_equal) {
+    SlotId slot_id = 1;
+    parquet::Utils::SlotDesc slot_descs[] = {{"c1", TYPE_INT_DESC, 1}, {"c2", TYPE_INT_DESC, 2}, {""}};
+    _opts.tuple_desc = parquet::Utils::create_tuple_descriptor(&_runtime_state, &_pool, slot_descs);
+
+    std::vector<int32_t> values{1, 3, 5, 7, 9};
+    _texprs.emplace_back(ExprsTestHelper::create_in_pred_texpr<TYPE_INT, int32_t>(slot_id, values, true));
+    ASSERT_OK(ExprsTestHelper::create_and_open_conjunct_ctxs(&_pool, &_runtime_state, &_texprs, &_expr_ctxs));
+    ASSERT_EQ(_expr_ctxs.size(), 1);
+
+    auto* in_const_expr = reinterpret_cast<VectorizedInConstPredicate<TYPE_INT>*>(_expr_ctxs[0]->root());
+    in_const_expr->set_eq_null(true);
+    _expr_containers.emplace_back(BoxedExprContext(_expr_ctxs[0]));
+
+    ChunkPredicateBuilder<BoxedExprContext, CompoundNodeType::AND> builder(_opts, _expr_containers, true);
+    ASSIGN_OR_ASSERT_FAIL(auto normalized, builder.parse_conjuncts());
+    ASSERT_TRUE(normalized);
+
+    ASSIGN_OR_ASSERT_FAIL(auto pred, builder.get_predicate_tree_root(_int_pred_parser, _predicate_free_pool));
+    ASSERT_EQ(pred.debug_string(), "{\"and\":[]}");
+}
+
 TEST_F(ChunkPredicateBuilderTest, normalized_in_has_null_date) {
     SlotId slot_id = 1;
     parquet::Utils::SlotDesc slot_descs[] = {{"c1", TYPE_DATE_DESC, 1}, {"c2", TYPE_DATE_DESC, 2}, {""}};
@@ -177,6 +222,28 @@ TEST_F(ChunkPredicateBuilderTest, normalized_in_has_null_date) {
 
     ASSIGN_OR_ASSERT_FAIL(auto pred, builder.get_predicate_tree_root(_date_pred_parser, _predicate_free_pool));
     ASSERT_EQ(pred.debug_string(), "{\"and\":[{\"pred\":\"((columnId=1)IN(2014-01-01,2014-01-02,2014-01-03))\"}]}");
+}
+
+TEST_F(ChunkPredicateBuilderTest, normalized_in_has_null_date_null_equal) {
+    SlotId slot_id = 1;
+    parquet::Utils::SlotDesc slot_descs[] = {{"c1", TYPE_DATE_DESC, 1}, {"c2", TYPE_DATE_DESC, 2}, {""}};
+    _opts.tuple_desc = parquet::Utils::create_tuple_descriptor(&_runtime_state, &_pool, slot_descs);
+
+    _texprs.emplace_back(ExprsTestHelper::create_in_pred_texpr<TYPE_DATE, std::string>(
+            slot_id, {"2014-01-01", "2014-01-02", "2014-01-03"}, true));
+    ASSERT_OK(ExprsTestHelper::create_and_open_conjunct_ctxs(&_pool, &_runtime_state, &_texprs, &_expr_ctxs));
+    ASSERT_EQ(_expr_ctxs.size(), 1);
+
+    auto* in_const_expr = reinterpret_cast<VectorizedInConstPredicate<TYPE_DATE>*>(_expr_ctxs[0]->root());
+    in_const_expr->set_eq_null(true);
+    _expr_containers.emplace_back(BoxedExprContext(_expr_ctxs[0]));
+
+    ChunkPredicateBuilder<BoxedExprContext, CompoundNodeType::AND> builder(_opts, _expr_containers, true);
+    ASSIGN_OR_ASSERT_FAIL(auto normalized, builder.parse_conjuncts());
+    ASSERT_TRUE(normalized);
+
+    ASSIGN_OR_ASSERT_FAIL(auto pred, builder.get_predicate_tree_root(_date_pred_parser, _predicate_free_pool));
+    ASSERT_EQ(pred.debug_string(), "{\"and\":[]}");
 }
 
 TEST_F(ChunkPredicateBuilderTest, normalize_or_in_has_null) {
@@ -234,6 +301,30 @@ TEST_F(ChunkPredicateBuilderTest, normalized_not_in_has_null) {
     ASSERT_TRUE(ret.status().is_end_of_file());
 }
 
+TEST_F(ChunkPredicateBuilderTest, normalized_not_in_has_null_larger_than_1024) {
+    SlotId slot_id = 1;
+    parquet::Utils::SlotDesc slot_descs[] = {{"c1", TYPE_INT_DESC, 1}, {"c2", TYPE_INT_DESC, 2}, {""}};
+    _opts.tuple_desc = parquet::Utils::create_tuple_descriptor(&_runtime_state, &_pool, slot_descs);
+
+    std::vector<int32_t> values;
+    for (int32_t i=0; i < 2048; i++) {
+        values.emplace_back(i);
+    }
+
+    _texprs.emplace_back(ExprsTestHelper::create_not_in_pred_texpr<TYPE_INT, int32_t>(slot_id, values, false));
+    ASSERT_OK(ExprsTestHelper::create_and_open_conjunct_ctxs(&_pool, &_runtime_state, &_texprs, &_expr_ctxs));
+    ASSERT_EQ(_expr_ctxs.size(), 1);
+
+    _expr_containers.emplace_back(BoxedExprContext(_expr_ctxs[0]));
+
+    ChunkPredicateBuilder<BoxedExprContext, CompoundNodeType::AND> builder(_opts, _expr_containers, true);
+    ASSIGN_OR_ASSERT_FAIL(auto normalized, builder.parse_conjuncts());
+    ASSERT_TRUE(normalized);
+
+    ASSIGN_OR_ASSERT_FAIL(auto pred, builder.get_predicate_tree_root(_int_pred_parser, _predicate_free_pool));
+    ASSERT_EQ(pred.debug_string(), "{\"and\":[]}");
+}
+
 TEST_F(ChunkPredicateBuilderTest, normalize_or_not_in_has_null) {
     SlotId slot_id = 1;
     parquet::Utils::SlotDesc slot_descs[] = {{"c1", TYPE_INT_DESC, 1}, {"c2", TYPE_INT_DESC, 2}, {""}};
@@ -242,6 +333,24 @@ TEST_F(ChunkPredicateBuilderTest, normalize_or_not_in_has_null) {
     _texprs.emplace_back(ExprsTestHelper::create_binary_pred_texpr<TYPE_INT, int32_t>(slot_id, 10));
     _texprs.emplace_back(ExprsTestHelper::create_in_pred_texpr<TYPE_INT, int32_t>(
             slot_id, std::vector<int32_t>{1, 3, 5, 7, 9}, true));
+    ASSERT_OK(ExprsTestHelper::create_and_open_conjunct_ctxs(&_pool, &_runtime_state, &_texprs, &_expr_ctxs));
+    ASSERT_EQ(_expr_ctxs.size(), 2);
+    _expr_containers.emplace_back(BoxedExprContext(_expr_ctxs[0]));
+    _expr_containers.emplace_back(BoxedExprContext(_expr_ctxs[1]));
+
+    ChunkPredicateBuilder<BoxedExprContext, CompoundNodeType::OR> builder(_opts, _expr_containers, false);
+    ASSIGN_OR_ASSERT_FAIL(auto normalized, builder.parse_conjuncts());
+    ASSERT_FALSE(normalized);
+}
+
+TEST_F(ChunkPredicateBuilderTest, normalize_or_not_in_has_null_date) {
+    SlotId slot_id = 1;
+    parquet::Utils::SlotDesc slot_descs[] = {{"c1", TYPE_DATE_DESC, 1}, {"c2", TYPE_DATE_DESC, 2}, {""}};
+    _opts.tuple_desc = parquet::Utils::create_tuple_descriptor(&_runtime_state, &_pool, slot_descs);
+
+    _texprs.emplace_back(ExprsTestHelper::create_binary_pred_texpr<TYPE_DATE, std::string>(slot_id, "2023-01-02"));
+    _texprs.emplace_back(ExprsTestHelper::create_in_pred_texpr<TYPE_DATE, std::string>(
+            slot_id, {"2014-01-01", "2014-01-02", "2014-01-03"}, true));
     ASSERT_OK(ExprsTestHelper::create_and_open_conjunct_ctxs(&_pool, &_runtime_state, &_texprs, &_expr_ctxs));
     ASSERT_EQ(_expr_ctxs.size(), 2);
     _expr_containers.emplace_back(BoxedExprContext(_expr_ctxs[0]));
