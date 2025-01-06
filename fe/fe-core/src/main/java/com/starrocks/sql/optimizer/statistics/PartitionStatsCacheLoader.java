@@ -20,6 +20,8 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.statistic.StatisticExecutor;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.thrift.TStatisticData;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.checkerframework.checker.nullness.qual.NonNull;
 
 import java.util.HashMap;
@@ -31,7 +33,7 @@ import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executor;
 
 public class PartitionStatsCacheLoader implements AsyncCacheLoader<ColumnStatsCacheKey, Optional<PartitionStats>> {
-
+    private static final Logger LOG = LogManager.getLogger(PartitionStatsCacheLoader.class);
     private final StatisticExecutor statisticExecutor = new StatisticExecutor();
 
     @Override
@@ -44,11 +46,11 @@ public class PartitionStatsCacheLoader implements AsyncCacheLoader<ColumnStatsCa
     public @NonNull CompletableFuture<Map<ColumnStatsCacheKey, Optional<PartitionStats>>>
     asyncLoadAll(@NonNull Iterable<? extends @NonNull ColumnStatsCacheKey> cacheKey, @NonNull Executor executor) {
         return CompletableFuture.supplyAsync(() -> {
+            Map<ColumnStatsCacheKey, Optional<PartitionStats>> result = new HashMap<>();
             try {
                 ConnectContext connectContext = StatisticUtils.buildConnectContext();
                 connectContext.setThreadLocalInfo();
 
-                Map<ColumnStatsCacheKey, Optional<PartitionStats>> result = new HashMap<>();
                 long tableId = -1;
                 List<String> columns = Lists.newArrayList();
                 for (ColumnStatsCacheKey statsCacheKey : cacheKey) {
@@ -69,7 +71,11 @@ public class PartitionStatsCacheLoader implements AsyncCacheLoader<ColumnStatsCa
                 }
                 return result;
             } catch (RuntimeException e) {
-                throw e;
+                LOG.error(e);
+                for (ColumnStatsCacheKey key : cacheKey) {
+                    result.put(key, Optional.empty());
+                }
+                return result;
             } catch (Exception e) {
                 throw new CompletionException(e);
             } finally {

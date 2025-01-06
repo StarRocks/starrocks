@@ -21,6 +21,8 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.statistic.StatisticExecutor;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.thrift.TStatisticData;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.checkerframework.checker.nullness.qual.NonNull;
 
 import java.util.HashMap;
@@ -32,6 +34,7 @@ import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executor;
 
 public class TableStatsCacheLoader implements AsyncCacheLoader<TableStatsCacheKey, Optional<Long>> {
+    private static final Logger LOG = LogManager.getLogger(TableStatsCacheLoader.class);
     private final StatisticExecutor statisticExecutor = new StatisticExecutor();
 
     @Override
@@ -47,11 +50,10 @@ public class TableStatsCacheLoader implements AsyncCacheLoader<TableStatsCacheKe
             @NonNull Iterable<? extends @NonNull TableStatsCacheKey> cacheKey,
             @NonNull Executor executor) {
         return CompletableFuture.supplyAsync(() -> {
+            Map<TableStatsCacheKey, Optional<Long>> result = new HashMap<>();
             try {
                 ConnectContext connectContext = StatisticUtils.buildConnectContext();
                 connectContext.setThreadLocalInfo();
-
-                Map<TableStatsCacheKey, Optional<Long>> result = new HashMap<>();
                 List<Long> pids = Lists.newArrayList();
                 long tableId = -1;
                 for (TableStatsCacheKey statsCacheKey : cacheKey) {
@@ -78,7 +80,11 @@ public class TableStatsCacheLoader implements AsyncCacheLoader<TableStatsCacheKe
                 }
                 return result;
             } catch (RuntimeException e) {
-                throw e;
+                LOG.error(e);
+                for (TableStatsCacheKey key : cacheKey) {
+                    result.put(key, Optional.empty());
+                }
+                return result;
             } catch (Exception e) {
                 throw new CompletionException(e);
             } finally {

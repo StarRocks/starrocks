@@ -26,6 +26,8 @@ import com.starrocks.sql.optimizer.statistics.HistogramUtils;
 import com.starrocks.statistic.StatisticExecutor;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.thrift.TStatisticData;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.checkerframework.checker.nullness.qual.NonNull;
 
 import java.util.ArrayList;
@@ -41,7 +43,7 @@ import static com.starrocks.connector.statistics.StatisticsUtils.getTableByUUID;
 
 public class ConnectorHistogramColumnStatsCacheLoader implements
         AsyncCacheLoader<ConnectorTableColumnKey, Optional<Histogram>> {
-
+    private static final Logger LOG = LogManager.getLogger(ConnectorHistogramColumnStatsCacheLoader.class);
     private final StatisticExecutor statisticExecutor = new StatisticExecutor();
 
     @Override
@@ -61,7 +63,8 @@ public class ConnectorHistogramColumnStatsCacheLoader implements
                     return Optional.empty();
                 }
             } catch (RuntimeException e) {
-                throw e;
+                LOG.error(e);
+                return Optional.empty();
             } catch (Exception e) {
                 throw new CompletionException(e);
             } finally {
@@ -75,17 +78,18 @@ public class ConnectorHistogramColumnStatsCacheLoader implements
             @NonNull Iterable<? extends @NonNull ConnectorTableColumnKey> keys, @NonNull Executor executor) {
         return CompletableFuture.supplyAsync(() -> {
             Map<ConnectorTableColumnKey, Optional<Histogram>> result = new HashMap<>();
+            String tableUUID = null;
+            List<String> columns = new ArrayList<>();
+            if (!keys.iterator().hasNext()) {
+                return result;
+            }
+            for (ConnectorTableColumnKey key : keys) {
+                tableUUID = key.tableUUID;
+                columns.add(key.column);
+                result.put(key, Optional.empty());
+            }
+
             try {
-                String tableUUID = null;
-                List<String> columns = new ArrayList<>();
-                if (!keys.iterator().hasNext()) {
-                    return result;
-                }
-                for (ConnectorTableColumnKey key : keys) {
-                    tableUUID = key.tableUUID;
-                    columns.add(key.column);
-                    result.put(key, Optional.empty());
-                }
                 ConnectContext connectContext = StatisticUtils.buildConnectContext();
                 connectContext.setThreadLocalInfo();
 
@@ -98,7 +102,8 @@ public class ConnectorHistogramColumnStatsCacheLoader implements
 
                 return result;
             } catch (RuntimeException e) {
-                throw e;
+                LOG.error(e);
+                return result;
             } catch (Exception e) {
                 throw new CompletionException(e);
             } finally {
