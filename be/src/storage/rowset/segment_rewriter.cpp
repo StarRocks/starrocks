@@ -29,6 +29,7 @@ Status SegmentRewriter::rewrite_partial_update(const FileInfo& src, FileInfo* de
                                                const FooterPointerPB& partial_rowset_footer) {
     constexpr size_t kBufferSize = 1024 * 1024; // 1 MB
     if (UNLIKELY(column_ids.empty())) {
+        dest->size = src.size.value_or(0);
         return fs::copy_file(src.path, dest->path, kBufferSize);
     }
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(dest->path));
