@@ -10,6 +10,47 @@ displayed_sidebar: docs
 
 :::
 
+## 3.3.8
+
+发布日期：2025 年 1 月 3 日
+
+### 功能优化
+
+- 添加集群空闲 API 以帮助判断集群状态。[#53850](https://github.com/StarRocks/starrocks/pull/53850)
+- JSON 指标中添加节点信息和直方图指标。[#53735](https://github.com/StarRocks/starrocks/pull/53735)
+- 优化存算分离集群中主键表的 MemTable。[#54178](https://github.com/StarRocks/starrocks/pull/54178)
+- 优化存算分离集群中主键表的内存占用和统计信息。[#54358](https://github.com/StarRocks/starrocks/pull/54358)
+- 当查询需要扫描全表或大量分区时，增加单节点扫描分区数量限制以控制单 BE 或 CN 节点的扫描压力，提升系统稳定性。[#53747](https://github.com/StarRocks/starrocks/pull/53747)
+- 支持收集 Paimon 表的统计信息。[#52858](https://github.com/StarRocks/starrocks/pull/52858)
+- 存算分离集群支持配置 S3 Client 请求超时时间。[#54211](https://github.com/StarRocks/starrocks/pull/54211)
+
+### 问题修复
+
+- 主键表 DelVec 不一致导致 BE 退出。[#53460](https://github.com/StarRocks/starrocks/pull/53460)
+- 存算分离集群中主键表的锁释放问题。[#53878](https://github.com/StarRocks/starrocks/pull/53878)
+- 函数嵌套中 UDF 遇到错误时，查询不会返回错误。[#44297](https://github.com/StarRocks/starrocks/pull/44297)
+- 事务因依赖原始副本，导致其状态阻塞在 Decommission 阶段。[#49349](https://github.com/StarRocks/starrocks/pull/49349)
+- 查询 Delta Lake 表时，使用相对路径而不是文件名来获取文件。[#53949](https://github.com/StarRocks/starrocks/pull/53949)
+- 查询 Delta Lake Shallow Clone 表报错。[#54044](https://github.com/StarRocks/starrocks/pull/54044)
+- 使用 JNI 读取 Paimon 时的大小写敏感问题。[#54041](https://github.com/StarRocks/starrocks/pull/54041)
+- 使用 INSERT OVERWRITE 覆盖写 Hive Catalog 中由 Hive 创建的表报错。[#53792](https://github.com/StarRocks/starrocks/pull/53792)
+- SHOW TABLE STATUS 命令没有校验视图权限。[#53811](https://github.com/StarRocks/starrocks/pull/53811)
+- FE 指标缺失。[#53058](https://github.com/StarRocks/starrocks/pull/53058)
+- INSERT 任务内存泄露问题。[#53809](https://github.com/StarRocks/starrocks/pull/53809)
+- 副本复制任务中提交的事务没有写锁引发的并发问题。[#54061](https://github.com/StarRocks/starrocks/pull/54061)
+- 统计信息数据库中的表 `parti``ti``on_ttl` 不生效。[#54398](https://github.com/StarRocks/starrocks/pull/54398)
+- Query Cache 相关问题：
+  - 在开启 Group Execution 时 Query Cache 发生 Crash。[#54363](https://github.com/StarRocks/starrocks/pull/54363) 
+  - Runtime Filter 发生 Crash 的问题。[#54305](https://github.com/StarRocks/starrocks/pull/54305)
+- 物化视图 Union Rewrite 的问题。[#54293](https://github.com/StarRocks/starrocks/pull/54293)
+- 主键表部分列更新导致的字符串填充缺位。[#54182](https://github.com/StarRocks/starrocks/pull/54182)
+- 在启用低基数优化时 `max(count(distinct))` 的错误执行计划。[#53403](https://github.com/StarRocks/starrocks/pull/53403)
+- 变更物化视图参数 `excluded_refresh_tables` 的问题。[#53394](https://github.com/StarRocks/starrocks/pull/53394)
+
+### 行为变更
+
+- 存算分离集群中主键表 `persistent_index_type` 默认值修改为 `CLOUD_NATIVE`，即默认打开 Persistent Index。[#52209](https://github.com/StarRocks/starrocks/pull/52209)
+
 ## 3.3.7
 
 发布日期：2024 年 11 月 29 日
