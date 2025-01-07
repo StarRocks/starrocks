@@ -26,7 +26,7 @@ Metabase 支持对 StarRocks 中的内部数据和外部数据进行查询和可
    - **Host** 和 **Port**: 根据使用场景输入主机和端口信息。
    - **Database name**：按照 `<catalog_name>.<database_name>` 格式输入数据库名称。在 3.2 版本以前，StarRocks 只支持 Internal Catalog 与 Metabase 的集成。自 3.2 版本起，StarRocks 支持 Internal Catalog 和 External Catalog 与 Metabase 的集成。
    - **Username** 和 **Password**：输入 StarRocks 集群用户的用户名和密码。
-   - **Additional JDBC connection string options**: 需要输入 `tinyInt1isBit=false` 否则会导致无法正常使用。
+   - **Additional JDBC connection string options**: 必须在改字段添加属性 `tinyInt1isBit=false`，否则会导致无法正常使用。
 
    其他参数与 StarRocks 无关，您可以根据实际需要填写。
 
