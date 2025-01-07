@@ -70,6 +70,8 @@ public:
 
     ~HashJoinProbeOperatorFactory() override = default;
 
+    bool support_event_scheduler() const override { return true; }
+
     Status prepare(RuntimeState* state) override;
 
     void close(RuntimeState* state) override;

@@ -68,6 +68,8 @@ public:
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
 
+    bool support_event_scheduler() const override { return false; }
+
 private:
     std::shared_ptr<spill::SpilledOptions> _spill_options;
     std::shared_ptr<spill::SpillerFactory> _spill_factory = std::make_shared<spill::SpillerFactory>();

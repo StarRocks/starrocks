@@ -45,10 +45,15 @@ void PipelineObserver::_do_update(int event) {
     auto token = driver->acquire_schedule_token();
     auto sink = driver->sink_operator();
     auto source = driver->source_operator();
-    TRACE_SCHEDULE_LOG << "notify driver:" << driver << " state:" << driver->driver_state()
-                       << " in_block_queue:" << driver->is_in_blocked() << " source finished:" << source->is_finished()
-                       << " operator has output:" << source->has_output() << " sink finished:" << sink->is_finished()
-                       << " sink need input:" << sink->need_input() << ":" << driver->to_readable_string();
+
+    if (auto state = driver->driver_state(); state == DriverState::INPUT_EMPTY || state == DriverState::OUTPUT_FULL) {
+        TRACE_SCHEDULE_LOG << "notify driver:" << driver << " state:" << driver->driver_state()
+                           << " in_block_queue:" << driver->is_in_blocked()
+                           << " source finished:" << source->is_finished()
+                           << " operator has output:" << source->has_output()
+                           << " sink finished:" << sink->is_finished() << " sink need input:" << sink->need_input()
+                           << ":" << driver->to_readable_string();
+    }
 
     if (driver->is_in_blocked()) {
         // In PRECONDITION state, has_output need_input may return false. In this case,

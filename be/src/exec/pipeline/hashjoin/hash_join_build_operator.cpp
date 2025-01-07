@@ -20,6 +20,7 @@
 #include "exec/hash_joiner.h"
 #include "exec/pipeline/hashjoin/hash_joiner_factory.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/pipeline/runtime_filter_types.h"
 #include "exprs/runtime_filter_bank.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_filter_worker.h"
@@ -53,6 +54,7 @@ Status HashJoinBuildOperator::prepare(RuntimeState* state) {
     _join_builder->ref();
 
     RETURN_IF_ERROR(_join_builder->prepare_builder(state, _unique_metrics.get()));
+    _join_builder->attach_build_observer(state, observer());
 
     return Status::OK();
 }
@@ -82,6 +84,8 @@ size_t HashJoinBuildOperator::output_amplification_factor() const {
 
 Status HashJoinBuildOperator::set_finishing(RuntimeState* state) {
     ONCE_DETECT(_set_finishing_once);
+    // notify probe side
+    auto notify = _join_builder->defer_notify_probe();
     DeferOp op([this]() { _is_finished = true; });
 
     if (state->is_cancelled()) {

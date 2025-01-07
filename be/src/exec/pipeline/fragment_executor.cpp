@@ -35,6 +35,7 @@
 #include "exec/pipeline/scan/connector_scan_operator.h"
 #include "exec/pipeline/scan/morsel.h"
 #include "exec/pipeline/scan/scan_operator.h"
+#include "exec/pipeline/schedule/common.h"
 #include "exec/pipeline/stream_pipeline_driver.h"
 #include "exec/scan_node.h"
 #include "exec/tablet_sink.h"
@@ -762,6 +763,8 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
             auto* sink = pipeline->sink_operator_factory();
             all_support_event_scheduler = all_support_event_scheduler && src->support_event_scheduler();
             all_support_event_scheduler = all_support_event_scheduler && sink->support_event_scheduler();
+            TRACE_SCHEDULE_LOG << src->get_name() << " " << src->support_event_scheduler();
+            TRACE_SCHEDULE_LOG << sink->get_name() << " " << sink->support_event_scheduler();
         });
 
         if (all_support_event_scheduler) {

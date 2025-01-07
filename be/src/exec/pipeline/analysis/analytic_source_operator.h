@@ -18,6 +18,7 @@
 
 #include "exec/analytor.h"
 #include "exec/pipeline/source_operator.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
 class AnalyticSourceOperator : public SourceOperator {
@@ -29,6 +30,8 @@ public:
         _analytor->ref();
     }
     ~AnalyticSourceOperator() override = default;
+
+    Status prepare(RuntimeState* state) override;
 
     bool has_output() const override;
     bool is_finished() const override;
@@ -52,6 +55,7 @@ public:
               _analytor_factory(std::move(analytor_factory)) {}
 
     ~AnalyticSourceOperatorFactory() override = default;
+    bool support_event_scheduler() const override { return true; }
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         auto analytor = _analytor_factory->create(driver_sequence);

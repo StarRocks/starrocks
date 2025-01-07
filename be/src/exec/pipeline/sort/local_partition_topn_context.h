@@ -111,6 +111,8 @@ public:
 
     size_t num_partitions() const { return _partition_num; }
 
+    PipeObservable& observable() { return _observable; }
+
 private:
     // Pull one chunk from one of the sorters
     // The output chunk stream is unordered
@@ -179,6 +181,8 @@ private:
     int32_t _sorter_index = 0;
 
     std::unique_ptr<MemPool> _mem_pool = nullptr;
+
+    PipeObservable _observable;
 };
 
 using LocalPartitionTopnContextPtr = std::shared_ptr<LocalPartitionTopnContext>;
