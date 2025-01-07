@@ -177,6 +177,23 @@ void ConnectorScanOperatorFactory::set_data_source_mem_bytes(int64_t value) {
     _io_tasks_mem_limiter->set_data_source_mem_bytes(value);
 }
 
+void ConnectorScanOperatorFactory::attach_shared_input(int32_t operator_seq, int32_t source_index) {
+    auto key = std::make_pair(operator_seq, source_index);
+    VLOG_ROW << fmt::format("attach_shared_input ({}, {}), active {}", operator_seq, source_index,
+                            _active_inputs.size());
+    _num_active_inputs += _active_inputs.emplace(key).second;
+}
+
+void ConnectorScanOperatorFactory::detach_shared_input(int32_t operator_seq, int32_t source_index) {
+    auto key = std::make_pair(operator_seq, source_index);
+    VLOG_ROW << fmt::format("detach_shared_input ({}, {}), remain {}", operator_seq, source_index,
+                            _active_inputs.size());
+    int erased = _active_inputs.erase(key);
+    if (erased && _num_active_inputs.fetch_sub(1) == 1) {
+        _active_inputs_empty = true;
+    }
+}
+
 // ===============================================================
 struct ConnectorScanOperatorAdaptiveProcessor {
     // ----------------------
@@ -294,16 +311,12 @@ ChunkSourcePtr ConnectorScanOperator::create_chunk_source(MorselPtr morsel, int3
 
 void ConnectorScanOperator::attach_chunk_source(int32_t source_index) {
     auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
-    auto& active_inputs = factory->get_active_inputs();
-    auto key = std::make_pair(_driver_sequence, source_index);
-    active_inputs.emplace(key);
+    factory->attach_shared_input(_driver_sequence, source_index);
 }
 
 void ConnectorScanOperator::detach_chunk_source(int32_t source_index) {
     auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
-    auto& active_inputs = factory->get_active_inputs();
-    auto key = std::make_pair(_driver_sequence, source_index);
-    active_inputs.erase(key);
+    factory->detach_shared_input(_driver_sequence, source_index);
 }
 
 bool ConnectorScanOperator::has_shared_chunk_source() const {
@@ -525,6 +538,24 @@ int ConnectorScanOperator::available_pickup_morsel_count() {
     P.last_cs_scan_speed = cs_scan_speed;
     P.last_cs_total_scan_bytes = cs_total_scan_bytes;
     return io_tasks;
+}
+
+std::string ConnectorScanOperator::get_name() const {
+    std::string finished = is_finished() ? "X" : "O";
+    bool full = is_buffer_full();
+    int io_tasks = _num_running_io_tasks;
+    bool has_active = has_shared_chunk_source();
+    std::string morsel_queue_name = _morsel_queue->name();
+    bool morsel_queue_empty = _morsel_queue->empty();
+    return fmt::format(
+            "{}_{}_{}({}) {{ full:{} iostasks:{} has_active:{} num_chunks:{} morsel:{} empty:{} has_output:{}}}", _name,
+            _plan_node_id, (void*)this, finished, full, io_tasks, has_active, num_buffered_chunks(), morsel_queue_name,
+            morsel_queue_empty, has_output());
+}
+
+bool ConnectorScanOperator::need_notify_all() {
+    auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
+    return factory->active_inputs_empty_event() || has_full_events();
 }
 
 Status ConnectorScanOperator::append_morsels(std::vector<MorselPtr>&& morsels) {

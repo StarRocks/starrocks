@@ -70,6 +70,8 @@ public:
 
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
+    std::string get_name() const override;
+
 private:
     std::atomic<bool> _is_finished{false};
 
@@ -93,6 +95,7 @@ public:
               _limit(limit) {}
 
     ~ExchangeParallelMergeSourceOperatorFactory() override = default;
+    bool support_event_scheduler() const override { return true; }
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
 

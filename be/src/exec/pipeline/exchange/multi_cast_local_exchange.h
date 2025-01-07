@@ -18,6 +18,7 @@
 #include <utility>
 
 #include "column/chunk.h"
+#include "exec/pipeline/schedule/observer.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/spill/dir_manager.h"
 #include "fs/fs.h"
@@ -35,7 +36,7 @@ namespace starrocks::pipeline {
 //                                                     |             -> [new pipeline2]
 //                                                     |             -> [new pipeline3]
 // and for each new pipeline, the internal structure is
-// [new pileine]: mcast_local_source -> exchange_sink_operator
+// [new pipeline]: mcast_local_source -> exchange_sink_operator
 
 // The dataflow works like:
 // 1. mcast_local_sink push chunks to exchanger
@@ -51,6 +52,8 @@ class MultiCastLocalExchangeSinkOperator;
 class MultiCastLocalExchanger {
 public:
     virtual ~MultiCastLocalExchanger() = default;
+    virtual bool support_event_scheduler() const = 0;
+
     virtual Status init_metrics(RuntimeProfile* profile) = 0;
 
     virtual bool can_pull_chunk(int32_t mcast_consumer_index) const = 0;
@@ -64,12 +67,18 @@ public:
 
     virtual bool releaseable() const { return false; }
     virtual void enter_release_memory_mode() {}
+
+    PipeObservable& observable() { return _observable; }
+
+private:
+    PipeObservable _observable;
 };
 
 class InMemoryMultiCastLocalExchanger final : public MultiCastLocalExchanger {
 public:
     InMemoryMultiCastLocalExchanger(RuntimeState* runtime_state, size_t consumer_number);
     ~InMemoryMultiCastLocalExchanger() override;
+    bool support_event_scheduler() const override { return true; }
 
     Status init_metrics(RuntimeProfile* profile) override;
     bool can_pull_chunk(int32_t mcast_consumer_index) const override;
@@ -119,6 +128,7 @@ class SpillableMultiCastLocalExchanger : public MultiCastLocalExchanger {
 public:
     SpillableMultiCastLocalExchanger(RuntimeState* runtime_state, size_t consumer_number, int32_t plan_node_id);
     ~SpillableMultiCastLocalExchanger() override = default;
+    bool support_event_scheduler() const override { return false; }
 
     Status init_metrics(RuntimeProfile* profile) override;
     bool can_pull_chunk(int32_t mcast_consumer_index) const override;

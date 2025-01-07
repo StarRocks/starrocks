@@ -21,6 +21,7 @@
 #include "column/column.h"
 #include "common/global_types.h"
 #include "common/object_pool.h"
+#include "exec/pipeline/schedule/observer.h"
 #include "exprs/column_ref.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
@@ -196,6 +197,9 @@ public:
     }
     void set_runtime_filter(const JoinRuntimeFilter* rf);
     void set_shared_runtime_filter(const std::shared_ptr<const JoinRuntimeFilter>& rf);
+    void add_observer(RuntimeState* state, pipeline::PipelineObserver* observer) {
+        _observable.add_observer(state, observer);
+    }
 
 private:
     friend class HashJoinNode;
@@ -219,6 +223,7 @@ private:
 
     std::atomic<const JoinRuntimeFilter*> _runtime_filter = nullptr;
     std::shared_ptr<const JoinRuntimeFilter> _shared_runtime_filter = nullptr;
+    pipeline::Observable _observable;
 };
 
 // RuntimeFilterProbeCollector::do_evaluate function apply runtime bloom filter to Operators to filter chunk.

@@ -20,9 +20,11 @@
 
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
+#include "exec/pipeline/schedule/observer.h"
 #include "exec/sorting/merge.h"
 #include "exec/sorting/sorting.h"
 #include "runtime/descriptors.h"
+#include "util/defer_op.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks::merge_path {
@@ -396,6 +398,9 @@ public:
 
     size_t add_original_chunk(ChunkPtr&& chunk);
     detail::Metrics& get_metrics(const int32_t parallel_idx) { return _metrics[parallel_idx]; }
+    void attach_observer(RuntimeState* state, pipeline::PipelineObserver* observer) {
+        _observable.add_observer(state, observer);
+    }
 
 private:
     bool _is_current_stage_done();
@@ -420,6 +425,15 @@ private:
     bool _has_pending_node();
 
     void _reset_output();
+
+    template <class Notify>
+    auto defer_notify_source(Notify notify) {
+        return DeferOp([this, notify]() {
+            if (notify()) {
+                _observable.notify_source_observers();
+            }
+        });
+    }
 
 public:
     // The ordinal value is comprising the following two parts
@@ -490,6 +504,8 @@ private:
     std::chrono::steady_clock::time_point _pending_start;
     // First pending should not be recorded, because it all comes from the operator dependency
     bool _is_first_pending = true;
+
+    starrocks::pipeline::Observable _observable;
 };
 
 } // namespace starrocks::merge_path

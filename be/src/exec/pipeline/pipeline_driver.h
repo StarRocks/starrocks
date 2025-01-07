@@ -386,6 +386,7 @@ public:
             // wait global rf to be ready for at most _global_rf_wait_time_out_ns after
             // both dependencies_block and local_rf_block return false.
             _global_rf_wait_timeout_ns += _precondition_block_timer_sw->elapsed_time();
+            _update_global_rf_timer();
             return global_rf_block();
         } else {
             return global_rf_block();
@@ -540,6 +541,9 @@ protected:
     void _update_scan_statistics(RuntimeState* state);
     void _update_driver_level_timer();
 
+    // used in event scheduler
+    void _update_global_rf_timer();
+
     RuntimeState* _runtime_state = nullptr;
     Operators _operators;
     DriverDependencies _dependencies;
@@ -587,6 +591,9 @@ protected:
     std::atomic<bool> _has_log_cancelled{false};
 
     PipelineObserver _observer;
+
+    std::unique_ptr<PipelineTimerTask> _global_rf_timer;
+
     // metrics
     RuntimeProfile::Counter* _total_timer = nullptr;
     RuntimeProfile::Counter* _active_timer = nullptr;

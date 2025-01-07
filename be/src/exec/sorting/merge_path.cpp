@@ -846,6 +846,8 @@ bool MergePathCascadeMerger::_is_current_stage_done() {
 
 void MergePathCascadeMerger::_forward_stage(const detail::Stage& stage, int32_t worker_num,
                                             std::vector<size_t>* process_cnts) {
+    bool current_stage_finished = true;
+    auto notify = defer_notify_source([&]() { return current_stage_finished; });
     std::lock_guard<std::recursive_mutex> l(_status_m);
     _stage = stage;
     DCHECK_GT(worker_num, 0);

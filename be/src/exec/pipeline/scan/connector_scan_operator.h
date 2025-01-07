@@ -70,10 +70,19 @@ public:
     void set_mem_share_arb(ConnectorScanOperatorMemShareArbitrator* arb);
     void set_data_source_mem_bytes(int64_t value);
 
+    void attach_shared_input(int32_t operator_seq, int32_t source_index);
+    void detach_shared_input(int32_t operator_seq, int32_t source_index);
+    bool active_inputs_empty_event() {
+        bool val = true;
+        return _active_inputs_empty.compare_exchange_strong(val, false);
+    }
+
 private:
     // TODO: refactor the OlapScanContext, move them into the context
     BalancedChunkBuffer _chunk_buffer;
     ActiveInputSet _active_inputs;
+    std::atomic_int _num_active_inputs{};
+    std::atomic_bool _active_inputs_empty{};
 
 public:
     ConnectorScanOperatorIOTasksMemLimiter* _io_tasks_mem_limiter = nullptr;
@@ -114,6 +123,8 @@ public:
     workgroup::ScanSchedEntityType sched_entity_type() const override {
         return workgroup::ScanSchedEntityType::CONNECTOR;
     }
+    std::string get_name() const override;
+    bool need_notify_all() override;
 
 private:
     int64_t _adjust_scan_mem_limit(int64_t old_chunk_source_mem_bytes, int64_t new_chunk_source_mem_bytes);

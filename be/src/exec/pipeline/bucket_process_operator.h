@@ -19,6 +19,7 @@
 
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_fwd.h"
+#include "exec/pipeline/schedule/observer.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/pipeline/spill_process_channel.h"
 #include "runtime/runtime_state.h"
@@ -48,6 +49,20 @@ struct BucketProcessContext {
     Status reset_operator_state(RuntimeState* state);
 
     Status finish_current_sink(RuntimeState* state);
+
+    void attach_sink_observer(RuntimeState* state, pipeline::PipelineObserver* observer) {
+        _pip_observable.attach_sink_observer(state, observer);
+    }
+
+    void attach_source_observer(RuntimeState* state, pipeline::PipelineObserver* observer) {
+        _pip_observable.attach_source_observer(state, observer);
+    }
+
+    auto defer_notify_source() { return _pip_observable.defer_notify_source(); }
+    auto defer_notify_sink() { return _pip_observable.defer_notify_sink(); }
+
+private:
+    PipeObservable _pip_observable;
 };
 using BucketProcessContextPtr = std::shared_ptr<BucketProcessContext>;
 
@@ -122,6 +137,8 @@ class BucketProcessSinkOperatorFactory final : public OperatorFactory {
 public:
     BucketProcessSinkOperatorFactory(int32_t id, int32_t plan_node_id, BucketProcessContextFactoryPtr context_factory,
                                      OperatorFactoryPtr factory);
+    bool support_event_scheduler() const override { return true; }
+
     pipeline::OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
@@ -135,6 +152,8 @@ class BucketProcessSourceOperatorFactory final : public SourceOperatorFactory {
 public:
     BucketProcessSourceOperatorFactory(int32_t id, int32_t plan_node_id, BucketProcessContextFactoryPtr context_factory,
                                        OperatorFactoryPtr factory);
+    bool support_event_scheduler() const override { return true; }
+
     pipeline::OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;

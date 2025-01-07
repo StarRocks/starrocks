@@ -26,6 +26,7 @@ LocalPartitionTopnSinkOperator::LocalPartitionTopnSinkOperator(OperatorFactory* 
 
 Status LocalPartitionTopnSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
+    _partition_topn_ctx->observable().attach_sink_observer(state, observer());
     return _partition_topn_ctx->prepare(state, _unique_metrics.get());
 }
 
@@ -34,10 +35,12 @@ StatusOr<ChunkPtr> LocalPartitionTopnSinkOperator::pull_chunk(RuntimeState* stat
 }
 
 Status LocalPartitionTopnSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+    auto notify = _partition_topn_ctx->observable().defer_notify_source();
     return _partition_topn_ctx->push_one_chunk_to_partitioner(state, chunk);
 }
 
 Status LocalPartitionTopnSinkOperator::set_finishing(RuntimeState* state) {
+    auto notify = _partition_topn_ctx->observable().defer_notify_source();
     ONCE_DETECT(_set_finishing_once);
     DeferOp defer([&]() {
         _partition_topn_ctx->sink_complete();

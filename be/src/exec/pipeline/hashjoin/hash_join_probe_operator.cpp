@@ -47,6 +47,7 @@ Status HashJoinProbeOperator::prepare(RuntimeState* state) {
     }
 
     RETURN_IF_ERROR(_join_prober->prepare_prober(state, _unique_metrics.get()));
+    _join_builder->attach_probe_observer(state, observer());
 
     return Status::OK();
 }
@@ -87,6 +88,8 @@ StatusOr<ChunkPtr> HashJoinProbeOperator::pull_chunk(RuntimeState* state) {
 }
 
 Status HashJoinProbeOperator::set_finishing(RuntimeState* state) {
+    // TODO: notify one will be ok
+    auto notify = _join_builder->defer_notify_build();
     RETURN_IF_ERROR(_join_prober->probe_input_finished(state));
     _join_prober->enter_post_probe_phase();
     return Status::OK();

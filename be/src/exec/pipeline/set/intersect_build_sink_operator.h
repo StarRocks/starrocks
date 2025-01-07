@@ -16,6 +16,7 @@
 
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/set/intersect_context.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
 
@@ -55,6 +56,8 @@ public:
     bool is_finished() const override { return _is_finished || _intersect_ctx->is_finished(); }
 
     Status set_finishing(RuntimeState* state) override {
+        // notify probe operator
+        auto notify = _intersect_ctx->observable().defer_notify_sink();
         _is_finished = true;
         _intersect_ctx->finish_build_ht();
         return Status::OK();
