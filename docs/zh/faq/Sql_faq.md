@@ -39,7 +39,7 @@ ALTER TABLE 是异步操作，如果之前有 ALTER TABLE 操作还没完成，�
 show tablet from lineitem where State="ALTER"; 
 ```
 
-执行时间与数据量大小有关系，一般是分钟级别，建议 ALTER 过程中停止数据导入，导入会降低 ALTER 速度。
+执行时间与数据量大小有关系，一般是分钟级别，建议 ALTER 过程中停止数据导入，导入会提升 ALTER 速度。
 
 ## [Hive外部表查询问题] 查询 Hive 外部表时报错获取分区失败
 
