@@ -51,6 +51,7 @@ public class CacheRelaxDictManager implements IRelaxDictManager, MemoryTrackable
     public static final Integer LOW_CARDINALITY_THRESHOLD = 255;
     private static final long DICT_EXPIRATION_SECONDS = 7 * 24 * 3600;
     private static final long DICT_REFRESH_INTERVAL_SECONDS = 7 * 24 * 3600;
+    public static final long PASSIVE_VERSION_THRESHOLD = 3;
     private static final CacheRelaxDictManager INSTANCE = new CacheRelaxDictManager();
 
 
@@ -80,7 +81,15 @@ public class CacheRelaxDictManager implements IRelaxDictManager, MemoryTrackable
                                         return Optional.empty();
                                     }
                                     // merge old value
-                                    oldValue.ifPresent(columnDict -> newDict.get().merge(columnDict));
+                                    if (oldValue.isPresent()) {
+                                        ColumnDict oldDict = oldValue.get();
+                                        int oldSize = oldDict.getDictSize();
+                                        oldDict.merge(newDict.get());
+                                        if (oldDict.getDictSize() > oldSize) {
+                                            oldDict.updateVersion(0);
+                                        }
+                                        newDict = Optional.of(oldDict);
+                                    }
                                     return checkDictSize(key, newDict);
                                 } else {
                                     return oldValue;
@@ -118,7 +127,7 @@ public class CacheRelaxDictManager implements IRelaxDictManager, MemoryTrackable
 
     private Optional<ColumnDict> checkDictSize(ConnectorTableColumnKey key, Optional<ColumnDict> input) {
         if (input.isPresent()) {
-            if (input.get().getDict().size() > LOW_CARDINALITY_THRESHOLD) {
+            if (input.get().getDictSize() > LOW_CARDINALITY_THRESHOLD) {
                 NO_DICT_STRING_COLUMNS.add(key);
                 return Optional.empty();
             }
@@ -136,7 +145,7 @@ public class CacheRelaxDictManager implements IRelaxDictManager, MemoryTrackable
         for (int i = 0; i < dictSize; ++i) {
             dicts.put(tGlobalDict.strings.get(i), tGlobalDict.ids.get(i));
         }
-        return Optional.of(new ColumnDict(dicts.build(), -1));
+        return Optional.of(new ColumnDict(dicts.build(), 0));
     }
 
     @Override
@@ -188,8 +197,9 @@ public class CacheRelaxDictManager implements IRelaxDictManager, MemoryTrackable
             try {
                 Optional<ColumnDict> columnOptional = future.get();
                 if (columnOptional.isPresent()) {
-                    columnDict.get().merge(columnOptional.get());
-                    dictStatistics.put(key, CompletableFuture.completedFuture(checkDictSize(key, columnDict)));
+                    columnOptional.get().merge(columnDict.get());
+                    columnOptional.get().updateVersion(columnOptional.get().getVersion() + 1);
+                    dictStatistics.put(key, CompletableFuture.completedFuture(checkDictSize(key, columnOptional)));
                 }
             } catch (Exception e) {
                 LOG.warn(String.format("update dict cache for %s: %s failed", tableUUID, columnName), e);

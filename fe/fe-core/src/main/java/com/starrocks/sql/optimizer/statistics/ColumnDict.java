@@ -23,31 +23,37 @@ import java.util.TreeSet;
 
 public final class ColumnDict {
     private ImmutableMap<ByteBuffer, Integer> dict;
-    private final long collectedVersionTime;
-    private long versionTime;
+    // for olap table, version info is time
+    // for table on lake, version info is version num
+    private final long collectedVersion;
+    private long version;
 
-    public ColumnDict(ImmutableMap<ByteBuffer, Integer> dict, long versionTime) {
+    public ColumnDict(ImmutableMap<ByteBuffer, Integer> dict, long version) {
         Preconditions.checkState(dict.size() > 0 && dict.size() <= 256,
                 "dict size %s is illegal", dict.size());
         this.dict = dict;
-        this.collectedVersionTime = versionTime;
-        this.versionTime = versionTime;
+        this.collectedVersion = version;
+        this.version = version;
     }
 
     public ImmutableMap<ByteBuffer, Integer> getDict() {
         return dict;
     }
 
-    public long getVersionTime() {
-        return versionTime;
+    public long getVersion() {
+        return version;
     }
 
-    public long getCollectedVersionTime() {
-        return collectedVersionTime;
+    public long getCollectedVersion() {
+        return collectedVersion;
     }
 
-    void updateVersionTime(long versionTime) {
-        this.versionTime = versionTime;
+    public int getDictSize() {
+        return dict.size();
+    }
+
+    void updateVersion(long version) {
+        this.version = version;
     }
 
     void merge(ColumnDict o) {

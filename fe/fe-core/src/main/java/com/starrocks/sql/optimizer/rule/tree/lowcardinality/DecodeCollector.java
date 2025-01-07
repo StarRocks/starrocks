@@ -54,6 +54,7 @@ import com.starrocks.sql.optimizer.operator.scalar.MatchExprOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.statistics.CacheDictManager;
+import com.starrocks.sql.optimizer.statistics.CacheRelaxDictManager;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
@@ -653,7 +654,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
                     column.getName());
             // cache reaches capacity limit, randomly eliminate some keys
             // then we will get an empty dictionary.
-            if (dict.isEmpty()) {
+            if (dict.isEmpty() || dict.get().getVersion() > CacheRelaxDictManager.PASSIVE_VERSION_THRESHOLD) {
                 continue;
             }
 
