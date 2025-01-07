@@ -235,9 +235,10 @@ Status DataStreamRecvr::get_next_for_pipeline(ChunkPtr* chunk, std::atomic<bool>
 bool DataStreamRecvr::is_data_ready() {
     if (_chunks_merger) {
         return _chunks_merger->is_data_ready();
-    } else {
+    } else if (_cascade_merger) {
         return _cascade_merger->is_data_ready();
     }
+    return false;
 }
 
 Status DataStreamRecvr::add_chunks(const PTransmitChunkParams& request, ::google::protobuf::Closure** done) {
