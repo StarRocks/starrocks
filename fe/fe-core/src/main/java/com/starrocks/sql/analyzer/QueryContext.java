@@ -27,7 +27,11 @@ public class QueryContext {
     }
 
     public static void setContext(QueryContext context) {
-        CONTEXT_HOLDER.set(context);
+        if (context == null) {
+            CONTEXT_HOLDER.remove();
+        } else {
+            CONTEXT_HOLDER.set(context);
+        }
     }
 
     public static QueryContext getContext() {

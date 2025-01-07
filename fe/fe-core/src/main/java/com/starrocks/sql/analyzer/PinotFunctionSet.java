@@ -4,6 +4,7 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Table;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -116,8 +117,8 @@ public class PinotFunctionSet {
         }
 
         if (isFunctionString(nodeContent)) {
-            return dateFunctions.contains(nodeContent.toLowerCase());
-
+            // Convert both the node content and the set entries to lower case for comparison, ensuring consistent case handling
+            return dateFunctions.contains(nodeContent.toLowerCase(Locale.ROOT));
         }
         return false;
     }
