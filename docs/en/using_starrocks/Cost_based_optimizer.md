@@ -532,7 +532,7 @@ The following examples happen in a database under the Hive external catalog. If 
 
 ### Query-triggered collection
 
-Since v3.4.0, the system supports automatic statistics collection of external tables by query-triggered ANALYZE tasks. When querying Hive, Iceberg, Hudi, Delta Lake tables, the system will automatically trigger ANALYZE tasks in the background to collect statistics of the corresponding tables and columns, and use it for subsequent query plan optimization.
+Since v3.4.0, the system supports automatic statistics collection of external tables by query-triggered ANALYZE tasks. When querying Hive, Iceberg, Hudi, or Delta Lake tables, the system will automatically trigger ANALYZE tasks in the background to collect statistics of the corresponding tables and columns, and use it for subsequent query plan optimization.
 
 Workflow:
 
