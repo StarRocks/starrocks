@@ -440,10 +440,11 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_path));
     std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(params.metadata->schema());
     // get rowset schema
-    if (!params.op_write.has_txn_meta() || rowset_meta.num_rows() == 0 ||
-        params.op_write.txn_meta().has_merge_condition()) {
+    if (!params.op_write.has_txn_meta() || params.op_write.rewrite_segments_size() == 0 ||
+        rowset_meta.num_rows() == 0 || params.op_write.txn_meta().has_merge_condition()) {
         return Status::OK();
     }
+    RETURN_ERROR_IF_FALSE(params.op_write.rewrite_segments_size() == rowset_meta.segments_size());
     // currently assume it's a partial update
     const auto& txn_meta = params.op_write.txn_meta();
     std::vector<ColumnId> unmodified_column_ids = get_read_columns_ids(params.op_write, params.tablet_schema);
