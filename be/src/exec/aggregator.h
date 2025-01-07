@@ -344,12 +344,9 @@ public:
     [[nodiscard]] Status evaluate_agg_fn_exprs(Chunk* chunk, bool use_intermediate);
     [[nodiscard]] Status evaluate_agg_input_column(Chunk* chunk, std::vector<ExprContext*>& agg_expr_ctxs, int i);
 
-<<<<<<< HEAD
     [[nodiscard]] Status output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk);
-=======
-    Status output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk);
-    Status output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk, size_t num_input_rows, bool use_selection);
->>>>>>> efe1ddecb4 ([BugFix] Fix sequence of selection and input_chunk for streaming_agg_with_selection (#54595))
+    [[nodiscard]] Status output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk, size_t num_input_rows,
+                                                   bool use_selection);
 
     // convert input chunk to spill format
     [[nodiscard]] Status convert_to_spill_format(Chunk* input_chunk, ChunkPtr* chunk);
