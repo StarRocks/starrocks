@@ -2130,7 +2130,7 @@ public class SchemaChangeHandler extends AlterHandler {
     }
 
     public void processLakeTableDropPersistentIndex(AlterClause alterClause, Database db, OlapTable olapTable)
-            throws StarRocksException {
+            throws UserException {
         if (!olapTable.enablePersistentIndex() || 
                 olapTable.getPersistentIndexType() != TPersistentIndexType.CLOUD_NATIVE) {
             LOG.warn(String.format("drop persistent index on table %s failed, it must be" +
