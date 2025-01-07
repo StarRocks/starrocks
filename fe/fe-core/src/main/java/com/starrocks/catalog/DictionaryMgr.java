@@ -576,7 +576,7 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
         }
 
         private ConnectContext buildConnectContext() {
-            ConnectContext context = new ConnectContext();
+            ConnectContext context = ConnectContext.buildInner();
             context.setCurrentCatalog(dictionary.getCatalogName());
             context.setDatabase(dictionary.getDbName());
             context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());

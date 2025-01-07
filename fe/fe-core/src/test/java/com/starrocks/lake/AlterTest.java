@@ -88,7 +88,7 @@ public class AlterTest {
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getAlterClauseList().get(0);
         GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .addPartitions(Util.getOrCreateConnectContext(), db, "test_lake_partition", addPartitionClause);
+                    .addPartitions(Util.getOrCreateInnerContext(), db, "test_lake_partition", addPartitionClause);
 
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test")
                     .getTable("test_lake_partition");
@@ -134,7 +134,7 @@ public class AlterTest {
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getAlterClauseList().get(0);
         GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .addPartitions(Util.getOrCreateConnectContext(), db, "site_access", addPartitionClause);
+                    .addPartitions(Util.getOrCreateInnerContext(), db, "site_access", addPartitionClause);
 
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test")
                     .getTable("site_access");

@@ -914,7 +914,7 @@ public class MaterializedViewAnalyzer {
             }
         }
 
-        private  void checkRangePartitionColumnLimit(List<Expr> partitionByExprs) {
+        private void checkRangePartitionColumnLimit(List<Expr> partitionByExprs) {
             if (partitionByExprs.size() > 1) {
                 throw new SemanticException("Materialized view with range partition type " +
                         "only supports single column");
