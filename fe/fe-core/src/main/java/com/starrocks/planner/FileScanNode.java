@@ -542,25 +542,7 @@ public class FileScanNode extends LoadScanNode {
     }
 
     private void assignBackends() throws StarRocksException {
-        nodes = Lists.newArrayList();
-
-        // TODO: need to refactor after be split into cn + dn
-        if (RunMode.isSharedDataMode()) {
-            List<Long> computeNodeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseId);
-            for (long cnId : computeNodeIds) {
-                ComputeNode cn = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(cnId);
-                if (cn != null && cn.isAvailable()) {
-                    nodes.add(cn);
-                }
-            }
-        } else {
-            for (ComputeNode be : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdToBackend().values()) {
-                if (be.isAvailable()) {
-                    nodes.add(be);
-                }
-            }
-        }
-
+        nodes = getAvailableComputeNodes(warehouseId);
         if (nodes.isEmpty()) {
             throw new StarRocksException("No available backends");
         }
