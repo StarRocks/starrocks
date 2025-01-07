@@ -263,7 +263,19 @@ public class AlterJobExecutor extends AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitTruncatePartitionClause(TruncatePartitionClause clause, ConnectContext context) {
+<<<<<<< HEAD
         unsupportedException("Not support");
+=======
+        // This logic is used to adapt mysql syntax.
+        // ALTER TABLE test TRUNCATE PARTITION p1;
+        TableRef tableRef = new TableRef(tableName, null, clause.getPartitionNames());
+        TruncateTableStmt tStmt = new TruncateTableStmt(tableRef);
+        ConnectContext ctx = ConnectContext.buildInner();
+        ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+
+        ErrorReport.wrapWithRuntimeException(() ->
+                GlobalStateMgr.getCurrentState().getLocalMetastore().truncateTable(tStmt, ctx));
+>>>>>>> 6a0fd5dd7b ([BugFix] Build a ConnectContext for inner query which is used for StarRocks internal query (#54737))
         return null;
     }
 

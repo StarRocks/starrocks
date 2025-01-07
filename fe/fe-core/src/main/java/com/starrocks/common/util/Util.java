@@ -477,4 +477,16 @@ public class Util {
         }
         return outputStream.toByteArray();
     }
+<<<<<<< HEAD
+=======
+
+    public static ConnectContext getOrCreateInnerContext() {
+        if (ConnectContext.get() != null) {
+            return ConnectContext.get();
+        }
+        ConnectContext ctx = ConnectContext.buildInner();
+        ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        return ctx;
+    }
+>>>>>>> 6a0fd5dd7b ([BugFix] Build a ConnectContext for inner query which is used for StarRocks internal query (#54737))
 }

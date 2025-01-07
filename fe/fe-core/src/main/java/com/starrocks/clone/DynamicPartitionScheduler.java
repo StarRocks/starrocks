@@ -438,6 +438,14 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
             db.readUnlock();
         }
 
+<<<<<<< HEAD
+=======
+        WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        ConnectContext ctx = Util.getOrCreateInnerContext();
+        ctx.setCurrentWarehouse(warehouseManager.getBackgroundWarehouse().getName());
+
+        Locker locker = new Locker();
+>>>>>>> 6a0fd5dd7b ([BugFix] Build a ConnectContext for inner query which is used for StarRocks internal query (#54737))
         for (DropPartitionClause dropPartitionClause : dropPartitionClauses) {
             if (!db.writeLockAndCheckExist()) {
                 LOG.warn("db: {}({}) has been dropped, skip", db.getFullName(), db.getId());

@@ -181,7 +181,7 @@ public abstract class AlterJobV2 implements Writable {
 
     public void createConnectContextIfNeeded() {
         if (ConnectContext.get() == null) {
-            ConnectContext context = new ConnectContext();
+            ConnectContext context = ConnectContext.buildInner();
             context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
             context.setCurrentUserIdentity(UserIdentity.ROOT);
             context.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
