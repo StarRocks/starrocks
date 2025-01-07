@@ -81,6 +81,10 @@ public class ViewAnalyzer {
                 throw new SemanticException("The specified table [" + tableName + "] is not a view");
             }
 
+            if (stmt.getAlterClause() == null) {
+                return null;
+            }
+
             AlterClause alterClause = stmt.getAlterClause();
             if (alterClause instanceof AlterViewClause) {
                 AlterViewClause alterViewClause = (AlterViewClause) alterClause;

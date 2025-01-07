@@ -669,13 +669,16 @@ createViewStatement
     : CREATE (OR REPLACE)? VIEW (IF NOT EXISTS)? qualifiedName
         ('(' columnNameWithComment (',' columnNameWithComment)* ')')?
         withRowAccessPolicy*
-        comment? AS queryStatement
+        comment?
+        (SECURITY (NONE | INVOKER))?
+        AS queryStatement
     ;
 
 alterViewStatement
     : ALTER VIEW qualifiedName ('(' columnNameWithComment (',' columnNameWithComment)* ')')?  AS queryStatement
     | ALTER VIEW qualifiedName applyMaskingPolicyClause
     | ALTER VIEW qualifiedName applyRowAccessPolicyClause
+    | ALTER VIEW qualifiedName SET SECURITY (NONE | INVOKER)
     ;
 
 dropViewStatement

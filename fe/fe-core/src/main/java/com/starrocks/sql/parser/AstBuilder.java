@@ -1623,12 +1623,23 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             throw new ParsingException(PARSER_ERROR_MSG.conflictedOptions("if not exists", "or replace"),
                     createPos(context));
         }
+
+        boolean isSecurity = false;
+        if (context.SECURITY() != null) {
+            if (context.NONE() != null) {
+                isSecurity = false;
+            } else if (context.INVOKER() != null) {
+                isSecurity = true;
+            }
+        }
+
         return new CreateViewStmt(
                 context.IF() != null,
                 context.REPLACE() != null,
                 targetTableName,
                 colWithComments,
                 context.comment() == null ? null : ((StringLiteral) visit(context.comment())).getStringValue(),
+                isSecurity,
                 (QueryStatement) visit(context.queryStatement()), createPos(context));
     }
 
@@ -1638,20 +1649,29 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         TableName targetTableName = qualifiedNameToTableName(qualifiedName);
 
         List<ColWithComment> colWithComments = null;
-        if (context.columnNameWithComment().size() > 0) {
+        if (!context.columnNameWithComment().isEmpty()) {
             colWithComments = visit(context.columnNameWithComment(), ColWithComment.class);
         }
+        boolean isSecurity = false;
         if (context.queryStatement() != null) {
             QueryStatement queryStatement = (QueryStatement) visit(context.queryStatement());
             AlterClause alterClause = new AlterViewClause(colWithComments, queryStatement, createPos(context));
-            return new AlterViewStmt(targetTableName, alterClause, createPos(context));
+            return new AlterViewStmt(targetTableName, isSecurity, alterClause, createPos(context));
         } else {
             if (context.applyMaskingPolicyClause() != null) {
-                return new AlterViewStmt(targetTableName, (AlterClause) visit(context.applyMaskingPolicyClause()),
+                return new AlterViewStmt(targetTableName, isSecurity, (AlterClause) visit(context.applyMaskingPolicyClause()),
                         createPos(context));
             } else if (context.applyRowAccessPolicyClause() != null) {
-                return new AlterViewStmt(targetTableName, (AlterClause) visit(context.applyRowAccessPolicyClause()),
+                return new AlterViewStmt(targetTableName, isSecurity, (AlterClause) visit(context.applyRowAccessPolicyClause()),
                         createPos(context));
+            } else if (context.SECURITY() != null) {
+                if (context.NONE() != null) {
+                    isSecurity = false;
+                } else if (context.INVOKER() != null) {
+                    isSecurity = true;
+                }
+
+                return new AlterViewStmt(targetTableName, isSecurity, null, createPos(context));
             } else {
                 throw new ParsingException("Not support statement", createPos(context));
             }
@@ -2636,7 +2656,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitAdminSetAutomatedSnapshotOnStatement(
-                     StarRocksParser.AdminSetAutomatedSnapshotOnStatementContext context) {
+            StarRocksParser.AdminSetAutomatedSnapshotOnStatementContext context) {
         String svName = StorageVolumeMgr.BUILTIN_STORAGE_VOLUME;
         if (context.svName != null) {
             svName = getIdentifierName(context.svName);
@@ -2646,7 +2666,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitAdminSetAutomatedSnapshotOffStatement(
-                     StarRocksParser.AdminSetAutomatedSnapshotOffStatementContext context) {
+            StarRocksParser.AdminSetAutomatedSnapshotOffStatementContext context) {
         return new AdminSetAutomatedSnapshotOffStmt(createPos(context));
     }
 

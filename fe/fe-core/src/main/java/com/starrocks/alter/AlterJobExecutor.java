@@ -36,6 +36,7 @@ import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.catalog.View;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
@@ -208,7 +209,13 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
         this.catalog = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
         this.db = db;
         this.table = table;
-        AlterClause alterViewClause = statement.getAlterClause();
+
+        if (statement.getAlterClause() == null) {
+            ((View) table).setSecurity(statement.isSecurity());
+            return null;
+        }
+
+        AlterViewClause alterViewClause = (AlterViewClause) statement.getAlterClause();
         visit(alterViewClause, context);
         return null;
     }

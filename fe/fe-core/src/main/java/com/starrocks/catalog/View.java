@@ -86,6 +86,9 @@ public class View extends Table {
     @SerializedName(value = "m")
     private long sqlMode = 0L;
 
+    @SerializedName(value = "s")
+    private boolean security = false;
+
     // cache used table names
     private List<TableName> tableRefsCache = Lists.newArrayList();
 
@@ -134,6 +137,14 @@ public class View extends Table {
 
     public long getSqlMode() {
         return sqlMode;
+    }
+
+    public void setSecurity(boolean security) {
+        this.security = security;
+    }
+
+    public boolean isSecurity() {
+        return security;
     }
 
     /**
