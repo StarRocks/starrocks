@@ -37,16 +37,16 @@ public class LoadPlanNodeTest {
     private GlobalStateMgr globalStateMgr;
 
     @Test
-    public void testAvailableNodesForShareDataWithCn() {
-        testShareDataBase(true);
+    public void testAvailableNodesForSharedDataWithCn() {
+        testAvailableNodesForSharedDataBase(true);
     }
 
     @Test
-    public void testAvailableNodesForShareDataWithBackend() {
-        testShareDataBase(false);
+    public void testAvailableNodesForSharedDataWithBackend() {
+        testAvailableNodesForSharedDataBase(false);
     }
 
-    private void testShareDataBase(boolean useCn) {
+    private void testAvailableNodesForSharedDataBase(boolean useCn) {
         SystemInfoService service = new SystemInfoService();
         List<Long> nodeIds = new ArrayList<>();
         if (useCn) {
@@ -99,7 +99,7 @@ public class LoadPlanNodeTest {
     }
 
     @Test
-    public void testAvailableNodesForShareNothing() {
+    public void testAvailableNodesForSharedNothing() {
         SystemInfoService service = new SystemInfoService();
         for (int i = 1; i <= 4; i++) {
             ComputeNode computeNode = new ComputeNode(i, "127.0.0." + i, 9050);
