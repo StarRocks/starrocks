@@ -41,6 +41,7 @@ import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.SlotDescriptor;
@@ -49,6 +50,7 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Table;
@@ -62,6 +64,7 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.load.Load;
 import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.TBrokerRangeDesc;
 import com.starrocks.thrift.TBrokerScanRange;
@@ -319,6 +322,19 @@ public class StreamLoadScanNode extends LoadScanNode {
                     Column.DefaultValueType defaultValueType = column.getDefaultValueType();
                     if (defaultValueType == Column.DefaultValueType.CONST) {
                         expr = new StringLiteral(column.calculatedDefaultValue());
+                        if (expr.equals(ColumnDef.DefaultValueDef.EMPTY_VALUE.expr)) {
+                            if (column.getType().isHllType()) {
+                                expr = new FunctionCallExpr(new FunctionName(FunctionSet.HLL_EMPTY), Lists.newArrayList());
+                                Function fn = Expr.getBuiltinFunction(FunctionSet.HLL_EMPTY, new Type[] {}, Function.CompareMode.IS_IDENTICAL);
+                                expr.setFn(fn);
+                                expr.setType(fn.getReturnType());
+                            } else if (column.getType().isBitmapType()) {
+                                expr = new FunctionCallExpr(new FunctionName(FunctionSet.BITMAP_EMPTY), Lists.newArrayList());
+                                Function fn = Expr.getBuiltinFunction(FunctionSet.BITMAP_EMPTY, new Type[] {}, Function.CompareMode.IS_IDENTICAL);
+                                expr.setFn(fn);
+                                expr.setType(fn.getReturnType());
+                            }
+                        }
                     } else if (defaultValueType == Column.DefaultValueType.VARY) {
                         if (SUPPORTED_DEFAULT_FNS.contains(column.getDefaultExpr().getExpr())) {
                             expr = column.getDefaultExpr().obtainExpr();

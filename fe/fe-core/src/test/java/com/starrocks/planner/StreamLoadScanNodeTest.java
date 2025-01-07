@@ -40,6 +40,7 @@ import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.SlotDescriptor;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
@@ -58,6 +59,7 @@ import com.starrocks.load.Load;
 import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.parser.AstBuilder;
 import com.starrocks.sql.parser.ParsingException;
@@ -153,6 +155,26 @@ public class StreamLoadScanNodeTest {
         v1.setIsKey(false);
         v1.setIsAllowNull(true);
         v1.setAggregationType(AggregateType.HLL_UNION, false);
+        v1.setDefaultValue(((StringLiteral) ColumnDef.DefaultValueDef.EMPTY_VALUE.expr).getValue());
+
+        columns.add(v1);
+
+        return columns;
+    }
+
+    List<Column> getBitmapSchema() {
+        List<Column> columns = Lists.newArrayList();
+
+        Column k1 = new Column("k1", Type.BIGINT);
+        k1.setIsKey(true);
+        k1.setIsAllowNull(false);
+        columns.add(k1);
+
+        Column v1 = new Column("v1", Type.BITMAP);
+        v1.setIsKey(false);
+        v1.setIsAllowNull(true);
+        v1.setAggregationType(AggregateType.BITMAP_UNION, false);
+        v1.setDefaultValue(((StringLiteral) ColumnDef.DefaultValueDef.EMPTY_VALUE.expr).getValue());
 
         columns.add(v1);
 
@@ -787,5 +809,77 @@ public class StreamLoadScanNodeTest {
         List<ImportColumnDesc> columnExprs = Lists.newArrayList();
         columnExprs.add(new ImportColumnDesc("c3", new FunctionCallExpr("func", Lists.newArrayList())));
         Load.initColumns(table, columnExprs, null, null, null, null, null, null, true, false, Lists.newArrayList());
+    }
+
+    @Test
+    public void testHllColumnDefaultEmpty() throws UserException {
+        Analyzer analyzer = new Analyzer(globalStateMgr, connectContext);
+        DescriptorTable descTbl = analyzer.getDescTbl();
+
+        List<Column> columns = getHllSchema();
+        TupleDescriptor dstDesc = descTbl.createTupleDescriptor("DstTableDesc");
+        for (Column column : columns) {
+            SlotDescriptor slot = descTbl.addSlotDescriptor(dstDesc);
+            slot.setColumn(column);
+            slot.setIsMaterialized(true);
+            if (column.isAllowNull()) {
+                slot.setIsNullable(true);
+            } else {
+                slot.setIsNullable(false);
+            }
+        }
+
+        new Expectations() {{
+            globalStateMgr.getFunction((Function) any, (Function.CompareMode) any);
+            result = new ScalarFunction(new FunctionName(FunctionSet.HLL_EMPTY), Lists.newArrayList(), Type.HLL,
+                false);
+        }};
+
+        TStreamLoadPutRequest request = getBaseRequest();
+        request.setFileType(TFileType.FILE_STREAM);
+        request.setColumns("k1,k2");
+        StreamLoadScanNode scanNode = getStreamLoadScanNode(dstDesc, request);
+
+        scanNode.init(analyzer);
+        scanNode.finalizeStats(analyzer);
+        scanNode.getNodeExplainString("", TExplainLevel.NORMAL);
+        TPlanNode planNode = new TPlanNode();
+        scanNode.toThrift(planNode);
+    }
+
+    @Test
+    public void testBitmapColumnDefaultEmpty() throws UserException {
+        Analyzer analyzer = new Analyzer(globalStateMgr, connectContext);
+        DescriptorTable descTbl = analyzer.getDescTbl();
+
+        List<Column> columns = getBitmapSchema();
+        TupleDescriptor dstDesc = descTbl.createTupleDescriptor("DstTableDesc");
+        for (Column column : columns) {
+            SlotDescriptor slot = descTbl.addSlotDescriptor(dstDesc);
+            slot.setColumn(column);
+            slot.setIsMaterialized(true);
+            if (column.isAllowNull()) {
+                slot.setIsNullable(true);
+            } else {
+                slot.setIsNullable(false);
+            }
+        }
+
+        new Expectations() {{
+            globalStateMgr.getFunction((Function) any, (Function.CompareMode) any);
+            result = new ScalarFunction(new FunctionName(FunctionSet.BITMAP_EMPTY), Lists.newArrayList(), Type.BITMAP,
+                false);
+        }};
+
+        TStreamLoadPutRequest request = getBaseRequest();
+        request.setFileType(TFileType.FILE_STREAM);
+        request.setColumns("k1,k2");
+        StreamLoadScanNode scanNode = getStreamLoadScanNode(dstDesc, request);
+
+        scanNode.init(analyzer);
+        scanNode.finalizeStats(analyzer);
+        scanNode.getNodeExplainString("", TExplainLevel.NORMAL);
+        TPlanNode planNode = new TPlanNode();
+        scanNode.toThrift(planNode);
     }
 }
