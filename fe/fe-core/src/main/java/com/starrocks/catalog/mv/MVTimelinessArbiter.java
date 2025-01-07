@@ -20,7 +20,6 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvBaseTableUpdateInfo;
 import com.starrocks.catalog.MvUpdateInfo;
@@ -29,13 +28,11 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.PCell;
 import com.starrocks.sql.common.PartitionDiff;
 import com.starrocks.sql.common.PartitionDiffResult;
 import com.starrocks.sql.common.PartitionDiffer;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
-import com.starrocks.sql.optimizer.rule.transformation.partition.PartitionSelector;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -296,6 +293,7 @@ public abstract class MVTimelinessArbiter {
         return mvUpdateInfo;
     }
 
+<<<<<<< HEAD
     public Set<String> getMVRetentionPartitionNames(MaterializedView mv,
                                                     String retentionCondition,
                                                     Map<String, PCell> toCheckPartitionNames) {
@@ -315,6 +313,23 @@ public abstract class MVTimelinessArbiter {
         return Sets.newHashSet(retentionPartitionNames);
     }
 
+=======
+    /**
+     * Collect mv to base table partition names mapping to be used in {@code MvUpdate#getBaseTableToRefreshPartitionNames}
+     * for union compensate rewrite.
+     */
+    protected void collectMVToBaseTablePartitionNames(Map<Table, Map<String, PCell>> refBaseTablePartitionMap,
+                                                      PartitionDiff diff,
+                                                      MvUpdateInfo mvUpdateInfo) {
+        Map<String, PCell> mvPartitionToCells = mv.getPartitionCells(Optional.empty());
+        diff.getDeletes().keySet().forEach(mvPartitionToCells::remove);
+        mvPartitionToCells.putAll(diff.getAdds());
+        Map<String, Map<Table, Set<String>>> mvToBaseNameRef = differ
+                .generateMvRefMap(mvPartitionToCells, refBaseTablePartitionMap);
+        mvUpdateInfo.getMvPartToBasePartNames().putAll(mvToBaseNameRef);
+    }
+    
+>>>>>>> d928cac11 ([Enhancement] Optimize partition retention condition compensation rewrite performance in force_mv mode (#54072))
     /**
      * TODO: Optimize performance in loos/force_mv mode
      * TODO: in loose mode, ignore partition that both exists in baseTable and mv
@@ -352,21 +367,11 @@ public abstract class MVTimelinessArbiter {
         if (CollectionUtils.sizeIsEmpty(adds)) {
             return MvUpdateInfo.noRefresh(mv);
         }
-        Set<String> retentionPartitionNames = getMVRetentionPartitionNames(mv, retentionCondition, adds);
-        if (retentionPartitionNames == null) {
-            logMVPrepare(mv, "Get expired partitions by retention condition failed");
-            return null;
-        }
         MvUpdateInfo mvUpdateInfo = MvUpdateInfo.partialRefresh(mv, TableProperty.QueryRewriteConsistencyMode.FORCE_MV);
-        adds.keySet().stream()
-                .filter(mvPartitionName -> !retentionPartitionNames.contains(mvPartitionName))
-                .forEach(mvPartitionName -> mvUpdateInfo.getMvToRefreshPartitionNames().add(mvPartitionName));
-        if (CollectionUtils.isEmpty(mvUpdateInfo.getMvToRefreshPartitionNames())) {
-            return MvUpdateInfo.noRefresh(mv);
+        if (!CollectionUtils.sizeIsEmpty(adds)) {
+            adds.keySet().stream().forEach(mvPartitionName ->
+                    mvUpdateInfo.getMvToRefreshPartitionNames().add(mvPartitionName));
         }
-        collectBaseTableUpdatePartitionNamesInLoose(mvUpdateInfo);
-        // collect base table's partition infos
-        collectMVToBaseTablePartitionNames(refBaseTablePartitionMap, diff, mvUpdateInfo);
         return mvUpdateInfo;
     }
 }

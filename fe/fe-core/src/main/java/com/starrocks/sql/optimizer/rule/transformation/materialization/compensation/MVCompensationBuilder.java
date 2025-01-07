@@ -127,7 +127,27 @@ public class MVCompensationBuilder {
 
     public TableCompensation getRefBaseTableCompensation(Table refBaseTable,
                                                          Optional<LogicalScanOperator> scanOperatorOpt) {
+<<<<<<< HEAD
         return getRefBaseTableCompensationByPartitionKeys(refBaseTable, scanOperatorOpt);
+=======
+        // if query consistency is not `force_mv`, use the old compensation logic.
+        if (isEnableRefBaseTableCompensationByPartitionKeys(refBaseTable)) {
+            return getRefBaseTableCompensationByPartitionKeys(refBaseTable, scanOperatorOpt);
+        } else {
+            return PartitionRetentionTableCompensation.build(refBaseTable, mvUpdateInfo, scanOperatorOpt);
+        }
+    }
+
+    private boolean isEnableRefBaseTableCompensationByPartitionKeys(Table refBaseTable) {
+        TableProperty.QueryRewriteConsistencyMode consistencyMode =
+                mvUpdateInfo.getQueryRewriteConsistencyMode();
+        if (consistencyMode != TableProperty.QueryRewriteConsistencyMode.FORCE_MV) {
+            return true;
+        }
+        MaterializedView mv = mvUpdateInfo.getMv();
+        String partitionRetention = mv.getTableProperty().getPartitionRetentionCondition();
+        return Strings.isNullOrEmpty(partitionRetention);
+>>>>>>> d928cac11 ([Enhancement] Optimize partition retention condition compensation rewrite performance in force_mv mode (#54072))
     }
 
     private boolean isEnableRefBaseTableCompensationByPartitionKeys(Table refBaseTable) {

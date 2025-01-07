@@ -84,6 +84,7 @@ import com.starrocks.sql.optimizer.rule.transformation.SeparateProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.SkewJoinOptimizeRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitScanORToUnionRule;
 import com.starrocks.sql.optimizer.rule.transformation.UnionToValuesRule;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MVCompensationPruneUnionRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvRewriteStrategy;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.TextMatchBasedRewriteRule;
@@ -458,6 +459,7 @@ public class Optimizer {
             // It's necessary for external table since its predicate is not used directly after push down.
             ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PARTITION_PRUNE);
             ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PRUNE_EMPTY_OPERATOR);
+            ruleRewriteIterative(tree, rootTaskContext, new MVCompensationPruneUnionRule());
             ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
         }
     }

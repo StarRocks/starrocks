@@ -107,6 +107,7 @@ public class MvPartitionCompensator {
                     .add(OperatorType.LOGICAL_ICEBERG_SCAN)
                     .build();
 
+
     public static final ImmutableSet<OperatorType> SUPPORTED_PARTITION_COMPENSATE_SCAN_TYPES =
             ImmutableSet.<OperatorType>builder()
                     .add(OperatorType.LOGICAL_OLAP_SCAN)
@@ -121,6 +122,14 @@ public class MvPartitionCompensator {
             ImmutableSet.<OperatorType>builder()
                     .add(OperatorType.LOGICAL_HIVE_SCAN)
                     .build();
+    public static final ImmutableSet<OperatorType> UNSUPPORTED_PARTITION_PRUNE_EXTERNAL_SCAN_TYPES =
+            ImmutableSet.<OperatorType>builder()
+                    .add(OperatorType.LOGICAL_ICEBERG_SCAN)
+                    .build();
+
+    public static boolean isUnSupportedPartitionPruneExternalScanType(OperatorType operatorType) {
+        return UNSUPPORTED_PARTITION_PRUNE_EXTERNAL_SCAN_TYPES.contains(operatorType);
+    }
 
     /**
      * Whether the table is supported to compensate extra partition predicates.
