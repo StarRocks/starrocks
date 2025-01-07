@@ -100,6 +100,7 @@ import com.starrocks.common.ThriftServerEventProcessor;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ProfileManager;
+import com.starrocks.common.util.Util;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -2385,7 +2386,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
 
             // If a create partition request is from BE or CN, the warehouse information may be lost, we can get it from txn state.
-            ConnectContext ctx = com.starrocks.common.util.Util.getOrCreateConnectContext();
+            ConnectContext ctx = Util.getOrCreateInnerContext();
             if (txnState.getWarehouseId() != WarehouseManager.DEFAULT_WAREHOUSE_ID) {
                 ctx.setCurrentWarehouseId(txnState.getWarehouseId());
             }
