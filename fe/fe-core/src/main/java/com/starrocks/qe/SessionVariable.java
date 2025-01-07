@@ -355,6 +355,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_ENABLE_REPLICATED_JOIN = "cbo_enable_replicated_join";
     public static final String CBO_USE_CORRELATED_JOIN_ESTIMATE = "cbo_use_correlated_join_estimate";
     public static final String ALWAYS_COLLECT_LOW_CARD_DICT = "always_collect_low_card_dict";
+    public static final String ALWAYS_COLLECT_LOW_CARD_DICT_ON_LAKE = "always_collect_low_card_dict_on_lake";
     public static final String CBO_ENABLE_LOW_CARDINALITY_OPTIMIZE = "cbo_enable_low_cardinality_optimize";
     public static final String LOW_CARDINALITY_OPTIMIZE_V2 = "low_cardinality_optimize_v2";
     public static final String ARRAY_LOW_CARDINALITY_OPTIMIZE = "array_low_cardinality_optimize";
@@ -1386,6 +1387,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // only used for test case
     @VariableMgr.VarAttr(name = ALWAYS_COLLECT_LOW_CARD_DICT, flag = VariableMgr.INVISIBLE)
     private boolean alwaysCollectDict = false;
+
+    @VariableMgr.VarAttr(name = ALWAYS_COLLECT_LOW_CARD_DICT_ON_LAKE, flag = VariableMgr.INVISIBLE)
+    private boolean alwaysCollectDictOnLake = true;
 
     @VariableMgr.VarAttr(name = CBO_ENABLE_LOW_CARDINALITY_OPTIMIZE)
     private boolean enableLowCardinalityOptimize = true;
@@ -3516,6 +3520,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isAlwaysCollectDict() {
         return alwaysCollectDict;
+    }
+
+    public boolean isAlwaysCollectDictOnLake() {
+        return alwaysCollectDictOnLake;
     }
 
     public boolean isEnableLowCardinalityOptimize() {

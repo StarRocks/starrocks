@@ -631,10 +631,14 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
             ColumnStatistic columnStatistic = GlobalStateMgr.getCurrentState().getStatisticStorage()
                     .getConnectorTableStatistics(table, List.of(column.getName())).get(0).getColumnStatistic();
 
-            boolean alwaysCollectDict = sessionVariable.isAlwaysCollectDict();
-            if (!alwaysCollectDict && !column.getType().isArrayType() && !FeConstants.USE_MOCK_DICT_MANAGER &&
-                    (columnStatistic.isUnknown() ||
-                            columnStatistic.getDistinctValuesCount() > CacheDictManager.LOW_CARDINALITY_THRESHOLD)) {
+            if (!columnStatistic.isUnknown() &&
+                    columnStatistic.getDistinctValuesCount() > CacheDictManager.LOW_CARDINALITY_THRESHOLD) {
+                LOG.debug("{} isn't low cardinality string column", column.getName());
+                continue;
+            }
+
+            boolean alwaysCollectDict = sessionVariable.isAlwaysCollectDictOnLake();
+            if (!alwaysCollectDict && !FeConstants.USE_MOCK_DICT_MANAGER && columnStatistic.isUnknown()) {
                 LOG.debug("{} isn't low cardinality string column", column.getName());
                 continue;
             }
