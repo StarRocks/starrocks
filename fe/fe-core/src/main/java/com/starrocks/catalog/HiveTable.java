@@ -241,6 +241,15 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         return partColumnNames.size() == 0;
     }
 
+<<<<<<< HEAD
+=======
+    @Override
+    public boolean isHMSExternalTable() {
+        return hiveTableType.equals(HiveTableType.EXTERNAL_TABLE);
+    }
+
+    @Override
+>>>>>>> e8d938b554 ([Enhancement] Support auto refresh for HMS external table (#54596))
     public String getTableLocation() {
         return this.tableLocation;
     }
