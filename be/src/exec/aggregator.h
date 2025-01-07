@@ -345,6 +345,8 @@ public:
     [[nodiscard]] Status evaluate_agg_input_column(Chunk* chunk, std::vector<ExprContext*>& agg_expr_ctxs, int i);
 
     [[nodiscard]] Status output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk);
+    [[nodiscard]] Status output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk, size_t num_input_rows,
+                                                   bool use_selection);
 
     // convert input chunk to spill format
     [[nodiscard]] Status convert_to_spill_format(Chunk* input_chunk, ChunkPtr* chunk);
