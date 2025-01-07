@@ -250,11 +250,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                     case FunctionSet.HLL_UNION:
                     case FunctionSet.PERCENTILE_UNION:
                     case FunctionSet.COUNT: {
-<<<<<<< HEAD
                         MVColumnItem item = buildAggColumnItem(selectListItem, slots);
-=======
-                        MVColumnItem item = buildAggColumnItem(ConnectContext.buildInner(), selectListItem, slots);
->>>>>>> 6a0fd5dd7b ([BugFix] Build a ConnectContext for inner query which is used for StarRocks internal query (#54737))
                         expr = item.getDefineExpr();
                         name = item.getName();
                         break;

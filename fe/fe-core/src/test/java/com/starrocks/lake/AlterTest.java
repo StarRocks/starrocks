@@ -88,11 +88,7 @@ public class AlterTest {
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getAlterClauseList().get(0);
         GlobalStateMgr.getCurrentState().getLocalMetastore()
-<<<<<<< HEAD
-                .addPartitions(Util.getOrCreateConnectContext(), db, "test_lake_partition", addPartitionClause);
-=======
-                    .addPartitions(Util.getOrCreateInnerContext(), db, "test_lake_partition", addPartitionClause);
->>>>>>> 6a0fd5dd7b ([BugFix] Build a ConnectContext for inner query which is used for StarRocks internal query (#54737))
+                .addPartitions(Util.getOrCreateInnerContext(), db, "test_lake_partition", addPartitionClause);
 
         Table table = GlobalStateMgr.getCurrentState().getDb("test")
                 .getTable("test_lake_partition");
@@ -138,11 +134,7 @@ public class AlterTest {
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getAlterClauseList().get(0);
         GlobalStateMgr.getCurrentState().getLocalMetastore()
-<<<<<<< HEAD
-                .addPartitions(Util.getOrCreateConnectContext(), db, "site_access", addPartitionClause);
-=======
-                    .addPartitions(Util.getOrCreateInnerContext(), db, "site_access", addPartitionClause);
->>>>>>> 6a0fd5dd7b ([BugFix] Build a ConnectContext for inner query which is used for StarRocks internal query (#54737))
+                .addPartitions(Util.getOrCreateInnerContext(), db, "site_access", addPartitionClause);
 
         Table table = GlobalStateMgr.getCurrentState().getDb("test")
                 .getTable("site_access");
