@@ -868,15 +868,7 @@ alterClause
     | optimizeClause
     | addFieldClause
     | dropFieldClause
-<<<<<<< HEAD
-=======
-    | createOrReplaceBranchClause
-    | createOrReplaceTagClause
-    | dropBranchClause
-    | dropTagClause
-    | tableOperationClause
     | dropPersistentIndexClause
->>>>>>> b5f6b65ce7 ([Enhancement] Support drop cloud native index for primary key table in Shared-data mode (#53971))
 
     //Alter partition clause
     | addPartitionClause
@@ -1043,75 +1035,10 @@ dropFieldClause
     : MODIFY COLUMN identifier DROP FIELD nestedFieldName properties?
     ;
 
-<<<<<<< HEAD
-=======
-createOrReplaceTagClause
-    : (CREATE OR)? REPLACE TAG identifier tagOptions
-    | CREATE TAG (IF NOT EXISTS)? identifier tagOptions
-    ;
-
-createOrReplaceBranchClause
-    : (CREATE OR)? REPLACE BRANCH identifier branchOptions
-    | CREATE BRANCH (IF NOT EXISTS)? identifier branchOptions
-    ;
-
-dropBranchClause
-    : DROP BRANCH (IF EXISTS)? identifier
-    ;
-
-dropTagClause
-    : DROP TAG (IF EXISTS)? identifier
-    ;
-
-tableOperationClause
-    : EXECUTE functionCall
-    ;
-
-tagOptions
-    : (AS OF VERSION snapshotId)? (refRetain)?
-    ;
-
-branchOptions
-    : (AS OF VERSION snapshotId)? (refRetain)? (snapshotRetention)?
-    ;
-
-snapshotRetention
-    : WITH SNAPSHOT RETENTION minSnapshotsToKeep
-    | WITH SNAPSHOT RETENTION maxSnapshotAge
-    | WITH SNAPSHOT RETENTION minSnapshotsToKeep maxSnapshotAge
-    ;
-
-refRetain
-    : RETAIN number timeUnit
-    ;
-
-maxSnapshotAge
-    : number timeUnit
-    ;
-
-minSnapshotsToKeep
-    : number SNAPSHOTS
-    ;
-
-snapshotId
-    : number
-    ;
-
-timeUnit
-    : DAYS
-    | HOURS
-    | MINUTES
-    ;
-
-integer_list
-    : '(' INTEGER_VALUE (',' INTEGER_VALUE)* ')'
-    ;
-
 dropPersistentIndexClause
     : DROP PERSISTENT INDEX ON TABLETS integer_list
     ;
 
->>>>>>> b5f6b65ce7 ([Enhancement] Support drop cloud native index for primary key table in Shared-data mode (#53971))
 // ---------Alter partition clause---------
 
 addPartitionClause
