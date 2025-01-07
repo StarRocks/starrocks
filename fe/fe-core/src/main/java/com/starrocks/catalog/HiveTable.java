@@ -241,6 +241,11 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         return partColumnNames.size() == 0;
     }
 
+    @Override
+    public boolean isHMSExternalTable() {
+        return hiveTableType.equals(HiveTableType.EXTERNAL_TABLE);
+    }
+
     public String getTableLocation() {
         return this.tableLocation;
     }
