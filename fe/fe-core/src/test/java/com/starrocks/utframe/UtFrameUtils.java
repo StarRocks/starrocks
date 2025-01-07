@@ -83,8 +83,10 @@ import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.persist.EditLog;
+import com.starrocks.persist.EditLogDeserializer;
 import com.starrocks.persist.ImageFormatVersion;
 import com.starrocks.persist.ImageWriter;
+import com.starrocks.persist.OperationType;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.planner.PlanFragment;
@@ -1145,12 +1147,12 @@ public class UtFrameUtils {
                 DataInputStream dis =
                             new DataInputStream(new ByteArrayInputStream(buffer.getData(), 0, buffer.getLength()));
                 try {
-                    JournalEntity je = new JournalEntity();
-                    je.readFields(dis);
-                    if (je.getOpCode() == expectCode) {
-                        return je.getData();
+                    short opCode = dis.readShort();
+                    JournalEntity je = new JournalEntity(opCode, EditLogDeserializer.deserialize(opCode, dis));
+                    if (je.opCode() == expectCode) {
+                        return je.data();
                     } else {
-                        System.err.println("ignore irrelevant journal id " + je.getOpCode());
+                        System.err.println("ignore irrelevant journal id " + je.opCode());
                     }
                 } finally {
                     dis.close();
@@ -1162,14 +1164,16 @@ public class UtFrameUtils {
             int count = followerJournalQueue.size();
             while (!followerJournalQueue.isEmpty()) {
                 DataOutputBuffer buffer = followerJournalQueue.take().getBuffer();
-                JournalEntity je = new JournalEntity();
+                JournalEntity je = new JournalEntity(OperationType.OP_INVALID, null);
                 try (DataInputStream dis = new DataInputStream(
                             new ByteArrayInputStream(buffer.getData(), 0, buffer.getLength()))) {
-                    je.readFields(dis);
+
+                    short opCode = dis.readShort();
+                    je = new JournalEntity(opCode, EditLogDeserializer.deserialize(opCode, dis));
                     GlobalStateMgr.getCurrentState().getEditLog().loadJournal(GlobalStateMgr.getCurrentState(), je);
                     // System.out.println("replayed journal type: " + je.getOpCode());
                 } catch (JournalInconsistentException e) {
-                    System.err.println("load journal failed, type: " + je.getOpCode() + " , error: " + e.getMessage());
+                    System.err.println("load journal failed, type: " + je.opCode() + " , error: " + e.getMessage());
                     e.printStackTrace();
                     Assert.fail();
                 }
