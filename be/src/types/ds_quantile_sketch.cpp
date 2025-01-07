@@ -35,7 +35,7 @@ void DataSketchesQuantile<T>::merge(const DataSketchesQuantile<T>& other) {
     }
     _sketch.get()->merge(*other._sketch);
 }
- 
+
 template <typename T>
 uint64_t DataSketchesQuantile<T>::serialize_size() const {
     if (_sketch == nullptr) {
@@ -47,7 +47,7 @@ uint64_t DataSketchesQuantile<T>::serialize_size() const {
 template <typename T>
 bool DataSketchesQuantile<T>::deserialize(const Slice& slice) {
     DCHECK(_sketch == nullptr);
-    
+
     if (!is_valid(slice)) {
         return false;
     }
@@ -90,7 +90,7 @@ template <typename T>
 std::string DataSketchesQuantile<T>::to_string() const {
     if (_sketch == nullptr) {
         return "";
-    }  
+    }
     datasketches::string<alloc_type> str = _sketch->to_string();
     return std::string(str.begin(), str.end());
 }

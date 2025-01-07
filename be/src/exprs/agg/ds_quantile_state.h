@@ -54,7 +54,7 @@ struct DSSketchState<LT, QUANTILE> {
     }
 
     bool is_inited() const { return ds_sketch_wrapper != nullptr; }
-     
+
     void update(const Column* data_column, size_t row_num) const {
         const ColumnType* column = down_cast<const ColumnType*>(data_column);
         const auto& values = column->get_data();
