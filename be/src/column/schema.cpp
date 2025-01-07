@@ -47,7 +47,7 @@ Schema::Schema(Schema* schema, const std::vector<ColumnId>& cids)
     for (int i = 0; i < cids.size(); i++) {
         DCHECK_LT(cids[i], schema->_fields.size());
         _fields[i] = schema->_fields[cids[i]];
-        cid_to_field_id[cid[i]] = i;
+        cid_to_field_id[cids[i]] = i;
     }
     for (auto idx : ori_sort_idxes) {
         if (cid_to_field_id.count(idx) > 0) {
