@@ -217,11 +217,12 @@ private:
         env->ExceptionClear();                                                     \
     }
 
-#define RETURN_ERROR_IF_JNI_EXCEPTION(env)                                                     \
-    if (auto e = env->ExceptionOccurred()) {                                                   \
-        LOCAL_REF_GUARD(e);                                                                    \
-        std::string msg = JVMFunctionHelper::getInstance().dumpExceptionString(e);             \
-        return Status::InternalError(JVMFunctionHelper::getInstance().dumpExceptionString(e)); \
+#define RETURN_ERROR_IF_JNI_EXCEPTION(env)                                         \
+    if (auto e = env->ExceptionOccurred()) {                                       \
+        LOCAL_REF_GUARD(e);                                                        \
+        std::string msg = JVMFunctionHelper::getInstance().dumpExceptionString(e); \
+        env->ExceptionClear();                                                     \
+        return Status::InternalError(msg);                                         \
     }
 
 // Used for UDAF serialization and deserialization,
