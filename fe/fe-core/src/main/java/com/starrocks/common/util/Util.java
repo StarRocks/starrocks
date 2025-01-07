@@ -517,11 +517,11 @@ public class Util {
         return outputStream.toByteArray();
     }
 
-    public static ConnectContext getOrCreateConnectContext() {
+    public static ConnectContext getOrCreateInnerContext() {
         if (ConnectContext.get() != null) {
             return ConnectContext.get();
         }
-        ConnectContext ctx = new ConnectContext();
+        ConnectContext ctx = ConnectContext.buildInner();
         ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         return ctx;
     }
