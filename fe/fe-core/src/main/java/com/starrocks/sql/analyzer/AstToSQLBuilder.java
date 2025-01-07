@@ -27,6 +27,7 @@ import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.MapExpr;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
+import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
@@ -169,6 +170,15 @@ public class AstToSQLBuilder {
 
             if (selectList.isDistinct()) {
                 sqlBuilder.append("DISTINCT ");
+            }
+
+            //get catalog. database, tablename
+            Relation selectRelation = stmt.getRelation();
+            if (selectRelation instanceof TableRelation) {
+                TableRelation tableRelation = (TableRelation) stmt.getRelation();
+                QueryContext queryContext = new QueryContext(tableRelation.getName().getCatalog(),
+                        tableRelation.getName().getDb(), tableRelation.getName().getTbl());
+                QueryContext.setContext(queryContext);
             }
 
             List<String> selectListString = new ArrayList<>();

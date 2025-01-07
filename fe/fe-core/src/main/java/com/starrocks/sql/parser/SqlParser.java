@@ -24,8 +24,10 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.ImportColumnsStmt;
 import com.starrocks.sql.ast.PrepareStmt;
+import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -64,6 +66,15 @@ public class SqlParser {
         try {
             if (sessionVariable.getSqlDialect().equalsIgnoreCase("trino")) {
                 return parseWithTrinoDialect(sql, sessionVariable);
+            } else if (sessionVariable.getSqlDialect().equalsIgnoreCase("pinot")) {
+                //change the sql from pinot to sr sql
+                List<StatementBase> statementBases = parseWithStarRocksDialect(sql, sessionVariable);
+                if (statementBases.get(0) instanceof QueryStatement) {
+                    String sqlTrans = AstToSQLBuilder.toSQL(statementBases.get(0));
+                    return parseWithStarRocksDialect(sqlTrans, sessionVariable);
+                } else {
+                    return statementBases;
+                }
             } else {
                 return parseWithStarRocksDialect(sql, sessionVariable);
             }

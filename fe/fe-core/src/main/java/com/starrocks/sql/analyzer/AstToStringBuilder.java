@@ -85,6 +85,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.credential.CredentialUtil;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterStorageVolumeStmt;
 import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.sql.ast.ArrayExpr;
@@ -1114,7 +1115,13 @@ public class AstToStringBuilder {
             if (isImplicit) {
                 return visit(node.getChild(0));
             }
-            return "CAST(" + printWithParentheses(node.getChild(0)) + " AS " + node.getTargetTypeDef().toString() + ")";
+            //for "DATETRUNC" in pinot
+            if (node.getChild(0) instanceof FunctionCallExpr && PinotFunctionSet.DATETRUNC.equalsIgnoreCase(((FunctionCallExpr)
+                    node.getChild(0)).getFnName().getFunction()) && node.getChild(0).getChildren().size() == 3) {
+                return visit(node.getChild(0));
+            } else {
+                return "CAST(" + printWithParentheses(node.getChild(0)) + " AS " + node.getTargetTypeDef().toString() + ")";
+            }
         }
 
         public String visitCompoundPredicate(CompoundPredicate node, Void context) {
@@ -1206,6 +1213,111 @@ public class AstToStringBuilder {
                     return str;
                 }).collect(Collectors.toList());
                 sb.append(Joiner.on(", ").join(p)).append(")");
+            } else if (functionName.equalsIgnoreCase(PinotFunctionSet.DATETRUNC)) {
+                //deal with DATETRUNC function in Pinot
+                QueryContext queryContext = QueryContext.getContext();
+                if (queryContext != null) {
+                    String catalog = queryContext.getCatalog();
+                    String database = queryContext.getDatabase();
+                    String tableName = queryContext.getTableName();
+
+                    Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalog, database, tableName);
+
+                    String nodeContent = visit(node.getChild(1)).replace("`", "");
+                    boolean isDateTime = PinotFunctionSet.isDateTimeReturned(nodeContent, table);
+                    if (isDateTime) {
+                        List<String> p = node.getChildren().stream()
+                                .limit(2) // make sure there are only two arguments
+                                .map(this::visit)
+                                .collect(Collectors.toList());
+
+                        sb.append(Joiner.on(", ").join(p)).append(")");
+                    } else {
+                        sb.append(visit(node.getChild(0)));
+                        sb.append(", ");
+                        sb.append(FunctionSet.FROM_UNIXTIME);
+                        sb.append("(");
+                        sb.append(visit(node.getChild(1)));
+                        sb.append("/1000)");
+                        sb.append(")");
+                    }
+                    PinotFunctionSet.replaceAll(sb, functionName, FunctionSet.DATE_TRUNC);
+                }
+            } else if (functionName.equalsIgnoreCase(PinotFunctionSet.DATETIMECONVERT)) {
+                //deal with DATETIMECONVERT function in Pinot
+                QueryContext queryContext = QueryContext.getContext();
+                if (queryContext != null) {
+                    String catalog = queryContext.getCatalog();
+                    String database = queryContext.getDatabase();
+                    String tableName = queryContext.getTableName();
+
+                    Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalog, database, tableName);
+
+                    StringLiteral granularity = (StringLiteral) node.getChild(3);
+                    String[] timeValues = granularity.getValue().split(":");
+                    String timeSize = timeValues[0];
+                    String timeUnit = timeValues[1];
+                    String timeUnitSR = PinotFunctionSet.getShortenedTimeUnit(timeUnit);
+
+                    String nodeContent = visit(node.getChild(0)).replace("`", "");
+                    boolean isDateTime = PinotFunctionSet.isDateTimeReturned(nodeContent, table);
+
+                    sb.append("'" + timeUnitSR + "'");
+                    sb.append(", ");
+                    sb.append(visit(node.getChild(0)));
+                    sb.append(") - ");
+                    sb.append("INTERVAL ");
+                    sb.append(timeUnitSR);
+                    sb.append("(");
+
+                    if (isDateTime) {
+                        sb.append(visit(node.getChild(0)));
+                    } else {
+                        sb.append(FunctionSet.FROM_UNIXTIME);
+                        sb.append("(");
+                        sb.append(visit(node.getChild(0)));
+                        sb.append("/1000)");
+                    }
+                    sb.append(") % ");
+                    sb.append(timeSize);
+                    sb.append(" ");
+                    sb.append(timeUnitSR);
+                    PinotFunctionSet.replaceAll(sb, functionName, FunctionSet.DATE_TRUNC);
+                }
+            } else if (functionName.equalsIgnoreCase(PinotFunctionSet.TODATETIME)) {
+                QueryContext queryContext = QueryContext.getContext();
+                if (queryContext != null) {
+                    String catalog = queryContext.getCatalog();
+                    String database = queryContext.getDatabase();
+                    String tableName = queryContext.getTableName();
+
+                    Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalog, database, tableName);
+
+                    String nodeContent = visit(node.getChild(0)).replace("`", "");
+                    boolean isDateTime = PinotFunctionSet.isDateTimeReturned(nodeContent, table);
+                    if (isDateTime) {
+                        sb.append(visit(node.getChild(0)));
+                        sb.append(", ");
+                        sb.append(PinotFunctionSet.convertDateFormat(visit(node.getChild(1))));
+                        sb.append(")");
+
+                        PinotFunctionSet.replaceAll(sb, functionName, FunctionSet.DATE_FORMAT);
+                    } else {
+                        sb.append(visit(node.getChild(0)));
+                        sb.append("/1000, ");
+                        sb.append(visit(node.getChild(1)));
+                        sb.append(")");
+
+                        PinotFunctionSet.replaceAll(sb, functionName, FunctionSet.FROM_UNIXTIME);
+                    }
+                }
+            } else if (functionName.equalsIgnoreCase(PinotFunctionSet.FROMDATETIME)) {
+                sb.append(visit(node.getChild(0)));
+                sb.append(", ");
+                sb.append(PinotFunctionSet.convertDateFormat(visit(node.getChild(1))));
+                sb.append(")");
+
+                PinotFunctionSet.replaceAll(sb, functionName, FunctionSet.STR_TO_DATE);
             } else {
                 List<String> p = node.getChildren().stream().map(this::visit).collect(Collectors.toList());
                 sb.append(Joiner.on(", ").join(p)).append(")");
