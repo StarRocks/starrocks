@@ -891,15 +891,20 @@ public class LowCardinalityTest extends PlanTestBase {
         // Test multi input Expression with DictColumn
         sql = "select count(*) from supplier where if(S_ADDRESS = 'kks',cast(S_COMMENT as boolean), false)";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan, plan.contains(
-                "PREDICATES: if(DictDecode(12: S_ADDRESS, [<place-holder> = 'kks']), " +
-                        "DictDecode(13: S_COMMENT, [CAST(<place-holder> AS BOOLEAN)]), FALSE)"));
-
+        assertContains(plan, "  2:SELECT\n" +
+                "  |  predicates: if(3: S_ADDRESS = 'kks', CAST(7: S_COMMENT AS BOOLEAN), FALSE)\n" +
+                "  |  \n" +
+                "  1:Decode\n" +
+                "  |  <dict id 12> : <string id 3>\n" +
+                "  |  <dict id 13> : <string id 7>");
         // Test multi input Expression with No-String Column
         sql = "select count(*) from supplier where if(S_ADDRESS = 'kks',cast(S_NAME as boolean), false)";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains(
-                "PREDICATES: if(DictDecode(12: S_ADDRESS, [<place-holder> = 'kks']), CAST(2: S_NAME AS BOOLEAN), FALSE)"));
+        assertContains(plan, "  2:SELECT\n" +
+                "  |  predicates: if(3: S_ADDRESS = 'kks', CAST(2: S_NAME AS BOOLEAN), FALSE)\n" +
+                "  |  \n" +
+                "  1:Decode\n" +
+                "  |  <dict id 12> : <string id 3>");
 
         // Test Two input column. one could apply the other couldn't apply
         // The first expression that can accept a full rewrite. the second couldn't apply
@@ -913,9 +918,16 @@ public class LowCardinalityTest extends PlanTestBase {
         sql = "select count(*) from supplier where if(S_ADDRESS = 'kks',cast(S_COMMENT as boolean), false) " +
                 "and S_COMMENT not like '%kks%'";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains(
-                "PREDICATES: if(DictDecode(12: S_ADDRESS, [<place-holder> = 'kks']), " +
-                        "CAST(7: S_COMMENT AS BOOLEAN), FALSE), NOT (7: S_COMMENT LIKE '%kks%')"));
+        assertContains(plan, "  2:SELECT\n" +
+                "  |  predicates: if(3: S_ADDRESS = 'kks', CAST(7: S_COMMENT AS BOOLEAN), FALSE)\n" +
+                "  |  \n" +
+                "  1:Decode\n" +
+                "  |  <dict id 12> : <string id 3>\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: supplier\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: NOT (7: S_COMMENT LIKE '%kks%')");
 
     }
 

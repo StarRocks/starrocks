@@ -836,6 +836,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_REWRITE_UNNEST_BITMAP_TO_ARRAY = "enable_rewrite_unnest_bitmap_to_array";
 
+    public static final String ENABLE_SCAN_PREDICATE_EXPR_REUSE = "enable_scan_predicate_expr_reuse";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -1630,6 +1632,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = DISABLE_GENERATED_COLUMN_REWRITE, flag = VariableMgr.INVISIBLE)
     private boolean disableGeneratedColumnRewrite = false;
+
+    @VarAttr(name = ENABLE_SCAN_PREDICATE_EXPR_REUSE, flag = VariableMgr.INVISIBLE)
+    private boolean enableScanPredicateExprReuse = true;
 
     public int getCboPruneJsonSubfieldDepth() {
         return cboPruneJsonSubfieldDepth;
@@ -4410,6 +4415,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isDisableGeneratedColumnRewrite() {
         return disableGeneratedColumnRewrite;
+    }
+
+    public boolean isEnableScanPredicateExprReuse() {
+        return enableScanPredicateExprReuse;
     }
 
     public int getConnectorIncrementalScanRangeNumber() {
