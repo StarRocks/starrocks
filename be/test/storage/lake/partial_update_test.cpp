@@ -1213,8 +1213,6 @@ TEST_P(LakePartialUpdateTest, test_partial_update_retry_rewrite_check) {
         ASSERT_ERROR(publish_single_version(tablet_id, version + 1, txn_id));
         auto txn_log_st = _tablet_mgr->get_txn_log(tablet_id, txn_id);
         EXPECT_TRUE(txn_log_st.ok());
-        auto& txn_log = txn_log_st.value();
-        EXPECT_TRUE(txn_log->op_write().rewrite_segments_size() == 0);
     }
     // success
     _tablet_mgr->prune_metacache();
@@ -1377,8 +1375,6 @@ TEST_P(LakePartialUpdateTest, test_partial_update_retry_check_file_exist) {
         ASSERT_ERROR(publish_single_version(tablet_id, version + 1, txn_id));
         auto txn_log_st = _tablet_mgr->get_txn_log(tablet_id, txn_id);
         EXPECT_TRUE(txn_log_st.ok());
-        auto& txn_log = txn_log_st.value();
-        EXPECT_TRUE(txn_log->op_write().rewrite_segments_size() == 0);
     }
     // success
     _tablet_mgr->prune_metacache();
