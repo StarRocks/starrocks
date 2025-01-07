@@ -91,14 +91,6 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ProfileManager;
-<<<<<<< HEAD
-=======
-import com.starrocks.common.util.Util;
-import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
-import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
-import com.starrocks.common.util.concurrent.lock.LockType;
-import com.starrocks.common.util.concurrent.lock.Locker;
->>>>>>> 6a0fd5dd7b ([BugFix] Build a ConnectContext for inner query which is used for StarRocks internal query (#54737))
 import com.starrocks.http.BaseAction;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.lake.LakeTablet;
@@ -2414,22 +2406,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             } catch (Exception e) {
                 LOG.warn("cancel schema change or rollup failed. error: {}", e.getMessage());
             }
-<<<<<<< HEAD
             state.addPartitions(db, olapTable.getName(), addPartitionClause);
-=======
-
-            // If a create partition request is from BE or CN, the warehouse information may be lost, we can get it from txn state.
-            ConnectContext ctx = Util.getOrCreateInnerContext();
-            if (txnState.getWarehouseId() != WarehouseManager.DEFAULT_WAREHOUSE_ID) {
-                ctx.setCurrentWarehouseId(txnState.getWarehouseId());
-            }
-            try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(table.getId()),
-                    LockType.READ)) {
-                AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(olapTable);
-                analyzer.analyze(ctx, addPartitionClause);
-            }
-            state.getLocalMetastore().addPartitions(ctx, db, olapTable.getName(), addPartitionClause);
->>>>>>> 6a0fd5dd7b ([BugFix] Build a ConnectContext for inner query which is used for StarRocks internal query (#54737))
         } catch (Exception e) {
             LOG.warn(e);
             errorStatus.setError_msgs(Lists.newArrayList(

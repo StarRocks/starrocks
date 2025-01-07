@@ -85,14 +85,8 @@ public class AlterTest {
         String alterSQL = "ALTER TABLE test_lake_partition ADD\n" +
                 "    PARTITION p3 VALUES LESS THAN (\"2014-01-01\")";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
-<<<<<<< HEAD
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
         GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(db, "test_lake_partition", addPartitionClause);
-=======
-        AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getAlterClauseList().get(0);
-        GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .addPartitions(Util.getOrCreateInnerContext(), db, "test_lake_partition", addPartitionClause);
->>>>>>> 6a0fd5dd7b ([BugFix] Build a ConnectContext for inner query which is used for StarRocks internal query (#54737))
 
         Table table = GlobalStateMgr.getCurrentState().getDb("test")
                 .getTable("test_lake_partition");
@@ -136,14 +130,8 @@ public class AlterTest {
                 "   ADD PARTITIONS START (\"7\") END (\"9\") EVERY (1)";
 
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
-<<<<<<< HEAD
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
         GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(db, "site_access", addPartitionClause);
-=======
-        AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getAlterClauseList().get(0);
-        GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .addPartitions(Util.getOrCreateInnerContext(), db, "site_access", addPartitionClause);
->>>>>>> 6a0fd5dd7b ([BugFix] Build a ConnectContext for inner query which is used for StarRocks internal query (#54737))
 
         Table table = GlobalStateMgr.getCurrentState().getDb("test")
                 .getTable("site_access");

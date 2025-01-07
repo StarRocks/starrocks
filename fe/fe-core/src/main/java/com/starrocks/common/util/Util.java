@@ -42,6 +42,8 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.TimeoutException;
 import com.starrocks.http.WebUtils;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -477,8 +479,6 @@ public class Util {
         }
         return outputStream.toByteArray();
     }
-<<<<<<< HEAD
-=======
 
     public static ConnectContext getOrCreateInnerContext() {
         if (ConnectContext.get() != null) {
@@ -488,5 +488,4 @@ public class Util {
         ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         return ctx;
     }
->>>>>>> 6a0fd5dd7b ([BugFix] Build a ConnectContext for inner query which is used for StarRocks internal query (#54737))
 }
