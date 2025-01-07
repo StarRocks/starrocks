@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization.compensation;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
@@ -57,6 +58,7 @@ public class OptCompensator extends OptExpressionVisitor<OptExpression, Void> {
         }
         if (MvPartitionCompensator.isSupportPartitionCompensate(refBaseTable)) {
             LogicalScanOperator newScanOperator = compensation.compensate(optimizerContext, mv, scanOperator);
+            Preconditions.checkArgument(newScanOperator != null);
             // reset the partition prune flag to be pruned again.
             newScanOperator.resetOpRuleBit(OP_PARTITION_PRUNED);
             return OptExpression.create(newScanOperator);

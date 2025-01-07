@@ -244,6 +244,8 @@ public class AlterMVJobExecutor extends AlterJobExecutorEPack {
                 !ttlRetentionCondition.equalsIgnoreCase(materializedView.getTableProperty().getPartitionRetentionCondition())) {
             curProp.put(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION, ttlRetentionCondition);
             materializedView.getTableProperty().setPartitionRetentionCondition(ttlRetentionCondition);
+            // re-analyze mv retention condition
+            materializedView.analyzeMVRetentionCondition(context);
             isChanged = true;
         } else if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER) &&
                 materializedView.getTableProperty().getPartitionRefreshNumber() != partitionRefreshNumber) {

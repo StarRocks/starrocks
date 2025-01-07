@@ -16,6 +16,7 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
@@ -69,6 +70,7 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.iceberg.IcebergPartitionTransform;
 import com.starrocks.mv.analyzer.MVPartitionSlotRefResolver;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
@@ -98,11 +100,15 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
+import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.OptExprBuilder;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
+import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.parser.ParsingException;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
 import org.apache.commons.collections.map.CaseInsensitiveMap;
@@ -112,7 +118,6 @@ import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.logging.log4j.util.Strings;
 import org.jetbrains.annotations.NotNull;
 
 import java.time.LocalDateTime;
@@ -133,6 +138,7 @@ import java.util.stream.IntStream;
 
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
 import static com.starrocks.server.CatalogMgr.isInternalCatalog;
+import static com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter.DEFAULT_TYPE_CAST_RULE;
 
 public class MaterializedViewAnalyzer {
     private static final Logger LOG = LogManager.getLogger(MaterializedViewAnalyzer.class);
@@ -209,7 +215,7 @@ public class MaterializedViewAnalyzer {
             return false;
         }
         String catalog = table.getCatalogName();
-        return Strings.isBlank(catalog) || isResourceMappingCatalog(catalog);
+        return Strings.isNullOrEmpty(catalog) || isResourceMappingCatalog(catalog);
     }
 
     private static void processViews(QueryStatement queryStatement, Set<BaseTableInfo> baseTableInfos,
@@ -263,18 +269,18 @@ public class MaterializedViewAnalyzer {
              * Materialized view name is a little bit different from a normal table
              * 1. Use default catalog if not specified, actually it only support default catalog until now
              */
-            if (com.google.common.base.Strings.isNullOrEmpty(tableNameObject.getCatalog())) {
+            if (Strings.isNullOrEmpty(tableNameObject.getCatalog())) {
                 tableNameObject.setCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
             }
-            if (com.google.common.base.Strings.isNullOrEmpty(tableNameObject.getDb())) {
-                if (com.google.common.base.Strings.isNullOrEmpty(context.getDatabase())) {
+            if (Strings.isNullOrEmpty(tableNameObject.getDb())) {
+                if (Strings.isNullOrEmpty(context.getDatabase())) {
                     throw new SemanticException("No database selected. " +
                             "You could set the database name through `<database>.<table>` or `use <database>` statement");
                 }
                 tableNameObject.setDb(context.getDatabase());
             }
 
-            if (com.google.common.base.Strings.isNullOrEmpty(tableNameObject.getTbl())) {
+            if (Strings.isNullOrEmpty(tableNameObject.getTbl())) {
                 throw new SemanticException("Table name cannot be empty");
             }
 
@@ -581,7 +587,7 @@ public class MaterializedViewAnalyzer {
             for (int i = 0; i < mvColumns.size(); i++) {
                 Column col = mvColumns.get(i);
                 if (columnMap.putIfAbsent(col.getName(), Pair.create(col, i)) != null) {
-                    throw new SemanticException("Duplicate column name " + Strings.quote(col.getName()));
+                    throw new SemanticException("Duplicate column name '" + col.getName() + "'");
                 }
             }
 
@@ -1843,5 +1849,62 @@ public class MaterializedViewAnalyzer {
             return partitionByExpr;
         }
         return partitionByExpr;
+    }
+
+    public static Optional<Expr> analyzeMVRetentionCondition(ConnectContext connectContext,
+                                                             MaterializedView mv,
+                                                             Table refBaseTable,
+                                                             String retentionCondition) {
+        Expr retentionCondtiionExpr = null;
+        try {
+            retentionCondtiionExpr = SqlParser.parseSqlToExpr(retentionCondition, SqlModeHelper.MODE_DEFAULT);
+        } catch (Exception e) {
+            throw new SemanticException("Failed to parse retention condition: " + retentionCondition);
+        }
+        if (retentionCondtiionExpr == null) {
+            return Optional.empty();
+        }
+        Scope scope = new Scope(RelationId.anonymous(), new RelationFields(
+                refBaseTable.getBaseSchema().stream()
+                        .map(col -> new Field(col.getName(), col.getType(), null, null))
+                        .collect(Collectors.toList())));
+        ExpressionAnalyzer.analyzeExpression(retentionCondtiionExpr, new AnalyzeState(), scope, connectContext);
+        Map<Expr, Expr> partitionByExprMap = getMVPartitionByExprToAdjustMap(null, mv);
+        retentionCondtiionExpr = MaterializedViewAnalyzer.adjustWhereExprIfNeeded(partitionByExprMap, retentionCondtiionExpr,
+                scope, connectContext);
+        return Optional.of(retentionCondtiionExpr);
+    }
+
+    public static Optional<ScalarOperator> analyzeMVRetentionConditionOperator(ConnectContext connectContext,
+                                                                               MaterializedView mv,
+                                                                               Table refBaseTable,
+                                                                               Optional<Expr> exprOpt) {
+        if (exprOpt.isEmpty()) {
+            return Optional.empty();
+        }
+        Expr retentionCondtiionExpr = exprOpt.get();
+        ColumnRefFactory columnRefFactory = new ColumnRefFactory();
+        List<ColumnRefOperator> columnRefOperators = refBaseTable.getBaseSchema()
+                .stream()
+                .map(col -> columnRefFactory.create(col.getName(), col.getType(), col.isAllowNull()))
+                .collect(Collectors.toList());
+        TableName tableName = new TableName(null, refBaseTable.getName());
+        Scope scope = new Scope(RelationId.anonymous(), new RelationFields(
+                columnRefOperators.stream()
+                        .map(col -> new Field(col.getName(), col.getType(), tableName, null))
+                        .collect(Collectors.toList())));
+        ExpressionMapping expressionMapping = new ExpressionMapping(scope, columnRefOperators);
+        // substitute generated column expr if whereExpr is a mv which contains iceberg transform expr.
+        // translate whereExpr to scalarOperator and replace whereExpr's generatedColumnExpr to partition slotRef.
+        ScalarOperator scalarOperator =
+                SqlToScalarOperatorTranslator.translate(retentionCondtiionExpr, expressionMapping, Lists.newArrayList(),
+                        columnRefFactory, connectContext, null,
+                        null, null, false);
+        if (scalarOperator == null) {
+            return Optional.empty();
+        }
+        ScalarOperatorRewriter scalarOpRewriter = new ScalarOperatorRewriter();
+        scalarOperator = scalarOpRewriter.rewrite(scalarOperator, DEFAULT_TYPE_CAST_RULE);
+        return Optional.of(scalarOperator);
     }
 }

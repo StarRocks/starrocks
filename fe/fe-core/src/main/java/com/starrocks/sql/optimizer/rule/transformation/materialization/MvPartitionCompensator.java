@@ -105,6 +105,7 @@ public class MvPartitionCompensator {
                     .add(OperatorType.LOGICAL_ICEBERG_SCAN)
                     .build();
 
+
     public static final ImmutableSet<OperatorType> SUPPORTED_PARTITION_COMPENSATE_SCAN_TYPES =
             ImmutableSet.<OperatorType>builder()
                     .add(OperatorType.LOGICAL_OLAP_SCAN)
@@ -119,6 +120,14 @@ public class MvPartitionCompensator {
             ImmutableSet.<OperatorType>builder()
                     .add(OperatorType.LOGICAL_HIVE_SCAN)
                     .build();
+    public static final ImmutableSet<OperatorType> UNSUPPORTED_PARTITION_PRUNE_EXTERNAL_SCAN_TYPES =
+            ImmutableSet.<OperatorType>builder()
+                    .add(OperatorType.LOGICAL_ICEBERG_SCAN)
+                    .build();
+
+    public static boolean isUnSupportedPartitionPruneExternalScanType(OperatorType operatorType) {
+        return UNSUPPORTED_PARTITION_PRUNE_EXTERNAL_SCAN_TYPES.contains(operatorType);
+    }
 
     /**
      * Whether the table is supported to compensate extra partition predicates.
@@ -195,6 +204,7 @@ public class MvPartitionCompensator {
         // duplicate mv's plan and output columns
         OptExpressionDuplicator duplicator = new OptExpressionDuplicator(mvContext);
         OptExpression newMvScanPlan = duplicator.duplicate(mvScanOptExpression);
+        newMvScanPlan.getOp().setOpRuleBit(OP_MV_UNION_REWRITE);
         // output columns order by mv's columns
         List<ColumnRefOperator> mvScanOutputColumns = duplicator.getMappedColumns(orgMvScanOutputColumns);
         return Pair.create(newMvScanPlan, mvScanOutputColumns);

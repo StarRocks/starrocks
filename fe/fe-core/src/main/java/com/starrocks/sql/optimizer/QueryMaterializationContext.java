@@ -24,12 +24,13 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.MvRefreshArbiter;
 import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.common.Config;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.scheduler.mv.MVTimelinessMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -42,7 +43,6 @@ import org.apache.logging.log4j.Logger;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-
 
 /**
  * Store materialized view context during the query lifecycle which is seperated from per materialized view's context.
@@ -215,8 +215,14 @@ public class QueryMaterializationContext {
         if (mv == null) {
             return null;
         }
-        return mvTimelinessInfos.computeIfAbsent(mv,
-                ignored -> MvRefreshArbiter.getMVTimelinessUpdateInfo(mv, true));
+        if (!mvTimelinessInfos.containsKey(mv)) {
+            MVTimelinessMgr mvTimelinessMgr = GlobalStateMgr.getCurrentState().getMaterializedViewMgr().getMvTimelinessMgr();
+            MvUpdateInfo result = mvTimelinessMgr.getMVTimelinessInfo(mv);
+            mvTimelinessInfos.put(mv, result);
+            return result;
+        } else {
+            return mvTimelinessInfos.get(mv);
+        }
     }
 
     /**
