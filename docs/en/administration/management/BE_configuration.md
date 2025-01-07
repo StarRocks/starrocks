@@ -3574,6 +3574,15 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Introduced in: -
 -->
 
+##### starlet_fslib_s3client_request_timeout_ms
+
+- Default: -1
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: No
+- Description: An alias of `object_storage_request_timeout_ms`. Refer to [object_storage_request_timeout_ms](#object_storage_request_timeout_ms) for details.
+- Introduced in: v3.3.9
+
 ##### lake_compaction_stream_buffer_size_bytes
 
 - Default: 1048576
