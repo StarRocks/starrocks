@@ -714,8 +714,8 @@ public class OlapTable extends Table {
             maxColUniqueId = Math.max(maxColUniqueId, column.getMaxUniqueId());
         }
         setMaxColUniqueId(maxColUniqueId);
-        LOG.info("after rebuild full schema. table {}, schema: {}, max column unique id: {}",
-                name, fullSchema, maxColUniqueId);
+        LOG.debug("after rebuild full schema. table {}, schema: {}, max column unique id: {}",
+                 name, fullSchema, maxColUniqueId);
     }
 
     public boolean deleteIndexInfo(String indexName) {
