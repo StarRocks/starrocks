@@ -61,12 +61,14 @@ import com.starrocks.scheduler.TableWithPartitions;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
+import com.starrocks.scheduler.mv.MVTimelinessMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.AnalyzeState;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.Field;
+import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
 import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
@@ -77,6 +79,7 @@ import com.starrocks.sql.common.PRangeCell;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.MvRewritePreprocessor;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.mv.MVUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.parser.SqlParser;
@@ -504,6 +507,10 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     // cache table to base table info's mapping to refresh table, Iceberg/Delta table needs to refresh table's snapshots
     // to fetch the newest table info.
     private transient volatile Map<Table, BaseTableInfo> tableToBaseTableInfoCache = Maps.newConcurrentMap();
+    // partition retention expr which is used to filter out the partitions that need to be retained.
+    private transient volatile Optional<Expr> retentionConditionExprOpt = Optional.empty();
+    // partition retention scalar operator which is used to filter out the partitions that need to be retained.
+    private transient volatile Optional<ScalarOperator> retentionConditionScalarOpOpt = Optional.empty();
 
     // Materialized view's output columns may be different from defined query's output columns.
     // Record the indexes based on materialized view's column output.
@@ -947,6 +954,15 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
     @Override
+    public void dropPartition(long dbId, String partitionName, boolean isForceDrop) {
+        super.dropPartition(dbId, partitionName, isForceDrop);
+
+        // if mv's partition is dropped, we need to update mv's timeliness.
+        GlobalStateMgr.getCurrentState().getMaterializedViewMgr()
+                .triggerTimelessInfoEvent(this, MVTimelinessMgr.MVChangeEvent.MV_PARTITION_DROPPED);
+    }
+
+    @Override
     public void onDrop(Database db, boolean force, boolean replay) {
         super.onDrop(db, force, replay);
 
@@ -1144,7 +1160,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                     }
                 }
             }
-
             TableName tableName =
                     new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, db.getFullName(), this.name);
             ExpressionAnalyzer.analyzeExpression(partitionExpr, new AnalyzeState(),
@@ -1490,6 +1505,14 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         return false;
     }
 
+    public Optional<Expr> getRetentionConditionExpr() {
+        return retentionConditionExprOpt;
+    }
+
+    public Optional<ScalarOperator> getRetentionConditionScalarOp() {
+        return retentionConditionScalarOpOpt;
+    }
+
     /**
      * NOTE: The ref-base-table partition expressions' order is guaranteed as the order of mv's defined partition columns' order.
      * @return table to the partition expr map, multi values if mv contains multi ref base tables, empty if it's un-partitioned
@@ -1815,9 +1838,32 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             analyzeRefBaseTablePartitionSlots();
             // analyze partition columns for ref base tables
             analyzeRefBaseTablePartitionColumns();
+            // analyze partition retention condition
+            analyzeMVRetentionCondition(connectContext);
         } catch (Exception e) {
             LOG.warn("Analyze partition exprs failed", e);
         }
+    }
+
+    public synchronized void analyzeMVRetentionCondition(ConnectContext connectContext) {
+        PartitionInfo partitionInfo = getPartitionInfo();
+        if (partitionInfo.isUnPartitioned()) {
+            return;
+        }
+        String retentionCondition = getTableProperty().getPartitionRetentionCondition();
+        if (Strings.isNullOrEmpty(retentionCondition)) {
+            return;
+        }
+
+        final Map<Table, List<Column>> refBaseTablePartitionColumns = getRefBaseTablePartitionColumns();
+        if (refBaseTablePartitionColumns == null || refBaseTablePartitionColumns.size() != 1) {
+            return;
+        }
+        Table refBaseTable = refBaseTablePartitionColumns.keySet().iterator().next();
+        this.retentionConditionExprOpt =
+                MaterializedViewAnalyzer.analyzeMVRetentionCondition(connectContext, this, refBaseTable, retentionCondition);
+        this.retentionConditionScalarOpOpt = MaterializedViewAnalyzer.analyzeMVRetentionConditionOperator(
+                connectContext, this, refBaseTable, this.retentionConditionExprOpt);
     }
 
     /**
@@ -1829,6 +1875,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             Table table = e.getKey();
             if (table instanceof IcebergTable || table instanceof DeltaLakeTable) {
                 Preconditions.checkState(tableToBaseTableInfoCache.containsKey(table));
+                // TODO: get table from current context rather than metadata catalog
                 // it's fine to re-get table from metadata catalog again since metadata catalog should cache
                 // the newest table info.
                 Table refreshedTable = MvUtils.getTableChecked(tableToBaseTableInfoCache.get(table));
