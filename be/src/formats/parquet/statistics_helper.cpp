@@ -17,7 +17,6 @@
 #include <string>
 
 #include "column/column_helper.h"
-#include "column/datum.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
@@ -27,13 +26,13 @@
 #include "formats/parquet/encoding_plain.h"
 #include "formats/parquet/schema.h"
 #include "gutil/casts.h"
-#include "runtime/large_int_value.h"
 #include "runtime/types.h"
 #include "simd/simd.h"
 #include "storage/column_predicate.h"
 #include "storage/types.h"
 #include "storage/uint24.h"
 #include "types/date_value.h"
+#include "types/large_int_value.h"
 #include "types/logical_type.h"
 
 namespace starrocks::parquet {
