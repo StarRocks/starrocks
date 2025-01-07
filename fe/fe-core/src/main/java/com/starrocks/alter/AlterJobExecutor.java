@@ -259,7 +259,7 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
         try {
             schemaChangeHandler.processLakeTableDropPersistentIndex(clause, db, (OlapTable) table);
-        } catch (StarRocksException e) {
+        } catch (Exception e) {
             throw new AlterJobException(e.getMessage(), e);
         }
         return null;
