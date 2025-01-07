@@ -245,6 +245,10 @@ public class BasicStatsMeta implements Writable {
         this.columnStatsMetaMap.put(columnStatsMeta.getColumnName(), columnStatsMeta);
     }
 
+    public void resetDeltaRows() {
+        this.deltaRows = 0;
+    }
+
     public BasicStatsMeta clone() {
         String json = GsonUtils.GSON.toJson(this);
         return GsonUtils.GSON.fromJson(json, BasicStatsMeta.class);
