@@ -11,7 +11,7 @@ displayed_sidebar: docs
 ### 功能优化
 
 - 优化在部分复杂查询场景下 BE 内存分配和统计，避免 OOM。[#51382](https://github.com/StarRocks/starrocks/pull/51382)
-- 优化在 Schema Change 场景下 FE 的内存使用。[#48569](https://github.com/StarRocks/starrocks/pull/48569)
+- 优化在 Schema Change 场景下 FE 的内存使用。[#50855](https://github.com/StarRocks/starrocks/pull/50855)
 - 优化从 Follower FE 节点查询系统定义视图 `information_schema.routine_load_jobs` 时 Job 状态的展示。[#51763](https://github.com/StarRocks/starrocks/pull/51763)
 - 支持备份还原 List 分区表。[#51993](https://github.com/StarRocks/starrocks/pull/51993)
 
