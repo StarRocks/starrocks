@@ -42,10 +42,13 @@ import com.sleepycat.je.LockMode;
 import com.sleepycat.je.OperationStatus;
 import com.sleepycat.je.rep.InsufficientLogException;
 import com.sleepycat.je.rep.RestartRequiredException;
+import com.starrocks.common.io.Writable;
 import com.starrocks.journal.JournalCursor;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalException;
 import com.starrocks.journal.JournalInconsistentException;
+import com.starrocks.persist.EditLogDeserializer;
+import com.starrocks.persist.OperationType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -243,19 +246,19 @@ public class BDBJournalCursor implements JournalCursor {
 
     protected JournalEntity deserializeData(DatabaseEntry data) throws JournalException {
         DataInputStream in = new DataInputStream(new ByteArrayInputStream(data.getData()));
-        JournalEntity ret = new JournalEntity();
+        short opCode = OperationType.OP_INVALID;
         try {
-            ret.readFields(in);
+            opCode = in.readShort();
+            Writable writable = EditLogDeserializer.deserialize(opCode, in);
+            return new JournalEntity(opCode, writable);
         } catch (Throwable t) {
             // bad data, will not retry
-            String errMsg = String.format("fail to read journal entity key=%s, data=%s",
-                    nextKey, data);
+            String errMsg = String.format("fail to read journal entity key=%s, data=%s", nextKey, data);
             LOG.error(errMsg, t);
-            JournalException exception = new JournalException(ret.getOpCode(), errMsg);
+            JournalException exception = new JournalException(opCode, errMsg);
             exception.initCause(t);
             throw exception;
         }
-        return ret;
     }
 
     @Override

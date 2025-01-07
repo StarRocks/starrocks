@@ -46,7 +46,10 @@ import com.sleepycat.je.Environment;
 import com.sleepycat.je.EnvironmentConfig;
 import com.sleepycat.je.LockMode;
 import com.sleepycat.je.OperationStatus;
+import com.starrocks.common.io.Writable;
 import com.starrocks.journal.JournalEntity;
+import com.starrocks.persist.EditLogDeserializer;
+import com.starrocks.persist.OperationType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.json.JSONArray;
@@ -162,9 +165,11 @@ public class BDBTool {
         if (status == OperationStatus.SUCCESS) {
             byte[] retData = value.getData();
             DataInputStream in = new DataInputStream(new ByteArrayInputStream(retData));
-            JournalEntity entity = new JournalEntity();
+            JournalEntity entity = new JournalEntity(OperationType.OP_INVALID, null);
             try {
-                entity.readFields(in);
+                short opCode = in.readShort();
+                Writable writable = EditLogDeserializer.deserialize(opCode, in);
+                entity = new JournalEntity(opCode, writable);
             } catch (Exception e) {
                 String msg = "Fail to read journal entity for key: " + key + ". reason: " + e.getMessage();
                 LOG.warn(msg, e);
@@ -172,8 +177,8 @@ public class BDBTool {
                 System.exit(-1);
             }
             System.out.println("key: " + key);
-            System.out.println("op code: " + entity.getOpCode());
-            System.out.println("value: " + entity.getData().toString());
+            System.out.println("op code: " + entity.opCode());
+            System.out.println("value: " + entity.data().toString());
         } else if (status == OperationStatus.NOTFOUND) {
             System.out.println("key: " + key);
             System.out.println("value: NOT FOUND");
