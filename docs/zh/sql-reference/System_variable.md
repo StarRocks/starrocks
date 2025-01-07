@@ -946,6 +946,12 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 类型：Int
 * 引入版本：v3.1.0
 
+### scan_olap_partition_num_limit
+
+* 描述：在SQL执行计划中, 单表允许的最大扫描分区数.
+* 默认值：0 (无限制)
+* 引入版本：v3.3.9
+
 ### spill_mode (3.0 及以后)
 
 中间结果落盘的执行方式。默认值：`auto`。有效值包括：
