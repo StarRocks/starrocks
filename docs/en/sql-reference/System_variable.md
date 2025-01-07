@@ -242,7 +242,7 @@ Used for MySQL client compatibility. No practical usage.
 * **Data type**: String
 * **Introduced in**: v3.1.11, v3.2.5
 
-### query_excluding_mv_names(
+### query_excluding_mv_names
 
 * **Description**: Specifies the name of the asynchronous materialized views to exclude from query execution. You can use this variable to limit the number of candidate materialized views and reduce the time of query rewrite in the optimizer. `query_including_mv_names` takes effect prior to this item.
 * **Default**: empty
@@ -931,6 +931,12 @@ Used to decide whether to rewrite count distinct queries to bitmap_union_count a
 * **Unit**: Second
 * **Data type**: Int
 * **Introduced in**: v3.1.0
+
+### scan_olap_partition_num_limit
+
+* **Description**: The number of partitions allowed to be scanned for a single table in the execution plan.
+* **Default**: 0 (No limit)
+* **Introduced in**: v3.3.9
 
 ### spill_mode (3.0 and later)
 
