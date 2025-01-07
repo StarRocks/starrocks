@@ -443,7 +443,7 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
         }
 
         WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-        ConnectContext ctx = Util.getOrCreateConnectContext();
+        ConnectContext ctx = Util.getOrCreateInnerContext();
         ctx.setCurrentWarehouse(warehouseManager.getBackgroundWarehouse().getName());
 
         Locker locker = new Locker();

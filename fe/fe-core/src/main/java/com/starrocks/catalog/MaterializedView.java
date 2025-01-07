@@ -1065,7 +1065,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             return;
         }
         // analyze expression, because it converts to sql for serialize
-        ConnectContext connectContext = new ConnectContext();
+        ConnectContext connectContext = ConnectContext.buildInner();
         connectContext.setDatabase(db.getFullName());
         // set privilege
         connectContext.setQualifiedUser(AuthenticationMgr.ROOT_USER);
@@ -1781,6 +1781,165 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
     /**
+<<<<<<< HEAD
+=======
+     * Analyze partition exprs in mv's structures.
+     * NOTE: This method should be only called once in FE restart phase.
+     */
+    private void analyzePartitionExprs() {
+        try {
+            // initialize table to base table info cache
+            for (BaseTableInfo tableInfo : this.baseTableInfos) {
+                this.tableToBaseTableInfoCache.put(MvUtils.getTableChecked(tableInfo), tableInfo);
+            }
+            // analyze partition exprs for ref base tables
+            analyzeRefBaseTablePartitionExprs();
+            // analyze partition exprs
+            Map<Table, List<Expr>> refBaseTablePartitionExprs = getRefBaseTablePartitionExprs();
+            ConnectContext connectContext = ConnectContext.buildInner();
+            if (refBaseTablePartitionExprs != null) {
+                for (BaseTableInfo baseTableInfo : baseTableInfos) {
+                    Optional<Table> refBaseTableOpt = MvUtils.getTable(baseTableInfo);
+                    if (refBaseTableOpt.isEmpty()) {
+                        continue;
+                    }
+                    Table refBaseTable = refBaseTableOpt.get();
+                    if (!refBaseTablePartitionExprs.containsKey(refBaseTable)) {
+                        continue;
+                    }
+                    List<Expr> partitionExprs = refBaseTablePartitionExprs.get(refBaseTable);
+                    TableName tableName = new TableName(baseTableInfo.getCatalogName(),
+                            baseTableInfo.getDbName(), baseTableInfo.getTableName());
+                    for (Expr partitionExpr : partitionExprs) {
+                        analyzePartitionExpr(connectContext, refBaseTable, tableName, partitionExpr);
+                    }
+                }
+            }
+            // analyze partition slots for ref base tables
+            analyzeRefBaseTablePartitionSlots();
+            // analyze partition columns for ref base tables
+            analyzeRefBaseTablePartitionColumns();
+            // analyze partition retention condition
+            analyzeMVRetentionCondition(connectContext);
+        } catch (Exception e) {
+            LOG.warn("Analyze partition exprs failed", e);
+        }
+    }
+
+    public synchronized void analyzeMVRetentionCondition(ConnectContext connectContext) {
+        PartitionInfo partitionInfo = getPartitionInfo();
+        if (partitionInfo.isUnPartitioned()) {
+            return;
+        }
+        String retentionCondition = getTableProperty().getPartitionRetentionCondition();
+        if (Strings.isNullOrEmpty(retentionCondition)) {
+            return;
+        }
+
+        final Map<Table, List<Column>> refBaseTablePartitionColumns = getRefBaseTablePartitionColumns();
+        if (refBaseTablePartitionColumns == null || refBaseTablePartitionColumns.size() != 1) {
+            return;
+        }
+        Table refBaseTable = refBaseTablePartitionColumns.keySet().iterator().next();
+        this.retentionConditionExprOpt =
+                MaterializedViewAnalyzer.analyzeMVRetentionCondition(connectContext, this, refBaseTable, retentionCondition);
+        this.retentionConditionScalarOpOpt = MaterializedViewAnalyzer.analyzeMVRetentionConditionOperator(
+                connectContext, this, refBaseTable, this.retentionConditionExprOpt);
+    }
+
+    /**
+     * Since the table is cached in the Optional, needs to refresh it again for each query.
+     */
+    private <K> Map<Table, K> refreshBaseTable(Map<Table, K> cached) {
+        Map<Table, K> result = Maps.newHashMap();
+        for (Map.Entry<Table, K> e : cached.entrySet()) {
+            Table table = e.getKey();
+            if (table instanceof IcebergTable || table instanceof DeltaLakeTable) {
+                Preconditions.checkState(tableToBaseTableInfoCache.containsKey(table));
+                // TODO: get table from current context rather than metadata catalog
+                // it's fine to re-get table from metadata catalog again since metadata catalog should cache
+                // the newest table info.
+                Table refreshedTable = MvUtils.getTableChecked(tableToBaseTableInfoCache.get(table));
+                result.put(refreshedTable, e.getValue());
+            } else {
+                result.put(table, e.getValue());
+            }
+        }
+        return result;
+    }
+
+    private void analyzeRefBaseTablePartitionExprs() {
+        Map<Table, List<Expr>> refBaseTablePartitionExprMap = Maps.newHashMap();
+        for (BaseTableInfo tableInfo : baseTableInfos) {
+            Table table = MvUtils.getTableChecked(tableInfo);
+            List<MVPartitionExpr> mvPartitionExprs = MvUtils.getMvPartitionExpr(partitionExprMaps, table);
+            if (CollectionUtils.isEmpty(mvPartitionExprs)) {
+                LOG.info("Base table {} contains no partition expr, skip", table.getName());
+                continue;
+            }
+
+            List<Expr> exprs = mvPartitionExprs.stream().map(MVPartitionExpr::getExpr).collect(Collectors.toList());
+            refBaseTablePartitionExprMap.put(table, exprs);
+        }
+        LOG.info("The refBaseTablePartitionExprMap of mv {} is {}", getName(), refBaseTablePartitionExprMap);
+        refBaseTablePartitionExprsOpt = Optional.of(refBaseTablePartitionExprMap);
+    }
+
+    public void analyzeRefBaseTablePartitionSlots() {
+        Map<Table, List<SlotRef>> refBaseTablePartitionSlotMap = Maps.newHashMap();
+        Preconditions.checkState(refBaseTablePartitionExprsOpt.isPresent());
+        Map<Table, List<Expr>> refBaseTablePartitionExprMap = refBaseTablePartitionExprsOpt.get();
+        for (BaseTableInfo tableInfo : baseTableInfos) {
+            Table table = MvUtils.getTableChecked(tableInfo);
+            List<Expr> mvPartitionExprs = refBaseTablePartitionExprMap.get(table);
+            if (CollectionUtils.isEmpty(mvPartitionExprs)) {
+                LOG.info("Base table {} contains no partition expr, skip", table.getName());
+                continue;
+            }
+            List<SlotRef> slotRefs = Lists.newArrayList();
+            for (Expr expr : mvPartitionExprs) {
+                List<SlotRef> exprSlotRefs = expr.collectAllSlotRefs();
+                if (exprSlotRefs.size() != 1) {
+                    LOG.warn("The partition expr {} of table {} contains more than one slot ref, skip", expr, table.getName());
+                    continue;
+                }
+                slotRefs.add(exprSlotRefs.get(0));
+            }
+            refBaseTablePartitionSlotMap.put(table, slotRefs);
+        }
+        LOG.info("The refBaseTablePartitionSlotMap of mv {} is {}", getName(), refBaseTablePartitionSlotMap);
+        refBaseTablePartitionSlotsOpt = Optional.of(refBaseTablePartitionSlotMap);
+    }
+
+    private void analyzeRefBaseTablePartitionColumns() {
+        Map<Table, List<Column>> result = getBaseTablePartitionColumnMapImpl();
+        refBaseTablePartitionColumnsOpt = Optional.of(result);
+    }
+
+    private void analyzePartitionExpr(ConnectContext connectContext,
+                                      Table refBaseTable,
+                                      TableName tableName,
+                                      Expr partitionExpr) {
+        if (partitionExpr == null) {
+            return;
+        }
+        if (tableName == null) {
+            return;
+        }
+        SelectAnalyzer.SlotRefTableNameCleaner visitor = MVUtils.buildSlotRefTableNameCleaner(
+                connectContext, refBaseTable, tableName);
+        partitionExpr.accept(visitor, null);
+        ExpressionAnalyzer.analyzeExpression(partitionExpr, new AnalyzeState(),
+                new Scope(RelationId.anonymous(),
+                        new RelationFields(refBaseTable.getBaseSchema().stream()
+                                .map(col -> new Field(col.getName(), col.getType(),
+                                        tableName, null))
+                                .collect(Collectors.toList()))), connectContext);
+
+    }
+
+    /**
+>>>>>>> 6a0fd5dd7b ([BugFix] Build a ConnectContext for inner query which is used for StarRocks internal query (#54737))
      * Parse partition expr from sql
      * @param sql serialized partition expr sql
      * @param partitionCol materialized view's partition column
@@ -1990,7 +2149,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             if (db == null) {
                 return null;
             }
-            ConnectContext connectContext = new ConnectContext();
+            ConnectContext connectContext = ConnectContext.buildInner();
             connectContext.setDatabase(db.getOriginName());
             if (!Strings.isNullOrEmpty(originalViewDefineSql)) {
                 this.defineQueryParseNode = MvUtils.getQueryAst(originalViewDefineSql, connectContext);

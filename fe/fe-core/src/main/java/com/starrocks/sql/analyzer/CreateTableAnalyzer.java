@@ -456,6 +456,75 @@ public class CreateTableAnalyzer {
         }
     }
 
+<<<<<<< HEAD
+=======
+    public static void analyzeMultiExprsPartition(CreateTableStmt stmt, TableName tableName) {
+        PartitionDesc partitionDesc = stmt.getPartitionDesc();
+        if (partitionDesc == null || !(partitionDesc instanceof ListPartitionDesc)) {
+            return;
+        }
+        ListPartitionDesc listPartitionDesc = (ListPartitionDesc) partitionDesc;
+        if (!listPartitionDesc.isAutoPartitionTable()) {
+            return;
+        }
+        List<ParseNode> multiDescList = listPartitionDesc.getMultiDescList();
+        if (multiDescList == null || multiDescList.isEmpty()) {
+            return;
+        }
+        List<ColumnDef> columnDefs = stmt.getColumnDefs();
+        List<String> partitionColumnList = Lists.newArrayList();
+        List<PartitionDesc> partitionDescList = Lists.newArrayList();
+        List<Expr> partitionExprs = Lists.newArrayList();
+        int placeHolderSlotId = 0;
+        for (ParseNode partitionExpr : multiDescList) {
+            if (partitionExpr instanceof Identifier) {
+                Identifier identifier = (Identifier) partitionExpr;
+                partitionColumnList.add(identifier.getValue());
+            }
+            if (partitionExpr instanceof FunctionCallExpr) {
+                FunctionCallExpr expr = (FunctionCallExpr) (((Expr) partitionExpr).clone());
+                ExpressionAnalyzer.analyzeExpression(expr, new AnalyzeState(), new Scope(RelationId.anonymous(),
+                                new RelationFields(columnDefs.stream().map(col -> new Field(col.getName(),
+                                        col.getType(), null, null)).collect(Collectors.toList()))),
+                        ConnectContext.buildInner());
+                String columnName = FeConstants.GENERATED_PARTITION_COLUMN_PREFIX + placeHolderSlotId++;
+                partitionColumnList.add(columnName);
+                Type type = expr.getType();
+                if (type.isScalarType()) {
+                    ScalarType scalarType = (ScalarType) type;
+                    if (scalarType.isWildcardChar()) {
+                        type = ScalarType.createCharType(ScalarType.getOlapMaxVarcharLength());
+                    } else if (scalarType.isWildcardVarchar()) {
+                        type = ScalarType.createVarcharType(ScalarType.getOlapMaxVarcharLength());
+                    }
+                }
+                TypeDef typeDef = new TypeDef(type);
+                try {
+                    typeDef.analyze();
+                } catch (Exception e) {
+                    throw new SemanticException("Generate partition column " + columnName
+                            + " for multi expression partition error: " + e.getMessage(), partitionDesc.getPos());
+                }
+                // generated column expression should be saved in unanalyzed way in meta
+                ColumnDef generatedPartitionColumn = new ColumnDef(
+                        columnName, typeDef, null, false, null, null, true,
+                        ColumnDef.DefaultValueDef.NOT_SET, null, (FunctionCallExpr) partitionExpr, "");
+                columnDefs.add(generatedPartitionColumn);
+                partitionExprs.add((FunctionCallExpr) partitionExpr);
+            }
+        }
+        for (ColumnDef columnDef : columnDefs) {
+            if (partitionColumnList.contains(columnDef.getName())) {
+                columnDef.setIsPartitionColumn(true);
+            }
+        }
+        listPartitionDesc = new ListPartitionDesc(partitionColumnList, partitionDescList);
+        listPartitionDesc.setAutoPartitionTable(true);
+        listPartitionDesc.setPartitionExprs(partitionExprs);
+        stmt.setPartitionDesc(listPartitionDesc);
+    }
+
+>>>>>>> 6a0fd5dd7b ([BugFix] Build a ConnectContext for inner query which is used for StarRocks internal query (#54737))
     public static void analyzePartitionDesc(CreateTableStmt stmt) {
         String engineName = stmt.getEngineName();
         PartitionDesc partitionDesc = stmt.getPartitionDesc();

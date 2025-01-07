@@ -776,7 +776,7 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
         LOG.info("execute sql : {}", sql);
         ConnectContext context = ConnectContext.get();
         if (context == null) {
-            context = new ConnectContext();
+            context = ConnectContext.buildInner();
             context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
             context.setCurrentUserIdentity(UserIdentity.ROOT);
             context.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
