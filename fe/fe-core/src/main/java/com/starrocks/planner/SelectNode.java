@@ -36,12 +36,8 @@ package com.starrocks.planner;
 
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
-<<<<<<< HEAD
-import com.starrocks.common.UserException;
-=======
 import com.starrocks.analysis.SlotId;
-import com.starrocks.common.StarRocksException;
->>>>>>> e66fcdb8ad ([Enhancement] support common expr reuse strategy on scan predicates (#52889))
+import com.starrocks.common.UserException;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
