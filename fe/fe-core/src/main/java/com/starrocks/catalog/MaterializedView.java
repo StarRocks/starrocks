@@ -989,7 +989,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             return;
         }
         // analyze expression, because it converts to sql for serialize
-        ConnectContext connectContext = new ConnectContext();
+        ConnectContext connectContext = ConnectContext.buildInner();
         connectContext.setDatabase(db.getFullName());
         // set privilege
         connectContext.setQualifiedUser(AuthenticationMgr.ROOT_USER);
@@ -1860,7 +1860,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             if (db == null) {
                 return null;
             }
-            ConnectContext connectContext = new ConnectContext();
+            ConnectContext connectContext = ConnectContext.buildInner();
             connectContext.setDatabase(db.getOriginName());
             if (!Strings.isNullOrEmpty(originalViewDefineSql)) {
                 this.defineQueryParseNode = MvUtils.getQueryAst(originalViewDefineSql, connectContext);
