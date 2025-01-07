@@ -36,7 +36,7 @@ Release date: October 23, 2024
 ### Improvements
 
 - Optimized memory allocation and statistics in BE for certain complex query scenarios to avoid OOM. [#51382](https://github.com/StarRocks/starrocks/pull/51382)
-- Optimized memory usage in FE in Schema Change scenarios. [#48569](https://github.com/StarRocks/starrocks/pull/48569)
+- Optimized memory usage in FE in Schema Change scenarios. [#50855](https://github.com/StarRocks/starrocks/pull/50855)
 - Optimized the job status display when querying the system-defined view `information_schema.routine_load_jobs` from Follower FE nodes. [#51763](https://github.com/StarRocks/starrocks/pull/51763)
 - Supports Backup and Restore of with the List partitioned tables. [#51993](https://github.com/StarRocks/starrocks/pull/51993)
 
