@@ -23,6 +23,7 @@
 #include "column/column_helper.h"
 #include "exprs/runtime_filter_bank.h"
 #include "simd/simd.h"
+#include "testutil/column_test_helper.h"
 
 namespace starrocks {
 
@@ -38,9 +39,54 @@ public:
     void TearDown() override {}
 
 protected:
+    void _check_equal(const Filter& real, const std::vector<uint8_t>& expect);
+
     using Int32RF = RuntimeBloomFilter<TYPE_INT>;
     ObjectPool _pool;
 };
+
+void RuntimeBloomFilterTest::_check_equal(const Filter& real, const std::vector<uint8_t>& expect) {
+    ASSERT_EQ(real.size(), expect.size());
+    for (size_t i = 0; i < real.size(); i++) {
+        ASSERT_EQ(real[i], expect[i]);
+    }
+}
+
+TEST_F(RuntimeBloomFilterTest, evaluate_with_min_max) {
+    // [10, 20]
+    auto* rf = _pool.add(new Int32RF());
+    rf->insert(10);
+    rf->insert(20);
+    auto col = ColumnTestHelper::build_column<int32_t>({5, 10, 15, 20, 25});
+    JoinRuntimeFilter::RunningContext ctx1;
+    ctx1.use_merged_selection = false;
+    rf->evaluate(col.get(), &ctx1);
+    _check_equal(ctx1.selection, {0, 1, 1, 1, 0});
+
+    // [10, 20)
+    rf->set_left_close_interval(true);
+    rf->set_right_close_interval(false);
+    JoinRuntimeFilter::RunningContext ctx2;
+    ctx2.use_merged_selection = false;
+    rf->evaluate(col.get(), &ctx2);
+    _check_equal(ctx2.selection, {0, 1, 1, 0, 0});
+
+    // (10, 20]
+    rf->set_left_close_interval(false);
+    rf->set_right_close_interval(true);
+    JoinRuntimeFilter::RunningContext ctx3;
+    ctx3.use_merged_selection = false;
+    rf->evaluate(col.get(), &ctx3);
+    _check_equal(ctx3.selection, {0, 0, 1, 1, 0});
+
+    // (10, 20)
+    rf->set_left_close_interval(false);
+    rf->set_right_close_interval(false);
+    JoinRuntimeFilter::RunningContext ctx4;
+    ctx4.use_merged_selection = false;
+    rf->evaluate(col.get(), &ctx4);
+    _check_equal(ctx4.selection, {0, 0, 1, 0, 0});
+}
 
 TEST_F(RuntimeBloomFilterTest, filter_zonemap_with_min_max) {
     // > 10
