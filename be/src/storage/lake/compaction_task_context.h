@@ -49,6 +49,10 @@ struct CompactionTaskStats {
     int64_t io_count_local_disk = 0;
     int64_t io_count_remote = 0;
     int64_t in_queue_time_sec = 0;
+<<<<<<< HEAD
+=======
+    int64_t pk_sst_merge_ns = 0;
+>>>>>>> 0a59530c22 ([BugFix] fix incorrect part of compaction profile (#54678))
 
     void collect(const OlapReaderStatistics& reader_stats);
     CompactionTaskStats operator+(const CompactionTaskStats& that) const;

@@ -32,8 +32,24 @@ CompactionTask::CompactionTask(VersionedTablet tablet, std::vector<std::shared_p
                                                     GlobalEnv::GetInstance()->compaction_mem_tracker())),
           _context(context) {}
 
+<<<<<<< HEAD
 Status CompactionTask::fill_compaction_segment_info(TxnLogPB_OpCompaction* op_compaction, TabletWriter* writer,
                                                     bool is_pk) {
+=======
+Status CompactionTask::execute_index_major_compaction(TxnLogPB* txn_log) {
+    if (_tablet.get_schema()->keys_type() == KeysType::PRIMARY_KEYS) {
+        SCOPED_RAW_TIMER(&_context->stats->pk_sst_merge_ns);
+        auto metadata = _tablet.metadata();
+        if (metadata->enable_persistent_index() &&
+            metadata->persistent_index_type() == PersistentIndexTypePB::CLOUD_NATIVE) {
+            return _tablet.tablet_manager()->update_mgr()->execute_index_major_compaction(*metadata, txn_log);
+        }
+    }
+    return Status::OK();
+}
+
+Status CompactionTask::fill_compaction_segment_info(TxnLogPB_OpCompaction* op_compaction, TabletWriter* writer) {
+>>>>>>> 0a59530c22 ([BugFix] fix incorrect part of compaction profile (#54678))
     for (auto& rowset : _input_rowsets) {
         op_compaction->add_input_rowsets(rowset->id());
     }
