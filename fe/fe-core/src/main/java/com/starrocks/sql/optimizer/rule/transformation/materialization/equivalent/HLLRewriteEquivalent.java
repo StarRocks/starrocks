@@ -122,7 +122,7 @@ public class HLLRewriteEquivalent extends IAggregateRewriteEquivalent {
             if (!arg0.equals(eqChild)) {
                 return null;
             }
-            return rewriteImpl(shuttleContext, aggFunc, replace, isRollup);
+            return rewriteImpl(shuttleContext, aggFunc, replace);
         } else if (aggFuncName.equals(HLL_UNION_AGG)) {
             ScalarOperator eqArg = aggFunc.getChild(0);
             if (eqArg instanceof CallOperator) {
@@ -145,7 +145,7 @@ public class HLLRewriteEquivalent extends IAggregateRewriteEquivalent {
             if (!eqArg.equals(eqChild)) {
                 return null;
             }
-            return rewriteImpl(shuttleContext, aggFunc, replace, isRollup);
+            return rewriteImpl(shuttleContext, aggFunc, replace);
         } else if ((aggFuncName.equalsIgnoreCase(FunctionSet.COUNT) && aggFunc.isDistinct()
                 && aggFunc.getChildren().size() == 1) || aggFuncName.equalsIgnoreCase(MULTI_DISTINCT_COUNT)) {
             SessionVariable sessionVariable = shuttleContext.getRewriteContext().getOptimizerContext().getSessionVariable();
@@ -156,7 +156,7 @@ public class HLLRewriteEquivalent extends IAggregateRewriteEquivalent {
             if (!eqArg.equals(eqChild)) {
                 return null;
             }
-            return rewriteImpl(shuttleContext, aggFunc, replace, isRollup);
+            return rewriteImpl(shuttleContext, aggFunc, replace);
         }
         return null;
     }
@@ -187,9 +187,9 @@ public class HLLRewriteEquivalent extends IAggregateRewriteEquivalent {
     }
 
     @Override
-    public ScalarOperator rewriteAggregateFunc(EquivalentShuttleContext shuttleContext,
-                                               CallOperator aggFunc,
-                                               ColumnRefOperator replace) {
+    public ScalarOperator rewriteAggregateFuncWithoutRollup(EquivalentShuttleContext shuttleContext,
+                                                            CallOperator aggFunc,
+                                                            ColumnRefOperator replace) {
         return makeHllCardinalityFunc(replace);
     }
 

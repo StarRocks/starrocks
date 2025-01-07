@@ -71,15 +71,31 @@ public class MVVersionManager {
                 .collect(Collectors.partitioningBy(s -> s.getBaseTable().isNativeTableOrMaterializedView()));
         List<TableSnapshotInfo> olapTables = snapshotInfoSplits.getOrDefault(true, List.of());
         List<TableSnapshotInfo> externalTables = snapshotInfoSplits.getOrDefault(false, List.of());
-        updateMetaForOlapTable(refreshContext, olapTables, refBaseTableIds);
-        updateMetaForExternalTable(refreshContext, externalTables, refBaseTableIds);
+        boolean isOlapTableRefreshed = updateMetaForOlapTable(refreshContext, olapTables, refBaseTableIds);
+        boolean isExternalTableRefreshed = updateMetaForExternalTable(refreshContext, externalTables, refBaseTableIds);
+
+        if (!isOlapTableRefreshed && !isExternalTableRefreshed) {
+            return;
+        }
+        Collection<Map<String, MaterializedView.BasePartitionInfo>> allChangedPartitionInfos =
+                snapshotBaseTables.values()
+                        .stream()
+                        .map(snapshot -> snapshot.getRefreshedPartitionInfos())
+                        .collect(Collectors.toList());
+        long maxChangedTableRefreshTime = MvUtils.getMaxTablePartitionInfoRefreshTime(allChangedPartitionInfos);
+        mv.getRefreshScheme().setLastRefreshTime(maxChangedTableRefreshTime);
+        updateEditLogAfterVersionMetaChanged(mv, maxChangedTableRefreshTime);
+
+        // trigger timeless info event since mv version changed
+        GlobalStateMgr.getCurrentState().getMaterializedViewMgr().triggerTimelessInfoEvent(mv,
+                MVTimelinessMgr.MVChangeEvent.MV_REFRESHED);
     }
 
-    private void updateMetaForOlapTable(MaterializedView.AsyncRefreshContext refreshContext,
-                                        List<TableSnapshotInfo> changedTablePartitionInfos,
-                                        Set<Long> refBaseTableIds) {
+    private boolean updateMetaForOlapTable(MaterializedView.AsyncRefreshContext refreshContext,
+                                           List<TableSnapshotInfo> changedTablePartitionInfos,
+                                           Set<Long> refBaseTableIds) {
         if (changedTablePartitionInfos.isEmpty()) {
-            return;
+            return false;
         }
         LOG.info("Update meta for mv {} with olap tables:{}, refBaseTableIds:{}", mv.getName(),
                 changedTablePartitionInfos, refBaseTableIds);
@@ -87,6 +103,7 @@ public class MVVersionManager {
                 refreshContext.getBaseTableVisibleVersionMap();
         boolean hasNextPartitionToRefresh = mvTaskRunContext.hasNextBatchPartition();
         // update version map of materialized view
+        boolean isOlapTableRefreshed = false;
         for (TableSnapshotInfo snapshotInfo : changedTablePartitionInfos) {
             Table snapshotTable = snapshotInfo.getBaseTable();
             // Non-ref-base-tables should be update meta at the last refresh, otherwise it may
@@ -123,24 +140,16 @@ public class MVVersionManager {
                 currentTablePartitionInfo.keySet().removeIf(partitionName ->
                         !snapshotOlapTable.getVisiblePartitionNames().contains(partitionName));
             }
+            isOlapTableRefreshed = true;
         }
-        if (!changedTablePartitionInfos.isEmpty()) {
-            Collection<Map<String, MaterializedView.BasePartitionInfo>> allChangedPartitionInfos =
-                    changedTablePartitionInfos
-                            .stream()
-                            .map(snapshot -> snapshot.getRefreshedPartitionInfos())
-                            .collect(Collectors.toList());
-            long maxChangedTableRefreshTime =
-                    MvUtils.getMaxTablePartitionInfoRefreshTime(allChangedPartitionInfos);
-            updateEditLogAfterVersionMetaChanged(mv, maxChangedTableRefreshTime);
-        }
+        return isOlapTableRefreshed;
     }
 
-    private void updateMetaForExternalTable(MaterializedView.AsyncRefreshContext refreshContext,
-                                            List<TableSnapshotInfo> changedTablePartitionInfos,
-                                            Set<Long> refBaseTableIds) {
+    private boolean updateMetaForExternalTable(MaterializedView.AsyncRefreshContext refreshContext,
+                                               List<TableSnapshotInfo> changedTablePartitionInfos,
+                                               Set<Long> refBaseTableIds) {
         if (changedTablePartitionInfos.isEmpty()) {
-            return;
+            return false;
         }
         LOG.info("Update meta for mv {} with external tables:{}, refBaseTableIds:{}", mv.getName(),
                 changedTablePartitionInfos, refBaseTableIds);
@@ -183,16 +192,7 @@ public class MVVersionManager {
             Set<String> partitionNames = Sets.newHashSet(PartitionUtil.getPartitionNames(snapshotTable));
             currentTablePartitionInfo.keySet().removeIf(partitionName -> !partitionNames.contains(partitionName));
         }
-        if (!changedTablePartitionInfos.isEmpty()) {
-            Collection<Map<String, MaterializedView.BasePartitionInfo>> allChangedPartitionInfos =
-                    changedTablePartitionInfos
-                            .stream()
-                            .map(snapshot -> snapshot.getRefreshedPartitionInfos())
-                            .collect(Collectors.toList());
-            long maxChangedTableRefreshTime = MvUtils.getMaxTablePartitionInfoRefreshTime(allChangedPartitionInfos);
-            mv.getRefreshScheme().setLastRefreshTime(maxChangedTableRefreshTime);
-            updateEditLogAfterVersionMetaChanged(mv, maxChangedTableRefreshTime);
-        }
+        return true;
     }
 
     /**

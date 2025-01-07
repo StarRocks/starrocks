@@ -78,6 +78,7 @@ import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
+import com.starrocks.scheduler.mv.MVTimelinessMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.analyzer.Analyzer;
@@ -194,7 +195,7 @@ public class AlterJobMgr {
         LOG.info("process change materialized view {} status to {}, isReplay: {}",
                 materializedView.getName(), status, isReplay);
         if (AlterMaterializedViewStatusClause.ACTIVE.equalsIgnoreCase(status)) {
-            ConnectContext context = new ConnectContext();
+            ConnectContext context = ConnectContext.buildInner();
             context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
             context.setQualifiedUser(AuthenticationMgr.ROOT_USER);
             context.setCurrentUserIdentity(UserIdentity.ROOT);
@@ -414,6 +415,10 @@ public class AlterJobMgr {
                     oldMaterializedView.getName(), refreshType.name(), asyncRefreshContext.getStartTime(),
                     asyncRefreshContext.getStep(),
                     asyncRefreshContext.getTimeUnit(), oldMaterializedView.getId(), maxChangedTableRefreshTime);
+
+            // trigger timeless info event since mv refresh scheme has changed
+            GlobalStateMgr.getCurrentState().getMaterializedViewMgr()
+                    .triggerTimelessInfoEvent(oldMaterializedView, MVTimelinessMgr.MVChangeEvent.MV_REFRESHED);
         } catch (Throwable e) {
             oldMaterializedView.setInactiveAndReason("replay failed: " + e.getMessage());
             LOG.warn("replay change materialized-view refresh scheme failed: {}",
