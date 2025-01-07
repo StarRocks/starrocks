@@ -118,6 +118,7 @@ import com.starrocks.sql.optimizer.LogicalPlanPrinter;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
 import com.starrocks.sql.optimizer.OptimizerConfig;
+import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
@@ -1335,6 +1336,15 @@ public class UtFrameUtils {
             @Mock
             public void execute() throws Exception {
                 runnable.run();
+            }
+        };
+    }
+
+    public static void mockEnableQueryContextCache() {
+        new MockUp<QueryMaterializationContext>() {
+            @Mock
+            public boolean isEnableQueryContextCache() {
+                return true;
             }
         };
     }
