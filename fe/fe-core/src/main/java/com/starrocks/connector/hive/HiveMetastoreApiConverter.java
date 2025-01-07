@@ -91,6 +91,7 @@ import static com.starrocks.catalog.HiveTable.HIVE_TABLE_COLUMN_TYPES;
 import static com.starrocks.catalog.HiveTable.HIVE_TABLE_INPUT_FORMAT;
 import static com.starrocks.catalog.HiveTable.HIVE_TABLE_SERDE_LIB;
 import static com.starrocks.catalog.HudiTable.HUDI_BASE_PATH;
+import static com.starrocks.catalog.HudiTable.HUDI_HMS_TABLE_TYPE;
 import static com.starrocks.catalog.HudiTable.HUDI_TABLE_COLUMN_NAMES;
 import static com.starrocks.catalog.HudiTable.HUDI_TABLE_COLUMN_TYPES;
 import static com.starrocks.catalog.HudiTable.HUDI_TABLE_INPUT_FOAMT;
@@ -538,6 +539,7 @@ public class HiveMetastoreApiConverter {
         }
 
         hudiProperties.put(HUDI_TABLE_TYPE, metaClient.getTableType().name());
+        hudiProperties.put(HUDI_HMS_TABLE_TYPE, metastoreTable.getTableType());
 
         StringBuilder columnNamesBuilder = new StringBuilder();
         StringBuilder columnTypesBuilder = new StringBuilder();

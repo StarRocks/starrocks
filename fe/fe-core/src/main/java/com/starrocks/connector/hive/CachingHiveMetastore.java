@@ -17,7 +17,9 @@ package com.starrocks.connector.hive;
 import com.github.benmanes.caffeine.cache.AsyncCacheLoader;
 import com.github.benmanes.caffeine.cache.AsyncLoadingCache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import com.google.common.annotations.GwtIncompatible;
 import com.google.common.base.Preconditions;
+import com.google.common.cache.Cache;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 import com.google.common.collect.ImmutableMap;
@@ -25,6 +27,8 @@ import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Streams;
+import com.google.common.util.concurrent.Futures;
+import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.UncheckedExecutionException;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
@@ -81,10 +85,12 @@ public class CachingHiveMetastore extends CachingMetastore implements IHiveMetas
     protected LoadingCache<HivePartitionName, Partition> partitionCache;
     protected LoadingCache<DatabaseTableName, HivePartitionStats> tableStatsCache;
     protected AsyncLoadingCache<HivePartitionName, HivePartitionStats> partitionStatsCache;
+    protected Cache<DatabaseTableName, String> hmsExternalTableCache;
 
     public static CachingHiveMetastore createQueryLevelInstance(IHiveMetastore metastore, long perQueryCacheMaxSize) {
         return new CachingHiveMetastore(
                 metastore,
+                newDirectExecutorService(),
                 newDirectExecutorService(),
                 NEVER_EVICT,
                 NEVER_REFRESH,
@@ -93,9 +99,11 @@ public class CachingHiveMetastore extends CachingMetastore implements IHiveMetas
     }
 
     public static CachingHiveMetastore createCatalogLevelInstance(IHiveMetastore metastore, Executor executor,
-                                                                  long expireAfterWrite, long refreshInterval,
-                                                                  long maxSize, boolean enableListNamesCache) {
-        return new CachingHiveMetastore(metastore, executor, expireAfterWrite, refreshInterval, maxSize, enableListNamesCache);
+                                                                  Executor partitionExecutor, long expireAfterWrite,
+                                                                  long refreshInterval, long maxSize,
+                                                                  boolean enableListNamesCache) {
+        return new CachingHiveMetastore(metastore, executor, partitionExecutor,
+          expireAfterWrite, refreshInterval, maxSize, enableListNamesCache);
     }
 
     public static class PartitionStatisticsLoader implements AsyncCacheLoader<HivePartitionName, HivePartitionStats> {
@@ -118,8 +126,9 @@ public class CachingHiveMetastore extends CachingMetastore implements IHiveMetas
         }
     }
 
-    protected CachingHiveMetastore(IHiveMetastore metastore, Executor executor, long expireAfterWriteSec,
-                                   long refreshIntervalSec, long maxSize, boolean enableListNamesCache) {
+    protected CachingHiveMetastore(IHiveMetastore metastore, Executor executor, Executor partitionExecutor,
+                                   long expireAfterWriteSec, long refreshIntervalSec, long maxSize,
+                                   boolean enableListNamesCache) {
         super(executor, expireAfterWriteSec, refreshIntervalSec, maxSize);
         this.metastore = metastore;
         this.enableListNameCache = enableListNamesCache;
@@ -134,7 +143,8 @@ public class CachingHiveMetastore extends CachingMetastore implements IHiveMetas
                     .build(asyncReloading(CacheLoader.from(this::loadPartitionKeys), executor));
         }
 
-        partitionCache = newCacheBuilder(expireAfterWriteSec, NEVER_REFRESH, maxSize)
+        hmsExternalTableCache = newCacheBuilder(expireAfterWriteSec, NEVER_REFRESH, maxSize).build();
+        partitionCache = newCacheBuilder(expireAfterWriteSec, refreshIntervalSec, maxSize)
                 .build(asyncReloading(new CacheLoader<HivePartitionName, Partition>() {
                     @Override
                     public Partition load(@NotNull HivePartitionName key) {
@@ -142,11 +152,21 @@ public class CachingHiveMetastore extends CachingMetastore implements IHiveMetas
                     }
 
                     @Override
+                    @GwtIncompatible
+                    public ListenableFuture<Partition> reload(
+                            @NotNull HivePartitionName key, @NotNull Partition oldValue) {
+                        if (isCachedExternalTable(key.getDatabaseTableName())) {
+                            return Futures.immediateFuture(loadPartition(key));
+                        }
+                        return Futures.immediateFuture(oldValue);
+                    }
+
+                    @Override
                     public Map<HivePartitionName, Partition> loadAll(
                             @NotNull Iterable<? extends HivePartitionName> partitionKeys) {
                         return loadPartitionsByNames(partitionKeys);
                     }
-                }, executor));
+                }, partitionExecutor));
 
         tableStatsCache = newCacheBuilder(expireAfterWriteSec, refreshIntervalSec, maxSize)
                 .build(asyncReloading(CacheLoader.from(this::loadTableStatistics), executor));
@@ -287,7 +307,11 @@ public class CachingHiveMetastore extends CachingMetastore implements IHiveMetas
     }
 
     public Table loadTable(DatabaseTableName databaseTableName) {
-        return metastore.getTable(databaseTableName.getDatabaseName(), databaseTableName.getTableName());
+        Table table = metastore.getTable(databaseTableName.getDatabaseName(), databaseTableName.getTableName());
+        if (table.isHMSExternalTable()) {
+            hmsExternalTableCache.put(databaseTableName, databaseTableName.toString());
+        }
+        return table;
     }
 
     public Partition getPartition(String dbName, String tblName, List<String> partitionValues) {
@@ -694,6 +718,10 @@ public class CachingHiveMetastore extends CachingMetastore implements IHiveMetas
 
     public boolean isPartitionPresent(HivePartitionName hivePartitionName) {
         return partitionCache.getIfPresent(hivePartitionName) != null;
+    }
+
+    public boolean isCachedExternalTable(DatabaseTableName tableName) {
+        return hmsExternalTableCache.asMap().containsKey(tableName);
     }
 
     public synchronized void refreshTableByEvent(HiveTable updatedHiveTable, HiveCommonStats commonStats, Partition partition) {
