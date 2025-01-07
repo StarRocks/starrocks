@@ -15,6 +15,8 @@
 
 package com.starrocks.connector.hive;
 
+import com.starrocks.connector.DatabaseTableName;
+
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -58,6 +60,10 @@ public class HivePartitionName {
 
     public String getDatabaseName() {
         return databaseName;
+    }
+
+    public DatabaseTableName getDatabaseTableName() {
+        return DatabaseTableName.of(databaseName, tableName);
     }
 
     public List<String> getPartitionValues() {

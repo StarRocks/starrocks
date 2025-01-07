@@ -222,6 +222,11 @@ public class HiveTable extends Table {
     }
 
     @Override
+    public boolean isHMSExternalTable() {
+        return hiveTableType.equals(HiveTableType.EXTERNAL_TABLE);
+    }
+
+    @Override
     public String getTableLocation() {
         return this.tableLocation;
     }
