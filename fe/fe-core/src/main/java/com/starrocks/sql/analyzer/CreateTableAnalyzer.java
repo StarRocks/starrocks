@@ -496,7 +496,7 @@ public class CreateTableAnalyzer {
                 ExpressionAnalyzer.analyzeExpression(expr, new AnalyzeState(), new Scope(RelationId.anonymous(),
                                 new RelationFields(columnDefs.stream().map(col -> new Field(col.getName(),
                                         col.getType(), null, null)).collect(Collectors.toList()))),
-                        new ConnectContext());
+                        ConnectContext.buildInner());
                 String columnName = FeConstants.GENERATED_PARTITION_COLUMN_PREFIX + placeHolderSlotId++;
                 partitionColumnList.add(columnName);
                 Type type = expr.getType();

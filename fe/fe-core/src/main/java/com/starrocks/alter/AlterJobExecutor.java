@@ -629,7 +629,7 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
         // ALTER TABLE test TRUNCATE PARTITION p1;
         TableRef tableRef = new TableRef(tableName, null, clause.getPartitionNames());
         TruncateTableStmt tStmt = new TruncateTableStmt(tableRef);
-        ConnectContext ctx = new ConnectContext();
+        ConnectContext ctx = ConnectContext.buildInner();
         ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
 
         ErrorReport.wrapWithRuntimeException(() ->

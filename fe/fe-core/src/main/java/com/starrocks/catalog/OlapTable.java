@@ -3229,7 +3229,7 @@ public class OlapTable extends Table {
             return;
         }
         TableName tableName = new TableName(null, getName());
-        ConnectContext session = new ConnectContext();
+        ConnectContext session = ConnectContext.buildInner();
         Optional<SelectAnalyzer.SlotRefTableNameCleaner> visitorOpt = Optional.empty();
         for (MaterializedIndexMeta indexMeta : indexIdToMeta.values()) {
             if (indexMeta.getIndexId() == baseIndexId) {

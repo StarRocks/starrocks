@@ -108,7 +108,7 @@ public abstract class MetadataCollectJob {
     }
 
     protected ConnectContext buildConnectContext(SessionVariable originSessionVariable) {
-        ConnectContext context = new ConnectContext();
+        ConnectContext context = ConnectContext.buildInner();
         context.getSessionVariable().setEnableProfile(originSessionVariable.isEnableMetadataProfile());
         context.getSessionVariable().setParallelExecInstanceNum(1);
         context.getSessionVariable().setQueryTimeoutS(originSessionVariable.getMetadataCollectQueryTimeoutS());
