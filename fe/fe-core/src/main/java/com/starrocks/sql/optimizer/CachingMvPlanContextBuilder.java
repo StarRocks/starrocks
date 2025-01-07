@@ -29,6 +29,8 @@ import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.scheduler.mv.MVTimelinessMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
@@ -200,7 +202,10 @@ public class CachingMvPlanContextBuilder {
             LOG.warn("get mv plan cache failed: {}", mv.getName(), e);
             return null;
         }
-        LOG.info("Get mv plan cache success: {}, cost: {}ms", mv.getName(), System.currentTimeMillis() - startTime);
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("Get mv plan cache success: {}, cost: {}ms", mv.getName(),
+                    System.currentTimeMillis() - startTime);
+        }
         return result;
     }
 
@@ -223,8 +228,13 @@ public class CachingMvPlanContextBuilder {
     public void updateMvPlanContextCache(MaterializedView mv, boolean isActive) {
         // invalidate caches first
         try {
+            // invalidate mv from plan cache
             MV_PLAN_CONTEXT_CACHE.synchronous().invalidate(mv);
+            // invalidate mv from ast cache
             invalidateAstFromCache(mv);
+            // invalidate mv from timeline cache
+            MVTimelinessMgr mvTimelinessMgr = GlobalStateMgr.getCurrentState().getMaterializedViewMgr().getMvTimelinessMgr();
+            mvTimelinessMgr.remove(mv);
         } catch (Throwable e) {
             LOG.warn("updateMvPlanContextCache invalidate cache failed: {}", mv.getName(), e);
         }
