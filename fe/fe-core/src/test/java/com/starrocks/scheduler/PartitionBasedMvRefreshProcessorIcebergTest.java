@@ -25,6 +25,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.utframe.UtFrameUtils;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -206,7 +207,6 @@ public class PartitionBasedMvRefreshProcessorIcebergTest extends MVRefreshTestBa
                             "\"storage_medium\" = \"HDD\"\n" +
                             ")\n" +
                             "AS SELECT id, data, ts  FROM `iceberg0`.`partitioned_transforms_db`.`t0_year` as a;");
-
             Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
             MaterializedView partitionedMaterializedView = ((MaterializedView) testDb.getTable("iceberg_year_mv1"));
             triggerRefreshMv(testDb, partitionedMaterializedView);
@@ -332,6 +332,7 @@ public class PartitionBasedMvRefreshProcessorIcebergTest extends MVRefreshTestBa
                         "REFRESH DEFERRED MANUAL\n" +
                         "AS SELECT id, data, date  FROM `iceberg0`.`partitioned_db`.`t1` as a;",
                 () -> {
+                    UtFrameUtils.mockEnableQueryContextCache();
                     MaterializedView mv = getMv("test", "test_mv1");
                     PartitionBasedMvRefreshProcessor processor = refreshMV("test", mv);
                     RuntimeProfile runtimeProfile = processor.getRuntimeProfile();

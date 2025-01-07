@@ -32,6 +32,7 @@ import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TGetTasksParams;
+import com.starrocks.utframe.UtFrameUtils;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -248,6 +249,7 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVRefreshTest
                         "refresh deferred manual\n" +
                         "as select k1, k2, sum(v1) as total from tbl1 group by k1, k2;",
                 () -> {
+                    UtFrameUtils.mockEnableQueryContextCache();
                     executeInsertSql(connectContext, "insert into tbl1 values(\"2022-02-20\", 1, 10)");
                     OlapTable table = (OlapTable) getTable("test", "tbl1");
                     MaterializedView mv = getMv("test", "test_mv1");

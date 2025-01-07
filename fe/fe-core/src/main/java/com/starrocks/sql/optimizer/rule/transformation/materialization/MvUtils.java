@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
-import com.github.benmanes.caffeine.cache.Cache;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Predicates;
 import com.google.common.collect.Lists;
@@ -1384,8 +1383,6 @@ public class MvUtils {
         }
 
         QueryMaterializationContext queryMaterializationContext = optimizerContext.getQueryMaterializationContext();
-        Cache<Object, Object> predicateSplitCache = queryMaterializationContext.getMvQueryContextCache();
-        Preconditions.checkArgument(predicateSplitCache != null);
         // Cache predicate split for predicates because it's time costing if there are too many materialized views.
         return queryMaterializationContext.getPredicateSplit(queryConjuncts, queryColumnRefRewriter);
     }
