@@ -398,24 +398,16 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
         Assert.assertEquals(2, materializedView.getPartition("p202204_202205").getVisibleVersion());
 
         refreshMVRange(materializedView.getName(), "2021-12-03", "2022-05-06", true);
-<<<<<<< HEAD
-        Assert.assertEquals(2, materializedView.getPartition("p202112_202201").getVisibleVersion());
-        Assert.assertEquals(2, materializedView.getPartition("p202201_202202").getVisibleVersion());
-        Assert.assertEquals(1, materializedView.getPartition("p202202_202203").getVisibleVersion());
-        Assert.assertEquals(2, materializedView.getPartition("p202203_202204").getVisibleVersion());
-        Assert.assertEquals(2, materializedView.getPartition("p202204_202205").getVisibleVersion());
-=======
         Assert.assertEquals(3, materializedView.getPartition("p202112_202201")
-                .getDefaultPhysicalPartition().getVisibleVersion());
+                .getVisibleVersion());
         Assert.assertEquals(3, materializedView.getPartition("p202201_202202")
-                .getDefaultPhysicalPartition().getVisibleVersion());
+                .getVisibleVersion());
         Assert.assertEquals(2, materializedView.getPartition("p202202_202203")
-                .getDefaultPhysicalPartition().getVisibleVersion());
+                .getVisibleVersion());
         Assert.assertEquals(2, materializedView.getPartition("p202203_202204")
-                .getDefaultPhysicalPartition().getVisibleVersion());
+                .getVisibleVersion());
         Assert.assertEquals(3, materializedView.getPartition("p202204_202205")
-                .getDefaultPhysicalPartition().getVisibleVersion());
->>>>>>> 367311b61d ([Enhancement] should do mv refresh when force refresh (#52081))
+                .getVisibleVersion());
     }
 
     @Test

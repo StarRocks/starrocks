@@ -253,15 +253,9 @@ public class PartitionBasedMvRefreshProcessorJdbcTest extends MVRefreshTestBase 
                     materializedView.getPartitions().stream().map(Partition::getName).sorted()
                             .collect(Collectors.toList());
             Assert.assertEquals(Arrays.asList("p000101_202308", "p202308_202309"), partitions);
-<<<<<<< HEAD
-            Assert.assertEquals(partitionVersionMap.get("p202308_202309").longValue(),
-                    materializedView.getPartition("p202308_202309").getVisibleVersion());
-=======
             // mv partition p202308_202309 is force refreshed and visible version is increased
             Assert.assertEquals(partitionVersionMap.get("p202308_202309") + 1,
-                    materializedView.getPartition("p202308_202309")
-                            .getDefaultPhysicalPartition().getVisibleVersion());
->>>>>>> 367311b61d ([Enhancement] should do mv refresh when force refresh (#52081))
+                    materializedView.getPartition("p202308_202309").getVisibleVersion());
         }
 
         // partial range refresh 2
