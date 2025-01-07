@@ -18,7 +18,6 @@ import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
-import com.starrocks.common.UserException;
 import com.starrocks.connector.informationschema.InformationSchemaMetadata;
 import com.starrocks.connector.jdbc.MockedJDBCMetadata;
 import com.starrocks.connector.metadata.TableMetaMetadata;
@@ -161,13 +160,8 @@ public class CatalogConnectorMetadataTest {
     }
 
     @Test
-<<<<<<< HEAD
-    void testMetadataRouting(@Mocked ConnectorMetadata connectorMetadata) throws UserException {
-        ConnectContext ctx = com.starrocks.common.util.Util.getOrCreateConnectContext();
-=======
-    void testMetadataRouting(@Mocked ConnectorMetadata connectorMetadata) throws StarRocksException {
+    void testMetadataRouting(@Mocked ConnectorMetadata connectorMetadata) throws Exception {
         ConnectContext ctx = com.starrocks.common.util.Util.getOrCreateInnerContext();
->>>>>>> 6a0fd5dd7 ([BugFix] Build a ConnectContext for inner query which is used for StarRocks internal query (#54737))
         ctx.setThreadLocalInfo();
         GetRemoteFilesParams getRemoteFilesParams =
                 GetRemoteFilesParams.newBuilder().setTableVersionRange(TableVersionRange.empty()).build();
