@@ -48,6 +48,25 @@ struct RandomGenerator {
     static T next_value() { return rand() % range; }
 };
 
+template <class T, int range>
+struct RandomConstGenerator {
+    static T next_value() {
+        if (!_is_initialize) {
+            const_value = rand() % range;
+            _is_initialize = true;
+        }
+        return const_value;
+    }
+    static T const_value;
+    static bool _is_initialize;
+};
+
+template <class T, int range>
+bool RandomConstGenerator<T, range>::_is_initialize = false;
+
+template <class T, int range>
+T RandomConstGenerator<T, range>::const_value = 0;
+
 template <class DataGenerator, class Container, int init_size>
 struct ContainerIniter {
     static void init(Container& container) {
