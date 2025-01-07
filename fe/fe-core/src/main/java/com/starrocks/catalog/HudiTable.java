@@ -68,6 +68,7 @@ public class HudiTable extends Table {
     private static final String JSON_KEY_HUDI_PROPERTIES = "hudiProperties";
 
     public static final String HUDI_TABLE_TYPE = "hudi.table.type";
+    public static final String HUDI_HMS_TABLE_TYPE = "hudi.hms.table.type";
     public static final String HUDI_BASE_PATH = "hudi.table.base.path";
     public static final String HUDI_TABLE_SERDE_LIB = "hudi.table.serde.lib";
     public static final String HUDI_TABLE_INPUT_FOAMT = "hudi.table.input.format";
@@ -322,6 +323,11 @@ public class HudiTable extends Table {
     @Override
     public boolean isSupported() {
         return true;
+    }
+
+    @Override
+    public boolean isHMSExternalTable() {
+        return hudiProperties.get(HUDI_HMS_TABLE_TYPE).equals("EXTERNAL_TABLE");
     }
 
     @Override
