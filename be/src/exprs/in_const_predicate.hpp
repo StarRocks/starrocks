@@ -385,6 +385,8 @@ public:
 
     bool null_in_set() const { return _null_in_set; }
 
+    bool is_eq_null() const { return _eq_null; }
+
     void set_null_in_set(bool v) { _null_in_set = v; }
 
     bool is_join_runtime_filter() const { return _is_join_runtime_filter; }

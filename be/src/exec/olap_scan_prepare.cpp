@@ -385,15 +385,29 @@ requires(!lt_is_date<SlotType>) Status ChunkPredicateBuilder<E, Type>::normalize
                     continue;
                 }
 
-                if (is_not_in<Negative>(pred) || pred->null_in_set() ||
-                    pred->hash_set().size() > config::max_pushdown_conditions_per_column) {
+                if (is_not_in<Negative>(pred) || pred->hash_set().size() > config::max_pushdown_conditions_per_column) {
                     continue;
                 }
 
                 std::set<RangeValueType> values;
+                if (pred->null_in_set()) {
+                    if (pred->is_eq_null()) {
+                        // TODO: equal null is also can be normalized, will be optimized later
+                        continue;
+                    }
+                    if constexpr (Negative) {
+                        // or col not in (v1, v2, v3, null)
+                        _normalized_exprs[i] = true;
+                        continue;
+                    } else {
+                        // and col in (v1, v2, v3, null), null can be eliminated
+                    }
+                }
+
                 for (const auto& value : pred->hash_set()) {
                     values.insert(value);
                 }
+
                 if (range->add_fixed_values(FILTER_IN, values).ok()) {
                     _normalized_exprs[i] = true;
                 }
@@ -462,9 +476,18 @@ requires lt_is_date<SlotType> Status ChunkPredicateBuilder<E, Type>::normalize_i
                         continue;
                     }
 
-                    if (is_not_in<Negative>(pred) || pred->null_in_set() ||
+                    if (is_not_in<Negative>(pred) ||
                         pred->hash_set().size() > config::max_pushdown_conditions_per_column) {
                         continue;
+                    }
+                    if (pred->null_in_set()) {
+                        if (pred->is_eq_null()) {
+                            continue;
+                        }
+                        if constexpr (Negative) {
+                            _normalized_exprs[i] = true;
+                            continue;
+                        }
                     }
 
                     for (const TimestampValue& ts : pred->hash_set()) {
@@ -476,9 +499,18 @@ requires lt_is_date<SlotType> Status ChunkPredicateBuilder<E, Type>::normalize_i
                 } else if (pred_type == starrocks::TYPE_DATE) {
                     const auto* pred = down_cast<const VectorizedInConstPredicate<starrocks::TYPE_DATE>*>(root_expr);
 
-                    if (is_not_in<Negative>(pred) || pred->null_in_set() ||
+                    if (is_not_in<Negative>(pred) ||
                         pred->hash_set().size() > config::max_pushdown_conditions_per_column) {
                         continue;
+                    }
+                    if (pred->null_in_set()) {
+                        if (pred->is_eq_null()) {
+                            continue;
+                        }
+                        if constexpr (Negative) {
+                            _normalized_exprs[i] = true;
+                            continue;
+                        }
                     }
                     for (const DateValue& date : pred->hash_set()) {
                         values.insert(date);
@@ -759,12 +791,26 @@ Status ChunkPredicateBuilder<E, Type>::normalize_not_in_or_not_equal_predicate(
                     continue;
                 }
 
-                if (!is_not_in<Negative>(pred) || pred->null_in_set() ||
+                if (!is_not_in<Negative>(pred) ||
                     pred->hash_set().size() > config::max_pushdown_conditions_per_column) {
                     continue;
                 }
 
                 std::set<RangeValueType> values;
+                if (pred->null_in_set()) {
+                    if (pred->is_eq_null()) {
+                        continue;
+                    }
+                    if constexpr (!Negative) {
+                        // and col not in (v1, v2, v3, null)
+                        range->clear_to_empty();
+                        _normalized_exprs[i] = true;
+                        continue;
+                    } else {
+                        // or col in (v1, v2, v3, null)
+                    }
+                }
+
                 for (const auto& value : pred->hash_set()) {
                     values.insert(value);
                 }
@@ -1185,4 +1231,5 @@ const UnarrivedRuntimeFilterList& ScanConjunctsManager::unarrived_runtime_filter
 }
 
 template class ChunkPredicateBuilder<BoxedExprContext, CompoundNodeType::AND>;
+template class ChunkPredicateBuilder<BoxedExprContext, CompoundNodeType::OR>;
 } // namespace starrocks
