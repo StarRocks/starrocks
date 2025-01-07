@@ -3533,6 +3533,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 引入版本：-
 -->
 
+##### starlet_fslib_s3client_request_timeout_ms
+
+- 默认值：-1
+- 类型：Int
+- 单位：Milliseconds
+- 是否动态：否
+- 配置项描述: `object_storage_request_timeout_ms` 的别名。详细信息请参考配置项 [object_storage_request_timeout_ms](#object_storage_request_timeout_ms)。
+- 引入版本: v3.3.9
+
 ##### lake_compaction_stream_buffer_size_bytes
 
 - 默认值：1048576
