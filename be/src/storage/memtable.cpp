@@ -491,6 +491,9 @@ Status MemTable::_sort_column_inc(bool by_sort_key) {
     std::vector<ColumnId> sort_key_idxes;
     if (by_sort_key) {
         sort_key_idxes = _vectorized_schema->sort_key_idxes();
+        for (auto idx : sort_key_idxes) {
+            LOG(INFO) << "sort idx: " << idx;
+        }
         if (sort_key_idxes.empty()) {
             for (ColumnId i = 0; i < _vectorized_schema->num_key_fields(); ++i) {
                 sort_key_idxes.push_back(i);
@@ -509,6 +512,9 @@ Status MemTable::_sort_column_inc(bool by_sort_key) {
                 LOG(ERROR) << msg;
                 return Status::InternalError(msg);
             }
+        }
+        for (auto idx : sort_key_idxes) {
+            LOG(INFO) << "after sort idx: " << idx;
         }
     } else {
         for (ColumnId i = 0; i < _vectorized_schema->num_key_fields(); ++i) {
