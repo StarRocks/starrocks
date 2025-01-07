@@ -764,6 +764,7 @@ void RuntimeFilterProbeCollector::wait(bool on_scan_node) {
 }
 
 void RuntimeFilterProbeDescriptor::set_runtime_filter(const JoinRuntimeFilter* rf) {
+    auto notify = DeferOp([this]() { _observable.notify_source_observers(); });
     const JoinRuntimeFilter* expected = nullptr;
     _runtime_filter.compare_exchange_strong(expected, rf, std::memory_order_seq_cst, std::memory_order_seq_cst);
     if (_ready_timestamp == 0 && rf != nullptr && _latency_timer != nullptr) {

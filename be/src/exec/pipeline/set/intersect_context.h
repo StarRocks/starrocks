@@ -22,6 +22,7 @@
 #include "exec/intersect_hash_set.h"
 #include "exec/olap_common.h"
 #include "exec/pipeline/context_with_dependency.h"
+#include "exec/pipeline/schedule/observer.h"
 #include "exprs/expr_context.h"
 #include "gutil/casts.h"
 #include "runtime/mem_pool.h"
@@ -59,6 +60,8 @@ public:
         return _finished_dependency_index.load(std::memory_order_acquire) == dependency_index;
     }
 
+    int32_t finished_dependency_index() const { return _finished_dependency_index.load(std::memory_order_acquire); }
+
     bool is_output_finished() const { return _next_processed_iter == _hash_set_end_iter; }
 
     // Called in the preparation phase of IntersectBuildSinkOperator.
@@ -72,6 +75,8 @@ public:
                                 const std::vector<ExprContext*>& child_exprs, int hit_times);
 
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state);
+
+    PipeObservable& observable() { return _observable; }
 
 private:
     std::unique_ptr<IntersectHashSerializeSet> _hash_set = std::make_unique<IntersectHashSerializeSet>();
@@ -103,6 +108,8 @@ private:
     // i-th PROBE must wait for _finished_dependency_index becoming i-1,
     // and OUTPUT must wait for _finished_dependency_index becoming n.
     std::atomic<int32_t> _finished_dependency_index{-1};
+
+    PipeObservable _observable;
 };
 
 // The input chunks of BUILD and PROBE are shuffled by the local shuffle operator.

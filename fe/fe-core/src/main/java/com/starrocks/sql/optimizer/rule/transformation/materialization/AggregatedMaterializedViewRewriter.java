@@ -21,6 +21,8 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.RandomDistributionInfo;
+import com.starrocks.catalog.combinator.AggStateMergeCombinator;
+import com.starrocks.catalog.combinator.AggStateUnionCombinator;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.MvRewriteContext;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -129,6 +131,17 @@ public final class AggregatedMaterializedViewRewriter extends MaterializedViewRe
                         "Rollup aggregate cannot contain distinct aggregate functions," +
                         "mv:{}, query:{}", mvAggOp.getAggregations().values(), queryAggOp.getAggregations().values());
                 return null;
+            }
+        } else {
+            // agg_state combinator cannot be used for non-rollup rewrite(convert agg_state to final result),
+            // so change isRollup to true if mv has agg_state combinator.
+            boolean isContainAggStateCombinator = mvAggOp.getAggregations()
+                    .values()
+                    .stream()
+                    .anyMatch(callOp -> callOp.getFunction() instanceof AggStateUnionCombinator
+                            || callOp.getFunction() instanceof AggStateMergeCombinator);
+            if (isContainAggStateCombinator) {
+                isRollup = true;
             }
         }
         rewriteContext.setRollup(isRollup);

@@ -15,6 +15,7 @@
 #pragma once
 
 #include "column/column.h"
+#include "column/column_helper.h"
 #include "common/status.h"
 #include "formats/parquet/encoding.h"
 #include "gutil/strings/substitute.h"
@@ -173,11 +174,13 @@ public:
         slices.reserve(count);
 
         size_t num_decoded = 0;
+        size_t byte_size = 0;
         while (num_decoded < count && _offset < _data.size) {
             uint32_t length = decode_fixed32_le(reinterpret_cast<const uint8_t*>(_data.data) + _offset);
             _offset += sizeof(int32_t);
             slices.emplace_back(_data.data + _offset, length);
             _offset += length;
+            byte_size += length;
             num_decoded++;
         }
         // never happend
@@ -185,6 +188,7 @@ public:
             return Status::InternalError(strings::Substitute(
                     "going to read out-of-bounds data, offset=$0,count=$1,size=$2", _offset, count, _data.size));
         }
+        ColumnHelper::get_binary_column(dst)->reserve(count, byte_size);
         auto ret = dst->append_strings(slices);
         if (UNLIKELY(!ret)) {
             return Status::InternalError("PlainDecoder append strings to column failed");
