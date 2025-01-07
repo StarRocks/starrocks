@@ -21,6 +21,8 @@ class PercentileValue {
 public:
     PercentileValue() { _type = TDIGEST; }
 
+    explicit PercentileValue(double compression) : _tdigest(compression) { _type = TDIGEST; }
+
     explicit PercentileValue(const Slice& src) {
         switch (*src.data) {
         case PercentileDataType::TDIGEST:
