@@ -59,6 +59,9 @@ import java.util.stream.Collectors;
 public class MaterializedViewMgr {
     private static final Logger LOG = LogManager.getLogger(MaterializedViewMgr.class);
 
+    // MV's global timeliness info manager
+    private final MVTimelinessMgr mvTimelinessMgr = new MVTimelinessMgr();
+    // MV's maintenance job
     private final Map<MvId, MVMaintenanceJob> jobMap = new ConcurrentHashMap<>();
 
     public MaterializedView createSinkTable(CreateMaterializedViewStatement stmt, PartitionInfo partitionInfo,
@@ -306,5 +309,13 @@ public class MaterializedViewMgr {
             mvMaintenanceJob.restore();
             jobMap.put(mvId, mvMaintenanceJob);
         });
+    }
+
+    public MVTimelinessMgr getMvTimelinessMgr() {
+        return mvTimelinessMgr;
+    }
+
+    public void triggerTimelessInfoEvent(MaterializedView mv, MVTimelinessMgr.MVChangeEvent event) {
+        mvTimelinessMgr.triggerEvent(mv, event);
     }
 }

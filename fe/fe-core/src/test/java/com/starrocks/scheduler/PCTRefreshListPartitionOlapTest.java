@@ -1418,7 +1418,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                         PlanTestBase.assertContains(plan, ":UNION");
                         PlanTestBase.assertContains(plan, String.format("TABLE: %s\n" +
                                 "     PREAGGREGATION: ON\n" +
-                                "     partitions=4/6", tableName));
+                                "     PREDICATES: ", tableName));
                         PlanTestBase.assertContains(plan, "TABLE: test_mv1\n" +
                                 "     PREAGGREGATION: ON\n" +
                                 "     partitions=0/0");
@@ -1431,7 +1431,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                         PlanTestBase.assertContains(plan, ":UNION");
                         PlanTestBase.assertContains(plan, String.format("TABLE: %s\n" +
                                 "     PREAGGREGATION: ON\n" +
-                                "     partitions=4/6", tableName));
+                                "     PREDICATES: ", tableName));
                         PlanTestBase.assertContains(plan, "TABLE: test_mv1\n" +
                                 "     PREAGGREGATION: ON\n" +
                                 "     partitions=2/2");

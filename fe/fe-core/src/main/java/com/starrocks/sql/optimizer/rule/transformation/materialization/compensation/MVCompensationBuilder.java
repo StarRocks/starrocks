@@ -14,11 +14,13 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization.compensation;
 
+import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.MaterializationContext;
@@ -126,7 +128,22 @@ public class MVCompensationBuilder {
     public TableCompensation getRefBaseTableCompensation(Table refBaseTable,
                                                          Optional<LogicalScanOperator> scanOperatorOpt) {
         // if query consistency is not `force_mv`, use the old compensation logic.
-        return getRefBaseTableCompensationByPartitionKeys(refBaseTable, scanOperatorOpt);
+        if (isEnableRefBaseTableCompensationByPartitionKeys(refBaseTable)) {
+            return getRefBaseTableCompensationByPartitionKeys(refBaseTable, scanOperatorOpt);
+        } else {
+            return PartitionRetentionTableCompensation.build(refBaseTable, mvUpdateInfo, scanOperatorOpt);
+        }
+    }
+
+    private boolean isEnableRefBaseTableCompensationByPartitionKeys(Table refBaseTable) {
+        TableProperty.QueryRewriteConsistencyMode consistencyMode =
+                mvUpdateInfo.getQueryRewriteConsistencyMode();
+        if (consistencyMode != TableProperty.QueryRewriteConsistencyMode.FORCE_MV) {
+            return true;
+        }
+        MaterializedView mv = mvUpdateInfo.getMv();
+        String partitionRetention = mv.getTableProperty().getPartitionRetentionCondition();
+        return Strings.isNullOrEmpty(partitionRetention);
     }
 
     /**
