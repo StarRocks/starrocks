@@ -96,6 +96,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ProfileManager;
+import com.starrocks.common.util.Util;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -551,7 +552,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         View view = (View) table;
                         String ddlSql = view.getInlineViewDef();
 
-                        ConnectContext connectContext = new ConnectContext();
+                        ConnectContext connectContext = ConnectContext.buildInner();
                         connectContext.setQualifiedUser(AuthenticationMgr.ROOT_USER);
                         connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
                         connectContext.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
@@ -2336,7 +2337,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
 
             // If a create partition request is from BE or CN, the warehouse information may be lost, we can get it from txn state.
-            ConnectContext ctx = com.starrocks.common.util.Util.getOrCreateConnectContext();
+            ConnectContext ctx = Util.getOrCreateInnerContext();
             if (txnState.getWarehouseId() != WarehouseManager.DEFAULT_WAREHOUSE_ID) {
                 ctx.setCurrentWarehouseId(txnState.getWarehouseId());
             }

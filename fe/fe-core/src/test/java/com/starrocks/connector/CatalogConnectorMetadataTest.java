@@ -161,8 +161,13 @@ public class CatalogConnectorMetadataTest {
     }
 
     @Test
+<<<<<<< HEAD
     void testMetadataRouting(@Mocked ConnectorMetadata connectorMetadata) throws UserException {
         ConnectContext ctx = com.starrocks.common.util.Util.getOrCreateConnectContext();
+=======
+    void testMetadataRouting(@Mocked ConnectorMetadata connectorMetadata) throws StarRocksException {
+        ConnectContext ctx = com.starrocks.common.util.Util.getOrCreateInnerContext();
+>>>>>>> 6a0fd5dd7 ([BugFix] Build a ConnectContext for inner query which is used for StarRocks internal query (#54737))
         ctx.setThreadLocalInfo();
         GetRemoteFilesParams getRemoteFilesParams =
                 GetRemoteFilesParams.newBuilder().setTableVersionRange(TableVersionRange.empty()).build();
@@ -215,7 +220,7 @@ public class CatalogConnectorMetadataTest {
         catalogConnectorMetadata.dropTable(null);
         catalogConnectorMetadata.refreshTable("test_db", null, null, false);
         catalogConnectorMetadata.alterMaterializedView(null);
-        catalogConnectorMetadata.addPartitions(com.starrocks.common.util.Util.getOrCreateConnectContext(), null, null, null);
+        catalogConnectorMetadata.addPartitions(com.starrocks.common.util.Util.getOrCreateInnerContext(), null, null, null);
         catalogConnectorMetadata.dropPartition(null, null, null);
         catalogConnectorMetadata.renamePartition(null, null, null);
         catalogConnectorMetadata.createMaterializedView((CreateMaterializedViewStatement) null);
