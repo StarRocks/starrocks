@@ -656,6 +656,22 @@ public class LimitTest extends PlanTestBase {
     }
 
     @Test
+    public void testPushDownLimitToTopN() throws Exception {
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(3000000);
+        String sql;
+        String plan;
+        sql = "select c0 from (select * from ( select v1 c0, v2 c1 from t0 order by c0 asc limit 1000, 600 ) l " +
+                "union all select 0 as c0, '0' as c1 ) b limit 100;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:TOP-N\n" +
+                "  |  order by: <slot 1> 1: v1 ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  limit: 1100\n" +
+                "  |  \n" +
+                "  1:OlapScanNode");
+    }
+
+    @Test
     public void testUnionLimit() throws Exception {
         String queryStr = "select 1 from (select 4, 3 from t0 union all select 2, 3 ) as a limit 3";
         String explainString = getFragmentPlan(queryStr);
