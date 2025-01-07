@@ -56,7 +56,6 @@ import com.starrocks.catalog.FsBroker;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -72,7 +71,6 @@ import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.Load;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TBrokerFileStatus;
@@ -543,25 +541,7 @@ public class FileScanNode extends LoadScanNode {
     }
 
     private void assignBackends() throws UserException {
-        nodes = Lists.newArrayList();
-
-        // TODO: need to refactor after be split into cn + dn
-        if (RunMode.isSharedDataMode()) {
-            List<Long> computeNodeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseId);
-            for (long cnId : computeNodeIds) {
-                ComputeNode cn = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(cnId);
-                if (cn != null && cn.isAvailable()) {
-                    nodes.add(cn);
-                }
-            }
-        } else {
-            for (ComputeNode be : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdToBackend().values()) {
-                if (be.isAvailable()) {
-                    nodes.add(be);
-                }
-            }
-        }
-
+        nodes = getAvailableComputeNodes(warehouseId);
         if (nodes.isEmpty()) {
             throw new UserException("No available backends");
         }
