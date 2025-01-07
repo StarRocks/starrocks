@@ -592,13 +592,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
                 continue;
             }
 
-            info.outputStringColumns.union(column);
-            info.inputStringColumns.union(column);
-            stringRefToDefineExprMap.put(column.getId(), column);
-            scanStringColumns.add(column.getId());
-            expressionStringRefCounter.put(column.getId(), 0);
-            globalDicts.put(column.getId(), dict.get());
-            scanColumnRefSet.union(column.getId());
+            markedAsGlobalDictOpt(info, column, dict.get());
         }
 
         if (info.outputStringColumns.isEmpty()) {
@@ -658,13 +652,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
                 continue;
             }
 
-            info.outputStringColumns.union(column);
-            info.inputStringColumns.union(column);
-            stringRefToDefineExprMap.put(column.getId(), column);
-            scanStringColumns.add(column.getId());
-            expressionStringRefCounter.put(column.getId(), 0);
-            globalDicts.put(column.getId(), dict.get());
-            scanColumnRefSet.union(column.getId());
+            markedAsGlobalDictOpt(info, column, dict.get());
         }
 
         if (info.outputStringColumns.isEmpty()) {
@@ -672,6 +660,16 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         }
 
         return info;
+    }
+
+    private void markedAsGlobalDictOpt(DecodeInfo info, ColumnRefOperator column, ColumnDict dict) {
+        info.outputStringColumns.union(column);
+        info.inputStringColumns.union(column);
+        stringRefToDefineExprMap.put(column.getId(), column);
+        scanStringColumns.add(column.getId());
+        expressionStringRefCounter.put(column.getId(), 0);
+        globalDicts.put(column.getId(), dict);
+        scanColumnRefSet.union(column.getId());
     }
 
     // complex type may be support prune subfield, doesn't read data
