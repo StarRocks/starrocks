@@ -107,7 +107,7 @@ struct DSSketchState<LT, FREQUENT> {
         offset = offset + sizeof(uint8_t);
         const Slice sketch_data_slice = Slice(slice.get_data() + offset, slice.size - offset);
         ds_sketch_wrapper = std::make_unique<SketchWarapperType>(sketch_data_slice, lg_max_map_size, lg_start_map_size,
-                                                                     memory_usage);
+                                                                 memory_usage);
     }
 
     void get_values(Column* dst, size_t start, size_t end) const {
