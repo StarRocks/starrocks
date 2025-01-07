@@ -1035,6 +1035,10 @@ dropFieldClause
     : MODIFY COLUMN identifier DROP FIELD nestedFieldName properties?
     ;
 
+integer_list
+    : '(' INTEGER_VALUE (',' INTEGER_VALUE)* ')'
+    ;
+
 dropPersistentIndexClause
     : DROP PERSISTENT INDEX ON TABLETS integer_list
     ;
