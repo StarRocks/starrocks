@@ -36,7 +36,7 @@ void DataSketchesFrequent<T>::merge(const DataSketchesFrequent<T>& other) {
                                                          alloc_type(_memory_usage));
     }
     _sketch.get()->merge(*other._sketch);
-}    
+}
 
 template <typename T>
 uint64_t DataSketchesFrequent<T>::serialize_size() const {
