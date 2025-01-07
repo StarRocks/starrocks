@@ -52,9 +52,9 @@ public abstract class IAggregateRewriteEquivalent implements IRewriteEquivalent 
      * @param replace:        the column ref to replace
      * @return: the rewritten aggregate function
      */
-    abstract ScalarOperator rewriteAggregateFunc(EquivalentShuttleContext shuttleContext,
-                                                 CallOperator aggFunc,
-                                                 ColumnRefOperator replace);
+    abstract ScalarOperator rewriteAggregateFuncWithoutRollup(EquivalentShuttleContext shuttleContext,
+                                                              CallOperator aggFunc,
+                                                              ColumnRefOperator replace);
 
     /**
      * Rewrite the aggregate function with rollup and push down.
@@ -74,14 +74,13 @@ public abstract class IAggregateRewriteEquivalent implements IRewriteEquivalent 
      * @param shuttleContext: the context of equivalent shuttle
      * @param aggFunc:        the aggregate function to rewrite
      * @param replace:        the column ref to replace
-     * @param isRollup:       whether the rewrite is for rollup
      * @return: the rewritten aggregate function
      */
     public ScalarOperator rewriteImpl(EquivalentShuttleContext shuttleContext,
                                       CallOperator aggFunc,
-                                      ColumnRefOperator replace,
-                                      boolean isRollup) {
+                                      ColumnRefOperator replace) {
         RewriteContext rewriteContext = shuttleContext.getRewriteContext();
+        boolean isRollup = shuttleContext.isRollup();
         if (isRollup) {
             if (rewriteContext != null && rewriteContext.getAggregatePushDownContext() != null) {
                 // final agg is used to rewrite query which will be remapping in the final stage.
@@ -94,7 +93,7 @@ public abstract class IAggregateRewriteEquivalent implements IRewriteEquivalent 
                 return rewriteRollupAggregateFunc(shuttleContext, aggFunc, replace);
             }
         } else {
-            return rewriteAggregateFunc(shuttleContext, aggFunc, replace);
+            return rewriteAggregateFuncWithoutRollup(shuttleContext, aggFunc, replace);
         }
     }
 }
