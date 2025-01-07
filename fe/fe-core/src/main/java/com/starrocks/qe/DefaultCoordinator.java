@@ -794,7 +794,7 @@ public class DefaultCoordinator extends Coordinator {
                 throw new RpcException("unknown", copyStatus.getErrorMsg());
             } else {
                 String errMsg = copyStatus.getErrorMsg();
-                LOG.warn("query failed: {}", errMsg);
+                LOG.warn("query {} failed: {}", connectContext.queryId, errMsg);
 
                 // hide host info
                 int hostIndex = errMsg.indexOf("host");
@@ -838,7 +838,7 @@ public class DefaultCoordinator extends Coordinator {
                 queryStatus.setStatus(Status.CANCELLED);
                 queryStatus.setErrorMsg(message);
             }
-            LOG.warn("cancel execState of query, this is outside invoke");
+            LOG.info("cancel query {} because {}", connectContext.queryId, message);
             cancelInternal(reason);
         } finally {
             try {

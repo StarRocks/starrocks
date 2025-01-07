@@ -41,6 +41,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.util.SqlUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.http.HttpConnectContext;
 import com.starrocks.mysql.MysqlCapability;
@@ -788,7 +789,7 @@ public class ConnectContext {
                     Thread.sleep(10);
                     times++;
                     if (times > 100) {
-                        LOG.warn("wait for close fail, break.");
+                        LOG.warn("kill queryId={} connectId={} wait for close fail, break.", queryId, connectionId);
                         break;
                     }
                 } catch (InterruptedException e) {
@@ -819,8 +820,8 @@ public class ConnectContext {
             if (delta > sessionVariable.getWaitTimeoutS() * 1000L) {
                 // Need kill this connection.
                 LOG.warn("kill wait timeout connection, remote: {}, wait timeout: {}, query id: {}, sql: {}",
-                        getMysqlChannel().getRemoteHostPortString(), sessionVariable.getWaitTimeoutS(), queryId, sql);
-
+                        getMysqlChannel().getRemoteHostPortString(), sessionVariable.getWaitTimeoutS(), queryId,
+                        SqlUtils.sqlPrefix(sql));
                 killFlag = true;
                 killConnection = true;
             }
@@ -828,7 +829,8 @@ public class ConnectContext {
             long timeoutSecond = sessionVariable.getQueryTimeoutS();
             if (delta > timeoutSecond * 1000L) {
                 LOG.warn("kill query timeout, remote: {}, query timeout: {}, query id: {}, sql: {}",
-                        getMysqlChannel().getRemoteHostPortString(), sessionVariable.getQueryTimeoutS(), queryId, sql);
+                        getMysqlChannel().getRemoteHostPortString(), sessionVariable.getQueryTimeoutS(), queryId,
+                        SqlUtils.sqlPrefix(sql));
 
                 // Only kill
                 killFlag = true;
