@@ -272,7 +272,7 @@ If the data of `file1.csv` is published to `topic1` of your Kafka cluster, execu
 ```SQL
 CREATE ROUTINE LOAD test_db.table102 ON table1
 COLUMNS TERMINATED BY ",",
-COLUMNS (user_id, user_gender, event_date, event_type)
+COLUMNS (user_id, user_gender, event_date, event_type),
 WHERE event_type = 1
 FROM KAFKA
 (
