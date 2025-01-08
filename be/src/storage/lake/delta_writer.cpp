@@ -488,7 +488,7 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish(DeltaWriterFinishMode mode) {
                 op_write->mutable_txn_meta()->add_partial_update_column_unique_ids(tablet_column.unique_id());
             }
             if (_partial_update_mode != PartialUpdateMode::COLUMN_UPDATE_MODE) {
-                // generate rewrite segment names to avoid gc in rewrite operation
+                // rewrite segments are useless now, just for compatibility
                 for (auto i = 0; i < op_write->rowset().segments_size(); i++) {
                     op_write->add_rewrite_segments(gen_segment_filename(_txn_id));
                 }
@@ -523,6 +523,7 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish(DeltaWriterFinishMode mode) {
             }
 
             if (op_write->rewrite_segments_size() == 0) {
+                // rewrite segments are useless now, just for compatibility
                 for (auto i = 0; i < op_write->rowset().segments_size(); i++) {
                     op_write->add_rewrite_segments(gen_segment_filename(_txn_id));
                 }
