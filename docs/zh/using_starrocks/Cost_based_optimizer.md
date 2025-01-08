@@ -483,9 +483,9 @@ KILL ANALYZE <ID>
 
 `statistic_collect_parallel` 用于调整 BE 上能并发执行的统计信息收集任务的个数，默认值为 1，可以调大该数值来加快收集任务的执行速度。
 
-## 采集 Hive/Iceberg/Hudi 表的统计信息
+## 采集外表的统计信息
 
-从 3.2 版本起，支持采集 Hive, Iceberg, Hudi 表的统计信息。**采集的语法和内表相同，但是只支持手动全量采集、手动直方图采集（自 v3.2.7 起）、自动全量采集，不支持抽样采集**。自 v3.3.0 起，支持采集 STRUCT 子列的统计信息。
+从 3.2 版本起，支持采集 Hive、Iceberg、Hudi 表的统计信息。**采集的语法和内表相同，但是只支持手动全量采集、手动直方图采集（自 v3.2.7 起）、自动全量采集，不支持抽样采集**。自 v3.3.0 起，支持采集 Delta Lake 表的统计信息，并支持采集 STRUCT 子列的统计信息。自 v3.4.0 起，支持通过查询触发 ANALYZE 任务自动收集统计信息。
 
 收集的统计信息会写入到 `_statistics_` 数据库的 `external_column_statistics` 表中，不会写入到 Hive Metastore 中，因此无法和其他查询引擎共用。您可以通过查询 `default_catalog._statistics_.external_column_statistics` 表中是否写入了表的统计信息。
 
@@ -511,15 +511,100 @@ partition_name:
 
 ### 使用限制
 
-对 Hive、Iceberg、Hudi 表采集统计信息时，有如下限制：
+对外表采集统计信息时，有如下限制：
 
-1. 目前只支持采集 Hive、Iceberg、Hudi 表的统计信息。
-2. 目前只支持手动全量采集、手动直方图采集（自 v3.2.7 起）和自动全量采集，不支持抽样采集。
-3. 全量自动采集，需要创建一个采集任务，系统不会默认自动采集外部数据源的统计信息。
-4. 对于自动采集任务，只支持采集指定表的统计信息，不支持采集所有数据库、数据库下所有表的统计信息。
-5. 对于自动采集任务，目前只有 Hive 和 Iceberg 表可以每次检查数据是否发生更新，数据发生了更新才会执行采集任务, 并且只会采集数据发生了更新的分区。Hudi 表目前无法判断是否发生了数据更新，所以会根据采集间隔周期性全表采集。
+- 目前只支持采集 Hive、Iceberg、Hudi、Delta Lake（自 v3.3.0 起） 表的统计信息。
+- 目前只支持手动全量采集、手动直方图采集（自 v3.2.7 起）、自动全量采集、查询触发采集（自 v3.4.0 起），不支持抽样采集。
+- 全量自动采集，需要创建一个采集任务，系统不会默认自动采集外部数据源的统计信息。
+- 对于自动采集任务：
+  - 只支持采集指定表的统计信息，不支持采集所有数据库、数据库下所有表的统计信息。
+  - 目前只有 Hive 和 Iceberg 表可以每次检查数据是否发生更新，数据发生了更新才会执行采集任务, 并且只会采集数据发生了更新的分区。Hudi 表目前无法判断是否发生了数据更新，所以会根据采集间隔周期性全表采集。
+- 对于查询触发采集：
+  - 目前只有 Leader FE 节点可以触发收集任务。
+  - 仅支持检查 Hive、Iceberg 外表的分区变动，只收集数据发生变动分区的统计信息。对于 Delta Lake/Hudi 外表，系统会收集整表的统计信息。
+  - 如果 Iceberg 表启用 Partition Transform，仅支持对于 `identity`、`year`、`month`、`day`、`hour` 类型 Transform 收集统计信息。
+  - 不支持针对 Iceberg 表的 Partition Evolution 收集统计信息。
 
 以下示例默认在 External Catalog 指定数据库下采集表的统计信息。如果是在 `default_catalog` 下采集 External Catalog 下表的统计信息，引用表名时可以使用 `[catalog_name.][database_name.]<table_name>` 格式。
+
+### 查询触发采集
+
+自 v3.4.0 起，支持通过查询触发 ANALYZE 任务自动收集外表的统计信息。当查询 Hive、Iceberg、Hudi、Delta Lake 表时，系统会在后台自动触发 ANALYZE 任务，收集对应表和列的统计信息，可以用于后续查询计划优化。
+
+触发流程：
+
+1. 优化器查询 FE 缓存的统计信息时，会依据被查询的表和列确定需要触发的 ANALYZE 任务的对象（ANALYZE 任务只会收集查询中包含的列的统计信息）。
+2. 系统会将任务对象包装为一个 ANALYZE 任务加入 PendingTaskQueue 中。
+3. Schedule 线程会周期性从 PendingTaskQueue 中获取任务放入 RunningTasksQueue 中执行。
+4. ANALYZE 任务被执行时会收集统计信息并写入到 BE 中，并清除 FE 中缓存的过期统计信息。
+
+该功能默认开启。你可以通过以下系统变量和配置项控制以上流程。
+
+#### 系统变量
+
+##### enable_query_trigger_analyze
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 描述：是否开启查询触发 ANALYZE 任务。
+- 引入版本：v3.4.0
+
+#### FE 配置项
+
+##### connector_table_query_trigger_analyze_small_table_rows
+
+- 默认值：10000000
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：查询触发 ANALYZE 任务的小表阈值。
+- 引入版本：v3.4.0
+
+##### connector_table_query_trigger_analyze_small_table_interval
+
+- 默认值：2 * 3600
+- 类型：Int
+- 单位：秒
+- 是否动态：是
+- 描述：查询触发 ANALYZE 任务的小表采集间隔。
+- 引入版本：v3.4.0
+
+##### connector_table_query_trigger_analyze_large_table_interval
+
+- 默认值：12 * 3600
+- 类型：Int
+- 单位：秒
+- 是否动态：是
+- 描述：查询触发 ANALYZE 任务的大表采集间隔。
+- 引入版本：v3.4.0
+
+##### connector_table_query_trigger_analyze_max_pending_task_num
+
+- 默认值：100
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：FE 中处于 Pending 状态的查询触发 ANALYZE 任务的最大数量。
+- 引入版本：v3.4.0
+
+##### connector_table_query_trigger_analyze_schedule_interval
+
+- 默认值：30
+- 类型：Int
+- 单位：秒
+- 是否动态：是
+- 描述：Schedule 线程调度查询触发 ANALYZE 任务的周期。
+- 引入版本：v3.4.0
+
+##### connector_table_query_trigger_analyze_max_running_task_num
+
+- 默认值：2
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：FE 中处于 Running 状态的查询触发 ANALYZE 任务的最大数量。
+- 引入版本：v3.4.0
 
 ### 手动采集
 
