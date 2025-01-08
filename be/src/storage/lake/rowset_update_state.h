@@ -114,7 +114,7 @@ public:
                         bool need_resolve_conflict, bool need_lock);
 
     // Handle `segment_id`-th segment file's partial update request.
-    Status rewrite_segment(uint32_t segment_id, const RowsetUpdateStateParams& params,
+    Status rewrite_segment(uint32_t segment_id, int64_t txn_id, const RowsetUpdateStateParams& params,
                            std::map<int, FileInfo>* replace_segments, std::vector<std::string>* orphan_files);
 
     // Release `segment_id`-th segment file's state.
