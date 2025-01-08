@@ -263,7 +263,7 @@ Status UserFunctionCache::_load_cache_entry(const std::string& url, UserFunction
     }
 
     if (!entry->is_loaded.load()) {
-        RETURN_IF_ERROR(_load_cache_entry_internal(entry, loader));
+        RETURN_IF_ERROR(_load_cache_entry_internal(url, entry, loader));
     }
     return Status::OK();
 }
