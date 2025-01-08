@@ -2415,7 +2415,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enablePhasedScheduler = false;
 
     @VarAttr(name = ENABLE_PIPELINE_EVENT_SCHEDULER)
-    private boolean enablePipelineEventScheduler = false;
+    private boolean enablePipelineEventScheduler = true;
 
     @VarAttr(name = PHASED_SCHEDULER_MAX_CONCURRENCY)
     private int phasedSchedulerMaxConcurrency = 2;
