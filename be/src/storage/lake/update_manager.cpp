@@ -237,7 +237,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
                                            false /*no need lock*/));
         _update_state_cache.update_object_size(state_entry, state.memory_usage());
         // 2.1 rewrite segment file if it is partial update
-        RETURN_IF_ERROR(state.rewrite_segment(segment_id, params, &replace_segments, &orphan_files));
+        RETURN_IF_ERROR(state.rewrite_segment(segment_id, txn_id, params, &replace_segments, &orphan_files));
         rssid_fileinfo_container.add_rssid_to_file(op_write.rowset(), metadata->next_rowset_id(), segment_id,
                                                    replace_segments);
         // handle merge condition, skip update row which's merge condition column value is smaller than current row
