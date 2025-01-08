@@ -835,14 +835,18 @@ TimestampValue timestamp_add(TimestampValue tsv, int count) {
     return tsv.add<UNIT>(count);
 }
 
-#define DEFINE_TIME_ADD_FN(FN, UNIT)                                                                               \
-    DEFINE_BINARY_FUNCTION_WITH_IMPL(FN##Impl, timestamp, value) { return timestamp_add<UNIT>(timestamp, value); } \
-                                                                                                                   \
+#define DEFINE_TIME_ADD_FN(FN, UNIT)                               \
+    DEFINE_BINARY_FUNCTION_WITH_IMPL(FN##Impl, timestamp, value) { \
+        return timestamp_add<UNIT>(timestamp, value);              \
+    }                                                              \
+                                                                   \
     DEFINE_TIME_CALC_FN(FN, TYPE_DATETIME, TYPE_INT, TYPE_DATETIME);
 
-#define DEFINE_TIME_SUB_FN(FN, UNIT)                                                                                \
-    DEFINE_BINARY_FUNCTION_WITH_IMPL(FN##Impl, timestamp, value) { return timestamp_add<UNIT>(timestamp, -value); } \
-                                                                                                                    \
+#define DEFINE_TIME_SUB_FN(FN, UNIT)                               \
+    DEFINE_BINARY_FUNCTION_WITH_IMPL(FN##Impl, timestamp, value) { \
+        return timestamp_add<UNIT>(timestamp, -value);             \
+    }                                                              \
+                                                                   \
     DEFINE_TIME_CALC_FN(FN, TYPE_DATETIME, TYPE_INT, TYPE_DATETIME);
 
 #define DEFINE_TIME_ADD_AND_SUB_FN(FN_PREFIX, UNIT) \
@@ -2118,7 +2122,7 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(yyyy_MM_dd_Impl, v) {
 }
 
 std::string format_for_yyyyMMddHHmmssImpl(const TimestampValue& date_value) {
-    return date_value.to_string();
+    return date_value.to_string(true);
 }
 
 DEFINE_STRING_UNARY_FN_WITH_IMPL(yyyyMMddHHmmssImpl, v) {
