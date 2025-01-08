@@ -1815,6 +1815,60 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The maximum number of rows to collect for a histogram.
 - Introduced in: -
 
+##### connector_table_query_trigger_analyze_small_table_rows
+
+- Default: 10000000
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The threshold for determining whether a table is a small table for query-trigger ANALYZE tasks.
+- Introduced in: v3.4.0
+
+##### connector_table_query_trigger_analyze_small_table_interval
+
+- Default: 2 * 3600
+- Type: Int
+- Unit: Second
+- Is mutable: Yes
+- Description: The interval for query-trigger ANALYZE tasks of small tables.
+- Introduced in: v3.4.0
+
+##### connector_table_query_trigger_analyze_large_table_interval
+
+- Default: 12 * 3600
+- Type: Int
+- Unit: Second
+- Is mutable: Yes
+- Description: The interval for query-trigger ANALYZE tasks of large tables.
+- Introduced in: v3.4.0
+
+##### connector_table_query_trigger_analyze_max_pending_task_num
+
+- Default: 100
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Maximum number of query-trigger ANALYZE tasks that are in Pending state on the FE.
+- Introduced in: v3.4.0
+
+##### connector_table_query_trigger_analyze_schedule_interval
+
+- Default: 30
+- Type: Int
+- Unit: Second
+- Is mutable: Yes
+- Description: The interval at which the Scheduler thread schedules to query-trigger ANALYZE tasks.
+- Introduced in: v3.4.0
+
+##### connector_table_query_trigger_analyze_max_running_task_num
+
+- Default: 2
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Maximum number of query-trigger ANALYZE tasks that are in Running state on the FE.
+- Introduced in: v3.4.0
+
 ##### enable_local_replica_selection
 
 - Default: false

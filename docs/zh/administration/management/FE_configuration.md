@@ -1807,6 +1807,60 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：直方图最大采样行数。
 - 引入版本：-
 
+##### connector_table_query_trigger_analyze_small_table_rows
+
+- 默认值：10000000
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：查询触发 ANALYZE 任务的小表阈值。
+- 引入版本：v3.4.0
+
+##### connector_table_query_trigger_analyze_small_table_interval
+
+- 默认值：2 * 3600
+- 类型：Int
+- 单位：秒
+- 是否动态：是
+- 描述：查询触发 ANALYZE 任务的小表采集间隔。
+- 引入版本：v3.4.0
+
+##### connector_table_query_trigger_analyze_large_table_interval
+
+- 默认值：12 * 3600
+- 类型：Int
+- 单位：秒
+- 是否动态：是
+- 描述：查询触发 ANALYZE 任务的大表采集间隔。
+- 引入版本：v3.4.0
+
+##### connector_table_query_trigger_analyze_max_pending_task_num
+
+- 默认值：100
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：FE 中处于 Pending 状态的查询触发 ANALYZE 任务的最大数量。
+- 引入版本：v3.4.0
+
+##### connector_table_query_trigger_analyze_schedule_interval
+
+- 默认值：30
+- 类型：Int
+- 单位：秒
+- 是否动态：是
+- 描述：Schedule 线程调度查询触发 ANALYZE 任务的周期。
+- 引入版本：v3.4.0
+
+##### connector_table_query_trigger_analyze_max_running_task_num
+
+- 默认值：2
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：FE 中处于 Running 状态的查询触发 ANALYZE 任务的最大数量。
+- 引入版本：v3.4.0
+
 ##### enable_local_replica_selection
 
 - 默认值：false
