@@ -1,3 +1,4 @@
+
 # Generate PDFs from the StarRocks Docusaurus documentation site
 
 Node.js code to:
@@ -115,20 +116,12 @@ node generatePdf.js http://0.0.0.0:3000/zh/docs/introduction/StarRocks_intro/
 
 > Note:
 >
-> There are 900+ PDF files and more than 4,000 pages in total. Combining takes three hours on my laptop, just let it run. I am looking for a faster method to combine the files.
+> Change the name of the PDF output file as needed, in the example this is `StarRocks_33`
 
 ```bash
-source .venv/bin/activate
-pdfcombine -y combine.yaml --title="StarRocks 3.3" -o ../../PDFoutput/StarRocks_3.3.pdf
+cd ../../PDFoutput/
+pdftk 00*pdf output StarRocks_33.pdf
 ```
-
-> Note:
->
-> You may see this message during the `pdfcombine` step:
->
-> `GPL Ghostscript 10.03.1: Missing glyph CID=93, glyph=005d in the font IAAAAA+Menlo-Regular . The output PDF may fail with some viewers.`
->
-> I have not had any complaints about the missing glyph from readers of the documents produced with this.
 
 ## Finished file
 
@@ -136,16 +129,28 @@ The individual PDF files and the combined file will be on your local machine in 
 
 ## Customizing the docs site for PDF
 
-Gotenberg generates the PDF files without the side navigation, header, and footer as these components are not displayed when the `media` is set to `print`. In our docs it does not make sense to have the edit URLs or Feedback widget show. These are filtered out using CSS by adding `display: none` to the classes of these objects when `@media print`.
+Gotenberg generates the PDF files without the side navigation, header, and footer as these components are not displayed when the `media` is set to `print`. In our docs it does not make sense to have the breadcrumbs, edit URLs, or Feedback widget show. These are filtered out using CSS by adding `display: none` to the classes of these objects when `@media print`.
 
 Removing the Feedback form from the PDF can be done with CSS. This snippet is added to the Docusaurus CSS file `src/css/custom.css`:
 
 ```css
-/* When we generate PDF files we do not need to show the feedback widget. */
+/* When we generate PDF files we do not need to show the:
+ - edit URL
+ - Feedback widget
+ - breadcrumbs
+*/
 @media print {
     .feedback_Ak7m {
         display: none;
     }
+
+    .theme-doc-footer-edit-meta-row {
+        display: none;
+    };
+
+    .breadcrumbs {
+        display: none;
+    };
 }
 ```
 
@@ -153,5 +158,5 @@ Removing the Feedback form from the PDF can be done with CSS. This snippet is ad
 
 - [`docusaurus-prince-pdf`](https://github.com/signcl/docusaurus-prince-pdf)
 - [`Gotenberg`](https://pptr.dev/)
+- [`pdftk`](https://gitlab.com/pdftk-java/pdftk)
 - [Ghostscript](https://www.ghostscript.com/)
-- [`pdfcombine`](https://github.com/tdegeus/pdfcombine.git)
