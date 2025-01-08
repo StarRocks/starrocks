@@ -56,6 +56,21 @@ public class CompactionMgr implements MemoryTrackable {
     private Sorter sorter;
     private CompactionScheduler compactionScheduler;
 
+    /**
+     * We use `activeCompactionTransactionMap` to track all lake compaction txns that are not published on FE restart.
+     * The key of the map is the transaction id related to the compaction task, and the value is table id of the
+     * compaction task. It's possible that multiple keys have the same value, because there might be multiple compaction
+     * jobs on different partitions with the same table id.
+     *
+     * Note that, this will prevent all partitions whose tableId is maintained in the map from being compacted
+     */
+    private final ConcurrentHashMap<Long, Long> activeCompactionTransactionMap = new ConcurrentHashMap<>();
+
+    @VisibleForTesting
+    protected synchronized ConcurrentHashMap<Long, Long> getActiveCompactionTransactionMap() {
+        return activeCompactionTransactionMap;
+    }
+
     public CompactionMgr() {
         try {
             init();
@@ -80,13 +95,44 @@ public class CompactionMgr implements MemoryTrackable {
 
     public void start() {
         if (compactionScheduler == null) {
-            compactionScheduler = new CompactionScheduler(this, GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
-                    GlobalStateMgr.getCurrentState().getGlobalTransactionMgr(), GlobalStateMgr.getCurrentState(),
-                    Config.lake_compaction_disable_tables);
-            GlobalStateMgr.getCurrentState().getConfigRefreshDaemon().registerListener(() -> {
+            GlobalStateMgr stateMgr = GlobalStateMgr.getCurrentState();
+            compactionScheduler = new CompactionScheduler(this, stateMgr.getNodeMgr().getClusterInfo(),
+                    stateMgr.getGlobalTransactionMgr(), stateMgr, Config.lake_compaction_disable_tables);
+            stateMgr.getConfigRefreshDaemon().registerListener(() -> {
                 compactionScheduler.disableTables(Config.lake_compaction_disable_tables);
             });
+            // In order to ensure that the input rowsets of compaction still exists when doing publishing version, it is
+            // necessary to ensure that the compaction task of the same partition is executed serially, that is, the next
+            // compaction task can be executed only after the status of the previous compaction task changes to visible or
+            // canceled.
+            if (stateMgr.isLeader() && stateMgr.isReady()) {
+                rebuildActiveCompactionTransactionMapOnRestart();
+            }
             compactionScheduler.start();
+        }
+    }
+
+    /**
+     * iterate all transactions and find those with LAKE_COMPACTION labels and are not finished before FE restart.
+     **/
+    protected synchronized void rebuildActiveCompactionTransactionMapOnRestart() {
+        Map<Long, Long> activeTxnStates =
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getLakeCompactionActiveTxnStats();
+        for (Map.Entry<Long, Long> txnState : activeTxnStates.entrySet()) {
+            // for lake compaction txn, there can only be one table id for each txn state
+            activeCompactionTransactionMap.put(txnState.getKey(), txnState.getValue());
+            LOG.info("Found lake compaction transaction not finished on table {}, txn_id: {}", txnState.getValue(),
+                    txnState.getKey());
+        }
+    }
+
+    protected synchronized void removeFromStartupActiveCompactionTransactionMap(long txnId) {
+        if (activeCompactionTransactionMap.isEmpty()) {
+            return;
+        }
+        boolean ret = activeCompactionTransactionMap.keySet().removeIf(key -> key == txnId);
+        if (ret) {
+            LOG.info("Removed transaction {} from startup active compaction transaction map", txnId);
         }
     }
 
@@ -107,7 +153,8 @@ public class CompactionMgr implements MemoryTrackable {
     }
 
     public void handleCompactionFinished(PartitionIdentifier partition, long version, long versionTime,
-                                         Quantiles compactionScore) {
+                                         Quantiles compactionScore, long txnId) {
+        removeFromStartupActiveCompactionTransactionMap(txnId);
         PartitionVersion compactionVersion = new PartitionVersion(version, versionTime);
         PartitionStatistics statistics = partitionStatisticsHashMap.compute(partition, (k, v) -> {
             if (v == null) {
@@ -129,7 +176,19 @@ public class CompactionMgr implements MemoryTrackable {
         return choosePartitionsToCompact(excludeTables)
                 .stream()
                 .filter(p -> !excludes.contains(p.getPartition()))
+                .filter(p -> !shouldSkipChoseTable(p.getPartition().getTableId()))
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * check if this table in `activeCompactionTransactionMap`,
+     * if that is the case, we should skip this table while `choosePartitionsToCompact`
+     */
+    protected synchronized boolean shouldSkipChoseTable(long tableId) {
+        if (activeCompactionTransactionMap.isEmpty()) {
+            return false;
+        }
+        return activeCompactionTransactionMap.containsValue(tableId);
     }
 
     @NotNull

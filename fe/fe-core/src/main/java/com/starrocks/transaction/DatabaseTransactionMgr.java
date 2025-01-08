@@ -776,6 +776,27 @@ public class DatabaseTransactionMgr {
         }
     }
 
+    public Map<Long, Long> getLakeCompactionActiveTxnMap() {
+        readLock();
+        try {
+            // for lake compaction txn, there can only be one table id for each txn state
+            Map<Long, Long> txnIdToTableIdMap = new HashMap<>();
+            idToRunningTransactionState.values().stream()
+                    .filter(state -> !isTransactionFinished(state))
+                    .filter(state -> state.getSourceType() == TransactionState.LoadJobSourceType.LAKE_COMPACTION)
+                    .sorted(Comparator.comparing(TransactionState::getPrepareTime))
+                    .forEach(state -> txnIdToTableIdMap.put(state.getTransactionId(), state.getTableIdList().get(0)));
+            return txnIdToTableIdMap;
+        } finally {
+            readUnlock();
+        }
+    }
+
+    private boolean isTransactionFinished(TransactionState transactionState) {
+        return transactionState.getTransactionStatus() == TransactionStatus.ABORTED ||
+                transactionState.getTransactionStatus() == TransactionStatus.VISIBLE;
+    }
+
     // Check whether there is committed txns on partitionId.
     public boolean hasCommittedTxnOnPartition(long tableId, long partitionId) {
         readLock();
