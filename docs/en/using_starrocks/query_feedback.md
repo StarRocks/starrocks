@@ -164,7 +164,7 @@ large left table1 (shuffle) inner join large right table2 (shuffle)
 
 ## Limitations
 
-- A tuning guide can only be used to the exact same query based on which it was generated. It is not applicable to queries with the same pattern but different parameters.
+- A tuning guide can only be used for the exact same query for which it was generated. It is not applicable to queries with the same pattern but different parameters.
 - Each FE manages its Query Plan Advisor independently, and synchronization across FE nodes is not supported. If the same query is submitted to different FE nodes, the tuning results may vary.
 - Query Plan Advisor uses an in-memory cache structure:
   - When the number of tuning guides exceeds the limit, expired tuning guides are automatically evicted.
