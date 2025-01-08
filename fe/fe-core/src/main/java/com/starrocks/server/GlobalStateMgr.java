@@ -2136,7 +2136,7 @@ public class GlobalStateMgr {
         if (entity == null) {
             return "null";
         }
-        Writable data = entity.getData();
+        Writable data = entity.data();
         try {
             return GsonUtils.GSON.toJson(data);
         } catch (Exception e) {

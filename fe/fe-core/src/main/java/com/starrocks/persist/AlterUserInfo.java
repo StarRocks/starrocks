@@ -18,17 +18,14 @@ package com.starrocks.persist;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.UserAuthenticationInfo;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.sql.ast.UserIdentity;
 
-import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.Map;
 
-public class AlterUserInfo implements Writable {
+public class AlterUserInfo implements Writable, GsonPostProcessable {
     @SerializedName(value = "u")
     UserIdentity userIdentity;
     @SerializedName(value = "a")
@@ -60,18 +57,11 @@ public class AlterUserInfo implements Writable {
     }
 
     @Override
-    public void write(DataOutput out) throws IOException {
-        Text.writeString(out, GsonUtils.GSON.toJson(this));
-    }
-
-    public static AlterUserInfo read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        AlterUserInfo ret = GsonUtils.GSON.fromJson(json, AlterUserInfo.class);
+    public void gsonPostProcess() throws IOException {
         try {
-            ret.authenticationInfo.analyze();
+            authenticationInfo.analyze();
         } catch (AuthenticationException e) {
             throw new IOException(e);
         }
-        return ret;
     }
 }

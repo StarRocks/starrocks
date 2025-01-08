@@ -83,11 +83,11 @@ public class EditLogEPack extends EditLog {
     public void loadJournal(GlobalStateMgr globalStateMgr, JournalEntity journal)
             throws JournalInconsistentException {
 
-        short opCode = journal.getOpCode();
+        short opCode = journal.opCode();
         try {
             switch (opCode) {
                 case OperationTypeEPack.OP_CREATE_SECURITY_INTEGRATION: {
-                    SecurityIntegrationPersistInfo info = (SecurityIntegrationPersistInfo) journal.getData();
+                    SecurityIntegrationPersistInfo info = (SecurityIntegrationPersistInfo) journal.data();
                     AuthenticationMgrEPack authenticationMgr =
                             (AuthenticationMgrEPack) GlobalStateMgr.getCurrentState().getAuthenticationMgr();
                     authenticationMgr.replayCreateSecurityIntegration(
@@ -95,7 +95,7 @@ public class EditLogEPack extends EditLog {
                     break;
                 }
                 case OperationTypeEPack.OP_ALTER_SECURITY_INTEGRATION: {
-                    SecurityIntegrationPersistInfo info = (SecurityIntegrationPersistInfo) journal.getData();
+                    SecurityIntegrationPersistInfo info = (SecurityIntegrationPersistInfo) journal.data();
                     AuthenticationMgrEPack authenticationMgr =
                             (AuthenticationMgrEPack) GlobalStateMgr.getCurrentState().getAuthenticationMgr();
                     authenticationMgr.replayAlterSecurityIntegration(
@@ -103,41 +103,41 @@ public class EditLogEPack extends EditLog {
                     break;
                 }
                 case OperationTypeEPack.OP_DROP_SECURITY_INTEGRATION: {
-                    SecurityIntegrationPersistInfo info = (SecurityIntegrationPersistInfo) journal.getData();
+                    SecurityIntegrationPersistInfo info = (SecurityIntegrationPersistInfo) journal.data();
                     AuthenticationMgrEPack authenticationMgr =
                             (AuthenticationMgrEPack) GlobalStateMgr.getCurrentState().getAuthenticationMgr();
                     authenticationMgr.replayDropSecurityIntegration(info.name);
                     break;
                 }
                 case OperationTypeEPack.OP_CREATE_ROLE_MAPPING: {
-                    RoleMappingPersistInfo info = (RoleMappingPersistInfo) journal.getData();
+                    RoleMappingPersistInfo info = (RoleMappingPersistInfo) journal.data();
                     globalStateMgr.getAuthorizationMgr().getRoleMappingMetaMgr().replayCreateRoleMapping(
                             info.name, info.propertyMap);
                     break;
                 }
                 case OperationTypeEPack.OP_ALTER_ROLE_MAPPING: {
-                    RoleMappingPersistInfo info = (RoleMappingPersistInfo) journal.getData();
+                    RoleMappingPersistInfo info = (RoleMappingPersistInfo) journal.data();
                     globalStateMgr.getAuthorizationMgr().getRoleMappingMetaMgr().replayAlterRoleMapping(
                             info.name, info.propertyMap);
                     break;
                 }
                 case OperationTypeEPack.OP_DROP_ROLE_MAPPING: {
-                    RoleMappingPersistInfo info = (RoleMappingPersistInfo) journal.getData();
+                    RoleMappingPersistInfo info = (RoleMappingPersistInfo) journal.data();
                     globalStateMgr.getAuthorizationMgr().getRoleMappingMetaMgr().replayDropRoleMapping(info.name);
                     break;
                 }
                 case OperationTypeEPack.OP_CREATE_PASSWORD_POLICY: {
-                    CreatePasswordPolicyLog createPasswordPolicyLog = (CreatePasswordPolicyLog) journal.getData();
+                    CreatePasswordPolicyLog createPasswordPolicyLog = (CreatePasswordPolicyLog) journal.data();
                     globalStateMgr.getSecurityPolicyManager().doCreatePasswordPolicy(createPasswordPolicyLog);
                     break;
                 }
                 case OperationTypeEPack.OP_DROP_PASSWORD_POLICY: {
-                    DropPasswordPolicyLog dropPasswordPolicyLog = (DropPasswordPolicyLog) journal.getData();
+                    DropPasswordPolicyLog dropPasswordPolicyLog = (DropPasswordPolicyLog) journal.data();
                     globalStateMgr.getSecurityPolicyManager().doDropPasswordPolicy(dropPasswordPolicyLog);
                     break;
                 }
                 case OperationTypeEPack.OP_SET_PASSWORD_POLICY: {
-                    SetPasswordPolicyLog setPasswordPolicyLog = (SetPasswordPolicyLog) journal.getData();
+                    SetPasswordPolicyLog setPasswordPolicyLog = (SetPasswordPolicyLog) journal.data();
                     globalStateMgr.getSecurityPolicyManager().setGlobalPasswordPolicy(setPasswordPolicyLog.getPasswordPolicyId());
                     break;
                 }

@@ -34,6 +34,8 @@
 
 package com.starrocks.common.io;
 
+import com.starrocks.persist.gson.GsonUtils;
+
 import java.io.DataOutput;
 import java.io.IOException;
 
@@ -80,5 +82,7 @@ public interface Writable {
      * @param out <code>DataOutput</code> to serialize this object into.
      * @throws IOException
      */
-    void write(DataOutput out) throws IOException;
+    default void write(DataOutput out) throws IOException {
+        Text.writeString(out, GsonUtils.GSON.toJson(this));
+    }
 }
