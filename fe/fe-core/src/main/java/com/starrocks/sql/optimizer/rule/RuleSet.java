@@ -116,6 +116,7 @@ import com.starrocks.sql.optimizer.rule.transformation.PruneUnionColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneValuesColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneWindowColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownAggToMetaScanRule;
+import com.starrocks.sql.optimizer.rule.transformation.PushDownAggUnionRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownApplyAggFilterRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownApplyAggProjectFilterRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownApplyFilterRule;
@@ -426,6 +427,7 @@ public class RuleSet {
         transformRules.add(SplitTwoPhaseAggRule.getInstance());
         transformRules.add(GroupByCountDistinctDataSkewEliminateRule.getInstance());
         transformRules.add(SplitTopNRule.getInstance());
+        transformRules.add(PushDownAggUnionRule.getInstance());
     }
 
     public void addJoinTransformationRules() {

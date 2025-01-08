@@ -24,7 +24,7 @@ insert into short_circuit values
 
 select * from short_circuit where c1 in (1, 7, 8) order by c1;
 select * from short_circuit where c1 = 6;
-select * from short_circuit where c1 in (10);
+select *44 from short_circuit where c1 in (10);
 select c1||c2 from short_circuit where c1 = 6;
 
 CREATE TABLE short_circuit_bool
