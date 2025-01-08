@@ -3,14 +3,10 @@ services:
   gotenberg:
     image: gotenberg/gotenberg
     healthcheck:
-      test: ["CMD", "curl", "--silent", "--fail", "http://localhost:3000/health"]
+      test: ["CMD", "curl", "--silent", "--fail", "http://gotenberg:3000/health"]
 
   docusaurus:
     build: ../
-    environment:
-      - DISABLE_VERSIONING='true'
-      - PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
-      - PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
     ports:
         - 3000:3000
     volumes:
@@ -26,10 +22,6 @@ services:
       timeout: 5s
     entrypoint: >
       /bin/bash -c "
-      cd PDF && yarn install &&
-      python3 -m venv .venv &&
-      source .venv/bin/activate &&
-      pip3 install pdfcombine &&
       cd /app/docusaurus &&
       npm install -g docusaurus-prince-pdf@1.2.1 &&
       yarn install &&
