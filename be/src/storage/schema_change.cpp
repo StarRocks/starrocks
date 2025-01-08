@@ -1059,6 +1059,9 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
                          << ". exit alter process";
             break;
         }
+        if (config::enable_rowset_verify) {
+            RETURN_IF_ERROR((*new_rowset)->verify());
+        }
         status = sc_params.new_tablet->add_rowset(*new_rowset, false);
         if (status.is_already_exist()) {
             LOG(WARNING) << _alter_msg_header << "version already exist, version revert occurred. "
