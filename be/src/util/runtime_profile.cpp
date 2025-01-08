@@ -746,8 +746,6 @@ void RuntimeProfile::to_thrift(TRuntimeProfileTree* tree) {
 }
 
 void RuntimeProfile::to_thrift(std::vector<TRuntimeProfileNode>* nodes) {
-    nodes->reserve(nodes->size() + _children.size());
-
     int index = nodes->size();
     nodes->emplace_back();
     TRuntimeProfileNode& node = (*nodes)[index];
@@ -810,6 +808,7 @@ void RuntimeProfile::to_thrift(std::vector<TRuntimeProfileNode>* nodes) {
         children = _children;
     }
     node.num_children = children.size();
+    nodes->reserve(nodes->size() + children.size());
 
     for (auto& i : children) {
         int child_idx = nodes->size();
