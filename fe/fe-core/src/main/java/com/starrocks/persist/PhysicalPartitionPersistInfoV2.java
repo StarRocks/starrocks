@@ -21,7 +21,6 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 
 public class PhysicalPartitionPersistInfoV2 implements Writable {
@@ -42,11 +41,7 @@ public class PhysicalPartitionPersistInfoV2 implements Writable {
         this.partition = partition;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        String json = GsonUtils.GSON.toJson(this);
-        Text.writeString(out, json);
-    }
+
 
     public static PhysicalPartitionPersistInfoV2 read(DataInput in) throws IOException {
         String json = Text.readString(in);

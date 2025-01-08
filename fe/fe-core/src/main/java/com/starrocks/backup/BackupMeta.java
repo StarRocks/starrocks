@@ -49,7 +49,6 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataInputStream;
-import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
@@ -137,10 +136,7 @@ public class BackupMeta implements Writable, GsonPostProcessable {
         return GsonUtils.GSON.fromJson(Text.readString(in), BackupMeta.class);
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        Text.writeString(out, GsonUtils.GSON.toJson(this));
-    }
+
 
     @Override
     public void gsonPostProcess() throws IOException {

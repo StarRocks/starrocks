@@ -27,7 +27,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
@@ -152,11 +151,7 @@ public class LakeTablet extends Tablet {
         }
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        String json = GsonUtils.GSON.toJson(this);
-        Text.writeString(out, json);
-    }
+
 
     public static LakeTablet read(DataInput in) throws IOException {
         String json = Text.readString(in);

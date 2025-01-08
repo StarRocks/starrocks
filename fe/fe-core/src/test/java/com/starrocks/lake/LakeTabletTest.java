@@ -15,6 +15,8 @@
 
 package com.starrocks.lake;
 
+import com.starrocks.common.io.Text;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -40,7 +42,7 @@ public class LakeTabletTest {
         File file = new File("./LakeTabletSerializationTest");
         file.createNewFile();
         try (DataOutputStream dos = new DataOutputStream(new FileOutputStream(file))) {
-            tablet.write(dos);
+            Text.writeString(dos, GsonUtils.GSON.toJson(tablet, LakeTablet.class));
             dos.flush();
         }
 

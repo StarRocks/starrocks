@@ -20,7 +20,6 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 
 public class DisablePartitionRecoveryInfo implements Writable {
@@ -40,8 +39,5 @@ public class DisablePartitionRecoveryInfo implements Writable {
         return GsonUtils.GSON.fromJson(json, DisablePartitionRecoveryInfo.class);
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        Text.writeString(out, GsonUtils.GSON.toJson(this));
-    }
+
 }

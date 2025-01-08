@@ -32,7 +32,6 @@ import com.starrocks.statistic.StatsConstants.ScheduleType;
 import org.apache.commons.collections.CollectionUtils;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -244,11 +243,7 @@ public class NativeAnalyzeJob implements AnalyzeJob, Writable {
         }
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        String s = GsonUtils.GSON.toJson(this);
-        Text.writeString(out, s);
-    }
+
 
     public static NativeAnalyzeJob read(DataInput in) throws IOException {
         String s = Text.readString(in);

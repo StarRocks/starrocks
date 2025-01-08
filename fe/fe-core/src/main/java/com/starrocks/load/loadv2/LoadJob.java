@@ -1242,11 +1242,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
                 && this.jobType.equals(other.jobType);
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        String json = GsonUtils.GSON.toJson(this);
-        Text.writeString(out, json);
-    }
+
 
     public void replayUpdateStateInfo(LoadJobStateUpdateInfo info) {
         state = info.getState();

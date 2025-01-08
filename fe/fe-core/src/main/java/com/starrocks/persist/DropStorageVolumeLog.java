@@ -20,7 +20,6 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 
 public class DropStorageVolumeLog implements Writable {
@@ -35,10 +34,7 @@ public class DropStorageVolumeLog implements Writable {
         return id;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        Text.writeString(out, GsonUtils.GSON.toJson(this));
-    }
+
 
     public static DropStorageVolumeLog read(DataInput in) throws IOException {
         String json = Text.readString(in);

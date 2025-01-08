@@ -15,21 +15,18 @@
 package com.starrocks.lake.snapshot;
 
 //import com.google.common.collect.Lists;
+
 import com.starrocks.alter.AlterTest;
 import com.starrocks.backup.BlobStorage;
 import com.starrocks.backup.Status;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
-//import com.starrocks.common.Pair;
-//import com.starrocks.journal.bdbje.BDBJEJournal;
 import com.starrocks.lake.StarOSAgent;
-//import com.starrocks.lake.snapshot.ClusterSnapshotJob.ClusterSnapshotJobState;
 import com.starrocks.persist.ClusterSnapshotLog;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.Storage;
 import com.starrocks.server.GlobalStateMgr;
-//import com.starrocks.server.RunMode;
 import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.AdminSetAutomatedSnapshotOffStmt;

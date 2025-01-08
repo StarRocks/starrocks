@@ -64,7 +64,6 @@ import org.apache.commons.lang.StringEscapeUtils;
 import org.apache.commons.text.translate.UnicodeUnescaper;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -855,11 +854,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         return true;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        String json = GsonUtils.GSON.toJson(this);
-        Text.writeString(out, json);
-    }
+
 
     public static Column read(DataInput in) throws IOException {
         String json = Text.readString(in);

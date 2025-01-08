@@ -43,7 +43,6 @@ import com.starrocks.sql.ast.SetDefaultStorageVolumeStmt;
 import com.starrocks.storagevolume.StorageVolume;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.lang.reflect.Field;
 import java.net.URI;
@@ -420,10 +419,7 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
         this.tableToStorageVolume = data.tableToStorageVolume;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        Text.writeString(out, GsonUtils.GSON.toJson(this));
-    }
+
 
     public abstract StorageVolume getStorageVolumeByName(String svName);
 
