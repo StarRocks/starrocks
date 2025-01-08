@@ -46,7 +46,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
 
-public class DeltaConnectorScanRangeSource implements ConnectorScanRangeSource {
+public class DeltaConnectorScanRangeSource extends ConnectorScanRangeSource {
     private static final Logger LOG = LogManager.getLogger(DeltaConnectorScanRangeSource.class);
     private DeltaLakeTable table;
     private RemoteFileInfoSource remoteFileInfoSource;
@@ -128,7 +128,7 @@ public class DeltaConnectorScanRangeSource implements ConnectorScanRangeSource {
     }
 
     @Override
-    public List<TScanRangeLocations> getOutputs(int maxSize) {
+    public List<TScanRangeLocations> getSourceOutputs(int maxSize) {
         try (Timer ignored = Tracers.watchScope(EXTERNAL, "DeltaLake.getScanFiles")) {
             List<TScanRangeLocations> res = new ArrayList<>();
             while (hasMoreOutput() && res.size() < maxSize) {
@@ -140,7 +140,7 @@ public class DeltaConnectorScanRangeSource implements ConnectorScanRangeSource {
     }
 
     @Override
-    public boolean hasMoreOutput() {
+    public boolean sourceHasMoreOutput() {
         try (Timer ignored = Tracers.watchScope(EXTERNAL, "DeltaLake.getScanFiles")) {
             return remoteFileInfoSource.hasMoreOutput();
         }
