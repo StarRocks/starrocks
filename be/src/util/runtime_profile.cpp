@@ -752,7 +752,6 @@ void RuntimeProfile::to_thrift(std::vector<TRuntimeProfileNode>* nodes) {
     nodes->emplace_back();
     TRuntimeProfileNode& node = (*nodes)[index];
     node.name = _name;
-    node.num_children = _children.size();
     node.metadata = _metadata;
     node.indent = true;
 
@@ -810,6 +809,7 @@ void RuntimeProfile::to_thrift(std::vector<TRuntimeProfileNode>* nodes) {
         std::lock_guard<std::mutex> l(_children_lock);
         children = _children;
     }
+    node.num_children = children.size();
 
     for (auto& i : children) {
         int child_idx = nodes->size();
