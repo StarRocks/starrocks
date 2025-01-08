@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer.operator;
 
+import com.google.common.collect.Maps;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -163,5 +164,15 @@ public class Projection {
     @Override
     public String toString() {
         return columnRefMap.values().toString();
+    }
+
+    public Projection clone() {
+        Map<ColumnRefOperator, ScalarOperator> newColumnRefMap = Maps.newHashMap();
+        columnRefMap.entrySet().stream().forEach(entry ->
+                newColumnRefMap.put((ColumnRefOperator) entry.getKey().clone(), entry.getValue().clone()));
+        Map<ColumnRefOperator, ScalarOperator> newCommonSubOperatorMap = Maps.newHashMap();
+        commonSubOperatorMap.entrySet().stream().forEach(entry ->
+                newCommonSubOperatorMap.put((ColumnRefOperator) entry.getKey().clone(), entry.getValue().clone()));
+        return new Projection(newColumnRefMap, newCommonSubOperatorMap, this.needReuseLambdaDependentExpr);
     }
 }
