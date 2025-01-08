@@ -177,7 +177,8 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
             _need_partition_materializing = true;
         }
 
-        if (!(fn.name.function_name == "sum" || fn.name.function_name == "avg" || fn.name.function_name == "count")) {
+        if (!(fn.name.function_name == "sum" || fn.name.function_name == "avg" || fn.name.function_name == "count" ||
+              fn.name.function_name == "max" || fn.name.function_name == "min")) {
             _use_removable_cumulative_process = false;
         }
 
