@@ -24,7 +24,7 @@ This statement returns the following fields:
 - Prefix: the prefix of the partition name.
 - Buckets: the number of buckets per partition.
 - ReplicationNum: the number of replicas for the table.
-- StartOf
+- StartOf: the first day of each week/month depending on the specified TimeUnit
 - LastUpdateTime: the time when the table was last updated.
 - LastSchedulerTime: the time when data in the table was last scheduled.
 - State: the status of the table.
