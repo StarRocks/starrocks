@@ -1199,7 +1199,6 @@ TEST_P(LakePartialUpdateTest, test_partial_update_retry_rewrite_check) {
         delta_writer->close();
     }
     // retry publish again
-    std::string md5_val = "";
     for (int i = 0; i < 5; i++) {
         TEST_ENABLE_ERROR_POINT("TabletManager::put_tablet_metadata",
                                 Status::IOError("injected put tablet metadata error"));
@@ -1214,17 +1213,11 @@ TEST_P(LakePartialUpdateTest, test_partial_update_retry_rewrite_check) {
         ASSERT_ERROR(publish_single_version(tablet_id, version + 1, txn_id));
         auto txn_log_st = _tablet_mgr->get_txn_log(tablet_id, txn_id);
         EXPECT_TRUE(txn_log_st.ok());
-        auto& txn_log = txn_log_st.value();
-        auto segment = txn_log->op_write().rewrite_segments(0);
-        std::string filename = _tablet_mgr->segment_location(tablet_id, segment);
-        ASSIGN_OR_ABORT(auto cur_md5_val, fs::md5sum(filename));
-        if (md5_val.empty()) {
-            md5_val = cur_md5_val;
-        } else {
-            // make sure each rewrite will generate same file
-            EXPECT_TRUE(md5_val == cur_md5_val);
-        }
     }
+    // success
+    _tablet_mgr->prune_metacache();
+    ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id));
+    ASSERT_EQ(kChunkSize, check(version + 1, [](int c0, int c1, int c2) { return (c0 * 5 == c1) && (c0 * 4 == c2); }));
 }
 
 TEST_P(LakePartialUpdateTest, test_write_multi_segment_by_diff_val_mem_limit) {
@@ -1382,12 +1375,11 @@ TEST_P(LakePartialUpdateTest, test_partial_update_retry_check_file_exist) {
         ASSERT_ERROR(publish_single_version(tablet_id, version + 1, txn_id));
         auto txn_log_st = _tablet_mgr->get_txn_log(tablet_id, txn_id);
         EXPECT_TRUE(txn_log_st.ok());
-        auto& txn_log = txn_log_st.value();
-        auto segment = txn_log->op_write().rewrite_segments(0);
-        std::string filename = _tablet_mgr->segment_location(tablet_id, segment);
-        ASSIGN_OR_ABORT(bool file_exist, RowsetUpdateState::file_exist(filename));
-        EXPECT_TRUE(file_exist);
     }
+    // success
+    _tablet_mgr->prune_metacache();
+    ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id));
+    ASSERT_EQ(kChunkSize, check(version + 1, [](int c0, int c1, int c2) { return (c0 * 5 == c1) && (c0 * 4 == c2); }));
 }
 
 namespace {

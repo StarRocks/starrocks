@@ -430,7 +430,7 @@ StatusOr<bool> RowsetUpdateState::file_exist(const std::string& full_path) {
     }
 }
 
-Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, const RowsetUpdateStateParams& params,
+Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, const RowsetUpdateStateParams& params,
                                           std::map<int, FileInfo>* replace_segments,
                                           std::vector<std::string>* orphan_files) {
     CHECK_MEM_LIMIT("RowsetUpdateState::rewrite_segment");
@@ -468,10 +468,10 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, const RowsetUpdat
 
     bool need_rename = true;
     const auto& src_path = rowset_meta.segments(segment_id);
-    const auto& dest_path = params.op_write.rewrite_segments(segment_id);
+    const auto& dest_path = gen_segment_filename(txn_id);
     DCHECK(src_path != dest_path);
 
-    FileInfo src{.path = params.tablet->segment_location(src_path)};
+    FileInfo src{.path = params.tablet->segment_location(src_path), .size = rowset_meta.segment_size(segment_id)};
     auto segment_encryption_metas_size = params.op_write.rowset().segment_encryption_metas_size();
     if (segment_encryption_metas_size > 0) {
         if (segment_id >= segment_encryption_metas_size) {
@@ -484,35 +484,23 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, const RowsetUpdat
         src.encryption_meta = params.op_write.rowset().segment_encryption_metas(segment_id);
     }
 
-    bool skip_because_file_exist = false;
     int64_t t_rewrite_start = MonotonicMillis();
     if (has_auto_increment_partial_update_state(params) &&
         !_auto_increment_partial_update_states[segment_id].skip_rewrite) {
         FileInfo file_info{.path = params.tablet->segment_location(dest_path)};
-        ASSIGN_OR_RETURN(bool skip_rewrite, file_exist(file_info.path));
-        if (!skip_rewrite) {
-            RETURN_IF_ERROR(SegmentRewriter::rewrite_auto_increment_lake(
-                    src, &file_info, params.tablet_schema, _auto_increment_partial_update_states[segment_id],
-                    unmodified_column_ids,
-                    has_partial_update_state(params) ? &_partial_update_states[segment_id].write_columns : nullptr,
-                    params.tablet));
-        } else {
-            skip_because_file_exist = true;
-        }
+        RETURN_IF_ERROR(SegmentRewriter::rewrite_auto_increment_lake(
+                src, &file_info, params.tablet_schema, _auto_increment_partial_update_states[segment_id],
+                unmodified_column_ids,
+                has_partial_update_state(params) ? &_partial_update_states[segment_id].write_columns : nullptr,
+                params.tablet));
         file_info.path = dest_path;
         (*replace_segments)[segment_id] = file_info;
     } else if (has_partial_update_state(params)) {
         const FooterPointerPB& partial_rowset_footer = txn_meta.partial_rowset_footers(segment_id);
         FileInfo file_info{.path = params.tablet->segment_location(dest_path)};
-        // if rewrite fail, let segment gc to clean dest segment file
-        ASSIGN_OR_RETURN(bool skip_rewrite, file_exist(file_info.path));
-        if (!skip_rewrite) {
-            RETURN_IF_ERROR(SegmentRewriter::rewrite_partial_update(
-                    src, &file_info, params.tablet_schema, unmodified_column_ids,
-                    _partial_update_states[segment_id].write_columns, segment_id, partial_rowset_footer));
-        } else {
-            skip_because_file_exist = true;
-        }
+        RETURN_IF_ERROR(SegmentRewriter::rewrite_partial_update(
+                src, &file_info, params.tablet_schema, unmodified_column_ids,
+                _partial_update_states[segment_id].write_columns, segment_id, partial_rowset_footer));
         file_info.path = dest_path;
         (*replace_segments)[segment_id] = file_info;
     } else {
@@ -520,10 +508,9 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, const RowsetUpdat
     }
     int64_t t_rewrite_end = MonotonicMillis();
     LOG(INFO) << strings::Substitute(
-            "lake apply partial segment tablet:$0 rowset:$1 seg:$2 #column:$3 #rewrite:$4ms [$5 -> $6] "
-            "skip_because_file_exist:$7",
+            "lake apply partial segment tablet:$0 rowset:$1 seg:$2 #column:$3 #rewrite:$4ms [$5 -> $6]",
             params.tablet->id(), rowset_meta.id(), segment_id, unmodified_column_ids.size(),
-            t_rewrite_end - t_rewrite_start, src_path, dest_path, skip_because_file_exist);
+            t_rewrite_end - t_rewrite_start, src_path, dest_path);
 
     // rename segment file
     if (need_rename) {
