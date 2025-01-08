@@ -152,7 +152,7 @@ public class StatisticAutoCollector extends FrontendDaemon {
     private void initDefaultJob() {
         List<NativeAnalyzeJob> allNativeAnalyzeJobs =
                 GlobalStateMgr.getCurrentState().getAnalyzeMgr().getAllNativeAnalyzeJobList();
-        if (allNativeAnalyzeJobs.stream().anyMatch(j -> j.getScheduleType() == ScheduleType.SCHEDULE)) {
+        if (allNativeAnalyzeJobs.stream().anyMatch(NativeAnalyzeJob::isDefaultJob)) {
             return;
         }
 
