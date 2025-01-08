@@ -480,8 +480,19 @@ public class ExpressionTest extends PlanTestBase {
         String sql = "select t2.tb from tall t1 join tall t2 " +
                 "on t1.tc = t2.tb and t2.tt = 123 and (t2.tt != 'ax') = t2.td;";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "PREDICATES: 20: tt = '123', " +
-                "CAST(20: tt != 'ax' AS BIGINT) = 14: td, 14: td = 1");
+        assertContains(plan, "  2:SELECT\n" +
+                "  |  predicates: CAST(20: tt != 'ax' AS BIGINT) = 14: td\n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 12> : 12: tb\n" +
+                "  |  <slot 14> : 14: td\n" +
+                "  |  <slot 20> : 20: tt\n" +
+                "  |  <slot 21> : CAST(12: tb AS INT)\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: tall\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 20: tt = '123', 14: td = 1");
     }
 
     @Test
@@ -1780,7 +1791,7 @@ public class ExpressionTest extends PlanTestBase {
 
         sql = "select * from test_object where true = bitmap_contains(b1, v1) or bitmap_contains(b1, v2) = true";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "PREDICATES: (bitmap_contains(5: b1, CAST(1: v1 AS BIGINT))) " +
+        assertContains(plan, "predicates: (bitmap_contains(5: b1, CAST(1: v1 AS BIGINT))) " +
                 "OR (bitmap_contains(5: b1, CAST(2: v2 AS BIGINT)))");
     }
 
