@@ -23,6 +23,7 @@ public class PieceTraits {
     // use version to prevent
     private long version;
     private String name;
+    private boolean isNonSPJG;
     // dimensions and metrics
     private int numDimensions;
     private int numRollupDimensions;
@@ -39,6 +40,14 @@ public class PieceTraits {
     private List<String> hoistedConjuncts;
     private LegacyMVInfo legacyMV;
     private Map<String, TableInfo> tables;
+
+    public boolean isNonSPJG() {
+        return isNonSPJG;
+    }
+
+    public void setNonSPJG(boolean nonSPJG) {
+        isNonSPJG = nonSPJG;
+    }
 
     public String getName() {
         return name;

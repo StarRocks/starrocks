@@ -260,8 +260,8 @@ public class QueryGenerator {
                     newColumnAliasesBuilder.put(p.first, columnAlias);
                 } else {
                     DerivedColumn derived = p.second.cast();
-                    ColumnAlias columnAlias = aliasGenerator.nextAliasIfColumnNameAbsent(null);
                     String sql = opToSql.apply(derived.getExpr().getOp());
+                    ColumnAlias columnAlias = aliasGenerator.nextAliasIfColumnNameAbsent(null);
                     selectItems.add(String.format("(%s) AS %s", sql, columnAlias.getName()));
                     newColumnAliasesBuilder.put(p.first, columnAlias);
                 }
@@ -504,25 +504,6 @@ public class QueryGenerator {
         QueryGenerateResult generate(PlanPiece piece, QueryGenerateContext context) {
             piece.assignPieceIds();
             ColumnRefSet outputColumnIds = ColumnRefSet.createByIds(piece.getColumns().keySet());
-            // for 11MV, the output columns is determined by QueryGenerateContext.inputColumnIds.
-            // for SPJG MV, the output columns is determined by the top AggregatePiece.
-            if (piece.isTableScan() && context.getTableUsage().isPresent()) {
-                // TODO(by satanson): in future, 11MV would support derived columns that
-                //  extracts and transforms complex types(such as JSON, STRUCT, MAP and etc.),
-                //  at present, derived columns is neglected.
-                //  List<Integer> derivedColumnIds = piece.getColumns().entrySet()
-                //          .stream()
-                //          .filter(e -> e.getValue().isDerived())
-                //          .map(Map.Entry::getKey)
-                //          .collect(Collectors.toList());
-                //  outputColumnIds = ColumnRefSet.createByIds(derivedColumnIds);
-                outputColumnIds = context.getTableUsage().get().getUsedColumns().clone();
-            }
-            if (piece.isAggregate()) {
-                AggregatePiece aggPiece = piece.cast();
-                outputColumnIds = ColumnRefSet.createByIds(aggPiece.getDimensions().keySet());
-                outputColumnIds.union(ColumnRefSet.createByIds(aggPiece.getMetrics().keySet()));
-            }
             List<Pair<Integer, GenericColumn>> outputColumns = piece.getOutputColumns(outputColumnIds);
             QueryGenerateContext newContext = context.derive(outputColumns, outputColumnIds);
             return generateImpl(piece, newContext);

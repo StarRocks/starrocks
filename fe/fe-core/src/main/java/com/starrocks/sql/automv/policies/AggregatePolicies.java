@@ -162,6 +162,7 @@ public class AggregatePolicies {
 
         AggregatePolicy.AbstractAggregatePolicy policy =
                 AggregatePolicy.seq(
+                        ReprogramAggregatePolicy.INSTANCE,
                         options.isPushDownAggBelowSemiAntiJoin() ? EliminateSemiAntiJoinPolicy.INSTANCE :
                                 AggregatePolicy.IDENTITY_POLICY,
                         AggregatePolicy.and(

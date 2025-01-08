@@ -103,7 +103,20 @@ public abstract class PlanPiece {
         return optObj.get();
     }
 
+    public boolean isSPJG() {
+        return this.cast(AggregatePiece.class)
+                .map(aggPiece -> aggPiece.getInputPieces().get(0).stream().noneMatch(PlanPiece::isAggregate))
+                .orElse(false);
+    }
+
     public List<Pair<Integer, GenericColumn>> getOutputColumns(ColumnRefSet superiorInputColumns) {
+        if (this.isAggregate()) {
+            return getColumns().entrySet()
+                    .stream()
+                    .map(e -> Pair.create(e.getKey(), e.getValue()))
+                    .collect(Collectors.toList());
+        }
+
         List<Pair<Integer, GenericColumn>> outputColumns = Lists.newArrayList();
         //TieredMap may have duplicates, just use the first one.
         ColumnRefSet uniqueColumns = new ColumnRefSet();
@@ -145,6 +158,11 @@ public abstract class PlanPiece {
         return getAuxState().getParent().cast(AggregatePiece.class);
     }
 
+    public Optional<AggregatePiece> getParentAggregateIfFlatTable() {
+        return Optional.ofNullable(getAuxState().getParent())
+                .map(parentPiece -> parentPiece.cast(AggregatePiece.class).orElse(null));
+    }
+
     public List<PlanPiece> getInputPieces() {
         return inputPieces;
     }
@@ -165,6 +183,10 @@ public abstract class PlanPiece {
         return this instanceof AggregatePiece;
     }
 
+    public boolean isProject() {
+        return this instanceof ReferencePiece;
+    }
+
     public TieredMap<Integer, GenericColumn> getColumns() {
         return Objects.requireNonNull(columns);
     }
@@ -177,7 +199,7 @@ public abstract class PlanPiece {
         return Objects.requireNonNull(conjuncts);
     }
 
-    public final PlanPiece setConjuncts(TieredList<Op> conjuncts) {
+    public PlanPiece setConjuncts(TieredList<Op> conjuncts) {
         return this.builder().setConjuncts(conjuncts).build();
     }
 

@@ -182,6 +182,14 @@ public class AggregatePiece extends PlanPiece {
         return distinctMetrics;
     }
 
+    public boolean isStem() {
+        return this.getHoistConjuncts().isEmpty() &&
+                this.getNonHoistConjuncts().isEmpty() &&
+                this.getDistinctMetrics().isEmpty() &&
+                this.getRollupDimensions().isEmpty() &&
+                this.getFlatTable().getFlexibleConjuncts().isEmpty();
+    }
+
     public static final class FlatTable {
         private final PlanPiece piece;
         private final TieredList<Op> stiffConjuncts;

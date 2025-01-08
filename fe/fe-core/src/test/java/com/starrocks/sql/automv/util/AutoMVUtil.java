@@ -38,6 +38,7 @@ import com.starrocks.sql.automv.generator.MVName;
 import com.starrocks.sql.automv.generator.OneOneMVGenerator;
 import com.starrocks.sql.automv.generator.QueryGenerateResult;
 import com.starrocks.sql.automv.lattice.MVRecommendation;
+import com.starrocks.sql.automv.lattice.MVRecommender;
 import com.starrocks.sql.automv.lifecycle.MVChangeLog;
 import com.starrocks.sql.automv.lifecycle.MVHitCountEntry;
 import com.starrocks.sql.automv.lifecycle.QueryAuditEntry;
@@ -84,6 +85,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -107,7 +109,17 @@ public class AutoMVUtil {
                 pieceInfo.getTraits().setName(nameGenerator.get());
                 return pieceInfo;
             }).collect(Collectors.toList());
+
+            Supplier<String> oneOneMVNameGenerator = Util.nextStringGenerator(name + ".11mv.part.", "");
+            List<PlanPieceInfo> oneOneMVPieceInfoList = RboOptimizer.get11MVPlanPieces(name, query, ctx)
+                    .stream()
+                    .filter(Predicate.not(PlanPiece::isSPJG))
+                    .map(piece -> PlanPieceInfo.from11MV(oneOneMVNameGenerator.get(), piece,
+                            piece.getCommonState().getFqTableMap()))
+                    .collect(Collectors.toList());
+
             allPieceInfoList.addAll(pieceInfoList);
+            allPieceInfoList.addAll(oneOneMVPieceInfoList);
         }
         return allPieceInfoList;
     }
@@ -312,17 +324,48 @@ public class AutoMVUtil {
         }
     }
 
+    public static void testOneOneMVHelper(ConnectContext ctx, List<Pair<String, String>> queryList,
+                                          Consumer<SessionVariable> svSetter,
+                                          Consumer<Object> gvSetter,
+                                          BiFunction<List<Pair<String, PlanPiece>>, List<List<String>>, Void> resultChecker) {
+        mockUpCustomizedQueryExecutor(queryList);
+        TableName tableName = new TableName(null, "db", "_tunespace_");
+        ShowRecommendationsStmt stmt = new ShowRecommendationsStmt(tableName, -1, -1);
+        stmt.setSingle(true);
+        String savedSv = null;
+        Map<String, Object> savedGv = null;
+        try {
+            savedSv = ctx.getSessionVariable().getJsonString();
+            savedGv = saveGlobalVariable();
+            gvSetter.accept(null);
+            svSetter.accept(ctx.getSessionVariable());
+            List<Pair<String, PlanPiece>> pieces = get11MVPieces(ctx, queryList, s -> true);
+            ShowResultSet showResultSet = TunespaceExecutor.execute(stmt, ctx);
+            resultChecker.apply(pieces, showResultSet.getResultRows());
+        } catch (Exception e) {
+            e.printStackTrace();
+            Assert.fail();
+        } finally {
+            try {
+                ctx.getSessionVariable().replayFromJson(savedSv);
+                restoreGlobalVariable(savedGv);
+            } catch (Throwable e) {
+                Assert.fail();
+            }
+        }
+    }
+
     public static void defaultTestHelper(ConnectContext ctx, List<Pair<String, String>> queryList) {
         testHelper(ctx, queryList, AutoMVUtil::configDefaultAutoMV, AutoMVUtil::defaultResultChecker);
     }
 
     public static List<Pair<String, AggregatePiece>> getPieces(ConnectContext ctx, List<Pair<String, String>> queryList,
-                                                               java.util.function.Predicate<String> filter) {
+                                                               Predicate<String> filter) {
         return getPieces(ctx, PlanPiecePatterns.getSPJG(), queryList, filter);
     }
 
     public static List<Pair<String, PlanPiece>> get11MVPieces(ConnectContext ctx, List<Pair<String, String>> queryList,
-                                                              java.util.function.Predicate<String> filter) {
+                                                              Predicate<String> filter) {
         return queryList.stream()
                 .filter(p -> filter.test(p.first))
                 .flatMap(p -> RboOptimizer.get11MVPlanPieces(p.first, p.second, ctx)
@@ -359,7 +402,7 @@ public class AutoMVUtil {
 
     public static List<Pair<String, AggregatePiece>> getPieces(ConnectContext ctx, PlanPiecePattern piecePattern,
                                                                List<Pair<String, String>> queryList,
-                                                               java.util.function.Predicate<String> filter) {
+                                                               Predicate<String> filter) {
         AutoMVOptions options = AutoMVOptions.of(new PartitionExtractor(), ctx.getSessionVariable());
         AggregatePolicy policy = AggregatePolicies.defaultPolicies(options);
         return queryList.stream()
@@ -411,7 +454,12 @@ public class AutoMVUtil {
 
     public static List<MVRecommendation> recommend(List<Pair<String, String>> queryList, ConnectContext context) {
         mockUpCustomizedQueryExecutor(queryList);
-        return TunespaceExecutor.recommend("ts", context, 0, Integer.MAX_VALUE);
+        return TunespaceExecutor.recommend(MVRecommender.Type.SPJG_MV, "ts", context, 0, Integer.MAX_VALUE);
+    }
+
+    public static List<MVRecommendation> recommend11MV(List<Pair<String, String>> queryList, ConnectContext context) {
+        mockUpCustomizedQueryExecutor(queryList);
+        return TunespaceExecutor.recommend(MVRecommender.Type.ONE_ONE_MV, "ts", context, 0, Integer.MAX_VALUE);
     }
 
     public static void testPartitionHelper(StarRocksAssert starRocksAssert, Object[][] testCases) {

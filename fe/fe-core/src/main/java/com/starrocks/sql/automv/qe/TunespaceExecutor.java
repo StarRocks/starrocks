@@ -42,11 +42,8 @@ import com.starrocks.sql.automv.lattice.MVRecommender;
 import com.starrocks.sql.automv.options.AutoMVOptions;
 import com.starrocks.sql.automv.pattern.PlanPiecePattern;
 import com.starrocks.sql.automv.pattern.PlanPiecePatterns;
-import com.starrocks.sql.automv.pieces.AggregatePiece;
 import com.starrocks.sql.automv.pieces.FQTable;
 import com.starrocks.sql.automv.pieces.PlanPiece;
-import com.starrocks.sql.automv.policies.AggregatePolicies;
-import com.starrocks.sql.automv.policies.AggregatePolicy;
 import com.starrocks.sql.automv.tunespace.MaterializedViewPlus;
 import com.starrocks.sql.automv.tunespace.PlanPieceInfo;
 import com.starrocks.sql.automv.util.Util;
@@ -55,7 +52,9 @@ import com.starrocks.sql.optimizer.OptExpression;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
@@ -72,7 +71,8 @@ public class TunespaceExecutor {
         return INSTANCE.visit(stmt, context);
     }
 
-    public static List<MVRecommendation> recommend(String tsFqName, ConnectContext context, int startIdx, int endIdx) {
+    public static List<MVRecommendation> recommend(MVRecommender.Type recommendType, String tsFqName,
+                                                   ConnectContext context, int startIdx, int endIdx) {
         TablePlus table = PlanPieceInfo.getTable(tsFqName, 1, 1);
         List<String> items = table.getColumnPluses().stream()
                 .map(columnPlus -> columnPlus.getColumn().getName())
@@ -84,16 +84,8 @@ public class TunespaceExecutor {
                 executor.query(PlanPieceInfo.class, PlanPieceInfo.getColumns(), context, selectSql);
         AutoMVOptions options = AutoMVOptions.of(new PartitionExtractor(), context.getSessionVariable());
 
-        AggregatePolicy policy = AggregatePolicies.defaultPolicies(options);
-
-        List<PlanPiece> pieces = pieceInfos.stream()
-                .map(pieceInfo -> Pair.create(pieceInfo.getName(), pieceInfo.getQuery()))
-                .flatMap(p -> RboOptimizer.getPlanPieces(p.first, p.second, context).stream())
-                .map(aggPiece -> aggPiece.mustCast(AggregatePiece.class))
-                .map(aggPiece -> policy.convert(aggPiece).orElse(aggPiece))
-                .collect(Collectors.toList());
-        MVRecommender mvRecommender = new MVRecommender(context, options);
-        return mvRecommender.recommend(pieces, startIdx, endIdx);
+        MVRecommender mvRecommender = MVRecommender.createMVRecommender(recommendType, context, options);
+        return Objects.requireNonNull(mvRecommender).recommendFromPieceInfos(pieceInfos, startIdx, endIdx);
     }
 
     public static final class TunespaceExecuteVisitor implements AstVisitorEPack<ShowResultSet, ConnectContext> {
@@ -135,13 +127,10 @@ public class TunespaceExecutor {
             return null;
         }
 
-        private ShowResultSet handleAppendClause(String fqTableName, AlterTunespaceClause.AppendClause appendClause,
-                                                 ConnectContext context) {
-            String queryName = appendClause.getQueryName();
-            QueryStatement queryStmt = appendClause.getQueryStatement().getQueryStatement();
-            Map<String, FQTable> fqTableMap = appendClause.getQueryStatement().getFqTableMap();
-            OptExpression logicalPlan = RboOptimizer.getLogicalPlan(queryStmt, context);
+        private void appendSPJGSubPlans(String fqTableName, String queryName, OptExpression logicalPlan,
+                                        Map<String, FQTable> fqTableMap, ConnectContext context) {
             List<OptExpression> subPlans = PlanPiecePattern.extract(logicalPlan, PlanPiecePatterns.getSPJG());
+
             Optional<OptExpression> optAggRoot = PlanPiecePattern.getAggRoot(logicalPlan);
             boolean matchEntire = optAggRoot
                     .map(aggRoot -> subPlans.size() == 1 && subPlans.get(0) == aggRoot)
@@ -166,7 +155,7 @@ public class TunespaceExecutor {
                             fqTableMap))
                     .collect(Collectors.toList());
             if (pieceInfos.isEmpty()) {
-                return null;
+                return;
             }
             String insertSql = PlanPieceInfo.getTable(fqTableName, 1, 1).getInsertSql(pieceInfos);
             try {
@@ -174,6 +163,50 @@ public class TunespaceExecutor {
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
+        }
+
+        private void append11MVSubPlans(String fqTableName, String queryName, OptExpression logicalPlan,
+                                        Map<String, FQTable> fqTableMap, ConnectContext context) {
+            List<OptExpression> subPlans = PlanPiecePattern.extract(logicalPlan, PlanPiecePatterns.get11MV());
+
+            if (queryName == null || queryName.isBlank() || queryName.isEmpty()) {
+                queryName = "";
+            }
+
+            String qName = queryName;
+            Supplier<String> nameGenerator = qName.equals("") ?
+                    () -> qName :
+                    Util.nextStringGenerator(qName + ".11mv.part.", "");
+
+            List<Pair<String, OptExpression>> namedSubPlans = subPlans.stream()
+                    .filter(Predicate.not(Util::isSPJG))
+                    .map(subPlan -> Pair.create(nameGenerator.get(), subPlan))
+                    .collect(Collectors.toList());
+
+            AutoMVOptions options = AutoMVOptions.of(new PartitionExtractor(), context.getSessionVariable());
+            List<PlanPieceInfo> pieceInfos = namedSubPlans.stream()
+                    .map(namedSubPlan -> PlanPieceInfo.from11MV(options, namedSubPlan.first, namedSubPlan.second, false,
+                            fqTableMap))
+                    .collect(Collectors.toList());
+            if (pieceInfos.isEmpty()) {
+                return;
+            }
+            String insertSql = PlanPieceInfo.getTable(fqTableName, 1, 1).getInsertSql(pieceInfos);
+            try {
+                exec(insertSql, InsertStmt.class, context);
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        }
+
+        private ShowResultSet handleAppendClause(String fqTableName, AlterTunespaceClause.AppendClause appendClause,
+                                                 ConnectContext context) {
+            String queryName = appendClause.getQueryName();
+            QueryStatement queryStmt = appendClause.getQueryStatement().getQueryStatement();
+            Map<String, FQTable> fqTableMap = appendClause.getQueryStatement().getFqTableMap();
+            OptExpression logicalPlan = RboOptimizer.getLogicalPlan(queryStmt, context);
+            appendSPJGSubPlans(fqTableName, queryName, logicalPlan, fqTableMap, context);
+            append11MVSubPlans(fqTableName, queryName, logicalPlan, fqTableMap, context);
             return null;
         }
 
@@ -240,9 +273,15 @@ public class TunespaceExecutor {
             int startIdx = node.getOffset().orElse(0L).intValue();
             int endIdx = node.getLimit().map(limit -> limit + startIdx).orElse((long) Integer.MAX_VALUE).intValue();
             Supplier<Integer> idAssigner = Util.nextIdGenerator();
-            List<List<String>> showResults = recommend(fqTableName, context, startIdx, endIdx).stream()
+
+            MVRecommender.Type recommendType = node.isSingle() ?
+                    MVRecommender.Type.ONE_ONE_MV :
+                    MVRecommender.Type.SPJG_MV;
+
+            List<List<String>> showResults = recommend(recommendType, fqTableName, context, startIdx, endIdx).stream()
                     .map(rec -> rec.getRow(idAssigner))
                     .collect(Collectors.toList());
+
             int newStartIdx = Math.min(startIdx, showResults.size());
             int newEndIdx = Math.min(endIdx, showResults.size());
             showResults = showResults.subList(newStartIdx, newEndIdx);

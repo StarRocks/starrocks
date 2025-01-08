@@ -45,7 +45,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -62,7 +61,10 @@ public final class PlanPieceBuilder extends OptExpressionVisitor<PlanPiece, Plan
                                             Map<String, FQTable> fqTableMap) {
         PlanPieceBuildContext context =
                 PlanPieceBuildContext.of(idConverter, name, fqTableMap, Collections.emptyList());
-        return PlanPieceBuilder.INSTANCE.build(optExpression, context);
+        PlanPiece piece = PlanPieceBuilder.INSTANCE.build(optExpression, context);
+        return piece.revise(p -> p.cast(ReferencePiece.class)
+                .map(refPiece -> refPiece.getInputPieces().get(0))
+                .orElse(p));
     }
 
     private TieredMap<Integer, GenericColumn> convAggCalls(
@@ -346,58 +348,36 @@ public final class PlanPieceBuilder extends OptExpressionVisitor<PlanPiece, Plan
         TieredMap<Integer, GenericColumn> dimensions =
                 convColumnRefs(agg.getGroupingKeys(), idConverter, flatTablePiece.getColumns());
 
-        ColumnRefSet groupKeyColRefSet = ColumnRefSet.createByIds(dimensions.keySet());
-        Map<Boolean, TieredList<Op>> conjGroups = flatTablePiece.getConjuncts().stream().collect(
-                Collectors.partitioningBy(op -> groupKeyColRefSet.containsAll(op.getIds()), TieredList.<Op>toList()));
-
-        TieredList<Op> hoistConjuncts = conjGroups.get(true);
-        TieredList<Op> nonHoistConjuncts = conjGroups.get(false);
-        Map<Boolean, TieredList<Op>> nonHoistConjunctGroups = nonHoistConjuncts
-                .stream()
-                .collect(Collectors.partitioningBy(OpUtil::isStiffPredicate, TieredList.<Op>toList()));
-
-        TieredList<Op> stiffConjuncts = nonHoistConjunctGroups.get(true);
-        TieredList<Op> flexibleConjuncts = nonHoistConjunctGroups.get(false);
-
-        Set<Integer> rollupColumnRefs = flexibleConjuncts.stream().flatMap(op -> op.getIdSet().stream())
-                .filter(colRef -> !groupKeyColRefSet.contains(colRef)).collect(Collectors.toSet());
-
-        TieredMap<Integer, GenericColumn> rollupDimension = flatTablePiece.getColumns().entrySet()
-                .stream().filter(e -> rollupColumnRefs.contains(e.getKey()))
-                .collect(TieredMap.toMap());
-
         TieredMap<Integer, GenericColumn> allMetrics =
                 convAggCalls(agg.getAggregations(), idConverter, flatTablePiece.getColumns());
-        Map<Boolean, TieredMap<Integer, GenericColumn>> metricsGroup = allMetrics.entrySet()
-                .stream()
-                .collect(Collectors.partitioningBy(e -> OpUtil.isDistinct(e.getValue()), TieredMap.toMap()));
 
-        TieredMap<Integer, GenericColumn> distinctMetrics = metricsGroup.get(true);
-
-        TieredMap<Integer, GenericColumn> metrics = metricsGroup.get(false);
+        TieredList<Op> conjuncts = flatTablePiece.getConjuncts();
         flatTablePiece = flatTablePiece.setConjuncts(TieredList.<Op>genesis());
         AggregatePiece.FlatTable flatTable =
-                new AggregatePiece.FlatTable(flatTablePiece, stiffConjuncts, flexibleConjuncts);
+                new AggregatePiece.FlatTable(flatTablePiece, conjuncts, TieredList.<Op>genesis());
 
         AggregatePiece aggPiece = AggregatePiece.newBuilder()
                 .setFlatTable(flatTable)
                 .setDimensions(dimensions)
-                .setRollupDimensions(rollupDimension)
-                .setMetrics(metrics)
-                .setDistinctMetrics(distinctMetrics)
-                .setHoistConjuncts(hoistConjuncts)
-                .setNonHoistConjuncts(nonHoistConjuncts)
+                .setRollupDimensions(TieredMap.genesis())
+                .setMetrics(allMetrics)
+                .setDistinctMetrics(TieredMap.genesis())
+                .setHoistConjuncts(TieredList.<Op>genesis())
+                .setNonHoistConjuncts(TieredList.<Op>genesis())
                 .setConjuncts(TieredList.genesis())
                 .setCommonState(args.getCommonState())
                 .build().cast();
 
-        return handleProjectAndFilter(agg, aggPiece, idConverter);
+        Preconditions.checkState(aggPiece.isStem());
+        aggPiece = handleProjectAndFilter(agg, aggPiece, idConverter).cast();
+        return ReferencePiece.of(aggPiece);
     }
 
     private PlanPiece build(OptExpression optExpression, PlanPieceBuildContext context) {
         List<PlanPiece> inputPieces =
                 optExpression.getInputs().stream().map(child -> build(child, context)).collect(Collectors.toList());
         PlanPieceBuildContext newContext = context.newContextWithPieces(inputPieces);
-        return optExpression.getOp().accept(this, optExpression, newContext);
+        PlanPiece piece = optExpression.getOp().accept(this, optExpression, newContext);
+        return piece;
     }
 }

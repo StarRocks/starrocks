@@ -59,6 +59,7 @@ public class ShowRecommendationsStmt extends ShowStmt {
             .addColumn(new Column(ACCELERATED_QUERIES, Type.STRING))
             .build();
     private TableName tableName;
+    private boolean single = false;
     private long limit = -1;
     private long offset = -1;
 
@@ -67,6 +68,14 @@ public class ShowRecommendationsStmt extends ShowStmt {
         this.tableName = tableName;
         this.limit = limit;
         this.offset = offset;
+    }
+
+    public boolean isSingle() {
+        return single;
+    }
+
+    public void setSingle(boolean single) {
+        this.single = single;
     }
 
     public TableName getTableName() {

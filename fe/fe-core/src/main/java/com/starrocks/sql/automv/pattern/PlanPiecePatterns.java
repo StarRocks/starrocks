@@ -17,6 +17,10 @@ package com.starrocks.sql.automv.pattern;
 import java.util.Collections;
 
 public class PlanPiecePatterns {
+
+    //11MV pattern matches the plans contains scan/join/aggregate operators,
+    //so it includes SPJG pattern whose top operator is aggregator and other operators
+    //must be scan or join operators.
     private static final PlanPiecePattern ONE_ONE_MV_PATTERN;
     private static final PlanPiecePattern SPJG_PATTERN;
 

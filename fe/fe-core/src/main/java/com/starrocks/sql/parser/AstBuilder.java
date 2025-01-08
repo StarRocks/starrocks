@@ -8301,7 +8301,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 .map(limitElm -> (LimitElement) visitLimitElement(limitElm));
         long limit = limitElement.map(LimitElement::getLimit).orElse(-1L);
         long offset = limitElement.map(LimitElement::getOffset).orElse(-1L);
-        return new ShowRecommendationsStmt(tableName, limit, offset);
+        ShowRecommendationsStmt stmt = new ShowRecommendationsStmt(tableName, limit, offset);
+        stmt.setSingle(ctx.SINGLE() != null);
+        return stmt;
     }
 
     // ------------------------------------------- Util Functions -------------------------------------------

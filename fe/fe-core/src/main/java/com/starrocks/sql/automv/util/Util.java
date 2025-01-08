@@ -16,7 +16,10 @@ package com.starrocks.sql.automv.util;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import org.apache.hadoop.util.Lists;
 
 import java.nio.charset.StandardCharsets;
@@ -27,10 +30,13 @@ import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public class Util {
@@ -39,6 +45,14 @@ public class Util {
     private static final String DIGEST_MD5 = "MD5";
     private static final ThreadLocal<MessageDigest> TLS_SHA1_ALGO = new ThreadLocal<>();
     private static final ThreadLocal<MessageDigest> TLS_MD5_ALGO = new ThreadLocal<>();
+    private static final ColumnRefSet SPJG_OP_TYPES = ColumnRefSet.createByIds(Stream.of(
+                    OperatorType.LOGICAL_OLAP_SCAN,
+                    OperatorType.LOGICAL_AGGR,
+                    OperatorType.LOGICAL_JOIN,
+                    OperatorType.LOGICAL_PROJECT,
+                    OperatorType.LOGICAL_FILTER)
+            .map(OperatorType::ordinal)
+            .collect(Collectors.toList()));
 
     public static Supplier<Integer> nextIdGenerator(int from) {
         int[] id = new int[] {from};
@@ -199,6 +213,22 @@ public class Util {
     public static Stream<Operator> getStream(OptExpression optExpression) {
         return Stream.concat(Stream.of(optExpression.getOp()),
                 optExpression.getInputs().stream().flatMap(Util::getStream));
+    }
+
+    public static boolean isSPJG(OptExpression root) {
+        boolean rootIsAgg = root.getOp().getOpType().equals(OperatorType.LOGICAL_AGGR);
+        if (!rootIsAgg) {
+            return false;
+        }
+        Map<Integer, Long> opTypeCounts = Util.getStream(root)
+                .map(op -> LogicalScanOperator.class.isAssignableFrom(op.getClass()) ?
+                        OperatorType.LOGICAL_OLAP_SCAN : op.getOpType())
+                .map(OperatorType::ordinal)
+                .collect(Collectors.groupingBy(Function.identity(), Collectors.counting()));
+        if (opTypeCounts.getOrDefault(OperatorType.LOGICAL_AGGR.ordinal(), 0L) > 1) {
+            return false;
+        }
+        return SPJG_OP_TYPES.containsAll(opTypeCounts.keySet());
     }
 
     public static long timeDiff(long lhsEpochMilliSeconds, long rhsEpochMilliSeconds) {

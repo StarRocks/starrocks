@@ -1088,4 +1088,19 @@ public class OpUtil {
         return OpUtil.toOpConverter(new ColumnRefToIdConverter(), TieredMap.genesis())
                 .apply(SqlToScalarOperatorTranslator.translate(literal));
     }
+
+    public static GenericColumn ref(int id, GenericColumn column) {
+        if (column.isDerived() && !column.getOp().isVar()) {
+            return GenericColumn.derived(Op.var(column.getType(), id));
+        } else {
+            return column;
+        }
+    }
+
+    public static boolean isRef(int id, GenericColumn column) {
+        return column.cast(DerivedColumn.class)
+                .map(GenericColumn::getOp)
+                .map(op -> op.isVar() && op.getId() == id)
+                .orElse(false);
+    }
 }

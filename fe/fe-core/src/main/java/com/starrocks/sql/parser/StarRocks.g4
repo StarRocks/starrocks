@@ -2663,7 +2663,7 @@ alterTunespaceStatement
     ;
 
 showRecommendationsStatement
-    : SHOW RECOMMENDATIONS FROM qualifiedName (limitElement)?
+    : SHOW (SINGLE)? RECOMMENDATIONS FROM qualifiedName (limitElement)?
     ;
 
 alterTunespaceClause

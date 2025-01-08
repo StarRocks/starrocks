@@ -102,12 +102,12 @@ public class TunespaceTest {
         Assert.assertTrue(createSql, createSql.startsWith(expectCreateSql));
 
         String insertSql = table.getInsertSql(ImmutableList.of(info));
-        String expectInsertSql = "INSERT INTO _auto_tuning_.tunespace" +
-                "(ts, originalQuery, query, category, traits) VALUES \n" +
+        String expectInsertSql = "INSERT INTO _auto_tuning_.tunespace(ts, originalQuery, query, " +
+                "category, traits) VALUES \n" +
                 "  (\"2024-01-01 12:59:59\", to_binary(\"select * from t1\", \"utf8\"), " +
-                "to_binary(\"select * from t0\", \"utf8\"), \"MV\", " +
-                "\"{\\\"version\\\":1,\\\"numDimensions\\\":0,\\\"numRollupDimensions\\\":0," +
-                "\\\"numMetrics\\\":10,\\\"numDistinctMetrics\\\":0,\\\"numHoistedConjuncts\\\":0}\")";
+                "to_binary(\"select * from t0\", \"utf8\"), \"MV\", \"{\\\"version\\\":1," +
+                "\\\"isNonSPJG\\\":false,\\\"numDimensions\\\":0,\\\"numRollupDimensions" +
+                "\\\":0,\\\"numMetrics\\\":10,\\\"numDistinctMetrics\\\":0,\\\"numHoistedConjuncts\\\":0}\")";
         Assert.assertEquals(insertSql, insertSql, expectInsertSql);
 
         String insertAsSelectSql = table.getInsertAsSelectSql("ts0");

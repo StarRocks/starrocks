@@ -31,6 +31,7 @@ import org.junit.Test;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 public class OneOneMVGeneratorTest {
@@ -104,5 +105,46 @@ public class OneOneMVGeneratorTest {
             String s = result.get().getSubquery().getResult();
             Assert.assertTrue(s, s.contains(expectResults[i]));
         }
+    }
+
+    private void testHelper(List<Pair<String, String>> queryList, Consumer<List<List<String>>> checker) {
+        AutoMVUtil.testOneOneMVHelper(getStarRocksAssert().getCtx(), queryList,
+                sv -> {
+                },
+                gv -> {
+                },
+                (pieces, results) -> {
+                    checker.accept(results);
+                    return null;
+                });
+    }
+
+    @Test
+    public void testShowSingleRecommendations() {
+        String queryName = "query01";
+        List<Pair<String, String>> queryList = TestUtil.getTPCDSQueryList()
+                .stream()
+                .filter(p -> p.first.equals(queryName))
+                .collect(Collectors.toList());
+        testHelper(queryList, results -> {
+            Assert.assertEquals(4, results.size());
+            String mv0 = results.get(0).get(2);
+            Assert.assertTrue(mv0, mv0.contains("SELECT\n" +
+                    "  `tpcds`.`customer`.c_customer_sk\n" +
+                    "  ,`tpcds`.`customer`.c_customer_id\n" +
+                    "FROM\n" +
+                    "  `tpcds`.`customer`"));
+
+            String mv3 = results.get(3).get(2);
+            Assert.assertTrue(mv3, mv3.contains("SELECT\n" +
+                    "  `tpcds`.`store_returns`.sr_returned_date_sk\n" +
+                    "  ,`tpcds`.`store_returns`.sr_customer_sk\n" +
+                    "  ,`tpcds`.`store_returns`.sr_store_sk\n" +
+                    "  ,`tpcds`.`store_returns`.sr_return_amt\n" +
+                    "FROM\n" +
+                    "  `tpcds`.`store_returns`\n" +
+                    "WHERE\n" +
+                    "  (`tpcds`.`store_returns`.sr_store_sk IS NOT NULL)"));
+        });
     }
 }

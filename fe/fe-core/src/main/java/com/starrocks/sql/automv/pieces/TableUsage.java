@@ -399,7 +399,9 @@ public class TableUsage {
                 analysis.joinKeys.clear();
                 analysis.joinKeys.addAll(joinKeys);
             }
-            visitConjuncts(aggPiece.getHoistConjuncts().concat(aggPiece.getNonHoistConjuncts()), context);
+            TieredList<Op> conjuncts = aggPiece.getFlatTable().getStiffConjuncts()
+                    .concat(aggPiece.getFlatTable().getFlexibleConjuncts());
+            visitConjuncts(conjuncts, context);
             return context;
         }
 

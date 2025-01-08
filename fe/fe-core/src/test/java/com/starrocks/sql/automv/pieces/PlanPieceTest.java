@@ -335,13 +335,13 @@ public class PlanPieceTest {
                         "FROM\n" +
                         "  `tpcds`.`customer`",
                 "SELECT\n" +
-                        "  `tpcds`.`store`.s_state\n" +
-                        "  ,`tpcds`.`store`.s_store_sk\n" +
+                        "  `tpcds`.`store`.s_store_sk\n" +
+                        "  ,`tpcds`.`store`.s_state\n" +
                         "FROM\n" +
                         "  `tpcds`.`store`",
                 "SELECT\n" +
-                        "  `tpcds`.`date_dim`.d_year\n" +
-                        "  ,`tpcds`.`date_dim`.d_date_sk\n" +
+                        "  `tpcds`.`date_dim`.d_date_sk\n" +
+                        "  ,`tpcds`.`date_dim`.d_year\n" +
                         "FROM\n" +
                         "  `tpcds`.`date_dim`\n" +
                         "WHERE\n" +
@@ -359,8 +359,8 @@ public class PlanPieceTest {
         };
 
         for (int i = 0; i < mergedTableUsages.size(); ++i) {
-            TablePiece tablePiece = mergedTableUsages.get(i).getTablePiece();
-            QueryGenerateContext queryGenContext = QueryGenerateContext.of11MV(mergedTableUsages.get(i));
+            PlanPiece tablePiece = PieceColumnPruner.prune(mergedTableUsages.get(i).getTablePiece());
+            QueryGenerateContext queryGenContext = QueryGenerateContext.of(false, true, false);
             String s = QueryGenerator.generate(tablePiece, queryGenContext).getSubquery().getResult();
             Assert.assertEquals(expectResults[i], s);
         }

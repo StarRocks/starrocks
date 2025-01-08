@@ -490,7 +490,7 @@ public class LatticeTest {
         List<Pair<String, AggregatePiece>> pieces = AutoMVUtil.getPieces(ctx, queryList);
         List<PlanPiece> pieceList = pieces.stream().map(p -> p.second).collect(Collectors.toList());
         AutoMVOptions options = AutoMVOptions.of(new PartitionExtractor(), ctx.getSessionVariable());
-        MVRecommender mvRecommender = new MVRecommender(ctx, options);
+        SPJGMVRecommender mvRecommender = new SPJGMVRecommender(ctx, options);
         List<MVRecommendation> resultList = mvRecommender.recommend(pieceList, 0, Integer.MAX_VALUE);
         Assert.assertEquals(resultList.size(), 1);
         Assert.assertNotNull(resultList.get(0).getMvResult());

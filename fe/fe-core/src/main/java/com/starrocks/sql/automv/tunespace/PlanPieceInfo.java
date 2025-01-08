@@ -34,6 +34,7 @@ import com.starrocks.sql.automv.generator.QueryGenerator;
 import com.starrocks.sql.automv.options.AutoMVOptions;
 import com.starrocks.sql.automv.pieces.AggregatePiece;
 import com.starrocks.sql.automv.pieces.FQTable;
+import com.starrocks.sql.automv.pieces.PieceColumnPruner;
 import com.starrocks.sql.automv.pieces.PlanPiece;
 import com.starrocks.sql.automv.pieces.PlanPieceBuilder;
 import com.starrocks.sql.automv.pn.Op;
@@ -148,6 +149,14 @@ public class PlanPieceInfo {
         return planPieceInfo;
     }
 
+    public static PlanPieceInfo from11MV(AutoMVOptions options, String name, OptExpression subPlan, boolean enableTrace,
+                                         Map<String, FQTable> fqTableMap) {
+        ColumnRefToIdConverter idConverter = new ColumnRefToIdConverter();
+        PlanPiece planPiece = PlanPieceBuilder.createPlanPiece(name, subPlan, idConverter, fqTableMap);
+        return from11MV(name, planPiece, fqTableMap);
+
+    }
+
     private static PlanPieceInfo from(String originalQuery, String query, PlanPiece piece,
                                       Map<String, FQTable> fqTableMap) {
         PlanPieceInfo pieceInfo = new PlanPieceInfo();
@@ -228,6 +237,15 @@ public class PlanPieceInfo {
                 .map(aggPiece -> QueryGenerator.generate(aggPiece, context).getSubquery().getResult())
                 .orElse(null);
         return from(originalQuery, query, piece, fqTableMap);
+    }
+
+    public static PlanPieceInfo from11MV(String name, PlanPiece piece, Map<String, FQTable> fqTableMap) {
+        piece = PieceColumnPruner.prune(piece).cast();
+        QueryGenerateContext context = QueryGenerateContext.of(false, true, false);
+        String query = QueryGenerator.generate(piece, context).getSubquery().getResult();
+        PlanPieceInfo planPieceInfo = from("", query, piece, fqTableMap);
+        planPieceInfo.getTraits().setName(name);
+        return planPieceInfo;
     }
 
     public long getId() {

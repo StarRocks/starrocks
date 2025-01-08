@@ -19,6 +19,7 @@ import com.google.common.base.Preconditions;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.automv.column.ColumnAlias;
 import com.starrocks.sql.automv.column.GenericColumn;
+import com.starrocks.sql.automv.pieces.PieceColumnPruner;
 import com.starrocks.sql.automv.pieces.PlanPiece;
 import com.starrocks.sql.automv.pieces.TablePiece;
 import com.starrocks.sql.automv.pieces.TableUsage;
@@ -102,6 +103,7 @@ public class OneOneMVGenerator {
         PlanPiece tablePiece =
                 addPartitionColumns(tableUsage.getTablePiece(), partitionExtractor)
                         .setConjuncts(tableUsage.getWhereConjuncts());
+        tablePiece = PieceColumnPruner.prune(tablePiece).cast();
         QueryGenerateResult result = QueryGenerator.generate(tablePiece, queryGenerateContext);
 
         TieredMap<Integer, ColumnAlias> columnAliases = result.getColumnAliases();
