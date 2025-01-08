@@ -613,6 +613,13 @@ If a Join (other than Broadcast Join and Replicated Join) has multiple equi-join
 * **Default**: false
 * **Introduced in**: v3.2
 
+### enable_query_trigger_analyze
+
+* **Default**: true
+* **Type**: Boolean
+* **Description**: Whether to enable query-trigger ANALYZE tasks.
+* **Introduced in**: v3.4.0
+
 ### event_scheduler
 
 Used for MySQL client compatibility. No practical usage.

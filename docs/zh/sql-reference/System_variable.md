@@ -611,6 +611,14 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：false
 * 引入版本：v3.2
 
+### enable_query_trigger_analyze
+
+* 默认值：true
+* 类型：Boolean
+* 单位：-
+* 描述：是否开启查询触发 ANALYZE 任务。
+* 引入版本：v3.4.0
+
 ### event_scheduler
 
 * 描述：用于兼容 MySQL 客户端。无实际作用。
