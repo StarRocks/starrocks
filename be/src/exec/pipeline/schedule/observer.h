@@ -105,6 +105,7 @@ public:
     // Non-thread-safe, we only allow the need to do this in the fragment->prepare phase.
     void add_observer(RuntimeState* state, PipelineObserver* observer) {
         if (state->enable_event_scheduler()) {
+            DCHECK(observer != nullptr);
             _observers.push_back(observer);
         }
     }
