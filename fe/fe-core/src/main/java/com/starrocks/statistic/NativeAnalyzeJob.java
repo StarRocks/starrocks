@@ -204,6 +204,10 @@ public class NativeAnalyzeJob implements AnalyzeJob, Writable {
         return tableId == StatsConstants.DEFAULT_ALL_ID;
     }
 
+    public boolean isDefaultJob() {
+        return isAnalyzeAllDb() && isAnalyzeAllTable() && getScheduleType() == ScheduleType.SCHEDULE;
+    }
+
     @Override
     public List<StatisticsCollectJob> instantiateJobs() {
         return StatisticsCollectJobFactory.buildStatisticsCollectJob(this);
