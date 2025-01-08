@@ -46,7 +46,8 @@ CREATE TABLE starrocks_audit_db__.starrocks_audit_tbl__ (
   `stmt`              VARCHAR(1048576)           COMMENT "Original SQL statement",
   `digest`            VARCHAR(32)                COMMENT "Slow SQL fingerprint",
   `planCpuCosts`      DOUBLE                     COMMENT "CPU resources consumption time for planning in nanoseconds",
-  `planMemCosts`      DOUBLE                     COMMENT "Memory cost for planning in bytes"
+  `planMemCosts`      DOUBLE                     COMMENT "Memory cost for planning in bytes",
+  `warehouse`         VARCHAR(128)               COMMENT "Warehouse name"
 ) ENGINE = OLAP
 DUPLICATE KEY (`queryId`, `timestamp`, `queryType`)
 COMMENT "Audit log table"
@@ -204,6 +205,7 @@ See [INSTALL PLUGIN](../../sql-reference/sql-statements/cluster-management/plugi
           digest:
     planCpuCosts: 0
     planMemCosts: 0
+       warehouse: default_warehouse
     1 row in set (0.01 sec)
     ```
 
