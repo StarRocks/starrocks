@@ -95,4 +95,12 @@ a {
     .feedback_Ak7m {
         display: none;
     }
+
+    .theme-doc-footer-edit-meta-row {
+        display: none;
+    };
+
+    .breadcrumbs {
+        display: none;
+    };
 }
