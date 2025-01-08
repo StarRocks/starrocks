@@ -82,7 +82,6 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.ListComparator;
@@ -92,7 +91,6 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.delete.LakeDeleteJob;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.persist.ImageWriter;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -116,7 +114,6 @@ import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataOutput;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
@@ -827,12 +824,6 @@ public class DeleteMgr implements Writable, MemoryTrackable {
         }
         OlapTable olapTable = (OlapTable) table;
         olapTable.setHasDelete();
-    }
-
-    // for delete handler, we only persist those delete already finished.
-    @Override
-    public void write(DataOutput out) throws IOException {
-        Text.writeString(out, GsonUtils.GSON.toJson(this));
     }
 
     private boolean isDeleteInfoExpired(DeleteInfo deleteInfo, long currentTimeMs) {
