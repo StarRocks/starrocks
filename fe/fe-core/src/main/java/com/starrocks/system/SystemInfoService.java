@@ -64,7 +64,6 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.datacache.DataCacheMetrics;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.CancelDecommissionDiskInfo;
-import com.starrocks.persist.CancelDisableDiskInfo;
 import com.starrocks.persist.DecommissionDiskInfo;
 import com.starrocks.persist.DisableDiskInfo;
 import com.starrocks.persist.DropComputeNodeLog;
@@ -579,16 +578,6 @@ public class SystemInfoService implements GsonPostProcessable {
         GlobalStateMgr.getCurrentState().getEditLog().logDisableDisk(new DisableDiskInfo(backend.getId(), diskList));
     }
 
-    public void cancelDisableDisks(String beHostPort, List<String> diskList) throws DdlException {
-        Backend backend = getBackendByHostPort(beHostPort);
-        for (String disk : diskList) {
-            backend.cancelDisableDisk(disk);
-        }
-
-        GlobalStateMgr.getCurrentState().getEditLog()
-                .logCancelDisableDisk(new CancelDisableDiskInfo(backend.getId(), diskList));
-    }
-
     public void replayDecommissionDisks(DecommissionDiskInfo info) {
         Backend backend = getBackend(info.getBeId());
         if (backend == null) {
@@ -631,22 +620,6 @@ public class SystemInfoService implements GsonPostProcessable {
                 backend.disableDisk(disk);
             } catch (DdlException e) {
                 LOG.warn("replay disable disk failed", e);
-            }
-        }
-    }
-
-    public void replayCancelDisableDisks(CancelDisableDiskInfo info) {
-        Backend backend = getBackend(info.getBeId());
-        if (backend == null) {
-            LOG.warn("replay cancel disable disk failed, backend:{} does not exist", info.getBeId());
-            return;
-        }
-
-        for (String disk : info.getDiskList()) {
-            try {
-                backend.cancelDisableDisk(disk);
-            } catch (DdlException e) {
-                LOG.warn("replay cancel disable disk failed", e);
             }
         }
     }

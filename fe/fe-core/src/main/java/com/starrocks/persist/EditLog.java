@@ -1067,11 +1067,6 @@ public class EditLog {
                     globalStateMgr.getNodeMgr().getClusterInfo().replayDisableDisks(info);
                     break;
                 }
-                case OperationType.OP_CANCEL_DISABLE_DISK: {
-                    CancelDisableDiskInfo info = (CancelDisableDiskInfo) journal.data();
-                    globalStateMgr.getNodeMgr().getClusterInfo().replayCancelDisableDisks(info);
-                    break;
-                }
                 case OperationType.OP_REPLICATION_JOB: {
                     ReplicationJobLog replicationJobLog = (ReplicationJobLog) journal.data();
                     globalStateMgr.getReplicationMgr().replayReplicationJob(replicationJobLog.getReplicationJob());
@@ -1957,10 +1952,6 @@ public class EditLog {
 
     public void logDisableDisk(DisableDiskInfo info) {
         logEdit(OperationType.OP_DISABLE_DISK, info);
-    }
-
-    public void logCancelDisableDisk(CancelDisableDiskInfo info) {
-        logEdit(OperationType.OP_CANCEL_DISABLE_DISK, info);
     }
 
     public void logRecoverPartitionVersion(PartitionVersionRecoveryInfo info) {

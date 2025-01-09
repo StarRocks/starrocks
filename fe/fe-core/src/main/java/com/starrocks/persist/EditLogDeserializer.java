@@ -236,7 +236,6 @@ public class EditLogDeserializer {
             .put(OperationType.OP_DECOMMISSION_DISK, DecommissionDiskInfo.class)
             .put(OperationType.OP_CANCEL_DECOMMISSION_DISK, CancelDecommissionDiskInfo.class)
             .put(OperationType.OP_DISABLE_DISK, DisableDiskInfo.class)
-            .put(OperationType.OP_CANCEL_DISABLE_DISK, CancelDisableDiskInfo.class)
             .put(OperationType.OP_REPLICATION_JOB, ReplicationJobLog.class)
             .put(OperationType.OP_DELETE_REPLICATION_JOB, ReplicationJobLog.class)
             .put(OperationType.OP_RECOVER_PARTITION_VERSION, PartitionVersionRecoveryInfo.class)
