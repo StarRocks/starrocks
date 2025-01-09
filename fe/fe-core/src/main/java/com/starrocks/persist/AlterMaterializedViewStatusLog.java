@@ -33,11 +33,14 @@ public class AlterMaterializedViewStatusLog implements Writable {
     private long tableId;
     @SerializedName(value = "status")
     private String status;
+    @SerializedName(value = "reason")
+    private String reason;
 
-    public AlterMaterializedViewStatusLog(long dbId, long tableId, String status) {
+    public AlterMaterializedViewStatusLog(long dbId, long tableId, String status, String reason) {
         this.dbId = dbId;
         this.tableId = tableId;
         this.status = status;
+        this.reason = reason;
     }
 
     public long getDbId() {
@@ -64,10 +67,11 @@ public class AlterMaterializedViewStatusLog implements Writable {
         this.status = status;
     }
 
-
+    public String getReason() {
+        return reason;
+    }
 
     public static AlterMaterializedViewStatusLog read(DataInput in) throws IOException {
         return GsonUtils.GSON.fromJson(Text.readString(in), AlterMaterializedViewStatusLog.class);
     }
-
 }
