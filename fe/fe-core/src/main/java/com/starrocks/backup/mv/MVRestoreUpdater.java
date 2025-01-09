@@ -55,7 +55,7 @@ public class MVRestoreUpdater {
     public static Pair<Status, Boolean> checkMvDefinedQuery(MaterializedView mv,
                                                             Map<TableName, TableName> remoteToLocalTableName,
                                                             Pair<String, String> newDefineQueries) {
-        ConnectContext context = new ConnectContext();
+        ConnectContext context = ConnectContext.buildInner();
         context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         context.setQualifiedUser(AuthenticationMgr.ROOT_USER);
         context.setCurrentUserIdentity(UserIdentity.ROOT);

@@ -1635,7 +1635,7 @@ public class MaterializedViewAnalyzer {
         ExpressionAnalyzer.analyzeExpression(adjustedPartitionByExpr, new AnalyzeState(), new Scope(RelationId.anonymous(),
                         new RelationFields(mvColumns.stream().map(col -> new Field(col.getName(),
                                 col.getType(), mvTableName, null)).collect(Collectors.toList()))),
-                new ConnectContext());
+                ConnectContext.buildInner());
         // update partitionByExprToAdjustExprMap
         recordPartitionByExprToAdjustExprMap(mvColumns, mvTableName, originalPartitionByExpr, adjustedPartitionByExpr,
                 partitionByExprToAdjustExprMap);

@@ -65,7 +65,7 @@ public class CreateReplicatedPartitionJob extends FailoverGroupJob {
         AddPartitionClause addPartitionClause = getAddPartitionClause(remoteTable, remotePartition);
         try {
             WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-            ConnectContext ctx = Util.getOrCreateConnectContext();
+            ConnectContext ctx = Util.getOrCreateInnerContext();
             ctx.setCurrentWarehouse(warehouseManager.getBackgroundWarehouse().getName());
             GlobalStateMgr.getServingState().getLocalMetastore().addPartitions(ctx, localDatabase, localTable.getName(),
                     addPartitionClause);
