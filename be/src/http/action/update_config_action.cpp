@@ -54,6 +54,7 @@
 #include "http/http_status.h"
 #include "storage/compaction_manager.h"
 #include "storage/lake/compaction_scheduler.h"
+#include "storage/lake/load_spill_block_manager.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/update_manager.h"
 #include "storage/memtable_flush_executor.h"
@@ -315,6 +316,16 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
                 tablet_manager->compaction_scheduler()->update_compact_threads(config::compact_threads);
             }
             return Status::OK();
+        });
+        _config_callback.emplace("load_spill_merge_memory_limit_percent", [&]() -> Status {
+            // The change of load spill merge memory will be reflected in the max thread cnt of load spill merge pool.
+            return StorageEngine::instance()->load_spill_block_merge_executor()->refresh_max_thread_num();
+        });
+        _config_callback.emplace("load_spill_merge_max_thread", [&]() -> Status {
+            return StorageEngine::instance()->load_spill_block_merge_executor()->refresh_max_thread_num();
+        });
+        _config_callback.emplace("load_spill_max_merge_bytes", [&]() -> Status {
+            return StorageEngine::instance()->load_spill_block_merge_executor()->refresh_max_thread_num();
         });
 
 #ifdef USE_STAROS
