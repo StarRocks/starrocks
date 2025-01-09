@@ -813,7 +813,7 @@ CONF_Double(pipeline_driver_queue_ratio_of_adjacent_queue, "1.2");
 CONF_Int32(pipeline_analytic_max_buffer_size, "128");
 CONF_Int32(pipeline_analytic_removable_chunk_num, "128");
 CONF_Bool(pipeline_analytic_enable_streaming_process, "true");
-CONF_Bool(pipeline_analytic_enable_removable_cumulative_process, "true");
+CONF_mBool(pipeline_analytic_enable_removable_cumulative_process, "true");
 CONF_Int32(pipline_limit_max_delivery, "4096");
 
 CONF_mBool(use_default_dop_when_shared_scan, "true");

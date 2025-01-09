@@ -227,6 +227,8 @@ public:
 
     NullColumn* mutable_null_column() { return _null_column.get(); }
 
+    const NullColumn* immutable_null_column() const { return _null_column.get(); }
+
     const Column& data_column_ref() const { return *_data_column; }
 
     const ColumnPtr& data_column() const { return _data_column; }
