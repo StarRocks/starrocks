@@ -3595,8 +3595,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
         db.dropTable(oldTableName);
         db.registerTableUnlocked(olapTable);
-        inactiveRelatedMaterializedView(db, olapTable,
-                MaterializedViewExceptions.inactiveReasonForBaseTableRenamed(oldTableName));
+        AlterMVJobExecutor.inactiveRelatedMaterializedView(db, olapTable,
+                MaterializedViewExceptions.inactiveReasonForBaseTableRenamed(oldTableName), false);
 
         TableInfo tableInfo = TableInfo.createForTableRename(db.getId(), olapTable.getId(), newTableName);
         GlobalStateMgr.getCurrentState().getEditLog().logTableRename(tableInfo);
@@ -3612,6 +3612,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         table.setComment(clause.getNewComment());
     }
 
+<<<<<<< HEAD
     public static void inactiveRelatedMaterializedView(Database db, Table olapTable, String reason) {
         for (MvId mvId : olapTable.getRelatedMaterializedViews()) {
             MaterializedView mv = (MaterializedView) db.getTable(mvId.getId());
@@ -3628,6 +3629,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
     }
 
+=======
+>>>>>>> 48b9d6ecea ([BugFix] Only inactive related materialized views because of base table/view is changed in Leader and not replay (#54732))
     public void replayRenameTable(TableInfo tableInfo) {
         long dbId = tableInfo.getDbId();
         long tableId = tableInfo.getTableId();
@@ -3642,9 +3645,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             db.dropTable(tableName);
             table.setName(newTableName);
             db.registerTableUnlocked(table);
-            inactiveRelatedMaterializedView(db, table,
-                    MaterializedViewExceptions.inactiveReasonForBaseTableRenamed(tableName));
-
             LOG.info("replay rename table[{}] to {}, tableId: {}", tableName, newTableName, table.getId());
         } finally {
             locker.unLockDatabase(db, LockType.WRITE);

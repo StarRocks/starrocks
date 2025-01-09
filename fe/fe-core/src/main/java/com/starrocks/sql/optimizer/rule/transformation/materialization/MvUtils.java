@@ -42,11 +42,9 @@ import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.MvPlanContext;
-import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.RangeUtils;
@@ -56,7 +54,6 @@ import com.starrocks.mv.analyzer.MVPartitionExpr;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.QueryRelation;
@@ -69,7 +66,6 @@ import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.MaterializedViewOptimizer;
-import com.starrocks.sql.optimizer.MvPlanContextBuilder;
 import com.starrocks.sql.optimizer.MvRewritePreprocessor;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -126,7 +122,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.TreeSet;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -1129,6 +1124,7 @@ public class MvUtils {
         return joinOperator.isLeftOuterJoin() || joinOperator.isInnerJoin();
     }
 
+<<<<<<< HEAD
     public static SlotRef extractPartitionSlotRef(Expr paritionExpr) {
         List<SlotRef> slotRefs = Lists.newArrayList();
         paritionExpr.collect(SlotRef.class, slotRefs);
@@ -1205,6 +1201,8 @@ public class MvUtils {
         }
     }
 
+=======
+>>>>>>> 48b9d6ecea ([BugFix] Only inactive related materialized views because of base table/view is changed in Leader and not replay (#54732))
     public static void collectViewScanOperator(OptExpression tree, Collection<Operator> viewScanOperators) {
         if (tree.getOp() instanceof LogicalViewScanOperator) {
             viewScanOperators.add(tree.getOp());
