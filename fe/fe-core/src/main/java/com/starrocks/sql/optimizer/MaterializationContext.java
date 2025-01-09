@@ -83,8 +83,6 @@ public class MaterializationContext {
     // used to reduce the rewrite times for the same group and mv
     private final List<Integer> matchedGroups;
 
-    private final ScalarOperator mvPartialPartitionPredicate;
-
     // The output column refs of the MV which is ordered by user's select list.
     private final List<ColumnRefOperator> mvOutputColumnRefs;
 
@@ -111,7 +109,6 @@ public class MaterializationContext {
                                   ColumnRefFactory mvColumnRefFactory,
                                   List<Table> baseTables,
                                   List<Table> intersectingTables,
-                                  ScalarOperator mvPartialPartitionPredicate,
                                   MvUpdateInfo mvUpdateInfo,
                                   List<ColumnRefOperator> mvOutputColumnRefs) {
         this.optimizerContext = optimizerContext;
@@ -122,7 +119,6 @@ public class MaterializationContext {
         this.baseTables = baseTables;
         this.intersectingTables = intersectingTables;
         this.matchedGroups = Lists.newArrayList();
-        this.mvPartialPartitionPredicate = mvPartialPartitionPredicate;
         this.mvUpdateInfo = mvUpdateInfo;
         this.mvOutputColumnRefs = mvOutputColumnRefs;
         this.scanOpToPartitionCompensatePredicates = Maps.newHashMap();
@@ -186,10 +182,6 @@ public class MaterializationContext {
 
     public boolean isMatchedGroup(int groupId) {
         return matchedGroups.contains(groupId);
-    }
-
-    public ScalarOperator getMvPartialPartitionPredicate() {
-        return mvPartialPartitionPredicate;
     }
 
     public long getMVUsedCount() {
