@@ -1291,16 +1291,18 @@ public class DatabaseTransactionMgr {
                 } else {
                     Map<Long, Long> doubleWritePartitions = table.getDoubleWritePartitions();
                     if (doubleWritePartitions != null && !doubleWritePartitions.isEmpty()) {
-                        // double write source partition
-                        if (doubleWritePartitions.containsKey(partitionId)) {
-                            doubleWritePartitionVersions.put(doubleWritePartitions.get(partitionId),
-                                    partition.getNextVersion());
-                            partitionCommitInfo.setVersion(partition.getNextVersion());
-                            // double write target partition
-                        } else if (doubleWritePartitions.containsValue(partitionId)) {
+                        // double write partition
+                        if (doubleWritePartitions.containsValue(partitionId)) {
                             doubleWritePartitionCommitInfos.put(partitionId, partitionCommitInfo);
                         } else {
+                            // double write partition version is the same as the original partition
+                            if (doubleWritePartitions.containsKey(partitionId)) {
+                                doubleWritePartitionVersions.put(doubleWritePartitions.get(partitionId),
+                                        partition.getNextVersion());
+                            }
                             partitionCommitInfo.setVersion(partition.getNextVersion());
+                            LOG.info("set partition {} version to {} in transaction {}",
+                                    partitionId, partitionCommitInfo.getVersion(), transactionState);
                         }
                     } else {
                         partitionCommitInfo.setVersion(partition.getNextVersion());
@@ -1322,12 +1324,13 @@ public class DatabaseTransactionMgr {
                 partitionCommitInfo.setVersionTime(table.isCloudNativeTableOrMaterializedView() ? 0 : commitTs);
             }
 
+            // set double write partition version
             for (Map.Entry<Long, Long> entry : doubleWritePartitionVersions.entrySet()) {
                 PartitionCommitInfo partitionCommitInfo = doubleWritePartitionCommitInfos.get(entry.getKey());
                 if (partitionCommitInfo != null) {
                     partitionCommitInfo.setVersion(entry.getValue());
                     partitionCommitInfo.setIsDoubleWrite(true);
-                    LOG.debug("set double write partition {} version to {} in transaction {}",
+                    LOG.info("set double write partition {} version to {} in transaction {}",
                             entry.getKey(), entry.getValue(), transactionState);
                 }
             }

@@ -23,13 +23,11 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.StarRocksException;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.persist.DropWarehouseLog;
 import com.starrocks.persist.ImageWriter;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
@@ -46,7 +44,6 @@ import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -256,11 +253,7 @@ public class WarehouseManager implements Writable {
         return nextComputeNodeIndex;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        String json = GsonUtils.GSON.toJson(this);
-        Text.writeString(out, json);
-    }
+
 
     public Warehouse getCompactionWarehouse() {
         return getWarehouse(DEFAULT_WAREHOUSE_ID);

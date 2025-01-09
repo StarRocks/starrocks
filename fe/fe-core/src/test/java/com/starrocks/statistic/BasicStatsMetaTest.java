@@ -84,6 +84,8 @@ public class BasicStatsMetaTest extends PlanTestBase {
             basicStatsMeta.increaseDeltaRows(5000L);
             basicStatsMeta.setUpdateRows(10000L);
             Assert.assertEquals(0.5, basicStatsMeta.getHealthy(), 0.01);
+            basicStatsMeta.resetDeltaRows();
+            Assert.assertEquals(1.0, basicStatsMeta.getHealthy(), 0.01);
         }
     }
 

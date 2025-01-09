@@ -17,10 +17,24 @@
 #include "exec/spill/block_manager.h"
 #include "exec/spill/dir_manager.h"
 #include "exec/spill/input_stream.h"
+#include "util/threadpool.h"
 
 namespace starrocks {
-
 namespace lake {
+
+class LoadSpillBlockMergeExecutor {
+public:
+    LoadSpillBlockMergeExecutor() {}
+    ~LoadSpillBlockMergeExecutor() {}
+    Status init();
+
+    ThreadPool* get_thread_pool() { return _merge_pool.get(); }
+    Status refresh_max_thread_num();
+
+private:
+    // ThreadPool for merge.
+    std::unique_ptr<ThreadPool> _merge_pool;
+};
 
 class LoadSpillBlockContainer {
 public:
@@ -63,6 +77,8 @@ public:
 
     spill::BlockManager* block_manager() { return _block_manager.get(); }
     LoadSpillBlockContainer* block_container() { return _block_container.get(); }
+
+    bool has_spill_block() const { return _block_container != nullptr && !_block_container->empty(); }
 
 private:
     TUniqueId _load_id;                                        // Unique ID for the load.

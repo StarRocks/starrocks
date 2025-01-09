@@ -55,7 +55,6 @@ import com.starrocks.persist.ModifyPartitionInfo;
 import com.starrocks.persist.SwapTableOperationLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AddColumnsClause;
@@ -336,10 +335,10 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
                 }
 
                 // inactive the related MVs
-                LocalMetastore.inactiveRelatedMaterializedView(db, origTable,
-                        MaterializedViewExceptions.inactiveReasonForBaseTableSwapped(origTblName));
-                LocalMetastore.inactiveRelatedMaterializedView(db, olapNewTbl,
-                        MaterializedViewExceptions.inactiveReasonForBaseTableSwapped(newTblName));
+                AlterMVJobExecutor.inactiveRelatedMaterializedView(db, origTable,
+                        MaterializedViewExceptions.inactiveReasonForBaseTableSwapped(origTblName), false);
+                AlterMVJobExecutor.inactiveRelatedMaterializedView(db, olapNewTbl,
+                        MaterializedViewExceptions.inactiveReasonForBaseTableSwapped(newTblName), false);
 
                 SwapTableOperationLog log = new SwapTableOperationLog(db.getId(), origTable.getId(), olapNewTbl.getId());
                 GlobalStateMgr.getCurrentState().getAlterJobMgr().swapTableInternal(log);
@@ -818,7 +817,7 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
                 alterViewClause.getColumns(),
                 ctx.getSessionVariable().getSqlMode(), alterViewClause.getComment());
 
-        GlobalStateMgr.getCurrentState().getAlterJobMgr().alterView(alterViewInfo);
+        GlobalStateMgr.getCurrentState().getAlterJobMgr().alterView(alterViewInfo, false);
         GlobalStateMgr.getCurrentState().getEditLog().logModifyViewDef(alterViewInfo);
         return null;
     }

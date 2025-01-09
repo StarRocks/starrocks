@@ -41,4 +41,4 @@ Example 2: Simulate and analyze an INSERT INTO statement. The loading transactio
 ## Relevant SQLs
 
 - [SHOW PROFILELIST](./SHOW_PROFILELIST.md)
-- [ANALYZE PROFILE](./EXPLAIN_ANALYZE.md)
+- [ANALYZE PROFILE](./ANALYZE_PROFILE.md)

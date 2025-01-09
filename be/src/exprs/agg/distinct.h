@@ -467,13 +467,7 @@ public:
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
-        DCHECK(false) << "this method shouldn't be called";
-    }
-
-    void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
-                                   AggDataPtr __restrict state) const override {
         auto& agg_state = this->data(state);
-        const auto* column = down_cast<const ArrayColumn*>(columns[0]);
         MemPool* mem_pool = ctx->mem_pool();
 
         // if dict size greater than DICT_DECODE_MAX_SIZE. we return a FAKE dictionary
@@ -481,9 +475,45 @@ public:
             return;
         }
 
-        const auto& elements_column = column->elements();
-        if (column->elements().is_nullable()) {
-            const auto& null_column = down_cast<const NullableColumn&>(elements_column);
+        if (columns[0]->is_array()) {
+            const auto* array_column = down_cast<const ArrayColumn*>(columns[0]);
+            const auto* column = array_column->elements_column().get();
+            const auto& off = array_column->offsets().get_data();
+            const auto* binary_column = down_cast<const BinaryColumn*>(ColumnHelper::get_data_column(column));
+            for (auto i = off[row_num]; i < off[row_num + 1]; i++) {
+                if (!column->is_null(i)) {
+                    agg_state.update(mem_pool, binary_column->get_slice(i));
+                }
+            }
+        } else {
+            const auto& binary_column = down_cast<const BinaryColumn&>(*columns[0]);
+            agg_state.update(mem_pool, binary_column.get_slice(row_num));
+        }
+
+        agg_state.over_limit = agg_state.set.size() > DICT_DECODE_MAX_SIZE;
+    }
+
+    void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
+                                   AggDataPtr __restrict state) const override {
+        auto& agg_state = this->data(state);
+        MemPool* mem_pool = ctx->mem_pool();
+
+        // if dict size greater than DICT_DECODE_MAX_SIZE. we return a FAKE dictionary
+        if (agg_state.over_limit) {
+            return;
+        }
+
+        const Column* column = nullptr;
+
+        if (columns[0]->is_array()) {
+            const auto* array_column = down_cast<const ArrayColumn*>(columns[0]);
+            column = array_column->elements_column().get();
+        } else {
+            column = columns[0];
+        }
+
+        if (column->is_nullable()) {
+            const auto& null_column = down_cast<const NullableColumn&>(*column);
             const auto& null_data = null_column.immutable_null_column_data();
             const auto& binary_column = down_cast<const BinaryColumn&>(null_column.data_column_ref());
 
@@ -494,7 +524,7 @@ public:
             }
             agg_state.over_limit = agg_state.set.size() > DICT_DECODE_MAX_SIZE;
         } else {
-            const auto& binary_column = down_cast<const BinaryColumn&>(elements_column);
+            const auto& binary_column = down_cast<const BinaryColumn&>(*column);
             for (size_t i = 0; i < binary_column.size(); ++i) {
                 agg_state.update(mem_pool, binary_column.get_slice(i));
             }

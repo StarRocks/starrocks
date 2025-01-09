@@ -1529,6 +1529,10 @@ CONF_mBool(enable_load_spill, "false");
 CONF_mInt64(load_spill_max_chunk_bytes, "10485760");
 // Max merge input bytes during spill merge. Default is 1024MB.
 CONF_mInt64(load_spill_max_merge_bytes, "1073741824");
+// Max memory used for merge load spill blocks.
+CONF_mInt64(load_spill_merge_memory_limit_percent, "30");
+// Upper bound of spill merge thread count
+CONF_mInt64(load_spill_merge_max_thread, "16");
 
 // ignore union type tag in avro kafka routine load
 CONF_mBool(avro_ignore_union_type_tag, "false");
