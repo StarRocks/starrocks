@@ -59,7 +59,8 @@ import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.mysql.ssl.SSLChannel;
-import com.starrocks.mysql.ssl.SSLChannelImpClassLoader;
+import com.starrocks.mysql.ssl.SSLChannelImp;
+import com.starrocks.mysql.ssl.SSLContextLoader;
 import com.starrocks.plugin.AuditEvent.AuditEventBuilder;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -103,7 +104,6 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
-import javax.net.ssl.SSLContext;
 
 // When one client connect in, we create a connection context for it.
 // We store session information here. Meanwhile, ConnectScheduler all
@@ -232,8 +232,6 @@ public class ConnectContext {
     protected volatile boolean isPending = false;
     protected volatile boolean isForward = false;
 
-    protected SSLContext sslContext;
-
     private ConnectContext parent;
 
     private boolean relationAliasCaseInsensitive = false;
@@ -289,14 +287,10 @@ public class ConnectContext {
     }
 
     public ConnectContext() {
-        this(null, null);
+        this(null);
     }
 
     public ConnectContext(SocketChannel channel) {
-        this(channel, null);
-    }
-
-    public ConnectContext(SocketChannel channel, SSLContext sslContext) {
         closed = false;
         state = new QueryState();
         returnRows = 0;
@@ -312,8 +306,6 @@ public class ConnectContext {
         if (channel != null) {
             remoteIP = mysqlChannel.getRemoteIp();
         }
-
-        this.sslContext = sslContext;
 
         if (shouldDumpQuery()) {
             this.dumpInfo = new QueryDumpInfo(this);
@@ -1091,29 +1083,13 @@ public class ConnectContext {
         return isForward;
     }
 
-    public boolean supportSSL() {
-        return sslContext != null;
-    }
-
     public boolean enableSSL() throws IOException {
-        Class<? extends SSLChannel> clazz = SSLChannelImpClassLoader.loadSSLChannelImpClazz();
-        if (clazz == null) {
-            LOG.warn("load SSLChannelImp class failed");
-            throw new IOException("load SSLChannelImp class failed");
-        }
-
-        try {
-            SSLChannel sslChannel = (SSLChannel) clazz.getConstructors()[0]
-                    .newInstance(sslContext.createSSLEngine(), mysqlChannel);
-            if (!sslChannel.init()) {
-                return false;
-            } else {
-                mysqlChannel.setSSLChannel(sslChannel);
-                return true;
-            }
-        } catch (Exception e) {
-            LOG.warn("construct SSLChannelImp class failed");
-            throw new IOException("construct SSLChannelImp class failed");
+        SSLChannel sslChannel = new SSLChannelImp(SSLContextLoader.getSslContext().createSSLEngine(), mysqlChannel);
+        if (!sslChannel.init()) {
+            return false;
+        } else {
+            mysqlChannel.setSSLChannel(sslChannel);
+            return true;
         }
     }
 
