@@ -30,6 +30,18 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },
+  "overrides": {
+    "react-router": {
+      "path-to-regexp": "1.9.0"
+    },
+    "express": {
+      "path-to-regexp": "0.1.10"
+    },
+    "serve-handler": {
+      "path-to-regexp": "3.3.0"
+    },
+    "webpack-dev-middleware" : "5.3.4"
+  },
   "devDependencies": {
     "@docusaurus/module-type-aliases": "^3.1.1",
     "@docusaurus/types": "^3.1.1"
