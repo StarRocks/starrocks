@@ -917,13 +917,8 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             }
 
             if (pathHash != -1) {
-<<<<<<< HEAD
                 Replica replica = invertedIndex.getReplica(tabletId, beId);
-                if (replica.getPathHash() != pathHash) {
-=======
-                Replica replica = GlobalStateMgr.getCurrentInvertedIndex().getReplica(tabletId, beId);
                 if (replica == null || replica.getPathHash() != pathHash) {
->>>>>>> 0a1d30e38 ([BugFix] Fix IllegalState Exception thrown from TabletScheduler (#25349))
                     continue;
                 }
             }
@@ -940,14 +935,10 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
         for (Map.Entry<Pair<Long, Long>, Set<Long>> entry : partitionTablets.entrySet()) {
             long totalSize = 0;
             for (Long tabletId : entry.getValue()) {
-<<<<<<< HEAD
-                totalSize += invertedIndex.getReplica(tabletId, beId).getDataSize();
-=======
-                Replica replica = GlobalStateMgr.getCurrentInvertedIndex().getReplica(tabletId, beId);
+                Replica replica = invertedIndex.getReplica(tabletId, beId);
                 if (replica != null) {
                     totalSize += replica.getDataSize();
                 }
->>>>>>> 0a1d30e38 ([BugFix] Fix IllegalState Exception thrown from TabletScheduler (#25349))
             }
             result.put(entry.getKey(), (double) totalSize / (entry.getValue().size() > 0 ? entry.getValue().size() : 1));
         }
