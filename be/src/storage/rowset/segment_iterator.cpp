@@ -378,9 +378,7 @@ private:
     std::shared_ptr<tenann::IndexMeta> _index_meta;
 #endif
 
-    bool _always_build_rowid() const {
-        return _use_vector_index && !_use_ivfpq;
-    }
+    bool _always_build_rowid() const { return _use_vector_index && !_use_ivfpq; }
 
     bool _use_vector_index;
     std::string _vector_distance_column_name;
