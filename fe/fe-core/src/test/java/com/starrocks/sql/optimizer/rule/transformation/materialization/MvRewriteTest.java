@@ -2452,4 +2452,46 @@ public class MvRewriteTest extends MVTestBase {
                 ));
         connectContext.getSessionVariable().setCboCTERuseRatio(0);
     }
+
+    @Test
+    public void testMVUnionRewriteWithDuplicateMVs1() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE s1 (\n" +
+                "  num int,\n" +
+                "  dt date\n" +
+                ")\n" +
+                "DUPLICATE KEY(`num`)\n" +
+                "PARTITION BY RANGE(`dt`)\n" +
+                "(\n" +
+                "  PARTITION p20200615 VALUES [(\"2020-06-15 00:00:00\"), (\"2020-06-16 00:00:00\")),\n" +
+                "  PARTITION p20200618 VALUES [(\"2020-06-18 00:00:00\"), (\"2020-06-19 00:00:00\")),\n" +
+                "  PARTITION p20200621 VALUES [(\"2020-06-21 00:00:00\"), (\"2020-06-22 00:00:00\")),\n" +
+                "  PARTITION p20200624 VALUES [(\"2020-06-24 00:00:00\"), (\"2020-06-25 00:00:00\")),\n" +
+                "  PARTITION p20200702 VALUES [(\"2020-07-02 00:00:00\"), (\"2020-07-03 00:00:00\")),\n" +
+                "  PARTITION p20200705 VALUES [(\"2020-07-05 00:00:00\"), (\"2020-07-06 00:00:00\")),\n" +
+                "  PARTITION p20200708 VALUES [(\"2020-07-08 00:00:00\"), (\"2020-07-09 00:00:00\")),\n" +
+                "  PARTITION p20200716 VALUES [(\"2020-07-16 00:00:00\"), (\"2020-07-17 00:00:00\")),\n" +
+                "  PARTITION p20200719 VALUES [(\"2020-07-19 00:00:00\"), (\"2020-07-20 00:00:00\")),\n" +
+                "  PARTITION p20200722 VALUES [(\"2020-07-22 00:00:00\"), (\"2020-07-23 00:00:00\")),\n" +
+                "  PARTITION p20200725 VALUES [(\"2020-07-25 00:00:00\"), (\"2020-07-26 00:00:00\")),\n" +
+                "  PARTITION p20200711 VALUES [(\"2020-07-11 00:00:00\"), (\"2020-07-12 00:00:00\"))\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(`num`);");
+        executeInsertSql("INSERT INTO s1 VALUES \n" +
+                "  (1,\"2020-06-15\"),(2,\"2020-06-18\"),(3,\"2020-06-21\"),(4,\"2020-06-24\"),\n" +
+                "  (1,\"2020-07-02\"),(2,\"2020-07-05\"),(3,\"2020-07-08\"),(4,\"2020-07-11\"),\n" +
+                "  (1,\"2020-07-16\"),(2,\"2020-07-19\"),(3,\"2020-07-22\"),(4,\"2020-07-25\"),\n" +
+                "  (2,\"2020-06-15\"),(3,\"2020-06-18\"),(4,\"2020-06-21\"),(5,\"2020-06-24\"),\n" +
+                "  (2,\"2020-07-02\"),(3,\"2020-07-05\"),(4,\"2020-07-08\"),(5,\"2020-07-11\");");
+        withRefreshedMV("CREATE MATERIALIZED VIEW test_mv1 \n" +
+                "PARTITION BY dt \n" +
+                "REFRESH DEFERRED MANUAL \n" +
+                "AS SELECT * FROM s1 where dt > '2020-07-01';", () -> {
+            String query = "SELECT * FROM (SELECT * FROM s1 where num > 3 UNION ALL SELECT * FROM s1 where num > 3) t " +
+                    "order by 1, 2 limit 3;";
+            connectContext.getSessionVariable().setMaterializedViewUnionRewriteMode(2);
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "test_mv1");
+            connectContext.getSessionVariable().setMaterializedViewUnionRewriteMode(0);
+        });
+    }
 }

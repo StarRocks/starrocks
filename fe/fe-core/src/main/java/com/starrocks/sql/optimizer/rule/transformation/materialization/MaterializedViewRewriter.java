@@ -2230,6 +2230,7 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
             ColumnRefOperator newColumn = rewriteContext.getQueryRefFactory().create(
                     columnRef, columnRef.getType(), columnRef.isNullable());
             newViewOutputColumns.add(newColumn);
+            Preconditions.checkArgument(mvProjection.containsKey(columnRef));
             newColumnRefMap.put(newColumn, mvProjection.get(columnRef));
         }
         Projection newMvProjection = new Projection(newColumnRefMap);
@@ -2458,6 +2459,11 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
                         .stream()
                         .map(org -> Pair.create(org, columnMapping.get(org)))
                         .collect(Collectors.toMap(p -> p.first, p -> p.second));
+            }
+            // rewrite mv pruned predicates since mv's output columns mapping have changed
+            if (mvRewriteContext.getMvPruneConjunct() != null) {
+                ScalarOperator newMvPruneConjunct = duplicator.rewriteAfterDuplicate(mvRewriteContext.getMvPruneConjunct());
+                mvRewriteContext.setMvPruneConjunct(newMvPruneConjunct);
             }
             return Utils.mergeProjection(duplicate, newProjection);
         } else {
