@@ -2437,26 +2437,37 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
 
         if (materializationContext.isMvDuplicateUsed()) {
             // duplicate if needed
-            deriveLogicalProperty(result);
-            ColumnRefSet origOutputCols = result.getOutputColumns();
             OptExpressionDuplicator duplicator = new OptExpressionDuplicator(materializationContext);
-            ColumnRefFactory columnRefFactory = rewriteContext.getQueryRefFactory();
             OptExpression duplicate = duplicator.duplicate(result);
-            Map<ColumnRefOperator, ColumnRefOperator> replacedOutputMapping = duplicator.getColumnMapping();
-            Set<ColumnRefOperator> origColRefs =
-                    origOutputCols.getStream().map(columnRefFactory::getColumnRef).collect(Collectors.toSet());
-            Map<ColumnRefOperator, ScalarOperator> newProject = Maps.newHashMap();
-            for (ColumnRefOperator colRef : origColRefs) {
-                Preconditions.checkArgument(replacedOutputMapping.containsKey(colRef));
-                newProject.put(colRef, replacedOutputMapping.get(colRef));
+            Map<ColumnRefOperator, ColumnRefOperator> columnMapping = duplicator.getColumnMapping();
+            Map<ColumnRefOperator, ScalarOperator> newProjection;
+            Projection projection = result.getOp().getProjection();
+            if (projection != null) {
+                newProjection =
+                        projection.getColumnRefMap().entrySet()
+                                .stream()
+                                .map(e -> Pair.create(e.getKey(), columnMapping.get(e.getKey())))
+                                .collect(Collectors.toMap(p -> p.first, p -> p.second));
+
+            } else {
+                deriveLogicalProperty(result);
+                ColumnRefSet columnRefSet = result.getOutputColumns();
+                List<ColumnRefOperator> originalOutputColumns = columnRefSet.getColumnRefOperators(
+                        materializationContext.getQueryRefFactory());
+                newProjection = originalOutputColumns
+                        .stream()
+                        .map(org -> Pair.create(org, columnMapping.get(org)))
+                        .collect(Collectors.toMap(p -> p.first, p -> p.second));
             }
-            return Utils.mergeProjection(duplicate, newProject);
+            return Utils.mergeProjection(duplicate, newProjection);
         } else {
             return result;
         }
     }
 
-    // TODO: consider no-loss type cast
+    /**
+     * Do rewrite based on materialized view's plan.
+     */
     protected OptExpression doViewBasedRewrite(RewriteContext rewriteContext,
                                                OptExpression mvScanOptExpression) {
         final Map<ColumnRefOperator, ScalarOperator> mvColumnRefToScalarOp =
