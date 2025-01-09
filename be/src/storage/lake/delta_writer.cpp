@@ -140,6 +140,8 @@ public:
 
     int64_t last_write_ts() const;
 
+    bool has_spill_block() const;
+
 private:
     Status reset_memtable();
 
@@ -239,6 +241,10 @@ Status DeltaWriterImpl::check_immutable() {
 
 int64_t DeltaWriterImpl::last_write_ts() const {
     return _last_write_ts;
+}
+
+bool DeltaWriterImpl::has_spill_block() const {
+    return _load_spill_block_mgr != nullptr && _load_spill_block_mgr->has_spill_block();
 }
 
 Status DeltaWriterImpl::build_schema_and_writer() {
@@ -808,6 +814,10 @@ Status DeltaWriter::check_immutable() {
 
 int64_t DeltaWriter::last_write_ts() const {
     return _impl->last_write_ts();
+}
+
+bool DeltaWriter::has_spill_block() const {
+    return _impl->has_spill_block();
 }
 
 ThreadPool* DeltaWriter::io_threads() {

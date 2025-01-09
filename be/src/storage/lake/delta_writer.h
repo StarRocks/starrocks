@@ -110,6 +110,8 @@ public:
 
     int64_t last_write_ts() const;
 
+    bool has_spill_block() const;
+
 private:
     DeltaWriterImpl* _impl;
 };
