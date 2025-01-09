@@ -86,6 +86,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
+import java.util.regex.Pattern;
 
 /**
  * Implementation of FileIO that adds metadata content caching features.
@@ -106,6 +107,8 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
     private transient ContentCache fileContentCache;
     private FileIO wrappedIO;
     private SerializableSupplier<Configuration> conf;
+    private static final Pattern HADOOP_CATALOG_METADATA_JSON_PATTERN =
+            Pattern.compile("^v\\d+(\\.gz)?\\.metadata\\.json(\\.gz)?$");
 
     @Override
     public void initialize(Map<String, String> properties) {
@@ -219,6 +222,7 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
         public void pin() {
             useCount += 1;
         }
+
         public void unpin() {
             useCount -= 1;
         }
@@ -312,6 +316,7 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
     private static class MemoryCacheHolder {
         static final ContentCache INSTANCE = new MemoryContentCache();
     }
+
     public static class MemoryContentCache extends ContentCache {
         private final Cache<String, CacheEntry> cache;
 
@@ -358,6 +363,7 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
     private static class TwoLevelCacheHolder {
         static final ContentCache INSTANCE = new TwoLevelContentCache();
     }
+
     public static class TwoLevelContentCache extends ContentCache {
         private final Cache<String, CacheEntry> memCache;
         private final Cache<String, DiskCacheEntry> diskCache;
@@ -506,6 +512,7 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
             this.diskCache = diskCache;
             this.key = key;
         }
+
         @Override
         public void close() throws IOException {
             try {
@@ -562,7 +569,10 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
         public SeekableInputStream newStream() {
             try {
                 // read-through cache if file length is less than or equal to maximum length allowed to cache.
-                if (getLength() <= contentCache.maxContentLength()) {
+                // do not cache metadata json files because the name could be same, like "v1.metadata.json"
+                // when re-create table with same name.
+                if (getLength() <= contentCache.maxContentLength() &&
+                        !HADOOP_CATALOG_METADATA_JSON_PATTERN.matcher(wrappedInputFile.location()).matches()) {
                     return cachedStream();
                 }
 
