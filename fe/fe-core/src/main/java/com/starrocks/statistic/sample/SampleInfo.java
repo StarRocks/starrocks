@@ -238,8 +238,14 @@ public class SampleInfo {
         hint.append(tabletStats.stream()
                 .map(e -> String.valueOf(e.getTabletId()))
                 .collect(Collectors.joining(", ", "(", ")")));
-        hint.append(" WHERE rand() <= ").append(readRatio);
-        hint.append(" LIMIT ").append(sampleRowsLimit);
+
+        if (Config.enable_use_table_sample_collect_statistics) {
+            int percent = Math.max(1, Math.min(100, (int) (readRatio * 100)));
+            hint.append(String.format(" SAMPLE('percent'='%d') LIMIT %d ", percent, sampleRowsLimit));
+        } else {
+            hint.append(" WHERE rand() <= ").append(readRatio);
+            hint.append(" LIMIT ").append(sampleRowsLimit);
+        }
         return hint.toString();
     }
 

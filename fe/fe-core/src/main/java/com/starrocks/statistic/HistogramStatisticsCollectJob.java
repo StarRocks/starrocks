@@ -149,7 +149,7 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
         context.put("totalRows", Config.histogram_max_sample_row_count);
 
         // TODO: use it by default and remove this switch
-        if (Config.histogram_enable_table_sample && sampleRatio > 0.0 && sampleRatio < 1.0) {
+        if (Config.enable_use_table_sample_collect_statistics && sampleRatio > 0.0 && sampleRatio < 1.0) {
             String sampleClause = String.format("SAMPLE('percent'='%d')", (int) (sampleRatio * 100));
             context.put("sampleClause", sampleClause);
             context.put("randFilter", "TRUE");
