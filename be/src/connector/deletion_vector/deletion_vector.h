@@ -21,7 +21,7 @@
 namespace starrocks {
 
 struct DeletionVectorBuildStats {
-    int64_t bitmap_deserialized_ns = 0;
+    int64_t bitmap_deserialize_ns = 0;
 };
 
 class DeletionVector {

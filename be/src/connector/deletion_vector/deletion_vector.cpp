@@ -117,7 +117,7 @@ Status DeletionVector::deserialized_deletion_vector(uint32_t magic_number, std::
                                                     int64_t serialized_bitmap_length,
                                                     const SkipRowsContextPtr& skip_rows_ctx) {
     {
-        SCOPED_RAW_TIMER(&_build_stats.bitmap_deserialized_ns);
+        SCOPED_RAW_TIMER(&_build_stats.bitmap_deserialize_ns);
         if (magic_number != MAGIC_NUMBER) {
             std::stringstream ss;
             ss << "Unexpected magic number : " << magic_number;
@@ -285,10 +285,10 @@ void DeletionVector::update_dv_build_counter(RuntimeProfile* parent_profile,
         static const char* prefix = "DV_BuildTime";
         ADD_CHILD_COUNTER(parent_profile, prefix, TUnit::NONE, DV_TIMER);
 
-        RuntimeProfile::Counter* bitmap_deserialized_timer =
-                ADD_CHILD_COUNTER(parent_profile, "DV_BitmapDeserializedTime", TUnit::TIME_NS, prefix);
+        RuntimeProfile::Counter* bitmap_deserialize_timer =
+                ADD_CHILD_COUNTER(parent_profile, "DV_BitmapDeserializeTime", TUnit::TIME_NS, prefix);
 
-        COUNTER_UPDATE(bitmap_deserialized_timer, build_stats.bitmap_deserialized_ns);
+        COUNTER_UPDATE(bitmap_deserialize_timer, build_stats.bitmap_deserialize_ns);
     }
 }
 
