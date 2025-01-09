@@ -152,6 +152,8 @@ public:
         return _flush_token == nullptr ? nullptr : &(_flush_token->get_stats());
     }
 
+    bool has_spill_block() const;
+
 private:
     Status reset_memtable();
 
@@ -250,6 +252,10 @@ Status DeltaWriterImpl::check_immutable() {
 
 int64_t DeltaWriterImpl::last_write_ts() const {
     return _last_write_ts;
+}
+
+bool DeltaWriterImpl::has_spill_block() const {
+    return _load_spill_block_mgr != nullptr && _load_spill_block_mgr->has_spill_block();
 }
 
 Status DeltaWriterImpl::build_schema_and_writer() {
@@ -565,7 +571,7 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
                 op_write->mutable_txn_meta()->add_partial_update_column_unique_ids(tablet_column.unique_id());
             }
             if (_partial_update_mode != PartialUpdateMode::COLUMN_UPDATE_MODE) {
-                // generate rewrite segment names to avoid gc in rewrite operation
+                // rewrite segments are useless now, just for compatibility
                 for (auto i = 0; i < op_write->rowset().segments_size(); i++) {
                     op_write->add_rewrite_segments(gen_segment_filename(_txn_id));
                 }
@@ -600,6 +606,7 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
             }
 
             if (op_write->rewrite_segments_size() == 0) {
+                // rewrite segments are useless now, just for compatibility
                 for (auto i = 0; i < op_write->rowset().segments_size(); i++) {
                     op_write->add_rewrite_segments(gen_segment_filename(_txn_id));
                 }
@@ -834,6 +841,10 @@ const DeltaWriterStat& DeltaWriter::get_writer_stat() const {
 
 const FlushStatistic* DeltaWriter::get_flush_stats() const {
     return _impl->get_flush_stats();
+}
+
+bool DeltaWriter::has_spill_block() const {
+    return _impl->has_spill_block();
 }
 
 ThreadPool* DeltaWriter::io_threads() {

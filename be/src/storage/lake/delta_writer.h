@@ -156,6 +156,8 @@ public:
 
     const FlushStatistic* get_flush_stats() const;
 
+    bool has_spill_block() const;
+
 private:
     DeltaWriterImpl* _impl;
 };

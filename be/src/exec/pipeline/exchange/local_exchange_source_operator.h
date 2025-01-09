@@ -149,6 +149,8 @@ public:
 
     ~LocalExchangeSourceOperatorFactory() override = default;
 
+    bool support_event_scheduler() const override { return true; }
+
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         std::shared_ptr<LocalExchangeSourceOperator> source = std::make_shared<LocalExchangeSourceOperator>(
                 this, _id, _plan_node_id, driver_sequence, _memory_manager);

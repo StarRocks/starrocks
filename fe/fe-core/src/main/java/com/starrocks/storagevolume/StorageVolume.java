@@ -41,7 +41,6 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.net.URI;
 import java.util.ArrayList;
@@ -352,11 +351,7 @@ public class StorageVolume implements Writable, GsonPostProcessable {
         }
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        String json = GsonUtils.GSON.toJson(this);
-        Text.writeString(out, json);
-    }
+
 
     public static StorageVolume read(DataInput in) throws IOException {
         String json = Text.readString(in);

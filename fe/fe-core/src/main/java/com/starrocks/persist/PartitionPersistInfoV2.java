@@ -24,7 +24,6 @@ import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.persist.gson.GsonUtils;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 
 public abstract class PartitionPersistInfoV2 implements Writable {
@@ -82,11 +81,7 @@ public abstract class PartitionPersistInfoV2 implements Writable {
         return (RangePartitionPersistInfo) this;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        String json = GsonUtils.GSON.toJson(this);
-        Text.writeString(out, json);
-    }
+
 
     public static PartitionPersistInfoV2 read(DataInput in) throws IOException {
         String json = Text.readString(in);

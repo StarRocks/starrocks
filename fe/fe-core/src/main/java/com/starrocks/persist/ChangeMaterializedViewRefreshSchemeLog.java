@@ -22,7 +22,6 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 
 public class ChangeMaterializedViewRefreshSchemeLog implements Writable {
@@ -64,11 +63,7 @@ public class ChangeMaterializedViewRefreshSchemeLog implements Writable {
         return asyncRefreshContext;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        String json = GsonUtils.GSON.toJson(this);
-        Text.writeString(out, json);
-    }
+
 
     public static ChangeMaterializedViewRefreshSchemeLog read(DataInput in) throws IOException {
         try {

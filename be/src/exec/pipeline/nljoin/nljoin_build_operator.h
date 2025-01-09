@@ -64,6 +64,7 @@ public:
             : OperatorFactory(id, "nljoin_build", plan_node_id), _cross_join_context(std::move(cross_join_context)) {}
 
     ~NLJoinBuildOperatorFactory() override = default;
+    bool support_event_scheduler() const override { return true; }
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         return std::make_shared<NLJoinBuildOperator>(this, _id, _plan_node_id, driver_sequence, _cross_join_context);
