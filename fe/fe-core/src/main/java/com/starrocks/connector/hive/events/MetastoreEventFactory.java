@@ -55,8 +55,6 @@ public class MetastoreEventFactory implements EventFactory {
                 return AlterPartitionEvent.getEvents(event, cacheProcessor, catalogName);
             case DROP_PARTITION:
                 return DropPartitionEvent.getEvents(event, cacheProcessor, catalogName);
-            case INSERT:
-                return InsertEvent.getEvents(event, cacheProcessor, catalogName);
             default:
                 // ignore all the unknown events by creating a IgnoredEvent
                 return Lists.newArrayList(new IgnoredEvent(event, cacheProcessor, catalogName));

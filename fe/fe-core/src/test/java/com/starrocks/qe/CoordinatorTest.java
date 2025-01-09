@@ -4,6 +4,7 @@ package com.starrocks.qe;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.TupleId;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.EmptySetNode;
@@ -18,7 +19,6 @@ import com.starrocks.thrift.TPartitionType;
 import com.starrocks.thrift.TScanRangeParams;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.utframe.UtFrameUtils;
-import org.apache.commons.compress.utils.Lists;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
