@@ -791,13 +791,12 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
     iter_opts.lake_io_opts = _opts.lake_io_opts;
     iter_opts.has_preaggregation = _opts.has_preaggregation;
 
+    RandomAccessFileOptions opts{.skip_fill_local_cache = !_opts.lake_io_opts.fill_data_cache,
+                                 .buffer_size = _opts.lake_io_opts.buffer_size};
+
     bool is_compaction =
             (_opts.reader_type == READER_BASE_COMPACTION || _opts.reader_type == READER_CUMULATIVE_COMPACTION);
-
-    RandomAccessFileOptions opts{.skip_fill_local_cache = !_opts.lake_io_opts.fill_data_cache,
-                                 .buffer_size = _opts.lake_io_opts.buffer_size,
-                                 .skip_disk_cache = _opts.lake_io_opts.skip_disk_cache,
-                                 .op_type = OperationKind::COMPACTION};
+    
     if (is_compaction) {
         opts.op_type = OperationKind::COMPACTION;
     }
