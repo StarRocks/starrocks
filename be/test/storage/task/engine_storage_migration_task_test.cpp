@@ -642,7 +642,8 @@ int main(int argc, char** argv) {
     starrocks::UserFunctionCache::instance()->init(starrocks::config::user_function_dir);
 
     starrocks::date::init_date_cache();
-    starrocks::TimezoneUtils::init_time_zones();
+    // Disable time zone cache, save time for unit test
+    // starrocks::TimezoneUtils::init_time_zones();
 
     // first create the starrocks::config::storage_root_path ahead
     std::vector<starrocks::StorePath> paths;
