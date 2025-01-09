@@ -47,6 +47,7 @@ import static com.starrocks.statistic.StatisticExecutor.queryDictSync;
 public class CacheRelaxDictManager implements IRelaxDictManager, MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(CacheRelaxDictManager.class);
     private static final Set<ConnectorTableColumnKey> NO_DICT_STRING_COLUMNS = Sets.newConcurrentHashSet();
+    private static final Set<ConnectorTableColumnKey> TEMP_NOT_MATCHED_KEY = Sets.newConcurrentHashSet();
     private static final Set<String> FORBIDDEN_DICT_TABLE_UUIDS = Sets.newConcurrentHashSet();
     public static final Integer LOW_CARDINALITY_THRESHOLD = 255;
     private static final long DICT_EXPIRATION_SECONDS = 7 * 24 * 3600;
@@ -154,7 +155,7 @@ public class CacheRelaxDictManager implements IRelaxDictManager, MemoryTrackable
             return false;
         }
         ConnectorTableColumnKey key = new ConnectorTableColumnKey(tableUUID, columnName);
-        if (NO_DICT_STRING_COLUMNS.contains(key)) {
+        if (NO_DICT_STRING_COLUMNS.contains(key) || TEMP_NOT_MATCHED_KEY.contains(key)) {
             LOG.debug("{} isn't low cardinality string column", columnName);
             return false;
         }
@@ -217,6 +218,18 @@ public class CacheRelaxDictManager implements IRelaxDictManager, MemoryTrackable
 
         LOG.info("remove dict for table:{} column:{}", tableUUID, columnName);
         dictStatistics.synchronous().invalidate(key);
+    }
+
+    @Override
+    public void invalidTemporarily(String tableUUID, String columnName) {
+        ConnectorTableColumnKey key = new ConnectorTableColumnKey(tableUUID, columnName);
+        TEMP_NOT_MATCHED_KEY.add(key);
+    }
+
+    @Override
+    public void removeTemporaryInvalid(String tableUUID, String columnName) {
+        ConnectorTableColumnKey key = new ConnectorTableColumnKey(tableUUID, columnName);
+        TEMP_NOT_MATCHED_KEY.remove(key);
     }
 
     @Override

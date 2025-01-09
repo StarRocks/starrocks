@@ -34,6 +34,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.optimizer.statistics.IRelaxDictManager;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.statistic.StatisticExecutor;
 import com.starrocks.thrift.TExplainLevel;
@@ -107,6 +108,7 @@ public class ExecuteExceptionHandler {
             if (scanNode.getDesc().getSlots().stream().anyMatch(x -> x.getId().equals(slotId))) {
                 String columnName = scanNode.getDesc().getSlot(slotId.asInt()).getColumn().getName();
                 String tableUUID = scanNode.getDesc().getTable().getUUID();
+                IRelaxDictManager.getInstance().invalidTemporarily(tableUUID, columnName);
                 StatisticExecutor.updateDictASync(tableUUID, columnName, err.second);
                 return;
             }

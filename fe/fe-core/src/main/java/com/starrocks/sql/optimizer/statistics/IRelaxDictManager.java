@@ -23,6 +23,8 @@ public interface IRelaxDictManager {
     Optional<ColumnDict> getGlobalDict(String tableUUID, String columnName);
     void updateGlobalDict(String tableUUID, String columnName, Optional<TStatisticData> stat);
     void removeGlobalDict(String tableUUID, String columnName);
+    void invalidTemporarily(String tableUUID, String columnName);
+    void removeTemporaryInvalid(String tableUUID, String columnName);
 
     static IRelaxDictManager getInstance() {
         return CacheRelaxDictManager.getInstance();

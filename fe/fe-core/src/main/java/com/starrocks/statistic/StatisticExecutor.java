@@ -364,13 +364,15 @@ public class StatisticExecutor {
             throws TException {
         // poc hack with sync
         if (fileName.isEmpty()) {
+            IRelaxDictManager.getInstance().removeTemporaryInvalid(tableUUID, columnName);
             IRelaxDictManager.getInstance().updateGlobalDict(tableUUID, columnName, Optional.empty());
             return;
         }
         Pair<List<TStatisticData>, Status> result = queryDictSync(tableUUID, columnName, fileName.get());
+        IRelaxDictManager.getInstance().removeTemporaryInvalid(tableUUID, columnName);
         if (result.second.isGlobalDictError()) {
             IRelaxDictManager.getInstance().updateGlobalDict(tableUUID, columnName, Optional.empty());
-        } else {
+        } else if (result.second.ok()) {
             IRelaxDictManager.getInstance().updateGlobalDict(tableUUID, columnName, Optional.of(result.first.get(0)));
         }
     }
