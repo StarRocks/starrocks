@@ -21,6 +21,8 @@
 
 namespace starrocks {
 
+static const size_t max_merge_chunk_size = 65536;
+
 // new_heap_merge_iterator create a sorted iterator based on merge-sort algorithm.
 // the order of rows is determined by the key columns.
 // if two rows compared equal, their order is determinate by the index of the source iterator

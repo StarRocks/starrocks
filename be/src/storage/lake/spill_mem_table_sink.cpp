@@ -106,7 +106,8 @@ Status SpillMemTableSink::_prepare(const ChunkPtr& chunk_ptr) {
 Status SpillMemTableSink::_do_spill(const Chunk& chunk, const spill::SpillOutputDataStreamPtr& output) {
     // 1. caclulate per row memory usage
     const int64_t per_row_memory_usage = chunk.memory_usage() / chunk.num_rows();
-    const int64_t spill_rows = config::load_spill_max_chunk_bytes / (per_row_memory_usage + 1) + 1;
+    const int64_t spill_rows = std::min(config::load_spill_max_chunk_bytes / (per_row_memory_usage + 1) + 1,
+                                        (int64_t)max_merge_chunk_size);
     // 2. serialize chunk
     for (int64_t rowid = 0; rowid < chunk.num_rows(); rowid += spill_rows) {
         int64_t rows = std::min(spill_rows, (int64_t)chunk.num_rows() - rowid);
