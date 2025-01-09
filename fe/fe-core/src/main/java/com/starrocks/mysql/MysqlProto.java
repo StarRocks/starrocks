@@ -41,7 +41,11 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+<<<<<<< HEAD
 import com.starrocks.common.Pair;
+=======
+import com.starrocks.mysql.ssl.SSLContextLoader;
+>>>>>>> 49c20e1f8 ([Feature] Support SSL encryption for mysql protocol (#54877))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;
@@ -129,7 +133,7 @@ public class MysqlProto {
         // Server send handshake packet to client.
         serializer.reset();
         MysqlHandshakePacket handshakePacket = new MysqlHandshakePacket(context.getConnectionId(),
-                context.supportSSL());
+                SSLContextLoader.getSslContext() != null);
         handshakePacket.writeTo(serializer);
         channel.sendAndFlush(serializer.toByteBuffer());
 
