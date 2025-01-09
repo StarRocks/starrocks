@@ -42,7 +42,6 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.inactiveRelatedMaterializedViews;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -138,7 +137,7 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
         table.rebuildFullSchema();
 
         // If modified columns are already done, inactive related mv
-        inactiveRelatedMaterializedViews(db, table, droppedOrModifiedColumns);
+        AlterMVJobExecutor.inactiveRelatedMaterializedViews(db, table, droppedOrModifiedColumns);
     }
 
     @Override
