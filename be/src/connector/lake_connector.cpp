@@ -598,7 +598,7 @@ void LakeDataSource::init_counter(RuntimeState* state) {
     _io_count_total_counter = ADD_CHILD_COUNTER(_runtime_profile, "IOCountTotal", TUnit::UNIT, io_statistics_name);
     _io_count_request_counter = ADD_CHILD_COUNTER(_runtime_profile, "IOCountRequest", TUnit::UNIT, io_statistics_name);
     // IO read time
-    _io_ns_read_local_disk_timer = ADD_CHILD_TIMER(_runtime_profile, "IOTimeReadLocalDisk", io_statistics_name);
+    _io_ns_read_local_disk_timer = ADD_CHILD_TIMER(_runtime_profile, "IOTimeLocalDisk", io_statistics_name);
     _io_ns_remote_timer = ADD_CHILD_TIMER(_runtime_profile, "IOTimeRemote", io_statistics_name);
     _io_ns_total_timer = ADD_CHILD_TIMER(_runtime_profile, "IOTimeTotal", io_statistics_name);
     // IO write time
@@ -626,7 +626,7 @@ void LakeDataSource::init_counter(RuntimeState* state) {
     _io_count_request_index_counter =
             ADD_CHILD_COUNTER(_runtime_profile, "IOCountRequestIndex", TUnit::UNIT, index_statistics_name);
     _io_ns_read_local_disk_index_timer =
-            ADD_CHILD_TIMER(_runtime_profile, "IOTimeReadLocalDiskIndex", index_statistics_name);
+            ADD_CHILD_TIMER(_runtime_profile, "IOTimeLocalDiskIndex", index_statistics_name);
     _io_ns_remote_index_timer = ADD_CHILD_TIMER(_runtime_profile, "IOTimeRemoteIndex", index_statistics_name);
     _io_ns_write_local_disk_index_timer =
             ADD_CHILD_TIMER(_runtime_profile, "IOTimeWriteLocalDiskIndex", index_statistics_name);
