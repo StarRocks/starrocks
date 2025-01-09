@@ -94,7 +94,7 @@ public class MysqlServerTest {
         ServerSocket socket = new ServerSocket(0);
         int port = socket.getLocalPort();
         socket.close();
-        MysqlServer server = new MysqlServer(port, null, null);
+        MysqlServer server = new MysqlServer(port, null);
         Assert.assertFalse(server.start());
     }
 
@@ -103,9 +103,9 @@ public class MysqlServerTest {
         ServerSocket socket = new ServerSocket(0);
         int port = socket.getLocalPort();
         socket.close();
-        MysqlServer server = new MysqlServer(port, scheduler, null);
+        MysqlServer server = new MysqlServer(port, scheduler);
         Assert.assertTrue(server.start());
-        MysqlServer server1 = new MysqlServer(port, scheduler, null);
+        MysqlServer server1 = new MysqlServer(port, scheduler);
         Assert.assertFalse(server1.start());
 
         server.stop();
@@ -117,7 +117,7 @@ public class MysqlServerTest {
         ServerSocket socket = new ServerSocket(0);
         int port = socket.getLocalPort();
         socket.close();
-        MysqlServer server = new MysqlServer(port, badScheduler, null);
+        MysqlServer server = new MysqlServer(port, badScheduler);
         Assert.assertTrue(server.start());
 
         // submit

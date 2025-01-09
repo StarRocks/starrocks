@@ -47,7 +47,6 @@ import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadPoolExecutor;
-import javax.net.ssl.SSLContext;
 
 // MySQL protocol network service
 public class MysqlServer {
@@ -60,12 +59,10 @@ public class MysqlServer {
     // used to accept connect request from client
     private ThreadPoolExecutor listener;
     private Future listenerFuture;
-    private SSLContext sslContext;
 
-    public MysqlServer(int port, ConnectScheduler scheduler, SSLContext sslContext) {
+    public MysqlServer(int port, ConnectScheduler scheduler) {
         this.port = port;
         this.scheduler = scheduler;
-        this.sslContext = sslContext;
     }
 
     protected MysqlServer() {
@@ -129,7 +126,7 @@ public class MysqlServer {
                         continue;
                     }
                     // submit this context to scheduler
-                    ConnectContext context = new ConnectContext(clientChannel, sslContext);
+                    ConnectContext context = new ConnectContext(clientChannel);
                     // Set globalStateMgr here.
                     context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
                     if (!scheduler.submit(context)) {
