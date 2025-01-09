@@ -78,6 +78,10 @@ SpillMemTableSink::SpillMemTableSink(LoadSpillBlockManager* block_manager, Table
     _profile = profile;
     _runtime_state = std::make_shared<RuntimeState>();
     _spiller_factory = spill::make_spilled_factory();
+    std::string tracker_label = "LoadSpillMerge-" + std::to_string(_block_manager->tablet_id()) + "-" +
+                                std::to_string(_block_manager->txn_id());
+    _merge_mem_tracker = std::make_unique<MemTracker>(MemTracker::COMPACTION, -1, std::move(tracker_label),
+                                                      GlobalEnv::GetInstance()->compaction_mem_tracker());
 }
 
 Status SpillMemTableSink::_prepare(const ChunkPtr& chunk_ptr) {
@@ -192,6 +196,7 @@ private:
 };
 
 Status SpillMemTableSink::merge_blocks_to_segments() {
+    SCOPED_THREAD_LOCAL_MEM_SETTER(_merge_mem_tracker.get(), false);
     auto& groups = _block_manager->block_container()->block_groups();
     RETURN_IF(groups.empty(), Status::OK());
 
@@ -233,7 +238,14 @@ Status SpillMemTableSink::merge_blocks_to_segments() {
     };
     for (size_t i = 0; i < groups.size(); ++i) {
         auto& group = groups[i];
-        if (merge_inputs.size() > 0 && current_input_bytes + group.data_size() > config::load_spill_max_merge_bytes) {
+        // We need to stop merging if:
+        // 1. The current input block group size exceed the load_spill_max_merge_bytes,
+        //    because we don't want to generate too large segment file.
+        // 2. The input chunks memory usage exceed the load_spill_max_merge_bytes,
+        //    because we don't want each thread cost too much memory.
+        if (merge_inputs.size() > 0 &&
+            (current_input_bytes + group.data_size() >= config::load_spill_max_merge_bytes ||
+             merge_inputs.size() * config::load_spill_max_chunk_bytes >= config::load_spill_max_merge_bytes)) {
             RETURN_IF_ERROR(merge_func());
             merge_inputs.clear();
             current_input_bytes = 0;
@@ -256,7 +268,7 @@ Status SpillMemTableSink::merge_blocks_to_segments() {
     ADD_COUNTER(_profile, "SpillMergeInputGroups", TUnit::UNIT)->update(groups.size());
     ADD_COUNTER(_profile, "SpillMergeInputBytes", TUnit::BYTES)->update(total_block_bytes);
     ADD_COUNTER(_profile, "SpillMergeCount", TUnit::UNIT)->update(total_merges);
-    ADD_COUNTER(_profile, "SpillMergeDurationMs", TUnit::TIME_MS)->update(duration_ms);
+    ADD_COUNTER(_profile, "SpillMergeDurationNs", TUnit::TIME_NS)->update(duration_ms * 1000000);
     return Status::OK();
 }
 

@@ -342,6 +342,7 @@ public:
     // thread pool metrics
     METRICS_DEFINE_THREAD_POOL(publish_version);
     METRICS_DEFINE_THREAD_POOL(async_delta_writer);
+    METRICS_DEFINE_THREAD_POOL(load_spill_block_merge);
     METRICS_DEFINE_THREAD_POOL(memtable_flush);
     METRICS_DEFINE_THREAD_POOL(lake_memtable_flush);
     METRICS_DEFINE_THREAD_POOL(segment_replicate);
