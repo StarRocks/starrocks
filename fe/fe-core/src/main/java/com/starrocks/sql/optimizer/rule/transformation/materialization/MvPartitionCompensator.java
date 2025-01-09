@@ -745,6 +745,11 @@ public class MvPartitionCompensator {
     // convert varchar date to date type
     @VisibleForTesting
     public static Range<PartitionKey> convertToDateRange(Range<PartitionKey> from) throws AnalysisException {
+        if ((from.hasLowerBound() && !(from.lowerEndpoint().getKeys().get(0) instanceof StringLiteral)) ||
+                (from.hasUpperBound() && !(from.upperEndpoint().getKeys().get(0) instanceof StringLiteral))) {
+            return from;
+        }
+
         if (from.hasLowerBound() && from.hasUpperBound()) {
             StringLiteral lowerString = (StringLiteral) from.lowerEndpoint().getKeys().get(0);
             LocalDateTime lowerDateTime = DateUtils.parseDatTimeString(lowerString.getStringValue());
