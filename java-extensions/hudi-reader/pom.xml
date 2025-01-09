@@ -16,7 +16,7 @@
         <parquet-hadoop.version>1.14.1</parquet-hadoop.version>
         <hudi.version>0.15.0</hudi.version>
         <airlift.version>0.27</airlift.version>
-        <avro.version>1.11.3</avro.version>
+        <avro.version>1.11.4</avro.version>
         <luben.zstd.jni.version>1.5.4-2</luben.zstd.jni.version>
     </properties>
 
