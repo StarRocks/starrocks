@@ -16,16 +16,23 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.CreateViewStmt;
+import com.starrocks.sql.ast.ListPartitionDesc;
+import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.utframe.UtFrameUtils;
+import org.apache.hadoop.util.Sets;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -33,8 +40,11 @@ import org.junit.Test;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.DB_NAME;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.starRocksAssert;
 
 public class AnalyzeUtilTest {
     @BeforeClass
@@ -406,6 +416,88 @@ public class AnalyzeUtilTest {
             Pair<Boolean, String> result = AnalyzerUtils.containsNonDeterministicFunction(statementBase);
             Assert.assertEquals(true, result.first);
             Assert.assertTrue(!Strings.isNullOrEmpty(result.second));
+        }
+    }
+    @Test
+    public void testCalculateStringDiff() throws Exception {
+        OlapTable t1 = (OlapTable) starRocksAssert.getTable(DB_NAME, "auto_tbl1");
+        List<String> combinations = generateCaseCombinations("aac_def?gHi|Gx.com");
+        List<List<String>> partitionValues = combinations.stream()
+                .map(s -> Lists.newArrayList(s))
+                .collect(Collectors.toList());
+        Map<String, PartitionDesc> partitionNames = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+        {
+            AddPartitionClause addPartitionClauses =
+                    AnalyzerUtils.getAddPartitionClauseFromPartitionValues(t1, partitionValues, false, "");
+            ListPartitionDesc listPartitionDesc = (ListPartitionDesc) addPartitionClauses.getPartitionDesc();
+            List<PartitionDesc> descs = listPartitionDesc.getPartitionDescs();
+            Assert.assertEquals(combinations.size(), descs.size());
+            for (PartitionDesc desc : descs) {
+                Assert.assertTrue(partitionNames.get(desc.getPartitionName()) == null);
+                partitionNames.put(desc.getPartitionName(), desc);
+            }
+        }
+
+        {
+            AddPartitionClause addPartitionClauses =
+                    AnalyzerUtils.getAddPartitionClauseFromPartitionValues(t1, partitionValues, false, "");
+            ListPartitionDesc listPartitionDesc = (ListPartitionDesc) addPartitionClauses.getPartitionDesc();
+            List<PartitionDesc> descs = listPartitionDesc.getPartitionDescs();
+            Assert.assertEquals(combinations.size(), descs.size());
+            for (PartitionDesc desc : descs) {
+                Assert.assertTrue(partitionNames.get(desc.getPartitionName()) != null);
+            }
+        }
+
+        {
+            AddPartitionClause addPartitionClauses =
+                    AnalyzerUtils.getAddPartitionClauseFromPartitionValues(t1, partitionValues, false, "");
+            ListPartitionDesc listPartitionDesc = (ListPartitionDesc) addPartitionClauses.getPartitionDesc();
+            List<PartitionDesc> descs = listPartitionDesc.getPartitionDescs();
+            Assert.assertEquals(combinations.size(), descs.size());
+            for (PartitionDesc desc : descs) {
+                Assert.assertTrue(partitionNames.get(desc.getPartitionName()) != null);
+            }
+        }
+    }
+
+    @Test
+    public void testIntToHexString() {
+        int j = Integer.MAX_VALUE - 50;
+        Set<String> values = Sets.newTreeSet();
+        for (int i = 0; i < 100; i++) {
+            j += 1;
+            String v = Integer.toHexString(j);
+            Assert.assertTrue(!values.contains(v));
+            values.add(v);
+        }
+    }
+
+    public static List<String> generateCaseCombinations(String input) {
+        List<String> results = Lists.newArrayList();
+        generateHelper(input.toCharArray(), 0, results);
+        return results;
+    }
+
+    private static void generateHelper(char[] chars, int index, List<String> results) {
+        if (index == chars.length) {
+            // Add the current combination to the results
+            results.add(new String(chars));
+            return;
+        }
+
+        // If the current character is alphabetic, generate both lowercase and uppercase
+        if (Character.isLetter(chars[index])) {
+            // Recurse with the lowercase version
+            chars[index] = Character.toLowerCase(chars[index]);
+            generateHelper(chars, index + 1, results);
+
+            // Recurse with the uppercase version
+            chars[index] = Character.toUpperCase(chars[index]);
+            generateHelper(chars, index + 1, results);
+        } else {
+            // If not alphabetic, just continue to the next character
+            generateHelper(chars, index + 1, results);
         }
     }
 }
