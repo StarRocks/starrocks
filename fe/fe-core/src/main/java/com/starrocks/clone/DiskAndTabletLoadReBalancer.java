@@ -918,7 +918,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
 
             if (pathHash != -1) {
                 Replica replica = invertedIndex.getReplica(tabletId, beId);
-                if (replica.getPathHash() != pathHash) {
+                if (replica == null || replica.getPathHash() != pathHash) {
                     continue;
                 }
             }
@@ -935,7 +935,10 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
         for (Map.Entry<Pair<Long, Long>, Set<Long>> entry : partitionTablets.entrySet()) {
             long totalSize = 0;
             for (Long tabletId : entry.getValue()) {
-                totalSize += invertedIndex.getReplica(tabletId, beId).getDataSize();
+                Replica replica = invertedIndex.getReplica(tabletId, beId);
+                if (replica != null) {
+                    totalSize += replica.getDataSize();
+                }
             }
             result.put(entry.getKey(), (double) totalSize / (entry.getValue().size() > 0 ? entry.getValue().size() : 1));
         }
@@ -1891,8 +1894,11 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                 tabletGroups[i] = new ArrayList<>();
             }
             for (long tabletId : tablets) {
-                long pathHash = tabletInvertedIndex.getReplica(tabletId, this.backendId).getPathHash();
-                int sortIndex = pathSortIndex.get(pathHash);
+                Replica replica = tabletInvertedIndex.getReplica(tabletId, this.backendId);
+                if (replica == null) {
+                    continue;
+                }
+                int sortIndex = pathSortIndex.get(replica.getPathHash());
                 if (sortIndex > lastHighLoadIndex) {
                     continue;
                 }
