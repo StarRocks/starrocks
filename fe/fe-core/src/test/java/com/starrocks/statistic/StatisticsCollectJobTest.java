@@ -411,7 +411,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 db, olapTable, Lists.newArrayList("v2"), Lists.newArrayList(Type.BIGINT),
                 StatsConstants.ScheduleType.ONCE, properties);
 
-        Config.histogram_enable_table_sample = false;
+        Config.enable_use_table_sample_collect_statistics = false;
         Function<String, String> normalize = str -> str.replaceAll(" +", " ").toLowerCase();
         String sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
                 db, olapTable, 0.1, 64L, Maps.newHashMap(), "v2", Type.BIGINT);
@@ -471,7 +471,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         "`v5` not in (\"1991-01-01 00:00:00\",\"0000-01-01 00:00:00\") ORDER BY `v5` LIMIT 10000000) t",
                 t0StatsTableId, dbid)), normalize.apply(sql));
 
-        Config.histogram_enable_table_sample = true;
+        Config.enable_use_table_sample_collect_statistics = true;
         sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
                 db, olapTable, 0.1, 64L, mostCommonValues, "v5", Type.DATETIME);
         Assert.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics(" +
