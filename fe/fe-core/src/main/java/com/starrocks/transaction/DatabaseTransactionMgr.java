@@ -1281,17 +1281,8 @@ public class DatabaseTransactionMgr {
                 } else {
                     Map<Long, Long> doubleWritePartitions = table.getDoubleWritePartitions();
                     if (doubleWritePartitions != null && !doubleWritePartitions.isEmpty()) {
-<<<<<<< HEAD
-                        // double write source partition
-                        if (doubleWritePartitions.containsKey(partitionId)) {
-                            doubleWritePartitionVersions.put(doubleWritePartitions.get(partitionId), partition.getNextVersion());
-                            partitionCommitInfo.setVersion(partition.getNextVersion());
-                        // double write target partition
-                        } else if (doubleWritePartitions.containsValue(partitionId)) {
-=======
                         // double write partition
                         if (doubleWritePartitions.containsValue(partitionId)) {
->>>>>>> e8d87ab8d ([Refactor] add some log for online optimize table (#54834))
                             doubleWritePartitionCommitInfos.put(partitionId, partitionCommitInfo);
                         } else {
                             // double write partition version is the same as the original partition
