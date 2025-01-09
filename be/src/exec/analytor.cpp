@@ -985,7 +985,7 @@ void Analytor::_update_window_batch_removable_cumulatively() {
         _agg_functions[i]->update_state_removable_cumulatively(
                 _agg_fn_ctxs[i], _managed_fn_states[0]->mutable_data() + _agg_states_offsets[i], &agg_column,
                 _current_row_position, _partition.start, _partition.end, _rows_start_offset, _rows_end_offset, false,
-                false);
+                false, false);
     }
 }
 
