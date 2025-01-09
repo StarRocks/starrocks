@@ -3576,6 +3576,16 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             db.writeUnlock();
         }
 
+<<<<<<< HEAD
+=======
+        olapTable.checkAndSetName(newTableName, false);
+
+        db.dropTable(oldTableName);
+        db.registerTableUnlocked(olapTable);
+        AlterMVJobExecutor.inactiveRelatedMaterializedView(db, olapTable,
+                MaterializedViewExceptions.inactiveReasonForBaseTableRenamed(oldTableName), false);
+
+>>>>>>> 48b9d6ecea ([BugFix] Only inactive related materialized views because of base table/view is changed in Leader and not replay (#54732))
         TableInfo tableInfo = TableInfo.createForTableRename(db.getId(), olapTable.getId(), newTableName);
         GlobalStateMgr.getCurrentState().getEditLog().logTableRename(tableInfo);
         LOG.info("rename table[{}] to {}, tableId: {}", oldTableName, newTableName, olapTable.getId());
@@ -3590,6 +3600,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         table.setComment(clause.getNewComment());
     }
 
+<<<<<<< HEAD
     public static void inactiveRelatedMaterializedView(Database db, Table olapTable, String reason) {
         for (MvId mvId : olapTable.getRelatedMaterializedViews()) {
             MaterializedView mv = (MaterializedView) db.getTable(mvId.getId());
@@ -3606,6 +3617,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
     }
 
+=======
+>>>>>>> 48b9d6ecea ([BugFix] Only inactive related materialized views because of base table/view is changed in Leader and not replay (#54732))
     public void replayRenameTable(TableInfo tableInfo) {
         long dbId = tableInfo.getDbId();
         long tableId = tableInfo.getTableId();
@@ -3619,9 +3632,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             db.dropTable(tableName);
             table.setName(newTableName);
             db.registerTableUnlocked(table);
-            inactiveRelatedMaterializedView(db, table,
-                    MaterializedViewExceptions.inactiveReasonForBaseTableRenamed(tableName));
-
             LOG.info("replay rename table[{}] to {}, tableId: {}", tableName, newTableName, table.getId());
         } finally {
             db.writeUnlock();

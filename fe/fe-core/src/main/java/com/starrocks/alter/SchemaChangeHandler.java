@@ -137,8 +137,6 @@ import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
 
-import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.inactiveRelatedMaterializedViews;
-
 public class SchemaChangeHandler extends AlterHandler {
 
     private static final Logger LOG = LogManager.getLogger(SchemaChangeHandler.class);
@@ -2706,7 +2704,7 @@ public class SchemaChangeHandler extends AlterHandler {
             olapTable.rebuildFullSchema();
 
             // If modified columns are already done, inactive related mv
-            inactiveRelatedMaterializedViews(db, olapTable, modifiedColumns);
+            AlterMVJobExecutor.inactiveRelatedMaterializedViews(db, olapTable, modifiedColumns);
 
             if (!isReplay) {
                 TableAddOrDropColumnsInfo info = new TableAddOrDropColumnsInfo(db.getId(), olapTable.getId(),

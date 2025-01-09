@@ -97,7 +97,6 @@ import com.starrocks.qe.ShowResultSet;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -132,7 +131,10 @@ import com.starrocks.thrift.TTabletType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.util.Strings;
+<<<<<<< HEAD
 import org.threeten.extra.PeriodDuration;
+=======
+>>>>>>> 48b9d6ecea ([BugFix] Only inactive related materialized views because of base table/view is changed in Leader and not replay (#54732))
 
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -282,7 +284,13 @@ public class AlterJobMgr {
         }
     }
 
+<<<<<<< HEAD
     public void alterMaterializedViewStatus(MaterializedView materializedView, String status, boolean isReplay) {
+=======
+    public void alterMaterializedViewStatus(MaterializedView materializedView, String status, String reason, boolean isReplay) {
+        LOG.info("process change materialized view {} status to {}, isReplay: {}",
+                materializedView.getName(), status, isReplay);
+>>>>>>> 48b9d6ecea ([BugFix] Only inactive related materialized views because of base table/view is changed in Leader and not replay (#54732))
         if (AlterMaterializedViewStatusClause.ACTIVE.equalsIgnoreCase(status)) {
             ConnectContext context = ConnectContext.buildInner();
             context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
@@ -308,7 +316,7 @@ public class AlterJobMgr {
             materializedView.onReload();
             materializedView.setActive();
         } else if (AlterMaterializedViewStatusClause.INACTIVE.equalsIgnoreCase(status)) {
-            materializedView.setInactiveAndReason(MANUAL_INACTIVE_MV_REASON);
+            materializedView.setInactiveAndReason(reason);
         }
     }
 
@@ -412,12 +420,28 @@ public class AlterJobMgr {
     public void replayAlterMaterializedViewStatus(AlterMaterializedViewStatusLog log) {
         long dbId = log.getDbId();
         long tableId = log.getTableId();
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         db.writeLock();
         MaterializedView mv = null;
         try {
             mv = (MaterializedView) db.getTable(tableId);
             alterMaterializedViewStatus(mv, log.getStatus(), true);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getId(), tableId);
+        if (mv == null) {
+            return;
+        }
+
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(mv.getId()), LockType.WRITE);
+        // To be compatible with the old version, if the reason is empty, use the default reason
+        String reason = Strings.isEmpty(log.getReason()) ? MANUAL_INACTIVE_MV_REASON : log.getReason();
+        try {
+            alterMaterializedViewStatus(mv, log.getStatus(), reason, true);
+>>>>>>> 48b9d6ecea ([BugFix] Only inactive related materialized views because of base table/view is changed in Leader and not replay (#54732))
         } catch (Throwable e) {
             if (mv != null) {
                 LOG.warn("replay alter materialized-view status failed: {}", mv.getName(), e);
@@ -815,7 +839,7 @@ public class AlterJobMgr {
         }
     }
 
-    public void alterView(AlterViewInfo alterViewInfo) {
+    public void alterView(AlterViewInfo alterViewInfo, boolean isReplay) {
         long dbId = alterViewInfo.getDbId();
         long tableId = alterViewInfo.getTableId();
         String inlineViewDef = alterViewInfo.getInlineViewDef();
@@ -835,8 +859,8 @@ public class AlterJobMgr {
             }
             view.setNewFullSchema(newFullSchema);
             view.setComment(comment);
-            LocalMetastore.inactiveRelatedMaterializedView(db, view,
-                    MaterializedViewExceptions.inactiveReasonForBaseViewChanged(viewName));
+            AlterMVJobExecutor.inactiveRelatedMaterializedView(db, view,
+                    MaterializedViewExceptions.inactiveReasonForBaseViewChanged(viewName), isReplay);
             db.dropTable(viewName);
             db.registerTableUnlocked(view);
 

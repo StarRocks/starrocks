@@ -121,8 +121,6 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.inactiveRelatedMaterializedViews;
-
 /*
  * Version 2 of SchemaChangeJob.
  * This is for replacing the old SchemaChangeJob
@@ -757,7 +755,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             onFinished(tbl);
 
             // If schema changes include fields which defined in related mv, set those mv state to inactive.
-            inactiveRelatedMaterializedViews(db, tbl, modifiedColumns);
+            AlterMVJobExecutor.inactiveRelatedMaterializedViews(db, tbl, modifiedColumns);
 
             pruneMeta();
             tbl.onReload();
