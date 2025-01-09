@@ -99,6 +99,9 @@ void AggregateFuncResolver::register_others() {
     add_general_mapping<AnyValueSemiState>("any_value", false, AggregateFactory::MakeAnyValueSemiAggregateFunction());
     add_general_mapping_notnull("array_agg2", false, AggregateFactory::MakeArrayAggAggregateFunctionV2());
     add_general_mapping_notnull("group_concat2", false, AggregateFactory::MakeGroupConcatAggregateFunctionV2());
+
+    add_aggregate_mapping<TYPE_VARCHAR, TYPE_VARCHAR, DictMergeState>(
+            "dict_merge", false, AggregateFactory::MakeDictMergeAggregateFunction());
 }
 
 } // namespace starrocks
