@@ -103,7 +103,7 @@ public final class AggregatedMaterializedViewRewriter extends MaterializedViewRe
     //      query:
     //      select a+1, abs(a), sum(c) from t group by a
     @Override
-    protected OptExpression viewBasedRewrite(RewriteContext rewriteContext, OptExpression mvOptExpr) {
+    protected OptExpression doViewBasedRewrite(RewriteContext rewriteContext, OptExpression mvOptExpr) {
         LogicalAggregationOperator mvAggOp = (LogicalAggregationOperator) rewriteContext.getMvExpression().getOp();
         LogicalAggregationOperator queryAggOp = (LogicalAggregationOperator) rewriteContext.getQueryExpression().getOp();
 
@@ -153,8 +153,6 @@ public final class AggregatedMaterializedViewRewriter extends MaterializedViewRe
         EquationRewriter queryExprToMvExprRewriter =
                 buildEquationRewriter(mvProjection, rewriteContext, false);
 
-        // TODO:duplicate if mv has already outputted.
-        // mvOptExpr = duplicateMvOptExpression(rewriteContext, mvOptExpr, queryExprToMvExprRewriter);
         if (isRollup) {
             return rewriteForRollup(queryAggOp, queryGroupingKeys, columnRewriter, queryExprToMvExprRewriter,
                     rewriteContext, mvOptExpr);
@@ -386,7 +384,6 @@ public final class AggregatedMaterializedViewRewriter extends MaterializedViewRe
         }
         return rewriteGroupingKeys;
     }
-
 
     private Map<ColumnRefOperator, CallOperator> rewriteAggregations(RewriteContext rewriteContext,
                                                                        ColumnRewriter columnRewriter,

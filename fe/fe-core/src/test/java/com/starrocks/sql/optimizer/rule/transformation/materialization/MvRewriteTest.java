@@ -40,7 +40,10 @@ import com.starrocks.sql.optimizer.Optimizer;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
+import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.plan.PlanTestBase;
 import mockit.Mock;
 import mockit.MockUp;
@@ -52,7 +55,9 @@ import org.junit.runners.MethodSorters;
 
 import java.sql.SQLException;
 import java.time.LocalDate;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -2372,5 +2377,79 @@ public class MvRewriteTest extends MVTestBase {
         PlanTestBase.assertContains(plan, "mv1");
         starRocksAssert.dropMaterializedView("mv1");
         starRocksAssert.dropTable("s1");
+    }
+
+    private void checkMVRewritePlanWithUniqueColumnRefs(String mvQuery,
+                                                        List<String> queries) throws Exception {
+        createAndRefreshMv(mvQuery);
+        for (String query : queries) {
+            OptExpression plan = getOptimizedPlan(query);
+            List<LogicalScanOperator> scanOperators = MvUtils.getScanOperator(plan);
+            Set<ColumnRefOperator> mvColumnRefSet = new HashSet<>();
+            for (LogicalScanOperator scanOperator : scanOperators) {
+                Assert.assertTrue(scanOperator instanceof LogicalOlapScanOperator);
+                Assert.assertTrue(scanOperator.getTable().getName().equalsIgnoreCase("test_mv1"));
+                LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) scanOperator;
+                for (ColumnRefOperator colRef : olapScanOperator.getColumnMetaToColRefMap().values()) {
+                    Assert.assertTrue(!mvColumnRefSet.contains(colRef));
+                    mvColumnRefSet.add(colRef);
+                }
+            }
+        }
+    }
+
+    @Test
+    public void testMVWriteWithDuplicatedMVs1() throws Exception {
+        connectContext.getSessionVariable().setCboCTERuseRatio(-1);
+        checkMVRewritePlanWithUniqueColumnRefs("create materialized view test_mv1 " +
+                        " distributed by random" +
+                        " as select emps.empid from emps join depts using (deptno)",
+                ImmutableList.of(
+                        "with cte1 as (select emps.empid from emps join depts using(deptno)) " +
+                                " select * from cte1 union all select * from cte1 " +
+                                "union all select * from cte1 union all select * from cte1",
+                        "with cte1 as (select emps.empid from emps join depts using(deptno)) " +
+                                " select * from cte1 a join cte1 b on a.empid=b.empid"
+                ));
+        connectContext.getSessionVariable().setCboCTERuseRatio(0);
+    }
+
+    @Test
+    public void testMVWriteWithDuplicatedMVs2() throws Exception {
+        connectContext.getSessionVariable().setCboCTERuseRatio(-1);
+        checkMVRewritePlanWithUniqueColumnRefs("create materialized view test_mv1 " +
+                        " distributed by random" +
+                        " as select a.empid, a.name, sum(b.deptno) from emps a join depts b " +
+                        " on a.deptno=b.deptno group by a.empid, a.name",
+                ImmutableList.of(
+                        "with cte1 as (select a.empid, sum(b.deptno) from emps a join depts b " +
+                                " on a.deptno=b.deptno group by a.empid)" +
+                                " select * from cte1 union all select * from cte1 " +
+                                "union all select * from cte1 union all select * from cte1",
+                        "with cte1 as (select a.empid, a.name, sum(b.deptno) from emps a join depts b " +
+                                " on a.deptno=b.deptno group by a.empid, a.name)" +
+                                " select * from cte1 union all select * from cte1 " +
+                                "union all select * from cte1 union all select * from cte1",
+                        "with cte1 as (select a.empid, a.name, sum(b.deptno) from emps a join depts b " +
+                                " on a.deptno=b.deptno group by a.empid, a.name)" +
+                                " select * from cte1 a join cte1 b on a.empid=b.empid"
+                ));
+        connectContext.getSessionVariable().setCboCTERuseRatio(0);
+    }
+
+    @Test
+    public void testMVWriteWithDuplicatedMVs3() throws Exception {
+        connectContext.getSessionVariable().setCboCTERuseRatio(-1);
+        checkMVRewritePlanWithUniqueColumnRefs("create materialized view test_mv1 " +
+                        " distributed by random" +
+                        " as select empid, name from emps ",
+                ImmutableList.of(
+                        "with cte1 as (select empid, name from emps) " +
+                                " select * from cte1 union all select * from cte1 " +
+                                "union all select * from cte1 union all select * from cte1",
+                        "with cte1 as (select empid, name from emps) " +
+                                " select * from cte1 a join cte1 b on a.empid=b.empid"
+                ));
+        connectContext.getSessionVariable().setCboCTERuseRatio(0);
     }
 }
