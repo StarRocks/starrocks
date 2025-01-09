@@ -78,6 +78,8 @@ private:
     spill::SpillerFactoryPtr _spiller_factory;
     std::shared_ptr<spill::Spiller> _spiller;
     SchemaPtr _schema;
+    // used for spill merge, parent trakcer is compaction tracker
+    std::unique_ptr<MemTracker> _merge_mem_tracker = nullptr;
 };
 
 } // namespace lake

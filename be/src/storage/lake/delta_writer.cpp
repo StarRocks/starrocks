@@ -152,6 +152,8 @@ public:
         return _flush_token == nullptr ? nullptr : &(_flush_token->get_stats());
     }
 
+    bool has_spill_block() const;
+
 private:
     Status reset_memtable();
 
@@ -250,6 +252,10 @@ Status DeltaWriterImpl::check_immutable() {
 
 int64_t DeltaWriterImpl::last_write_ts() const {
     return _last_write_ts;
+}
+
+bool DeltaWriterImpl::has_spill_block() const {
+    return _load_spill_block_mgr != nullptr && _load_spill_block_mgr->has_spill_block();
 }
 
 Status DeltaWriterImpl::build_schema_and_writer() {
@@ -835,6 +841,10 @@ const DeltaWriterStat& DeltaWriter::get_writer_stat() const {
 
 const FlushStatistic* DeltaWriter::get_flush_stats() const {
     return _impl->get_flush_stats();
+}
+
+bool DeltaWriter::has_spill_block() const {
+    return _impl->has_spill_block();
 }
 
 ThreadPool* DeltaWriter::io_threads() {
