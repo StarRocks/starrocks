@@ -378,7 +378,9 @@ private:
     std::shared_ptr<tenann::IndexMeta> _index_meta;
 #endif
 
-    bool _always_build_rowid() const { return _use_vector_index && !_use_ivfpq; }
+    bool _always_build_rowid() const {
+        return _use_vector_index && !_use_ivfpq;
+    }
 
     bool _use_vector_index;
     std::string _vector_distance_column_name;
@@ -710,8 +712,7 @@ Status SegmentIterator::_try_to_update_ranges_by_runtime_filter() {
                 _opts.stats->runtime_stats_filtered += (prev_size - _scan_range.span_size());
                 return Status::OK();
             },
-            false,
-            _opts.stats->raw_rows_read);
+            false, _opts.stats->raw_rows_read);
 }
 
 StatusOr<std::shared_ptr<Segment>> SegmentIterator::_get_dcg_segment(uint32_t ucid) {
