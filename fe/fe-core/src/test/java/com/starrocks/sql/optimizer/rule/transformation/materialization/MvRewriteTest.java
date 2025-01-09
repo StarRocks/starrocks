@@ -2483,15 +2483,16 @@ public class MvRewriteTest extends MVTestBase {
                 "  (2,\"2020-06-15\"),(3,\"2020-06-18\"),(4,\"2020-06-21\"),(5,\"2020-06-24\"),\n" +
                 "  (2,\"2020-07-02\"),(3,\"2020-07-05\"),(4,\"2020-07-08\"),(5,\"2020-07-11\");");
         withRefreshedMV("CREATE MATERIALIZED VIEW test_mv1 \n" +
-                "PARTITION BY dt \n" +
-                "REFRESH DEFERRED MANUAL \n" +
-                "AS SELECT * FROM s1 where dt > '2020-07-01';", () -> {
-            String query = "SELECT * FROM (SELECT * FROM s1 where num > 3 UNION ALL SELECT * FROM s1 where num > 3) t " +
-                    "order by 1, 2 limit 3;";
-            connectContext.getSessionVariable().setMaterializedViewUnionRewriteMode(2);
-            String plan = getFragmentPlan(query);
-            PlanTestBase.assertContains(plan, "test_mv1");
-            connectContext.getSessionVariable().setMaterializedViewUnionRewriteMode(0);
-        });
+                        "PARTITION BY dt \n" +
+                        "REFRESH DEFERRED MANUAL \n" +
+                        "AS SELECT * FROM s1 where dt > '2020-07-01';",
+                () -> {
+                    String query = "SELECT * FROM (SELECT * FROM s1 where num > 3 " +
+                            "UNION ALL SELECT * FROM s1 where num > 3) t order by 1, 2 limit 3;";
+                    connectContext.getSessionVariable().setMaterializedViewUnionRewriteMode(2);
+                    String plan = getFragmentPlan(query);
+                    PlanTestBase.assertContains(plan, "test_mv1");
+                    connectContext.getSessionVariable().setMaterializedViewUnionRewriteMode(0);
+                });
     }
 }
