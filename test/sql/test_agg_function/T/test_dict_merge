@@ -1,0 +1,27 @@
+-- name: testDictMerge
+CREATE TABLE `test_dict_merge` (
+  `id` int NULL COMMENT "",
+  `city` string NOT NULL COMMENT "",
+  `city_null` string NULL COMMENT "",
+  `city_array` array<string> NOT NULL COMMENT "",
+  `city_array_null` array<string> NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 4
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+
+insert into test_dict_merge values
+(1, "beijing", "beijing", ["beijing", "shanghai"], NULL),
+(1, "beijing", NULL, ["shenzhen", "shanghai"], ["shenzhen", "shanghai"]),
+(1, "shanghai", "shanghai", ["shenzhen", NULL], ["shenzhen", NULL]),
+(1, "shanghai", NULL, ["beijing", NULL, "shanghai"], NULL);
+
+select dict_merge(city) from test_dict_merge;
+select dict_merge(city_null) from test_dict_merge;
+select dict_merge(city_array) from test_dict_merge;
+select dict_merge(city_array_null) from test_dict_merge;
