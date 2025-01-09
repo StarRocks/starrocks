@@ -217,10 +217,13 @@ select count(distinct t1.c1, if(t2.c3 is null, 1, 0)), sum(t1.c2 + if(t2.c3 is n
 -- result:
 1	5000
 -- !result
-# streaming_preaggregation_mode = 'auto' new_planner_agg_stage = '0'
+-- streaming_preaggregation_mode = 'auto' new_planner_agg_stage = '0'
 set streaming_preaggregation_mode = 'auto';
 -- result:
+<<<<<<< HEAD
 E: (1064, "Getting syntax error at line 1, column 2. Detail message: Unexpected input 'streaming_preaggregation_mode', the most similar input is {'ADMIN', 'GRANT', 'STOP', 'TRUNCATE', 'INSERT', '(', ';'}.")
+=======
+>>>>>>> c1bc8d31d ([Enhancement] adjust translate function syntax structure to prevent parser performance rollback (#54830))
 -- !result
 set new_planner_agg_stage = '0';
 -- result:
@@ -489,10 +492,13 @@ select array_agg(distinct c2), count(distinct c2), sum(c3) from skew_agg group b
 [3]	1	5000
 [3]	1	5000
 -- !result
-# streaming_preaggregation_mode = 'force_streaming' new_planner_agg_stage = '2'
+-- streaming_preaggregation_mode = 'force_streaming' new_planner_agg_stage = '2'
 set streaming_preaggregation_mode = 'force_streaming';
 -- result:
+<<<<<<< HEAD
 E: (1064, "Getting syntax error at line 1, column 2. Detail message: Unexpected input 'streaming_preaggregation_mode', the most similar input is {'ADMIN', 'GRANT', 'STOP', 'TRUNCATE', 'INSERT', '(', ';'}.")
+=======
+>>>>>>> c1bc8d31d ([Enhancement] adjust translate function syntax structure to prevent parser performance rollback (#54830))
 -- !result
 set new_planner_agg_stage = '0';
 -- result:
@@ -737,10 +743,13 @@ select array_agg(distinct c2), count(distinct c2), sum(c3) from skew_agg group b
 [3]	1	5000
 [3]	1	5000
 -- !result
-# streaming_preaggregation_mode = 'force_preaggregation' new_planner_agg_stage = '2'
+-- streaming_preaggregation_mode = 'force_preaggregation' new_planner_agg_stage = '2'
 set streaming_preaggregation_mode = 'force_preaggregation';
 -- result:
+<<<<<<< HEAD
 E: (1064, "Getting syntax error at line 1, column 2. Detail message: Unexpected input 'streaming_preaggregation_mode', the most similar input is {'ADMIN', 'GRANT', 'STOP', 'TRUNCATE', 'INSERT', '(', ';'}.")
+=======
+>>>>>>> c1bc8d31d ([Enhancement] adjust translate function syntax structure to prevent parser performance rollback (#54830))
 -- !result
 set new_planner_agg_stage = '0';
 -- result:

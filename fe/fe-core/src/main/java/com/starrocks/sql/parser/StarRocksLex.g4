@@ -439,6 +439,10 @@ TIMESTAMPADD: 'TIMESTAMPADD';
 TIMESTAMPDIFF: 'TIMESTAMPDIFF';
 TINYINT: 'TINYINT';
 TRANSACTION: 'TRANSACTION';
+<<<<<<< HEAD
+=======
+TRANSLATE: 'TRANSLATE';
+>>>>>>> c1bc8d31d ([Enhancement] adjust translate function syntax structure to prevent parser performance rollback (#54830))
 TO: 'TO';
 TRACE: 'TRACE';
 TRIGGERS: 'TRIGGERS';
