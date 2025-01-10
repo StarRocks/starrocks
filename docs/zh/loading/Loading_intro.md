@@ -157,9 +157,9 @@ StarRocks 提供以下各种导入方案供您选择：
 | Microsoft Azure Storage                | <ul><li>(Batch) INSERT INTO SELECT FROM FILES()（自 3.2 版本起支持）</li><li>(Batch) Broker Load</li></ul>参见[从 Microsoft Azure Storage 导入数据](azure.md)。 |
 | Google GCS                             | <ul><li>(Batch) INSERT INTO SELECT FROM FILES()（自 3.2 版本起支持）</li><li>(Batch) Broker Load</li></ul>参见[从 GCS 导入数据](gcs.md)。 |
 | 其他兼容 S3 协议的对象存储（如 MinIO） | <ul><li>(Batch) INSERT INTO SELECT FROM FILES()（自 3.2 版本起支持）</li><li>(Batch) Broker Load</li></ul>参见[从 MinIO 导入数据](minio.md)。 |
-| Alibaba Cloud OSS                      | (Batch) Broker Load <br/>参见[从云存储导入](cloud_storage_load.md)。                                          |
-| Tencent Cloud COS                      | (Batch) Broker Load <br/>参见[从云存储导入](cloud_storage_load.md)。                                          |
-| Huawei Cloud OBS                       | (Batch) Broker Load <br/>参见[从云存储导入](cloud_storage_load.md)。                                          |
+| Alibaba Cloud OSS                      | (Batch) Broker Load <br/>参见[从云存储导入](./alibaba.md)。                                          |
+| Tencent Cloud COS                      | (Batch) Broker Load <br/>参见[从云存储导入](./tencent.md)。                                          |
+| Huawei Cloud OBS                       | (Batch) Broker Load <br/>参见[从云存储导入](./huawei.md)。                                          |
 
 ### 本地文件系统（包括 NAS）
 
