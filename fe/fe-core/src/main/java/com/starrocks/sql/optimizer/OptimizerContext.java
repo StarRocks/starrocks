@@ -202,8 +202,12 @@ public class OptimizerContext {
         return optimizerTimer.elapsed(TimeUnit.MILLISECONDS);
     }
 
+    public Stopwatch getStopwatch(RuleType ruleType) {
+        return ruleWatchMap.computeIfAbsent(ruleType, (k) -> Stopwatch.createStarted());
+    }
+
     public boolean ruleExhausted(RuleType ruleType) {
-        Stopwatch watch = ruleWatchMap.computeIfAbsent(ruleType, (k) -> Stopwatch.createStarted());
+        Stopwatch watch = getStopwatch(ruleType);
         long elapsed = watch.elapsed(TimeUnit.MILLISECONDS);
         long timeLimit = Math.min(sessionVariable.getOptimizerMaterializedViewTimeLimitMillis(),
                 sessionVariable.getOptimizerExecuteTimeout());
