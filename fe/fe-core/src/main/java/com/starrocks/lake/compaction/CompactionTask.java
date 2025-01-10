@@ -121,7 +121,7 @@ public class CompactionTask {
         if (taskResult == TaskResult.NOT_FINISHED || taskResult == TaskResult.NONE_SUCCESS) {
             AbortCompactionRequest abortRequest = new AbortCompactionRequest();
             abortRequest.txnId = request.txnId;
-            abortRequest.reason = request.reason;
+            abortRequest.reason = reason;
             try {
                 Future<AbortCompactionResponse> ignored = rpcChannel.abortCompaction(abortRequest);
                 LOG.info("aborted compaction task, txn_id: {}, node: {}", request.txnId, nodeId);
