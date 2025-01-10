@@ -645,6 +645,22 @@ void ThreadPool::check_not_pool_thread_unlocked() {
     }
 }
 
+Status ConcurrencyLimitedThreadPoolToken::submit(std::shared_ptr<Runnable> task,
+                                                 std::chrono::system_clock::time_point deadline) {
+    if (!_sem->try_acquire_until(deadline)) {
+        auto t = MilliSecondsSinceEpochFromTimePoint(deadline);
+        return Status::TimedOut(fmt::format("acquire semaphore reached deadline={}", t));
+    }
+    auto token_task =
+            std::make_shared<AutoCleanRunnable>([t = std::move(task)] { t->run(); }, [sem = _sem] { sem->release(); });
+    return _pool->submit(std::move(token_task));
+}
+
+Status ConcurrencyLimitedThreadPoolToken::submit_func(std::function<void()> f,
+                                                      std::chrono::system_clock::time_point deadline) {
+    return submit(std::make_shared<FunctionRunnable>(std::move(f)), deadline);
+}
+
 std::ostream& operator<<(std::ostream& o, ThreadPoolToken::State s) {
     return o << ThreadPoolToken::state_to_string(s);
 }
