@@ -118,21 +118,13 @@ public class CheckpointController extends FrontendDaemon {
         RW_LOCK.writeLock().unlock();
     }
 
-    private void lock() {
-        RW_LOCK.readLock().lock();
-    }
-
-    private void unlock() {
-        RW_LOCK.readLock().unlock();
-    }
-
     @Override
     protected void runAfterCatalogReady() {
-        lock();
+        RW_LOCK.readLock().lock();
         try {
             runCheckpointController();
         } finally {
-            unlock();
+            RW_LOCK.readLock().unlock();
         }
     }
 
