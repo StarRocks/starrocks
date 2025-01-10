@@ -236,6 +236,7 @@ message RestoreSnapshotsResponse {
 
 message AbortCompactionRequest {
     optional int64 txn_id = 1;
+    optional string reason = 2;
 }
 
 message AbortCompactionResponse {

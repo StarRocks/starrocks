@@ -188,8 +188,11 @@ public class CompactionMgr implements MemoryTrackable {
         }
     }
 
+    /**
+     * Used for cancelling compaction manually.
+     */
     public void cancelCompaction(long txnId) {
-        compactionScheduler.cancelCompaction(txnId);
+        compactionScheduler.cancelCompaction(txnId, "Canceled by user");
     }
 
     public boolean existCompaction(long txnId) {

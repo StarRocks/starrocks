@@ -819,7 +819,7 @@ void LakeServiceImpl::abort_compaction(::google::protobuf::RpcController* contro
     }
 
     auto scheduler = _tablet_mgr->compaction_scheduler();
-    auto st = scheduler->abort(request->txn_id());
+    auto st = scheduler->abort(request->txn_id(), request->reason());
     TEST_SYNC_POINT("LakeServiceImpl::abort_compaction:aborted");
     st.to_protobuf(response->mutable_status());
 }

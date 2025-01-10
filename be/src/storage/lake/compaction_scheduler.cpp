@@ -413,7 +413,7 @@ Status CompactionScheduler::do_compaction(std::unique_ptr<CompactionTaskContext>
     return status;
 }
 
-Status CompactionScheduler::abort(int64_t txn_id) {
+Status CompactionScheduler::abort(int64_t txn_id, const std::string& reason) {
     std::unique_lock l(_contexts_lock);
     for (butil::LinkNode<CompactionTaskContext>* node = _contexts.head(); node != _contexts.end();
          node = node->next()) {
@@ -424,7 +424,7 @@ Status CompactionScheduler::abort(int64_t txn_id) {
             // Do NOT touch |context| since here, it may have been destroyed.
             TEST_SYNC_POINT("lake::CompactionScheduler::abort:unlock:1");
             TEST_SYNC_POINT("lake::CompactionScheduler::abort:unlock:2");
-            cb->update_status(Status::Aborted("aborted on demand"));
+            cb->update_status(Status::Aborted(reason));
             return Status::OK();
         }
     }

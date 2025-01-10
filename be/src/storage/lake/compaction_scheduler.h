@@ -213,7 +213,7 @@ public:
     // for the tasks to exit.
     // Returns Status::NotFound if no task with the given txn_id is found,
     // otherwise returns Status::OK.
-    Status abort(int64_t txn_id);
+    Status abort(int64_t txn_id, const std::string& reason);
 
     void list_tasks(std::vector<CompactionTaskInfo>* infos);
 

@@ -40,7 +40,7 @@ public class CompactionTaskTest {
             }
         };
 
-        task.abort();
+        task.abort("");
     }
 
     @Test
@@ -57,6 +57,6 @@ public class CompactionTaskTest {
             }
         };
 
-        task.abort();
+        task.abort("");
     }
 }
