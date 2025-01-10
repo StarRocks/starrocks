@@ -352,6 +352,8 @@ set(EXEC_FILES
         ./storage/persistent_index_consistency_test.cpp
         ./storage/meta_reader_test.cpp
         ./storage/dictionary_cache_manager_test.cpp
+        ./storage/column_or_predicate_test.cpp
+        ./storage/column_and_predicate_test.cpp
         ./runtime/buffer_control_block_test.cpp
         ./runtime/data_stream_mgr_test.cpp
         ./runtime/datetime_value_test.cpp

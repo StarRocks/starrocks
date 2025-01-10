@@ -23,7 +23,7 @@
 
 namespace starrocks {
 
-class ColumnIsNullPredicate : public ColumnPredicate {
+class ColumnIsNullPredicate final : public ColumnPredicate {
 public:
     explicit ColumnIsNullPredicate(const TypeInfoPtr& type_info, ColumnId id) : ColumnPredicate(type_info, id) {}
 
@@ -99,7 +99,7 @@ public:
     }
 };
 
-class ColumnNotNullPredicate : public ColumnPredicate {
+class ColumnNotNullPredicate final : public ColumnPredicate {
 public:
     explicit ColumnNotNullPredicate(const TypeInfoPtr& type_info, ColumnId id) : ColumnPredicate(type_info, id) {}
 
