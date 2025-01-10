@@ -8,9 +8,11 @@ sidebar_position: 10
 
 自 v3.0 起，StarRocks 支持表达式分区（原称自动创建分区），更加灵活易用，适用于大多数场景，比如按照连续日期范围或者枚举值来查询和管理数据。
 
-您仅需要在建表时设置分区表达式（时间函数表达式或列表达式）。在数据导入时，StarRocks 会根据数据和分区表达式的定义规则自动创建分区，您无需在建表时预先手动/批量创建大量分区，或者配置动态分区属性。
+您仅需要在建表时设置分区表达式。在数据导入时，StarRocks 会根据数据和分区表达式的定义规则自动创建分区，您无需在建表时预先手动/批量创建大量分区，或者配置动态分区属性。
 
-## 时间函数表达式分区
+从 v3.4 开始，表达式分区方式进一步得到优化，统一所有分区策略，并支持更复杂的解决方案。在大多数情况下，建议您使用表达式分区。表达式分区将在未来版本中逐渐取代其他分区策略。
+
+## 简单时间函数表达式分区
 
 如果您经常按照连续日期范围来查询和管理数据，则只需要在时间函数分区表达式中，指定一个日期类型（DATE 或者 DATETIME ）的分区列，以及指定分区粒度（年、月、日或小时）。StarRocks 会根据导入的数据和分区表达式，自动创建分区并且设置分区的起止时间。
 
@@ -32,7 +34,7 @@ expression ::=
 
 | 参数                    | 是否必填 | 说明                                                         |
 | ----------------------- | -------- | ------------------------------------------------------------ |
-| `expression`            | 是       | 目前仅支持 [date_trunc](../../sql-reference/sql-functions/date-time-functions/date_trunc.md) 和 [time_slice](../../sql-reference/sql-functions/date-time-functions/time_slice.md) 函数。并且如果您使用 `time_slice` 函数，则可以不传入参数 `boundary`，因为在该场景中该参数默认且仅支持为 `floor`，不支持为 `ceil`。 |
+| `expression`            | 是       | 使用 [date_trunc](../../sql-reference/sql-functions/date-time-functions/date_trunc.md) 或 [time_slice](../../sql-reference/sql-functions/date-time-functions/time_slice.md) 的简单时间函数表达式。并且如果您使用 `time_slice` 函数，则可以不传入参数 `boundary`，因为在该场景中该参数默认且仅支持为 `floor`，不支持为 `ceil`。 |
 | `time_unit`             | 是       | 分区粒度，目前仅支持为 `hour`、`day`、`month` 或 `year`，暂时不支持为 `week`。如果分区粒度为 `hour`，则仅支持分区列为 DATETIME 类型，不支持为 DATE 类型。 |
 | `partition_column`      | 是       | 分区列。  <br /> <ul><li>仅支持为日期类型（DATE 或 DATETIME），不支持为其它类型。如果使用 `date_trunc` 函数，则分区列支持为 DATE 或 DATETIME 类型。如果使用 `time_slice` 函数，则分区列仅支持为 DATETIME 类型。分区列的值支持为 `NULL`。</li><li> 如果分区列是 DATE 类型，则范围支持为 [0000-01-01 ~ 9999-12-31]。如果分区列是 DATETIME 类型，则范围支持为 [0000-01-01 01:01:01 ~ 9999-12-31 23:59:59]。</li><li> 目前仅支持指定一个分区列，不支持指定多个分区列。</li></ul> |
 | `partition_live_number` | 否       | 保留最近多少数量的分区。最近是指分区按时间的先后顺序进行排序，以**当前时间**为基准，然后从后往前数指定个数的分区进行保留，其余（更早的）分区会被删除。后台会定时调度任务来管理分区数量，调度间隔可以通过 FE 动态参数 `dynamic_partition_check_interval_seconds` 配置，默认为 600 秒，即 10 分钟。假设当前为 2023 年 4 月 4 日，`partition_live_number` 设置为 `2`，分区包含 `p20230401`、`p20230402`、`p20230403`、`p20230404`，则分区 `p20230403`、`p20230404` 会保留，其他分区会删除。如果导入了脏数据，比如未来时间 4 月 5 日和 6 日的数据，导致分区包含 `p20230401`、`p20230402`、`p20230403`、`p20230404`、`p20230405`、`p20230406`，则分区 `p20230403`、`p20230404`、`p20230405`、`p20230406` 会保留，其他分区会删除。|
@@ -120,12 +122,12 @@ DISTRIBUTED BY HASH(event_day, site_id);
 
 ### 语法
 
-```bnf
+```SQL
 PARTITION BY expression
 ...
 
 expression ::=
-    ( <partition_columns> )
+    <partition_columns>
     
 partition_columns ::=
     <column>, [ <column> [,...] ]
@@ -156,7 +158,7 @@ CREATE TABLE t_recharge_detail1 (
     dt varchar(20) not null
 )
 DUPLICATE KEY(id)
-PARTITION BY (dt,city)
+PARTITION BY dt,city
 DISTRIBUTED BY HASH(`id`);
 ```
 
@@ -194,6 +196,61 @@ LastConsistencyCheckTime: NULL
               IsInMemory: false
                 RowCount: 1
 1 row in set (0.00 sec)
+```
+
+## 复杂时间函数表达式分区 (自 v3.4)
+
+从 v3.4.0 版本开始，表达式分区支持返回 DATE 或 DATETIME 类型的任意表达式，以满足更加复杂的分区场景需求。
+
+例如，您可以定义一个 Unix 时间戳列，并直接在分区表达式中使用 from_unixtime() 函数作为分区键，而无需通过该函数生成一个 DATE 或 DATETIME 列。有关用法的更多信息，请参见以下示例。
+
+### 示例
+
+示例一：假设您为每行数据分配一个 Unix 时间戳，并且经常按天查询数据，则建表时可以使用 from_unixtime() 函数，并且设置分区列为时间戳列，分区粒度为一天。将同一天的数据存储在一个分区中，利用分区裁剪可以显著提高查询效率。
+
+```SQL
+CREATE TABLE orders (
+    ts BIGINT NOT NULL,
+    id BIGINT NOT NULL,
+    city STRING NOT NULL
+)
+PARTITION BY from_unixtime(ts,'%Y%m%d');
+```
+
+示例二：假设您为每行数据分配了一个不规则的字符串类型时间戳，并且经常按天查询数据，则建表时可以使用 cast() 和 date_parse() 函数将时间戳转换为 DATE 类型作为分区列，并将分区粒度设置为为一天。将同一天的数据存储在一个分区中，利用分区裁剪可以显著提高查询效率。
+
+```SQL
+CREATE TABLE orders_new (
+    ts STRING NOT NULL,
+    id BIGINT NOT NULL,
+    city STRING NOT NULL
+)
+PARTITION BY CAST(DATE_PARSE(CAST(ts AS VARCHAR(100)),'%Y%m%d') AS DATE);
+```
+
+### 使用说明
+
+基于复杂时间函数表达式的分区支持分区裁剪，具体包括以下情况：
+
+- 如果分区子句为 `PARTITION BY from_unixtime(ts)`，则带有格式为 `ts > 1727224687` 条件的查询可以裁剪到相应的分区。
+- 如果分区子句为 `PARTITION BY CAST(DATE_PARSE(CAST(ts AS VARCHAR(100)),'%Y%m%d') AS DATE)`，则带有格式为 `ts = "20240506"` 条件的查询可以裁剪到相应的分区。
+- 上述情况同样适用于 [混合表达式分区](#混合表达式分区-自-v34).
+
+## 混合表达式分区 (自 v3.4)
+
+从 v3.4.0 版本开始，表达式分区支持使用多个分区列，其中一个列可以为时间函数表达式。
+
+### 示例
+
+示例一：假设您为每行数据分配一个 Unix 时间戳，并且经常按天和特定城市查询数据，则建表时可以使用时间戳列（结合 from_unixtime() 函数）和城市列作为分区列。将同个城市同一天的数据存储在一个分区中，利用分区裁剪可以显著提高查询效率。
+
+```SQL
+CREATE TABLE orders (
+    ts BIGINT NOT NULL,
+    id BIGINT NOT NULL,
+    city STRING NOT NULL
+)
+PARTITION BY from_unixtime(ts,'%Y%m%d'), city;
 ```
 
 ## 管理分区
@@ -235,7 +292,7 @@ MySQL > SHOW PARTITIONS FROM t_recharge_detail1;
 
 ## 使用限制
 
-- 自 v3.1.0 起，StarRocks [存算分离模式](../../deployment/shared_data/shared_data.mdx)支持[时间函数表达式分区](#时间函数表达式分区)。并且自 v3.1.1 起 StarRocks 存算分离模式支持[列表达式分区](#列表达式分区自-v31)。
+- 自 v3.1.0 起，StarRocks [存算分离模式](../../deployment/shared_data/shared_data.mdx)支持[时间函数表达式分区](#简单时间函数表达式分区)。并且自 v3.1.1 起 StarRocks 存算分离模式支持[列表达式分区](#列表达式分区自-v31)。
 - 使用 CTAS 建表时暂时不支持表达式分区。
 - 暂时不支持使用 Spark Load 导入数据至表达式分区的表。
 - 使用 `ALTER TABLE <table_name> DROP PARTITION <partition_name>` 删除列表达式分区时，分区直接被删除并且不能被恢复。
