@@ -133,8 +133,7 @@
                         "loading/s3_compatible",
                         "loading/s3",
                         "loading/azure",
-                        "loading/gcs",
-                        "loading/cloud_storage_load"
+                        "loading/gcs"
                     ]
                 },
                 "loading/StreamLoad",
