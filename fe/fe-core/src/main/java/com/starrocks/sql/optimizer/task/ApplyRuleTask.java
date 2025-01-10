@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer.task;
 
+import com.google.common.base.Stopwatch;
 import com.google.common.collect.Lists;
 import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Timer;
@@ -22,6 +23,7 @@ import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.GroupExpression;
 import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.OptimizerTraceUtil;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.rule.Binder;
@@ -66,11 +68,13 @@ public class ApplyRuleTask extends OptimizerTask {
             return;
         }
         // Apply rule and get all new OptExpressions
-        Pattern pattern = rule.getPattern();
-        Binder binder = new Binder(pattern, groupExpression);
+        final Pattern pattern = rule.getPattern();
+        final OptimizerContext optimizerContext = context.getOptimizerContext();
+        final Stopwatch ruleStopWatch = optimizerContext.getStopwatch(rule.type());
+        final Binder binder = new Binder(optimizerContext, pattern, groupExpression, ruleStopWatch);
+        final List<OptExpression> newExpressions = Lists.newArrayList();
+        final List<OptExpression> extractExpressions = Lists.newArrayList();
         OptExpression extractExpr = binder.next();
-        List<OptExpression> newExpressions = Lists.newArrayList();
-        List<OptExpression> extractExpressions = Lists.newArrayList();
         while (extractExpr != null) {
             // Check if the rule has exhausted or not to avoid optimization time exceeding the limit.:
             // 1. binder.next() may be infinite loop if something is wrong.
