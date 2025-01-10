@@ -54,6 +54,7 @@
 #include "http/http_status.h"
 #include "storage/compaction_manager.h"
 #include "storage/lake/compaction_scheduler.h"
+#include "storage/lake/load_spill_block_manager.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/update_manager.h"
 #include "storage/memtable_flush_executor.h"
@@ -316,6 +317,16 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             }
             return Status::OK();
         });
+        _config_callback.emplace("load_spill_merge_memory_limit_percent", [&]() -> Status {
+            // The change of load spill merge memory will be reflected in the max thread cnt of load spill merge pool.
+            return StorageEngine::instance()->load_spill_block_merge_executor()->refresh_max_thread_num();
+        });
+        _config_callback.emplace("load_spill_merge_max_thread", [&]() -> Status {
+            return StorageEngine::instance()->load_spill_block_merge_executor()->refresh_max_thread_num();
+        });
+        _config_callback.emplace("load_spill_max_merge_bytes", [&]() -> Status {
+            return StorageEngine::instance()->load_spill_block_merge_executor()->refresh_max_thread_num();
+        });
 
 #ifdef USE_STAROS
 #define UPDATE_STARLET_CONFIG(BE_CONFIG, STARLET_CONFIG)                                             \
@@ -340,6 +351,10 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
         UPDATE_STARLET_CONFIG(starlet_fslib_s3client_nonread_retry_scale_factor,
                               fslib_s3client_nonread_retry_scale_factor);
         UPDATE_STARLET_CONFIG(starlet_fslib_s3client_connect_timeout_ms, fslib_s3client_connect_timeout_ms);
+        if (config::object_storage_request_timeout_ms >= 0 &&
+            config::object_storage_request_timeout_ms <= std::numeric_limits<int32_t>::max()) {
+            UPDATE_STARLET_CONFIG(object_storage_request_timeout_ms, fslib_s3client_request_timeout_ms);
+        }
         UPDATE_STARLET_CONFIG(s3_use_list_objects_v1, fslib_s3client_use_list_objects_v1);
         UPDATE_STARLET_CONFIG(starlet_delete_files_max_key_in_batch, delete_files_max_key_in_batch);
 #undef UPDATE_STARLET_CONFIG

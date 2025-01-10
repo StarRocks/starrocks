@@ -47,6 +47,7 @@
 #include "exec/pipeline/driver_limiter.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/pipeline/schedule/pipeline_timer.h"
 #include "exec/spill/dir_manager.h"
 #include "exec/workgroup/pipeline_executor_set.h"
 #include "exec/workgroup/scan_executor.h"
@@ -205,8 +206,6 @@ Status GlobalEnv::_init_mem_tracker() {
     _process_mem_tracker = regist_tracker(MemTracker::PROCESS, bytes_limit, "process");
     _jemalloc_metadata_tracker =
             regist_tracker(MemTracker::JEMALLOC, -1, "jemalloc_metadata", _process_mem_tracker.get());
-    _jemalloc_fragmentation_tracker =
-            regist_tracker(MemTracker::JEMALLOC, -1, "jemalloc_fragmentation", _process_mem_tracker.get());
     int64_t query_pool_mem_limit =
             calc_max_query_memory(_process_mem_tracker->limit(), config::query_max_memory_limit_percent);
     _query_pool_mem_tracker =
@@ -423,6 +422,9 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
         auto* driver_limiter = ExecEnv::GetInstance()->driver_limiter();
         return (driver_limiter == nullptr) ? 0 : driver_limiter->num_total_drivers();
     });
+
+    _pipeline_timer = new pipeline::PipelineTimer();
+    RETURN_IF_ERROR(_pipeline_timer->start());
 
     const int num_io_threads = config::pipeline_scan_thread_pool_thread_num <= 0
                                        ? CpuInfo::num_cores()
@@ -736,6 +738,7 @@ void ExecEnv::destroy() {
     // _query_pool_mem_tracker.
     SAFE_DELETE(_runtime_filter_cache);
     SAFE_DELETE(_driver_limiter);
+    SAFE_DELETE(_pipeline_timer);
     SAFE_DELETE(_broker_client_cache);
     SAFE_DELETE(_frontend_client_cache);
     SAFE_DELETE(_backend_client_cache);
@@ -753,6 +756,11 @@ void ExecEnv::destroy() {
 }
 
 void ExecEnv::_wait_for_fragments_finish() {
+    if (config::loop_count_wait_fragments_finish < 0) {
+        LOG(WARNING) << "'config::loop_count_wait_fragments_finish' is set to a negative integer, ignore it.";
+        return;
+    }
+
     size_t max_loop_secs = config::loop_count_wait_fragments_finish * 10;
     if (max_loop_secs == 0) {
         return;

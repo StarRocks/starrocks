@@ -29,6 +29,8 @@ Status SegmentRewriter::rewrite_partial_update(const FileInfo& src, FileInfo* de
                                                const FooterPointerPB& partial_rowset_footer) {
     constexpr size_t kBufferSize = 1024 * 1024; // 1 MB
     if (UNLIKELY(column_ids.empty())) {
+        // In shared-nothing mode, this size can be null, and we don't need it so it's ok to return zero;
+        dest->size = src.size.value_or(0);
         return fs::copy_file(src.path, dest->path, kBufferSize);
     }
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(dest->path));
@@ -213,7 +215,7 @@ Status SegmentRewriter::rewrite_auto_increment_lake(
     auto tablet_mgr = tablet->tablet_mgr();
     // not fill data and meta cache
     auto fill_cache = false;
-    LakeIOOptions lake_io_opts{fill_cache, -1};
+    LakeIOOptions lake_io_opts{.fill_data_cache = fill_cache, .buffer_size = -1};
     ASSIGN_OR_RETURN(auto segment,
                      tablet_mgr->load_segment(src, segment_id, &footer_sine_hint, lake_io_opts, fill_cache, tschema));
     uint32_t num_rows = segment->num_rows();

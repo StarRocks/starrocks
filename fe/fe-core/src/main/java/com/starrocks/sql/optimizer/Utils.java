@@ -31,6 +31,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.LogicalProperty;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -42,7 +43,9 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalHudiScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalPaimonScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalSetOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTreeAnchorOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
@@ -58,6 +61,7 @@ import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.collections4.SetUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -420,6 +424,8 @@ public class Utils {
                 return ((LogicalIcebergScanOperator) operator).hasUnknownColumn();
             } else if (operator instanceof LogicalDeltaLakeScanOperator)  {
                 return ((LogicalDeltaLakeScanOperator) operator).hasUnknownColumn();
+            } else if (operator instanceof LogicalPaimonScanOperator) {
+                return ((LogicalPaimonScanOperator) operator).hasUnknownColumn();
             } else {
                 // For other scan operators, we do not know the column statistics.
                 return true;
@@ -905,5 +911,72 @@ public class Utils {
         }
 
         return value;
+    }
+
+    /**
+     * Recursively resolve the column ref for complicated expressions
+     * Throw exception if that ref cannot be found in the operator expression
+     *
+     * @param ref     column ref
+     * @param factory column factory
+     * @param expr    operator expression
+     * @return all resolved columns
+     */
+    public static List<Pair<Table, Column>> resolveColumnRefRecursive(ColumnRefOperator ref, ColumnRefFactory factory,
+                                                                      OptExpression expr) {
+        // consult the factory
+        Pair<Table, Column> tableAndColumn = factory.getTableAndColumn(ref);
+        if (tableAndColumn != null) {
+            return List.of(tableAndColumn);
+        }
+
+        // When deriving stats, the OptExpression is not exist but only a GroupExpression. We cannot resolve the
+        // ColumnRef from it
+        if (expr == null) {
+            return null;
+        }
+
+        // Consult the projection
+        if (expr.getOp().getProjection() != null) {
+            ScalarOperator impl = expr.getOp().getProjection().resolveColumnRef(ref);
+            if (impl != null) {
+                List<ColumnRefOperator> subRefs = Utils.extractColumnRef(impl);
+                if (impl instanceof ColumnRefOperator) {
+                    subRefs.remove(impl);
+                }
+                List<Pair<Table, Column>> subColumns = Lists.newArrayList();
+                for (ColumnRefOperator subRef : subRefs) {
+                    subColumns.addAll(ListUtils.emptyIfNull(resolveColumnRefRecursive(subRef, factory, expr)));
+                }
+                return subColumns;
+            }
+        }
+
+        // Consult the corresponding children
+        if (expr.getOp() instanceof LogicalSetOperator setOp) {
+            List<ColumnRefOperator> childrenRefs = setOp.resolveColumnRef(ref);
+            if (CollectionUtils.isNotEmpty(childrenRefs)) {
+                List<Pair<Table, Column>> result = Lists.newArrayList();
+                for (int i = 0; i < expr.getInputs().size(); i++) {
+                    List<Pair<Table, Column>> pairs =
+                            resolveColumnRefRecursive(childrenRefs.get(i), factory, expr.getInputs().get(i));
+                    if (CollectionUtils.isNotEmpty(pairs)) {
+                        result.addAll(pairs);
+                    }
+                }
+                return result;
+            }
+
+        }
+
+        // consult children operators
+        for (OptExpression child : expr.getInputs()) {
+            List<Pair<Table, Column>> children = resolveColumnRefRecursive(ref, factory, child);
+            if (CollectionUtils.isNotEmpty(children)) {
+                return children;
+            }
+        }
+
+        return null;
     }
 }

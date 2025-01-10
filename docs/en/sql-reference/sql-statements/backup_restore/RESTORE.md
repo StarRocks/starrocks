@@ -4,9 +4,17 @@ displayed_sidebar: docs
 
 # RESTORE
 
-## Description
+StarRocks supports backing up and restoring the following objects:
 
-Restores data from a snapshot to the target cluster.
+- Internal databases, tables (of all types and partitioning strategies), and partitions
+- Metadata of external catalogs (supported from v3.4.0 onwards)
+- Synchronous materialized views and asynchronous materialized views
+- Logical views (supported from v3.4.0 onwards)
+- User-defined functions (supported from v3.4.0 onwards)
+
+:::tip
+For an overview of backup and restore please see the [backup and restore guide](../../../administration/management/Backup_and_restore.md).
+:::
 
 RESTORE is an asynchronous operation. You can check the status of a RESTORE job using [SHOW RESTORE](./SHOW_RESTORE.md), or cancel a RESTORE job using [CANCEL RESTORE](./CANCEL_RESTORE.md).
 

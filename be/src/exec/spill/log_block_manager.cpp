@@ -43,14 +43,16 @@ namespace starrocks::spill {
 class LogBlockContainer {
 public:
     LogBlockContainer(DirPtr dir, const TUniqueId& query_id, const TUniqueId& fragment_instance_id,
-                      int32_t plan_node_id, std::string plan_node_name, uint64_t id, bool direct_io)
+                      int32_t plan_node_id, std::string plan_node_name, uint64_t id, bool direct_io,
+                      size_t acquired_size)
             : _dir(std::move(dir)),
               _query_id(query_id),
               _fragment_instance_id(fragment_instance_id),
               _plan_node_id(plan_node_id),
               _plan_node_name(std::move(plan_node_name)),
               _id(id),
-              _direct_io(direct_io) {}
+              _direct_io(direct_io),
+              _acquired_data_size(acquired_size) {}
 
     ~LogBlockContainer() {
         TRACE_SPILL_LOG << "delete spill container file: " << path();
@@ -96,7 +98,8 @@ public:
 
     static StatusOr<LogBlockContainerPtr> create(const DirPtr& dir, const TUniqueId& query_id,
                                                  const TUniqueId& fragment_instance_id, int32_t plan_node_id,
-                                                 const std::string& plan_node_name, uint64_t id, bool enable_direct_io);
+                                                 const std::string& plan_node_name, uint64_t id, bool enable_direct_io,
+                                                 size_t block_size);
 
 private:
     DirPtr _dir;
@@ -159,10 +162,10 @@ StatusOr<std::unique_ptr<io::InputStreamWrapper>> LogBlockContainer::get_readabl
 
 StatusOr<LogBlockContainerPtr> LogBlockContainer::create(const DirPtr& dir, const TUniqueId& query_id,
                                                          const TUniqueId& fragment_instance_id, int32_t plan_node_id,
-                                                         const std::string& plan_node_name, uint64_t id,
-                                                         bool direct_io) {
+                                                         const std::string& plan_node_name, uint64_t id, bool direct_io,
+                                                         size_t block_size) {
     auto container = std::make_shared<LogBlockContainer>(dir, query_id, fragment_instance_id, plan_node_id,
-                                                         plan_node_name, id, direct_io);
+                                                         plan_node_name, id, direct_io, block_size);
     RETURN_IF_ERROR(container->open());
     return container;
 }
@@ -255,8 +258,9 @@ StatusOr<BlockPtr> LogBlockManager::acquire_block(const AcquireBlockOptions& opt
     ASSIGN_OR_RETURN(auto dir, ExecEnv::GetInstance()->spill_dir_mgr()->acquire_writable_dir(acquire_dir_opts));
 #endif
 
-    ASSIGN_OR_RETURN(auto block_container, get_or_create_container(dir, opts.fragment_instance_id, opts.plan_node_id,
-                                                                   opts.name, opts.direct_io, opts.affinity_group));
+    ASSIGN_OR_RETURN(auto block_container,
+                     get_or_create_container(dir, opts.fragment_instance_id, opts.plan_node_id, opts.name,
+                                             opts.direct_io, opts.affinity_group, opts.block_size));
     auto res = std::make_shared<LogBlock>(block_container, block_container->size());
     res->set_is_remote(dir->is_remote());
     res->set_affinity_group(opts.affinity_group);
@@ -297,7 +301,7 @@ Status LogBlockManager::release_affinity_group(const BlockAffinityGroup affinity
 
 StatusOr<LogBlockContainerPtr> LogBlockManager::get_or_create_container(
         const DirPtr& dir, const TUniqueId& fragment_instance_id, int32_t plan_node_id,
-        const std::string& plan_node_name, bool direct_io, BlockAffinityGroup affinity_group) {
+        const std::string& plan_node_name, bool direct_io, BlockAffinityGroup affinity_group, size_t block_size) {
     TRACE_SPILL_LOG << "get_or_create_container at dir: " << dir->dir()
                     << ". fragment instance: " << print_id(fragment_instance_id) << ", plan node:" << plan_node_id
                     << ", " << plan_node_name;
@@ -319,7 +323,7 @@ StatusOr<LogBlockContainerPtr> LogBlockManager::get_or_create_container(
     std::string container_dir = dir->dir() + "/" + print_id(_query_id);
     RETURN_IF_ERROR(dir->fs()->create_dir_if_missing(container_dir));
     ASSIGN_OR_RETURN(auto block_container, LogBlockContainer::create(dir, _query_id, fragment_instance_id, plan_node_id,
-                                                                     plan_node_name, id, direct_io));
+                                                                     plan_node_name, id, direct_io, block_size));
     RETURN_IF_ERROR(block_container->open());
     return block_container;
 }

@@ -5,9 +5,17 @@ keywords: ['beifen']
 
 # RESTORE
 
-## 功能
+StarRocks 支持备份及恢复以下对象：
 
-从数据快照中恢复数据。
+- 内部数据库、表（所有类型和分区策略）和分区
+- External Catalog 的元数据（自 v3.4.0 开始支持）
+- 同步物化视图和异步物化视图
+- 逻辑视图（自 v3.4.0 开始支持）
+- UDF（自 v3.4.0 开始支持）
+
+:::tip
+有关备份和恢复的概述，请参阅 [备份和恢复指南](../../../administration/management/Backup_and_restore.md) 中。
+:::
 
 数据恢复为异步操作。您可以通过 [SHOW RESTORE](./SHOW_RESTORE.md) 语句查看恢复作业状态，或通过 [CANCEL RESTORE](./CANCEL_RESTORE.md) 语句取消恢复作业。
 

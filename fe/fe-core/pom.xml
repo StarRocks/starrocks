@@ -35,13 +35,16 @@ under the License.
     <packaging>jar</packaging>
 
     <properties>
+        <maven.compiler.source>17</maven.compiler.source>
+        <maven.compiler.target>17</maven.compiler.target>
+        <maven.compiler.release>17</maven.compiler.release>
         <starrocks.home>${basedir}/../../</starrocks.home>
         <fe_ut_parallel>${env.FE_UT_PARALLEL}</fe_ut_parallel>
-        <jacoco.version>0.8.7</jacoco.version>
+        <jacoco.version>0.8.8</jacoco.version>
         <iceberg.version>1.6.0</iceberg.version>
         <paimon.version>0.8.2</paimon.version>
         <delta-kernel.version>4.0.0rc1</delta-kernel.version>
-        <staros.version>3.4-rc1</staros.version>
+        <staros.version>3.4-rc2</staros.version>
         <python>python</python>
     </properties>
 
@@ -337,18 +340,6 @@ under the License.
             <groupId>org.apache.iceberg</groupId>
             <artifactId>iceberg-aws</artifactId>
             <version>${iceberg.version}</version>
-        </dependency>
-
-        <dependency>
-            <groupId>de.javakaffee</groupId>
-            <artifactId>kryo-serializers</artifactId>
-            <version>0.45</version>
-            <exclusions>
-                <exclusion>
-                    <groupId>com.esotericsoftware</groupId>
-                    <artifactId>kryo</artifactId>
-                </exclusion>
-            </exclusions>
         </dependency>
 
         <dependency>
@@ -1146,7 +1137,7 @@ under the License.
             <plugin>
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
-                <version>0.8.7</version>
+                <version>${jacoco.version}</version>
                 <executions>
                     <execution>
                         <id>default-prepare-agent</id>

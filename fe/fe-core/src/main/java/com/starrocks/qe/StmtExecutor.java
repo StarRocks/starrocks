@@ -51,6 +51,10 @@ import com.starrocks.analysis.SetVarHint;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.UserVariableHint;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.ObjectType;
+import com.starrocks.authorization.PrivilegeException;
+import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
@@ -112,10 +116,6 @@ import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.ScanNode;
-import com.starrocks.privilege.AccessDeniedException;
-import com.starrocks.privilege.ObjectType;
-import com.starrocks.privilege.PrivilegeException;
-import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.proto.PPlanFragmentCancelReason;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.proto.QueryStatisticsItemPB;
@@ -145,6 +145,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.SetStmtAnalyzer;
 import com.starrocks.sql.ast.AddBackendBlackListStmt;
 import com.starrocks.sql.ast.AddSqlBlackListStmt;
+import com.starrocks.sql.ast.AdminSetConfigStmt;
 import com.starrocks.sql.ast.AnalyzeHistogramDesc;
 import com.starrocks.sql.ast.AnalyzeProfileStmt;
 import com.starrocks.sql.ast.AnalyzeStmt;
@@ -186,6 +187,10 @@ import com.starrocks.sql.ast.UseCatalogStmt;
 import com.starrocks.sql.ast.UseDbStmt;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.ast.feedback.PlanAdvisorStmt;
+import com.starrocks.sql.ast.translate.TranslateStmt;
+import com.starrocks.sql.ast.txn.BeginStmt;
+import com.starrocks.sql.ast.txn.CommitStmt;
+import com.starrocks.sql.ast.txn.RollbackStmt;
 import com.starrocks.sql.ast.warehouse.SetWarehouseStmt;
 import com.starrocks.sql.common.AuditEncryptionChecker;
 import com.starrocks.sql.common.DmlException;
@@ -228,6 +233,7 @@ import com.starrocks.transaction.TransactionCommitFailedException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.transaction.VisibleStateWaiter;
+import com.starrocks.warehouse.WarehouseIdleChecker;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -291,13 +297,23 @@ public class StmtExecutor {
     private Optional<Boolean> isForwardToLeaderOpt = Optional.empty();
     private HttpResultSender httpResultSender;
     private PrepareStmtContext prepareStmtContext;
+    private boolean isInternalStmt = false;
 
     public StmtExecutor(ConnectContext ctx, StatementBase parsedStmt) {
+        this(ctx, parsedStmt, false);
+    }
+
+    public static StmtExecutor newInternalExecutor(ConnectContext ctx, StatementBase parsedStmt) {
+        return new StmtExecutor(ctx, parsedStmt, true);
+    }
+
+    private StmtExecutor(ConnectContext ctx, StatementBase parsedStmt, boolean isInternalStmt) {
         this.context = ctx;
         this.parsedStmt = Preconditions.checkNotNull(parsedStmt);
         this.originStmt = parsedStmt.getOrigStmt();
         this.serializer = context.getSerializer();
         this.isProxy = false;
+        this.isInternalStmt = isInternalStmt;
     }
 
     public void setProxy() {
@@ -511,7 +527,11 @@ public class StmtExecutor {
             httpResultSender = new HttpResultSender((HttpConnectContext) context);
         }
 
+        if (shouldMarkIdleCheck(parsedStmt)) {
+            WarehouseIdleChecker.increaseRunningSQL(context.getCurrentWarehouseId());
+        }
         try {
+            context.getState().setIsQuery(parsedStmt instanceof QueryStatement);
             if (parsedStmt.isExistQueryScopeHint()) {
                 processQueryScopeHint();
             }
@@ -672,21 +692,29 @@ public class StmtExecutor {
                             // to this failed execution.
                             String queryId = DebugUtil.printId(context.getExecutionId());
                             ProfileManager.getInstance().removeProfile(queryId);
-                        } else if (context instanceof ArrowFlightSqlConnectContext) {
-                            isAsync = true;
-                            tryProcessProfileAsync(execPlan, i);
-                        } else if (context.isProfileEnabled()) {
-                            isAsync = tryProcessProfileAsync(execPlan, i);
-                            if (parsedStmt.isExplain() &&
-                                    StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
-                                if (coord != null && coord.isShortCircuit()) {
-                                    throw new StarRocksException(
-                                            "short circuit point query doesn't suppot explain analyze stmt, " +
-                                                    "you can set it off by using  set enable_short_circuit=false");
+                        } else {
+                            // Release all resources after the query finish as soon as possible, as query profile is
+                            // asynchronous which can be delayed a long time.
+                            if (coord != null) {
+                                coord.onReleaseSlots();
+                            }
+
+                            if (context instanceof ArrowFlightSqlConnectContext) {
+                                isAsync = true;
+                                tryProcessProfileAsync(execPlan, i);
+                            } else if (context.isProfileEnabled()) {
+                                isAsync = tryProcessProfileAsync(execPlan, i);
+                                if (parsedStmt.isExplain() &&
+                                        StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
+                                    if (coord != null && coord.isShortCircuit()) {
+                                        throw new StarRocksException(
+                                                "short circuit point query doesn't suppot explain analyze stmt, " +
+                                                        "you can set it off by using  set enable_short_circuit=false");
+                                    }
+                                    handleExplainStmt(ExplainAnalyzer.analyze(
+                                            ProfilingExecPlan.buildFrom(execPlan), profile, null,
+                                            context.getSessionVariable().getColorExplainOutput()));
                                 }
-                                handleExplainStmt(ExplainAnalyzer.analyze(
-                                        ProfilingExecPlan.buildFrom(execPlan), profile, null,
-                                        context.getSessionVariable().getColorExplainOutput()));
                             }
                         }
 
@@ -764,6 +792,12 @@ public class StmtExecutor {
                 handleDelBackendBlackListStmt();
             } else if (parsedStmt instanceof PlanAdvisorStmt) {
                 handlePlanAdvisorStmt();
+            } else if (parsedStmt instanceof BeginStmt
+                    || parsedStmt instanceof CommitStmt
+                    || parsedStmt instanceof RollbackStmt) {
+                handleUnsupportedStmt();
+            } else if (parsedStmt instanceof TranslateStmt) {
+                handleTranslateStmt();
             } else {
                 context.getState().setError("Do not support this query.");
             }
@@ -806,6 +840,10 @@ public class StmtExecutor {
 
             // restore session variable in connect context
             context.setSessionVariable(sessionVariableBackup);
+
+            if (shouldMarkIdleCheck(parsedStmt)) {
+                WarehouseIdleChecker.decreaseRunningSQL(context.getCurrentWarehouseId());
+            }
         }
     }
 
@@ -1772,6 +1810,11 @@ public class StmtExecutor {
         context.getState().setOk();
     }
 
+    private void handleTranslateStmt() throws IOException {
+        ShowResultSet resultSet = TranslateExecutor.execute((TranslateStmt) parsedStmt);
+        sendShowResult(resultSet);
+    }
+
     private void sendMetaData(ShowResultSetMetaData metaData) throws IOException {
         // sends how many columns
         serializer.reset();
@@ -2317,14 +2360,11 @@ public class StmtExecutor {
                 }
             }
 
-            TLoadJobType type;
             if (needQuery) {
                 coord.setLoadJobType(TLoadJobType.INSERT_QUERY);
-                type = TLoadJobType.INSERT_QUERY;
             } else {
                 estimateScanRows = execPlan.getFragments().get(0).getPlanRoot().getCardinality();
                 coord.setLoadJobType(TLoadJobType.INSERT_VALUES);
-                type = TLoadJobType.INSERT_VALUES;
             }
 
             context.setStatisticsJob(AnalyzerUtils.isStatisticsJob(context, parsedStmt));
@@ -2344,8 +2384,8 @@ public class StmtExecutor {
                         estimateScanRows,
                         estimateFileNum,
                         estimateScanFileSize,
-                        type,
                         getExecTimeout(),
+                        context.getCurrentWarehouseId(),
                         coord);
                 loadJob.setJobProperties(stmt.getProperties());
                 jobId = loadJob.getId();
@@ -2637,7 +2677,7 @@ public class StmtExecutor {
                 if (jobId != -1) {
                     Preconditions.checkNotNull(coord);
                     context.getGlobalStateMgr().getLoadMgr()
-                            .recordFinishedOrCacnelledLoadJob(jobId, EtlJobType.INSERT,
+                            .recordFinishedOrCancelledLoadJob(jobId, EtlJobType.INSERT,
                                     "Cancelled, msg: " + t.getMessage(), coord.getTrackingUrl());
                     jobId = -1;
                 }
@@ -2651,7 +2691,7 @@ public class StmtExecutor {
                 try {
                     if (jobId != -1) {
                         context.getGlobalStateMgr().getLoadMgr()
-                                .recordFinishedOrCacnelledLoadJob(jobId, EtlJobType.INSERT,
+                                .recordFinishedOrCancelledLoadJob(jobId, EtlJobType.INSERT,
                                         "Cancelled", coord.getTrackingUrl());
                         jobId = -1;
                     }
@@ -2675,7 +2715,7 @@ public class StmtExecutor {
         }
         try {
             if (jobId != -1) {
-                context.getGlobalStateMgr().getLoadMgr().recordFinishedOrCacnelledLoadJob(jobId,
+                context.getGlobalStateMgr().getLoadMgr().recordFinishedOrCancelledLoadJob(jobId,
                         EtlJobType.INSERT,
                         "",
                         coord.getTrackingUrl());
@@ -2888,5 +2928,11 @@ public class StmtExecutor {
         queryDetail.setCatalog(ctx.getCurrentCatalog());
 
         QueryDetailQueue.addQueryDetail(queryDetail);
+    }
+
+    private boolean shouldMarkIdleCheck(StatementBase parsedStmt) {
+        return !isInternalStmt
+                && !(parsedStmt instanceof ShowStmt)
+                && !(parsedStmt instanceof AdminSetConfigStmt);
     }
 }

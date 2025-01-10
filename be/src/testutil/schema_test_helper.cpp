@@ -15,8 +15,8 @@
 #include "testutil/schema_test_helper.h"
 
 namespace starrocks {
-TabletSchemaPB SchemaTestHelper::gen_schema_pb_of_dup(TabletSchema::SchemaId schema_id, size_t num_cols,
-                                                      size_t num_key_cols) {
+TabletSchemaPB SchemaTestHelper::gen_schema_pb_of_dup(LogicalType type, TabletSchema::SchemaId schema_id,
+                                                      size_t num_cols, size_t num_key_cols) {
     TabletSchemaPB schema_pb;
 
     schema_pb.set_keys_type(DUP_KEYS);
@@ -27,7 +27,7 @@ TabletSchemaPB SchemaTestHelper::gen_schema_pb_of_dup(TabletSchema::SchemaId sch
         auto c0 = schema_pb.add_column();
         c0->set_unique_id(i);
         c0->set_name("c" + std::to_string(i));
-        c0->set_type("INT");
+        c0->set_type(logical_type_to_string(type));
         c0->set_is_nullable(true);
         c0->set_index_length(4);
         if (i < num_key_cols) {
@@ -38,9 +38,39 @@ TabletSchemaPB SchemaTestHelper::gen_schema_pb_of_dup(TabletSchema::SchemaId sch
     return schema_pb;
 }
 
-TabletSchemaSPtr SchemaTestHelper::gen_schema_of_dup(TabletSchema::SchemaId schema_id, size_t num_cols,
-                                                     size_t num_key_cols) {
-    TabletSchemaPB schema_pb = SchemaTestHelper::gen_schema_pb_of_dup(1, 3, 1);
+TabletSchemaPB SchemaTestHelper::gen_varchar_schema_pb_of_dup(TabletSchema::SchemaId schema_id, size_t num_cols,
+                                                              size_t num_key_cols) {
+    TabletSchemaPB schema_pb;
+
+    schema_pb.set_keys_type(DUP_KEYS);
+    schema_pb.set_num_short_key_columns(num_key_cols);
+    schema_pb.set_id(schema_id);
+
+    for (size_t i = 0; i < num_cols; i++) {
+        auto c0 = schema_pb.add_column();
+        c0->set_unique_id(i);
+        c0->set_name("c" + std::to_string(i));
+        c0->set_type("VARCHAR");
+        c0->set_is_nullable(true);
+        c0->set_index_length(4);
+        c0->set_length(100);
+        if (i < num_key_cols) {
+            c0->set_is_key(true);
+        }
+    }
+
+    return schema_pb;
+}
+
+TabletSchemaSPtr SchemaTestHelper::gen_schema_of_dup(LogicalType type, TabletSchema::SchemaId schema_id,
+                                                     size_t num_cols, size_t num_key_cols) {
+    TabletSchemaPB schema_pb = SchemaTestHelper::gen_schema_pb_of_dup(type, 1, 3, 1);
+    return std::make_shared<TabletSchema>(schema_pb);
+}
+
+TabletSchemaSPtr SchemaTestHelper::gen_varchar_schema_of_dup(TabletSchema::SchemaId schema_id, size_t num_cols,
+                                                             size_t num_key_cols) {
+    TabletSchemaPB schema_pb = SchemaTestHelper::gen_varchar_schema_pb_of_dup(1, 3, 1);
     return std::make_shared<TabletSchema>(schema_pb);
 }
 

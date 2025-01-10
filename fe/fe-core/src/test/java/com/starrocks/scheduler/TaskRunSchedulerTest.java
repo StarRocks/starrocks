@@ -22,7 +22,9 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.warehouse.DefaultWarehouse;
 import mockit.Expectations;
 import org.assertj.core.util.Sets;
 import org.junit.Assert;
@@ -31,12 +33,15 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 public class TaskRunSchedulerTest {
 
     private static final int N = 100;
     private static ConnectContext connectContext;
+
+    private WarehouseManager warehouseManager;
 
     @Before
     public void setUp() {
@@ -61,6 +66,9 @@ public class TaskRunSchedulerTest {
         UtFrameUtils.createMinStarRocksCluster();
 
         connectContext = UtFrameUtils.createDefaultCtx();
+        GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+        globalStateMgr.getWarehouseMgr().addWarehouse(new DefaultWarehouse(1, "w1"));
+        globalStateMgr.getWarehouseMgr().addWarehouse(new DefaultWarehouse(2, "w2"));
     }
 
     private static ExecuteOption makeExecuteOption(boolean isMergeRedundant, boolean isSync) {
@@ -291,5 +299,63 @@ public class TaskRunSchedulerTest {
         long runningTaskRunsCount = taskRunScheduler.getRunningTaskCount();
         System.out.println(taskRunScheduler);
         Assert.assertEquals(N, pendingTaskRunsCount + runningTaskRunsCount);
+    }
+
+    @Test
+    public void testGetAllRunnableTaskCount() {
+        ConnectContext context1 = new ConnectContext();
+        context1.setGlobalStateMgr(connectContext.getGlobalStateMgr());
+        ConnectContext context2 = new ConnectContext();
+        context2.getSessionVariable().setWarehouseName("w1");
+        context2.setGlobalStateMgr(connectContext.getGlobalStateMgr());
+        ConnectContext context3 = new ConnectContext();
+        context3.getSessionVariable().setWarehouseName("w2");
+        context3.setGlobalStateMgr(connectContext.getGlobalStateMgr());
+
+        TaskRunScheduler taskRunScheduler = new TaskRunScheduler();
+        TaskRun run1 = new TaskRun();
+        run1.setRunCtx(context1);
+        run1.setTaskId(1L);
+        taskRunScheduler.addPendingTaskRun(run1);
+        TaskRun run2 = new TaskRun();
+        run2.setRunCtx(context2);
+        run2.setTaskId(2L);
+        taskRunScheduler.addPendingTaskRun(run2);
+        TaskRun run3 = new TaskRun();
+        run3.setRunCtx(context3);
+        run3.setTaskId(3L);
+        taskRunScheduler.addPendingTaskRun(run3);
+
+        TaskRun run4 = new TaskRun();
+        run4.setRunCtx(context1);
+        run4.setTaskId(4L);
+        taskRunScheduler.addRunningTaskRun(run4);
+        TaskRun run5 = new TaskRun();
+        run5.setRunCtx(context2);
+        run5.setTaskId(5L);
+        taskRunScheduler.addRunningTaskRun(run5);
+        TaskRun run6 = new TaskRun();
+        run6.setRunCtx(context3);
+        run6.setTaskId(6L);
+        taskRunScheduler.addRunningTaskRun(run6);
+
+        TaskRun run7 = new TaskRun();
+        run7.setRunCtx(context1);
+        run7.setTaskId(7L);
+        taskRunScheduler.addSyncRunningTaskRun(run7);
+        TaskRun run8 = new TaskRun();
+        run8.setRunCtx(context2);
+        run8.setTaskId(8L);
+        taskRunScheduler.addSyncRunningTaskRun(run8);
+        TaskRun run9 = new TaskRun();
+        run9.setRunCtx(context3);
+        run9.setTaskId(9L);
+        taskRunScheduler.addSyncRunningTaskRun(run9);
+
+        Map<Long, Long> result = taskRunScheduler.getAllRunnableTaskCount();
+        Assert.assertEquals(3, result.size());
+        Assert.assertEquals(Long.valueOf(3), result.get(0L));
+        Assert.assertEquals(Long.valueOf(3), result.get(1L));
+        Assert.assertEquals(Long.valueOf(3), result.get(2L));
     }
 }

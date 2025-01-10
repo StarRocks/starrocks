@@ -34,19 +34,15 @@
 
 package com.starrocks.common;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.FileReader;
-import java.io.FileWriter;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.reflect.Field;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -56,7 +52,6 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-
 
 public class ConfigBase {
     private static final Logger LOG = LogManager.getLogger(ConfigBase.class);
@@ -80,37 +75,28 @@ public class ConfigBase {
         String[] aliases() default {};
     }
 
-    protected Properties props = new Properties();
-    private static String mutableConfigPath;
-    private static boolean isPersisted = false;
+    protected Properties props;
     protected static Field[] configFields;
     protected static Map<String, Field> allMutableConfigs = new HashMap<>();
 
     public void init(String propFile) throws Exception {
         configFields = this.getClass().getFields();
-        try (FileReader reader = new FileReader(propFile)) {
+        initAllMutableConfigs();
+        props = new Properties();
+        FileReader reader = null;
+        try {
+            reader = new FileReader(propFile);
             props.load(reader);
+        } catch (Exception e) {
+            throw e;
+        } finally {
+            if (reader != null) {
+                reader.close();
+            }
         }
         replacedByEnv();
-    }
-
-    public void initMutable(String propFile) throws Exception {
-
-        Path path = Path.of(propFile);
-        if (!Files.exists(path)) {
-            Files.createFile(path);
-        }
-        mutableConfigPath = propFile;
-        initAllMutableConfigs();
-        try (FileReader reader = new FileReader(mutableConfigPath)) {
-            props.load(reader);
-        }
         setFields();
-        if (Files.isWritable(path)) {
-            isPersisted = true;
-        }
     }
-
 
     public static void initAllMutableConfigs() {
         for (Field field : configFields) {
@@ -317,27 +303,11 @@ public class ConfigBase {
 
         try {
             ConfigBase.setConfigField(field, value);
-            ConfigBase.storeMutable(key, value);
         } catch (Exception e) {
             throw new InvalidConfException("Failed to set config '" + key + "'. err: " + e.getMessage());
         }
 
         LOG.info("set config {} to {}", key, value);
-    }
-
-    public static void storeMutable(String key, String value) throws Exception {
-        if (!isPersisted) {
-            LOG.warn("Config file:{} is not writable, skip saving config", mutableConfigPath);
-            return;
-        }
-        Properties props = new Properties();
-        try (FileReader reader = new FileReader(mutableConfigPath)) {
-            props.load(reader);
-            props.setProperty(key, value);
-        }
-        try (FileWriter writer = new FileWriter(mutableConfigPath)) {
-            props.store(writer, "Auto save");
-        }
     }
 
     private static boolean isAliasesMatch(PatternMatcher matcher, String[] aliases) {
@@ -411,10 +381,5 @@ public class ConfigBase {
         }
 
         return configs;
-    }
-
-    @VisibleForTesting
-    public static void setIsPersisted(boolean isPersisted) {
-        ConfigBase.isPersisted = isPersisted;
     }
 }

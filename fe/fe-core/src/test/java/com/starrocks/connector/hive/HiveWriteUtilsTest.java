@@ -96,4 +96,9 @@ public class HiveWriteUtilsTest {
                 "Failed to create directory",
                 () -> HiveWriteUtils.createDirectory(path, new Configuration()));
     }
+
+    @Test
+    public void testFileCreateByQuery() {
+        Assert.assertFalse(HiveWriteUtils.fileCreatedByQuery("000000_0", "aaaa-bbbb"));
+    }
 }

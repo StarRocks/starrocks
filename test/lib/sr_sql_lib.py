@@ -2666,7 +2666,8 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         sql = "show stats meta %s" % predicate
         res = self.execute_sql(sql, True)
         for expect in expects:
-            meta_string = "\n".join(item[0] for item in res["result"])
+            # Concatenate all tuples in res['result'] into a single string
+            meta_string = "\n".join("\t".join(item) for item in res["result"])
             tools.assert_true(str(res["result"]).find(expect) > 0, "assert expect %s is not found in show stats meta:\n %s" % (expect, meta_string))
 
     def assert_trace_values_contains(self, query, *expects):

@@ -611,6 +611,14 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：false
 * 引入版本：v3.2
 
+### enable_query_trigger_analyze
+
+* 默认值：true
+* 类型：Boolean
+* 单位：-
+* 描述：是否开启查询触发 ANALYZE 任务。
+* 引入版本：v3.4.0
+
 ### event_scheduler
 
 * 描述：用于兼容 MySQL 客户端。无实际作用。
@@ -869,31 +877,31 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 ### query_mem_limit
 
-* 描述：用于设置每个 BE 节点上单个查询的内存限制。该项仅在启用 Pipeline Engine 后生效。
+* 描述：用于设置每个 BE 节点上单个查询的内存限制。该项仅在启用 Pipeline Engine 后生效。设置为 `0` 表示没有限制。
 * 单位：字节
-* 默认值：`0`，表示没有限制。
+* 默认值：`0`
 
 ### query_queue_concurrency_limit (global)
 
-* 描述：单个 BE 节点中并发查询上限。仅在设置为大于 `0` 后生效。
+* 描述：单个 BE 节点中并发查询上限。仅在设置为大于 `0` 后生效。设置为 `0` 表示没有限制。
 * 默认值：`0`
 * 单位：-
 * 类型：Int
 
 ### query_queue_cpu_used_permille_limit (global)
 
-* 描述：单个 BE 节点中内存使用千分比上限（即 CPU 使用率）。仅在设置为大于 `0` 后生效。
+* 描述：单个 BE 节点中内存使用千分比上限（即 CPU 使用率）。仅在设置为大于 `0` 后生效。设置为 `0` 表示没有限制。
 * 默认值：0。
 * 取值范围：[0, 1000]
 
 ### query_queue_max_queued_queries (global)
 
-* 描述：队列中查询数量的上限。当达到此阈值时，新增查询将被拒绝执行。仅在设置为大于 `0` 后生效。
+* 描述：队列中查询数量的上限。当达到此阈值时，新增查询将被拒绝执行。仅在设置为大于 `0` 后生效。设置为 `0` 表示没有限制。
 * 默认值：1024。
 
 ### query_queue_mem_used_pct_limit (global)
 
-* 描述：单个 BE 节点中内存使用百分比上限。仅在设置为大于 `0` 后生效。
+* 描述：单个 BE 节点中内存使用百分比上限。仅在设置为大于 `0` 后生效。设置为 `0` 表示没有限制。
 * 默认值：`0`
 * 取值范围：[0, 1]
 
@@ -945,6 +953,12 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 单位：秒
 * 类型：Int
 * 引入版本：v3.1.0
+
+### scan_olap_partition_num_limit
+
+* 描述：在SQL执行计划中, 单表允许的最大扫描分区数.
+* 默认值：0 (无限制)
+* 引入版本：v3.3.9
 
 ### spill_mode (3.0 及以后)
 

@@ -728,9 +728,11 @@ public class ExpressionTest extends PlanTestBase {
         String sql = "select array_agg(array_length(array_map(x->x*2, c2))) from test_array12";
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  2:AGGREGATE (update finalize)\n" +
-                "  |  output: array_agg(array_length(array_map(<slot 4> -> CAST(<slot 4> AS BIGINT) * 2, 3: c2)))"));
-        Assert.assertTrue(plan.contains("  1:Project\n" +
-                "  |  <slot 3> : 3: c2"));
+                "  |  output: array_agg(5: array_length)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 5> : array_length(array_map(<slot 4> -> CAST(<slot 4> AS BIGINT) * 2, 3: c2))"));
 
         sql = "select array_map(x->x > count(c1), c2) from test_array12 group by c2";
         plan = getFragmentPlan(sql);

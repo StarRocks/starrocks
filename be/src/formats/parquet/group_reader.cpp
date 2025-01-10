@@ -32,6 +32,7 @@
 #include "formats/parquet/page_index_reader.h"
 #include "formats/parquet/scalar_column_reader.h"
 #include "formats/parquet/schema.h"
+#include "formats/parquet/zone_map_filter_evaluator.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/types.h"
 #include "simd/simd.h"
@@ -79,12 +80,29 @@ Status GroupReader::_deal_with_pageindex() {
     if (config::parquet_page_index_enable) {
         SCOPED_RAW_TIMER(&_param.stats->page_index_ns);
         _param.stats->rows_before_page_index += _row_group_metadata->num_rows;
-        auto page_index_reader =
-                std::make_unique<PageIndexReader>(this, _param.file, _column_readers, _row_group_metadata,
-                                                  _param.min_max_conjunct_ctxs, _param.conjunct_ctxs_by_slot);
-        ASSIGN_OR_RETURN(bool flag, page_index_reader->generate_read_range(_range));
-        if (flag && !_is_group_filtered) {
-            page_index_reader->select_column_offset_index();
+        if (config::parquet_advance_zonemap_filter) {
+            ASSIGN_OR_RETURN(auto sparse_range, _param.predicate_tree->visit(ZoneMapEvaluator<FilterLevel::PAGE_INDEX>{
+                                                        *_param.predicate_tree, this}));
+            if (sparse_range.has_value()) {
+                if (sparse_range.value().empty()) {
+                    // the whole row group has been filtered
+                    _is_group_filtered = true;
+                } else if (sparse_range->span_size() < _row_group_metadata->num_rows) {
+                    // some pages have been filtered
+                    _range = sparse_range.value();
+                    for (const auto& pair : _column_readers) {
+                        pair.second->select_offset_index(_range, _row_group_first_row);
+                    }
+                }
+            }
+        } else {
+            auto page_index_reader =
+                    std::make_unique<PageIndexReader>(this, _param.file, _column_readers, _row_group_metadata,
+                                                      _param.min_max_conjunct_ctxs, _param.conjunct_ctxs_by_slot);
+            ASSIGN_OR_RETURN(bool flag, page_index_reader->generate_read_range(_range));
+            if (flag && !_is_group_filtered) {
+                page_index_reader->select_column_offset_index();
+            }
         }
     }
 
@@ -184,7 +202,7 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
         // row id filter
         if ((nullptr != _need_skip_rowids) && !_need_skip_rowids->empty()) {
             {
-                SCOPED_RAW_TIMER(&_param.stats->iceberg_delete_file_build_filter_ns);
+                SCOPED_RAW_TIMER(&_param.stats->build_rowid_filter_ns);
                 auto start_str = _need_skip_rowids->lower_bound(r.begin());
                 auto end_str = _need_skip_rowids->upper_bound(r.end() - 1);
 

@@ -1,0 +1,14 @@
+-- name: test_view_privilege
+drop user if exists u1;
+create user u1;
+grant impersonate on user root to u1;
+
+CREATE TABLE tbl1 (col1 INT, col2 INT, col3 INT);
+CREATE VIEW view1 AS SELECT * FROM tbl1;
+
+execute as u1 with no revert;
+SHOW TABLE STATUS;
+show create view view1;
+
+execute as root with no revert;
+drop user u1;

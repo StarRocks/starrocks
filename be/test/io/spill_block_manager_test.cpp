@@ -323,4 +323,21 @@ TEST_F(SpillBlockManagerTest, hybird_block_allocation_test) {
         ASSERT_EQ(block->debug_string(), expected);
     }
 }
+
+TEST_F(SpillBlockManagerTest, dir_allocate_test) {
+    auto log_block_mgr = std::make_shared<spill::LogBlockManager>(dummy_query_id, local_dir_mgr.get());
+    ASSERT_OK(log_block_mgr->open());
+    {
+        // 1. allocate the first block but not release it
+        spill::AcquireBlockOptions opts{.query_id = dummy_query_id,
+                                        .fragment_instance_id = dummy_query_id,
+                                        .plan_node_id = 1,
+                                        .name = "node1",
+                                        .block_size = 10};
+        auto res = log_block_mgr->acquire_block(opts);
+        ASSERT_TRUE(res.ok());
+    }
+    ASSERT_EQ(local_dir_mgr->_dirs[0]->get_current_size(), 0);
+}
+
 } // namespace starrocks::vectorized

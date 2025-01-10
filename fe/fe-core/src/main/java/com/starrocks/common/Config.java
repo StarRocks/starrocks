@@ -1011,6 +1011,7 @@ public class Config extends ConfigBase {
     /**
      * Default insert load timeout
      */
+    @Deprecated
     @ConfField(mutable = true)
     public static int insert_load_default_timeout_second = 3600; // 1 hour
 
@@ -2012,6 +2013,13 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long statistic_collect_interval_sec = 5L * 60L; // 5m
 
+    @ConfField(mutable = true, comment = "The interval to persist predicate columns state")
+    public static long statistic_predicate_columns_persist_interval_sec = 60L;
+
+    @ConfField(mutable = true, comment = "The TTL of predicate columns, it would not be considered as predicate " +
+            "columns after this period")
+    public static long statistic_predicate_columns_ttl_hours = 24;
+
     /**
      * Num of thread to handle statistic collect(analyze command)
      */
@@ -2038,6 +2046,9 @@ public class Config extends ConfigBase {
 
     @ConfField
     public static long statistic_dict_columns = 100000;
+
+    @ConfField
+    public static int dict_collect_thread_pool_size = 16;
 
     /**
      * The column statistic cache update interval
@@ -2141,8 +2152,8 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long histogram_max_sample_row_count = 10000000;
 
-    @ConfField(mutable = true, comment = "Use table sample instead of row-level bernoulli sample")
-    public static boolean histogram_enable_table_sample = true;
+    @ConfField(mutable = true, comment = "Use table sample instead of row-level bernoulli sample to collect statistics")
+    public static boolean enable_use_table_sample_collect_statistics = true;
 
     @ConfField(mutable = true)
     public static long connector_table_query_trigger_analyze_small_table_rows = 10000000; // 10M
@@ -2561,7 +2572,8 @@ public class Config extends ConfigBase {
     @ConfField
     public static boolean enable_load_volume_from_conf = true;
     // remote storage related configuration
-    @ConfField(comment = "storage type for cloud native table. Available options: \"S3\", \"HDFS\", \"AZBLOB\". case-insensitive")
+    @ConfField(comment = "storage type for cloud native table. Available options: " +
+            "\"S3\", \"HDFS\", \"AZBLOB\", \"ADLS2\". case-insensitive")
     public static String cloud_native_storage_type = "S3";
 
     // HDFS storage configuration
@@ -2604,13 +2616,32 @@ public class Config extends ConfigBase {
     public static String azure_blob_endpoint = "";
     @ConfField
     public static String azure_blob_path = "";
-
     @ConfField
     public static String azure_blob_shared_key = "";
     @ConfField
     public static String azure_blob_sas_token = "";
+
+    // azure adls2
+    @ConfField
+    public static String azure_adls2_endpoint = "";
+    @ConfField
+    public static String azure_adls2_path = "";
+    @ConfField
+    public static String azure_adls2_shared_key = "";
+    @ConfField
+    public static String azure_adls2_sas_token = "";
+
     @ConfField(mutable = true)
     public static int starmgr_grpc_timeout_seconds = 5;
+
+    @ConfField(mutable = true)
+    public static int star_client_read_timeout_seconds = 15;
+
+    @ConfField(mutable = true)
+    public static int star_client_list_timeout_seconds = 30;
+
+    @ConfField(mutable = true)
+    public static int star_client_write_timeout_seconds = 30;
 
     // ***********************************************************
     // * END: of Cloud native meta server related configurations
@@ -2747,6 +2778,12 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static int lake_warehouse_max_compute_replica = 3;
+
+    @ConfField(mutable = true, comment = "time interval to check whether warehouse is idle")
+    public static long warehouse_idle_check_interval_seconds = 60;
+
+    @ConfField(mutable = true, comment = "True to start warehouse idle checker")
+    public static boolean warehouse_idle_check_enable = false;
 
     // e.g. "tableId1;tableId2"
     @ConfField(mutable = true)
@@ -3074,6 +3111,9 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean enable_mv_automatic_active_check = true;
+    @ConfField(mutable = true, comment = "Whether to enable the automatic related materialized views since of base table's " +
+            "schema changes")
+    public static boolean enable_mv_automatic_inactive_by_base_table_changes = true;
 
     @ConfField(mutable = true, comment = "The max retry times for base table change when refreshing materialized view")
     public static int max_mv_check_base_table_change_retry_times = 10;
@@ -3254,6 +3294,9 @@ public class Config extends ConfigBase {
     // limit for the number of host disconnections in the last {black_host_history_sec} seconds
     @ConfField(mutable = true)
     public static long black_host_connect_failures_within_time = 5;
+
+    @ConfField(mutable = true, comment = "The minimal time in milliseconds for the node to stay in the blocklist")
+    public static long black_host_penalty_min_ms = 500; // 500ms
 
     @ConfField(mutable = false)
     public static int jdbc_connection_pool_size = 8;

@@ -40,6 +40,7 @@ import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
@@ -55,6 +56,9 @@ import org.apache.velocity.VelocityContext;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
+
+import static com.starrocks.statistic.StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME;
 
 public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
     private static final Logger LOG = LogManager.getLogger(ExternalFullStatisticsCollectJob.class);
@@ -162,7 +166,7 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
         context.put("tableName", table.getName());
         context.put("catalogName", this.catalogName);
 
-        if (!columnType.canStatistic()) {
+        if (!columnType.canStatistic() || columnType.isCollectionType()) {
             context.put("hllFunction", "hex(hll_serialize(hll_empty()))");
             context.put("countNullFunction", "0");
             context.put("maxFunction", "''");
@@ -293,7 +297,7 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
         StatementBase insertStmt = createInsertStmt();
         do {
             LOG.debug("statistics insert sql size:" + rowsBuffer.size());
-            StmtExecutor executor = new StmtExecutor(context, insertStmt);
+            StmtExecutor executor = StmtExecutor.newInternalExecutor(context, insertStmt);
             context.setExecutor(executor);
             context.setQueryId(UUIDUtil.genUUID());
             context.setStartTime();
@@ -319,12 +323,15 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
     }
 
     private StatementBase createInsertStmt() {
-        String sql = "INSERT INTO external_column_statistics values " + String.join(", ", sqlBuffer) + ";";
-        List<String> names = Lists.newArrayList("column_0", "column_1", "column_2", "column_3",
-                "column_4", "column_5", "column_6", "column_7", "column_8", "column_9", "column_10",
-                "column_11", "column_12");
-        QueryStatement qs = new QueryStatement(new ValuesRelation(rowsBuffer, names));
+        List<String> targetColumnNames = StatisticUtils.buildStatsColumnDef(EXTERNAL_FULL_STATISTICS_TABLE_NAME).stream()
+                .map(ColumnDef::getName)
+                .collect(Collectors.toList());
+
+        String sql = "INSERT INTO external_column_statistics(" + String.join(", ", targetColumnNames) +
+                ") values " + String.join(", ", sqlBuffer) + ";";
+        QueryStatement qs = new QueryStatement(new ValuesRelation(rowsBuffer, targetColumnNames));
         InsertStmt insert = new InsertStmt(new TableName("_statistics_", "external_column_statistics"), qs);
+        insert.setTargetColumnNames(targetColumnNames);
         insert.setOrigStmt(new OriginStatement(sql, 0));
         return insert;
     }

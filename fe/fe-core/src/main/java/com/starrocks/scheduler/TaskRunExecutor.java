@@ -19,6 +19,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.persist.TaskRunStatus;
+import com.starrocks.warehouse.WarehouseIdleChecker;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -70,6 +71,7 @@ public class TaskRunExecutor {
                 // NOTE: Ensure this thread local is removed after this method to avoid memory leak in JVM.
                 ConnectContext.remove();
                 status.setFinishTime(System.currentTimeMillis());
+                WarehouseIdleChecker.updateJobLastFinishTime(taskRun.getRunCtx().getCurrentWarehouseId());
             }
             return status.getState();
         }, taskRunPool);

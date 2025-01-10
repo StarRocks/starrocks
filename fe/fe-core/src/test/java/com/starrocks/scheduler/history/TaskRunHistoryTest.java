@@ -21,6 +21,7 @@ import com.starrocks.load.pipe.filelist.RepoExecutor;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.persist.TaskRunStatus;
+import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TGetTasksParams;
@@ -46,7 +47,6 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class TaskRunHistoryTest {
 
@@ -167,10 +167,10 @@ public class TaskRunHistoryTest {
             }
         };
         keeper.run();
-        assertFalse(keeper.isDatabaseExisted());
+        assertFalse(keeper.checkTableExists());
 
         // create table
-        keeper.setDatabaseExisted(true);
+        new StatisticsMetaManager().createStatisticsTablesForTest();
         new Expectations() {
             {
                 repo.executeDDL("CREATE TABLE IF NOT EXISTS _statistics_.task_run_history (task_id bigint NOT NULL, " +
@@ -183,7 +183,6 @@ public class TaskRunHistoryTest {
             }
         };
         keeper.run();
-        assertTrue(keeper.isTableExisted());
         assertFalse(keeper.isTableCorrected());
 
         new MockUp<SystemInfoService>() {

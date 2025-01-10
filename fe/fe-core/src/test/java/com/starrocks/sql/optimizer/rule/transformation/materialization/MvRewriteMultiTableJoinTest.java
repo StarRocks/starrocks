@@ -19,11 +19,11 @@ import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-public class MvRewriteMultiTableJoinTest extends MvRewriteTestBase {
+public class MvRewriteMultiTableJoinTest extends MVTestBase {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        MvRewriteTestBase.beforeClass();
+        MVTestBase.beforeClass();
         prepareDatas();
     }
 

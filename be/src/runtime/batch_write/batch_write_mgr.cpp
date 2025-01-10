@@ -59,7 +59,7 @@ Status BatchWriteMgr::append_data(StreamLoadContext* data_ctx) {
 StatusOr<IsomorphicBatchWriteSharedPtr> BatchWriteMgr::_get_batch_write(const starrocks::BatchWriteId& batch_write_id,
                                                                         bool create_if_missing) {
     {
-        std::shared_lock<std::shared_mutex> lock(_mutex);
+        std::shared_lock<bthreads::BThreadSharedMutex> lock(_rw_mutex);
         auto it = _batch_write_map.find(batch_write_id);
         if (it != _batch_write_map.end()) {
             return it->second;
@@ -69,7 +69,7 @@ StatusOr<IsomorphicBatchWriteSharedPtr> BatchWriteMgr::_get_batch_write(const st
         return Status::NotFound("");
     }
 
-    std::unique_lock<std::shared_mutex> lock(_mutex);
+    std::unique_lock<bthreads::BThreadSharedMutex> lock(_rw_mutex);
     if (_stopped) {
         return Status::ServiceUnavailable("Batch write is stopped");
     }
@@ -92,7 +92,7 @@ StatusOr<IsomorphicBatchWriteSharedPtr> BatchWriteMgr::_get_batch_write(const st
 void BatchWriteMgr::stop() {
     std::vector<IsomorphicBatchWriteSharedPtr> stop_writes;
     {
-        std::unique_lock<std::shared_mutex> lock(_mutex);
+        std::unique_lock<bthreads::BThreadSharedMutex> lock(_rw_mutex);
         if (_stopped) {
             return;
         }
@@ -112,7 +112,9 @@ StatusOr<StreamLoadContext*> BatchWriteMgr::create_and_register_pipe(
         const std::map<std::string, std::string>& load_parameters, const std::string& label, long txn_id,
         const TUniqueId& load_id, int32_t batch_write_interval_ms) {
     std::string pipe_name = fmt::format("txn_{}_label_{}_id_{}", txn_id, label, print_id(load_id));
-    auto pipe = std::make_shared<TimeBoundedStreamLoadPipe>(pipe_name, batch_write_interval_ms);
+    auto pipe = std::make_shared<TimeBoundedStreamLoadPipe>(pipe_name, batch_write_interval_ms,
+                                                            config::merge_commit_stream_load_pipe_block_wait_us,
+                                                            config::merge_commit_stream_load_pipe_max_buffered_bytes);
     RETURN_IF_ERROR(exec_env->load_stream_mgr()->put(load_id, pipe));
     StreamLoadContext* ctx = new StreamLoadContext(exec_env, load_id);
     ctx->ref();
@@ -188,11 +190,10 @@ void BatchWriteMgr::receive_stream_load_rpc(ExecEnv* exec_env, brpc::Controller*
         }
         ctx->timeout_second = timeout_second;
     }
-    std::string remote_host;
-    butil::ip2hostname(cntl->remote_side().ip, &remote_host);
+    auto user_ip = butil::ip2str(cntl->remote_side().ip);
     ctx->auth.user = request->user();
     ctx->auth.passwd = request->passwd();
-    ctx->auth.user_ip = remote_host;
+    ctx->auth.user_ip.assign(user_ip.c_str());
     ctx->load_parameters = get_load_parameters_from_brpc(parameters);
 
     butil::IOBuf& io_buf = cntl->request_attachment();
@@ -221,6 +222,8 @@ void BatchWriteMgr::receive_stream_load_rpc(ExecEnv* exec_env, brpc::Controller*
     }
     ctx->buffer->pos += io_buf.size();
     ctx->buffer->flip();
+    ctx->receive_bytes = io_buf.size();
+    ctx->mc_read_data_cost_nanos = MonotonicNanos() - ctx->start_nanos;
     ctx->status = exec_env->batch_write_mgr()->append_data(ctx);
 }
 

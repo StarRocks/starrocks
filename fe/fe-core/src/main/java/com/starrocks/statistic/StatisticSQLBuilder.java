@@ -34,6 +34,7 @@ import static com.starrocks.statistic.StatsConstants.EXTERNAL_FULL_STATISTICS_TA
 import static com.starrocks.statistic.StatsConstants.FULL_STATISTICS_TABLE_NAME;
 import static com.starrocks.statistic.StatsConstants.SAMPLE_STATISTICS_TABLE_NAME;
 import static com.starrocks.statistic.StatsConstants.STATISTIC_DATA_VERSION;
+import static com.starrocks.statistic.StatsConstants.STATISTIC_DATA_VERSION_V2;
 import static com.starrocks.statistic.StatsConstants.STATISTIC_EXTERNAL_HISTOGRAM_VERSION;
 import static com.starrocks.statistic.StatsConstants.STATISTIC_EXTERNAL_QUERY_V2_VERSION;
 import static com.starrocks.statistic.StatsConstants.STATISTIC_HISTOGRAM_VERSION;
@@ -61,9 +62,18 @@ public class StatisticSQLBuilder {
                     + " WHERE $predicate";
 
     private static final String QUERY_FULL_STATISTIC_TEMPLATE =
-            "SELECT cast(" + STATISTIC_DATA_VERSION + " as INT), $updateTime, db_id, table_id, column_name,"
+            "SELECT cast(" + STATISTIC_DATA_VERSION_V2 + " as INT), $updateTime, db_id, table_id, column_name,"
                     + " sum(row_count), cast(sum(data_size) as bigint), hll_union_agg(ndv), sum(null_count), "
-                    + " cast(max(cast(max as $type)) as string), cast(min(cast(min as $type)) as string)"
+                    + " cast(max(cast(max as $type)) as string), cast(min(cast(min as $type)) as string),"
+                    + " cast(avg(collection_size) as bigint)"
+                    + " FROM " + StatsConstants.FULL_STATISTICS_TABLE_NAME
+                    + " WHERE $predicate"
+                    + " GROUP BY db_id, table_id, column_name";
+
+    private static final String QUERY_COLLECTION_FULL_STATISTIC_TEMPLATE =
+            "SELECT cast(" + STATISTIC_DATA_VERSION_V2 + " as INT), $updateTime, db_id, table_id, column_name,"
+                    + " sum(row_count), cast(sum(data_size) as bigint), hll_union_agg(ndv), sum(null_count), "
+                    + " any_value(''), any_value(''), cast(avg(collection_size) as bigint) "
                     + " FROM " + StatsConstants.FULL_STATISTICS_TABLE_NAME
                     + " WHERE $predicate"
                     + " GROUP BY db_id, table_id, column_name";
@@ -149,8 +159,7 @@ public class StatisticSQLBuilder {
         return build(context, QUERY_SAMPLE_STATISTIC_TEMPLATE);
     }
 
-    public static String buildQueryFullStatisticsSQL(Long dbId, Long tableId, List<String> columnNames,
-                                                     List<Type> columnTypes) {
+    public static String buildQueryFullStatisticsSQL(Long tableId, List<String> columnNames, List<Type> columnTypes) {
         Map<String, List<String>> nameGroups = groupByTypes(columnNames, columnTypes);
 
         List<String> querySQL = new ArrayList<>();
@@ -160,7 +169,12 @@ public class StatisticSQLBuilder {
             context.put("type", type);
             context.put("predicate", "table_id = " + tableId + " and column_name in (" +
                     names.stream().map(c -> "\"" + c + "\"").collect(Collectors.joining(", ")) + ")");
-            querySQL.add(build(context, QUERY_FULL_STATISTIC_TEMPLATE));
+
+            if (type.startsWith("array") || type.startsWith("map")) {
+                querySQL.add(build(context, QUERY_COLLECTION_FULL_STATISTIC_TEMPLATE));
+            } else {
+                querySQL.add(build(context, QUERY_FULL_STATISTIC_TEMPLATE));
+            }
         });
         return Joiner.on(" UNION ALL ").join(querySQL);
     }

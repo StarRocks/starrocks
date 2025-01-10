@@ -16,6 +16,7 @@
 
 #include "block_cache/block_cache_hit_rate_counter.hpp"
 #include "column/column_helper.h"
+#include "connector/deletion_vector//deletion_vector.h"
 #include "exec/exec_node.h"
 #include "fs/hdfs/fs_hdfs.h"
 #include "io/cache_select_input_stream.hpp"
@@ -243,7 +244,10 @@ StatusOr<std::unique_ptr<RandomAccessFile>> HdfsScanner::create_random_access_fi
         std::shared_ptr<io::SharedBufferedInputStream>& shared_buffered_input_stream,
         std::shared_ptr<io::CacheInputStream>& cache_input_stream, const OpenFileOptions& options) {
     ASSIGN_OR_RETURN(std::unique_ptr<RandomAccessFile> raw_file, options.fs->new_random_access_file(options.path))
-    const int64_t file_size = options.file_size;
+    int64_t file_size = options.file_size;
+    if (file_size < 0) {
+        ASSIGN_OR_RETURN(file_size, raw_file->stream()->get_size());
+    }
     raw_file->set_size(file_size);
     const std::string& filename = raw_file->filename();
 
@@ -324,8 +328,24 @@ void HdfsScanner::do_update_iceberg_v2_counter(RuntimeProfile* parent_profile, c
             ADD_CHILD_COUNTER(parent_profile, "DeleteFilesPerScan", TUnit::UNIT, ICEBERG_TIMER);
 
     COUNTER_UPDATE(delete_build_timer, _app_stats.iceberg_delete_file_build_ns);
-    COUNTER_UPDATE(delete_file_build_filter_timer, _app_stats.iceberg_delete_file_build_filter_ns);
+    COUNTER_UPDATE(delete_file_build_filter_timer, _app_stats.build_rowid_filter_ns);
     COUNTER_UPDATE(delete_file_per_scan_counter, _app_stats.iceberg_delete_files_per_scan);
+}
+
+void HdfsScanner::do_update_deletion_vector_counter(RuntimeProfile* parent_profile) {
+    const std::string DV_TIMER = DeletionVector::DELETION_VECTOR;
+    ADD_COUNTER(parent_profile, DV_TIMER, TUnit::NONE);
+
+    RuntimeProfile::Counter* delete_build_timer =
+            ADD_CHILD_COUNTER(parent_profile, "DeletionVectorBuildTime", TUnit::TIME_NS, DV_TIMER);
+    RuntimeProfile::Counter* delete_file_build_filter_timer =
+            ADD_CHILD_COUNTER(parent_profile, "DeletionVectorBuildRowIdFilterTime", TUnit::TIME_NS, DV_TIMER);
+    RuntimeProfile::Counter* delete_file_per_scan_counter =
+            ADD_CHILD_COUNTER(parent_profile, "DeletionVectorBuildCount", TUnit::UNIT, DV_TIMER);
+
+    COUNTER_UPDATE(delete_build_timer, _app_stats.deletion_vector_build_ns);
+    COUNTER_UPDATE(delete_file_build_filter_timer, _app_stats.build_rowid_filter_ns);
+    COUNTER_UPDATE(delete_file_per_scan_counter, _app_stats.deletion_vector_build_count);
 }
 
 int64_t HdfsScanner::estimated_mem_usage() const {

@@ -140,7 +140,7 @@ Status IsomorphicBatchWrite::init() {
 
 void IsomorphicBatchWrite::stop() {
     {
-        std::unique_lock<std::mutex> lock(_mutex);
+        std::unique_lock<bthread::Mutex> lock(_mutex);
         if (_stopped) {
             return;
         }
@@ -155,7 +155,7 @@ void IsomorphicBatchWrite::stop() {
 
     std::vector<StreamLoadContext*> release_contexts;
     {
-        std::unique_lock<std::mutex> lock(_mutex);
+        std::unique_lock<bthread::Mutex> lock(_mutex);
         release_contexts.insert(release_contexts.end(), _alive_stream_load_pipe_ctxs.begin(),
                                 _alive_stream_load_pipe_ctxs.end());
         release_contexts.insert(release_contexts.end(), _dead_stream_load_pipe_ctxs.begin(),
@@ -172,7 +172,7 @@ void IsomorphicBatchWrite::stop() {
 }
 
 Status IsomorphicBatchWrite::register_stream_load_pipe(StreamLoadContext* pipe_ctx) {
-    std::unique_lock<std::mutex> lock(_mutex);
+    std::unique_lock<bthread::Mutex> lock(_mutex);
     if (_stopped.load(std::memory_order_acquire)) {
         return Status::ServiceUnavailable("Batch write is stopped");
     }
@@ -188,7 +188,7 @@ Status IsomorphicBatchWrite::register_stream_load_pipe(StreamLoadContext* pipe_c
 void IsomorphicBatchWrite::unregister_stream_load_pipe(StreamLoadContext* pipe_ctx) {
     bool find = false;
     {
-        std::unique_lock<std::mutex> lock(_mutex);
+        std::unique_lock<bthread::Mutex> lock(_mutex);
         find = _alive_stream_load_pipe_ctxs.erase(pipe_ctx) > 0;
         if (!find) {
             find = _dead_stream_load_pipe_ctxs.erase(pipe_ctx) > 0;
@@ -202,12 +202,18 @@ void IsomorphicBatchWrite::unregister_stream_load_pipe(StreamLoadContext* pipe_c
 }
 
 bool IsomorphicBatchWrite::contain_pipe(StreamLoadContext* pipe_ctx) {
-    std::unique_lock<std::mutex> lock(_mutex);
+    std::unique_lock<bthread::Mutex> lock(_mutex);
     auto it = _alive_stream_load_pipe_ctxs.find(pipe_ctx);
     if (it != _alive_stream_load_pipe_ctxs.end()) {
         return true;
     }
     return _dead_stream_load_pipe_ctxs.find(pipe_ctx) != _dead_stream_load_pipe_ctxs.end();
+}
+
+bool IsomorphicBatchWrite::is_pipe_alive(starrocks::StreamLoadContext* pipe_ctx) {
+    std::unique_lock<bthread::Mutex> lock(_mutex);
+    auto it = _alive_stream_load_pipe_ctxs.find(pipe_ctx);
+    return it != _alive_stream_load_pipe_ctxs.end();
 }
 
 Status IsomorphicBatchWrite::append_data(StreamLoadContext* data_ctx) {
@@ -231,7 +237,7 @@ Status IsomorphicBatchWrite::append_data(StreamLoadContext* data_ctx) {
     async_ctx->latch().wait();
     async_ctx->total_cost_ns.store(MonotonicNanos() - async_ctx->create_time_ts);
     TRACE_BATCH_WRITE << "wait async finish, " << _batch_write_id << ", user label: " << async_ctx->data_ctx()->label
-                      << ", data size: " << data_ctx->receive_bytes
+                      << ", user ip: " << data_ctx->auth.user_ip << ", data size: " << data_ctx->receive_bytes
                       << ", total_cost: " << (async_ctx->total_cost_ns / 1000)
                       << "us, total_async_cost: " << (async_ctx->total_async_cost_ns / 1000)
                       << "us, task_pending_cost: " << (async_ctx->task_pending_cost_ns / 1000)
@@ -242,10 +248,13 @@ Status IsomorphicBatchWrite::append_data(StreamLoadContext* data_ctx) {
                       << ", pipe_left_active: " << (async_ctx->pipe_left_active_ns / 1000)
                       << ", async_status: " << async_ctx->get_status() << ", txn_id: " << async_ctx->txn_id()
                       << ", label: " << async_ctx->label();
-    RETURN_IF_ERROR(async_ctx->get_status());
     data_ctx->txn_id = async_ctx->txn_id();
     data_ctx->batch_write_label = async_ctx->label();
-    data_ctx->batch_left_time_nanos = async_ctx->pipe_left_active_ns;
+    data_ctx->mc_pending_cost_nanos = async_ctx->task_pending_cost_ns;
+    data_ctx->mc_wait_plan_cost_nanos = async_ctx->wait_pipe_cost_ns + async_ctx->rpc_cost_ns;
+    data_ctx->mc_write_data_cost_nanos = async_ctx->append_pipe_cost_ns;
+    data_ctx->mc_left_merge_time_nanos = async_ctx->pipe_left_active_ns;
+    RETURN_IF_ERROR(async_ctx->get_status());
     if (_batch_write_async) {
         return Status::OK();
     }
@@ -286,68 +295,90 @@ int IsomorphicBatchWrite::_execute_tasks(void* meta, bthread::TaskIterator<Task>
 }
 
 Status IsomorphicBatchWrite::_execute_write(AsyncAppendDataContext* async_ctx) {
-    Status st;
-    int64_t append_pipe_cost_ns = 0;
+    int64_t write_data_cost_ns = 0;
     int64_t rpc_cost_ns = 0;
     int64_t wait_pipe_cost_ns = 0;
     int num_retries = 0;
-    while (num_retries <= config::batch_write_rpc_request_retry_num) {
+    Status st;
+    while (true) {
         if (_stopped.load(std::memory_order_acquire)) {
-            return Status::ServiceUnavailable("Batch write is stopped");
-        }
-        int64_t append_ts = MonotonicNanos();
-        st = _write_data(async_ctx);
-        int64_t rpc_ts = MonotonicNanos();
-        append_pipe_cost_ns += rpc_ts - append_ts;
-        if (st.ok()) {
+            st = Status::ServiceUnavailable("Batch write is stopped");
             break;
         }
-        // TODO check if the error is retryable
-        st = _send_rpc_request(async_ctx->data_ctx());
-        int64_t wait_ts = MonotonicNanos();
-        rpc_cost_ns += wait_ts - rpc_ts;
-        st = _wait_for_stream_load_pipe();
-        wait_pipe_cost_ns += MonotonicNanos() - wait_ts;
+        {
+            SCOPED_RAW_TIMER(&write_data_cost_ns);
+            st = _write_data_to_pipe(async_ctx);
+        }
+        if (st.ok() || num_retries >= config::batch_write_rpc_request_retry_num) {
+            break;
+        }
         num_retries += 1;
+        {
+            SCOPED_RAW_TIMER(&rpc_cost_ns);
+            st = _send_rpc_request(async_ctx->data_ctx());
+            if (!st.ok()) {
+                break;
+            }
+        }
+        {
+            SCOPED_RAW_TIMER(&wait_pipe_cost_ns);
+            std::unique_lock<bthread::Mutex> lock(_mutex);
+            if (_alive_stream_load_pipe_ctxs.empty()) {
+                _cv.wait_for(lock, config::batch_write_rpc_request_retry_interval_ms * 1000);
+            }
+        }
     }
-    async_ctx->append_pipe_cost_ns.store(append_pipe_cost_ns);
+    async_ctx->append_pipe_cost_ns.store(write_data_cost_ns);
     async_ctx->rpc_cost_ns.store(rpc_cost_ns);
     async_ctx->wait_pipe_cost_ns.store(wait_pipe_cost_ns);
     async_ctx->num_retries.store(num_retries);
+    if (!st.ok()) {
+        std::stringstream stream;
+        stream << "Failed to write data to stream load pipe, num retry: " << num_retries
+               << ", write_data: " << (write_data_cost_ns / 1000) << " us, rpc: " << (rpc_cost_ns / 1000)
+               << "us, wait_pipe: " << (wait_pipe_cost_ns / 1000) << " us, last error: " << st;
+        st = Status::InternalError(stream.str());
+    }
     return st;
 }
 
-Status IsomorphicBatchWrite::_write_data(AsyncAppendDataContext* async_ctx) {
-    // TODO write data outside the lock
-    std::unique_lock<std::mutex> lock(_mutex);
-    Status st;
+Status IsomorphicBatchWrite::_write_data_to_pipe(AsyncAppendDataContext* async_ctx) {
     StreamLoadContext* data_ctx = async_ctx->data_ctx();
-    for (auto it = _alive_stream_load_pipe_ctxs.begin(); it != _alive_stream_load_pipe_ctxs.end();) {
-        StreamLoadContext* pipe_ctx = *it;
-        // add reference to the buffer to avoid being released if append fails
+    while (true) {
+        StreamLoadContext* pipe_ctx;
+        {
+            std::unique_lock<bthread::Mutex> lock(_mutex);
+            if (!_alive_stream_load_pipe_ctxs.empty()) {
+                pipe_ctx = *(_alive_stream_load_pipe_ctxs.begin());
+                // take a reference to avoid being released when appending data to the pipe outside the lock
+                pipe_ctx->ref();
+            } else {
+                return Status::CapacityLimitExceed("No available stream load pipe");
+            }
+        }
+        DeferOp defer([&] { StreamLoadContext::release(pipe_ctx); });
+        // task a reference to avoid being released by the pipe if append fails
         ByteBufferPtr buffer = data_ctx->buffer;
-        st = pipe_ctx->body_sink->append(std::move(buffer));
+        Status st = pipe_ctx->body_sink->append(std::move(buffer));
         if (st.ok()) {
             data_ctx->buffer.reset();
             async_ctx->pipe_left_active_ns.store(
                     static_cast<TimeBoundedStreamLoadPipe*>(pipe_ctx->body_sink.get())->left_active_ns());
             async_ctx->set_txn(pipe_ctx->txn_id, pipe_ctx->label);
-            return st;
+            return Status::OK();
         }
-        _dead_stream_load_pipe_ctxs.emplace(pipe_ctx);
-        it = _alive_stream_load_pipe_ctxs.erase(it);
+        TRACE_BATCH_WRITE << "Fail to append data to stream load pipe, " << _batch_write_id
+                          << ", user label: " << data_ctx->label << ", txn_id: " << pipe_ctx->txn_id
+                          << ", label: " << pipe_ctx->label << ", status: " << st;
+        // if failed, the pipe can't be appended anymore and move it from
+        // the alive to the dead, and wait for being unregistered
+        {
+            std::unique_lock<bthread::Mutex> lock(_mutex);
+            if (_alive_stream_load_pipe_ctxs.erase(pipe_ctx)) {
+                _dead_stream_load_pipe_ctxs.emplace(pipe_ctx);
+            }
+        }
     }
-    return st.ok() ? Status::CapacityLimitExceed("") : st;
-}
-
-Status IsomorphicBatchWrite::_wait_for_stream_load_pipe() {
-    std::unique_lock<std::mutex> lock(_mutex);
-    _cv.wait_for(lock, std::chrono::milliseconds(config::batch_write_rpc_request_retry_interval_ms),
-                 [&]() { return !_alive_stream_load_pipe_ctxs.empty(); });
-    if (!_alive_stream_load_pipe_ctxs.empty()) {
-        return Status::OK();
-    }
-    return Status::TimedOut("");
 }
 
 Status IsomorphicBatchWrite::_send_rpc_request(StreamLoadContext* data_ctx) {
@@ -401,7 +432,7 @@ bool is_final_load_status(const TTransactionStatus::type& status) {
 // TODO just poll the load status periodically. improve it later, such as cache the label, and FE notify the BE
 Status IsomorphicBatchWrite::_wait_for_load_status(StreamLoadContext* data_ctx, int64_t timeout_ns) {
     int64_t start_ts = MonotonicNanos();
-    int64_t wait_load_finish_ns = std::max((int64_t)0, data_ctx->batch_left_time_nanos) + 1000000;
+    int64_t wait_load_finish_ns = std::max((int64_t)0, data_ctx->mc_left_merge_time_nanos) + 1000000;
     bthread_usleep(std::min(wait_load_finish_ns, timeout_ns) / 1000);
     TGetLoadTxnStatusRequest request;
     request.__set_db(_batch_write_id.db);
@@ -443,6 +474,7 @@ Status IsomorphicBatchWrite::_wait_for_load_status(StreamLoadContext* data_ctx, 
         bthread_usleep(
                 std::min(config::batch_write_poll_load_status_interval_ms * (int64_t)1000, left_timeout_ns / 1000));
     } while (true);
+    data_ctx->mc_wait_finish_cost_nanos = MonotonicNanos() - start_ts;
     if (!st.ok()) {
         return Status::InternalError("Failed to get load status, " + st.to_string());
     }
@@ -455,7 +487,7 @@ Status IsomorphicBatchWrite::_wait_for_load_status(StreamLoadContext* data_ctx, 
     case TTransactionStatus::VISIBLE:
         return Status::OK();
     case TTransactionStatus::ABORTED:
-        return Status::InternalError("Load is aborted because of failure");
+        return Status::InternalError("Load is aborted, reason: " + response.reason);
     default:
         return Status::InternalError("Load status is unknown: " + to_string(response.status));
     }

@@ -47,6 +47,7 @@ import com.google.gson.annotations.SerializedName;
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
 import com.starrocks.alter.AlterJobV2Builder;
+import com.starrocks.alter.AlterMVJobExecutor;
 import com.starrocks.alter.OlapTableAlterJobV2Builder;
 import com.starrocks.alter.OlapTableRollupJobBuilder;
 import com.starrocks.alter.OptimizeJobV2Builder;
@@ -95,7 +96,6 @@ import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.TemporaryTableMgr;
 import com.starrocks.sql.analyzer.AnalyzeState;
@@ -298,6 +298,9 @@ public class OlapTable extends Table {
     // The flag is used to indicate whether the table is doing automatic bucketing.
     public AtomicBoolean isAutomaticBucketing = new AtomicBoolean(false);
 
+    // It's not persisted but resolved in QueryAnalyzer, so only exists if it's in the context of query
+    public volatile String dbName;
+
     public OlapTable() {
         this(TableType.OLAP);
     }
@@ -348,6 +351,17 @@ public class OlapTable extends Table {
         tryToAssignIndexId();
 
         this.tableProperty = null;
+    }
+
+    @Override
+    public synchronized Optional<String> mayGetDatabaseName() {
+        return Optional.ofNullable(dbName);
+    }
+
+    public synchronized void maySetDatabaseName(String dbName) {
+        if (this.dbName == null) {
+            this.dbName = dbName;
+        }
     }
 
     // Only Copy necessary metadata for query.
@@ -417,6 +431,7 @@ public class OlapTable extends Table {
         if (this.curBinlogConfig != null) {
             olapTable.curBinlogConfig = new BinlogConfig(this.curBinlogConfig);
         }
+        olapTable.dbName = this.dbName;
     }
 
     public void addDoubleWritePartition(String sourcePartitionName, String tempPartitionName) {
@@ -717,8 +732,8 @@ public class OlapTable extends Table {
             maxColUniqueId = Math.max(maxColUniqueId, column.getMaxUniqueId());
         }
         setMaxColUniqueId(maxColUniqueId);
-        LOG.info("after rebuild full schema. table {}, schema: {}, max column unique id: {}",
-                name, fullSchema, maxColUniqueId);
+        LOG.debug("after rebuild full schema. table {}, schema: {}, max column unique id: {}",
+                 name, fullSchema, maxColUniqueId);
     }
 
     public boolean deleteIndexInfo(String indexName) {
@@ -3214,7 +3229,7 @@ public class OlapTable extends Table {
             return;
         }
         TableName tableName = new TableName(null, getName());
-        ConnectContext session = new ConnectContext();
+        ConnectContext session = ConnectContext.buildInner();
         Optional<SelectAnalyzer.SlotRefTableNameCleaner> visitorOpt = Optional.empty();
         for (MaterializedIndexMeta indexMeta : indexIdToMeta.values()) {
             if (indexMeta.getIndexId() == baseIndexId) {
@@ -3273,8 +3288,8 @@ public class OlapTable extends Table {
         // in recycle bin,
         // which make things easier.
         dropAllTempPartitions();
-        LocalMetastore.inactiveRelatedMaterializedView(db, this,
-                MaterializedViewExceptions.inactiveReasonForBaseTableNotExists(getName()));
+        AlterMVJobExecutor.inactiveRelatedMaterializedView(db, this,
+                MaterializedViewExceptions.inactiveReasonForBaseTableNotExists(getName()), replay);
         if (!replay && hasAutoIncrementColumn()) {
             sendDropAutoIncrementMapTask();
         }

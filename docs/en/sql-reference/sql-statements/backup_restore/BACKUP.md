@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # BACKUP
 
-## Description
-
 StarRocks supports backing up and restoring the following objects:
 
 - Internal databases, tables (of all types and partitioning strategies), and partitions
@@ -13,6 +11,10 @@ StarRocks supports backing up and restoring the following objects:
 - Synchronous materialized views and asynchronous materialized views
 - Logical views (supported from v3.4.0 onwards)
 - User-defined functions (supported from v3.4.0 onwards)
+
+:::tip
+For an overview of backup and restore please see the [backup and restore guide](../../../administration/management/Backup_and_restore.md).
+:::
 
 BACKUP is an asynchronous operation. You can check the status of a BACKUP job status using [SHOW BACKUP](./SHOW_BACKUP.md), or cancel a BACKUP job using [CANCEL BACKUP](./CANCEL_BACKUP.md). You can view the snapshot information using [SHOW SNAPSHOT](./SHOW_SNAPSHOT.md).
 

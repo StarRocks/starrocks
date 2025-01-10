@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.load.streamload;
 
 import com.google.common.collect.Lists;
@@ -156,7 +155,8 @@ public class StreamLoadManagerTest {
         int channelId = 0;
         
         TransactionResult resp = new TransactionResult();
-        streamLoadManager.beginLoadTask(dbName, tableName, labelName, "", "", timeoutMillis, channelNum, channelId, resp);
+        streamLoadManager.beginLoadTaskFromFrontend(
+                dbName, tableName, labelName, "", "", timeoutMillis, channelNum, channelId, resp);
 
         Map<String, StreamLoadTask> idToStreamLoadTask =
                 Deencapsulation.getField(streamLoadManager, "idToStreamLoadTask");
@@ -185,7 +185,8 @@ public class StreamLoadManagerTest {
         int channelId = 1;
         
         TransactionResult resp = new TransactionResult();
-        streamLoadManager.beginLoadTask(dbName, tableName, labelName, "", "", timeoutMillis, channelNum, channelId, resp);
+        streamLoadManager.beginLoadTaskFromFrontend(
+                dbName, tableName, labelName, "", "", timeoutMillis, channelNum, channelId, resp);
         Map<String, StreamLoadTask> idToStreamLoadTask =
                 Deencapsulation.getField(streamLoadManager, "idToStreamLoadTask");
         Assert.assertEquals(1, idToStreamLoadTask.size());
@@ -205,7 +206,8 @@ public class StreamLoadManagerTest {
         int channelId = 0;
         
         TransactionResult resp = new TransactionResult();
-        streamLoadManager.beginLoadTask(dbName, tableName, labelName, "", "", timeoutMillis, channelNum, channelId, resp);
+        streamLoadManager.beginLoadTaskFromFrontend(
+                dbName, tableName, labelName, "", "", timeoutMillis, channelNum, channelId, resp);
 
         List<StreamLoadTask> tasks = streamLoadManager.getTaskByName(labelName);
         Assert.assertEquals(1, tasks.size());
@@ -228,8 +230,10 @@ public class StreamLoadManagerTest {
         int channelId = 0;
 
         TransactionResult resp = new TransactionResult();
-        streamLoadManager.beginLoadTask(dbName, tableName, labelName1, "", "", timeoutMillis, channelNum, channelId, resp);
-        streamLoadManager.beginLoadTask(dbName, tableName, labelName2, "", "", timeoutMillis, channelNum, channelId, resp);
+        streamLoadManager.beginLoadTaskFromFrontend(
+                dbName, tableName, labelName1, "", "", timeoutMillis, channelNum, channelId, resp);
+        streamLoadManager.beginLoadTaskFromFrontend(
+                dbName, tableName, labelName2, "", "", timeoutMillis, channelNum, channelId, resp);
 
         List<StreamLoadTask> tasks = streamLoadManager.getTaskByName(null);
         Assert.assertEquals(2, tasks.size());
@@ -249,7 +253,8 @@ public class StreamLoadManagerTest {
         int channelId = 0;
 
         TransactionResult resp = new TransactionResult();
-        streamLoadManager.beginLoadTask(dbName, tableName, labelName, "", "", timeoutMillis, channelNum, channelId, resp);
+        streamLoadManager.beginLoadTaskFromFrontend(
+                dbName, tableName, labelName, "", "", timeoutMillis, channelNum, channelId, resp);
 
         StreamLoadTask task = streamLoadManager.getTaskById(1001L);
         Assert.assertNotNull(task);
@@ -272,7 +277,8 @@ public class StreamLoadManagerTest {
         int channelId = 0;
 
         TransactionResult resp = new TransactionResult();
-        streamLoadManager.beginLoadTask(dbName, tableName, labelName, "", "", timeoutMillis, channelNum, channelId, resp);
+        streamLoadManager.beginLoadTaskFromFrontend(
+                dbName, tableName, labelName, "", "", timeoutMillis, channelNum, channelId, resp);
 
         StreamLoadTask task = streamLoadManager.getTaskById(1002L);
         Assert.assertNull(task);
@@ -289,7 +295,8 @@ public class StreamLoadManagerTest {
         long warehouseId = 0;
 
         TransactionResult resp = new TransactionResult();
-        streamLoadManager.beginLoadTask(dbName, tableName, labelName, "", "", timeoutMillis, resp, false, warehouseId);
+        streamLoadManager.beginLoadTaskFromBackend(
+                dbName, tableName, labelName, null, "", "", timeoutMillis, resp, false, warehouseId);
 
         Map<String, StreamLoadTask> idToStreamLoadTask =
                 Deencapsulation.getField(streamLoadManager, "idToStreamLoadTask");

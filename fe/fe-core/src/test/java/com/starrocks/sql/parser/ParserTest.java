@@ -41,6 +41,7 @@ import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
 import org.antlr.v4.runtime.atn.PredictionMode;
 import org.junit.Assert;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -387,7 +388,7 @@ class ParserTest {
         SessionVariable sessionVariable = new SessionVariable();
         try {
             SqlParser.parse(sql, sessionVariable).get(0);
-            fail("sql should fail.");
+            fail("sql should fail: " + sql);
         } catch (Exception e) {
             System.out.println(e.getMessage());
             assertContains(e.getMessage(), expecting);
@@ -561,7 +562,6 @@ class ParserTest {
                 "PROPERTIES (\n" +
                 " \"replication_num\" = \"1\"\n" +
                 ");", ")"));
-        arguments.add(Arguments.of("analyze table tt abc", "';'"));
         arguments.add(Arguments.of("select 1,, from tbl", "a legal identifier"));
         arguments.add(Arguments.of("INSTALL PLUGIN FRO xxx", "FROM"));
         arguments.add(Arguments.of("select (1 + 1) + 1) from tbl", "';'"));
@@ -577,6 +577,17 @@ class ParserTest {
         arguments.add(Arguments.of("create MATERIALIZED VIEW  as select * from (t1 join t2);",
                 "the most similar input is {a legal identifier}."));
         return arguments.stream();
+    }
+
+    @Test
+    public void testTranslateFunction() {
+        String sql = "select translate('abcabc', 'ab', '12') as test;";
+        SessionVariable sessionVariable = new SessionVariable();
+        try {
+            SqlParser.parse(sql, sessionVariable);
+        } catch (Exception e) {
+            Assertions.fail("sql should success. errMsg: " +  e.getMessage());
+        }
     }
 
 }

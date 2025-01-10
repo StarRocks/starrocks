@@ -40,6 +40,7 @@
 #include <atomic>
 #include <functional>
 #include <iostream>
+#include <optional>
 #include <thread>
 #include <unordered_set>
 #include <utility>
@@ -180,6 +181,11 @@ public:
 
         virtual double double_value() const { return bit_cast<double>(_value.load(std::memory_order_relaxed)); }
 
+        virtual void set_min(int64_t min) { _min_value.emplace(min); }
+        virtual void set_max(int64_t max) { _max_value.emplace(max); }
+        virtual std::optional<int64_t> min_value() const { return _min_value; }
+        virtual std::optional<int64_t> max_value() const { return _max_value; }
+
         TUnit::type type() const { return _type; }
 
         const TCounterStrategy& strategy() const { return _strategy; }
@@ -212,6 +218,8 @@ public:
         std::atomic<int64_t> _value;
         const TUnit::type _type;
         const TCounterStrategy _strategy;
+        std::optional<int64_t> _min_value;
+        std::optional<int64_t> _max_value;
     };
 
     class ConcurrentTimerCounter;

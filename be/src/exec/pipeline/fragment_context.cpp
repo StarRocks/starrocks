@@ -19,6 +19,8 @@
 #include "exec/data_sink.h"
 #include "exec/pipeline/group_execution/execution_group.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
+#include "exec/pipeline/schedule/pipeline_timer.h"
+#include "exec/pipeline/schedule/timeout_tasks.h"
 #include "exec/pipeline/stream_pipeline_driver.h"
 #include "exec/workgroup/work_group.h"
 #include "runtime/batch_write/batch_write_mgr.h"
@@ -30,6 +32,7 @@
 #include "util/threadpool.h"
 #include "util/thrift_rpc_helper.h"
 #include "util/time.h"
+#include "util/uid_util.h"
 
 namespace starrocks::pipeline {
 
@@ -43,6 +46,7 @@ FragmentContext::~FragmentContext() {
     if (_plan != nullptr) {
         _plan->close(_runtime_state.get());
     }
+    clear_pipeline_timer();
 }
 
 size_t FragmentContext::total_dop() const {
@@ -75,6 +79,9 @@ void FragmentContext::count_down_execution_group(size_t val) {
     if (!all_groups_finished) {
         return;
     }
+    // close fragment context states
+    // clear all pipeline timers
+    clear_pipeline_timer();
 
     // dump profile if necessary
     auto* state = runtime_state();
@@ -200,6 +207,14 @@ void FragmentContext::set_final_status(const Status& status) {
             iterate_drivers([executor](const DriverPtr& driver) { executor->cancel(driver.get()); });
         }
 
+        // cancel drivers in event scheduler
+        iterate_drivers([](const DriverPtr& driver) {
+            driver->set_need_check_reschedule(true);
+            if (driver->is_in_blocked()) {
+                driver->observer()->cancel_trigger();
+            }
+        });
+
         for (const auto& stream_load_context : _stream_load_contexts) {
             if (stream_load_context->body_sink) {
                 stream_load_context->body_sink->cancel(_s_status);
@@ -228,6 +243,7 @@ void FragmentContext::set_stream_load_contexts(const std::vector<StreamLoadConte
     _stream_load_contexts = std::move(contexts);
 }
 
+// Note: this function should be thread safe
 void FragmentContext::cancel(const Status& status) {
     if (!status.ok() && _runtime_state != nullptr && _runtime_state->query_ctx() != nullptr) {
         _runtime_state->query_ctx()->release_workgroup_token_once();
@@ -325,6 +341,33 @@ void FragmentContext::destroy_pass_through_chunk_buffer() {
     }
 }
 
+Status FragmentContext::set_pipeline_timer(PipelineTimer* timer) {
+    _pipeline_timer = timer;
+    _timeout_task = new CheckFragmentTimeout(this);
+    timespec tm = butil::microseconds_to_timespec(butil::gettimeofday_us());
+    tm.tv_sec += runtime_state()->query_ctx()->get_query_expire_seconds();
+    RETURN_IF_ERROR(_pipeline_timer->schedule(_timeout_task, tm));
+    return Status::OK();
+}
+
+void FragmentContext::clear_pipeline_timer() {
+    if (_pipeline_timer) {
+        if (!_rf_timeout_tasks.empty()) {
+            for (auto& [ignore, task] : _rf_timeout_tasks) {
+                if (task) {
+                    task->unschedule(_pipeline_timer);
+                    SAFE_DELETE(task);
+                }
+            }
+            _rf_timeout_tasks.clear();
+        }
+        if (_timeout_task) {
+            _timeout_task->unschedule(_pipeline_timer);
+            SAFE_DELETE(_timeout_task);
+        }
+    }
+}
+
 Status FragmentContext::reset_epoch() {
     _num_finished_epoch_pipelines = 0;
     const std::function<Status(Pipeline*)> caller = [this](Pipeline* pipeline) {
@@ -378,6 +421,7 @@ Status FragmentContext::prepare_active_drivers() {
     for (auto& group : _execution_groups) {
         RETURN_IF_ERROR(group->prepare_drivers(_runtime_state.get()));
     }
+    RETURN_IF_ERROR(submit_all_timer());
     return Status::OK();
 }
 
@@ -402,6 +446,33 @@ void FragmentContext::_close_stream_load_contexts() {
             _runtime_state->exec_env()->stream_context_mgr()->remove_channel_context(context);
         }
     }
+}
+
+void FragmentContext::init_event_scheduler() {
+    _event_scheduler = std::make_unique<EventScheduler>();
+    runtime_state()->runtime_profile()->add_info_string("EnableEventScheduler",
+                                                        enable_event_scheduler() ? "true" : "false");
+}
+
+void FragmentContext::add_timer_observer(PipelineObserver* observer, uint64_t timeout) {
+    RFScanWaitTimeout* task;
+    if (auto iter = _rf_timeout_tasks.find(timeout); iter != _rf_timeout_tasks.end()) {
+        task = down_cast<RFScanWaitTimeout*>(iter->second);
+    } else {
+        task = new RFScanWaitTimeout(this);
+        _rf_timeout_tasks.emplace(timeout, task);
+    }
+    task->add_observer(_runtime_state.get(), observer);
+}
+
+Status FragmentContext::submit_all_timer() {
+    timespec tm = butil::microseconds_to_timespec(butil::gettimeofday_us());
+    for (auto [delta_ns, task] : _rf_timeout_tasks) {
+        timespec abstime = tm;
+        abstime.tv_nsec += delta_ns;
+        RETURN_IF_ERROR(_pipeline_timer->schedule(task, abstime));
+    }
+    return Status::OK();
 }
 
 } // namespace starrocks::pipeline

@@ -42,7 +42,7 @@ public:
     Status init(std::unique_ptr<RandomAccessFile> rf, const PersistentIndexSstablePB& sstable_pb, Cache* cache,
                 bool need_filter = true);
 
-    static Status build_sstable(const phmap::btree_map<std::string, std::list<IndexValueWithVer>, std::less<>>& map,
+    static Status build_sstable(const phmap::btree_map<std::string, IndexValueWithVer, std::less<>>& map,
                                 WritableFile* wf, uint64_t* filesz);
 
     // multi_get can get multi keys at onces

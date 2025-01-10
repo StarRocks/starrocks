@@ -44,6 +44,8 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.ToNumberPolicy;
 import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
 import com.starrocks.common.VectorSearchOptions;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -269,6 +271,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_QUERY_TABLET_AFFINITY = "enable_query_tablet_affinity";
 
+    public static final String SKIP_LOCAL_DISK_CACHE = "skip_local_disk_cache";
+
+    public static final String SKIP_PAGE_CACHE = "skip_page_cache";
+
     public static final String ENABLE_TABLET_INTERNAL_PARALLEL = "enable_tablet_internal_parallel";
     public static final String ENABLE_TABLET_INTERNAL_PARALLEL_V2 = "enable_tablet_internal_parallel_v2";
 
@@ -345,6 +351,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_ENABLE_DP_JOIN_REORDER = "cbo_enable_dp_join_reorder";
     public static final String CBO_MAX_REORDER_NODE_USE_DP = "cbo_max_reorder_node_use_dp";
     public static final String CBO_ENABLE_GREEDY_JOIN_REORDER = "cbo_enable_greedy_join_reorder";
+    public static final String CBO_MAX_REORDER_NODE_USE_GREEDY = "cbo_max_reorder_node_use_greedy";
     public static final String CBO_ENABLE_REPLICATED_JOIN = "cbo_enable_replicated_join";
     public static final String CBO_USE_CORRELATED_JOIN_ESTIMATE = "cbo_use_correlated_join_estimate";
     public static final String ALWAYS_COLLECT_LOW_CARD_DICT = "always_collect_low_card_dict";
@@ -362,6 +369,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_PRUNE_SHUFFLE_COLUMN_RATE = "cbo_prune_shuffle_column_rate";
     public static final String CBO_PUSH_DOWN_AGGREGATE_MODE = "cbo_push_down_aggregate_mode";
     public static final String CBO_PUSH_DOWN_AGGREGATE_ON_BROADCAST_JOIN = "cbo_push_down_aggregate_on_broadcast_join";
+    public static final String CBO_PUSH_DOWN_AGGREGATE_ON_BROADCAST_JOIN_ROW_COUNT_LIMIT =
+            "cbo_push_down_aggregate_on_broadcast_join_row_count_limit";
 
     public static final String CBO_PUSH_DOWN_DISTINCT_BELOW_WINDOW = "cbo_push_down_distinct_below_window";
     public static final String CBO_PUSH_DOWN_AGGREGATE = "cbo_push_down_aggregate";
@@ -575,6 +584,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_EXECUTION_ONLY = "enable_execution_only";
 
+    public static final String ENABLE_PIPELINE_EVENT_SCHEDULER = "enable_pipeline_event_scheduler";
+
     // Flag to control whether to proxy follower's query statement to leader/follower.
     public enum FollowerQueryForwardMode {
         DEFAULT,    // proxy queries by the follower's replay progress (default)
@@ -759,6 +770,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String SCAN_HIVE_PARTITION_NUM_LIMIT = "scan_hive_partition_num_limit";
 
+    public static final String SCAN_OLAP_PARTITION_NUM_LIMIT = "scan_olap_partition_num_limit";
+
     public static final String ENABLE_CROSS_JOIN = "enable_cross_join";
 
     public static final String ENABLE_NESTED_LOOP_JOIN = "enable_nested_loop_join";
@@ -910,6 +923,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
      */
     @VariableMgr.VarAttr(name = ENABLE_QUERY_TABLET_AFFINITY)
     private boolean enableQueryTabletAffinity = false;
+
+    @VariableMgr.VarAttr(name = SKIP_LOCAL_DISK_CACHE)
+    private boolean skipLocalDiskCache = false;
+
+    @VariableMgr.VarAttr(name = SKIP_PAGE_CACHE)
+    private boolean skipPageCache = false;
 
     @VariableMgr.VarAttr(name = RUNTIME_FILTER_SCAN_WAIT_TIME, flag = VariableMgr.INVISIBLE)
     private long runtimeFilterScanWaitTime = 20L;
@@ -1331,6 +1350,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = CBO_MAX_REORDER_NODE_USE_DP)
     private long cboMaxReorderNodeUseDP = 10;
 
+    @VariableMgr.VarAttr(name = CBO_MAX_REORDER_NODE_USE_GREEDY)
+    private long cboMaxReorderNodeUseGreedy = 16;
+
     @VariableMgr.VarAttr(name = CBO_ENABLE_GREEDY_JOIN_REORDER, flag = VariableMgr.INVISIBLE)
     private boolean cboEnableGreedyJoinReorder = true;
 
@@ -1525,6 +1547,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = CBO_PUSH_DOWN_AGGREGATE_ON_BROADCAST_JOIN, flag = VariableMgr.INVISIBLE)
     private boolean cboPushDownAggregateOnBroadcastJoin = true;
+
+    @VarAttr(name = CBO_PUSH_DOWN_AGGREGATE_ON_BROADCAST_JOIN_ROW_COUNT_LIMIT, flag = VariableMgr.INVISIBLE)
+    private long cboPushDownAggregateOnBroadcastJoinRowCountLimit = 250000;
 
     // auto, global, local
     @VarAttr(name = CBO_PUSH_DOWN_AGGREGATE, flag = VariableMgr.INVISIBLE)
@@ -2038,10 +2063,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private long groupConcatMaxLen = 1024;
 
     @VariableMgr.VarAttr(name = FULL_SORT_MAX_BUFFERED_ROWS, flag = VariableMgr.INVISIBLE)
-    private long fullSortMaxBufferedRows = 1024000;
+    private long fullSortMaxBufferedRows = 1 * 1024 * 1024 * 1024;
 
     @VariableMgr.VarAttr(name = FULL_SORT_MAX_BUFFERED_BYTES, flag = VariableMgr.INVISIBLE)
-    private long fullSortMaxBufferedBytes = 16L * 1024 * 1024;
+    private long fullSortMaxBufferedBytes = 256L * 1024 * 1024;
 
     @VariableMgr.VarAttr(name = FULL_SORT_LATE_MATERIALIZATION_V2, alias = FULL_SORT_LATE_MATERIALIZATION,
             show = FULL_SORT_LATE_MATERIALIZATION)
@@ -2109,6 +2134,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // For the maximum number of partitions allowed to be scanned in a single hive table, 0 means no limit.
     @VarAttr(name = SCAN_HIVE_PARTITION_NUM_LIMIT)
     private int scanHivePartitionNumLimit = 0;
+
+    // For the maximum number of partitions allowed to be scanned in a single olap table, 0 means no limit.
+    @VarAttr(name = SCAN_OLAP_PARTITION_NUM_LIMIT)
+    private int scanOlapPartitionNumLimit = 0;
 
     @VarAttr(name = ENABLE_CROSS_JOIN)
     private boolean enableCrossJoin = true;
@@ -2385,6 +2414,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_PHASED_SCHEDULER)
     private boolean enablePhasedScheduler = false;
 
+    @VarAttr(name = ENABLE_PIPELINE_EVENT_SCHEDULER)
+    private boolean enablePipelineEventScheduler = false;
+
     @VarAttr(name = PHASED_SCHEDULER_MAX_CONCURRENCY)
     private int phasedSchedulerMaxConcurrency = 2;
 
@@ -2577,6 +2609,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableQueryTabletAffinity() {
         return enableQueryTabletAffinity;
+    }
+
+    public boolean isSkipLocalDiskCache() {
+        return skipLocalDiskCache;
+    }
+
+    public boolean isSkipPageCache() {
+        return skipPageCache;
     }
 
     public int getStatisticCollectParallelism() {
@@ -2905,6 +2945,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     public void setInsertMaxFilterRatio(double insertMaxFilterRatio) {
+        if (insertMaxFilterRatio < 0 || insertMaxFilterRatio > 1) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_VALUE, SessionVariable.INSERT_MAX_FILTER_RATIO,
+                    insertMaxFilterRatio, "between 0.0 and 1.0");
+        }
         this.insertMaxFilterRatio = insertMaxFilterRatio;
     }
 
@@ -3114,6 +3158,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isCboEnableGreedyJoinReorder() {
         return cboEnableGreedyJoinReorder;
+    }
+
+    public long getCboMaxReorderNodeUseGreedy() {
+        return cboMaxReorderNodeUseGreedy;
     }
 
     public void disableGreedyJoinReorder() {
@@ -3576,6 +3624,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setCboPushDownAggregateOnBroadcastJoin(boolean cboPushDownAggregateOnBroadcastJoin) {
         this.cboPushDownAggregateOnBroadcastJoin = cboPushDownAggregateOnBroadcastJoin;
+    }
+
+    public long getCboPushDownAggregateOnBroadcastJoinRowCountLimit() {
+        return cboPushDownAggregateOnBroadcastJoinRowCountLimit;
+    }
+
+    public void setCboPushDownAggregateOnBroadcastJoinRowCountLimit(long cboPushDownAggregateOnBroadcastJoinRowCountLimit) {
+        this.cboPushDownAggregateOnBroadcastJoinRowCountLimit = cboPushDownAggregateOnBroadcastJoinRowCountLimit;
     }
 
     public String getCboPushDownAggregate() {
@@ -4177,6 +4233,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.scanHivePartitionNumLimit = scanHivePartitionNumLimit;
     }
 
+    public int getScanOlapPartitionNumLimit() {
+        return scanOlapPartitionNumLimit;
+    }
+
+    public void setScanOlapPartitionNumLimit(int scanOlapPartitionNumLimit) {
+        this.scanOlapPartitionNumLimit = scanOlapPartitionNumLimit;
+    }
+
     public boolean isEnableCrossJoin() {
         return enableCrossJoin;
     }
@@ -4599,6 +4663,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setEnable_wait_dependent_event(enableWaitDependentEvent);
         tResult.setConnector_max_split_size(connectorMaxSplitSize);
         tResult.setOrc_use_column_names(orcUseColumnNames);
+        tResult.setEnable_pipeline_event_scheduler(enablePipelineEventScheduler);
         return tResult;
     }
 

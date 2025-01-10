@@ -19,6 +19,43 @@
 #include "types/logical_type.h"
 
 namespace starrocks {
+
+class ColumnValueRangeTest : public ::testing::Test {
+public:
+    void SetUp() override {}
+
+protected:
+    std::stringstream _ss;
+    static const auto _int32_min_value = RunTimeTypeLimits<TYPE_INT>::min_value();
+    static const auto _int32_max_value = RunTimeTypeLimits<TYPE_INT>::max_value();
+};
+
+TEST_F(ColumnValueRangeTest, add_range_le_max) {
+    ColumnValueRange<int32_t> range("c_int32", TYPE_INT, _int32_min_value, _int32_max_value, 5, _int32_max_value);
+
+    ASSERT_OK(range.add_range(SQLFilterOp::FILTER_LESS_OR_EQUAL, _int32_max_value));
+    std::vector<TCondition> filters;
+    range.to_olap_filter<false>(filters);
+
+    ASSERT_EQ(filters.size(), 1);
+    _ss << filters[0];
+    ASSERT_EQ(_ss.str(),
+              "TCondition(column_name=c_int32, condition_op=>=, condition_values=[5], is_index_filter_only=0)");
+}
+
+TEST_F(ColumnValueRangeTest, add_range_ge_min) {
+    ColumnValueRange<int32_t> range("c_int32", TYPE_INT, _int32_min_value, _int32_max_value, _int32_min_value, 100);
+
+    ASSERT_OK(range.add_range(SQLFilterOp::FILTER_LARGER_OR_EQUAL, _int32_min_value));
+    std::vector<TCondition> filters;
+    range.to_olap_filter<false>(filters);
+
+    ASSERT_EQ(filters.size(), 1);
+    _ss << filters[0];
+    ASSERT_EQ(_ss.str(),
+              "TCondition(column_name=c_int32, condition_op=<=, condition_values=[100], is_index_filter_only=0)");
+}
+
 TEST(NormalizeRangeTest, RangeTest) {
     const constexpr LogicalType Type = TYPE_INT;
     using CppType = RunTimeCppType<Type>;
@@ -81,7 +118,7 @@ TEST(NormalizeRangeTest, RangeTest) {
         // where range >= -limit and range in (1, 2, 3)
         ColumnValueRange<CppType> range("test", Type, std::numeric_limits<CppType>::lowest(),
                                         std::numeric_limits<CppType>::max());
-        ASSERT_ERROR(range.add_range(SQLFilterOp::FILTER_LARGER_OR_EQUAL, std::numeric_limits<CppType>::lowest()));
+        ASSERT_OK(range.add_range(SQLFilterOp::FILTER_LARGER_OR_EQUAL, std::numeric_limits<CppType>::lowest()));
         ASSERT_OK(range.add_fixed_values(SQLFilterOp::FILTER_IN, {1, 2, 3}));
         ASSERT_EQ(range._fixed_values.size(), 3);
         ASSERT_TRUE(range._fixed_values.count(1));

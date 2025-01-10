@@ -58,11 +58,9 @@ import com.starrocks.sql.common.PartitionDiffResult;
 import com.starrocks.sql.common.RangePartitionDiffer;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
-import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.parquet.Strings;
 
 import java.util.Collections;
 import java.util.Iterator;
@@ -76,7 +74,6 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.sql.common.SyncPartitionUtils.createRange;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.getStr2DateExpr;
-import static com.starrocks.sql.optimizer.rule.transformation.partition.PartitionSelector.getExpiredPartitionsByRetentionCondition;
 
 public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner {
     private static final int CREATE_PARTITION_BATCH_SIZE = 64;
@@ -102,7 +99,6 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
         Range<PartitionKey> rangeToInclude = SyncPartitionUtils.createRange(start, end, partitionColumn);
         PartitionDiffResult result = differ.computePartitionDiff(rangeToInclude);
         if (result == null) {
-            // TODO: throw exception?
             LOG.warn("compute range partition diff failed: mv: {}", mv.getName());
             return false;
         }
@@ -243,6 +239,9 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
                     // if use method below, it will break in the 2th TaskRun because ref-table has not updated in the
                     // specific start and end ranges.
                     return mvRangePartitionNames;
+                } else if (force) {
+                    // should refresh all related partitions if user want to do force refresh
+                    return mvRangePartitionNames;
                 } else {
                     // If the user specifies the start and end ranges, and the non-partitioned table still changes,
                     // it should be refreshed according to the user-specified range, not all partitions.
@@ -335,24 +334,10 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
         return inputRanges.keySet();
     }
 
-    private void filterPartitionsByTTL(Map<String, PCell> toRefreshPartitions,
-                                       boolean isMockPartitionIds) {
-        if (CollectionUtils.sizeIsEmpty(toRefreshPartitions)) {
-            return;
-        }
-        // filter partitions by partition_retention_condition
-        String ttlCondition = mv.getTableProperty().getPartitionRetentionCondition();
-        if (!Strings.isNullOrEmpty(ttlCondition)) {
-            List<String> expiredPartitionNames = getExpiredPartitionsByRetentionCondition(db, mv, ttlCondition,
-                    toRefreshPartitions, isMockPartitionIds);
-            // remove the expired partitions
-            if (CollectionUtils.isNotEmpty(expiredPartitionNames)) {
-                LOG.info("Filter partitions by partition_retention_condition, ttl_condition:{}, expired:{}",
-                        ttlCondition, expiredPartitionNames);
-                // remove expired partition names from toRefreshPartitions
-                expiredPartitionNames.stream().forEach(toRefreshPartitions::remove);
-            }
-        }
+    protected void filterPartitionsByTTL(Map<String, PCell> toRefreshPartitions,
+                                         boolean isMockPartitionIds) {
+        super.filterPartitionsByTTL(toRefreshPartitions, isMockPartitionIds);
+
         // filter partitions by partition_ttl_number
         int partitionTTLNumber = mvContext.getPartitionTTLNumber();
         int toRefreshPartitionNum = toRefreshPartitions.size();

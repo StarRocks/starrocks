@@ -411,11 +411,12 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 db, olapTable, Lists.newArrayList("v2"), Lists.newArrayList(Type.BIGINT),
                 StatsConstants.ScheduleType.ONCE, properties);
 
-        Config.histogram_enable_table_sample = false;
+        Config.enable_use_table_sample_collect_statistics = false;
         Function<String, String> normalize = str -> str.replaceAll(" +", " ").toLowerCase();
         String sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
                 db, olapTable, 0.1, 64L, Maps.newHashMap(), "v2", Type.BIGINT);
-        Assert.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics SELECT %s, 'v2', %d, " +
+        Assert.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics(" +
+                        "table_id, column_name, db_id, table_name, buckets, mcv, update_time) SELECT %s, 'v2', %d, " +
                         "'test.t0_stats', histogram(`column_key`, cast(64 as int), cast(0.1 as double)),  " +
                         "NULL, NOW() FROM (   SELECT `v2` as column_key    FROM `test`.`t0_stats`     " +
                         "WHERE  rand() <= 0.100000 and `v2` is not null    ORDER BY `v2` LIMIT 10000000) t",
@@ -426,7 +427,8 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         mostCommonValues.put("2", "20");
         sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
                 db, olapTable, 0.1, 64L, mostCommonValues, "v2", Type.BIGINT);
-        Assert.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics SELECT %d, 'v2', %d, " +
+        Assert.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics(" +
+                "table_id, column_name, db_id, table_name, buckets, mcv, update_time) SELECT %d, 'v2', %d, " +
                 "'test" +
                 ".t0_stats'," +
                 " " +
@@ -441,7 +443,8 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         mostCommonValues.put("1991-01-01", "20");
         sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
                 db, olapTable, 0.1, 64L, mostCommonValues, "v4", Type.DATE);
-        Assert.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics SELECT %d, 'v4', %d, " +
+        Assert.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics(" +
+                        "table_id, column_name, db_id, table_name, buckets, mcv, update_time) SELECT %d, 'v4', %d, " +
                         "'test" +
                         ".t0_stats', " +
                 "histogram(`column_key`, cast(64 as int), cast(0.1 as double)),  " +
@@ -458,7 +461,8 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         mostCommonValues.put("1991-01-01 00:00:00", "20");
         sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
                 db, olapTable, 0.1, 64L, mostCommonValues, "v5", Type.DATETIME);
-        Assert.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics SELECT %d, 'v5', %d, " +
+        Assert.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics(" +
+                        "table_id, column_name, db_id, table_name, buckets, mcv, update_time) SELECT %d, 'v5', %d, " +
                         "'test.t0_stats', " +
                         "histogram(`column_key`, cast(64 as int), cast(0.1 as double)),  " +
                         "'[[\"1991-01-01 00:00:00\",\"20\"],[\"0000-01-01 00:00:00\",\"10\"]]', NOW() FROM " +
@@ -467,10 +471,11 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         "`v5` not in (\"1991-01-01 00:00:00\",\"0000-01-01 00:00:00\") ORDER BY `v5` LIMIT 10000000) t",
                 t0StatsTableId, dbid)), normalize.apply(sql));
 
-        Config.histogram_enable_table_sample = true;
+        Config.enable_use_table_sample_collect_statistics = true;
         sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
                 db, olapTable, 0.1, 64L, mostCommonValues, "v5", Type.DATETIME);
-        Assert.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics SELECT %d, 'v5', %d, " +
+        Assert.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics(" +
+                        "table_id, column_name, db_id, table_name, buckets, mcv, update_time) SELECT %d, 'v5', %d, " +
                         "'test.t0_stats', " +
                         "histogram(`column_key`, cast(64 as int), cast(0.1 as double)),  " +
                         "'[[\"1991-01-01 00:00:00\",\"20\"],[\"0000-01-01 00:00:00\",\"10\"]]', NOW() FROM " +
@@ -1530,4 +1535,35 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         }
     }
 
+    @Test
+    public void testGetCollectibleColumns1() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE test.t_gen_col (" +
+                " c1 datetime NOT NULL," +
+                " c2 bigint," +
+                " c3 DATETIME NULL AS date_trunc('month', c1) " +
+                " ) " +
+                " DUPLICATE KEY(c1) " +
+                " PARTITION BY (c2, c3) " +
+                " PROPERTIES('replication_num'='1')");
+        Table table = starRocksAssert.getTable("test", "t_gen_col");
+        List<String> cols =  StatisticUtils.getCollectibleColumns(table);
+        Assert.assertTrue(cols.size() == 3);
+        Assert.assertTrue(cols.contains("c3"));
+        starRocksAssert.dropTable("test.t_gen_col");
+    }
+
+    @Test
+    public void testGetCollectibleColumns2() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE test.t_gen_col (" +
+                " c1 datetime NOT NULL," +
+                " c2 bigint" +
+                " ) " +
+                " DUPLICATE KEY(c1) " +
+                " PARTITION BY c2, date_trunc('month', c1) " +
+                " PROPERTIES('replication_num'='1')");
+        Table table = starRocksAssert.getTable("test", "t_gen_col");
+        List<String> cols =  StatisticUtils.getCollectibleColumns(table);
+        Assert.assertTrue(cols.size() == 2);
+        starRocksAssert.dropTable("test.t_gen_col");
+    }
 }

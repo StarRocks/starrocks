@@ -42,6 +42,7 @@ public:
     }
 
     Status set_finished(RuntimeState* state) override {
+        auto notify = _intersect_ctx->observable().defer_notify_sink();
         RETURN_IF_ERROR(_intersect_ctx->set_finished());
         return Status::OK();
     }
@@ -49,6 +50,8 @@ public:
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
     void close(RuntimeState* state) override;
+
+    Status prepare(RuntimeState* state) override;
 
 private:
     std::shared_ptr<IntersectContext> _intersect_ctx;
@@ -63,6 +66,7 @@ public:
             : SourceOperatorFactory(id, "intersect_output_source", plan_node_id),
               _intersect_partition_ctx_factory(std::move(intersect_partition_ctx_factory)),
               _dependency_index(dependency_index) {}
+    bool support_event_scheduler() const override { return true; }
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         return std::make_shared<IntersectOutputSourceOperator>(

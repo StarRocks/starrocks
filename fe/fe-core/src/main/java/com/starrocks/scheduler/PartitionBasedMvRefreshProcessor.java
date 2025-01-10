@@ -1034,7 +1034,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         // may be different from the defined query's output.
         // so set materialized view's defined outputs as target columns.
         List<Integer> queryOutputIndexes = materializedView.getQueryOutputIndices();
-        List<Column> baseSchema = materializedView.getBaseSchema();
+        List<Column> baseSchema = materializedView.getBaseSchemaWithoutGeneratedColumn();
         if (queryOutputIndexes != null && baseSchema.size() == queryOutputIndexes.size()) {
             List<String> targetColumnNames = queryOutputIndexes.stream()
                     .map(baseSchema::get)
@@ -1166,7 +1166,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             throw new StarRocksException("User Cancelled");
         }
 
-        StmtExecutor executor = new StmtExecutor(ctx, insertStmt);
+        StmtExecutor executor = StmtExecutor.newInternalExecutor(ctx, insertStmt);
         ctx.setExecutor(executor);
         if (ctx.getParent() != null && ctx.getParent().getExecutor() != null) {
             StmtExecutor parentStmtExecutor = ctx.getParent().getExecutor();

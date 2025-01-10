@@ -597,7 +597,9 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         native_file_path = file_path.native();
     }
     if (native_file_path.empty()) {
-        native_file_path = _hive_table->get_base_path() + scan_range.relative_path;
+        bool start_with_slash = !scan_range.relative_path.empty() && scan_range.relative_path.at(0) == '/';
+        native_file_path = _hive_table->get_base_path() +
+                           (start_with_slash ? scan_range.relative_path : "/" + scan_range.relative_path);
     }
 
     const auto& hdfs_scan_node = _provider->_hdfs_scan_node;
@@ -612,6 +614,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.fs = _pool.add(fs.release());
     scanner_params.path = native_file_path;
     scanner_params.file_size = _scan_range.file_length;
+    scanner_params.table_location = _hive_table->get_base_path();
     scanner_params.tuple_desc = _tuple_desc;
     scanner_params.materialize_slots = _materialize_slots;
     scanner_params.materialize_index_in_chunk = _materialize_index_in_chunk;
@@ -643,6 +646,11 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
 
     for (const auto& delete_file : scan_range.delete_files) {
         scanner_params.deletes.emplace_back(&delete_file);
+    }
+
+    if (scan_range.__isset.deletion_vector_descriptor) {
+        scanner_params.deletion_vector_descriptor =
+                std::make_shared<TDeletionVectorDescriptor>(scan_range.deletion_vector_descriptor);
     }
 
     if (scan_range.__isset.paimon_deletion_file && !scan_range.paimon_deletion_file.path.empty()) {

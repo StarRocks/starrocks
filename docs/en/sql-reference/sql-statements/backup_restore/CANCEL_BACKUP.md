@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # CANCEL BACKUP
 
-## Description
-
-Cancels an ongoing BACKUP task.
+Cancels an ongoing BACKUP task in a specified database.
 
 ## Syntax
 

@@ -10,9 +10,55 @@ After upgrading StarRocks to v3.3, DO NOT downgrade it directly to v3.2.0, v3.2.
 
 :::
 
+## 3.3.8
+
+Release date: January 3, 2025
+
+### Improvements
+
+- Added a cluster idle API to assist in determining cluster status. [#53850](https://github.com/StarRocks/starrocks/pull/53850)
+- Included node information and histogram metrics in JSON metrics. [#53735](https://github.com/StarRocks/starrocks/pull/53735)
+- Optimized the MemTable for Primary Key tables in shared-data clusters. [#54178](https://github.com/StarRocks/starrocks/pull/54178)
+- Optimized memory usage and statistics for Primary Key tables in shared-data clusters. [#54358](https://github.com/StarRocks/starrocks/pull/54358)
+- Introduced a limit on the number of partitions scanned per node for queries requiring full-table or large-scale partition scans, enhancing system stability by reducing scanning pressure on individual BE or CN nodes. [#53747](https://github.com/StarRocks/starrocks/pull/53747)
+- Supports collecting statistics of Paimon tables. [#52858](https://github.com/StarRocks/starrocks/pull/52858)
+- Supports configuration of S3 client request timeout for shared-data clusters. [#54211](https://github.com/StarRocks/starrocks/pull/54211)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- BE crashes caused by inconsistencies in the DelVec of Primary Key tables. [#53460](https://github.com/StarRocks/starrocks/pull/53460)
+- Issues with lock release of Primary Key tables in shared-data clusters. [#53878](https://github.com/StarRocks/starrocks/pull/53878)
+- Errors of UDFs nested in functions are not returned in query failures. [#44297](https://github.com/StarRocks/starrocks/pull/44297)
+- Transactions are blocked at the Decommission phase because they depend on the original replicas. [#49349](https://github.com/StarRocks/starrocks/pull/49349)
+- Queries against Delta Lake tables use relative paths instead of filenames for file retrieval. [#53949](https://github.com/StarRocks/starrocks/pull/53949)
+- An error is returned when querying Delta Lake Shallow Clone tables. [#54044](https://github.com/StarRocks/starrocks/pull/54044)
+- Case sensitivity issues when reading Paimon using JNI. [#54041](https://github.com/StarRocks/starrocks/pull/54041)
+- An error is returned during `INSERT OVERWRITE` operations on Hive tables created in Hive. [#53792](https://github.com/StarRocks/starrocks/pull/53792)
+- `SHOW TABLE STATUS` command does not validate view privileges. [#53811](https://github.com/StarRocks/starrocks/pull/53811)
+- Missing FE metrics. [#53058](https://github.com/StarRocks/starrocks/pull/53058)
+- Memory leaks in `INSERT` tasks. [#53809](https://github.com/StarRocks/starrocks/pull/53809)
+- Concurrency issues caused by missing write locks in replication tasks. [#54061](https://github.com/StarRocks/starrocks/pull/54061)
+- `partition_ttl` of tables in the `statistics` database does not take effect. [#54398](https://github.com/StarRocks/starrocks/pull/54398)
+- Query Cache-related issues: 
+  - Crashes when Query Cache is enabled with Group Execution. [#54363](https://github.com/StarRocks/starrocks/pull/54363) 
+  - Runtime Filter crashes. [#54305](https://github.com/StarRocks/starrocks/pull/54305)
+- Issues with materialized view Union Rewrite. [#54293](https://github.com/StarRocks/starrocks/pull/54293)
+- Missing padding in string updates for partial updates in Primary Key tables. [#54182](https://github.com/StarRocks/starrocks/pull/54182)
+- Incorrect execution plans for `max(count(distinct))` when low-cardinality optimization is enabled. [#53403](https://github.com/StarRocks/starrocks/pull/53403)
+- Issues with changing the `excluded_refresh_tables` parameter of materialized views. [#53394](https://github.com/StarRocks/starrocks/pull/53394)
+
+### Behavior Changes
+
+- Changed the default value of `persistent_index_type` for Primary Key tables in shared-data clusters to `CLOUD_NATIVE`, that is, enabled Persistent Index by default. [#52209](https://github.com/StarRocks/starrocks/pull/52209)
+
 ## 3.3.7
 
 Release date: November 29, 2024
+
+### New Features
+- Added a new Materialized View parameter, `excluded_refresh_tables`, exclude tables that need to be refreshed. [#50926](https://github.com/StarRocks/starrocks/pull/50926)
 
 ### Improvements
 

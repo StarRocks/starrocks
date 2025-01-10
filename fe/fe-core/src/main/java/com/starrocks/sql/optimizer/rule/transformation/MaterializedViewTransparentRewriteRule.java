@@ -37,7 +37,6 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvPartitionCompensator;
@@ -51,6 +50,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -157,10 +157,10 @@ public class MaterializedViewTransparentRewriteRule extends TransformationRule {
         logMVRewrite(context, this, "MV to refresh partition info: {}", mvUpdateInfo);
 
         MaterializationContext mvContext = MvRewritePreprocessor.buildMaterializationContext(context,
-                mv, mvPlanContext, ConstantOperator.TRUE, mvUpdateInfo, queryTables);
+                mv, mvPlanContext, mvUpdateInfo, queryTables);
 
         Map<Column, ColumnRefOperator> columnToColumnRefMap = olapScanOperator.getColumnMetaToColRefMap();
-        List<Column> mvColumns = mv.getBaseSchema();
+        List<Column> mvColumns = mv.getBaseSchemaWithoutGeneratedColumn();
         List<ColumnRefOperator> expectOutputColumns = mvColumns.stream()
                 .map(c -> columnToColumnRefMap.get(c))
                 .collect(Collectors.toList());
@@ -200,14 +200,14 @@ public class MaterializedViewTransparentRewriteRule extends TransformationRule {
                                                    MvPlanContext mvPlanContext,
                                                    LogicalOlapScanOperator olapScanOperator,
                                                    Set<Table> queryTables) {
-        MvUpdateInfo mvUpdateInfo = new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.FULL);
+        MvUpdateInfo mvUpdateInfo = MvUpdateInfo.fullRefresh(mv);
         mvUpdateInfo.addMvToRefreshPartitionNames(mv.getPartitionNames());
 
         MaterializationContext mvContext = MvRewritePreprocessor.buildMaterializationContext(context,
-                mv, mvPlanContext, ConstantOperator.TRUE, mvUpdateInfo, queryTables);
+                mv, mvPlanContext, mvUpdateInfo, queryTables);
         logMVRewrite(mvContext, "Get mv transparent plan failed, and redirect to mv's defined query");
         Map<Column, ColumnRefOperator> columnToColumnRefMap = olapScanOperator.getColumnMetaToColRefMap();
-        List<Column> mvColumns = mv.getBaseSchema();
+        List<Column> mvColumns = mv.getBaseSchemaWithoutGeneratedColumn();
         List<ColumnRefOperator> expectOutputColumns = mvColumns.stream()
                 .map(c -> columnToColumnRefMap.get(c))
                 .collect(Collectors.toList());
@@ -232,16 +232,16 @@ public class MaterializedViewTransparentRewriteRule extends TransformationRule {
             return null;
         }
         MVCompensationBuilder mvCompensationBuilder = new MVCompensationBuilder(mvContext, mvUpdateInfo);
-        MVCompensation mvCompensation = mvCompensationBuilder.buildMvCompensation();
+        MVCompensation mvCompensation = mvCompensationBuilder.buildMvCompensation(Optional.empty());
         if (mvCompensation == null) {
             logMVRewrite(mvContext, "Failed to get mv compensation info: {}", mvContext.getMv().getName());
             return null;
         }
         logMVRewrite(mvContext, "Get mv compensation info: {}", mvCompensation);
-        if (mvCompensation.getState().isNoCompensate()) {
+        if (mvCompensation.isNoCompensate()) {
             return input;
         }
-        if (!mvCompensation.getState().isCompensate()) {
+        if (mvCompensation.isUncompensable()) {
             logMVRewrite(mvContext, "Return directly because mv compensation info cannot compensate: {}",
                     mvCompensation);
             return null;

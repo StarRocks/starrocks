@@ -1197,13 +1197,28 @@ public class HdfsFsManager {
         getFileSystem(path, loadProperties, tProperties);
     }
 
+    public void copyToLocal(String srcPath, String destPath, Map<String, String> properties) throws StarRocksException {
+        HdfsFs fileSystem = getFileSystem(srcPath, properties, null);
+        try {
+            fileSystem.getDFSFileSystem().copyToLocalFile(false, new Path(new WildcardURI(srcPath).getPath()),
+                    new Path(destPath), true);
+        } catch (InterruptedIOException e) {
+            Thread.interrupted(); // clear interrupted flag
+            LOG.error("Interrupted while copy {} to local {} ", srcPath, destPath, e);
+            throw new StarRocksException("Failed to copy " + srcPath + "to local " + destPath, e);
+        } catch (Exception e) {
+            LOG.error("Exception while copy {} to local {} ", srcPath, destPath, e);
+            throw new StarRocksException("Failed to copy " + srcPath + "to local " + destPath, e);
+        }
+    }
+
     public List<FileStatus> listFileMeta(String path, Map<String, String> properties) throws StarRocksException {
         WildcardURI pathUri = new WildcardURI(path);
         HdfsFs fileSystem = getFileSystem(path, properties, null);
         Path pathPattern = new Path(pathUri.getPath());
         try {
             FileStatus[] files = fileSystem.getDFSFileSystem().globStatus(pathPattern);
-            return Lists.newArrayList(files);
+            return files != null ? Lists.newArrayList(files) : Lists.newArrayList();
         } catch (FileNotFoundException e) {
             LOG.info("file not found: " + path, e);
             throw new StarRocksException("file not found: " + path, e);

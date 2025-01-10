@@ -65,6 +65,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public class ListPartitionPruner implements PartitionPruner {
@@ -261,7 +262,7 @@ public class ListPartitionPruner implements PartitionPruner {
         }
         List<String> result = Lists.newArrayList(partitionColumnNames);
 
-        java.util.function.Function<SlotRef, ColumnRefOperator> slotRefResolver = (slot) -> {
+        Function<SlotRef, ColumnRefOperator> slotRefResolver = (slot) -> {
             return scanOperator.getColumnNameToColRefMap().get(slot.getColumnName());
         };
         Consumer<SlotRef> slotRefConsumer = (slot) -> {
@@ -304,7 +305,7 @@ public class ListPartitionPruner implements PartitionPruner {
         if (!deduceExtraConjuncts) {
             return;
         }
-        java.util.function.Function<SlotRef, ColumnRefOperator> slotRefResolver = (slot) -> {
+        Function<SlotRef, ColumnRefOperator> slotRefResolver = (slot) -> {
             return scanOperator.getColumnNameToColRefMap().get(slot.getColumnName());
         };
         // The GeneratedColumn doesn't have the correct type info, let's help it
@@ -437,8 +438,10 @@ public class ListPartitionPruner implements PartitionPruner {
             return null;
         }
 
-        // Fold constants
         ScalarOperatorRewriter rewriter = new ScalarOperatorRewriter();
+        // implicit cast
+        result = rewriter.rewrite(result, ScalarOperatorRewriter.DEFAULT_TYPE_CAST_RULE);
+        // fold constant
         result = rewriter.rewrite(result, ScalarOperatorRewriter.FOLD_CONSTANT_RULES);
         return result;
     }

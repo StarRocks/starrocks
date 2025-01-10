@@ -435,10 +435,9 @@ under the License.
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-compiler-plugin</artifactId>
-                    <version>3.8.1</version>
+                    <version>3.13.0</version>
+                    <!-- Do not change the version unless all external Spark clusters have upgraded JDK to a higher version.  -->
                     <configuration>
-                        <source>1.8</source>
-                        <target>1.8</target>
                         <release>8</release>
                     </configuration>
                 </plugin>

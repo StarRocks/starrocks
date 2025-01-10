@@ -57,10 +57,12 @@ namespace starrocks::parquet {
 
 struct SplitContext : public HdfsSplitContext {
     FileMetaDataPtr file_metadata;
+    SkipRowsContextPtr skip_rows_ctx;
 
     HdfsSplitContextPtr clone() override {
         auto ctx = std::make_unique<SplitContext>();
         ctx->file_metadata = file_metadata;
+        ctx->skip_rows_ctx = skip_rows_ctx;
         return ctx;
     }
 };
@@ -69,8 +71,7 @@ class FileReader {
 public:
     FileReader(int chunk_size, RandomAccessFile* file, size_t file_size,
                const DataCacheOptions& datacache_options = DataCacheOptions(),
-               io::SharedBufferedInputStream* sb_stream = nullptr,
-               const std::set<int64_t>* _need_skip_rowids = nullptr);
+               io::SharedBufferedInputStream* sb_stream = nullptr, SkipRowsContextPtr skipRowsContext = nullptr);
     ~FileReader();
 
     Status init(HdfsScannerContext* scanner_ctx);
@@ -82,6 +83,8 @@ public:
     Status collect_scan_io_ranges(std::vector<io::SharedBufferedInputStream::IORange>* io_ranges);
 
     size_t row_group_size() const { return _row_group_size; }
+
+    const std::vector<std::shared_ptr<GroupReader>>& group_readers() const { return _row_group_readers; }
 
 private:
     int _chunk_size;
@@ -142,7 +145,7 @@ private:
     io::SharedBufferedInputStream* _sb_stream = nullptr;
     GroupReaderParam _group_reader_param;
     std::shared_ptr<MetaHelper> _meta_helper = nullptr;
-    const std::set<int64_t>* _need_skip_rowids;
+    SkipRowsContextPtr _skip_rows_ctx = nullptr;
 };
 
 } // namespace starrocks::parquet

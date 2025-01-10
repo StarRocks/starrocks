@@ -42,6 +42,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import static com.starrocks.sql.optimizer.statistics.ColumnStatistic.DEFAULT_COLLECTION_SIZE;
+
 public abstract class HyperQueryJob {
     private static final Logger LOG = LogManager.getLogger(HyperQueryJob.class);
 
@@ -151,6 +153,7 @@ public abstract class HyperQueryJob {
         params.add("'" + data.getMax() + "'");
         params.add("'" + data.getMin() + "'");
         params.add("now()");
+        params.add(String.valueOf(data.getCollectionSize() <= 0 ? DEFAULT_COLLECTION_SIZE : data.getCollectionSize()));
         return "(" + String.join(", ", params) + ")";
     }
 
@@ -169,6 +172,7 @@ public abstract class HyperQueryJob {
         row.add(new StringLiteral(data.getMax())); // max, 200 byte
         row.add(new StringLiteral(data.getMin())); // min, 200 byte
         row.add(nowFn()); // update time, 8 byte
+        row.add(new IntLiteral(data.getCollectionSize() <= 0 ? -1 : data.getCollectionSize(), Type.BIGINT)); // collection size 8 byte
         return row;
     }
 

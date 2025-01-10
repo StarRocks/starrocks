@@ -215,31 +215,11 @@ void jemalloc_tracker_daemon(void* arg_this) {
         JemallocStats stats;
         retrieve_jemalloc_stats(&stats);
 
-        // metadata
+        // Jemalloc metadata
         if (GlobalEnv::GetInstance()->jemalloc_metadata_traker() && stats.metadata > 0) {
             auto tracker = GlobalEnv::GetInstance()->jemalloc_metadata_traker();
             int64_t delta = stats.metadata - tracker->consumption();
             tracker->consume(delta);
-        }
-
-        // fragmentation
-        if (GlobalEnv::GetInstance()->jemalloc_fragmentation_traker()) {
-            if (stats.resident > 0 && stats.allocated > 0 && stats.metadata > 0) {
-                int64_t fragmentation = stats.resident - stats.allocated - stats.metadata;
-                fragmentation *= config::jemalloc_fragmentation_ratio;
-
-                // In case that released a lot of memory but not get purged, we would not consider it as fragmentation
-                bool released_a_lot = stats.allocated < (stats.resident * 0.5);
-                if (released_a_lot) {
-                    fragmentation = 0;
-                }
-
-                if (fragmentation >= 0) {
-                    auto tracker = GlobalEnv::GetInstance()->jemalloc_fragmentation_traker();
-                    int64_t delta = fragmentation - tracker->consumption();
-                    tracker->consume(delta);
-                }
-            }
         }
 
         nap_sleep(1, [daemon] { return daemon->stopped(); });

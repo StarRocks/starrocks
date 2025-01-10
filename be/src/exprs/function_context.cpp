@@ -38,7 +38,9 @@ FunctionContext* FunctionContext::create_context(RuntimeState* state, MemPool* p
     ctx->_mem_pool = pool;
     ctx->_return_type = return_type;
     ctx->_arg_types = arg_types;
+#if !defined(BUILD_FORMAT_LIB)
     ctx->_jvm_udaf_ctxs = std::make_unique<JavaUDAFContext>();
+#endif
     return ctx;
 }
 
@@ -52,7 +54,9 @@ FunctionContext* FunctionContext::create_context(RuntimeState* state, MemPool* p
     ctx->_mem_pool = pool;
     ctx->_return_type = return_type;
     ctx->_arg_types = arg_types;
+#if !defined(BUILD_FORMAT_LIB)
     ctx->_jvm_udaf_ctxs = std::make_unique<JavaUDAFContext>();
+#endif
     ctx->_is_distinct = is_distinct;
     ctx->_is_asc_order = is_asc_order;
     ctx->_nulls_first = nulls_first;

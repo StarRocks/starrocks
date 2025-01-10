@@ -40,6 +40,11 @@ struct HdfsSplitContext : public pipeline::ScanSplitContext {
 };
 using HdfsSplitContextPtr = std::unique_ptr<HdfsSplitContext>;
 
+struct SkipRowsContext {
+    std::set<int64_t> need_skip_rowids;
+};
+using SkipRowsContextPtr = std::shared_ptr<SkipRowsContext>;
+
 struct HdfsScanStats {
     int64_t raw_rows_read = 0;
     int64_t rows_read = 0;
@@ -100,7 +105,11 @@ struct HdfsScanStats {
     // Iceberg v2 only!
     int64_t iceberg_delete_file_build_ns = 0;
     int64_t iceberg_delete_files_per_scan = 0;
-    int64_t iceberg_delete_file_build_filter_ns = 0;
+
+    // deletion vector
+    int64_t deletion_vector_build_ns = 0;
+    int64_t deletion_vector_build_count = 0;
+    int64_t build_rowid_filter_ns = 0;
 };
 
 class HdfsParquetProfile;
@@ -178,6 +187,8 @@ struct HdfsScannerParams {
     std::string path;
     // The file size. -1 means unknown.
     int64_t file_size = -1;
+    // the table location
+    std::string table_location;
 
     const TupleDescriptor* tuple_desc = nullptr;
 
@@ -212,6 +223,8 @@ struct HdfsScannerParams {
     HdfsScanProfile* profile = nullptr;
 
     std::vector<const TIcebergDeleteFile*> deletes;
+
+    std::shared_ptr<TDeletionVectorDescriptor> deletion_vector_descriptor = nullptr;
 
     const TIcebergSchema* iceberg_schema = nullptr;
 
@@ -401,6 +414,7 @@ protected:
     static CompressionTypePB get_compression_type_from_path(const std::string& filename);
 
     void do_update_iceberg_v2_counter(RuntimeProfile* parquet_profile, const std::string& parent_name);
+    void do_update_deletion_vector_counter(RuntimeProfile* parent_profile);
 
 private:
     bool _opened = false;

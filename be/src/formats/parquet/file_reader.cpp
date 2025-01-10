@@ -65,13 +65,13 @@ namespace starrocks::parquet {
 
 FileReader::FileReader(int chunk_size, RandomAccessFile* file, size_t file_size,
                        const DataCacheOptions& datacache_options, io::SharedBufferedInputStream* sb_stream,
-                       const std::set<int64_t>* _need_skip_rowids)
+                       SkipRowsContextPtr skip_rows_context)
         : _chunk_size(chunk_size),
           _file(file),
           _file_size(file_size),
           _datacache_options(datacache_options),
           _sb_stream(sb_stream),
-          _need_skip_rowids(_need_skip_rowids) {}
+          _skip_rows_ctx(std::move(skip_rows_context)) {}
 
 FileReader::~FileReader() = default;
 
@@ -166,6 +166,7 @@ Status FileReader::_build_split_tasks() {
         split_ctx->split_start = start_offset;
         split_ctx->split_end = end_offset;
         split_ctx->file_metadata = _file_metadata;
+        split_ctx->skip_rows_ctx = _skip_rows_ctx;
         _scanner_ctx->split_tasks.emplace_back(std::move(split_ctx));
     }
     _scanner_ctx->merge_split_tasks();
@@ -311,24 +312,41 @@ bool FileReader::_filter_group_with_more_filter(const GroupReaderPtr& group_read
                         return true;
                     }
                 } else if (filter_type == StatisticsHelper::StatSupportedFilter::FILTER_IN) {
+                    if (!column_meta->statistics.__isset.null_count) continue;
+
                     std::vector<string> min_values;
                     std::vector<string> max_values;
+                    std::vector<int64_t> null_counts;
+                    std::vector<bool> null_pages;
+                    int64_t num_rows = group_reader->get_row_group_metadata()->num_rows;
 
                     const ParquetField* field = group_reader->get_column_parquet_field(slot->id());
                     if (field == nullptr) {
                         LOG(WARNING) << "Can't get " + slot->col_name() + "'s ParquetField in _read_min_max_chunk.";
                         continue;
                     }
-                    auto st = StatisticsHelper::get_min_max_value(_file_metadata.get(), slot->type(), column_meta,
-                                                                  field, min_values, max_values);
-                    if (!st.ok()) continue;
+                    Status st;
+
+                    null_counts.emplace_back(column_meta->statistics.null_count);
+                    null_pages.emplace_back(num_rows == column_meta->statistics.null_count);
+                    if (num_rows == column_meta->statistics.null_count) {
+                        min_values.emplace_back("");
+                        max_values.emplace_back("");
+                    } else {
+                        st = StatisticsHelper::get_min_max_value(_file_metadata.get(), slot->type(), column_meta, field,
+                                                                 min_values, max_values);
+                        if (!st.ok()) continue;
+                    }
+
                     Filter selected(min_values.size(), 1);
-                    st = StatisticsHelper::in_filter_on_min_max_stat(min_values, max_values, ctx, field,
-                                                                     _scanner_ctx->timezone, selected);
+                    st = StatisticsHelper::in_filter_on_min_max_stat(min_values, max_values, null_pages, null_counts,
+                                                                     ctx, field, _scanner_ctx->timezone, selected);
                     if (!st.ok()) continue;
                     if (!selected[0]) {
                         return true;
                     }
+                } else if (filter_type == StatisticsHelper::StatSupportedFilter::RF_MIN_MAX) {
+                    // already process in `_filter_group_with_bloom_filter_min_max_conjuncts`.
                 }
             }
         }
@@ -398,11 +416,6 @@ Status FileReader::_read_has_nulls(const GroupReaderPtr& group_reader, const std
             // statistics not exist in parquet file
             return Status::Aborted("No exist statistics");
         } else {
-            const ParquetField* field = group_reader->get_column_parquet_field(slot->id());
-            if (field == nullptr) {
-                LOG(WARNING) << "Can't get " + slot->col_name() + "'s ParquetField in _read_has_nulls.";
-                return Status::InternalError(strings::Substitute("Can't get $0 field", slot->col_name()));
-            }
             RETURN_IF_ERROR(StatisticsHelper::get_has_nulls(column_meta, *has_nulls));
         }
     }
@@ -443,8 +456,18 @@ Status FileReader::_read_min_max_chunk(const GroupReaderPtr& group_reader, const
             // statistics not exist in parquet file
             return Status::Aborted("No exist statistics");
         } else {
+            size_t num_rows = group_reader->get_row_group_metadata()->num_rows;
             std::vector<string> min_values;
             std::vector<string> max_values;
+            std::vector<bool> null_pages;
+
+            // If all values of one group is null, the statistics is like this:
+            // max=<null>, min=<null>, null_count=3, distinct_count=<null>, max_value=<null>, min_value=<null>
+            if (column_meta->statistics.__isset.null_count && column_meta->statistics.null_count == num_rows) {
+                (*min_chunk)->columns()[i]->append_nulls(1);
+                (*max_chunk)->columns()[i]->append_nulls(1);
+                continue;
+            }
 
             const ParquetField* field = group_reader->get_column_parquet_field(slot->id());
             if (field == nullptr) {
@@ -454,10 +477,11 @@ Status FileReader::_read_min_max_chunk(const GroupReaderPtr& group_reader, const
 
             RETURN_IF_ERROR(StatisticsHelper::get_min_max_value(_file_metadata.get(), slot->type(), column_meta, field,
                                                                 min_values, max_values));
+            null_pages.emplace_back(false);
             RETURN_IF_ERROR(StatisticsHelper::decode_value_into_column((*min_chunk)->columns()[i], min_values,
-                                                                       slot->type(), field, ctx.timezone));
+                                                                       null_pages, slot->type(), field, ctx.timezone));
             RETURN_IF_ERROR(StatisticsHelper::decode_value_into_column((*max_chunk)->columns()[i], max_values,
-                                                                       slot->type(), field, ctx.timezone));
+                                                                       null_pages, slot->type(), field, ctx.timezone));
         }
     }
 
@@ -508,6 +532,7 @@ Status FileReader::_init_group_readers() {
     _group_reader_param.not_existed_slots = &fd_scanner_ctx.not_existed_slots;
     // for pageIndex
     _group_reader_param.min_max_conjunct_ctxs = fd_scanner_ctx.min_max_conjunct_ctxs;
+    _group_reader_param.predicate_tree = &fd_scanner_ctx.predicate_tree;
 
     int64_t row_group_first_row = 0;
     // select and create row group readers.
@@ -520,8 +545,8 @@ Status FileReader::_init_group_readers() {
             continue;
         }
 
-        auto row_group_reader =
-                std::make_shared<GroupReader>(_group_reader_param, i, _need_skip_rowids, row_group_first_row);
+        auto row_group_reader = std::make_shared<GroupReader>(_group_reader_param, i, &_skip_rows_ctx->need_skip_rowids,
+                                                              row_group_first_row);
         RETURN_IF_ERROR(row_group_reader->init());
 
         _group_reader_param.stats->parquet_total_row_groups += 1;
@@ -536,9 +561,9 @@ Status FileReader::_init_group_readers() {
         _row_group_readers.emplace_back(row_group_reader);
         int64_t num_rows = _file_metadata->t_metadata().row_groups[i].num_rows;
         // for iceberg v2 pos delete
-        if (_need_skip_rowids != nullptr && !_need_skip_rowids->empty()) {
-            auto start_iter = _need_skip_rowids->lower_bound(row_group_first_row);
-            auto end_iter = _need_skip_rowids->upper_bound(row_group_first_row + num_rows - 1);
+        if (_skip_rows_ctx != nullptr && !_skip_rows_ctx->need_skip_rowids.empty()) {
+            auto start_iter = _skip_rows_ctx->need_skip_rowids.lower_bound(row_group_first_row);
+            auto end_iter = _skip_rows_ctx->need_skip_rowids.upper_bound(row_group_first_row + num_rows - 1);
             num_rows -= std::distance(start_iter, end_iter);
         }
         _total_row_count += num_rows;

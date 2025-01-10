@@ -451,7 +451,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_publish_multi_times) {
 }
 
 TEST_P(LakePrimaryKeyPublishTest, test_publish_with_oom) {
-    config::skip_lake_pk_preload = true;
+    config::skip_pk_preload = true;
     auto [chunk0, indexes] = gen_data_and_index(kChunkSize, 0, true, true);
     auto txns = std::vector<int64_t>();
     auto version = 1;
@@ -478,7 +478,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_publish_with_oom) {
         EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
     }
     _update_mgr->mem_tracker()->set_limit(old_limit);
-    config::skip_lake_pk_preload = false;
+    config::skip_pk_preload = false;
 }
 
 TEST_P(LakePrimaryKeyPublishTest, test_publish_concurrent) {
@@ -899,6 +899,55 @@ TEST_P(LakePrimaryKeyPublishTest, test_recover_with_dels2) {
         check_local_persistent_index_meta(tablet_id, version);
     }
     config::enable_primary_key_recover = false;
+}
+
+TEST_P(LakePrimaryKeyPublishTest, test_index_load_failure) {
+    auto [chunk0, indexes] = gen_data_and_index(kChunkSize, 0, true, true);
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    bool ingest_failure = true;
+    std::string sync_point = "lake_index_load.1";
+    SyncPoint::GetInstance()->SetCallBack(sync_point, [&](void* arg) {
+        if (ingest_failure) {
+            *(Status*)arg = Status::AlreadyExist("ut_test");
+            ingest_failure = false;
+        } else {
+            ingest_failure = true;
+        }
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    for (int i = 0; i < 6; i++) {
+        int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        // upsert
+        ASSERT_OK(delta_writer->write(*chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        // Publish version
+        ASSERT_FALSE(publish_single_version(tablet_id, version + 1, txn_id).ok());
+        ASSERT_TRUE(publish_single_version(tablet_id, version + 1, txn_id).ok());
+        EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
+        EXPECT_TRUE(_update_mgr->TEST_check_primary_index_cache_ref(tablet_id, 1));
+        EXPECT_TRUE(_update_mgr->try_remove_primary_index_cache(tablet_id));
+        version++;
+    }
+    SyncPoint::GetInstance()->ClearCallBack(sync_point);
+    SyncPoint::GetInstance()->DisableProcessing();
+    ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+    EXPECT_EQ(new_tablet_metadata->rowsets_size(), 6);
+    ASSERT_EQ(kChunkSize, read_rows(tablet_id, version));
+    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
+        check_local_persistent_index_meta(tablet_id, version);
+    }
 }
 
 TEST_P(LakePrimaryKeyPublishTest, test_write_rebuild_persistent_index) {

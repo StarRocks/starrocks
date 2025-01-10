@@ -16,6 +16,7 @@
 
 #include <optional>
 #include <unordered_map>
+#include <unordered_set>
 
 #include "common/config.h"
 #include "exec/capture_version_node.h"
@@ -29,10 +30,12 @@
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
+#include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/result_sink_operator.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
 #include "exec/pipeline/scan/morsel.h"
 #include "exec/pipeline/scan/scan_operator.h"
+#include "exec/pipeline/schedule/common.h"
 #include "exec/pipeline/stream_pipeline_driver.h"
 #include "exec/scan_node.h"
 #include "exec/tablet_sink.h"
@@ -294,6 +297,11 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
     if (query_options.__isset.enable_spill && query_options.enable_spill) {
         RETURN_IF_ERROR(_query_ctx->init_spill_manager(query_options));
     }
+
+    for (const auto& action : request.debug_actions()) {
+        runtime_state->debug_action_mgr().add_action(action);
+    }
+
     _fragment_ctx->init_jit_profile();
     return Status::OK();
 }
@@ -743,8 +751,28 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
                                                                   tsink, fragment.output_exprs));
     }
     _fragment_ctx->set_data_sink(std::move(datasink));
-    auto group_with_pipelines = builder.build();
-    _fragment_ctx->set_pipelines(std::move(group_with_pipelines.first), std::move(group_with_pipelines.second));
+    auto [exec_groups, pipelines] = builder.build();
+    _fragment_ctx->set_pipelines(std::move(exec_groups), std::move(pipelines));
+
+    if (runtime_state->query_options().__isset.enable_pipeline_event_scheduler &&
+        runtime_state->query_options().enable_pipeline_event_scheduler) {
+        // check all pipeline in fragment support event scheduler
+        bool all_support_event_scheduler = true;
+        _fragment_ctx->iterate_pipeline([&all_support_event_scheduler](Pipeline* pipeline) {
+            auto* src = pipeline->source_operator_factory();
+            auto* sink = pipeline->sink_operator_factory();
+            all_support_event_scheduler = all_support_event_scheduler && src->support_event_scheduler();
+            all_support_event_scheduler = all_support_event_scheduler && sink->support_event_scheduler();
+            TRACE_SCHEDULE_LOG << src->get_name() << " " << src->support_event_scheduler();
+            TRACE_SCHEDULE_LOG << sink->get_name() << " " << sink->support_event_scheduler();
+        });
+
+        if (all_support_event_scheduler) {
+            _fragment_ctx->init_event_scheduler();
+            RETURN_IF_ERROR(_fragment_ctx->set_pipeline_timer(exec_env->pipeline_timer()));
+        }
+    }
+    runtime_state->set_enable_event_scheduler(_fragment_ctx->enable_event_scheduler());
 
     RETURN_IF_ERROR(_fragment_ctx->prepare_all_pipelines());
 
@@ -955,6 +983,8 @@ Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const
     if (fragment_ctx == nullptr) return Status::OK();
     RuntimeState* runtime_state = fragment_ctx->runtime_state();
 
+    std::unordered_set<int> notify_ids;
+
     for (const auto& [node_id, scan_ranges] : params.per_node_scan_ranges) {
         if (scan_ranges.size() == 0) continue;
         auto iter = fragment_ctx->morsel_queue_factories().find(node_id);
@@ -972,10 +1002,10 @@ Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const
         pipeline::ScanMorsel::build_scan_morsels(node_id, scan_ranges, true, &morsels, &has_more_morsel);
         RETURN_IF_ERROR(morsel_queue_factory->append_morsels(0, std::move(morsels)));
         morsel_queue_factory->set_has_more(has_more_morsel);
+        notify_ids.insert(node_id);
     }
 
     if (params.__isset.node_to_per_driver_seq_scan_ranges) {
-        UnifiedExecPlanFragmentParams uf_request{request, request};
         for (const auto& [node_id, per_driver_scan_ranges] : params.node_to_per_driver_seq_scan_ranges) {
             auto iter = fragment_ctx->morsel_queue_factories().find(node_id);
             if (iter == fragment_ctx->morsel_queue_factories().end()) {
@@ -996,8 +1026,16 @@ Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const
                 RETURN_IF_ERROR(morsel_queue_factory->append_morsels(driver_seq, std::move(morsels)));
             }
             morsel_queue_factory->set_has_more(has_more_morsel);
+            notify_ids.insert(node_id);
         }
     }
+
+    // notify all source
+    fragment_ctx->iterate_pipeline([&](Pipeline* pipeline) {
+        if (notify_ids.contains(pipeline->source_operator_factory()->plan_node_id())) {
+            pipeline->source_operator_factory()->observes().notify_source_observers();
+        }
+    });
 
     return Status::OK();
 }

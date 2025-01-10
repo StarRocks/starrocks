@@ -62,10 +62,10 @@ import com.starrocks.sql.ast.RefreshSchemeClause;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.MvRewritePreprocessor;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
-import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
@@ -78,10 +78,8 @@ import mockit.Mocked;
 import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.ClassRule;
 import org.junit.Rule;
@@ -90,7 +88,6 @@ import org.junit.rules.ExpectedException;
 import org.junit.rules.TemporaryFolder;
 import org.junit.rules.TestName;
 
-import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.Collection;
@@ -101,7 +98,7 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.MVTestUtils.waitingRollupJobV2Finish;
 
-public class CreateMaterializedViewTest {
+public class CreateMaterializedViewTest extends MVTestBase {
     private static final Logger LOG = LogManager.getLogger(CreateMaterializedViewTest.class);
 
     @Rule
@@ -114,12 +111,8 @@ public class CreateMaterializedViewTest {
     public static TemporaryFolder temp = new TemporaryFolder();
 
     private static ConnectContext connectContext;
-    private static StarRocksAssert starRocksAssert;
     private static Database testDb;
     private static GlobalStateMgr currentState;
-
-    private static long startSuiteTime = 0;
-    private long startCaseTime = 0;
 
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -133,7 +126,6 @@ public class CreateMaterializedViewTest {
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
-        startSuiteTime = Instant.now().getEpochSecond();
 
         if (!starRocksAssert.databaseExist("_statistics_")) {
             StatisticsMetaManager m = new StatisticsMetaManager();
@@ -331,18 +323,6 @@ public class CreateMaterializedViewTest {
 
     @AfterClass
     public static void afterClass() throws Exception {
-        PlanTestBase.cleanupEphemeralMVs(starRocksAssert, startSuiteTime);
-    }
-
-    @Before
-    public void before() {
-        startCaseTime = Instant.now().getEpochSecond();
-    }
-
-    @After
-    public void after() throws Exception {
-        // cleanup mv after each case
-        PlanTestBase.cleanupEphemeralMVs(starRocksAssert, startCaseTime);
     }
 
     private static void dropMv(String mvName) throws Exception {
@@ -2534,7 +2514,7 @@ public class CreateMaterializedViewTest {
                 "\"replication_num\" = \"1\"\n" +
                 ")\n" +
                 "as select date_trunc('month',k1) s1, k2 s2 from tbl1;";
-        assertParseFailWithException(sql, "Can not find database:unexisted_db1.");
+        assertParseFailWithException(sql, "Can not find database:unexisted_db1 in default_catalog.");
     }
 
     @Test
@@ -3178,20 +3158,6 @@ public class CreateMaterializedViewTest {
         testMVColumnAlias("(char_length(c_1_9)) + 1");
         testMVColumnAlias("(char_length(c_1_9)) + '$'");
         testMVColumnAlias("c_1_9 + c_1_10");
-    }
-
-    private Table getTable(String dbName, String mvName) {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), mvName);
-        Assert.assertNotNull(table);
-        return table;
-    }
-
-    private MaterializedView getMv(String dbName, String mvName) {
-        Table table = getTable(dbName, mvName);
-        Assert.assertTrue(table instanceof MaterializedView);
-        MaterializedView mv = (MaterializedView) table;
-        return mv;
     }
 
     @Test
@@ -4876,7 +4842,8 @@ public class CreateMaterializedViewTest {
                         "as select dt, province, sum(age) from t3 group by dt, province;");
                 Assert.fail();
             } catch (Exception e) {
-                Assert.assertTrue(e.getMessage().contains("Partition expression with function is not supported yet"));
+                Assert.assertTrue(e.getMessage().contains("List partition expression can only be ref-base-table's partition " +
+                        "expression but contains"));
             }
         }
         starRocksAssert.dropTable("t3");
@@ -5051,6 +5018,33 @@ public class CreateMaterializedViewTest {
         }
         starRocksAssert.dropTable("t3");
         starRocksAssert.dropTable("t4");
+    }
+
+    @Test
+    public void testHiveMVInExternalCatalog() throws DdlException {
+        try {
+            starRocksAssert.useCatalog("hive0");
+            String sql = "CREATE MATERIALIZED VIEW tpch.supplier_mv " +
+                    "DISTRIBUTED BY HASH(`s_suppkey`) BUCKETS 10 REFRESH MANUAL " +
+                    "AS select s_suppkey, s_nationkey, " +
+                    "sum(s_acctbal) as total_s_acctbal, count(s_phone) as s_phone_count from hive0.tpch.supplier as supp " +
+                    "group by s_suppkey, s_nationkey order by s_suppkey;";
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("Can not find database"));
+        } finally {
+            starRocksAssert.useCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+        }
+    }
+
+    @Test
+    public void testHiveMVInDefaultCatalog() throws Exception {
+        String sql = "CREATE MATERIALIZED VIEW supplier_mv " +
+                "DISTRIBUTED BY HASH(`s_suppkey`) BUCKETS 10 REFRESH MANUAL " +
+                "AS select s_suppkey, s_nationkey, " +
+                "sum(s_acctbal) as total_s_acctbal, count(s_phone) as s_phone_count from hive0.tpch.supplier as supp " +
+                "group by s_suppkey, s_nationkey order by s_suppkey;";
+        UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
     }
 
     @Test
@@ -5286,5 +5280,49 @@ public class CreateMaterializedViewTest {
         Assert.assertEquals("dt > current_date() - interval 1 month", retentionCondition);
         starRocksAssert.dropMaterializedView("mv1");
         starRocksAssert.dropTable("r1");
+    }
+
+    @Test
+    public void testCreateMVWithMultiCommonPartitionExpressions1() throws Exception {
+        starRocksAssert.withTable("create table tt1(k1 datetime, k2 datetime, v int) " +
+                "partition by date_trunc('day', k1), date_trunc('month', k2);\n");
+        starRocksAssert.withMaterializedView("\n" +
+                "CREATE MATERIALIZED VIEW mv1\n" +
+                "PARTITION BY (date_trunc('day', k1), date_trunc('month', k2))\n" +
+                "REFRESH ASYNC\n" +
+                "PROPERTIES(\n" +
+                "    \"auto_refresh_partitions_limit\"=\"30\"\n" +
+                ")\n" +
+                "as select * from tt1;");
+        MaterializedView mv = starRocksAssert.getMv("test", "mv1");
+        Assert.assertTrue(mv != null);
+        String alterTableSql = "ALTER MATERIALIZED VIEW mv1 SET ('partition_retention_condition' = " +
+                "'date_trunc(\\'day\\', k1) > current_date() - interval 2 month')";
+        starRocksAssert.alterMvProperties(alterTableSql);
+        String retentionCondition = mv.getTableProperty().getPartitionRetentionCondition();
+        Assert.assertEquals("date_trunc('day', k1) > current_date() - interval 2 month", retentionCondition);
+        starRocksAssert.dropMaterializedView("mv1");
+        starRocksAssert.dropTable("tt1");
+    }
+
+    @Test
+    public void testCreateMVWithMultiCommonPartitionExpressions2() throws Exception {
+        starRocksAssert.withTable("create table tt1(k1 datetime, k2 datetime, v int) " +
+                "partition by date_trunc('day', k1), date_trunc('month', k2);\n");
+        starRocksAssert.withMaterializedView("\n" +
+                "CREATE MATERIALIZED VIEW mv1\n" +
+                "PARTITION BY (date_trunc('day', k1), date_trunc('month', k2))\n" +
+                "REFRESH ASYNC\n" +
+                "PROPERTIES(\n" +
+                "    \"auto_refresh_partitions_limit\"=\"30\",\n" +
+                "   'partition_retention_condition' = 'date_trunc(\\'day\\', k1) > current_date() - interval 2 month'" +
+                ")\n" +
+                "as select * from tt1;");
+        MaterializedView mv = starRocksAssert.getMv("test", "mv1");
+        Assert.assertTrue(mv != null);
+        String retentionCondition = mv.getTableProperty().getPartitionRetentionCondition();
+        Assert.assertEquals("date_trunc('day', k1) > current_date() - interval 2 month", retentionCondition);
+        starRocksAssert.dropMaterializedView("mv1");
+        starRocksAssert.dropTable("tt1");
     }
 }

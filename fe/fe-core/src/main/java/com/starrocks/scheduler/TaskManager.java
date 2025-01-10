@@ -656,7 +656,7 @@ public class TaskManager implements MemoryTrackable {
                 .forEach(addResult);
 
         // history
-        taskRunManager.getTaskRunHistory().lookupHistoryByTaskNames(dbName, taskNames)
+        taskRunManager.getTaskRunHistory().lookupLastJobOfTasks(dbName, taskNames)
                 .stream()
                 .filter(taskRunFilter)
                 .forEach(addResult);
@@ -702,11 +702,10 @@ public class TaskManager implements MemoryTrackable {
                         .newBuilder(task)
                         .setExecuteOption(executeOption)
                         .build();
-
                 // TODO: To avoid the same query id collision, use a new query id instead of an old query id
                 taskRun.initStatus(status.getQueryId(), status.getCreateTime());
-                if (!taskRunManager.arrangeTaskRun(taskRun, true)) {
-                    LOG.warn("Submit task run to pending queue failed, reject the submit:{}", taskRun);
+                if (!taskRunScheduler.addPendingTaskRun(taskRun)) {
+                    LOG.warn("Submit task run to pending queue failed in follower, reject the submit:{}", taskRun);
                 }
                 break;
             // this will happen in build image
@@ -717,6 +716,7 @@ public class TaskManager implements MemoryTrackable {
             case FAILED:
                 taskRunManager.getTaskRunHistory().addHistory(status);
                 break;
+            case MERGED:
             case SUCCESS:
                 status.setProgress(100);
                 taskRunManager.getTaskRunHistory().addHistory(status);

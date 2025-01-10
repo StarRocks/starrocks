@@ -22,6 +22,8 @@
 #include "exprs/runtime_filter_bank.h"
 #include "runtime/global_dict/config.h"
 #include "runtime/runtime_state.h"
+#include "storage/column_and_predicate.h"
+#include "storage/column_or_predicate.h"
 #include "storage/column_predicate.h"
 #include "storage/olap_runtime_range_pruner.h"
 #include "storage/predicate_parser.h"
@@ -68,13 +70,13 @@ struct RuntimeColumnPredicateBuilder {
             if constexpr (ltype == TYPE_VARCHAR) {
                 auto cid = parser->column_id(*slot);
                 if (auto iter = global_dictmaps->find(cid); iter != global_dictmaps->end()) {
-                    build_minmax_range<RangeType, value_type, LowCardDictType, GlobalDictCodeDecoder>(range, rf,
+                    build_minmax_range<RangeType, limit_type, LowCardDictType, GlobalDictCodeDecoder>(range, rf,
                                                                                                       iter->second);
                 } else {
-                    build_minmax_range<RangeType, value_type, mapping_type, DummyDecoder>(range, rf, nullptr);
+                    build_minmax_range<RangeType, limit_type, mapping_type, DummyDecoder>(range, rf, nullptr);
                 }
             } else {
-                build_minmax_range<RangeType, value_type, mapping_type, DummyDecoder>(range, rf, nullptr);
+                build_minmax_range<RangeType, limit_type, mapping_type, DummyDecoder>(range, rf, nullptr);
             }
 
             std::vector<TCondition> filters;
@@ -82,7 +84,16 @@ struct RuntimeColumnPredicateBuilder {
 
             // if runtime filter generate an empty range we could return directly
             if (range.is_empty_value_range()) {
-                return Status::EndOfFile("EOF, Filter by always false runtime filter");
+                if (rf->has_null()) {
+                    std::vector<const ColumnPredicate*> new_preds;
+                    TypeInfoPtr type = get_type_info(limit_type, slot->type().precision, slot->type().scale);
+                    auto column_id = parser->column_id(*slot);
+                    ColumnPredicate* null_pred = pool->add(new_column_null_predicate(type, column_id, true));
+                    new_preds.emplace_back(null_pred);
+                    return new_preds;
+                } else {
+                    return Status::EndOfFile("EOF, Filter by always false runtime filter");
+                }
             }
 
             for (auto& f : filters) {
@@ -92,7 +103,25 @@ struct RuntimeColumnPredicateBuilder {
                 preds.emplace_back(p);
             }
 
-            return preds;
+            if (rf->has_null()) {
+                std::vector<const ColumnPredicate*> new_preds;
+                auto type = preds[0]->type_info_ptr();
+                auto column_id = preds[0]->column_id();
+
+                ColumnAndPredicate* and_pred = pool->add(new ColumnAndPredicate(type, column_id));
+                and_pred->add_child(preds.begin(), preds.end());
+
+                ColumnPredicate* null_pred = pool->add(new_column_null_predicate(type, column_id, true));
+
+                ColumnOrPredicate* or_pred = pool->add(new ColumnOrPredicate(type, column_id));
+                or_pred->add_child(and_pred);
+                or_pred->add_child(null_pred);
+                new_preds.emplace_back(or_pred);
+
+                return new_preds;
+            } else {
+                return preds;
+            }
         }
     }
 
@@ -135,13 +164,38 @@ struct RuntimeColumnPredicateBuilder {
             return decoder->decode(code);
         }
 
+        template <LogicalType Type>
+        ColumnPtr min_const_column(const TypeDescriptor& col_type) {
+            auto min_decode_value = min_value();
+            if constexpr (lt_is_decimal<Type>) {
+                return ColumnHelper::create_const_decimal_column<Type>(min_decode_value, col_type.precision,
+                                                                       col_type.scale, 1);
+            } else {
+                return ColumnHelper::create_const_column<Type>(min_decode_value, 1);
+            }
+        }
+
+        template <LogicalType Type>
+        ColumnPtr max_const_column(const TypeDescriptor& col_type) {
+            auto max_decode_value = max_value();
+            if constexpr (lt_is_decimal<Type>) {
+                return ColumnHelper::create_const_decimal_column<Type>(max_decode_value, col_type.precision,
+                                                                       col_type.scale, 1);
+            } else {
+                return ColumnHelper::create_const_column<Type>(max_decode_value, 1);
+            }
+        }
+
     private:
         const RuntimeFilter* runtime_filter;
         const Decoder* decoder;
     };
 
-    template <class Range, class value_type, LogicalType mapping_type, template <class> class Decoder, class... Args>
+    template <class Range, LogicalType SlotType, LogicalType mapping_type, template <class> class Decoder,
+              class... Args>
     static void build_minmax_range(Range& range, const JoinRuntimeFilter* rf, Args&&... args) {
+        using ValueType = typename RunTimeTypeTraits<SlotType>::CppType;
+
         const RuntimeBloomFilter<mapping_type>* filter = down_cast<const RuntimeBloomFilter<mapping_type>*>(rf);
         using DecoderType = Decoder<typename RunTimeTypeTraits<mapping_type>::CppType>;
         DecoderType decoder(std::forward<Args>(args)...);
@@ -153,7 +207,7 @@ struct RuntimeColumnPredicateBuilder {
             min_op = to_olap_filter_type(TExprOpcode::GT, false);
         }
         auto min_value = parser.min_value();
-        (void)range.add_range(min_op, static_cast<value_type>(min_value));
+        (void)range.add_range(min_op, static_cast<ValueType>(min_value));
 
         SQLFilterOp max_op;
         if (filter->right_close_interval()) {
@@ -163,7 +217,7 @@ struct RuntimeColumnPredicateBuilder {
         }
 
         auto max_value = parser.max_value();
-        (void)range.add_range(max_op, static_cast<value_type>(max_value));
+        (void)range.add_range(max_op, static_cast<ValueType>(max_value));
     }
 };
 } // namespace detail
@@ -199,8 +253,6 @@ inline Status OlapRuntimeScanRangePruner::_update(const ColumnIdToGlobalDictMap*
 
 inline auto OlapRuntimeScanRangePruner::_get_predicates(const ColumnIdToGlobalDictMap* global_dictmaps, size_t idx,
                                                         ObjectPool* pool) -> StatusOr<PredicatesRawPtrs> {
-    auto rf = _unarrived_runtime_filters[idx]->runtime_filter(_driver_sequence);
-    if (rf->has_null()) return PredicatesRawPtrs{};
     // convert to olap filter
     auto slot_desc = _slot_descs[idx];
     return type_dispatch_predicate<StatusOr<PredicatesRawPtrs>>(

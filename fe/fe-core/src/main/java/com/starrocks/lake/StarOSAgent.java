@@ -36,6 +36,7 @@ import com.staros.proto.PlacementRelationship;
 import com.staros.proto.QuitMetaGroupInfo;
 import com.staros.proto.ReplicaInfo;
 import com.staros.proto.ReplicaRole;
+import com.staros.proto.ReplicationType;
 import com.staros.proto.ServiceInfo;
 import com.staros.proto.ShardGroupInfo;
 import com.staros.proto.ShardInfo;
@@ -95,6 +96,17 @@ public class StarOSAgent {
 
     public boolean init(StarManagerServer server) {
         client = new StarClient(server);
+        client.connectServer(String.format("127.0.0.1:%d", Config.cloud_native_meta_port));
+        GlobalStateMgr.getCurrentState().getConfigRefreshDaemon().registerListener(() -> {
+            client.setClientReadTimeoutSec(Config.star_client_read_timeout_seconds);
+            client.setClientListTimeoutSec(Config.star_client_list_timeout_seconds);
+            client.setClientWriteTimeoutSec(Config.star_client_write_timeout_seconds);
+        });
+        return true;
+    }
+
+    public boolean initForTest() {
+        client = new StarClient(null);
         client.connectServer(String.format("127.0.0.1:%d", Config.cloud_native_meta_port));
         return true;
     }
@@ -734,7 +746,7 @@ public class StarOSAgent {
         }
     }
 
-    public long createWorkerGroup(String size, int replicaNumber) throws DdlException {
+    public long createWorkerGroup(String size, int replicaNumber, String replicationTypeStr) throws DdlException {
         prepare();
 
         // size should be x0, x1, x2, x4...
@@ -743,8 +755,18 @@ public class StarOSAgent {
         String owner = "Starrocks";
         WorkerGroupDetailInfo result = null;
         try {
+            ReplicationType replicationType = ReplicationType.NO_REPLICATION;
+            if (replicationTypeStr == null || replicationTypeStr.equalsIgnoreCase("NONE")) {
+                replicationType = ReplicationType.NO_REPLICATION;
+            } else if (replicationTypeStr.equalsIgnoreCase("SYNC")) {
+                replicationType = ReplicationType.SYNC;
+            } else if (replicationTypeStr.equalsIgnoreCase("ASYNC")) {
+                replicationType = ReplicationType.ASYNC;
+            } else {
+                throw new DdlException("Unknown replication type " + replicationTypeStr);
+            }
             result = client.createWorkerGroup(serviceId, owner, spec, Collections.emptyMap(),
-                    Collections.emptyMap(), replicaNumber);
+                    Collections.emptyMap(), replicaNumber, replicationType);
         } catch (StarClientException e) {
             LOG.warn("Failed to create worker group. error: {}", e.getMessage());
             throw new DdlException("Failed to create worker group. error: " + e.getMessage());

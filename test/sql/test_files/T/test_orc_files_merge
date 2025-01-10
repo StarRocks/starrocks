@@ -37,6 +37,7 @@ select * from files(
 select * from files(
     "path" = "oss://${oss_bucket}/test_files/orc_format/${uuid0}/*",
     "format" = "orc",
+    "fill_mismatch_column_with" = "null",
     "auto_detect_sample_files" = "2",
     "aws.s3.access_key" = "${oss_ak}",
     "aws.s3.secret_key" = "${oss_sk}",
@@ -44,6 +45,7 @@ select * from files(
 select k2, k5, k7 from files(
     "path" = "oss://${oss_bucket}/test_files/orc_format/${uuid0}/*",
     "format" = "orc",
+    "fill_mismatch_column_with" = "null",
     "auto_detect_sample_files" = "2",
     "aws.s3.access_key" = "${oss_ak}",
     "aws.s3.secret_key" = "${oss_sk}",
@@ -51,6 +53,17 @@ select k2, k5, k7 from files(
 select k1, k3, k8 from files(
     "path" = "oss://${oss_bucket}/test_files/orc_format/${uuid0}/*",
     "format" = "orc",
+    "fill_mismatch_column_with" = "null",
+    "auto_detect_sample_files" = "2",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+
+-- column mismatch
+select * from files(
+    "path" = "oss://${oss_bucket}/test_files/orc_format/${uuid0}/*",
+    "format" = "orc",
+    "fill_mismatch_column_with" = "none",
     "auto_detect_sample_files" = "2",
     "aws.s3.access_key" = "${oss_ak}",
     "aws.s3.secret_key" = "${oss_sk}",

@@ -22,6 +22,7 @@
 
 #include "common/compiler_util.h"
 #include "storage/lake/delta_writer.h"
+#include "storage/lake/load_spill_block_manager.h"
 #include "storage/storage_engine.h"
 #include "testutil/sync_point.h"
 #include "util/stack_trace_mutex.h"
@@ -29,6 +30,7 @@
 namespace starrocks::lake {
 
 class AsyncDeltaWriterImpl {
+    friend class MergeBlockTask;
     using Chunk = starrocks::Chunk;
 
 public:
@@ -70,6 +72,8 @@ public:
 
     [[nodiscard]] int64_t last_write_ts() const { return _writer->last_write_ts(); }
 
+    DeltaWriter* delta_writer() { return _writer.get(); }
+
 private:
     enum TaskType {
         kWriteTask = 0,
@@ -78,10 +82,11 @@ private:
     };
 
     struct Task {
-        explicit Task(TaskType t) : type(t) {}
+        explicit Task(TaskType t) : type(t), create_time_ns(MonotonicNanos()) {}
         virtual ~Task() = default;
 
         TaskType type;
+        int64_t create_time_ns;
     };
 
     struct WriteTask : public Task {
@@ -134,6 +139,28 @@ inline bool AsyncDeltaWriterImpl::closed() {
     return _closed;
 }
 
+class MergeBlockTask : public Runnable {
+public:
+    MergeBlockTask(std::shared_ptr<AsyncDeltaWriterImpl::FinishTask> finish_task, AsyncDeltaWriterImpl* async_writer)
+            : _finish_task(std::move(finish_task)), _async_writer(async_writer) {}
+
+    void run() override {
+        auto delta_writer = _async_writer->_writer.get();
+        if (_async_writer->closed()) {
+            _finish_task->cb(Status::InternalError("AsyncDeltaWriter has been closed"));
+            return;
+        }
+        auto res = delta_writer->finish_with_txnlog(_finish_task->finish_mode);
+        LOG_IF(ERROR, !res.ok()) << "Fail to finish write. tablet_id: " << delta_writer->tablet_id()
+                                 << " txn_id: " << delta_writer->txn_id() << ": " << res.status();
+        _finish_task->cb(std::move(res));
+    }
+
+private:
+    std::shared_ptr<AsyncDeltaWriterImpl::FinishTask> _finish_task;
+    AsyncDeltaWriterImpl* _async_writer;
+};
+
 inline int AsyncDeltaWriterImpl::execute(void* meta, bthread::TaskIterator<AsyncDeltaWriterImpl::TaskPtr>& iter) {
     TEST_SYNC_POINT("AsyncDeltaWriterImpl::execute:1");
     auto async_writer = static_cast<AsyncDeltaWriterImpl*>(meta);
@@ -142,13 +169,17 @@ inline int AsyncDeltaWriterImpl::execute(void* meta, bthread::TaskIterator<Async
         delta_writer->close();
         return 0;
     }
+    int num_tasks = 0;
     auto st = Status{};
+    int64_t pending_time_ns = 0;
     for (; iter; ++iter) {
         // It's safe to run without checking `closed()` but doing so can make the task quit earlier on cancel/error.
         if (async_writer->closed()) {
             st.update(Status::InternalError("AsyncDeltaWriter has been closed"));
         }
         auto task_ptr = *iter;
+        num_tasks += 1;
+        pending_time_ns += MonotonicNanos() - task_ptr->create_time_ns;
         switch (task_ptr->type) {
         case kWriteTask: {
             auto write_task = std::static_pointer_cast<WriteTask>(task_ptr);
@@ -170,19 +201,30 @@ inline int AsyncDeltaWriterImpl::execute(void* meta, bthread::TaskIterator<Async
         }
         case kFinishTask: {
             auto finish_task = std::static_pointer_cast<FinishTask>(task_ptr);
-            if (st.ok()) {
+            if (!st.ok()) {
+                finish_task->cb(st);
+            } else if (delta_writer->has_spill_block()) {
+                // If there are spill blocks, we merge them using another thread pool
+                auto merge_task = std::make_shared<MergeBlockTask>(finish_task, async_writer);
+                auto res = StorageEngine::instance()->load_spill_block_merge_executor()->get_thread_pool()->submit(
+                        merge_task);
+                if (!res.ok()) {
+                    st.update(res);
+                    LOG_IF(ERROR, !st.ok()) << "Fail to submit merge task: " << st;
+                    finish_task->cb(st);
+                }
+            } else {
                 auto res = delta_writer->finish_with_txnlog(finish_task->finish_mode);
                 st.update(res.status());
                 LOG_IF(ERROR, !st.ok()) << "Fail to finish write. tablet_id: " << delta_writer->tablet_id()
                                         << " txn_id: " << delta_writer->txn_id() << ": " << st;
                 finish_task->cb(std::move(res));
-            } else {
-                finish_task->cb(st);
             }
             break;
         }
         }
     }
+    async_writer->_writer->update_task_stat(num_tasks, pending_time_ns);
     return 0;
 }
 
@@ -336,6 +378,10 @@ int64_t AsyncDeltaWriter::last_write_ts() const {
     return _impl->last_write_ts();
 }
 
+DeltaWriter* AsyncDeltaWriter::delta_writer() {
+    return _impl->delta_writer();
+}
+
 StatusOr<AsyncDeltaWriterBuilder::AsyncDeltaWriterPtr> AsyncDeltaWriterBuilder::build() {
     ASSIGN_OR_RETURN(auto writer, DeltaWriterBuilder()
                                           .set_tablet_manager(_tablet_mgr)
@@ -351,6 +397,8 @@ StatusOr<AsyncDeltaWriterBuilder::AsyncDeltaWriterPtr> AsyncDeltaWriterBuilder::
                                           .set_schema_id(_schema_id)
                                           .set_partial_update_mode(_partial_update_mode)
                                           .set_column_to_expr_value(_column_to_expr_value)
+                                          .set_load_id(_load_id)
+                                          .set_profile(_profile)
                                           .build());
     auto impl = new AsyncDeltaWriterImpl(std::move(writer));
     return std::make_unique<AsyncDeltaWriter>(impl);

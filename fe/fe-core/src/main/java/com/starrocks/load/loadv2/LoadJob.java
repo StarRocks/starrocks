@@ -264,6 +264,10 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         this.id = id;
     }
 
+    protected void setLabel(String label) {
+        this.label = label;
+    }
+
     public Database getDb() throws MetaNotFoundException {
         // get db
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
@@ -283,6 +287,10 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
 
     public JobState getState() {
         return state;
+    }
+
+    protected void setState(JobState state) {
+        this.state = state;
     }
 
     public JobState getAcutalState() {
@@ -1234,11 +1242,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
                 && this.jobType.equals(other.jobType);
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        String json = GsonUtils.GSON.toJson(this);
-        Text.writeString(out, json);
-    }
+
 
     public void replayUpdateStateInfo(LoadJobStateUpdateInfo info) {
         state = info.getState();

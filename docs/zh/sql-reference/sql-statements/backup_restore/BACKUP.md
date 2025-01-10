@@ -5,15 +5,17 @@ keywords: ['beifen']
 
 # BACKUP
 
-## 功能
-
-StarRocks 支持备份以下对象：
+StarRocks 支持备份及恢复以下对象：
 
 - 内部数据库、表（所有类型和分区策略）和分区
 - External Catalog 的元数据（自 v3.4.0 开始支持）
 - 同步物化视图和异步物化视图
 - 逻辑视图（自 v3.4.0 开始支持）
 - UDF（自 v3.4.0 开始支持）
+
+:::tip
+有关备份和恢复的概述，请参阅 [备份和恢复指南](../../../administration/management/Backup_and_restore.md) 中。
+:::
 
 数据备份为异步操作。您可以通过 [SHOW BACKUP](./SHOW_BACKUP.md) 语句查看备份作业状态，或通过 [CANCEL BACKUP](./CANCEL_BACKUP.md) 语句取消备份作业。作业成功后，您可以通过 [SHOW SNAPSHOT](./SHOW_SNAPSHOT.md) 查看特定仓库对应的数据快照信息。
 

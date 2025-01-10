@@ -67,6 +67,7 @@ public:
 
     VectorizedInConstPredicate(const TExprNode& node) : Predicate(node), _is_not_in(node.in_predicate.is_not_in) {}
 
+    // _string_values is ColumnPtr, not deep copied, so once opened, should not be modified.
     VectorizedInConstPredicate(const VectorizedInConstPredicate& other)
             : Predicate(other),
               _is_not_in(other._is_not_in),
@@ -74,7 +75,10 @@ public:
               _null_in_set(other._null_in_set),
               _is_join_runtime_filter(other._is_join_runtime_filter),
               _eq_null(other._eq_null),
-              _array_size(other._array_size) {}
+              _array_size(other._array_size),
+              _array_buffer(other._array_buffer),
+              _hash_set(other._hash_set),
+              _string_values(other._string_values) {}
 
     ~VectorizedInConstPredicate() override = default;
 
@@ -381,6 +385,8 @@ public:
 
     bool null_in_set() const { return _null_in_set; }
 
+    bool is_eq_null() const { return _eq_null; }
+
     void set_null_in_set(bool v) { _null_in_set = v; }
 
     bool is_join_runtime_filter() const { return _is_join_runtime_filter; }
@@ -547,6 +553,8 @@ public:
             : _state(state), _pool(pool), _expr(expr) {}
 
     Status create();
+    // For string type, this interface will only copy the slice array, not add ColumnPtr,
+    // so be careful to manage the life cycle of source ColumnPtr.
     void add_values(const ColumnPtr& column, size_t column_offset);
     void use_array_set(size_t array_size) { _array_size = array_size; }
     void use_as_join_runtime_filter() { _is_join_runtime_filter = true; }

@@ -194,7 +194,7 @@ Status LakePersistentIndex::minor_compact() {
     }
     ASSIGN_OR_RETURN(auto wf, fs::new_writable_file(wopts, location));
     uint64_t filesize = 0;
-    RETURN_IF_ERROR(_immutable_memtable->flush(wf.get(), &filesize));
+    RETURN_IF_ERROR(_memtable->flush(wf.get(), &filesize));
     RETURN_IF_ERROR(wf->close());
 
     auto sstable = std::make_unique<PersistentIndexSstable>();
@@ -206,7 +206,7 @@ Status LakePersistentIndex::minor_compact() {
     PersistentIndexSstablePB sstable_pb;
     sstable_pb.set_filename(filename);
     sstable_pb.set_filesize(filesize);
-    sstable_pb.set_max_rss_rowid(_immutable_memtable->max_rss_rowid());
+    sstable_pb.set_max_rss_rowid(_memtable->max_rss_rowid());
     sstable_pb.set_encryption_meta(encryption_meta);
     auto* block_cache = _tablet_mgr->update_mgr()->block_cache();
     if (block_cache == nullptr) {
@@ -219,11 +219,10 @@ Status LakePersistentIndex::minor_compact() {
 }
 
 Status LakePersistentIndex::flush_memtable() {
-    if (_immutable_memtable != nullptr) {
-        RETURN_IF_ERROR(minor_compact());
-    }
-    _immutable_memtable = std::make_unique<PersistentIndexMemtable>(_memtable->max_rss_rowid());
-    _memtable.swap(_immutable_memtable);
+    RETURN_IF_ERROR(minor_compact());
+    auto max_rss_rowid = _memtable->max_rss_rowid();
+    _memtable.reset();
+    _memtable = std::make_unique<PersistentIndexMemtable>(max_rss_rowid);
     return Status::OK();
 }
 
@@ -243,24 +242,11 @@ Status LakePersistentIndex::get_from_sstables(size_t n, const Slice* keys, Index
     return Status::OK();
 }
 
-Status LakePersistentIndex::get_from_immutable_memtable(const Slice* keys, IndexValue* values,
-                                                        const KeyIndexSet& key_indexes, KeyIndexSet* found_key_indexes,
-                                                        int64_t version) const {
-    if (_immutable_memtable == nullptr || key_indexes.empty()) {
-        return Status::OK();
-    }
-    RETURN_IF_ERROR(_immutable_memtable->get(keys, values, key_indexes, found_key_indexes, version));
-    return Status::OK();
-}
-
 Status LakePersistentIndex::get(size_t n, const Slice* keys, IndexValue* values) {
     KeyIndexSet not_founds;
     // Assuming we always want the latest value now
     RETURN_IF_ERROR(_memtable->get(n, keys, values, &not_founds, -1));
     KeyIndexSet& key_indexes = not_founds;
-    KeyIndexSet found_key_indexes;
-    RETURN_IF_ERROR(get_from_immutable_memtable(keys, values, key_indexes, &found_key_indexes, -1));
-    set_difference(&key_indexes, found_key_indexes);
     RETURN_IF_ERROR(get_from_sstables(n, keys, values, &key_indexes, -1));
     return Status::OK();
 }
@@ -271,9 +257,6 @@ Status LakePersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue
     size_t num_found;
     RETURN_IF_ERROR(_memtable->upsert(n, keys, values, old_values, &not_founds, &num_found, _version.major_number()));
     KeyIndexSet& key_indexes = not_founds;
-    KeyIndexSet found_key_indexes;
-    RETURN_IF_ERROR(get_from_immutable_memtable(keys, old_values, key_indexes, &found_key_indexes, -1));
-    set_difference(&key_indexes, found_key_indexes);
     RETURN_IF_ERROR(get_from_sstables(n, keys, old_values, &key_indexes, -1));
     if (is_memtable_full()) {
         return flush_memtable();
@@ -307,9 +290,6 @@ Status LakePersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_v
     size_t num_found;
     RETURN_IF_ERROR(_memtable->erase(n, keys, old_values, &not_founds, &num_found, _version.major_number(), rowset_id));
     KeyIndexSet& key_indexes = not_founds;
-    KeyIndexSet found_key_indexes;
-    RETURN_IF_ERROR(get_from_immutable_memtable(keys, old_values, key_indexes, &found_key_indexes, -1));
-    set_difference(&key_indexes, found_key_indexes);
     RETURN_IF_ERROR(get_from_sstables(n, keys, old_values, &key_indexes, -1));
     if (is_memtable_full()) {
         return flush_memtable();
@@ -775,9 +755,6 @@ size_t LakePersistentIndex::memory_usage() const {
     size_t mem_usage = 0;
     if (_memtable != nullptr) {
         mem_usage += _memtable->memory_usage();
-    }
-    if (_immutable_memtable != nullptr) {
-        mem_usage += _immutable_memtable->memory_usage();
     }
     for (const auto& sst_ptr : _sstables) {
         if (sst_ptr != nullptr) {

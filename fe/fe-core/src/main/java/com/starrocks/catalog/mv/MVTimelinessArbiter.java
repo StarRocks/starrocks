@@ -15,6 +15,7 @@
 package com.starrocks.catalog.mv;
 
 import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.BaseTableInfo;
@@ -38,6 +39,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -88,6 +90,8 @@ public abstract class MVTimelinessArbiter {
         switch (mode) {
             case LOOSE:
                 return getMVTimelinessUpdateInfoInLoose();
+            case FORCE_MV:
+                return getMVTimelinessUpdateInfoInForceMVMode();
             default:
                 return getMVTimelinessUpdateInfoInChecked();
         }
@@ -205,7 +209,7 @@ public abstract class MVTimelinessArbiter {
         if (!allOlapTables) {
             return;
         }
-        mv.getRangePartitionMap().keySet().forEach(mvPartitionName -> {
+        mv.getVisiblePartitionNames().forEach(mvPartitionName -> {
             if (!mv.getPartition(mvPartitionName).getDefaultPhysicalPartition().hasStorageData()) {
                 // add empty partitions
                 mvUpdateInfo.addMvToRefreshPartitionNames(mvPartitionName);
@@ -242,7 +246,7 @@ public abstract class MVTimelinessArbiter {
             }
             return result.diff;
         } catch (Exception e) {
-            LOG.warn("Materialized view compute partition difference with base table failed.", e);
+            logMVPrepare(mv, "Materialized view compute partition difference with base table failed:" + e);
         }
         return null;
     }
@@ -252,12 +256,10 @@ public abstract class MVTimelinessArbiter {
      * Only need to check the mv partition existence.
      */
     public MvUpdateInfo getMVTimelinessUpdateInfoInLoose() {
-        MvUpdateInfo mvUpdateInfo = new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.PARTIAL,
-                TableProperty.QueryRewriteConsistencyMode.LOOSE);
         Map<Table, Map<String, PCell>> refBaseTablePartitionMap = syncBaseTablePartitions(mv);
         if (refBaseTablePartitionMap == null) {
             logMVPrepare(mv, "Sync base table partition infos failed");
-            return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.FULL);
+            return MvUpdateInfo.fullRefresh(mv);
         }
 
         PartitionDiff diff = getChangedPartitionDiff(mv, refBaseTablePartitionMap);
@@ -265,11 +267,74 @@ public abstract class MVTimelinessArbiter {
             return null;
         }
         Map<String, PCell> adds = diff.getAdds();
+        MvUpdateInfo mvUpdateInfo = MvUpdateInfo.partialRefresh(mv, TableProperty.QueryRewriteConsistencyMode.LOOSE);
         if (!CollectionUtils.sizeIsEmpty(adds)) {
             adds.keySet().stream().forEach(mvPartitionName ->
                     mvUpdateInfo.getMvToRefreshPartitionNames().add(mvPartitionName));
         }
         addEmptyPartitionsToRefresh(mvUpdateInfo);
+        collectBaseTableUpdatePartitionNamesInLoose(mvUpdateInfo);
+        collectMVToBaseTablePartitionNames(refBaseTablePartitionMap, diff, mvUpdateInfo);
+        return mvUpdateInfo;
+    }
+
+    /**
+     * Collect mv to base table partition names mapping to be used in {@code MvUpdate#getBaseTableToRefreshPartitionNames}
+     * for union compensate rewrite.
+     */
+    protected void collectMVToBaseTablePartitionNames(Map<Table, Map<String, PCell>> refBaseTablePartitionMap,
+                                                      PartitionDiff diff,
+                                                      MvUpdateInfo mvUpdateInfo) {
+        Map<String, PCell> mvPartitionToCells = mv.getPartitionCells(Optional.empty());
+        diff.getDeletes().keySet().forEach(mvPartitionToCells::remove);
+        mvPartitionToCells.putAll(diff.getAdds());
+        Map<String, Map<Table, Set<String>>> mvToBaseNameRef = differ
+                .generateMvRefMap(mvPartitionToCells, refBaseTablePartitionMap);
+        mvUpdateInfo.getMvPartToBasePartNames().putAll(mvToBaseNameRef);
+    }
+    
+    /**
+     * TODO: Optimize performance in loos/force_mv mode
+     * TODO: in loose mode, ignore partition that both exists in baseTable and mv
+     */
+    protected void collectBaseTableUpdatePartitionNamesInLoose(MvUpdateInfo mvUpdateInfo) {
+        Map<Table, List<Column>> refBaseTableAndColumns = mv.getRefBaseTablePartitionColumns();
+        // collect & update mv's to refresh partitions based on base table's partition changes
+        collectBaseTableUpdatePartitionNames(refBaseTableAndColumns, mvUpdateInfo);
+    }
+
+    /**
+     * In Force MV mode, do not to check mv's consistency with base table's partition's data if ttl is not expired.
+     * - if mv contains no ttl, always no need to refresh;
+     * - if mv contains ttl, no need to refresh if query's partitions is in ttl's lifecycle; and need to refresh if
+     * query's partitions is out of ttl's lifecycle.
+     */
+    public MvUpdateInfo getMVTimelinessUpdateInfoInForceMVMode() {
+        String retentionCondition = mv.getTableProperty().getPartitionRetentionCondition();
+        if (Strings.isNullOrEmpty(retentionCondition)) {
+            return MvUpdateInfo.noRefresh(mv);
+        }
+        Map<Table, Map<String, PCell>> refBaseTablePartitionMap = syncBaseTablePartitions(mv);
+        if (refBaseTablePartitionMap == null) {
+            logMVPrepare(mv, "Sync base table partition infos failed");
+            return MvUpdateInfo.fullRefresh(mv);
+        }
+
+        PartitionDiff diff = getChangedPartitionDiff(mv, refBaseTablePartitionMap);
+        if (diff == null) {
+            logMVPrepare(mv, "Materialized view compute partition difference with base table failed");
+            return null;
+        }
+        Map<String, PCell> adds = diff.getAdds();
+        // no partition added
+        if (CollectionUtils.sizeIsEmpty(adds)) {
+            return MvUpdateInfo.noRefresh(mv);
+        }
+        MvUpdateInfo mvUpdateInfo = MvUpdateInfo.partialRefresh(mv, TableProperty.QueryRewriteConsistencyMode.FORCE_MV);
+        if (!CollectionUtils.sizeIsEmpty(adds)) {
+            adds.keySet().stream().forEach(mvPartitionName ->
+                    mvUpdateInfo.getMvToRefreshPartitionNames().add(mvPartitionName));
+        }
         return mvUpdateInfo;
     }
 }

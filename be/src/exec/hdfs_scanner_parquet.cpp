@@ -14,6 +14,7 @@
 
 #include "exec/hdfs_scanner_parquet.h"
 
+#include "connector/deletion_vector/deletion_vector.h"
 #include "exec/hdfs_scanner.h"
 #include "exec/iceberg/iceberg_delete_builder.h"
 #include "exec/paimon/paimon_delete_file_builder.h"
@@ -28,8 +29,8 @@ static const std::string kParquetProfileSectionPrefix = "Parquet";
 Status HdfsParquetScanner::do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) {
     if (!scanner_params.deletes.empty()) {
         SCOPED_RAW_TIMER(&_app_stats.iceberg_delete_file_build_ns);
-        auto iceberg_delete_builder =
-                std::make_unique<IcebergDeleteBuilder>(&_need_skip_rowids, runtime_state, scanner_params);
+        auto iceberg_delete_builder = std::make_unique<IcebergDeleteBuilder>(&_skip_rows_ctx->need_skip_rowids,
+                                                                             runtime_state, scanner_params);
         for (const auto& delete_file : scanner_params.deletes) {
             if (delete_file->file_content == TIcebergFileContent::POSITION_DELETES) {
                 RETURN_IF_ERROR(iceberg_delete_builder->build_parquet(*delete_file));
@@ -43,13 +44,27 @@ Status HdfsParquetScanner::do_init(RuntimeState* runtime_state, const HdfsScanne
         _app_stats.iceberg_delete_files_per_scan += scanner_params.deletes.size();
     } else if (scanner_params.paimon_deletion_file != nullptr) {
         std::unique_ptr<PaimonDeleteFileBuilder> paimon_delete_file_builder(
-                new PaimonDeleteFileBuilder(scanner_params.fs, &_need_skip_rowids));
+                new PaimonDeleteFileBuilder(scanner_params.fs, &_skip_rows_ctx->need_skip_rowids));
         RETURN_IF_ERROR(paimon_delete_file_builder->build(scanner_params.paimon_deletion_file.get()));
+    } else if (scanner_params.deletion_vector_descriptor != nullptr) {
+        if (scanner_params.split_context != nullptr) {
+            auto split_ctx = down_cast<const parquet::SplitContext*>(scanner_params.split_context);
+            _skip_rows_ctx = split_ctx->skip_rows_ctx;
+            return Status::OK();
+        }
+        SCOPED_RAW_TIMER(&_app_stats.deletion_vector_build_ns);
+        std::unique_ptr<DeletionVector> dv = std::make_unique<DeletionVector>(scanner_params);
+        RETURN_IF_ERROR(dv->fill_row_indexes(&_skip_rows_ctx->need_skip_rowids));
+        _app_stats.deletion_vector_build_count += 1;
     }
     return Status::OK();
 }
 
 void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
+    RuntimeProfile* root = profile->runtime_profile;
+    // deletion vector build only in the first task which used for splite sub-tasks,
+    // and do not need to re-build in sub io tasks.
+    do_update_deletion_vector_counter(root);
     // if we have split tasks, we don't need to update counter
     // and we will update those counters in sub io tasks.
     if (has_split_tasks()) {
@@ -93,7 +108,6 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     RuntimeProfile::Counter* total_row_groups = nullptr;
     RuntimeProfile::Counter* filtered_row_groups = nullptr;
 
-    RuntimeProfile* root = profile->runtime_profile;
     ADD_COUNTER(root, kParquetProfileSectionPrefix, TUnit::NONE);
     request_bytes_read = ADD_CHILD_COUNTER(root, "RequestBytesRead", TUnit::BYTES, kParquetProfileSectionPrefix);
     request_bytes_read_uncompressed =
@@ -172,7 +186,7 @@ Status HdfsParquetScanner::do_open(RuntimeState* runtime_state) {
     // create file reader
     _reader = std::make_shared<parquet::FileReader>(runtime_state->chunk_size(), _file.get(), _file->get_size().value(),
                                                     _scanner_params.datacache_options,
-                                                    _shared_buffered_input_stream.get(), &_need_skip_rowids);
+                                                    _shared_buffered_input_stream.get(), _skip_rows_ctx);
     SCOPED_RAW_TIMER(&_app_stats.reader_init_ns);
     RETURN_IF_ERROR(_reader->init(&_scanner_ctx));
     return Status::OK();

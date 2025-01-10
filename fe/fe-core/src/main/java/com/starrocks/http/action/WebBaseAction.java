@@ -35,6 +35,8 @@
 package com.starrocks.http.action;
 
 import com.google.common.base.Strings;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.proc.ProcNodeInterface;
@@ -47,8 +49,6 @@ import com.starrocks.http.BaseResponse;
 import com.starrocks.http.HttpAuthManager;
 import com.starrocks.http.HttpAuthManager.SessionValue;
 import com.starrocks.http.rest.RestBaseResult;
-import com.starrocks.privilege.AccessDeniedException;
-import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;

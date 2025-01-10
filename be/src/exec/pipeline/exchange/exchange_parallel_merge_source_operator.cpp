@@ -28,6 +28,9 @@ Status ExchangeParallelMergeSourceOperator::prepare(RuntimeState* state) {
     _stream_recvr->bind_profile(_driver_sequence, _unique_metrics);
     _merger = factory->get_merge_path_merger(state);
     _merger->bind_profile(_driver_sequence, _unique_metrics.get());
+    _stream_recvr->attach_observer(state, observer());
+    _stream_recvr->attach_query_ctx(state->query_ctx());
+    _merger->attach_observer(state, observer());
     return Status::OK();
 }
 
@@ -64,6 +67,11 @@ StatusOr<ChunkPtr> ExchangeParallelMergeSourceOperator::pull_chunk(RuntimeState*
 
     eval_runtime_bloom_filters(chunk.get());
     return std::move(chunk);
+}
+
+std::string ExchangeParallelMergeSourceOperator::get_name() const {
+    std::string finished = is_finished() ? "X" : "O";
+    return fmt::format("{}_{}_{}({}) {{ has_output:{}}}", _name, _plan_node_id, (void*)this, finished, has_output());
 }
 
 Status ExchangeParallelMergeSourceOperatorFactory::prepare(RuntimeState* state) {

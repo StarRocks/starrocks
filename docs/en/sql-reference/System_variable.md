@@ -242,7 +242,7 @@ Used for MySQL client compatibility. No practical usage.
 * **Data type**: String
 * **Introduced in**: v3.1.11, v3.2.5
 
-### query_excluding_mv_names(
+### query_excluding_mv_names
 
 * **Description**: Specifies the name of the asynchronous materialized views to exclude from query execution. You can use this variable to limit the number of candidate materialized views and reduce the time of query rewrite in the optimizer. `query_including_mv_names` takes effect prior to this item.
 * **Default**: empty
@@ -613,6 +613,13 @@ If a Join (other than Broadcast Join and Replicated Join) has multiple equi-join
 * **Default**: false
 * **Introduced in**: v3.2
 
+### enable_query_trigger_analyze
+
+* **Default**: true
+* **Type**: Boolean
+* **Description**: Whether to enable query-trigger ANALYZE tasks.
+* **Introduced in**: v3.4.0
+
 ### event_scheduler
 
 Used for MySQL client compatibility. No practical usage.
@@ -859,30 +866,30 @@ Used for compatibility with JDBC connection pool C3P0. No practical use.
 
 ### query_mem_limit
 
-* **Description**: Used to set the memory limit of a query on each BE node. The default value is 0, which means no limit for it. This item takes effect only after Pipeline Engine is enabled. When the `Memory Exceed Limit` error happens, you could try to increase this variable.
-* **Default**: 0, which means no limit.
+* **Description**: Used to set the memory limit of a query on each BE node. The default value is 0, which means no limit for it. This item takes effect only after Pipeline Engine is enabled. When the `Memory Exceed Limit` error happens, you could try to increase this variable. Setting it to `0` indicates no limit is imposed.
+* **Default**: 0
 * **Unit**: Byte
 
 ### query_queue_concurrency_limit (global)
 
-* **Description**: The upper limit of concurrent queries on a BE. It takes effect only after being set greater than `0`.
+* **Description**: The upper limit of concurrent queries on a BE. It takes effect only after being set greater than `0`. Setting it to `0` indicates no limit is imposed.
 * **Default**: 0
 * **Data type**: Int
 
 ### query_queue_cpu_used_permille_limit (global)
 
-* **Description**: The upper limit of CPU usage permille (CPU usage * 1000) on a BE. It takes effect only after being set greater than `0`.
+* **Description**: The upper limit of CPU usage permille (CPU usage * 1000) on a BE. It takes effect only after being set greater than `0`. Setting it to `0` indicates no limit is imposed.
 * **Value range**: [0, 1000]
 * **Default**: `0`
 
 ### query_queue_max_queued_queries (global)
 
-* **Description**: The upper limit of queries in a queue. When this threshold is reached, incoming queries are rejected. It takes effect only after being set greater than `0`.
+* **Description**: The upper limit of queries in a queue. When this threshold is reached, incoming queries are rejected. It takes effect only after being set greater than `0`. Setting it to `0` indicates no limit is imposed.
 * **Default**: `1024`.
 
 ### query_queue_mem_used_pct_limit (global)
 
-* **Description**: The upper limit of memory usage percentage on a BE. It takes effect only after being set greater than `0`.
+* **Description**: The upper limit of memory usage percentage on a BE. It takes effect only after being set greater than `0`. Setting it to `0` indicates no limit is imposed.
 * **Value range**: [0, 1]
 * **Default**: 0
 
@@ -931,6 +938,12 @@ Used to decide whether to rewrite count distinct queries to bitmap_union_count a
 * **Unit**: Second
 * **Data type**: Int
 * **Introduced in**: v3.1.0
+
+### scan_olap_partition_num_limit
+
+* **Description**: The number of partitions allowed to be scanned for a single table in the execution plan.
+* **Default**: 0 (No limit)
+* **Introduced in**: v3.3.9
 
 ### spill_mode (3.0 and later)
 

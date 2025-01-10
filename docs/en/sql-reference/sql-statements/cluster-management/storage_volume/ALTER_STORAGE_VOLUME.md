@@ -18,7 +18,7 @@ Alters the credential properties, comment, or status (`enabled`) of a storage vo
 
 ```SQL
 ALTER STORAGE VOLUME [ IF EXISTS ] <storage_volume_name>
-{ COMMENT '<comment_string>'
+{ COMMENT = '<comment_string>'
 | SET ("key" = "value"[,...]) }
 ```
 

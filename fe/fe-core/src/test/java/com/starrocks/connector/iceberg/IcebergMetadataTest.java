@@ -1055,6 +1055,11 @@ public class IcebergMetadataTest extends TableTestBase {
             org.apache.iceberg.Table getTable(String dbName, String tableName) throws StarRocksConnectorException {
                 return mockedNativeTableB;
             }
+
+            @Mock
+            Database getDB(String dbName) {
+                return new Database(0, dbName);
+            }
         };
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
         CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(CATALOG_NAME, icebergHiveCatalog,
@@ -1297,6 +1302,11 @@ public class IcebergMetadataTest extends TableTestBase {
             org.apache.iceberg.Table getTable(String dbName, String tableName) throws StarRocksConnectorException {
                 return mockedNativeTableG;
             }
+
+            @Mock
+            Database getDB(String dbName) {
+                return new Database(0, dbName);
+            }
         };
 
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
@@ -1335,6 +1345,11 @@ public class IcebergMetadataTest extends TableTestBase {
             @Mock
             org.apache.iceberg.Table getTable(String dbName, String tableName) throws StarRocksConnectorException {
                 return mockedNativeTableA;
+            }
+
+            @Mock
+            Database getDB(String dbName) {
+                return new Database(0, dbName);
             }
         };
 
@@ -1476,7 +1491,7 @@ public class IcebergMetadataTest extends TableTestBase {
         };
 
         CreateViewStmt stmt = new CreateViewStmt(false, false, new TableName("catalog", "db", "table"),
-                Lists.newArrayList(new ColWithComment("k1", "", NodePosition.ZERO)), "", null, NodePosition.ZERO);
+                Lists.newArrayList(new ColWithComment("k1", "", NodePosition.ZERO)), "", false, null, NodePosition.ZERO);
         stmt.setColumns(Lists.newArrayList(new Column("k1", INT)));
         metadata.createView(stmt);
 

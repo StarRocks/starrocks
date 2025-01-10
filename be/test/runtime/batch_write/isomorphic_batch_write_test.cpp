@@ -84,7 +84,7 @@ public:
         return ctx;
     }
 
-    void test_append_data_sync_base(const Status& rpc_status, TTransactionStatus::type txn_status,
+    void test_append_data_sync_base(const Status& rpc_status, const TGetLoadTxnStatusResult& expect_result,
                                     const Status& expect_st);
 
 protected:
@@ -179,12 +179,45 @@ TEST_F(IsomorphicBatchWriteTest, append_data_async) {
     auto read_data2 = static_cast<TimeBoundedStreamLoadPipe*>(pipe_ctx1->body_sink.get())->read();
     verify_data("data2", read_data2.value());
 
+    // this will make the pipe_ctx1 reach the end of the active window
     SyncPoint::GetInstance()->SetCallBack("TimeBoundedStreamLoadPipe::get_current_ns",
                                           [&](void* arg) { *((int64_t*)arg) = 2000000000; });
     ASSERT_TRUE(static_cast<TimeBoundedStreamLoadPipe*>(pipe_ctx1->body_sink.get())->read().status().is_end_of_file());
+    ASSERT_TRUE(static_cast<TimeBoundedStreamLoadPipe*>(pipe_ctx1->body_sink.get())->finished());
+    // the pipe is still alive until next append_data detects it's finished
+    ASSERT_TRUE(batch_write->is_pipe_alive(pipe_ctx1));
 
     StreamLoadContext* pipe_ctx2 =
             build_pipe_context("label2", 2, batch_write_id, std::make_shared<TimeBoundedStreamLoadPipe>("p2", 1000));
+    ASSERT_OK(batch_write->register_stream_load_pipe(pipe_ctx2));
+    // this will make the pipe_ctx2 reach the end of the active window
+    SyncPoint::GetInstance()->SetCallBack("TimeBoundedStreamLoadPipe::get_current_ns",
+                                          [&](void* arg) { *((int64_t*)arg) = 4000000000; });
+    ASSERT_TRUE(static_cast<TimeBoundedStreamLoadPipe*>(pipe_ctx2->body_sink.get())->read().status().is_end_of_file());
+    ASSERT_TRUE(static_cast<TimeBoundedStreamLoadPipe*>(pipe_ctx2->body_sink.get())->finished());
+    // the pipe is still alive until next append_data detects it's finished
+    ASSERT_TRUE(batch_write->is_pipe_alive(pipe_ctx2));
+
+    StreamLoadContext* pipe_ctx3 =
+            build_pipe_context("label3", 3, batch_write_id, std::make_shared<TimeBoundedStreamLoadPipe>("p3", 1000));
+    ASSERT_OK(batch_write->register_stream_load_pipe(pipe_ctx3));
+    // data_ctx3 should be appended to pipe_ctx3 because pipe_ctx1 and pipe_ctx2 are finished
+    StreamLoadContext* data_ctx3 = build_data_context(batch_write_id, "data3");
+    ASSERT_OK(batch_write->append_data(data_ctx3));
+    ASSERT_EQ(1, num_rpc_request);
+    auto read_data3 = static_cast<TimeBoundedStreamLoadPipe*>(pipe_ctx3->body_sink.get())->read();
+    ASSERT_OK(read_data3.status());
+    verify_data("data3", read_data3.value());
+
+    // this will make the pipe_ctx3 reach the end of the active window
+    SyncPoint::GetInstance()->SetCallBack("TimeBoundedStreamLoadPipe::get_current_ns",
+                                          [&](void* arg) { *((int64_t*)arg) = 6000000000; });
+    ASSERT_TRUE(static_cast<TimeBoundedStreamLoadPipe*>(pipe_ctx3->body_sink.get())->read().status().is_end_of_file());
+    ASSERT_TRUE(static_cast<TimeBoundedStreamLoadPipe*>(pipe_ctx3->body_sink.get())->finished());
+
+    // there is no pipe that can append data, a rpc request for new pipe is expected, and pipe_ctx4 will be registered
+    StreamLoadContext* pipe_ctx4 =
+            build_pipe_context("label4", 4, batch_write_id, std::make_shared<TimeBoundedStreamLoadPipe>("p4", 1000));
     SyncPoint::GetInstance()->SetCallBack("IsomorphicBatchWrite::send_rpc_request::status",
                                           [&](void* arg) { *((Status*)arg) = Status::OK(); });
     SyncPoint::GetInstance()->SetCallBack("IsomorphicBatchWrite::send_rpc_request::response", [&](void* arg) {
@@ -192,35 +225,49 @@ TEST_F(IsomorphicBatchWriteTest, append_data_async) {
         TStatus status;
         status.__set_status_code(TStatusCode::OK);
         result->__set_status(status);
-        result->__set_label("label2");
-        ASSERT_OK(batch_write->register_stream_load_pipe(pipe_ctx2));
+        result->__set_label("label4");
+        ASSERT_OK(batch_write->register_stream_load_pipe(pipe_ctx4));
     });
 
-    StreamLoadContext* data_ctx3 = build_data_context(batch_write_id, "data3");
-    ASSERT_OK(batch_write->append_data(data_ctx3));
+    StreamLoadContext* data_ctx4 = build_data_context(batch_write_id, "data4");
+    ASSERT_OK(batch_write->append_data(data_ctx4));
     ASSERT_EQ(2, num_rpc_request);
-    auto read_data3 = static_cast<TimeBoundedStreamLoadPipe*>(pipe_ctx2->body_sink.get())->read();
-    ASSERT_OK(read_data3.status());
-    verify_data("data3", read_data3.value());
+    auto read_data4 = static_cast<TimeBoundedStreamLoadPipe*>(pipe_ctx4->body_sink.get())->read();
+    ASSERT_OK(read_data4.status());
+    verify_data("data4", read_data4.value());
+
+    // verify that pipe_ctx1, pipe_ctx2, pipe_ctx3 are dead
+    ASSERT_TRUE(batch_write->contain_pipe(pipe_ctx1) && !batch_write->is_pipe_alive(pipe_ctx1));
+    ASSERT_TRUE(batch_write->contain_pipe(pipe_ctx2) && !batch_write->is_pipe_alive(pipe_ctx2));
+    ASSERT_TRUE(batch_write->contain_pipe(pipe_ctx3) && !batch_write->is_pipe_alive(pipe_ctx3));
+    ASSERT_TRUE(batch_write->is_pipe_alive(pipe_ctx4));
 }
 
 TEST_F(IsomorphicBatchWriteTest, append_data_sync) {
-    test_append_data_sync_base(Status::InternalError("Artificial failure"), TTransactionStatus::UNKNOWN,
+    TGetLoadTxnStatusResult expect_result;
+    expect_result.__set_status(TTransactionStatus::UNKNOWN);
+    test_append_data_sync_base(Status::InternalError("Artificial failure"), expect_result,
                                Status::InternalError("Failed to get load status, Internal error: Artificial failure"));
-    test_append_data_sync_base(Status::OK(), TTransactionStatus::PREPARE,
-                               Status::TimedOut("load timeout, txn status: PREPARE"));
-    test_append_data_sync_base(Status::OK(), TTransactionStatus::PREPARED,
-                               Status::TimedOut("load timeout, txn status: PREPARED"));
-    test_append_data_sync_base(Status::OK(), TTransactionStatus::COMMITTED,
+    expect_result.__set_status(TTransactionStatus::PREPARE);
+    test_append_data_sync_base(Status::OK(), expect_result, Status::TimedOut("load timeout, txn status: PREPARE"));
+    expect_result.__set_status(TTransactionStatus::PREPARED);
+    test_append_data_sync_base(Status::OK(), expect_result, Status::TimedOut("load timeout, txn status: PREPARED"));
+    expect_result.__set_status(TTransactionStatus::COMMITTED);
+    test_append_data_sync_base(Status::OK(), expect_result,
                                Status::PublishTimeout("Load has not been published before timeout"));
-    test_append_data_sync_base(Status::OK(), TTransactionStatus::VISIBLE, Status::OK());
-    test_append_data_sync_base(Status::OK(), TTransactionStatus::ABORTED,
-                               Status::InternalError("Load is aborted because of failure"));
-    test_append_data_sync_base(Status::OK(), TTransactionStatus::UNKNOWN,
-                               Status::InternalError("Load status is unknown: UNKNOWN"));
+    expect_result.__set_status(TTransactionStatus::VISIBLE);
+    test_append_data_sync_base(Status::OK(), expect_result, Status::OK());
+    expect_result.__set_status(TTransactionStatus::ABORTED);
+    expect_result.__set_reason("artificial failure");
+    test_append_data_sync_base(Status::OK(), expect_result,
+                               Status::InternalError("Load is aborted, reason: artificial failure"));
+    expect_result.__set_status(TTransactionStatus::UNKNOWN);
+    expect_result.__set_reason("");
+    test_append_data_sync_base(Status::OK(), expect_result, Status::InternalError("Load status is unknown: UNKNOWN"));
 }
 
-void IsomorphicBatchWriteTest::test_append_data_sync_base(const Status& rpc_status, TTransactionStatus::type txn_status,
+void IsomorphicBatchWriteTest::test_append_data_sync_base(const Status& rpc_status,
+                                                          const TGetLoadTxnStatusResult& expect_result,
                                                           const Status& expect_st) {
     BatchWriteId batch_write_id{
             .db = "db", .table = "table", .load_params = {{HTTP_MERGE_COMMIT_ASYNC, "false"}, {HTTP_TIMEOUT, "1"}}};
@@ -271,7 +318,8 @@ void IsomorphicBatchWriteTest::test_append_data_sync_base(const Status& rpc_stat
                                           [&](void* arg) { *((Status*)arg) = rpc_status; });
     SyncPoint::GetInstance()->SetCallBack("IsomorphicBatchWrite::_wait_for_load_status::response", [&](void* arg) {
         TGetLoadTxnStatusResult* result = (TGetLoadTxnStatusResult*)arg;
-        result->__set_status(txn_status);
+        result->__set_status(expect_result.status);
+        result->__set_reason(expect_result.reason);
     });
     StreamLoadContext* data_ctx1 = build_data_context(batch_write_id, "data1");
     Status result = batch_write->append_data(data_ctx1);
@@ -310,6 +358,117 @@ TEST_F(IsomorphicBatchWriteTest, stop_write) {
     ASSERT_TRUE(batch_write->register_stream_load_pipe(pipe_ctx3).is_service_unavailable());
     StreamLoadContext* data_ctx = build_data_context(batch_write_id, "data");
     ASSERT_TRUE(batch_write->append_data(data_ctx).is_service_unavailable());
+}
+
+TEST_F(IsomorphicBatchWriteTest, reach_max_rpc_retry) {
+    BatchWriteId batch_write_id{.db = "db", .table = "table", .load_params = {{HTTP_MERGE_COMMIT_ASYNC, "true"}}};
+    IsomorphicBatchWriteSharedPtr batch_write = std::make_shared<IsomorphicBatchWrite>(batch_write_id, _executor.get());
+    ASSERT_OK(batch_write->init());
+    DeferOp defer_writer([&] { batch_write->stop(); });
+
+    auto old_retry_num = config::batch_write_rpc_request_retry_num;
+    auto old_retry_interval = config::batch_write_rpc_request_retry_interval_ms;
+    config::batch_write_rpc_request_retry_num = 5;
+    config::batch_write_rpc_request_retry_interval_ms = 10;
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([&]() {
+        SyncPoint::GetInstance()->ClearCallBack("IsomorphicBatchWrite::send_rpc_request::request");
+        SyncPoint::GetInstance()->ClearCallBack("IsomorphicBatchWrite::send_rpc_request::status");
+        SyncPoint::GetInstance()->ClearCallBack("IsomorphicBatchWrite::send_rpc_request::response");
+        SyncPoint::GetInstance()->DisableProcessing();
+        config::batch_write_rpc_request_retry_num = old_retry_num;
+        config::batch_write_rpc_request_retry_interval_ms = old_retry_interval;
+    });
+
+    int num_rpc_request = 0;
+    SyncPoint::GetInstance()->SetCallBack("IsomorphicBatchWrite::send_rpc_request::request",
+                                          [&](void* arg) { num_rpc_request += 1; });
+    SyncPoint::GetInstance()->SetCallBack("IsomorphicBatchWrite::send_rpc_request::status",
+                                          [&](void* arg) { *((Status*)arg) = Status::OK(); });
+    SyncPoint::GetInstance()->SetCallBack("IsomorphicBatchWrite::send_rpc_request::response", [&](void* arg) {
+        TMergeCommitResult* result = (TMergeCommitResult*)arg;
+        TStatus status;
+        status.__set_status_code(TStatusCode::OK);
+        result->__set_status(status);
+        result->__set_label("label");
+    });
+
+    StreamLoadContext* data_ctx = build_data_context(batch_write_id, "data1");
+    Status st = batch_write->append_data(data_ctx);
+    ASSERT_EQ(5, num_rpc_request);
+    ASSERT_TRUE(st.is_internal_error());
+    ASSERT_TRUE(st.message().find("Failed to write data to stream load pipe, num retry: 5") != std::string::npos);
+}
+
+TEST_F(IsomorphicBatchWriteTest, stop_retry_if_rpc_failed) {
+    BatchWriteId batch_write_id{.db = "db", .table = "table", .load_params = {{HTTP_MERGE_COMMIT_ASYNC, "true"}}};
+    IsomorphicBatchWriteSharedPtr batch_write = std::make_shared<IsomorphicBatchWrite>(batch_write_id, _executor.get());
+    ASSERT_OK(batch_write->init());
+    DeferOp defer_writer([&] { batch_write->stop(); });
+
+    auto old_retry_num = config::batch_write_rpc_request_retry_num;
+    auto old_retry_interval = config::batch_write_rpc_request_retry_interval_ms;
+    config::batch_write_rpc_request_retry_num = 5;
+    config::batch_write_rpc_request_retry_interval_ms = 10;
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([&]() {
+        SyncPoint::GetInstance()->ClearCallBack("IsomorphicBatchWrite::send_rpc_request::request");
+        SyncPoint::GetInstance()->ClearCallBack("IsomorphicBatchWrite::send_rpc_request::status");
+        SyncPoint::GetInstance()->ClearCallBack("IsomorphicBatchWrite::send_rpc_request::response");
+        SyncPoint::GetInstance()->DisableProcessing();
+        config::batch_write_rpc_request_retry_num = old_retry_num;
+        config::batch_write_rpc_request_retry_interval_ms = old_retry_interval;
+    });
+
+    // rpc failed
+    {
+        int num_rpc_request = 0;
+        SyncPoint::GetInstance()->SetCallBack("IsomorphicBatchWrite::send_rpc_request::request",
+                                              [&](void* arg) { num_rpc_request += 1; });
+        SyncPoint::GetInstance()->SetCallBack("IsomorphicBatchWrite::send_rpc_request::status", [&](void* arg) {
+            *((Status*)arg) = num_rpc_request == 2 ? Status::ThriftRpcError("artificial failure") : Status::OK();
+        });
+        SyncPoint::GetInstance()->SetCallBack("IsomorphicBatchWrite::send_rpc_request::response", [&](void* arg) {
+            TMergeCommitResult* result = (TMergeCommitResult*)arg;
+            TStatus status;
+            status.__set_status_code(TStatusCode::OK);
+            result->__set_status(status);
+            result->__set_label("label");
+        });
+        StreamLoadContext* data_ctx1 = build_data_context(batch_write_id, "data1");
+        Status st = batch_write->append_data(data_ctx1);
+        ASSERT_EQ(2, num_rpc_request);
+        ASSERT_TRUE(st.is_internal_error());
+        ASSERT_TRUE(st.message().find("Failed to write data to stream load pipe, num retry: 2") != std::string::npos);
+        ASSERT_TRUE(st.message().find("Rpc error: artificial failure") != std::string::npos);
+    }
+
+    // response status failed
+    {
+        int num_rpc_request = 0;
+        SyncPoint::GetInstance()->SetCallBack("IsomorphicBatchWrite::send_rpc_request::request",
+                                              [&](void* arg) { num_rpc_request += 1; });
+        SyncPoint::GetInstance()->SetCallBack("IsomorphicBatchWrite::send_rpc_request::status",
+                                              [&](void* arg) { *((Status*)arg) = Status::OK(); });
+        SyncPoint::GetInstance()->SetCallBack("IsomorphicBatchWrite::send_rpc_request::response", [&](void* arg) {
+            TMergeCommitResult* result = (TMergeCommitResult*)arg;
+            TStatus status;
+            if (num_rpc_request != 3) {
+                status.__set_status_code(TStatusCode::OK);
+                result->__set_label("label");
+            } else {
+                status.__set_status_code(TStatusCode::INTERNAL_ERROR);
+                status.__set_error_msgs({"artificial failure"});
+            }
+            result->__set_status(status);
+        });
+        StreamLoadContext* data_ctx2 = build_data_context(batch_write_id, "data2");
+        Status st = batch_write->append_data(data_ctx2);
+        ASSERT_EQ(3, num_rpc_request);
+        ASSERT_TRUE(st.is_internal_error());
+        ASSERT_TRUE(st.message().find("Failed to write data to stream load pipe, num retry: 3") != std::string::npos);
+        ASSERT_TRUE(st.message().find("Internal error: artificial failure") != std::string::npos);
+    }
 }
 
 } // namespace starrocks

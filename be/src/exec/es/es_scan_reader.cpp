@@ -219,7 +219,7 @@ Status ESScanReader::close() {
     std::function<void()> send_del_request = [user_name = _user_name, passwd = _passwd, enable_ssl = _ssl_enabled,
                                               scroll_id = _scroll_id, scratch_target]() {
         HttpClient client;
-        RETURN_IF(client.init(scratch_target).ok(), (void)0);
+        RETURN_IF(!client.init(scratch_target).ok(), (void)0);
         client.set_basic_auth(user_name, passwd);
         client.set_method(DELETE);
         client.set_content_type("application/json");

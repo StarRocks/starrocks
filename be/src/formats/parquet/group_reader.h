@@ -94,6 +94,7 @@ struct GroupReaderParam {
 
     // used for pageIndex
     std::vector<ExprContext*> min_max_conjunct_ctxs;
+    const PredicateTree* predicate_tree = nullptr;
 
     // partition column
     const std::vector<HdfsScannerContext::ColumnInfo>* partition_columns = nullptr;
@@ -125,6 +126,8 @@ public:
     Status get_next(ChunkPtr* chunk, size_t* row_count);
     void collect_io_ranges(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
                            ColumnIOType type = ColumnIOType::PAGES);
+
+    SparseRange<uint64_t> get_range() const { return _range; }
 
 private:
     void _set_end_offset(int64_t value) { _end_offset = value; }

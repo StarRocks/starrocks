@@ -628,8 +628,13 @@ Status NodeChannel::_send_request(bool eos, bool finished) {
     AddMultiChunkReq add_chunk = std::move(_request_queue.front());
     _request_queue.pop_front();
 
-    auto request = add_chunk.second;
     auto chunk = std::move(add_chunk.first);
+
+    // reset mem tracker since we don't want to send the brpc request under query_mem_tracker
+    // and the memory usage of the request is recorded by the olap_sink's mem tracker
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
+
+    auto request = add_chunk.second;
 
     _mem_tracker->release(chunk->memory_usage());
 

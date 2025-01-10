@@ -45,6 +45,7 @@
 #include "storage/index/vector/vector_index_reader_factory.h"
 #include "storage/index/vector/vector_search_option.h"
 #include "storage/lake/update_manager.h"
+#include "storage/olap_runtime_range_pruner.h"
 #include "storage/olap_runtime_range_pruner.hpp"
 #include "storage/projection_iterator.h"
 #include "storage/range.h"
@@ -376,18 +377,18 @@ private:
     tenann::PrimitiveSeqView _query_view;
     std::shared_ptr<tenann::IndexMeta> _index_meta;
 #endif
+
+    bool _always_build_rowid() const { return _use_vector_index && !_use_ivfpq; }
+
     bool _use_vector_index;
     std::string _vector_distance_column_name;
     int _vector_column_id;
     SlotId _vector_slot_id;
     std::unordered_map<rowid_t, float> _id2distance_map;
-    std::vector<rowid_t> _first_rowids;
     std::map<std::string, std::string> _query_params;
     double _vector_range;
     int _result_order;
     bool _use_ivfpq;
-    Buffer<uint8_t> _filter_selection;
-    Buffer<uint8_t> _filter_by_expr_selection;
 
     Status _init_reader_from_file(const std::string& index_path, const std::shared_ptr<TabletIndex>& tablet_index_meta,
                                   const std::map<std::string, std::string>& query_params);
@@ -775,7 +776,8 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
     iter_opts.has_preaggregation = _opts.has_preaggregation;
 
     RandomAccessFileOptions opts{.skip_fill_local_cache = !_opts.lake_io_opts.fill_data_cache,
-                                 .buffer_size = _opts.lake_io_opts.buffer_size};
+                                 .buffer_size = _opts.lake_io_opts.buffer_size,
+                                 .skip_disk_cache = _opts.lake_io_opts.skip_disk_cache};
 
     ColumnAccessPath* access_path = nullptr;
     if (_column_access_paths.find(cid) != _column_access_paths.end()) {
@@ -1324,12 +1326,6 @@ inline Status SegmentIterator::_read(Chunk* chunk, vector<rowid_t>* rowids, size
         chunk->check_or_die();
     }
 
-    if (_use_vector_index) {
-        for (uint32_t i = range.begin(); i < range.end(); i++) {
-            _first_rowids.push_back(i);
-        }
-    }
-
     if (rowids != nullptr) {
         rowids->reserve(rowids->size() + n);
         SparseRangeIterator<> iter = range.new_iterator();
@@ -1358,8 +1354,10 @@ Status SegmentIterator::do_get_next(Chunk* chunk) {
     DCHECK_EQ(0, chunk->num_rows());
 
     Status st;
+    std::vector<uint32_t> rowids;
+    std::vector<uint32_t>* p_rowids = _always_build_rowid() ? &rowids : nullptr;
     do {
-        st = _do_get_next(chunk, nullptr);
+        st = _do_get_next(chunk, p_rowids);
     } while (st.ok() && chunk->num_rows() == 0);
     return st;
 }
@@ -1512,26 +1510,25 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
     }
 
     if (_use_vector_index && !_use_ivfpq) {
+        DCHECK(rowid != nullptr);
         std::shared_ptr<FloatColumn> distance_column = FloatColumn::create();
         vector<rowid_t> rowids;
-        for (const auto& id : _first_rowids) {
-            auto it = _id2distance_map.find(id);
-            if (it != _id2distance_map.end()) {
+        for (const auto& rid : *rowid) {
+            auto it = _id2distance_map.find(rid);
+            if (LIKELY(it != _id2distance_map.end())) {
                 rowids.emplace_back(it->first);
+            } else {
+                DCHECK(false) << "not found row id:" << rid << " in distance map";
+                return Status::InternalError(fmt::format("not found row id:{} in distance map", rid));
             }
         }
-        if (!rowids.empty()) {
-            std::sort(rowids.begin(), rowids.end());
-            for (const auto& vrid : rowids) {
-                distance_column->append(_id2distance_map[vrid]);
-            }
+        for (const auto& vrid : rowids) {
+            distance_column->append(_id2distance_map[vrid]);
         }
-        if (has_non_expr_predicate && _filter_selection.size() == distance_column->size()) {
-            distance_column->filter_range(_filter_selection, 0, distance_column->size());
-        }
+
+        // TODO: plan vector column in FE Planner
         chunk->append_vector_column(distance_column, _make_field(_vector_column_id), _vector_slot_id);
     }
-    _first_rowids.clear();
 
     result->swap_chunk(*chunk);
 
@@ -1639,9 +1636,6 @@ StatusOr<uint16_t> SegmentIterator::_filter_by_non_expr_predicates(Chunk* chunk,
         }
     }
     _opts.stats->rows_vec_cond_filtered += (to - chunk_size);
-    for (int i = from; i < to; i++) {
-        _filter_selection.push_back(_selection[i]);
-    }
     return chunk_size;
 }
 
@@ -1667,9 +1661,6 @@ StatusOr<uint16_t> SegmentIterator::_filter_by_expr_predicates(Chunk* chunk, vec
             }
         }
         _opts.stats->rows_vec_cond_filtered += (chunk_size - new_size);
-        for (int i = 0; i < chunk_size; i++) {
-            _filter_by_expr_selection.push_back(_selection[i]);
-        }
         chunk_size = new_size;
     }
     return chunk_size;
