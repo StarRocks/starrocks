@@ -98,30 +98,14 @@ public class MVCompensation {
         return compensations;
     }
 
-    private boolean useTransparentRewrite() {
-        return sessionVariable.isEnableMaterializedViewTransparentUnionRewrite();
-    }
-
     public boolean isTransparentRewrite() {
-        if (!useTransparentRewrite()) {
-            return false;
-        }
-        // No compensate once if mv's freshness is satisfied.
-        if (state.isCompensate()) {
-            return true;
-        }
-        return false;
+        return state.isCompensate();
     }
 
     public boolean isCompensatePartitionPredicate() {
         // always false if it's set to false from session variable
-        if (!sessionVariable.isEnableMaterializedViewRewritePartitionCompensate()) {
+        if (state.isNoCompensate() || state.isCompensate()) {
             return false;
-        }
-        if (state.isNoCompensate()) {
-            return false;
-        } else if (state.isCompensate()) {
-            return !useTransparentRewrite();
         } else {
             return true;
         }
