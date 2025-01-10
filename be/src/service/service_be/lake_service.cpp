@@ -184,35 +184,11 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                     auto queuing_latency = run_ts - start_ts;
                     g_publish_tablet_version_queuing_latency << queuing_latency;
 
-<<<<<<< HEAD
-            auto base_version = request->base_version();
-            auto new_version = request->new_version();
-            auto txns = std::vector<TxnInfoPB>();
-            if (request->txn_infos_size() > 0) {
-                txns.insert(txns.begin(), request->txn_infos().begin(), request->txn_infos().end());
-            } else { // This is a request from older version FE
-                // Construct TxnInfoPB from other fields
-                txns.reserve(request->txn_ids_size());
-                for (auto i = 0, sz = request->txn_ids_size(); i < sz; i++) {
-                    auto& info = txns.emplace_back();
-                    info.set_txn_id(request->txn_ids(i));
-                    info.set_txn_type(TXN_NORMAL);
-                    info.set_combined_txn_log(false);
-                    info.set_commit_time(request->commit_time());
-                    info.set_force_publish(false);
-                }
-            }
-=======
                     auto base_version = request->base_version();
                     auto new_version = request->new_version();
                     auto txns = std::vector<TxnInfoPB>();
                     if (request->txn_infos_size() > 0) {
                         txns.insert(txns.begin(), request->txn_infos().begin(), request->txn_infos().end());
-                        if (rebuild_pindex_tablets.count(tablet_id) > 0) {
-                            for (auto& txn : txns) {
-                                txn.set_rebuild_pindex(true);
-                            }
-                        }
                     } else { // This is a request from older version FE
                         // Construct TxnInfoPB from other fields
                         txns.reserve(request->txn_ids_size());
@@ -223,9 +199,6 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                             info.set_combined_txn_log(false);
                             info.set_commit_time(request->commit_time());
                             info.set_force_publish(false);
-                            if (rebuild_pindex_tablets.count(tablet_id) > 0) {
-                                info.set_rebuild_pindex(true);
-                            }
                         }
                     }
 
@@ -262,7 +235,6 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                     g_publish_tablet_version_latency << (butil::gettimeofday_us() - run_ts);
                 },
                 [&] { latch.count_down(); });
->>>>>>> e267ea0c3 ([BugFix] ensure the latch can be counted down (#54859))
 
         auto st = thread_pool_token.submit(std::move(task), timeout_deadline);
         if (!st.ok()) {
