@@ -33,10 +33,7 @@ public:
     bool decide();
 
 private:
-    // Generate a random number within [0, 1]
-    std::random_device _rd;
     std::mt19937 _gen;
-    std::uniform_real_distribution<double> _dis;
 
     // Thompson sampling parameters, biased for TRUE value
     double _alpha = 3.0; // Success count

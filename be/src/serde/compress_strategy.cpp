@@ -15,12 +15,13 @@
 #include "serde/compress_strategy.h"
 
 #include <cmath>
+#include <random>
 
 #include "common/config.h"
 
 namespace starrocks::serde {
 
-CompressStrategy::CompressStrategy() : _rd(), _gen(_rd()), _dis(0.0, 1.0) {}
+CompressStrategy::CompressStrategy() : _gen(std::random_device()()) {}
 
 void CompressStrategy::feedback(uint64_t uncompressed_bytes, uint64_t compressed_bytes, uint64_t serialization_time_ns,
                                 uint64_t compression_time_ns) {
@@ -38,9 +39,14 @@ void CompressStrategy::feedback(uint64_t uncompressed_bytes, uint64_t compressed
 }
 
 bool CompressStrategy::decide() {
-    double theta = _dis(_gen);
-    double probability = _alpha / (_alpha + _beta);
-    return theta < probability;
+    std::gamma_distribution<double> gamma_alpha(_alpha, 1.0);
+    std::gamma_distribution<double> gamma_beta(_beta, 1.0);
+
+    double sample_alpha = gamma_alpha(_gen);
+    double sample_beta = gamma_beta(_gen);
+
+    double theta = sample_alpha / (sample_alpha + sample_beta);
+    return theta > 0.5;
 }
 
 } // namespace starrocks::serde
