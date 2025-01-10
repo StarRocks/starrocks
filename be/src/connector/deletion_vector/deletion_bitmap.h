@@ -35,6 +35,7 @@ public:
     bool empty() const { return roaring64_bitmap_is_empty(_bitmap); };
     StatusOr<bool> fill_filter(uint64_t start, uint64_t end, Filter& filter);
     uint64_t get_range_cardinality(uint64_t start, uint64_t end) const;
+    void add_value(uint64_t val);
     uint64_t get_cardinality() const;
     void to_array(std::vector<uint64_t>& array) const;
 

@@ -27,7 +27,7 @@ public:
             : _skip_rows_ctx(std::move(skip_rows_ctx)),
               _params(scanner_params),
               _runtime_state(state),
-              _deletion_bitmap(roaring64_bitmap_create()) {}
+              _deletion_bitmap(std::make_shared<DeletionBitmap>(roaring64_bitmap_create())) {}
 
     ~IcebergDeleteBuilder() = default;
 
@@ -50,7 +50,7 @@ private:
     SkipRowsContextPtr _skip_rows_ctx;
     const HdfsScannerParams& _params;
     RuntimeState* _runtime_state;
-    roaring64_bitmap_t* _deletion_bitmap;
+    DeletionBitmapPtr _deletion_bitmap;
 };
 
 class IcebergDeleteFileMeta {

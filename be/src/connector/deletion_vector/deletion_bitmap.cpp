@@ -24,6 +24,7 @@ StatusOr<bool> DeletionBitmap::fill_filter(uint64_t start, uint64_t end, Filter&
     }
     roaring64_iterator_t* it = roaring64_iterator_create(_bitmap);
     if (!roaring64_iterator_move_equalorlarger(it, start)) {
+        roaring64_iterator_free(it);
         return false;
     }
 
@@ -50,6 +51,10 @@ uint64_t DeletionBitmap::get_cardinality() const {
 
 void DeletionBitmap::to_array(std::vector<uint64_t>& array) const {
     roaring64_bitmap_to_uint64_array(_bitmap, array.data());
+}
+
+void DeletionBitmap::add_value(uint64_t val) {
+    roaring64_bitmap_add(_bitmap, val);
 }
 
 } // namespace starrocks
