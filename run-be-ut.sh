@@ -44,6 +44,8 @@ Usage: $0 <options>
      --enable-shared-data           enable to build with shared-data feature support
      --without-starcache            build without starcache library
      --use-staros                   DEPRECATED. an alias of --enable-shared-data option
+     --without-debug-symbol-split   split debug symbol out of the test binary to accelerate the speed
+                                    of loading binary into memory and start execution.
      -j                             build parallel
 
   Eg.
@@ -90,6 +92,7 @@ OPTS=$(getopt \
   -l 'enable-shared-data' \
   -l 'without-starcache' \
   -l 'with-brpc-keepalive' \
+  -l 'without-debug-symbol-split' \
   -o 'j:' \
   -l 'help' \
   -l 'run' \
@@ -113,6 +116,7 @@ USE_STAROS=OFF
 WITH_GCOV=OFF
 WITH_STARCACHE=ON
 WITH_BRPC_KEEPALIVE=OFF
+WITH_DEBUG_SYMBOL_SPLIT=ON
 while true; do
     case "$1" in
         --clean) CLEAN=1 ; shift ;;
@@ -128,6 +132,7 @@ while true; do
         --with-brpc-keepalive) WITH_BRPC_KEEPALIVE=ON; shift ;;
         --excluding-test-suit) EXCLUDING_TEST_SUIT=$2; shift 2;;
         --enable-shared-data|--use-staros) USE_STAROS=ON; shift ;;
+        --without-debug-symbol-split) WITH_DEBUG_SYMBOL_SPLIT=OFF; shift ;;
         -j) PARALLEL=$2; shift 2 ;;
         --) shift ;  break ;;
         *) echo "Internal error" ; exit 1 ;;
@@ -194,12 +199,25 @@ ${CMAKE_CMD}  -G "${CMAKE_GENERATOR}" \
 
 ${BUILD_SYSTEM} -j${PARALLEL}
 
+cd ${STARROCKS_HOME}
+export STARROCKS_TEST_BINARY_DIR=${CMAKE_BUILD_DIR}/test
+TEST_BIN=starrocks_test
+if [ "x$WITH_DEBUG_SYMBOL_SPLIT" = "xON" ] && test -f ${STARROCKS_TEST_BINARY_DIR}/$TEST_BIN ; then
+    pushd ${STARROCKS_TEST_BINARY_DIR} >/dev/null 2>&1
+    TEST_BIN_SYMBOL=starrocks_test.debuginfo
+    echo -n "[INFO] Split $TEST_BIN debug symbol to $TEST_BIN_SYMBOL ..."
+    objcopy --only-keep-debug $TEST_BIN $TEST_BIN_SYMBOL
+    strip --strip-debug $TEST_BIN
+    objcopy --add-gnu-debuglink=$TEST_BIN_SYMBOL $TEST_BIN
+    # continue the echo output from the previous `echo -n`
+    echo " split done."
+    popd >/dev/null 2>&1
+fi
+
 echo "*********************************"
 echo "  Starting to Run BE Unit Tests  "
 echo "*********************************"
 
-cd ${STARROCKS_HOME}
-export STARROCKS_TEST_BINARY_DIR=${CMAKE_BUILD_DIR}
 export TERM=xterm
 export UDF_RUNTIME_DIR=${STARROCKS_HOME}/lib/udf-runtime
 export LOG_DIR=${STARROCKS_HOME}/log
@@ -258,7 +276,6 @@ export CLASSPATH=$STARROCKS_HOME/conf:$HADOOP_CLASSPATH:$CLASSPATH
 
 # ===========================================================
 
-export STARROCKS_TEST_BINARY_DIR=${STARROCKS_TEST_BINARY_DIR}/test
 export ASAN_OPTIONS="abort_on_error=1:disable_coredump=0:unmap_shadow_on_exit=1:detect_stack_use_after_return=1"
 
 if [ $WITH_AWS = "OFF" ]; then
