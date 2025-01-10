@@ -858,3 +858,12 @@ You can configure the Delta Lake metadata cache refresh through the following FE
 Because the repeated decompression and parsing of metadata files can introduce unnecessary delays, StarRocks employs a new metadata cache strategy of caching deserialized memory objects. By storing these deserialized files in memory, the system can bypass the decompression and parsing stages for subsequent queries. This caching mechanism allows direct access to the required metadata, significantly reducing retrieval times. As a result, the system becomes more responsive and better suited to meet high query demands and materialized view rewriting needs.
 
 You can configure this behavior through the Catalog property [MetadataUpdateParams](#metadataupdateparams) and [relevant configuration items](#configure-metadata-cache-and-update-strategy).
+
+## Feature support
+
+Currently, Delta Lake catalogs support the following table features:
+
+- V2 Checkpoint (From v3.3.0 onwards)
+- Timestamp without Timezone (From v3.3.1 onwards)
+- Column mapping (From v3.3.6 onwards)
+- Deletion Vector (From v3.4.0 onwards)
