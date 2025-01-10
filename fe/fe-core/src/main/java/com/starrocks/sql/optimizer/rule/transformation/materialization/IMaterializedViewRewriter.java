@@ -17,11 +17,33 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 import com.starrocks.sql.optimizer.MvRewriteContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 /**
  * Base interface to implement materialized view rewrite rule.
  */
 public interface IMaterializedViewRewriter {
+
+    /**
+     * Do rewrite query's plan based on materialized view's plan.
+     */
+    OptExpression doViewBasedRewrite(RewriteContext rewriteContext,
+                                     OptExpression mvScanOptExpression);
+
+    /**
+     * Do rewrite mv's defined query plan based on query's plan.
+     */
+    OptExpression doQueryBasedRewrite(RewriteContext rewriteContext,
+                                      ScalarOperator compensationPredicates,
+                                      OptExpression queryExpression);
+    /**
+     * Union Rewrite by viewBasedRewrite and queryBasedRewrite.
+     * NOTE: Ensure plan's output column refs are unique even for the same query/mv plans.
+     * NOTE: viewInput's column ref's uniqueness is ensured by viewBasedRewrite.
+     */
+    OptExpression doUnionRewrite(OptExpression queryInput, OptExpression viewInput,
+                                 RewriteContext rewriteContext);
+
     /**
      * Rewrite the query with the given materialized view context.
      * @param mvContext: materialized view context of query and associated mv.
