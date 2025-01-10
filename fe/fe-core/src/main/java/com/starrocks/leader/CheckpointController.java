@@ -84,10 +84,10 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  */
 public class CheckpointController extends FrontendDaemon {
     public static final Logger LOG = LogManager.getLogger(CheckpointController.class);
-    public static final ReentrantReadWriteLock RW_LOCK = new ReentrantReadWriteLock();
     private static final int PUT_TIMEOUT_SECOND = 3600;
     private static final int CONNECT_TIMEOUT_SECOND = 1;
     private static final int READ_TIMEOUT_SECOND = 1;
+    private static final ReentrantReadWriteLock RW_LOCK = new ReentrantReadWriteLock();
 
     private String imageDir;
     private final Journal journal;
