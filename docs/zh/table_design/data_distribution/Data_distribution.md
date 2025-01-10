@@ -162,8 +162,8 @@ StarRocks 支持单独和组合使用数据分布方式。
 | **分区方式**       | **适用场景**                                                     | **分区创建方式**                                  |
 | ------------------ | ------------------------------------------------------------ | --------------------------------------------- |
 | 表达式分区（推荐） | 原称自动创建分区，适用大多数场景，并且灵活易用。适用于按照连续日期范围或者枚举值来查询和管理数据。 | 导入时自动创建                                |
-| Range 分区         | 典型的场景是数据简单有序，并且通常按照连续日期/数值范围来查询和管理数据。再如一些特殊场景，比如历史数据需要按月划分分区，而最近数据需要按天划分分区。 | 动态、批量或者手动创建 |
-| List  分区         | 典型的场景是按照枚举值来查询和管理数据，并且一个分区中需要包含各分区列的多值。比如经常按照国家和城市来查询和管理数据，则可以使用该方式，选择分区列为 `city`，一个分区包含属于一个国家的多个城市的数据。 | 手动创建                              |
+| Range 分区（不推荐）| 典型的场景是数据简单有序，并且通常按照连续日期/数值范围来查询和管理数据。再如一些特殊场景，比如历史数据需要按月划分分区，而最近数据需要按天划分分区。 | 动态、批量或者手动创建 |
+| List  分区（不推荐）| 典型的场景是按照枚举值来查询和管理数据，并且一个分区中需要包含各分区列的多值。比如经常按照国家和城市来查询和管理数据，则可以使用该方式，选择分区列为 `city`，一个分区包含属于一个国家的多个城市的数据。 | 手动创建                              |
 
 **选择分区列和分区粒度**
 
@@ -192,11 +192,65 @@ StarRocks 支持单独和组合使用数据分布方式。
 
 > **注意**
 >
-> 3.1 版本起，StarRocks [存算分离模式](../../deployment/shared_data/shared_data.mdx)支持时间函数的分区表达式。
+> StarRocks [存算分离模式](../../deployment/shared_data/shared_data.mdx)自 v3.1.0 起支持时间函数表达式分区，自 v3.1.1 起支持列表达式分区。
 
 [表达式分区](expression_partitioning.md)，原称自动创建分区，更加灵活易用，适用于大多数场景，比如按照连续日期范围或者枚举值来查询和管理数据。
 
-您仅需要在建表时使用分区表达式（时间函数表达式或列表达式），即可实现导入数据时自动创建分区，不需要预先创建出分区或者配置动态分区属性。
+您仅需要在建表时使用分区表达式，即可实现导入数据时自动创建分区，不需要预先创建出分区或者配置动态分区属性。
+
+从 v3.4 开始，表达式分区方式进一步得到优化，统一所有分区策略，并支持更复杂的解决方案。在大多数情况下，建议您使用表达式分区。表达式分区将在未来版本中逐渐取代其他分区策略。
+
+示例一：基于 DATETIME 列使用简单时间函数表达式分区。
+
+```SQL
+CREATE TABLE site_access(
+    event_day DATETIME NOT NULL,
+    site_id INT DEFAULT '10',
+    city_code VARCHAR(100),
+    user_name VARCHAR(32) DEFAULT '',
+    pv BIGINT DEFAULT '0'
+)
+DUPLICATE KEY(event_day, site_id, city_code, user_name)
+PARTITION BY time_slice(event_day, INTERVAL 7 day)
+DISTRIBUTED BY HASH(event_day, site_id)
+```
+
+示例二：基于多列使用列表达式分区。
+
+```SQL
+CREATE TABLE t_recharge_detail1 (
+    id bigint,
+    user_id bigint,
+    recharge_money decimal(32,2), 
+    city varchar(20) not null,
+    dt varchar(20) not null
+)
+DUPLICATE KEY(id)
+PARTITION BY dt,city
+DISTRIBUTED BY HASH(`id`);
+```
+
+示例三：基于 Unix 时间戳列使用复杂时间函数表达式分区。
+
+```SQL
+CREATE TABLE orders (
+    ts BIGINT NOT NULL,
+    id BIGINT NOT NULL,
+    city STRING NOT NULL
+)
+PARTITION BY from_unixtime(ts,'%Y%m%d');
+```
+
+示例四：使用时间函数表达式和列表达式的混合表达式分区。
+
+```SQL
+CREATE TABLE orders (
+    ts BIGINT NOT NULL,
+    id BIGINT NOT NULL,
+    city STRING NOT NULL
+)
+PARTITION BY from_unixtime(ts,'%Y%m%d'), city;
+```
 
 #### Range 分区
 
