@@ -296,5 +296,5 @@ MySQL > SHOW PARTITIONS FROM t_recharge_detail1;
 - 使用 CTAS 建表时暂时不支持表达式分区。
 - 暂时不支持使用 Spark Load 导入数据至表达式分区的表。
 - 使用 `ALTER TABLE <table_name> DROP PARTITION <partition_name>` 删除列表达式分区时，分区直接被删除并且不能被恢复。
-- 表达式分区表暂时不支持[备份与恢复](../../administration/management/Backup_and_restore.md)。
+- 自 v3.4.0、v3.3.8、v3.2.13 以及 v3.1.16 起，StarRocks 支持[备份与恢复](../../administration/management/Backup_and_restore.md)表达式分区表。
 - 如果使用表达式分区，则仅支持回滚到 2.5.4 及以后的版本。
