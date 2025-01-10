@@ -223,21 +223,14 @@ public:
     void shutdown();
 
     // Submits a Runnable class.
-<<<<<<< HEAD
+    // Be aware that the `r` may not be executed even though the submit returns OK
+    // in case a shutdown is issued right after the submission.
     [[nodiscard]] Status submit(std::shared_ptr<Runnable> r, Priority pri = LOW_PRIORITY);
 
     // Submits a function bound using std::bind(&FuncName, args...).
+    // Be aware that the `r` may not be executed even though the submit returns OK
+    // in case a shutdown is issued right after the submission.
     [[nodiscard]] Status submit_func(std::function<void()> f, Priority pri = LOW_PRIORITY);
-=======
-    // Be aware that the `r` may not be executed even though the submit returns OK
-    // in case a shutdown is issued right after the submission.
-    Status submit(std::shared_ptr<Runnable> r, Priority pri = LOW_PRIORITY);
-
-    // Submits a function bound using std::bind(&FuncName, args...).
-    // Be aware that the `r` may not be executed even though the submit returns OK
-    // in case a shutdown is issued right after the submission.
-    Status submit_func(std::function<void()> f, Priority pri = LOW_PRIORITY);
->>>>>>> e267ea0c38 ([BugFix] ensure the latch can be counted down (#54859))
 
     // Waits until all the tasks are completed.
     void wait();

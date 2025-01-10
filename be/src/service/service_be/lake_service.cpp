@@ -284,34 +284,20 @@ void LakeServiceImpl::_submit_publish_log_version_task(const int64_t* tablet_ids
 
     for (int i = 0; i < tablet_size; i++) {
         auto tablet_id = tablet_ids[i];
-<<<<<<< HEAD
-        auto task = [&, tablet_id]() {
-            DeferOp defer([&] { latch.count_down(); });
-            auto st = lake::publish_log_version(_tablet_mgr, tablet_id, txn_ids, log_versions, txn_size);
-            if (!st.ok()) {
-                g_publish_version_failed_tasks << 1;
-                LOG(WARNING) << "Fail to publish log version: " << st << " tablet_id=" << tablet_id
-                             << " txn_ids=" << JoinElementsIterator(txn_ids, txn_ids + txn_size, ",")
-                             << " versions=" << JoinElementsIterator(log_versions, log_versions + txn_size, ",");
-                std::lock_guard l(response_mtx);
-                response->add_failed_tablets(tablet_id);
-            }
-        };
-=======
         auto task = std::make_shared<AutoCleanRunnable>(
                 [&, tablet_id] {
-                    auto st = lake::publish_log_version(_tablet_mgr, tablet_id, txn_infos, log_versions);
+                    auto st = lake::publish_log_version(_tablet_mgr, tablet_id, txn_ids, log_versions, txn_size);
                     if (!st.ok()) {
                         g_publish_version_failed_tasks << 1;
                         LOG(WARNING) << "Fail to publish log version: " << st << " tablet_id=" << tablet_id
-                                     << " txns=" << JoinMapped(txn_infos, txn_info_string, ",") << " versions="
+                                     << " txn_ids=" << JoinElementsIterator(txn_ids, txn_ids + txn_size, ",")
+                                     << " versions="
                                      << JoinElementsIterator(log_versions, log_versions + txn_size, ",");
                         std::lock_guard l(response_mtx);
                         response->add_failed_tablets(tablet_id);
                     }
                 },
                 [&] { latch.count_down(); });
->>>>>>> e267ea0c38 ([BugFix] ensure the latch can be counted down (#54859))
 
         auto st = thread_pool->submit(std::move(task));
         if (!st.ok()) {
