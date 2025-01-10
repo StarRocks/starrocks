@@ -303,6 +303,18 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：true
 * 引入版本：v2.5.13，v3.0.7，v3.1.4，v3.2.0，v3.3.0
 
+### enable_plan_advisor
+
+* 描述：是否为慢查询或手动标记查询开启 Query Feedback 功能。
+* 默认值：true
+* 引入版本：v3.4.0
+
+### enable_plan_analyzer
+
+* 描述：是否为所有查询开启 Query Feedback 功能。该变量仅在 `enable_plan_advisor` 为 `true` 是生效。
+* 默认值：false
+* 引入版本：v3.4.0
+
 ### follower_query_forward_mode
 
 * 描述：用于指定将查询语句路由到 Leader FE 或 Follower FE 节点。

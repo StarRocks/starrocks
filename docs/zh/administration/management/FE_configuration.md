@@ -1879,6 +1879,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：: 分区裁剪允许的最大递归深度。增加递归深度可以裁剪更多元素但同时增加 CPU 资源消耗。
 - 引入版本：-
 
+##### slow_query_analyze_threshold
+
+- 默认值：5
+- 类型：Int
+- 单位：秒
+- 是否动态：是
+- 描述：查询触发 Query Feedback 分析的执行时间阈值。
+- 引入版本：v3.4.0
+
 ### 导入导出
 
 ##### load_straggler_wait_second

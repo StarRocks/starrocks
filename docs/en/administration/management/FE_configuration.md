@@ -1887,6 +1887,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description:: The maximum recursion depth allowed by the partition pruner. Increasing the recursion depth can prune more elements but also increases CPU consumption.
 - Introduced in: -
 
+##### slow_query_analyze_threshold
+
+- Default: 5
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description:: The execution time threshold for queries to trigger the analysis of Query Feedback.
+- Introduced in: v3.4.0
+
 ### Loading and unloading
 
 ##### load_straggler_wait_second
