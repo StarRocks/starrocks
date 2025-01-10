@@ -23,9 +23,9 @@ SHOW BACKENDS
 ## Return
 
 ```SQL
-+-----------+-----------+---------------+--------+----------+----------+---------------------+---------------------+-------+----------------------+-----------------------+-----------+------------------+---------------+---------------+---------+----------------+--------+--------------------+--------------------------------------------------------+-------------------+-------------+----------+-------------------+------------+------------+------------------+----------+
-| BackendId | IP        | HeartbeatPort | BePort | HttpPort | BrpcPort | LastStartTime       | LastHeartbeat       | Alive | SystemDecommissioned | ClusterDecommissioned | TabletNum | DataUsedCapacity | AvailCapacity | TotalCapacity | UsedPct | MaxDiskUsedPct | ErrMsg | Version            | Status                                                 | DataTotalCapacity | DataUsedPct | CpuCores | NumRunningQueries | MemUsedPct | CpuUsedPct | DataCacheMetrics | Location |
-+-----------+-----------+---------------+--------+----------+----------+---------------------+---------------------+-------+----------------------+-----------------------+-----------+------------------+---------------+---------------+---------+----------------+--------+--------------------+--------------------------------------------------------+-------------------+-------------+----------+-------------------+------------+------------+------------------+----------+
++-----------+--------------+---------------+--------+----------+----------+---------------------+---------------------+-------+----------------------+-----------------------+-----------+------------------+---------------+---------------+---------+----------------+--------+--------------+--------------------------------------------------------+-------------------+-------------+----------+----------+-------------------+------------+------------+--------------------------------------------------------+----------+------------+
+| BackendId | IP           | HeartbeatPort | BePort | HttpPort | BrpcPort | LastStartTime       | LastHeartbeat       | Alive | SystemDecommissioned | ClusterDecommissioned | TabletNum | DataUsedCapacity | AvailCapacity | TotalCapacity | UsedPct | MaxDiskUsedPct | ErrMsg | Version      | Status                                                 | DataTotalCapacity | DataUsedPct | CpuCores | MemLimit | NumRunningQueries | MemUsedPct | CpuUsedPct | DataCacheMetrics                                       | Location | StatusCode |
++-----------+--------------+---------------+--------+----------+----------+---------------------+---------------------+-------+----------------------+-----------------------+-----------+------------------+---------------+---------------+---------+----------------+--------+--------------+--------------------------------------------------------+-------------------+-------------+----------+----------+-------------------+------------+------------+--------------------------------------------------------+----------+------------+
 ```
 
 | **Return**            | **Description**                                              |
@@ -53,11 +53,13 @@ SHOW BACKENDS
 | DataTotalCapacity     | It is equivalent to `DataUsedCapacity` + `AvailCapacity`. It indicates the sum of the storage capacity occupied by the data file and the available storage capacity in the BE node. |
 | DataUsedPct           |  It is equivalent to `DataUsedCapacity`/`DataTotalCapacity`. It indicates the proportion of the storage capacity occupied by the data file to the sum of the data-occupied storage capacity and the available storage capacity. |
 | CpuCores              | The number of CPU cores in the BE node.                      |
+| MemLimit              | The memory limit of the BE node.                             |
 | NumRunningQueries     | The number of running queries on the BE node.                |
 | MemUsedPct            | The percentage of used memory.                               |
 | CpuUsedPct            | The percentage of used CPU cores.                            |
 | DataCacheMetrics      | The status of Data Cache:<ul><li>`Disabled`: Disabled</li><li>`Normal`: Normal </li><li>`Abnormal`: Abnormal </li><li>`Updating`: Data Cache is being updating, for example, scaling. </li></ul>                      |
 | Location              | The label of the BE node.                                    |
+| StatusCode            | BE status code. Valid values: <ul><li>`CONNECTING`: The BE node is being added to the cluster for the first time.</li><li>`OK`: The BE node is running.</li><li>`SHUTDOWN`: The BE node is being shut down gracefully.</li><li>`DISCONNECTED`: The BE node is disconnected.</li></ul> |
 
 ## Example
 
