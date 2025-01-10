@@ -663,7 +663,6 @@ public class ColumnTypeConverter {
                 primitiveType = PrimitiveType.DATETIME;
                 break;
             case STRING:
-            case UUID:
                 return ScalarType.createDefaultCatalogString();
             case DECIMAL:
                 int precision = ((Types.DecimalType) icebergType).precision();
@@ -697,6 +696,7 @@ public class ColumnTypeConverter {
                 }
                 return new StructType(structFields);
             case BINARY:
+            case UUID:
                 return Type.VARBINARY;
             case TIME:
                 return Type.TIME;
