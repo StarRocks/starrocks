@@ -12,7 +12,8 @@ displayed_sidebar: docs
 
 > **注意**
 >
-> 只有拥有基表所在数据库的 CREATE MATERIALIZED VIEW 权限的用户才可以创建物化视图。
+> - 只有拥有基表所在数据库的 CREATE MATERIALIZED VIEW 权限的用户才可以创建物化视图。
+> - 自 v3.4.0 起，StarRocks 存算分离集群支持同步物化视图。
 
 StarRocks 自 v2.4 起支持异步物化视图。异步物化视图与先前版本中的同步物化视图区别主要体现在以下方面：
 
