@@ -1,4 +1,4 @@
--- name: test_mv_partition_compensate_hive
+-- name: test_mv_partition_compensate_hive @slow
 create external catalog mv_hive_${uuid0}
 properties
 (
