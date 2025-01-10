@@ -10,7 +10,8 @@ Creates a materialized view. For usage information about materialized views, see
 
 > **CAUTION**
 >
-> Only users with the CREATE MATERIALIZED VIEW privilege in the database where the base table resides can create a materialized view.
+> - Only users with the CREATE MATERIALIZED VIEW privilege in the database where the base table resides can create a materialized view.
+> - From v3.4.0 onwards, StarRocks supports creating synchronous materialized views in shared-data clusters.
 
 Creating a materialized view is an asynchronous operation. Running this command successfully indicates that the task of creating the materialized view is submitted successfully. You can view the building status of a synchronous materialized view in a database via [SHOW ALTER MATERIALIZED VIEW](SHOW_ALTER_MATERIALIZED_VIEW.md) command, and view that of an asynchronous materialized view by querying the metadata views [`tasks`](../../information_schema/tasks.md) and [`task_runs`](../../information_schema/task_runs.md) in [Information Schema](../../information_schema/information_schema.md).
 

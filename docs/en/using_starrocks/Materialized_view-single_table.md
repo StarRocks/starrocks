@@ -15,7 +15,7 @@ From v2.4 onwards, StarRocks provides asynchronous materialized views, which sup
 
 :::note
 - Synchronous materialized views support WHERE clauses from v3.1.8 onwards.
-- Currently, synchronous materialized view is not yet supported in the shared-data clusters.
+- Synchronous materialized views are supported in the shared-data clusters from v3.4.0 onwards.
 :::
 
 The following table compares the asynchronous materialized views (ASYNC MVs) in StarRocks v2.5, v2.4, and the synchronous materialized view (SYNC MV) in the perspective of features that they support:

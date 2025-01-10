@@ -7,7 +7,7 @@ sidebar_position: 10
 
 The query cache is a powerful feature of StarRocks that can greatly enhance the performance of aggregate queries. By storing the intermediate results of local aggregations in memory, the query cache can avoid unnecessary disk access and computation for new queries that are identical or similar to previous ones. With its query cache, StarRocks can deliver fast and accurate results for aggregate queries, saving time and resources and enabling better scalability. The query cache is especially useful for high-concurrency scenarios where many users run similar queries on large and complex data sets.
 
-This feature is supported since v2.5.
+This feature is supported in shared-nothing clusters since v2.5 and in shared-data cluster since v3.4.0.
 
 In v2.5, the query cache supports only aggregate queries on single flat tables. Since v3.0, the query cache also supports aggregate queries on multiple tables joined in a star schema.
 

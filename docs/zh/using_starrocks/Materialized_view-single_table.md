@@ -15,7 +15,7 @@ StarRocks 中的同步物化视图仅能基于 [Default Catalog](../data_source/
 
 :::note
 - 同步物化视图自 v3.1.8 起支持 WHERE 子句。
-- 目前， StarRocks 存算分离集群暂不支持同步物化视图。
+- 自 v3.4.0 起，StarRocks 存算分离集群支持同步物化视图。
 :::
 
 下表从支持的特性角度比较了 StarRocks 2.5、2.4 中的异步物化视图以及同步物化视图（Rollup）：
