@@ -70,6 +70,26 @@ public:
     virtual ~Runnable() = default;
 };
 
+// A helper class implements the `Runnable` interface together with a cleaner
+// when the instance is destroyed.
+// NOTE:
+//  The function or the runnable submit to a ThreadPool successfully, may not be running
+// at all because of threadpool shutdown. The caller who depends on the function/runnable
+// execution to signal or clean resources, needs to inject a `cleaner` to ensure the clean-
+// up work can be done under no condition.
+class AutoCleanRunnable : public Runnable {
+public:
+    AutoCleanRunnable(std::function<void()> runner, std::function<void()> cleaner)
+            : _runnable(std::move(runner)), _cleaner(std::move(cleaner)) {}
+    virtual ~AutoCleanRunnable() { _cleaner(); }
+
+    virtual void run() override { _runnable(); }
+
+protected:
+    std::function<void()> _runnable;
+    std::function<void()> _cleaner;
+};
+
 // ThreadPool takes a lot of arguments. We provide sane defaults with a builder.
 //
 // name: Used for debugging output and default names of the worker threads.
@@ -193,18 +213,31 @@ public:
     bool is_pool_status_ok();
 
     // Wait for the running tasks to complete and then shutdown the threads.
-    // All the other pending tasks in the queue will be removed.
+    // All the other `pending tasks` in the queue will be removed without execution.
     // NOTE: That the user may implement an external abort logic for the
     //       runnable, that must be called before Shutdown(), if the system
     //       should know about the non-execution of these tasks, or the runnable
     //       required an explicit "abort" notification to exit from the run loop.
+    // NOTE: Try to leverage `AutoCleanRunnable` to inject exit hook if the caller
+    //       relies on the task to be executed to free resources or send signals.
     void shutdown();
 
     // Submits a Runnable class.
+<<<<<<< HEAD
     [[nodiscard]] Status submit(std::shared_ptr<Runnable> r, Priority pri = LOW_PRIORITY);
 
     // Submits a function bound using std::bind(&FuncName, args...).
     [[nodiscard]] Status submit_func(std::function<void()> f, Priority pri = LOW_PRIORITY);
+=======
+    // Be aware that the `r` may not be executed even though the submit returns OK
+    // in case a shutdown is issued right after the submission.
+    Status submit(std::shared_ptr<Runnable> r, Priority pri = LOW_PRIORITY);
+
+    // Submits a function bound using std::bind(&FuncName, args...).
+    // Be aware that the `r` may not be executed even though the submit returns OK
+    // in case a shutdown is issued right after the submission.
+    Status submit_func(std::function<void()> f, Priority pri = LOW_PRIORITY);
+>>>>>>> e267ea0c38 ([BugFix] ensure the latch can be counted down (#54859))
 
     // Waits until all the tasks are completed.
     void wait();
@@ -523,24 +556,9 @@ public:
 
     DISALLOW_COPY_AND_MOVE(ConcurrencyLimitedThreadPoolToken);
 
-    Status submit_func(std::function<void()> task, std::chrono::system_clock::time_point deadline) {
-        if (!_sem->try_acquire_until(deadline)) {
-            auto t = MilliSecondsSinceEpochFromTimePoint(deadline);
-            return Status::TimedOut(fmt::format("acquire semaphore reached deadline={}", t));
-        }
-        auto task_with_semaphore_release = [sem = _sem, task = std::move(task)]() {
-            task();
-            // The `ConcurrencyLimitedThreadPoolToken` object may have been destroyed
-            // before `release()` the semaphore, so we use `std::shared_ptr` to manage
-            // the semaphore to ensure it's still alive when calling `release()`.
-            sem->release();
-        };
-        auto st = _pool->submit_func(std::move(task_with_semaphore_release));
-        if (!st.ok()) {
-            _sem->release();
-        }
-        return st;
-    }
+    Status submit(std::shared_ptr<Runnable> task, std::chrono::system_clock::time_point deadline);
+
+    Status submit_func(std::function<void()> f, std::chrono::system_clock::time_point deadline);
 
 private:
     ThreadPool* _pool;
