@@ -17,6 +17,7 @@
 #include <atomic>
 #include <boost/algorithm/string.hpp>
 
+#include "connector/deletion_vector/deletion_bitmap.h"
 #include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/scan/morsel.h"
 #include "exprs/expr.h"
@@ -41,7 +42,9 @@ struct HdfsSplitContext : public pipeline::ScanSplitContext {
 using HdfsSplitContextPtr = std::unique_ptr<HdfsSplitContext>;
 
 struct SkipRowsContext {
-    std::set<int64_t> need_skip_rowids;
+    DeletionBitmapPtr deletion_bitmap;
+
+    bool has_skip_rows() { return deletion_bitmap != nullptr && !deletion_bitmap->empty(); }
 };
 using SkipRowsContextPtr = std::shared_ptr<SkipRowsContext>;
 

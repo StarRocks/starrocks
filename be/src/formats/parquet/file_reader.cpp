@@ -545,8 +545,8 @@ Status FileReader::_init_group_readers() {
             continue;
         }
 
-        auto row_group_reader = std::make_shared<GroupReader>(_group_reader_param, i, &_skip_rows_ctx->need_skip_rowids,
-                                                              row_group_first_row);
+        auto row_group_reader =
+                std::make_shared<GroupReader>(_group_reader_param, i, _skip_rows_ctx, row_group_first_row);
         RETURN_IF_ERROR(row_group_reader->init());
 
         _group_reader_param.stats->parquet_total_row_groups += 1;
@@ -560,11 +560,11 @@ Status FileReader::_init_group_readers() {
 
         _row_group_readers.emplace_back(row_group_reader);
         int64_t num_rows = _file_metadata->t_metadata().row_groups[i].num_rows;
-        // for iceberg v2 pos delete
-        if (_skip_rows_ctx != nullptr && !_skip_rows_ctx->need_skip_rowids.empty()) {
-            auto start_iter = _skip_rows_ctx->need_skip_rowids.lower_bound(row_group_first_row);
-            auto end_iter = _skip_rows_ctx->need_skip_rowids.upper_bound(row_group_first_row + num_rows - 1);
-            num_rows -= std::distance(start_iter, end_iter);
+        // for skip rows which already deleted
+        if (_skip_rows_ctx != nullptr && _skip_rows_ctx->has_skip_rows()) {
+            uint64_t deletion_rows = _skip_rows_ctx->deletion_bitmap->get_range_cardinality(
+                    row_group_first_row, row_group_first_row + num_rows);
+            num_rows -= deletion_rows;
         }
         _total_row_count += num_rows;
     }

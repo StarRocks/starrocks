@@ -44,9 +44,9 @@
 
 namespace starrocks::parquet {
 
-GroupReader::GroupReader(GroupReaderParam& param, int row_group_number, const std::set<int64_t>* need_skip_rowids,
+GroupReader::GroupReader(GroupReaderParam& param, int row_group_number, SkipRowsContextPtr skip_rows_ctx,
                          int64_t row_group_first_row)
-        : _row_group_first_row(row_group_first_row), _need_skip_rowids(need_skip_rowids), _param(param) {
+        : _row_group_first_row(row_group_first_row), _skip_rows_ctx(std::move(skip_rows_ctx)), _param(param) {
     _row_group_metadata = &_param.file_metadata->t_metadata().row_groups[row_group_number];
 }
 
@@ -200,16 +200,12 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
         Filter chunk_filter(count, 1);
 
         // row id filter
-        if ((nullptr != _need_skip_rowids) && !_need_skip_rowids->empty()) {
+        if (nullptr != _skip_rows_ctx && _skip_rows_ctx->has_skip_rows()) {
             {
                 SCOPED_RAW_TIMER(&_param.stats->build_rowid_filter_ns);
-                auto start_str = _need_skip_rowids->lower_bound(r.begin());
-                auto end_str = _need_skip_rowids->upper_bound(r.end() - 1);
+                ASSIGN_OR_RETURN(has_filter,
+                                 _skip_rows_ctx->deletion_bitmap->fill_filter(r.begin(), r.end(), chunk_filter));
 
-                for (; start_str != end_str; start_str++) {
-                    chunk_filter[*start_str - r.begin()] = 0;
-                    has_filter = true;
-                }
                 if (SIMD::count_nonzero(chunk_filter.data(), count) == 0) {
                     continue;
                 }

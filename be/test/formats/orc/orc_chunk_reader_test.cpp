@@ -2129,7 +2129,15 @@ TEST_F(OrcChunkReaderTest, TestOrcIcebergPositionDelete) {
 
     // we should ignore row_id = 4
     std::set<int64_t> rows_to_delete{3, 4};
-    ColumnPtr row_delete_filter = reader.get_row_delete_filter(rows_to_delete);
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    roaring64_bitmap_t* bitmap = roaring64_bitmap_create();
+    roaring64_bitmap_add(bitmap, 3);
+    roaring64_bitmap_add(bitmap, 4);
+    skip_rows_ctx->deletion_bitmap = std::make_shared<DeletionBitmap>(bitmap);
+
+    StatusOr<ColumnPtr> status = reader.get_row_delete_filter(skip_rows_ctx);
+    EXPECT_TRUE(status.ok());
+    ColumnPtr row_delete_filter = status.value();
 
     EXPECT_EQ(4, row_delete_filter->size());
     BooleanColumn* binary_column = down_cast<BooleanColumn*>(row_delete_filter.get());

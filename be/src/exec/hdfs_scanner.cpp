@@ -333,6 +333,9 @@ void HdfsScanner::do_update_iceberg_v2_counter(RuntimeProfile* parent_profile, c
 }
 
 void HdfsScanner::do_update_deletion_vector_counter(RuntimeProfile* parent_profile) {
+    if (_scanner_ctx.enable_split_tasks && !has_split_tasks()) {
+        return;
+    }
     const std::string DV_TIMER = DeletionVector::DELETION_VECTOR;
     ADD_COUNTER(parent_profile, DV_TIMER, TUnit::NONE);
 

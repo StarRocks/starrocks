@@ -30,12 +30,16 @@ public:
 
 TEST_F(DeletionVectorTest, inlineDeletionVectorTest) {
     std::string encoded_inline_dv = "^Bg9^0rr910000000000iXQKl0rr91000f55c8Xg0@@D72lkbi5=-{L";
-    std::set<int64_t> need_skip_rowids;
-    Status status = dv->deserialized_inline_dv(encoded_inline_dv, &need_skip_rowids);
+    SkipRowsContextPtr skipRowsContext = std::make_shared<SkipRowsContext>();
+    Status status = dv->deserialized_inline_dv(encoded_inline_dv, skipRowsContext);
     ASSERT_TRUE(status.ok());
-    ASSERT_EQ(6, need_skip_rowids.size());
+
+    uint64_t cardinality = skipRowsContext->deletion_bitmap->get_cardinality();
+    vector<uint64_t> bitmap_vector(cardinality);
+    skipRowsContext->deletion_bitmap->to_array(bitmap_vector);
+    ASSERT_EQ(6, bitmap_vector.size());
     std::stringstream ss;
-    for (int64_t rowid : need_skip_rowids) {
+    for (int64_t rowid : bitmap_vector) {
         ss << rowid << " ";
     }
     ASSERT_EQ("3 4 7 11 18 29 ", ss.str());
