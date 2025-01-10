@@ -28,14 +28,16 @@ StatusOr<bool> DeletionBitmap::fill_filter(uint64_t start, uint64_t end, Filter&
         return false;
     }
 
+    bool has_filter = false;
     while (roaring64_iterator_has_value(it) && roaring64_iterator_value(it) < end) {
         uint64_t value = roaring64_iterator_value(it);
         filter[value - start] = 0;
+        has_filter = true;
         roaring64_iterator_advance(it);
     }
 
     roaring64_iterator_free(it);
-    return true;
+    return has_filter;
 }
 
 uint64_t DeletionBitmap::get_range_cardinality(uint64_t start, uint64_t end) const {
