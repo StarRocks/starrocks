@@ -194,7 +194,8 @@ public:
                                                      const Column** columns, int64_t current_row_position,
                                                      int64_t partition_start, int64_t partition_end,
                                                      int64_t rows_start_offset, int64_t rows_end_offset,
-                                                     bool ignore_subtraction, bool ignore_addition) const {}
+                                                     bool ignore_subtraction, bool ignore_addition,
+                                                     [[maybe_unused]] bool has_null) const {}
 
     // Contains a loop with calls to "merge" function.
     // You can collect arguments into array "states"
