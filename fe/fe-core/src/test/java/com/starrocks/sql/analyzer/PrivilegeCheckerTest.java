@@ -965,7 +965,7 @@ public class PrivilegeCheckerTest {
                 " k4 int) ENGINE=OLAP PRIMARY KEY(`k1`) distributed by hash(k1) " +
                 "buckets 3 properties('replication_num' = '1');";
         starRocksAssert.withTable(createTblStmtStr4);
-        Config.setMutableConfig("authorization_enable_column_level_privilege", "true");
+        Config.setMutableConfig("authorization_enable_column_level_privilege", "true", false, "");
         // select
         verifyGrantRevoke(
                 "select * from db1.tbl1",
@@ -1082,7 +1082,7 @@ public class PrivilegeCheckerTest {
                 "grant delete on db3.tprimary to test", "revoke delete on db3.tprimary from test",
                 "Access denied; you need (at least one of) the DELETE privilege(s) on TABLE tprimary for this operation",
                 "Access denied; you need (at least one of) the SELECT privilege(s) on COLUMN tbl1.k1,k2 for this operation");
-        Config.setMutableConfig("authorization_enable_column_level_privilege", "false");
+        Config.setMutableConfig("authorization_enable_column_level_privilege", "false", false, "");
         starRocksAssert.dropTable("db3.tprimary");
     }
 

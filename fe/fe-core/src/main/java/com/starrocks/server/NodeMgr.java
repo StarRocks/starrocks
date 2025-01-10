@@ -1153,46 +1153,63 @@ public class NodeMgr {
     }
 
     public void setConfig(AdminSetConfigStmt stmt) throws DdlException {
-        setFrontendConfig(stmt.getConfig().getMap());
-
-        List<Frontend> allFrontends = getFrontends(null);
-        int timeout = ConnectContext.get().getExecTimeout() * 1000 + Config.thrift_rpc_timeout_ms;
-        StringBuilder errMsg = new StringBuilder();
-        for (Frontend fe : allFrontends) {
-            if (fe.getHost().equals(getSelfNode().first)) {
-                continue;
-            }
-
-            TSetConfigRequest request = new TSetConfigRequest();
-            request.setKeys(Lists.newArrayList(stmt.getConfig().getKey()));
-            request.setValues(Lists.newArrayList(stmt.getConfig().getValue()));
-            try {
-                TSetConfigResponse response = ThriftRPCRequestExecutor.call(
-                        ThriftConnectionPool.frontendPool,
-                        new TNetworkAddress(fe.getHost(), fe.getRpcPort()),
-                        timeout,
-                        client -> client.setConfig(request));
-                TStatus status = response.getStatus();
-                if (status.getStatus_code() != TStatusCode.OK) {
-                    errMsg.append("set config for fe[").append(fe.getHost()).append("] failed: ");
-                    if (status.getError_msgs() != null && status.getError_msgs().size() > 0) {
-                        errMsg.append(String.join(",", status.getError_msgs()));
-                    }
-                    errMsg.append(";");
+        if (GlobalStateMgr.getCurrentState().isLeader()) {
+            String user = ConnectContext.get().getCurrentUserIdentity().getUser();
+            setFrontendConfig(stmt.getConfig().getMap(), stmt.isPersistent(), user);
+            List<Frontend> allFrontends = getFrontends(null);
+            int timeout = ConnectContext.get().getExecTimeout() * 1000 + Config.thrift_rpc_timeout_ms;
+            StringBuilder errMsg = new StringBuilder();
+            for (Frontend fe : allFrontends) {
+                if (fe.getHost().equals(getSelfNode().first)) {
+                    continue;
                 }
-            } catch (Exception e) {
-                LOG.warn("set remote fe: {} config failed", fe.getHost(), e);
-                errMsg.append("set config for fe[").append(fe.getHost()).append("] failed: ").append(e.getMessage());
+                errMsg.append(callFrontNodeSetConfig(stmt, fe, timeout, errMsg));
             }
-        }
-        if (errMsg.length() > 0) {
-            ErrorReport.reportDdlException(ErrorCode.ERROR_SET_CONFIG_FAILED, errMsg.toString());
+            if (errMsg.length() > 0) {
+                ErrorReport.reportDdlException(ErrorCode.ERROR_SET_CONFIG_FAILED, errMsg.toString());
+            }
+        } else {
+            Pair<String, Integer> leaderIpAndRpcPort = getLeaderIpAndRpcPort();
+            Frontend fe = new Frontend(FrontendNodeType.LEADER, "leader", leaderIpAndRpcPort.first,
+                    leaderIpAndRpcPort.second);
+            StringBuilder errMsg =
+                    callFrontNodeSetConfig(stmt, fe, Config.thrift_rpc_timeout_ms, new StringBuilder());
+            if (errMsg.length() > 0) {
+                ErrorReport.reportDdlException(ErrorCode.ERROR_SET_CONFIG_FAILED, errMsg.toString());
+            }
         }
     }
 
-    public void setFrontendConfig(Map<String, String> configs) throws DdlException {
+    private StringBuilder callFrontNodeSetConfig(AdminSetConfigStmt stmt, Frontend fe, int timeout, StringBuilder errMsg) {
+        TSetConfigRequest request = new TSetConfigRequest();
+        request.setKeys(Lists.newArrayList(stmt.getConfig().getKey()));
+        request.setValues(Lists.newArrayList(stmt.getConfig().getValue()));
+        request.setIs_persistent(stmt.isPersistent());
+        request.setUser_identity(ConnectContext.get().getCurrentUserIdentity().getUser());
+        try {
+            TSetConfigResponse response = ThriftRPCRequestExecutor.call(
+                    ThriftConnectionPool.frontendPool,
+                    new TNetworkAddress(fe.getHost(), fe.getRpcPort()),
+                    timeout,
+                    client -> client.setConfig(request));
+            TStatus status = response.getStatus();
+            if (status.getStatus_code() != TStatusCode.OK) {
+                errMsg.append("set config for fe[").append(fe.getHost()).append("] failed: ");
+                if (status.getError_msgs() != null && status.getError_msgs().size() > 0) {
+                    errMsg.append(String.join(",", status.getError_msgs()));
+                }
+                errMsg.append(";");
+            }
+        } catch (Exception e) {
+            LOG.warn("set remote fe: {} config failed", fe.getHost(), e);
+            errMsg.append("set config for fe[").append(fe.getHost()).append("] failed: ").append(e.getMessage());
+        }
+        return errMsg;
+    }
+
+    public void setFrontendConfig(Map<String, String> configs, boolean isPersisted, String userIdentity) throws DdlException {
         for (Map.Entry<String, String> entry : configs.entrySet()) {
-            ConfigBase.setMutableConfig(entry.getKey(), entry.getValue());
+            ConfigBase.setMutableConfig(entry.getKey(), entry.getValue(), isPersisted, userIdentity);
         }
     }
 

@@ -36,13 +36,22 @@ package com.starrocks.common;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import com.starrocks.common.util.DateUtils;
+import com.starrocks.common.util.Util;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.BufferedWriter;
+import java.io.File;
 import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.reflect.Field;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -76,10 +85,13 @@ public class ConfigBase {
     }
 
     protected Properties props;
+    private static boolean isPersisted = false;
+    private static String configPath;
     protected static Field[] configFields;
     protected static Map<String, Field> allMutableConfigs = new HashMap<>();
 
     public void init(String propFile) throws Exception {
+        configPath = propFile;
         configFields = this.getClass().getFields();
         initAllMutableConfigs();
         props = new Properties();
@@ -94,8 +106,17 @@ public class ConfigBase {
                 reader.close();
             }
         }
+
+        if (Files.isWritable(Path.of(propFile)) && !Util.isRunningInContainer()) {
+            isPersisted = true;
+        }
+
         replacedByEnv();
         setFields();
+    }
+
+    public static boolean isIsPersisted() {
+        return isPersisted;
     }
 
     public static void initAllMutableConfigs() {
@@ -295,7 +316,22 @@ public class ConfigBase {
         }
     }
 
-    public static synchronized void setMutableConfig(String key, String value) throws InvalidConfException {
+    public static synchronized void setMutableConfig(String key, String value,
+                                                     boolean isPersisted, String userIdentity) throws InvalidConfException {
+        if (isPersisted) {
+            if (!ConfigBase.isIsPersisted()) {
+                String errMsg = "set persisted config failed, because current running mode is not persisted";
+                LOG.warn(errMsg);
+                throw new InvalidConfException(errMsg);
+            }
+
+            try {
+                appendPersistedProperties(key, value, userIdentity);
+            } catch (IOException e) {
+                throw new InvalidConfException("Failed to set config '" + key + "'. err: " + e.getMessage());
+            }
+        }
+
         Field field = allMutableConfigs.get(key);
         if (field == null) {
             throw new InvalidConfException("Config '" + key + "' does not exist or is not mutable");
@@ -308,6 +344,32 @@ public class ConfigBase {
         }
 
         LOG.info("set config {} to {}", key, value);
+    }
+
+    private static void appendPersistedProperties(String key, String value, String userIdentity) throws IOException {
+        String comment = String.format("# The user: %s manually modified the configuration on %s", userIdentity,
+                LocalDateTime.now().format(DateUtils.DATE_TIME_FORMATTER_UNIX));
+
+        Properties props = new Properties();
+        File file = new File(configPath);
+        try (FileReader reader = new FileReader(file)) {
+            props.load(reader);
+        }
+        // Update or add the key-value pair
+        props.setProperty(key, value);
+
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(configPath))) {
+            for (String propKey : props.stringPropertyNames()) {
+                if (propKey.equals(key)) {
+                    // write target key-value pair
+                    writer.write(comment);
+                    writer.newLine();
+                }
+                // write original key-value pair
+                writer.write(propKey + "=" + props.getProperty(propKey));
+                writer.newLine();
+            }
+        }
     }
 
     private static boolean isAliasesMatch(PatternMatcher matcher, String[] aliases) {

@@ -28,11 +28,13 @@ public class AdminSetConfigStmt extends DdlStmt {
 
     private final ConfigType type;
     private Property config;
+    private final boolean persistent;
 
-    public AdminSetConfigStmt(ConfigType type, Property config, NodePosition pos) {
+    public AdminSetConfigStmt(ConfigType type, Property config, boolean persistent, NodePosition pos) {
         super(pos);
         this.type = type;
         this.config = config;
+        this.persistent = persistent;
     }
 
     public ConfigType getType() {
@@ -41,6 +43,10 @@ public class AdminSetConfigStmt extends DdlStmt {
 
     public Property getConfig() {
         return config;
+    }
+
+    public boolean isPersistent() {
+        return persistent;
     }
 
     @Override

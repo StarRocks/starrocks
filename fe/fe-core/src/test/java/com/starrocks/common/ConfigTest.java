@@ -77,11 +77,46 @@ public class ConfigTest {
 
     @Test
     public void testConfigSetCompatibleWithOldName() throws Exception {
-        Config.setMutableConfig("schedule_slot_num_per_path", "4");
+        Config.setMutableConfig("schedule_slot_num_per_path", "4", false, "");
         PatternMatcher matcher = PatternMatcher.createMysqlPattern("schedule_slot_num_per_path", false);
         List<List<String>> configs = Config.getConfigInfo(matcher);
         Assert.assertEquals("4", configs.get(0).get(2));
         Assert.assertEquals(4, Config.tablet_sched_slot_num_per_path);
+    }
+
+    @Test
+    public void testMutableConfig() throws Exception {
+        PatternMatcher matcher = PatternMatcher.createMysqlPattern("adaptive_choose_instances_threshold", false);
+        List<List<String>> configs = Config.getConfigInfo(matcher);
+        Assert.assertEquals("99", configs.get(0).get(2));
+
+        Config.setMutableConfig("adaptive_choose_instances_threshold", "98", true, "root");
+        configs = Config.getConfigInfo(matcher);
+        Assert.assertEquals("98", configs.get(0).get(2));
+        Assert.assertEquals(98, Config.adaptive_choose_instances_threshold);
+
+        // Reload from file
+        URL resource = getClass().getClassLoader().getResource("conf/config_test.properties");
+        config.init(Paths.get(resource.toURI()).toFile().getAbsolutePath());
+        configs = Config.getConfigInfo(matcher);
+        Assert.assertEquals("98", configs.get(0).get(2));
+        Assert.assertEquals(98, Config.adaptive_choose_instances_threshold);
+    }
+
+    @Test
+    public void testDisableStoreConfig() throws Exception {
+        Config.setMutableConfig("adaptive_choose_instances_threshold", "98", false, "");
+        PatternMatcher matcher = PatternMatcher.createMysqlPattern("adaptive_choose_instances_threshold", false);
+        List<List<String>>  configs = Config.getConfigInfo(matcher);
+        Assert.assertEquals("98", configs.get(0).get(2));
+        Assert.assertEquals(98, Config.adaptive_choose_instances_threshold);
+
+        // Reload from file
+        URL resource = getClass().getClassLoader().getResource("conf/config_test.properties");
+        config.init(Paths.get(resource.toURI()).toFile().getAbsolutePath());
+        configs = Config.getConfigInfo(matcher);
+        Assert.assertEquals("99", configs.get(0).get(2));
+        Assert.assertEquals(99, Config.adaptive_choose_instances_threshold);
     }
 
     private static class ConfigForArray extends ConfigBase {

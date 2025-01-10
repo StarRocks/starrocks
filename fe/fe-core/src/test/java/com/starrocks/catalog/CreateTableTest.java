@@ -215,7 +215,7 @@ public class CreateTableTest {
                         + "partition by range(k2)\n" + "(partition p1 values less than(\"10\"))\n"
                         + "distributed by hash(k2) buckets 1\n" + "properties('replication_num' = '1');"));
 
-        ConfigBase.setMutableConfig("enable_strict_storage_medium_check", "false");
+        ConfigBase.setMutableConfig("enable_strict_storage_medium_check", "false", false, "");
         ExceptionChecker
                 .expectThrowsNoException(() -> createTable("create table test.tb7(key1 int, key2 varchar(10)) \n"
                         +
@@ -403,7 +403,7 @@ public class CreateTableTest {
                                 + "duplicate key(k1, k2, k3)\n" + "distributed by hash(k1) buckets 1\n"
                                 + "properties('replication_num' = '1');"));
 
-        ConfigBase.setMutableConfig("enable_strict_storage_medium_check", "true");
+        ConfigBase.setMutableConfig("enable_strict_storage_medium_check", "true", false, "");
         ExceptionChecker
                 .expectThrowsWithMsg(DdlException.class,
                         "Failed to find enough hosts with storage " +

@@ -698,7 +698,7 @@ cancelRefreshMaterializedViewStatement
 // ------------------------------------------- Admin Statement ---------------------------------------------------------
 
 adminSetConfigStatement
-    : ADMIN SET FRONTEND CONFIG '(' property ')'
+    : ADMIN SET FRONTEND CONFIG '(' property ')' (WITH PERSISTENT)?
     ;
 adminSetReplicaStatusStatement
     : ADMIN SET REPLICA STATUS properties
