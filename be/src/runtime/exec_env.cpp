@@ -476,6 +476,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
 
     std::unique_ptr<ThreadPool> load_rowset_pool;
     std::unique_ptr<ThreadPool> load_segment_pool;
+    std::unique_ptr<ThreadPool> put_combined_txn_log_thread_pool;
     RETURN_IF_ERROR(
             ThreadPoolBuilder("load_rowset_pool")
                     .set_min_threads(0)
@@ -495,6 +496,14 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     _load_segment_thread_pool = load_segment_pool.release();
 
     _broker_mgr = new BrokerMgr(this);
+
+    RETURN_IF_ERROR(ThreadPoolBuilder("put_combined_txn_log_thread_pool")
+                            .set_min_threads(0)
+                            .set_max_threads(config::put_combined_txn_log_thread_pool_num_max)
+                            .set_idle_timeout(MonoDelta::FromMilliseconds(500))
+                            .build(&put_combined_txn_log_thread_pool));
+    _put_combined_txn_log_thread_pool = put_combined_txn_log_thread_pool.release();
+
 #ifndef BE_TEST
     _bfd_parser = BfdParser::create();
 #endif
