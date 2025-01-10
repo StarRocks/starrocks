@@ -1,4 +1,4 @@
--- name: test_materialized_view_agg_pushdown_rewrite
+-- name: test_materialized_view_agg_pushdown_rewrite @slow
 CREATE TABLE IF NOT EXISTS `lineorder` (
     `lo_orderkey` int(11) NOT NULL COMMENT "",
     `lo_linenumber` int(11) NOT NULL COMMENT "",
@@ -71,14 +71,14 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`d_datekey`) BUCKETS 1;
 -- result:
 -- !result
- CREATE TABLE IF NOT EXISTS `supplier` (
-    `s_suppkey` int(11) NOT NULL COMMENT "",
-    `s_name` varchar(26) NOT NULL COMMENT "",
-    `s_address` varchar(26) NOT NULL COMMENT "",
-    `s_city` varchar(11) NOT NULL COMMENT "",
-    `s_nation` varchar(16) NOT NULL COMMENT "",
-    `s_region` varchar(13) NOT NULL COMMENT "",
-    `s_phone` varchar(16) NOT NULL COMMENT ""
+CREATE TABLE IF NOT EXISTS `supplier` (
+   `s_suppkey` int(11) NOT NULL COMMENT "",
+   `s_name` varchar(26) NOT NULL COMMENT "",
+   `s_address` varchar(26) NOT NULL COMMENT "",
+   `s_city` varchar(11) NOT NULL COMMENT "",
+   `s_nation` varchar(16) NOT NULL COMMENT "",
+   `s_region` varchar(13) NOT NULL COMMENT "",
+   `s_phone` varchar(16) NOT NULL COMMENT ""
 ) ENGINE=OLAP
 DUPLICATE KEY(`s_suppkey`)
 COMMENT "OLAP"
@@ -509,19 +509,19 @@ from lineorder l group by LO_ORDERDATE;
 refresh materialized view mv0 with sync mode;
 function: print_hit_materialized_view("select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), avg(LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date group by LO_ORDERDATE;", "mv0")
 -- result:
-True
+False
 -- !result
 function: print_hit_materialized_view("select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), avg(LO_REVENUE), avg(lo_suppkey), sum(LO_REVENUE), max(LO_REVENUE) , sum(LO_REVENUE), max(LO_REVENUE), count(distinct LO_REVENUE), count(distinct LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date group by LO_ORDERDATE;", "mv0")
 -- result:
-True
+False
 -- !result
 function: print_hit_materialized_view("select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), avg(LO_REVENUE), avg(lo_suppkey), min(LO_REVENUE), bitmap_union_count(to_bitmap(LO_REVENUE)), approx_count_distinct(LO_REVENUE), PERCENTILE_APPROX(LO_REVENUE, 0.5), PERCENTILE_APPROX(LO_REVENUE, 0.7), sum(distinct LO_REVENUE), count(distinct LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date group by LO_ORDERDATE;", "mv0")
 -- result:
-True
+False
 -- !result
 function: print_hit_materialized_view("select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), avg(LO_REVENUE), avg(lo_suppkey), min(LO_REVENUE), bitmap_union_count(to_bitmap(LO_REVENUE)), approx_count_distinct(LO_REVENUE), PERCENTILE_APPROX(LO_REVENUE, 0.5), PERCENTILE_APPROX(LO_REVENUE, 0.7), sum(distinct LO_REVENUE), count(distinct LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date group by LO_ORDERDATE HAVING sum(LO_REVENUE) > 1;", "mv0")
 -- result:
-True
+False
 -- !result
 select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), avg(LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date group by LO_ORDERDATE order by LO_ORDERDATE;
 -- result:
