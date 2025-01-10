@@ -183,69 +183,11 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                     auto queuing_latency = run_ts - start_ts;
                     g_publish_tablet_version_queuing_latency << queuing_latency;
 
-<<<<<<< HEAD
-            auto base_version = request->base_version();
-            auto new_version = request->new_version();
-            auto txns = std::vector<TxnInfoPB>();
-            if (request->txn_infos_size() > 0) {
-                txns.insert(txns.begin(), request->txn_infos().begin(), request->txn_infos().end());
-            } else { // This is a request from older version FE
-                // Construct TxnInfoPB from other fields
-                txns.reserve(request->txn_ids_size());
-                for (auto i = 0, sz = request->txn_ids_size(); i < sz; i++) {
-                    auto& info = txns.emplace_back();
-                    info.set_txn_id(request->txn_ids(i));
-                    info.set_txn_type(TXN_NORMAL);
-                    info.set_combined_txn_log(false);
-                    info.set_commit_time(request->commit_time());
-                    info.set_force_publish(false);
-                }
-            }
-
-            TRACE_COUNTER_INCREMENT("tablet_id", tablet_id);
-            TRACE_COUNTER_INCREMENT("queuing_latency_us", queuing_latency);
-
-            StatusOr<TabletMetadataPtr> res;
-            if (std::chrono::system_clock::now() < timeout_deadline) {
-                res = lake::publish_version(_tablet_mgr, tablet_id, base_version, new_version, txns);
-            } else {
-                auto t = MilliSecondsSinceEpochFromTimePoint(timeout_deadline);
-                res = Status::TimedOut(fmt::format("reached deadline={}/timeout={}", t, timeout_ms));
-            }
-            if (res.ok()) {
-                auto metadata = std::move(res).value();
-                auto score = compaction_score(_tablet_mgr, metadata);
-                std::lock_guard l(response_mtx);
-                response->mutable_compaction_scores()->insert({tablet_id, score});
-            } else {
-                g_publish_version_failed_tasks << 1;
-                if (res.status().is_resource_busy()) {
-                    VLOG(2) << "Fail to publish version: " << res.status() << ". tablet_id=" << tablet_id
-                            << " txn_ids=" << JoinMapped(txns, txn_info_string, ";") << " version=" << new_version;
-                } else {
-                    LOG(WARNING) << "Fail to publish version: " << res.status() << ". tablet_id=" << tablet_id
-                                 << " txn_ids=" << JoinMapped(txns, txn_info_string, ";") << " version=" << new_version;
-                }
-                std::lock_guard l(response_mtx);
-                response->add_failed_tablets(tablet_id);
-                res.status().to_protobuf(response->mutable_status());
-            }
-            TRACE("finished");
-            g_publish_tablet_version_latency << (butil::gettimeofday_us() - run_ts);
-        };
-
-        auto st = thread_pool_token.submit_func(std::move(task), timeout_deadline);
-=======
                     auto base_version = request->base_version();
                     auto new_version = request->new_version();
                     auto txns = std::vector<TxnInfoPB>();
                     if (request->txn_infos_size() > 0) {
                         txns.insert(txns.begin(), request->txn_infos().begin(), request->txn_infos().end());
-                        if (rebuild_pindex_tablets.count(tablet_id) > 0) {
-                            for (auto& txn : txns) {
-                                txn.set_rebuild_pindex(true);
-                            }
-                        }
                     } else { // This is a request from older version FE
                         // Construct TxnInfoPB from other fields
                         txns.reserve(request->txn_ids_size());
@@ -256,9 +198,6 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                             info.set_combined_txn_log(false);
                             info.set_commit_time(request->commit_time());
                             info.set_force_publish(false);
-                            if (rebuild_pindex_tablets.count(tablet_id) > 0) {
-                                info.set_rebuild_pindex(true);
-                            }
                         }
                     }
 
@@ -281,10 +220,11 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                         g_publish_version_failed_tasks << 1;
                         if (res.status().is_resource_busy()) {
                             VLOG(2) << "Fail to publish version: " << res.status() << ". tablet_id=" << tablet_id
-                                    << " txns=" << JoinMapped(txns, txn_info_string, ",") << " version=" << new_version;
+                                    << " txn_ids=" << JoinMapped(txns, txn_info_string, ";")
+                                    << " version=" << new_version;
                         } else {
                             LOG(WARNING) << "Fail to publish version: " << res.status() << ". tablet_id=" << tablet_id
-                                         << " txn_ids=" << JoinMapped(txns, txn_info_string, ",")
+                                         << " txn_ids=" << JoinMapped(txns, txn_info_string, ";")
                                          << " version=" << new_version;
                         }
                         std::lock_guard l(response_mtx);
@@ -297,7 +237,6 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                 [&] { latch.count_down(); });
 
         auto st = thread_pool_token.submit(std::move(task), timeout_deadline);
->>>>>>> e267ea0c38 ([BugFix] ensure the latch can be counted down (#54859))
         if (!st.ok()) {
             g_publish_version_failed_tasks << 1;
             LOG(WARNING) << "Fail to submit publish version task: " << st << ". tablet_id=" << tablet_id
@@ -332,34 +271,20 @@ void LakeServiceImpl::_submit_publish_log_version_task(const int64_t* tablet_ids
 
     for (int i = 0; i < tablet_size; i++) {
         auto tablet_id = tablet_ids[i];
-<<<<<<< HEAD
-        auto task = [&, tablet_id]() {
-            DeferOp defer([&] { latch.count_down(); });
-            auto st = lake::publish_log_version(_tablet_mgr, tablet_id, txn_ids, log_versions, txn_size);
-            if (!st.ok()) {
-                g_publish_version_failed_tasks << 1;
-                LOG(WARNING) << "Fail to publish log version: " << st << " tablet_id=" << tablet_id
-                             << " txn_ids=" << JoinElementsIterator(txn_ids, txn_ids + txn_size, ",")
-                             << " versions=" << JoinElementsIterator(log_versions, log_versions + txn_size, ",");
-                std::lock_guard l(response_mtx);
-                response->add_failed_tablets(tablet_id);
-            }
-        };
-=======
         auto task = std::make_shared<AutoCleanRunnable>(
                 [&, tablet_id] {
-                    auto st = lake::publish_log_version(_tablet_mgr, tablet_id, txn_infos, log_versions);
+                    auto st = lake::publish_log_version(_tablet_mgr, tablet_id, txn_ids, log_versions, txn_size);
                     if (!st.ok()) {
                         g_publish_version_failed_tasks << 1;
                         LOG(WARNING) << "Fail to publish log version: " << st << " tablet_id=" << tablet_id
-                                     << " txns=" << JoinMapped(txn_infos, txn_info_string, ",") << " versions="
+                                     << " txn_ids=" << JoinElementsIterator(txn_ids, txn_ids + txn_size, ",")
+                                     << " versions="
                                      << JoinElementsIterator(log_versions, log_versions + txn_size, ",");
                         std::lock_guard l(response_mtx);
                         response->add_failed_tablets(tablet_id);
                     }
                 },
                 [&] { latch.count_down(); });
->>>>>>> e267ea0c38 ([BugFix] ensure the latch can be counted down (#54859))
 
         auto st = thread_pool->submit(std::move(task));
         if (!st.ok()) {
@@ -453,40 +378,16 @@ void LakeServiceImpl::abort_txn(::google::protobuf::RpcController* controller,
 
     auto thread_pool = abort_txn_thread_pool(_env);
     auto latch = BThreadCountDownLatch(1);
-<<<<<<< HEAD
-    auto task = [&]() {
-        DeferOp defer([&] { latch.count_down(); });
-        auto txn_ids = std::span<const int64_t>(request->txn_ids().data(), request->txn_ids_size());
-        auto txn_types = std::span<const int32_t>(request->txn_types().data(), request->txn_types_size());
-        for (auto tablet_id : request->tablet_ids()) {
-            lake::abort_txn(_tablet_mgr, tablet_id, txn_ids, txn_types);
-        }
-    };
-    auto st = thread_pool->submit_func(task);
-=======
     auto task = std::make_shared<AutoCleanRunnable>(
             [&] {
-                std::vector<TxnInfoPB> txn_infos;
-                if (request->txn_infos_size() > 0) {
-                    txn_infos.insert(txn_infos.begin(), request->txn_infos().begin(), request->txn_infos().end());
-                } else {
-                    // Construct TxnInfoPB from txn_id and txn_type
-                    txn_infos.reserve(request->txn_ids_size());
-                    auto has_txn_type = request->txn_types_size() == request->txn_ids_size();
-                    for (int i = 0, sz = request->txn_ids_size(); i < sz; i++) {
-                        auto& info = txn_infos.emplace_back();
-                        info.set_txn_id(request->txn_ids(i));
-                        info.set_txn_type(has_txn_type ? request->txn_types(i) : TXN_NORMAL);
-                        info.set_combined_txn_log(false);
-                    }
-                }
+                auto txn_ids = std::span<const int64_t>(request->txn_ids().data(), request->txn_ids_size());
+                auto txn_types = std::span<const int32_t>(request->txn_types().data(), request->txn_types_size());
                 for (auto tablet_id : request->tablet_ids()) {
-                    lake::abort_txn(_tablet_mgr, tablet_id, txn_infos);
+                    lake::abort_txn(_tablet_mgr, tablet_id, txn_ids, txn_types);
                 }
             },
             [&] { latch.count_down(); });
     auto st = thread_pool->submit(std::move(task));
->>>>>>> e267ea0c38 ([BugFix] ensure the latch can be counted down (#54859))
     if (!st.ok()) {
         LOG(WARNING) << "Fail to submit abort transaction task: " << st;
     }
@@ -731,23 +632,13 @@ void LakeServiceImpl::get_tablet_stats(::google::protobuf::RpcController* contro
                                      << tablet_id << ", version: " << version;
                         return;
                     }
-
-                    auto tablet_metadata = _tablet_mgr->get_tablet_metadata(tablet_id, version, /*fill_cache=*/false);
+                    auto location = _tablet_mgr->tablet_metadata_location(tablet_id, version);
+                    auto tablet_metadata = _tablet_mgr->get_tablet_metadata(location, /*fll_cache=*/false);
                     if (!tablet_metadata.ok()) {
                         LOG(WARNING) << "Fail to get tablet metadata. tablet_id: " << tablet_id
                                      << ", version: " << version << ", error: " << tablet_metadata.status();
                         return;
                     }
-
-<<<<<<< HEAD
-            auto location = _tablet_mgr->tablet_metadata_location(tablet_id, version);
-            auto tablet_metadata = _tablet_mgr->get_tablet_metadata(location, /*fll_cache=*/false);
-            if (!tablet_metadata.ok()) {
-                LOG(WARNING) << "Fail to get tablet metadata. tablet_id: " << tablet_id << ", version: " << version
-                             << ", error: " << tablet_metadata.status();
-                return;
-            }
-=======
                     int64_t num_rows = 0;
                     int64_t data_size = 0;
                     for (const auto& rowset : (*tablet_metadata)->rowsets()) {
@@ -757,7 +648,6 @@ void LakeServiceImpl::get_tablet_stats(::google::protobuf::RpcController* contro
                     for (const auto& [_, file] : (*tablet_metadata)->delvec_meta().version_to_file()) {
                         data_size += file.size();
                     }
->>>>>>> e267ea0c38 ([BugFix] ensure the latch can be counted down (#54859))
 
                     std::lock_guard l(response_mtx);
                     auto tablet_stat = response->add_tablet_stats();
@@ -819,12 +709,7 @@ void LakeServiceImpl::upload_snapshots(::google::protobuf::RpcController* contro
     auto st = thread_pool->submit(std::move(task));
     if (!st.ok()) {
         LOG(WARNING) << "Fail to submit upload snapshots task: " << st;
-<<<<<<< HEAD
         cntl->SetFailed(st.get_error_msg());
-        latch.count_down();
-=======
-        cntl->SetFailed(std::string(st.message()));
->>>>>>> e267ea0c38 ([BugFix] ensure the latch can be counted down (#54859))
     }
     latch.wait();
 }
@@ -855,12 +740,7 @@ void LakeServiceImpl::restore_snapshots(::google::protobuf::RpcController* contr
     auto st = thread_pool->submit(std::move(task));
     if (!st.ok()) {
         LOG(WARNING) << "Fail to submit restore snapshots task: " << st;
-<<<<<<< HEAD
         cntl->SetFailed(st.get_error_msg());
-        latch.count_down();
-=======
-        cntl->SetFailed(std::string(st.message()));
->>>>>>> e267ea0c38 ([BugFix] ensure the latch can be counted down (#54859))
     }
     latch.wait();
 }

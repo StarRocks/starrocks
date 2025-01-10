@@ -43,11 +43,8 @@
 #include "gutil/strings/substitute.h"
 #include "gutil/sysinfo.h"
 #include "gutil/walltime.h"
-<<<<<<< HEAD
 #include "testutil/assert.h"
-=======
 #include "util/await.h"
->>>>>>> e267ea0c38 ([BugFix] ensure the latch can be counted down (#54859))
 #include "util/countdown_latch.h"
 #include "util/metrics.h"
 #include "util/monotime.h"
