@@ -439,9 +439,20 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 ### enable_insert_strict
 
-* 描述：用于设置通过 INSERT 语句进行数据导入时，是否开启严格模式 (Strict Mode)。
-默认值为 `true`，即开启严格模式。关于该模式的介绍，可以参阅[严格模式](../loading/load_concept/strict_mode.md)。
+* 描述：是否在使用 INSERT from FILES() 导入数据时启用严格模式。有效值：`true` 和 `false`（默认值）。启用严格模式时，系统仅导入合格的数据行，过滤掉不合格的行，并返回不合格行的详细信息。更多信息请参见 [严格模式](../loading/load_concept/strict_mode.md)。在早于 v3.4.0 的版本中，当 `enable_insert_strict` 设置为 `true` 时，INSERT 作业会在出现不合格行时失败。
 * 默认值：true
+
+### insert_max_filter_ratio
+
+* 描述：INSERT 导入作业的最大容忍率，即导入作业能够容忍的因数据质量不合格而过滤掉的数据行所占的最大比例。当不合格行数比例超过该限制时，导入作业失败。默认值：`0`。范围：[0, 1]。
+* 默认值：0
+* 引入版本：v3.4.0
+
+### insert_timeout
+
+* 描述：INSERT 作业的超时时间。单位：秒。从 v3.4.0 版本开始，`insert_timeout` 作用于所有涉及 INSERT 的操作（例如，UPDATE、DELETE、CTAS、物化视图刷新、统计信息收集和 PIPE），替代原本的 `query_timeout`。
+* 默认值：14400
+* 引入版本：v3.4.0
 
 ### enable_materialized_view_for_insert
 
@@ -913,7 +924,7 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 ### query_timeout
 
-* 描述：用于设置查询超时时间，单位为秒。该变量会作用于当前连接中所有的查询语句，以及 INSERT 语句。
+* 描述：用于设置查询超时时间，单位为秒。该变量会作用于当前连接中所有的查询语句。自 v3.4.0 起，`query_timeout` 不再作用于 INSERT 语句。
 * 默认值：300 （5 分钟）
 * 单位：秒
 * 类型：Int
