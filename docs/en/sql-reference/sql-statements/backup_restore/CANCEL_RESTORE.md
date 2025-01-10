@@ -13,7 +13,7 @@ Cancels an ongoing RESTORE task in a specified database.
 ## Syntax
 
 ```SQL
-CANCEL RESTORE FROM <db_name>
+CANCEL RESTORE { FROM <db_name> | FOR EXTERNAL CATALOG }
 ```
 
 ## Parameters
@@ -21,6 +21,7 @@ CANCEL RESTORE FROM <db_name>
 | **Parameter** | **Description**                                        |
 | ------------- | ------------------------------------------------------ |
 | db_name       | Name of the database that the RESTORE task belongs to. |
+| FOR EXTERNAL CATALOG | Cancels the ongoing RESTORE task for the external catalog metadata. |
 
 ## Examples
 
