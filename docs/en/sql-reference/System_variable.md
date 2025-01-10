@@ -443,7 +443,20 @@ Default value: `true`.
 
 ### enable_insert_strict
 
-Used to enable the strict mode when loading data using the INSERT statement. The default value is `true`, indicating the strict mode is enabled by default. For more information, see [Strict mode](../loading/load_concept/strict_mode.md).
+* **Description**: Whether to enable strict mode while loading data using INSERT from files(). Valid values: `true` and `false` (Default). When strict mode is enabled, the system loads only qualified rows. It filters out unqualified rows and returns details about the unqualified rows. For more information, see [Strict mode](../loading/load_concept/strict_mode.md). In versions earlier than v3.4.0, when `enable_insert_strict` is set to `true`, the INSERT jobs fails when there is an unqualified rows.
+* **Default**: true
+
+### insert_max_filter_ratio
+
+* **Description**: The maximum error tolerance of INSERT from files(). It's the maximum ratio of data records that can be filtered out due to inadequate data quality. When the ratio of unqualified data records reaches this threshold, the job fails. Range: [0, 1].
+* **Default**: 0
+* **Introduced in**: v3.4.0
+
+### insert_timeout
+
+* **Description**: The timeout duration of the INSERT job. Unit: Seconds. From v3.4.0 onwards, `insert_timeout` applies to operations involved INSERT (for example, UPDATE, DELETE, CTAS, materialized view refresh, statistics collection, and PIPE), replacing `query_timeout`.
+* **Default**: 14400
+* **Introduced in**: v3.4.0
 
 ### enable_materialized_view_for_insert
 
@@ -901,7 +914,7 @@ Used for compatibility with JDBC connection pool C3P0. No practical use.
 
 ### query_timeout
 
-* **Description**: Used to set the query timeout in "seconds". This variable will act on all query statements in the current connection, as well as INSERT statements. The default value is 300 seconds.
+* **Description**: Used to set the query timeout in "seconds". This variable will act on all query statements in the current connection. The default value is 300 seconds. From v3.4.0 onwards, `query_timeout` does not apply to INSERT statements.
 * **Value range**: [1, 259200]
 * **Default**: 300
 * **Data type**: Int
