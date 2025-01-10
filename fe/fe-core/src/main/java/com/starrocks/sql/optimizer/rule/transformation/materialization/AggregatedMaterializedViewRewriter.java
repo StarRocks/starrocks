@@ -129,7 +129,7 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
     //      query:
     //      select a+1, abs(a), sum(c) from t group by a
     @Override
-    protected OptExpression viewBasedRewrite(RewriteContext rewriteContext, OptExpression mvOptExpr) {
+    public OptExpression doViewBasedRewrite(RewriteContext rewriteContext, OptExpression mvOptExpr) {
         LogicalAggregationOperator mvAggOp = (LogicalAggregationOperator) rewriteContext.getMvExpression().getOp();
         LogicalAggregationOperator queryAggOp = (LogicalAggregationOperator) rewriteContext.getQueryExpression().getOp();
 
@@ -163,8 +163,6 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
         EquationRewriter queryExprToMvExprRewriter =
                 buildEquationRewriter(mvProjection, rewriteContext, false);
 
-        // TODO:duplicate if mv has already outputted.
-        // mvOptExpr = duplicateMvOptExpression(rewriteContext, mvOptExpr, queryExprToMvExprRewriter);
         if (isRollup) {
             return rewriteForRollup(queryAggOp, queryGroupingKeys, columnRewriter, queryExprToMvExprRewriter,
                     rewriteContext, mvOptExpr);
@@ -395,8 +393,12 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
         return rewriteGroupingKeys;
     }
 
+<<<<<<< HEAD
 
     private Map<ColumnRefOperator, ScalarOperator> rewriteAggregations(RewriteContext rewriteContext,
+=======
+    private Map<ColumnRefOperator, CallOperator> rewriteAggregations(RewriteContext rewriteContext,
+>>>>>>> 8f4c6aadff ([BugFix] Ensure mv rewrite plan output column refs unique (#54863))
                                                                        ColumnRewriter columnRewriter,
                                                                        Map<ColumnRefOperator, CallOperator> aggregations,
                                                                        boolean rewriteViewToQuery) {
@@ -471,9 +473,10 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
     }
 
     @Override
-    protected OptExpression queryBasedRewrite(RewriteContext rewriteContext, ScalarOperator compensationPredicates,
-                                              OptExpression queryExpression) {
-        OptExpression child = super.queryBasedRewrite(rewriteContext, compensationPredicates, queryExpression.inputAt(0));
+    public OptExpression doQueryBasedRewrite(RewriteContext rewriteContext,
+                                             ScalarOperator compensationPredicates,
+                                             OptExpression queryExpression) {
+        OptExpression child = super.doQueryBasedRewrite(rewriteContext, compensationPredicates, queryExpression.inputAt(0));
         if (child == null) {
             return null;
         }
@@ -481,7 +484,7 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
     }
 
     @Override
-    protected OptExpression createUnion(OptExpression queryInput,
+    public OptExpression doUnionRewrite(OptExpression queryInput,
                                         OptExpression viewInput,
                                         RewriteContext rewriteContext) {
         Map<ColumnRefOperator, ScalarOperator> queryColumnRefMap =
@@ -502,6 +505,7 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
             ColumnRefOperator newColumn = rewriteContext.getQueryRefFactory().create(
                     columnRef, columnRef.getType(), columnRef.isNullable());
             newViewOutputColumns.add(newColumn);
+            Preconditions.checkArgument(mvProjection.containsKey(columnRef));
             newColumnRefMap.put(newColumn, mvProjection.get(columnRef));
         }
         Projection newMvProjection = new Projection(newColumnRefMap);

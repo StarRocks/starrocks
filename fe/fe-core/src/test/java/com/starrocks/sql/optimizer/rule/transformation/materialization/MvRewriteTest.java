@@ -36,7 +36,10 @@ import com.starrocks.sql.optimizer.Optimizer;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
+import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.plan.PlanTestBase;
 import mockit.Mock;
 import mockit.MockUp;
@@ -47,7 +50,13 @@ import org.junit.Test;
 import org.junit.runners.MethodSorters;
 
 import java.sql.SQLException;
+<<<<<<< HEAD
+=======
+import java.time.LocalDate;
+import java.util.HashSet;
+>>>>>>> 8f4c6aadff ([BugFix] Ensure mv rewrite plan output column refs unique (#54863))
 import java.util.List;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -252,7 +261,6 @@ public class MvRewriteTest extends MvRewriteTestBase {
 
     @Test
     public void testJoinMvRewriteByForceRuleRewrite() throws Exception {
-        connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000000);
         {
             createAndRefreshMv("create materialized view join_mv_1" +
                     " distributed by hash(v1)" +
@@ -336,6 +344,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
         String plan6 = getFragmentPlan(query6);
         PlanTestBase.assertNotContains(plan6, "join_mv_1");
 
+        connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
         dropMv("test", "join_mv_1");
 
         createAndRefreshMv("create materialized view join_mv_2" +
@@ -2200,4 +2209,173 @@ public class MvRewriteTest extends MvRewriteTestBase {
             starRocksAssert.dropMaterializedView("mv_order_by_v2");
         }
     }
+<<<<<<< HEAD
 }
+=======
+
+    @Test
+    public void testRefreshMVWithListPartition1() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE s1 (\n" +
+                "   dt varchar(30),\n" +
+                "   id int\n" +
+                ")\n" +
+                "PARTITION BY RANGE(str2date(dt, \"%Y-%m-%d\"))(\n" +
+                "   START (\"2021-01-01\") END (\"2021-01-10\") EVERY (INTERVAL 1 DAY)\n" +
+                ");");
+        executeInsertSql(connectContext, "insert into s1 values(\"2021-01-01\",1),(\"2021-01-02\",2)," +
+                "(\"2021-01-03\",3), (\"2021-01-04\",4),(\"2021-01-05\",5),\n" +
+                "(\"2021-01-06\",6),(\"2021-01-07\",7),(\"2021-01-08\",8),(\"2021-01-09\",9),(\"2021-01-09\",10);");
+        try {
+            starRocksAssert.withMaterializedView("create materialized view mv1 partition by dt " +
+                    "refresh manual as select dt,id from s1;\n");
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("Materialized view is partitioned by string type column dt but ref base " +
+                    "table s1 is range partitioned"));
+        }
+        starRocksAssert.dropMaterializedView("mv1");
+        starRocksAssert.dropTable("s1");
+    }
+
+    @Test
+    public void testRefreshMVWithListPartition2() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE s1 (\n" +
+                "   dt varchar(30),\n" +
+                "   id int\n" +
+                ")\n" +
+                "PARTITION BY RANGE(str2date(dt, \"%Y-%m-%d\"))(\n" +
+                "   START (\"2021-01-01\") END (\"2021-01-10\") EVERY (INTERVAL 1 DAY)\n" +
+                ");");
+        executeInsertSql(connectContext, "insert into s1 values(\"2021-01-01\",1),(\"2021-01-02\",2)," +
+                "(\"2021-01-03\",3), (\"2021-01-04\",4),(\"2021-01-05\",5),\n" +
+                "(\"2021-01-06\",6),(\"2021-01-07\",7),(\"2021-01-08\",8),(\"2021-01-09\",9),(\"2021-01-09\",10);");
+        starRocksAssert.withMaterializedView("create materialized view mv1 " +
+                "PARTITION BY str2date(dt, \"%Y-%m-%d\")\n" +
+                "refresh manual as select dt,id from s1;\n");
+        refreshMaterializedView("test", "mv1");
+        MaterializedView mv = getMv("test", "mv1");
+        Assert.assertTrue(mv.getPartitionInfo().isRangePartition());
+        String plan = getFragmentPlan("select * from s1");
+        PlanTestBase.assertContains(plan, "mv1");
+        starRocksAssert.dropMaterializedView("mv1");
+        starRocksAssert.dropTable("s1");
+    }
+
+    private void checkMVRewritePlanWithUniqueColumnRefs(String mvQuery,
+                                                        List<String> queries) throws Exception {
+        createAndRefreshMv(mvQuery);
+        for (String query : queries) {
+            final OptExpression plan = getOptimizedPlan(query);
+            final List<LogicalScanOperator> scanOperators = MvUtils.getScanOperator(plan);
+            final Set<ColumnRefOperator> mvColumnRefSet = new HashSet<>();
+            for (LogicalScanOperator scanOperator : scanOperators) {
+                Assert.assertTrue(scanOperator instanceof LogicalOlapScanOperator);
+                Assert.assertTrue(scanOperator.getTable().getName().equalsIgnoreCase("test_mv1"));
+                final LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) scanOperator;
+                for (ColumnRefOperator colRef : olapScanOperator.getColumnMetaToColRefMap().values()) {
+                    Assert.assertTrue(!mvColumnRefSet.contains(colRef));
+                    mvColumnRefSet.add(colRef);
+                }
+            }
+        }
+    }
+
+    @Test
+    public void testMVWriteWithDuplicatedMVs1() throws Exception {
+        connectContext.getSessionVariable().setCboCTERuseRatio(-1);
+        checkMVRewritePlanWithUniqueColumnRefs("create materialized view test_mv1 " +
+                        " distributed by random" +
+                        " as select emps.empid from emps join depts using (deptno)",
+                ImmutableList.of(
+                        "with cte1 as (select emps.empid from emps join depts using(deptno)) " +
+                                " select * from cte1 union all select * from cte1 " +
+                                "union all select * from cte1 union all select * from cte1",
+                        "with cte1 as (select emps.empid from emps join depts using(deptno)) " +
+                                " select * from cte1 a join cte1 b on a.empid=b.empid"
+                ));
+        connectContext.getSessionVariable().setCboCTERuseRatio(0);
+    }
+
+    @Test
+    public void testMVWriteWithDuplicatedMVs2() throws Exception {
+        connectContext.getSessionVariable().setCboCTERuseRatio(-1);
+        checkMVRewritePlanWithUniqueColumnRefs("create materialized view test_mv1 " +
+                        " distributed by random" +
+                        " as select a.empid, a.name, sum(b.deptno) from emps a join depts b " +
+                        " on a.deptno=b.deptno group by a.empid, a.name",
+                ImmutableList.of(
+                        "with cte1 as (select a.empid, sum(b.deptno) from emps a join depts b " +
+                                " on a.deptno=b.deptno group by a.empid)" +
+                                " select * from cte1 union all select * from cte1 " +
+                                "union all select * from cte1 union all select * from cte1",
+                        "with cte1 as (select a.empid, a.name, sum(b.deptno) from emps a join depts b " +
+                                " on a.deptno=b.deptno group by a.empid, a.name)" +
+                                " select * from cte1 union all select * from cte1 " +
+                                "union all select * from cte1 union all select * from cte1",
+                        "with cte1 as (select a.empid, a.name, sum(b.deptno) from emps a join depts b " +
+                                " on a.deptno=b.deptno group by a.empid, a.name)" +
+                                " select * from cte1 a join cte1 b on a.empid=b.empid"
+                ));
+        connectContext.getSessionVariable().setCboCTERuseRatio(0);
+    }
+
+    @Test
+    public void testMVWriteWithDuplicatedMVs3() throws Exception {
+        connectContext.getSessionVariable().setCboCTERuseRatio(-1);
+        checkMVRewritePlanWithUniqueColumnRefs("create materialized view test_mv1 " +
+                        " distributed by random" +
+                        " as select empid, name from emps ",
+                ImmutableList.of(
+                        "with cte1 as (select empid, name from emps) " +
+                                " select * from cte1 union all select * from cte1 " +
+                                "union all select * from cte1 union all select * from cte1",
+                        "with cte1 as (select empid, name from emps) " +
+                                " select * from cte1 a join cte1 b on a.empid=b.empid"
+                ));
+        connectContext.getSessionVariable().setCboCTERuseRatio(0);
+    }
+
+    @Test
+    public void testMVUnionRewriteWithDuplicateMVs1() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE s1 (\n" +
+                "  num int,\n" +
+                "  dt date\n" +
+                ")\n" +
+                "DUPLICATE KEY(`num`)\n" +
+                "PARTITION BY RANGE(`dt`)\n" +
+                "(\n" +
+                "  PARTITION p20200615 VALUES [(\"2020-06-15 00:00:00\"), (\"2020-06-16 00:00:00\")),\n" +
+                "  PARTITION p20200618 VALUES [(\"2020-06-18 00:00:00\"), (\"2020-06-19 00:00:00\")),\n" +
+                "  PARTITION p20200621 VALUES [(\"2020-06-21 00:00:00\"), (\"2020-06-22 00:00:00\")),\n" +
+                "  PARTITION p20200624 VALUES [(\"2020-06-24 00:00:00\"), (\"2020-06-25 00:00:00\")),\n" +
+                "  PARTITION p20200702 VALUES [(\"2020-07-02 00:00:00\"), (\"2020-07-03 00:00:00\")),\n" +
+                "  PARTITION p20200705 VALUES [(\"2020-07-05 00:00:00\"), (\"2020-07-06 00:00:00\")),\n" +
+                "  PARTITION p20200708 VALUES [(\"2020-07-08 00:00:00\"), (\"2020-07-09 00:00:00\")),\n" +
+                "  PARTITION p20200716 VALUES [(\"2020-07-16 00:00:00\"), (\"2020-07-17 00:00:00\")),\n" +
+                "  PARTITION p20200719 VALUES [(\"2020-07-19 00:00:00\"), (\"2020-07-20 00:00:00\")),\n" +
+                "  PARTITION p20200722 VALUES [(\"2020-07-22 00:00:00\"), (\"2020-07-23 00:00:00\")),\n" +
+                "  PARTITION p20200725 VALUES [(\"2020-07-25 00:00:00\"), (\"2020-07-26 00:00:00\")),\n" +
+                "  PARTITION p20200711 VALUES [(\"2020-07-11 00:00:00\"), (\"2020-07-12 00:00:00\"))\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(`num`);");
+        executeInsertSql("INSERT INTO s1 VALUES \n" +
+                "  (1,\"2020-06-15\"),(2,\"2020-06-18\"),(3,\"2020-06-21\"),(4,\"2020-06-24\"),\n" +
+                "  (1,\"2020-07-02\"),(2,\"2020-07-05\"),(3,\"2020-07-08\"),(4,\"2020-07-11\"),\n" +
+                "  (1,\"2020-07-16\"),(2,\"2020-07-19\"),(3,\"2020-07-22\"),(4,\"2020-07-25\"),\n" +
+                "  (2,\"2020-06-15\"),(3,\"2020-06-18\"),(4,\"2020-06-21\"),(5,\"2020-06-24\"),\n" +
+                "  (2,\"2020-07-02\"),(3,\"2020-07-05\"),(4,\"2020-07-08\"),(5,\"2020-07-11\");");
+        withRefreshedMV("CREATE MATERIALIZED VIEW test_mv1 \n" +
+                        "PARTITION BY dt \n" +
+                        "REFRESH DEFERRED MANUAL \n" +
+                        "AS SELECT * FROM s1 where dt > '2020-07-01';",
+                () -> {
+                    String query = "SELECT * FROM (SELECT * FROM s1 where num > 3 " +
+                            "UNION ALL SELECT * FROM s1 where num > 3) t order by 1, 2 limit 3;";
+                    connectContext.getSessionVariable().setMaterializedViewUnionRewriteMode(2);
+                    final String plan = getFragmentPlan(query);
+                    PlanTestBase.assertContains(plan, "test_mv1");
+                    connectContext.getSessionVariable().setMaterializedViewUnionRewriteMode(0);
+                });
+    }
+}
+>>>>>>> 8f4c6aadff ([BugFix] Ensure mv rewrite plan output column refs unique (#54863))
