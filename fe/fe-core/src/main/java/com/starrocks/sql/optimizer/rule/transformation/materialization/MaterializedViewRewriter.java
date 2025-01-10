@@ -1256,9 +1256,28 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
         return Utils.compoundAnd(mvPrunePredicates);
     }
 
-    private OptExpression buildMVScanOptExpression(RewriteContext rewriteContext,
+    /**
+     * Build MV scan opt expression.
+     * According to the mv compensate info, build mv scan plan with or without compensate.
+     */
+    private OptExpression buildMVScanOptExpression(MaterializationContext materializationContext,
+                                                   RewriteContext rewriteContext,
                                                    ColumnRewriter columnRewriter,
                                                    Map<ColumnRefOperator, ScalarOperator> mvColumnRefToScalarOp) {
+        final MVCompensation mvCompensation = materializationContext.getMvCompensation();
+        final LogicalOlapScanOperator mvScanOperator = materializationContext.getScanMvOperator();
+        final MaterializedView mv = materializationContext.getMv();
+        final List<ColumnRefOperator>  originalOutputColumns = MvUtils.getMvScanOutputColumnRefs(mv, mvScanOperator);
+        // build mv scan opt expression with or without compensate
+        final OptExpression mvScanOptExpression = mvCompensation.isTransparentRewrite() ?
+                getMvTransparentPlan(materializationContext, mvCompensation, originalOutputColumns) :
+                getMVScanPlanWithoutCompensate(rewriteContext, columnRewriter, mvColumnRefToScalarOp);
+        return mvScanOptExpression;
+    }
+
+    private OptExpression getMVScanPlanWithoutCompensate(RewriteContext rewriteContext,
+                                                         ColumnRewriter columnRewriter,
+                                                         Map<ColumnRefOperator, ScalarOperator> mvColumnRefToScalarOp) {
         // the rewritten expression to replace query
         // should copy the op because the op will be modified and reused
         final LogicalOlapScanOperator mvScanOperator = materializationContext.getScanMvOperator();
@@ -1301,7 +1320,7 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
         logMVRewrite(mvRewriteContext, "Get compensation predicates:{}, isTransparentRewrite: {}",
                 compensationPredicates, isTransparentRewrite);
         if (compensationPredicates == null) {
-            return tryUnionRewrite(rewriteContext, columnRewriter, mvCompensation);
+            return tryUnionRewrite(rewriteContext, columnRewriter);
         } else {
             // all predicates are now query based
             final ScalarOperator equalPredicates = MvUtils.canonizePredicate(compensationPredicates.getEqualPredicates());
@@ -1315,9 +1334,8 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
                 return null;
             }
 
-            OptExpression mvScanOptExpression = isTransparentRewrite ?
-                    getMvTransparentPlan(materializationContext, mvCompensation, null) :
-                    buildMVScanOptExpression(rewriteContext, columnRewriter, mvColumnRefToScalarOp);
+            OptExpression mvScanOptExpression = buildMVScanOptExpression(materializationContext,
+                    rewriteContext, columnRewriter, mvColumnRefToScalarOp);
             if (mvScanOptExpression == null) {
                 logMVRewrite(mvRewriteContext, "Get mv scan opt expression failed, isTransparentRewrite: {}",
                         isTransparentRewrite);
@@ -1724,8 +1742,7 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
     }
 
     private OptExpression tryUnionRewrite(RewriteContext rewriteContext,
-                                          ColumnRewriter columnRewriter,
-                                          MVCompensation mvCompensation) {
+                                          ColumnRewriter columnRewriter) {
         logMVRewrite(mvRewriteContext, "Cannot compensate predicates from mv rewrite, " +
                 "try to use union rewrite.");
         if (!optimizerContext.getSessionVariable().isEnableMaterializedViewUnionRewrite()) {
@@ -1750,10 +1767,8 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
         }
         final Map<ColumnRefOperator, ScalarOperator> mvColumnRefToScalarOp = rewriteContext.getMVColumnRefToScalarOp();
         // return directly if it is not transparent rewrite
-        boolean isTransparentRewrite = mvCompensation.isTransparentRewrite();
-        OptExpression mvScanOptExpression = isTransparentRewrite ?
-                getMvTransparentPlan(materializationContext, mvCompensation, null) :
-                buildMVScanOptExpression(rewriteContext, columnRewriter, mvColumnRefToScalarOp);
+        final OptExpression mvScanOptExpression = buildMVScanOptExpression(materializationContext,
+                rewriteContext, columnRewriter, mvColumnRefToScalarOp);
         return doUnionRewrite(rewriteContext, mvScanOptExpression);
     }
 
@@ -1836,7 +1851,7 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
         // query: select a, b from t where a < 20;
         // queryBasedRewrite will return the tree of "select a, b from t where a >= 10 and a < 20"
         // which is realized by adding the compensation predicate to original query expression
-        final OptExpression queryInput = queryBasedRewrite(rewriteContext, mvCompensationPredicates, queryExpression);
+        final OptExpression queryInput = doQueryBasedRewrite(rewriteContext, mvCompensationPredicates, queryExpression);
         if (queryInput == null) {
             logMVRewrite(mvRewriteContext, "Rewrite union failed: cannot rewrite MV based on query");
             return null;
@@ -1864,7 +1879,7 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
         //           Union
         //       /          |
         // partial query   view
-        return createUnion(queryInput, viewInput, rewriteContext);
+        return doUnionRewrite(queryInput, viewInput, rewriteContext);
     }
 
     // retry to rewrite the rewritten failed predicates by enforcing the columns not exists in query
@@ -1930,8 +1945,10 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
         return Utils.compoundAnd(rewrittens);
     }
 
-    protected OptExpression queryBasedRewrite(RewriteContext rewriteContext, ScalarOperator compensationPredicates,
-                                              OptExpression queryExpression) {
+    @Override
+    public OptExpression doQueryBasedRewrite(RewriteContext rewriteContext,
+                                             ScalarOperator compensationPredicates,
+                                             OptExpression queryExpression) {
         queryExpression = MvUtils.replaceLogicalViewScanOperator(queryExpression);
         if (queryExpression == null) {
             return null;
@@ -2185,7 +2202,8 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
         return predicate.accept(visitor, null);
     }
 
-    protected OptExpression createUnion(OptExpression queryInput, OptExpression viewInput,
+    @Override
+    public OptExpression doUnionRewrite(OptExpression queryInput, OptExpression viewInput,
                                         RewriteContext rewriteContext) {
         Map<ColumnRefOperator, ScalarOperator> queryColumnRefMap =
                 MvUtils.getColumnRefMap(queryInput, rewriteContext.getQueryRefFactory());
@@ -2210,6 +2228,7 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
             ColumnRefOperator newColumn = rewriteContext.getQueryRefFactory().create(
                     columnRef, columnRef.getType(), columnRef.isNullable());
             newViewOutputColumns.add(newColumn);
+            Preconditions.checkArgument(mvProjection.containsKey(columnRef));
             newColumnRefMap.put(newColumn, mvProjection.get(columnRef));
         }
         Projection newMvProjection = new Projection(newColumnRefMap);
@@ -2285,8 +2304,8 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
                 }
                 rewriter.addMapping(rewriteScalarOp, entry.getKey());
             }
-
         }
+        rewriter.setOutputMapping(rewriteContext.getOutputMapping());
         return rewriter;
     }
 
@@ -2404,21 +2423,63 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
         return matchMode;
     }
 
-    // TODO: consider no-loss type cast
+    /**
+     * Rewrite the query based on the materialized view, ensure the rewritten plan is unique(column refs for the same mv are not
+     * the same).
+     */
     protected OptExpression viewBasedRewrite(RewriteContext rewriteContext,
                                              OptExpression mvScanOptExpression) {
-        final Map<ColumnRefOperator, ScalarOperator> mvColumnRefToScalarOp =
-                rewriteContext.getMVColumnRefToScalarOp();
+        final OptExpression result = doViewBasedRewrite(rewriteContext, mvScanOptExpression);
+        if (result == null) {
+            return null;
+        }
 
-        EquationRewriter queryExprToMvExprRewriter =
-                buildEquationRewriter(mvColumnRefToScalarOp, rewriteContext, false);
+        if (materializationContext.isMvDuplicateUsed()) {
+            // duplicate if needed
+            final OptExpressionDuplicator duplicator = new OptExpressionDuplicator(materializationContext);
+            final OptExpression duplicate = duplicator.duplicate(result);
+            final Map<ColumnRefOperator, ColumnRefOperator> columnMapping = duplicator.getColumnMapping();
+            final Projection projection = result.getOp().getProjection();
+            Map<ColumnRefOperator, ScalarOperator> newProjection;
+            if (projection != null) {
+                newProjection =
+                        projection.getColumnRefMap().entrySet()
+                                .stream()
+                                .map(e -> Pair.create(e.getKey(), columnMapping.get(e.getKey())))
+                                .collect(Collectors.toMap(p -> p.first, p -> p.second));
 
-        return rewriteProjection(rewriteContext, queryExprToMvExprRewriter, mvScanOptExpression);
+            } else {
+                final OptExpression queryInput = rewriteContext.getQueryExpression();
+                final Map<ColumnRefOperator, ScalarOperator> queryColumnRefMap =
+                        MvUtils.getColumnRefMap(queryInput, rewriteContext.getQueryRefFactory());
+                final List<ColumnRefOperator> originalOutputColumns = queryColumnRefMap.keySet()
+                        .stream().collect(Collectors.toList());
+                newProjection = originalOutputColumns
+                        .stream()
+                        .map(org -> {
+                            Preconditions.checkArgument(columnMapping.containsKey(org));
+                            return Pair.create(org, columnMapping.get(org));
+                        })
+                        .collect(Collectors.toMap(p -> p.first, p -> p.second));
+            }
+            // rewrite mv pruned predicates since mv's output columns mapping have changed
+            if (mvRewriteContext.getMvPruneConjunct() != null) {
+                final ScalarOperator newMvPruneConjunct = duplicator.rewriteAfterDuplicate(mvRewriteContext.getMvPruneConjunct());
+                mvRewriteContext.setMvPruneConjunct(newMvPruneConjunct);
+            }
+            return Utils.mergeProjection(duplicate, newProjection);
+        } else {
+            return result;
+        }
     }
 
-    protected OptExpression rewriteProjection(RewriteContext rewriteContext,
-                                              EquationRewriter equationRewriter,
-                                              OptExpression mvOptExpr) {
+    @Override
+    public OptExpression doViewBasedRewrite(RewriteContext rewriteContext,
+                                            OptExpression mvOptExpr) {
+        final Map<ColumnRefOperator, ScalarOperator> mvColumnRefToScalarOp =
+                rewriteContext.getMVColumnRefToScalarOp();
+        EquationRewriter equationRewriter =
+                buildEquationRewriter(mvColumnRefToScalarOp, rewriteContext, false);
         Map<ColumnRefOperator, ScalarOperator> queryMap = MvUtils.getColumnRefMap(
                 rewriteContext.getQueryExpression(), rewriteContext.getQueryRefFactory());
         Map<ColumnRefOperator, ScalarOperator> swappedQueryColumnMap = Maps.newHashMap();
@@ -2428,8 +2489,6 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
             ScalarOperator swapped = columnRewriter.rewriteByQueryEc(rewritten);
             swappedQueryColumnMap.put(entry.getKey(), swapped);
         }
-        // duplicate if mv has already outputted.
-        mvOptExpr = duplicateMvOptExpression(rewriteContext, mvOptExpr, equationRewriter);
 
         Map<ColumnRefOperator, ScalarOperator> newQueryProjection = Maps.newHashMap();
         for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : swappedQueryColumnMap.entrySet()) {
@@ -2927,47 +2986,13 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
      * Get projection of the mv opt expression tree. NOTE: mv opt expression's root may be filter opt expression.
      */
     protected Projection getMvOptExprProjection(OptExpression mvOptExpression) {
+        final LogicalOperator mvOp = (LogicalOperator) mvOptExpression.getOp();
         Projection projection = null;
-        LogicalOperator mvOp = (LogicalOperator) mvOptExpression.getOp();
         if (mvOp instanceof LogicalFilterOperator) {
             projection = mvOptExpression.inputAt(0).getOp().getProjection();
         } else {
             projection = mvOp.getProjection();
         }
         return projection;
-    }
-
-    /**
-     * Duplicate mv opt expression to avoid conflict if input query opt expression contains multi use of the same mv.
-     */
-    protected OptExpression duplicateMvOptExpression(RewriteContext rewriteContext,
-                                                     OptExpression mvOptExpr,
-                                                     EquationRewriter equationRewriter) {
-        Map<ColumnRefOperator, ColumnRefOperator> outputMapping = rewriteContext.getOutputMapping();
-        // Generate different column-refs for multi use of the same mv to avoid bugs later.
-        if (materializationContext.isMvDuplicateUsed()) {
-            OptExpressionDuplicator duplicator = new OptExpressionDuplicator(materializationContext);
-            OptExpression newMvOptExpr = duplicator.duplicate(mvOptExpr);
-            Map<ColumnRefOperator, ColumnRefOperator> replacedOutputMapping = duplicator.getColumnMapping();
-            Map<ColumnRefOperator, ColumnRefOperator> newOutputMapping = Maps.newHashMap();
-            for (Map.Entry<ColumnRefOperator, ColumnRefOperator> entry : outputMapping.entrySet()) {
-                ColumnRefOperator newDuplicatorColRef = replacedOutputMapping.get(entry.getValue());
-                if (newDuplicatorColRef != null) {
-                    newOutputMapping.put(entry.getKey(), newDuplicatorColRef);
-                }
-            }
-            equationRewriter.setOutputMapping(newOutputMapping);
-
-            // rewrite mv pruned predicates since mv's output columns mapping have changed
-            if (mvRewriteContext.getMvPruneConjunct() != null) {
-                ScalarOperator newMvPruneConjunct = duplicator.rewriteAfterDuplicate(mvRewriteContext.getMvPruneConjunct());
-                mvRewriteContext.setMvPruneConjunct(newMvPruneConjunct);
-            }
-
-            return newMvOptExpr;
-        } else {
-            equationRewriter.setOutputMapping(outputMapping);
-            return mvOptExpr;
-        }
     }
 }
