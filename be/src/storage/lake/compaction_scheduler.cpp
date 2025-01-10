@@ -37,6 +37,7 @@
 #include "storage/memtable_flush_executor.h"
 #include "storage/storage_engine.h"
 #include "testutil/sync_point.h"
+#include "util/misc.h"
 #include "util/threadpool.h"
 #include "util/thrift_rpc_helper.h"
 
@@ -277,7 +278,7 @@ void CompactionScheduler::thread_task(int id) {
             break;
         }
         if (!_limiter.acquire()) {
-            std::this_thread::sleep_for(std::chrono::seconds(1));
+            nap_sleep(1, [&] { return _stopped.load(); });
             continue;
         }
 
@@ -295,7 +296,7 @@ void CompactionScheduler::thread_task(int id) {
             }
         } else {
             _limiter.no_memory_limit_exceeded();
-            std::this_thread::sleep_for(std::chrono::seconds(1));
+            nap_sleep(1, [&] { return _stopped.load(); });
         }
     }
 }
