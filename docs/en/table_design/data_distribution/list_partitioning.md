@@ -3,9 +3,15 @@ displayed_sidebar: docs
 sidebar_position: 20
 ---
 
-# List partitioning
+# List partitioning (Legacy)
 
 Since v3.1, StarRocks supports list partitioning. Data is partitioned based on a predefined value list for each partition, which can accelerate queries and facilitate management according to enumerated values.
+
+:::note
+
+Please note that from v3.4 onwards, [expression partitioning](./expression_partitioning.md) is further optimized to unify all partitioning strategies and supported more complex solutions. It is recommended in most cases, and will replace the list partitioning strategy in future releases.
+
+:::
 
 ## Introduction
 
