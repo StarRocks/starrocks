@@ -868,3 +868,13 @@ INSERT INTO default_catalog.olap_db.olap_tbl SELECT * FROM deltalake_table
 由于反复解压和解析元数据文件会引入不必要的延迟，自 v3.3.3 起，StarRocks 采用了一种不同的元数据缓存策略。StarRocks 会将反序列化后的内存对象缓存下来，以应对延迟问题。通过将这些反序列化的文件缓存在FE内存中，系统可以在后续查询中跳过解压和解析阶段，直接访问所需的元数据。这种缓存机制显著减少了检索时间，使系统响应更快，更能满足高查询需求和物化视图改写的要求。
 
 您可以通过 Catalog 属性 [MetadataUpdateParams](#metadataupdateparams) 和[相关配置项](#配置元数据缓存及刷新策略)调节该行为。
+
+## 功能支持
+
+目前，Delta Lake Catalog 支持以下功能：
+
+- V2 Checkpoint（从 v3.3.0 起）
+- Timestamp without Timezone（从 v3.3.1 起）
+- 列映射（从 v3.3.6 起）
+
+Deletion Vector 将在未来版本中支持。
