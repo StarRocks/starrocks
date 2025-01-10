@@ -351,7 +351,7 @@ public:
             TDecimalLiteral decimal_literal;
             decimal_literal.value = value;
             node.__set_decimal_literal(decimal_literal);
-            node.node_type = TExprNodeType::DATE_LITERAL;
+            node.node_type = TExprNodeType::DECIMAL_LITERAL;
         } else {
             // not implement
             CHECK(false);
