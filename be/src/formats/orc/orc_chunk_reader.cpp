@@ -1209,27 +1209,33 @@ Status OrcChunkReader::build_search_argument_by_predicates(const OrcPredicates* 
     return Status::OK();
 }
 
-ColumnPtr OrcChunkReader::get_row_delete_filter(const std::set<int64_t>& deleted_pos) {
+StatusOr<ColumnPtr> OrcChunkReader::get_row_delete_filter(const SkipRowsContextPtr& skip_rows_ctx) {
     int64_t start_pos = _row_reader->getRowNumber();
     auto num_rows = _batch->numElements;
     ColumnPtr filter_column = BooleanColumn::create(num_rows, 1);
     auto& filter = static_cast<BooleanColumn*>(filter_column.get())->get_data();
-    auto iter = deleted_pos.lower_bound(start_pos);
-    auto end = deleted_pos.upper_bound(start_pos + num_rows - 1);
-    for (; iter != end; iter++) {
-        const int64_t file_pos = *iter - start_pos;
-        filter[file_pos] = 0;
+
+    if (skip_rows_ctx == nullptr || !skip_rows_ctx->has_skip_rows()) {
+        return filter_column;
     }
 
+    StatusOr<bool> status = skip_rows_ctx->deletion_bitmap->fill_filter(start_pos, start_pos + num_rows, filter);
+    if (!status.ok()) {
+        LOG(WARNING) << "OrcChunkReader::get_row_delete_filter, Failed to fill filter: " << status.status().message();
+        return Status::InternalError(
+                strings::Substitute("OrcChunkReader Failed to fill filter: $0", status.status().message()));
+    }
     return filter_column;
 }
 
-size_t OrcChunkReader::get_row_delete_number(const std::set<int64_t>& deleted_pos) {
+size_t OrcChunkReader::get_row_delete_number(const SkipRowsContextPtr& skip_rows_ctx) {
+    if (skip_rows_ctx == nullptr || !skip_rows_ctx->has_skip_rows()) {
+        return 0;
+    }
     int64_t start_pos = _row_reader->getRowNumber();
     auto num_rows = _batch->numElements;
-    auto iter = deleted_pos.lower_bound(start_pos);
-    auto end = deleted_pos.upper_bound(start_pos + num_rows - 1);
-    return std::distance(iter, end);
+
+    return skip_rows_ctx->deletion_bitmap->get_range_cardinality(start_pos, start_pos + num_rows);
 }
 
 Status OrcChunkReader::apply_dict_filter_eval_cache(const std::unordered_map<SlotId, FilterPtr>& dict_filter_eval_cache,
