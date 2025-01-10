@@ -26,6 +26,7 @@
 #include "runtime/memory/mem_chunk_allocator.h"
 #include "runtime/time_types.h"
 #include "runtime/user_function_cache.h"
+#include "storage/lake/tablet_manager.h"
 #include "storage/options.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
@@ -117,6 +118,11 @@ int init_test_env(int argc, char** argv) {
     // destroy exec env
     tls_thread_status.set_mem_tracker(nullptr);
     exec_env->stop();
+#ifdef USE_STAROS
+    if (exec_env->lake_tablet_manager() != nullptr) {
+        exec_env->lake_tablet_manager()->stop();
+    }
+#endif
     exec_env->destroy();
     global_env->stop();
 

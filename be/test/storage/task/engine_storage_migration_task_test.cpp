@@ -29,6 +29,7 @@
 #include "runtime/user_function_cache.h"
 #include "storage/chunk_helper.h"
 #include "storage/delta_writer.h"
+#include "storage/lake/tablet_manager.h"
 #include "storage/options.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_writer.h"
@@ -670,6 +671,11 @@ int main(int argc, char** argv) {
     // destroy exec env
     starrocks::tls_thread_status.set_mem_tracker(nullptr);
     exec_env->stop();
+#ifdef USE_STAROS
+    if (exec_env->lake_tablet_manager() != nullptr) {
+        exec_env->lake_tablet_manager()->stop();
+    }
+#endif
     exec_env->destroy();
     global_env->stop();
 
