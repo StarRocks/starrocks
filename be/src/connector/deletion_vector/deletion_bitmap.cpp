@@ -15,6 +15,7 @@
 #include "deletion_bitmap.h"
 
 #include "column/vectorized_fwd.h"
+#include "util/defer_op.h"
 
 namespace starrocks {
 
@@ -23,8 +24,8 @@ StatusOr<bool> DeletionBitmap::fill_filter(uint64_t start, uint64_t end, Filter&
         return false;
     }
     roaring64_iterator_t* it = roaring64_iterator_create(_bitmap);
+    DeferOp defer([&it] { roaring64_iterator_free(it); });
     if (!roaring64_iterator_move_equalorlarger(it, start)) {
-        roaring64_iterator_free(it);
         return false;
     }
 
@@ -36,7 +37,6 @@ StatusOr<bool> DeletionBitmap::fill_filter(uint64_t start, uint64_t end, Filter&
         roaring64_iterator_advance(it);
     }
 
-    roaring64_iterator_free(it);
     return has_filter;
 }
 
