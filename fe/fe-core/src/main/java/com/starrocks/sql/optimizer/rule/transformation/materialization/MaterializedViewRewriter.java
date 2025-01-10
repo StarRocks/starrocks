@@ -1265,11 +1265,11 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
                                                    ColumnRewriter columnRewriter,
                                                    Map<ColumnRefOperator, ScalarOperator> mvColumnRefToScalarOp) {
         final MVCompensation mvCompensation = materializationContext.getMvCompensation();
-        boolean isTransparentRewrite = mvCompensation.isTransparentRewrite();
         final LogicalOlapScanOperator mvScanOperator = materializationContext.getScanMvOperator();
         final MaterializedView mv = materializationContext.getMv();
         final List<ColumnRefOperator>  originalOutputColumns = MvUtils.getMvScanOutputColumnRefs(mv, mvScanOperator);
-        final OptExpression mvScanOptExpression = isTransparentRewrite ?
+        // build mv scan opt expression with or without compensate
+        final OptExpression mvScanOptExpression = mvCompensation.isTransparentRewrite() ?
                 getMvTransparentPlan(materializationContext, mvCompensation, originalOutputColumns) :
                 getMVScanPlanWithoutCompensate(rewriteContext, columnRewriter, mvColumnRefToScalarOp);
         return mvScanOptExpression;
@@ -1767,7 +1767,7 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
         }
         final Map<ColumnRefOperator, ScalarOperator> mvColumnRefToScalarOp = rewriteContext.getMVColumnRefToScalarOp();
         // return directly if it is not transparent rewrite
-        OptExpression mvScanOptExpression = buildMVScanOptExpression(materializationContext,
+        final OptExpression mvScanOptExpression = buildMVScanOptExpression(materializationContext,
                 rewriteContext, columnRewriter, mvColumnRefToScalarOp);
         return doUnionRewrite(rewriteContext, mvScanOptExpression);
     }
@@ -1851,7 +1851,7 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
         // query: select a, b from t where a < 20;
         // queryBasedRewrite will return the tree of "select a, b from t where a >= 10 and a < 20"
         // which is realized by adding the compensation predicate to original query expression
-        final OptExpression queryInput = queryBasedRewrite(rewriteContext, mvCompensationPredicates, queryExpression);
+        final OptExpression queryInput = doQueryBasedRewrite(rewriteContext, mvCompensationPredicates, queryExpression);
         if (queryInput == null) {
             logMVRewrite(mvRewriteContext, "Rewrite union failed: cannot rewrite MV based on query");
             return null;
@@ -1879,7 +1879,7 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
         //           Union
         //       /          |
         // partial query   view
-        return createUnion(queryInput, viewInput, rewriteContext);
+        return doUnionRewrite(queryInput, viewInput, rewriteContext);
     }
 
     // retry to rewrite the rewritten failed predicates by enforcing the columns not exists in query
@@ -1945,8 +1945,10 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
         return Utils.compoundAnd(rewrittens);
     }
 
-    protected OptExpression queryBasedRewrite(RewriteContext rewriteContext, ScalarOperator compensationPredicates,
-                                              OptExpression queryExpression) {
+    @Override
+    public OptExpression doQueryBasedRewrite(RewriteContext rewriteContext,
+                                             ScalarOperator compensationPredicates,
+                                             OptExpression queryExpression) {
         queryExpression = MvUtils.replaceLogicalViewScanOperator(queryExpression);
         if (queryExpression == null) {
             return null;
@@ -2200,12 +2202,8 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
         return predicate.accept(visitor, null);
     }
 
-    /**
-     * Union Rewrite by viewBasedRewrite and queryBasedRewrite.
-     * NOTE: Ensure plan's output column refs are unique even for the same query/mv plans.
-     * NOTE: viewInput's column ref's uniqueness is ensured by viewBasedRewrite.
-     */
-    protected OptExpression createUnion(OptExpression queryInput, OptExpression viewInput,
+    @Override
+    public OptExpression doUnionRewrite(OptExpression queryInput, OptExpression viewInput,
                                         RewriteContext rewriteContext) {
         Map<ColumnRefOperator, ScalarOperator> queryColumnRefMap =
                 MvUtils.getColumnRefMap(queryInput, rewriteContext.getQueryRefFactory());
@@ -2430,19 +2428,19 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
      * the same).
      */
     protected OptExpression viewBasedRewrite(RewriteContext rewriteContext,
-                                               OptExpression mvScanOptExpression) {
-        OptExpression result = doViewBasedRewrite(rewriteContext, mvScanOptExpression);
+                                             OptExpression mvScanOptExpression) {
+        final OptExpression result = doViewBasedRewrite(rewriteContext, mvScanOptExpression);
         if (result == null) {
             return null;
         }
 
         if (materializationContext.isMvDuplicateUsed()) {
             // duplicate if needed
-            OptExpressionDuplicator duplicator = new OptExpressionDuplicator(materializationContext);
-            OptExpression duplicate = duplicator.duplicate(result);
-            Map<ColumnRefOperator, ColumnRefOperator> columnMapping = duplicator.getColumnMapping();
+            final OptExpressionDuplicator duplicator = new OptExpressionDuplicator(materializationContext);
+            final OptExpression duplicate = duplicator.duplicate(result);
+            final Map<ColumnRefOperator, ColumnRefOperator> columnMapping = duplicator.getColumnMapping();
+            final Projection projection = result.getOp().getProjection();
             Map<ColumnRefOperator, ScalarOperator> newProjection;
-            Projection projection = result.getOp().getProjection();
             if (projection != null) {
                 newProjection =
                         projection.getColumnRefMap().entrySet()
@@ -2451,18 +2449,22 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
                                 .collect(Collectors.toMap(p -> p.first, p -> p.second));
 
             } else {
-                deriveLogicalProperty(result);
-                ColumnRefSet columnRefSet = result.getOutputColumns();
-                List<ColumnRefOperator> originalOutputColumns = columnRefSet.getColumnRefOperators(
-                        materializationContext.getQueryRefFactory());
+                final OptExpression queryInput = rewriteContext.getQueryExpression();
+                final Map<ColumnRefOperator, ScalarOperator> queryColumnRefMap =
+                        MvUtils.getColumnRefMap(queryInput, rewriteContext.getQueryRefFactory());
+                final List<ColumnRefOperator> originalOutputColumns = queryColumnRefMap.keySet()
+                        .stream().collect(Collectors.toList());
                 newProjection = originalOutputColumns
                         .stream()
-                        .map(org -> Pair.create(org, columnMapping.get(org)))
+                        .map(org -> {
+                            Preconditions.checkArgument(columnMapping.containsKey(org));
+                            return Pair.create(org, columnMapping.get(org));
+                        })
                         .collect(Collectors.toMap(p -> p.first, p -> p.second));
             }
             // rewrite mv pruned predicates since mv's output columns mapping have changed
             if (mvRewriteContext.getMvPruneConjunct() != null) {
-                ScalarOperator newMvPruneConjunct = duplicator.rewriteAfterDuplicate(mvRewriteContext.getMvPruneConjunct());
+                final ScalarOperator newMvPruneConjunct = duplicator.rewriteAfterDuplicate(mvRewriteContext.getMvPruneConjunct());
                 mvRewriteContext.setMvPruneConjunct(newMvPruneConjunct);
             }
             return Utils.mergeProjection(duplicate, newProjection);
@@ -2471,21 +2473,13 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
         }
     }
 
-    /**
-     * Do rewrite based on materialized view's plan.
-     */
-    protected OptExpression doViewBasedRewrite(RewriteContext rewriteContext,
-                                               OptExpression mvScanOptExpression) {
+    @Override
+    public OptExpression doViewBasedRewrite(RewriteContext rewriteContext,
+                                            OptExpression mvOptExpr) {
         final Map<ColumnRefOperator, ScalarOperator> mvColumnRefToScalarOp =
                 rewriteContext.getMVColumnRefToScalarOp();
-        EquationRewriter queryExprToMvExprRewriter =
+        EquationRewriter equationRewriter =
                 buildEquationRewriter(mvColumnRefToScalarOp, rewriteContext, false);
-        return rewriteProjection(rewriteContext, queryExprToMvExprRewriter, mvScanOptExpression);
-    }
-
-    protected OptExpression rewriteProjection(RewriteContext rewriteContext,
-                                              EquationRewriter equationRewriter,
-                                              OptExpression mvOptExpr) {
         Map<ColumnRefOperator, ScalarOperator> queryMap = MvUtils.getColumnRefMap(
                 rewriteContext.getQueryExpression(), rewriteContext.getQueryRefFactory());
         Map<ColumnRefOperator, ScalarOperator> swappedQueryColumnMap = Maps.newHashMap();
@@ -2992,8 +2986,8 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
      * Get projection of the mv opt expression tree. NOTE: mv opt expression's root may be filter opt expression.
      */
     protected Projection getMvOptExprProjection(OptExpression mvOptExpression) {
+        final LogicalOperator mvOp = (LogicalOperator) mvOptExpression.getOp();
         Projection projection = null;
-        LogicalOperator mvOp = (LogicalOperator) mvOptExpression.getOp();
         if (mvOp instanceof LogicalFilterOperator) {
             projection = mvOptExpression.inputAt(0).getOp().getProjection();
         } else {

@@ -2383,13 +2383,13 @@ public class MvRewriteTest extends MVTestBase {
                                                         List<String> queries) throws Exception {
         createAndRefreshMv(mvQuery);
         for (String query : queries) {
-            OptExpression plan = getOptimizedPlan(query);
-            List<LogicalScanOperator> scanOperators = MvUtils.getScanOperator(plan);
-            Set<ColumnRefOperator> mvColumnRefSet = new HashSet<>();
+            final OptExpression plan = getOptimizedPlan(query);
+            final List<LogicalScanOperator> scanOperators = MvUtils.getScanOperator(plan);
+            final Set<ColumnRefOperator> mvColumnRefSet = new HashSet<>();
             for (LogicalScanOperator scanOperator : scanOperators) {
                 Assert.assertTrue(scanOperator instanceof LogicalOlapScanOperator);
                 Assert.assertTrue(scanOperator.getTable().getName().equalsIgnoreCase("test_mv1"));
-                LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) scanOperator;
+                final LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) scanOperator;
                 for (ColumnRefOperator colRef : olapScanOperator.getColumnMetaToColRefMap().values()) {
                     Assert.assertTrue(!mvColumnRefSet.contains(colRef));
                     mvColumnRefSet.add(colRef);
@@ -2490,7 +2490,7 @@ public class MvRewriteTest extends MVTestBase {
                     String query = "SELECT * FROM (SELECT * FROM s1 where num > 3 " +
                             "UNION ALL SELECT * FROM s1 where num > 3) t order by 1, 2 limit 3;";
                     connectContext.getSessionVariable().setMaterializedViewUnionRewriteMode(2);
-                    String plan = getFragmentPlan(query);
+                    final String plan = getFragmentPlan(query);
                     PlanTestBase.assertContains(plan, "test_mv1");
                     connectContext.getSessionVariable().setMaterializedViewUnionRewriteMode(0);
                 });
