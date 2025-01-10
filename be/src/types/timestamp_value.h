@@ -132,7 +132,7 @@ public:
     // direct return microsecond will over int64
     int64_t diff_microsecond(TimestampValue other) const;
 
-    std::string to_string() const;
+    std::string to_string(bool igonre_microsecond = false) const;
 
     // Returns the formatted string length or -1 on error.
     int to_string(char* s, size_t n) const;
