@@ -47,6 +47,7 @@ import java.util.List;
 import java.util.Map;
 
 import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
+import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_CONNECTION_POOL_SIZE;
 import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_TIMEOUT;
 import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_TYPE;
 import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_URIS;
@@ -59,7 +60,8 @@ public class HiveMetaClient {
     public static final String DLF_HIVE_METASTORE = "dlf";
     public static final String GLUE_HIVE_METASTORE = "glue";
     // Maximum number of idle metastore connections in the connection pool at any point.
-    private static final int MAX_HMS_CONNECTION_POOL_SIZE = 32;
+    private final int maxPoolSize;
+    private static final int MAX_HMS_CONNECTION_POOL_SIZE_DEFAULT = 32;
 
     private final LinkedList<RecyclableClient> clientPool = new LinkedList<>();
     private final Object clientPoolLock = new Object();
@@ -71,6 +73,7 @@ public class HiveMetaClient {
 
     public HiveMetaClient(HiveConf conf) {
         this.conf = conf;
+        this.maxPoolSize = conf.getInt(HIVE_METASTORE_CONNECTION_POOL_SIZE, MAX_HMS_CONNECTION_POOL_SIZE_DEFAULT);
     }
 
     public static HiveMetaClient createHiveMetaClient(HdfsEnvironment env, Map<String, String> properties) {
@@ -81,7 +84,10 @@ public class HiveMetaClient {
             conf.set(MetastoreConf.ConfVars.THRIFT_URIS.getHiveName(), properties.get(HIVE_METASTORE_URIS));
         }
         String hmsTimeout = properties.getOrDefault(HIVE_METASTORE_TIMEOUT, String.valueOf(Config.hive_meta_store_timeout_s));
+        String poolSize = properties.getOrDefault(HIVE_METASTORE_CONNECTION_POOL_SIZE,
+                String.valueOf(MAX_HMS_CONNECTION_POOL_SIZE_DEFAULT));
         conf.set(MetastoreConf.ConfVars.CLIENT_SOCKET_TIMEOUT.getHiveName(), hmsTimeout);
+        conf.set(HIVE_METASTORE_CONNECTION_POOL_SIZE, poolSize);
         return new HiveMetaClient(conf);
     }
 
@@ -101,13 +107,13 @@ public class HiveMetaClient {
             }
         }
 
-        // When the number of currently used clients is less than MAX_HMS_CONNECTION_POOL_SIZE,
+        // When the number of currently used clients is less than maxPoolSize,
         // the client will be recycled and reused. If it does, we close the client.
         public void finish() {
             synchronized (clientPoolLock) {
-                if (clientPool.size() >= MAX_HMS_CONNECTION_POOL_SIZE) {
+                if (clientPool.size() >= maxPoolSize) {
                     LOG.warn("There are more than {} connections currently accessing the metastore",
-                            MAX_HMS_CONNECTION_POOL_SIZE);
+                            maxPoolSize);
                     close();
                 } else {
                     clientPool.offer(this);
@@ -118,6 +124,10 @@ public class HiveMetaClient {
         public void close() {
             hiveClient.close();
         }
+    }
+
+    public int getMaxClientPoolSize() {
+        return maxPoolSize;
     }
 
     public int getClientSize() {
