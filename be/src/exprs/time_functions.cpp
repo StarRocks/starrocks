@@ -2052,7 +2052,7 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(yyyy_MM_dd_Impl, v) {
 }
 
 std::string format_for_yyyyMMddHHmmssImpl(const TimestampValue& date_value) {
-    return date_value.to_string();
+    return date_value.to_string(true);
 }
 
 DEFINE_STRING_UNARY_FN_WITH_IMPL(yyyyMMddHHmmssImpl, v) {

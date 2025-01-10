@@ -864,8 +864,11 @@ bool TimestampValue::is_valid_non_strict() const {
     return is_valid();
 }
 
-std::string TimestampValue::to_string() const {
-    return timestamp::to_string(_timestamp);
+std::string TimestampValue::to_string(bool igonre_microsecond) const {
+    if (igonre_microsecond) {
+        return timestamp::to_string<false, true>(_timestamp);
+    }
+    return timestamp::to_string<false, false>(_timestamp);
 }
 
 int TimestampValue::to_string(char* s, size_t n) const {
