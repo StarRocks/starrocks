@@ -80,6 +80,7 @@ public class ClusterSnapshotCheckpointScheduler extends FrontendDaemon {
                 errMsg = "checkpoint failed for FE image: " + createFEImageRet.second;
                 break;
             }
+            LOG.info("Finished create image for FE image, version: {}", consistentIds.first);
 
             Pair<Long, Long> getStarMgrIdsRet = starMgrController.getCheckpointJournalIds();
             Pair<Boolean, String> createStarMgrImageRet =
@@ -88,6 +89,7 @@ public class ClusterSnapshotCheckpointScheduler extends FrontendDaemon {
                 errMsg = "checkpoint failed for starMgr image: " + createStarMgrImageRet.second;
                 break;
             }
+            LOG.info("Finished create image for starMgr image, version: {}", consistentIds.second);
 
             // step 3: upload all finished image file
             job.setState(ClusterSnapshotJobState.UPLOADING);
