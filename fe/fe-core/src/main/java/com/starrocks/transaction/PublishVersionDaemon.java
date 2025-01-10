@@ -569,7 +569,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
             // make sure sync wait for the RPC call to avoid too many RPC call existed in BE/CN side
             Future<DeleteTxnLogResponse> responseFuture = lakeService.deleteTxnLog(request);
             DeleteTxnLogResponse response = responseFuture.get();
-            if (response != null && response.status.statusCode != 0) {
+            if (response != null && response.status != null && response.status.statusCode != 0) {
                 LOG.warn("delete txn log request return with err: " + response.status.errorMsgs.get(0));
             }
         } catch (Exception e) {
