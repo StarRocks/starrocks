@@ -1,4 +1,4 @@
--- name: test_nest_loop_join
+-- name: test_nest_loop_join @slow
 
 CREATE TABLE `t1` (
   `c1` int(11) NULL COMMENT "",
