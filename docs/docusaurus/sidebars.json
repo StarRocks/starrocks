@@ -127,6 +127,10 @@
                         "id": "loading/objectstorage"
                     },
                     "items": [
+                        "loading/alibaba",
+                        "loading/huawei",
+                        "loading/tencent",
+                        "loading/s3_compatible",
                         "loading/s3",
                         "loading/azure",
                         "loading/gcs",
@@ -135,7 +139,6 @@
                 },
                 "loading/StreamLoad",
                 "loading/hdfs_load",
-                "loading/cloud_storage_load",
                 {
                     "type": "category",
                     "label": "Load data from Apache Kafka",

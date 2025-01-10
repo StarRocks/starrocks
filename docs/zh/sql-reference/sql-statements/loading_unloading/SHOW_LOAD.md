@@ -6,7 +6,11 @@ displayed_sidebar: docs
 
 ## 功能
 
+<<<<<<< HEAD
 查看数据库中指定导入作业的相关信息，包括 [Broker Load](./BROKER_LOAD.md)、[INSERT](./INSERT.md) 和 [Spark Load](./SPARK_LOAD.md)。您还可以使用 `curl` 命令查看这些导入作业的相关信息。注意，从 3.1 版本起，对于 Broker Load 和 Insert 导入，推荐您通过 [SELECT](../table_bucket_part_index/SELECT.md) 语句从 `information_schema` 数据库中的 [`loads`](../../../sql-reference/information_schema.md#loads) 表来查看作业结果。详请参见[从 HDFS 导入](../../../loading/hdfs_load.md)、[从云存储导入](../../../loading/cloud_storage_load.md)、[通过 INSERT 语句导入数据](../../../loading/InsertInto.md)和[使用 Apache Spark™ 批量导入](../../../loading/SparkLoad.md)。
+=======
+查看数据库中指定导入作业的相关信息，包括 [Broker Load](BROKER_LOAD.md)、[INSERT](INSERT.md) 和 [Spark Load](SPARK_LOAD.md)。您还可以使用 `curl` 命令查看这些导入作业的相关信息。注意，从 3.1 版本起，对于 Broker Load 和 Insert 导入，推荐您通过 [SELECT](../table_bucket_part_index/SELECT.md) 语句从 `information_schema` 数据库中的 [`loads`](../../information_schema/loads.md) 表来查看作业结果。详请参见[从 HDFS 导入](../../../loading/hdfs_load.md)、[从云存储导入](../../../loading/objectstorage.mdx)、[通过 INSERT 语句导入数据](../../../loading/InsertInto.md)和[使用 Apache Spark™ 批量导入](../../../loading/SparkLoad.md)。
+>>>>>>> 5efdbcf7e9 ([Doc] Remove cloud ingest (#54895))
 
 除了以上三种导入方式， StarRocks 还支持 Stream Load 和 Routine Load，其中 Stream Load 是同步操作，会直接返回结果，不会通过 SHOW LOAD 展示。Routine Load 可通过 [SHOW ROUTINE LOAD](routine_load/SHOW_ROUTINE_LOAD.md) 查看导入作业的相关信息。
 
