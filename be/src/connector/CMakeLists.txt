@@ -32,4 +32,5 @@ add_library(Connector STATIC
         async_flush_stream_poller.cpp
         sink_memory_manager.cpp
         deletion_vector/deletion_vector.cpp
+        deletion_vector/deletion_bitmap.cpp
 )

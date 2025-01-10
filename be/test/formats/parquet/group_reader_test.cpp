@@ -371,8 +371,8 @@ TEST_F(GroupReaderTest, TestInit) {
     param->chunk_size = config::vector_chunk_size;
     param->file = file;
     param->file_metadata = file_meta;
-    std::set<int64_t> need_skip_rowids;
-    auto* group_reader = _pool.add(new GroupReader(*param, 0, &need_skip_rowids, 0));
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
 
     // init row group reader
     status = group_reader->init();
@@ -414,8 +414,8 @@ TEST_F(GroupReaderTest, TestGetNext) {
     param->chunk_size = config::vector_chunk_size;
     param->file = file;
     param->file_metadata = file_meta;
-    std::set<int64_t> need_skip_rowids;
-    auto* group_reader = _pool.add(new GroupReader(*param, 0, &need_skip_rowids, 0));
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
 
     // init row group reader
     status = group_reader->init();

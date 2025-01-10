@@ -1079,10 +1079,11 @@ TEST_F(FileReaderTest, TestGetNext) {
 }
 
 TEST_F(FileReaderTest, TestGetNextWithSkipID) {
-    int64_t ids[] = {1};
-    std::set<int64_t> need_skip_rowids(ids, ids + 1);
+    roaring64_bitmap_t* bitmap = roaring64_bitmap_create();
+    roaring64_bitmap_add(bitmap, 1);
+
     SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
-    skip_rows_ctx->need_skip_rowids = need_skip_rowids;
+    skip_rows_ctx->deletion_bitmap = std::make_shared<DeletionBitmap>(bitmap);
     auto file = _create_file(_file1_path);
     auto file_reader =
             std::make_shared<FileReader>(config::vector_chunk_size, file.get(), std::filesystem::file_size(_file1_path),
