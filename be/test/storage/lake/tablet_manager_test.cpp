@@ -871,6 +871,43 @@ TEST_F(LakeTabletManagerTest, capture_tablet_and_rowsets) {
     }
 }
 
+// NOLINTNEXTLINE
+TEST_F(LakeTabletManagerTest, collect_tablet_storage_size) {
+    starrocks::TabletMetadata metadata;
+    metadata.set_id(123456);
+    metadata.set_version(2);
+    auto rowset_meta_pb = metadata.add_rowsets();
+    rowset_meta_pb->set_id(2);
+    rowset_meta_pb->set_overlapped(false);
+    rowset_meta_pb->set_data_size(1024);
+    rowset_meta_pb->set_num_rows(5);
+
+    // create a file as compaction input
+    constexpr static const char* const seg_file = "00000000000159e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat";
+
+    auto full_path = _location_provider->segment_location(123456, seg_file);
+    ASSIGN_OR_ABORT(auto f, FileSystem::Default()->new_writable_file(full_path));
+    ASSERT_OK(f->append("aaaa"));
+    ASSERT_OK(f->close());
+
+    auto compaction_input = metadata.add_compaction_inputs();
+    compaction_input->set_id(1);
+    compaction_input->set_data_size(4);
+    auto seg_file_ptr = compaction_input->add_segments();
+    *seg_file_ptr = seg_file;
+
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(metadata));
+
+    auto st = _tablet_manager->collect_tablet_storage_size(123456, 2);
+    ASSERT_OK(st);
+    ASSERT_EQ(*st, 1024 + 4);
+
+    ASSERT_OK(FileSystem::Default()->delete_file(full_path));
+    st = _tablet_manager->collect_tablet_storage_size(123456, 2);
+    ASSERT_OK(st);
+    ASSERT_EQ(*st, 1024);
+}
+
 #endif // USE_STAROS
 
 } // namespace starrocks

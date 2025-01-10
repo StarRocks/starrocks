@@ -2824,6 +2824,14 @@ public class Config extends ConfigBase {
     public static long lake_autovacuum_partition_naptime_seconds = 180;
 
     @ConfField(mutable = true, comment =
+            "Partition storage size minus data size exceeds this value(in MB) will trigger vacuuming in cloud native cluster")
+    public static long lake_enable_vacuum_storage_size_exceeds_mb = 50;
+
+    @ConfField(mutable = true, comment =
+            "Partition storage amplification ratio exceeds this value will trigger vacuuming in cloud native cluster")
+    public static double lake_enable_vacuum_storage_size_magnify_percent = 0.1;
+
+    @ConfField(mutable = true, comment =
             "History versions within this time range will not be deleted by auto vacuum.\n" +
                     "REMINDER: Set this to a value longer than the maximum possible execution time of queries," +
                     " to avoid deletion of versions still being accessed.\n" +
