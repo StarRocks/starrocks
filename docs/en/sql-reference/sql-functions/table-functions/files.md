@@ -198,9 +198,13 @@ To address this issue, the system introduces the dynamic FE configuration item `
 
 ##### Union files with different schema
 
-From v3.4.0 onwards, the system supports unionizing files with different schema, and assigning NULL values to the non-existent columns.
+From v3.4.0 onwards, the system supports unionizing files with different schema, and by default, an error will be returned if there are non-existent columns. By setting the property `fill_mismatch_column_with` to `null`, you can allow the system to assign NULL values to the non-existent columns instead of returning an error.
 
-For example, the files to read are from different partitions of a Hive table, and Schema Change has been performed on the newer partitions. When reading both new and old partitions, the system will unionize the schema of the new and old partition files, and assign NULL values to the non-existent columns.
+`fill_mismatch_column_with`: The behavior of the system after a non-existent column is detected when unionizing files with different schema. Valid values:
+- `none`: An error will be returned if a non-existent column is detected.
+- `null`: NULL values will be assigned to the non-existent column.
+
+For example, the files to read are from different partitions of a Hive table, and Schema Change has been performed on the newer partitions. When reading both new and old partitions, you can set `fill_mismatch_column_with` to `null`, and the system will unionize the schema of the new and old partition files, and assign NULL values to the non-existent columns.
 
 The system unionizes the schema of Parquet and ORC files based on the column names, and that of CSV files based on the position (order) of the columns.
 
@@ -722,6 +726,27 @@ PROPERTIES (
 "replication_num" = "3"
 );
 1 row in set (0.27 sec)
+```
+
+- Unionize the schema of Parquet files and allow the system to assign NULL values to non-existent columns by setting `fill_mismatch_column_with` to `null`:
+
+```SQL
+SELECT * FROM FILES(
+  "path" = "s3://inserttest/basic_type.parquet,s3://inserttest/basic_type_k2k5k7.parquet",
+  "format" = "parquet",
+  "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+  "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+  "aws.s3.region" = "us-west-2",
+  "fill_mismatch_column_with" = "null"
+);
++------+------+------+-------+------------+---------------------+------+------+
+| k1   | k2   | k3   | k4    | k5         | k6                  | k7   | k8   |
++------+------+------+-------+------------+---------------------+------+------+
+| NULL |   21 | NULL |  NULL | 2024-10-03 | NULL                | c    | NULL |
+|    0 |    1 |    2 |  3.20 | 2024-10-01 | 2024-10-01 12:12:12 | a    |  4.3 |
+|    1 |   11 |   12 | 13.20 | 2024-10-02 | 2024-10-02 13:13:13 | b    | 14.3 |
++------+------+------+-------+------------+---------------------+------+------+
+3 rows in set (0.03 sec)
 ```
 
 #### Example 6: View the schema of a file

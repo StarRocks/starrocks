@@ -197,9 +197,13 @@ FILES() 的 Schema 检测并不是完全严格的。例如，在读取 CSV 文�
 
 ##### 合并具有不同 Schema 的文件
 
-从 v3.4.0 版本开始，系统支持合并具有不同 Schema 的文件，并为不存在的列赋予 NULL 值。
+从 v3.4.0 版本开始，系统支持合并具有不同 Schema 的文件。默认情况下，如果检测到不存在的列，系统会返回错误。通过设置属性 `fill_mismatch_column_with` 为 `null`，可以允许系统为不存在的列赋予 NULL 值，而非返回错误。
 
-例如，读取的文件来自 Hive 表的不同分区，且较新的分区进行了 Schema Change。当同时读取新旧分区时，系统将合并新旧分区文件的 Schema ，并为不存在的列赋值为 NULL。
+`fill_mismatch_column_with`：用于指定在合并具有不同 Schema 的文件时，系统检测到不存在的列后的处理方式。有效值包括：
+- `none`：如果检测到不存在的列，系统会返回错误。
+- `null`：系统会将不存在的列填充为 NULL 值。
+
+例如，读取的文件来自 Hive 表的不同分区，且较新的分区进行了 Schema Change。当同时读取新旧分区时，可以将 `fill_mismatch_column_with` 设置为 `null`，系统将合并新旧分区文件的 Schema ，并为不存在的列赋值为 NULL。
 
 对于 Parquet 和 ORC 文件，系统根据列名合并其 Schema。而对于 CSV 文件，系统根据列的顺序（位置）合并 Schema。
 
@@ -722,6 +726,27 @@ PROPERTIES (
 "replication_num" = "3"
 );
 1 row in set (0.27 sec)
+```
+
+- 合并 Parquet 文件的 Schema，并将 `fill_mismatch_column_with` 为 `null` 以允许系统为不存在的列赋予 NULL 值：
+
+```SQL
+SELECT * FROM FILES(
+  "path" = "s3://inserttest/basic_type.parquet,s3://inserttest/basic_type_k2k5k7.parquet",
+  "format" = "parquet",
+  "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+  "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+  "aws.s3.region" = "us-west-2",
+  "fill_mismatch_column_with" = "null"
+);
++------+------+------+-------+------------+---------------------+------+------+
+| k1   | k2   | k3   | k4    | k5         | k6                  | k7   | k8   |
++------+------+------+-------+------------+---------------------+------+------+
+| NULL |   21 | NULL |  NULL | 2024-10-03 | NULL                | c    | NULL |
+|    0 |    1 |    2 |  3.20 | 2024-10-01 | 2024-10-01 12:12:12 | a    |  4.3 |
+|    1 |   11 |   12 | 13.20 | 2024-10-02 | 2024-10-02 13:13:13 | b    | 14.3 |
++------+------+------+-------+------------+---------------------+------+------+
+3 rows in set (0.03 sec)
 ```
 
 #### 示例六：查看文件的 Schema 信息
