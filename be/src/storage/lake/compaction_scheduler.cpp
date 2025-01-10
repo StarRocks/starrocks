@@ -138,6 +138,57 @@ void CompactionTaskCallback::finish_task(std::unique_ptr<CompactionTaskContext>&
     }
 }
 
+Status CompactionTaskCallback::is_txn_still_valid() {
+    RETURN_IF_ERROR(has_error());
+    auto check_interval_seconds = 60L * config::lake_compaction_check_valid_interval_minutes;
+    if (check_interval_seconds <= 0) {
+        return Status::OK();
+    }
+    // try_lock failed means other thread is checking txn
+    if (!_txn_valid_check_mutex.try_lock()) {
+        return Status::OK();
+    }
+    // check again after acquired lock
+    auto now = time(nullptr);
+    if (now < _last_check_time || (now - _last_check_time) < check_interval_seconds) {
+        return Status::OK();
+    }
+    // ask FE whether this compaction transaction is still valid
+#ifndef BE_TEST
+    TNetworkAddress master_addr = get_master_address();
+    if (master_addr.hostname.size() > 0 && master_addr.port > 0) {
+        TReportLakeCompactionRequest request;
+        request.__set_txn_id(_request->txn_id());
+        TReportLakeCompactionResponse result;
+        auto status = ThriftRpcHelper::rpc<FrontendServiceClient>(
+                master_addr.hostname, master_addr.port,
+                [&request, &result](FrontendServiceConnection& client) {
+                    client->reportLakeCompaction(result, request);
+                },
+                3000 /* timeout 3 seconds */);
+        if (status.ok()) {
+            if (!result.valid) {
+                // notify all tablets in this compaction request
+                LOG(WARNING) << "abort invalid compaction transaction " << _request->txn_id();
+                Status rs = Status::Aborted("compaction validation failed");
+                update_status(rs);
+                return rs; // should cancel compaction
+            } else {
+                // everything is fine
+            }
+        } else {
+            LOG(WARNING) << "fail to validate compaction transaction " << _request->txn_id() << ", error: " << status;
+        }
+    } else {
+        LOG(WARNING) << "fail to validate compaction transaction " << _request->txn_id()
+                     << ", error: leader FE address not found";
+    }
+#endif
+    _last_check_time = time(nullptr);
+    _txn_valid_check_mutex.unlock();
+    return Status::OK();
+}
+
 CompactionScheduler::CompactionScheduler(TabletManager* tablet_mgr)
         : _tablet_mgr(tablet_mgr),
           _limiter(config::compact_threads),
@@ -182,18 +233,16 @@ void CompactionScheduler::compact(::google::protobuf::RpcController* controller,
     // thread to avoid blocking other transactions, but if there are idle threads, they will steal
     // tasks from busy threads to execute.
     auto cb = std::make_shared<CompactionTaskCallback>(this, request, response, done);
-    bool is_checker = true; // make the first tablet as checker
     std::vector<std::unique_ptr<CompactionTaskContext>> contexts_vec;
     for (auto tablet_id : request->tablet_ids()) {
         auto context = std::make_unique<CompactionTaskContext>(request->txn_id(), tablet_id, request->version(),
-                                                               request->force_base_compaction(), is_checker, cb);
+                                                               request->force_base_compaction(), cb);
         {
             std::lock_guard l(_contexts_lock);
             _contexts.Append(context.get());
         }
         contexts_vec.push_back(std::move(context));
         // DO NOT touch `context` from here!
-        is_checker = false;
     }
     // initialize last check time, compact request is received right after FE sends it, so consider it valid now
     cb->set_last_check_time(time(nullptr));
@@ -302,52 +351,7 @@ void CompactionScheduler::thread_task(int id) {
 }
 
 Status compaction_should_cancel(CompactionTaskContext* context) {
-    RETURN_IF_ERROR(context->callback->has_error());
-
-    int64_t check_interval_seconds = 60LL * config::lake_compaction_check_valid_interval_minutes;
-    if (!context->is_checker || check_interval_seconds <= 0) {
-        return Status::OK();
-    }
-
-    int64_t now = time(nullptr);
-    int64_t last_check_time = context->callback->last_check_time();
-    if (now > last_check_time && (now - last_check_time) >= check_interval_seconds) {
-        // ask FE whether this compaction transaction is still valid
-#ifndef BE_TEST
-        TNetworkAddress master_addr = get_master_address();
-        if (master_addr.hostname.size() > 0 && master_addr.port > 0) {
-            TReportLakeCompactionRequest request;
-            request.__set_txn_id(context->txn_id);
-            TReportLakeCompactionResponse result;
-            auto status = ThriftRpcHelper::rpc<FrontendServiceClient>(
-                    master_addr.hostname, master_addr.port,
-                    [&request, &result](FrontendServiceConnection& client) {
-                        client->reportLakeCompaction(result, request);
-                    },
-                    3000 /* timeout 3 seconds */);
-            if (status.ok()) {
-                if (!result.valid) {
-                    // notify all tablets in this compaction request
-                    LOG(WARNING) << "validate compaction transaction " << context->txn_id << " for tablet "
-                                 << context->tablet_id << ", abort invalid compaction";
-                    Status rs = Status::Aborted("compaction validation failed");
-                    context->callback->update_status(rs);
-                    return rs; // should cancel compaction
-                } else {
-                    // everything is fine
-                }
-            } else {
-                LOG(WARNING) << "fail to validate compaction transaction " << context->txn_id << " for tablet "
-                             << context->tablet_id << ", error: " << status;
-            }
-        } else {
-            LOG(WARNING) << "fail to validate compaction transaction " << context->txn_id << " for tablet "
-                         << context->tablet_id << ", error: leader FE address not found";
-        }
-#endif
-        // update check time, if check rpc failed, wait next round
-        context->callback->set_last_check_time(now);
-    }
+    RETURN_IF_ERROR(context->callback->is_txn_still_valid());
     return Status::OK();
 }
 
