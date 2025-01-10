@@ -80,7 +80,6 @@ import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.mv.MVTimelinessMgr;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -94,6 +93,7 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.parser.SqlParser;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.util.Strings;
 
 import java.io.IOException;
 import java.util.Comparator;
@@ -191,7 +191,7 @@ public class AlterJobMgr {
         }
     }
 
-    public void alterMaterializedViewStatus(MaterializedView materializedView, String status, boolean isReplay) {
+    public void alterMaterializedViewStatus(MaterializedView materializedView, String status, String reason, boolean isReplay) {
         LOG.info("process change materialized view {} status to {}, isReplay: {}",
                 materializedView.getName(), status, isReplay);
         if (AlterMaterializedViewStatusClause.ACTIVE.equalsIgnoreCase(status)) {
@@ -219,7 +219,7 @@ public class AlterJobMgr {
             materializedView.onReload();
             materializedView.setActive();
         } else if (AlterMaterializedViewStatusClause.INACTIVE.equalsIgnoreCase(status)) {
-            materializedView.setInactiveAndReason(MANUAL_INACTIVE_MV_REASON);
+            materializedView.setInactiveAndReason(reason);
         }
     }
 
@@ -334,8 +334,10 @@ public class AlterJobMgr {
 
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(mv.getId()), LockType.WRITE);
+        // To be compatible with the old version, if the reason is empty, use the default reason
+        String reason = Strings.isEmpty(log.getReason()) ? MANUAL_INACTIVE_MV_REASON : log.getReason();
         try {
-            alterMaterializedViewStatus(mv, log.getStatus(), true);
+            alterMaterializedViewStatus(mv, log.getStatus(), reason, true);
         } catch (Throwable e) {
             LOG.warn("replay alter materialized-view status failed: {}", mv.getName(), e);
             mv.setInactiveAndReason("replay alter status failed: " + e.getMessage());
@@ -513,7 +515,7 @@ public class AlterJobMgr {
         }
     }
 
-    public void alterView(AlterViewInfo alterViewInfo) {
+    public void alterView(AlterViewInfo alterViewInfo, boolean isReplay) {
         long dbId = alterViewInfo.getDbId();
         long tableId = alterViewInfo.getTableId();
         String inlineViewDef = alterViewInfo.getInlineViewDef();
@@ -535,8 +537,8 @@ public class AlterJobMgr {
             }
             view.setNewFullSchema(newFullSchema);
             view.setComment(comment);
-            LocalMetastore.inactiveRelatedMaterializedView(db, view,
-                    MaterializedViewExceptions.inactiveReasonForBaseViewChanged(viewName));
+            AlterMVJobExecutor.inactiveRelatedMaterializedView(db, view,
+                    MaterializedViewExceptions.inactiveReasonForBaseViewChanged(viewName), isReplay);
             db.dropTable(viewName);
             db.registerTableUnlocked(view);
 

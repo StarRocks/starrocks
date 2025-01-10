@@ -524,10 +524,6 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
                 MvUtils.getReplaceColumnRefWriter(mvExpression, mvColumnRefFactory);
 
         final Set<ScalarOperator> mvConjuncts = MvUtils.getPredicateForRewrite(mvExpression);
-        ScalarOperator mvPartitionCompensate = compensateMVPartitionPredicate(mvConjuncts, mvColumnRefRewriter);
-        if (mvPartitionCompensate != ConstantOperator.TRUE) {
-            mvConjuncts.addAll(MvUtils.getAllValidPredicates(mvPartitionCompensate));
-        }
         final PredicateSplit mvPredicateSplit =
                 queryMaterializationContext.getPredicateSplit(mvConjuncts, mvColumnRefRewriter);
 
@@ -559,39 +555,6 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
         candidate = new MVColumnPruner().pruneColumns(candidate);
         candidate = new MVPartitionPruner(optimizerContext, mvRewriteContext).prunePartition(candidate);
         return candidate;
-    }
-
-    /**
-     * If materialized view has to-refreshed partitions, need to add compensated partition predicate
-     * into materialized view's predicate split. so it can be used for predicate compensate or union all
-     * rewrite.
-     */
-    private ScalarOperator compensateMVPartitionPredicate(Set<ScalarOperator> mvPredicates,
-                                                          ReplaceColumnRefRewriter mvColumnRefRewriter) {
-        ScalarOperator mvPrunedPartitionPredicate = getMVCompensatePartitionPredicate();
-        if (mvPrunedPartitionPredicate != null) {
-            List<ScalarOperator> partitionPredicates =
-                    getPartitionRelatedPredicates(mvPredicates, mvRewriteContext.getMaterializationContext().getMv());
-            if (partitionPredicates.stream().noneMatch(p -> (p instanceof IsNullPredicateOperator)
-                    && !((IsNullPredicateOperator) p).isNotNull())) {
-                // there is no partition column is null predicate
-                // add latest partition predicate to mv predicate
-                return mvColumnRefRewriter.rewrite(mvPrunedPartitionPredicate);
-            }
-        }
-        return ConstantOperator.TRUE;
-    }
-
-    /**
-     * Only compensate mv's partition predicate when mv's freshness cannot satisfy query's need.
-     * When mv's freshness is ok, return constant true because
-     * {@link com.starrocks.sql.optimizer.MaterializedViewOptimizer#optimize} disabled partition pruning and no need
-     * compensate pruned predicates.
-     * @return
-     */
-    private ScalarOperator getMVCompensatePartitionPredicate() {
-        return  materializationContext.getMvCompensation().isCompensatePartitionPredicate() ?
-                materializationContext.getMvPartialPartitionPredicate() : ConstantOperator.TRUE;
     }
 
     private OptExpression rewriteViewDelta(List<Table> queryTables,

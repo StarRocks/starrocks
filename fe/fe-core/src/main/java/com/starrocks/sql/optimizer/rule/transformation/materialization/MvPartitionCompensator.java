@@ -388,9 +388,8 @@ public class MvPartitionCompensator {
         if (mvCompensation.getState().isNoRewrite()) {
             return null;
         }
-        boolean isCompensatePartition = mvCompensation.isCompensatePartitionPredicate();
         // Compensate partition predicates and add them into query predicate.
-        Map<Pair<LogicalScanOperator, Boolean>, List<ScalarOperator>> scanOperatorScalarOperatorMap =
+        Map<LogicalScanOperator, List<ScalarOperator>> scanOperatorScalarOperatorMap =
                 mvContext.getScanOpToPartitionCompensatePredicates();
         MaterializedView mv = mvContext.getMv();
         final Set<Table> baseTables = new HashSet<>(mvContext.getBaseTables());
@@ -405,12 +404,11 @@ public class MvPartitionCompensator {
                 return null;
             }
             List<ScalarOperator> partitionPredicate = scanOperatorScalarOperatorMap
-                    .computeIfAbsent(Pair.create(scanOperator, isCompensatePartition), x -> {
+                    .computeIfAbsent(scanOperator, x -> {
                         if (!baseTables.contains(scanOperator.getTable())) {
                             return Collections.emptyList();
                         }
-                        return isCompensatePartition ? getCompensatePartitionPredicates(mvContext, columnRefFactory,
-                                scanOperator) : getScanOpPrunedPartitionPredicates(mv, scanOperator);
+                        return getScanOpPrunedPartitionPredicates(mv, scanOperator);
                     });
             if (partitionPredicate == null) {
                 logMVRewrite(mvContext.getMv().getName(), "Compensate partition failed for scan {}",

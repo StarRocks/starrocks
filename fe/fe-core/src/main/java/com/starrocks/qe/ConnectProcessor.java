@@ -69,6 +69,7 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.AstTraverser;
+import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.ExecuteStmt;
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.QueryStatement;
@@ -233,9 +234,6 @@ public class ConnectProcessor {
                     MetricRepo.COUNTER_SLOW_QUERY.increase(1L);
                 }
             }
-            if (Config.enable_sql_digest || ctx.getSessionVariable().isEnableSQLDigest()) {
-                ctx.getAuditEventBuilder().setDigest(computeStatementDigest(parsedStmt));
-            }
             ctx.getAuditEventBuilder().setIsQuery(true);
             if (ctx.getSessionVariable().isEnableBigQueryLog()) {
                 ctx.getAuditEventBuilder().setBigQueryLogCPUSecondThreshold(
@@ -247,6 +245,13 @@ public class ConnectProcessor {
             }
         } else {
             ctx.getAuditEventBuilder().setIsQuery(false);
+        }
+
+        // Build Digest for SELECT/INSERT/UPDATE/DELETE
+        if (ctx.getState().isQuery() || parsedStmt instanceof DmlStmt) {
+            if (Config.enable_sql_digest || ctx.getSessionVariable().isEnableSQLDigest()) {
+                ctx.getAuditEventBuilder().setDigest(computeStatementDigest(parsedStmt));
+            }
         }
 
         ctx.getAuditEventBuilder().setFeIp(FrontendOptions.getLocalHostAddress());

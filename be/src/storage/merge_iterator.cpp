@@ -50,8 +50,6 @@ inline int compare_chunk(size_t key_columns, const std::vector<uint32_t>& sort_k
     return 0;
 }
 
-static const size_t max_merge_chunk_size = 65536;
-
 // MergingChunk contains a chunk for merge and an index of compared row.
 class MergingChunk {
 public:

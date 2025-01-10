@@ -44,6 +44,8 @@ struct AggDataTypeTraits<lt, FixedLengthLTGuard<lt>> {
     static void update_min(ValueType& current, const RefType& input) { current = std::min<ValueType>(current, input); }
 
     static bool is_equal(const RefType& lhs, const RefType& rhs) { return lhs == rhs; }
+
+    static bool equals(const ValueType& lhs, const RefType& rhs) { return lhs == rhs; }
 };
 
 // For pointer ref types
@@ -66,6 +68,7 @@ struct AggDataTypeTraits<lt, ObjectFamilyLTGuard<lt>> {
     static void update_min(ValueType& current, const RefType& input) { current = std::min<ValueType>(current, *input); }
 
     static bool is_equal(const RefType& lhs, const RefType& rhs) { return *lhs == *rhs; }
+    static bool equals(const ValueType& lhs, const RefType& rhs) { return lhs == *rhs; }
 };
 
 template <LogicalType lt>

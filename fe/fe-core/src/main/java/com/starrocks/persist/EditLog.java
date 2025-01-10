@@ -345,7 +345,7 @@ public class EditLog {
                 }
                 case OperationType.OP_MODIFY_VIEW_DEF: {
                     AlterViewInfo info = (AlterViewInfo) journal.data();
-                    globalStateMgr.getAlterJobMgr().alterView(info);
+                    globalStateMgr.getAlterJobMgr().alterView(info, true);
                     break;
                 }
                 case OperationType.OP_RENAME_PARTITION_V2: {
@@ -1065,11 +1065,6 @@ public class EditLog {
                 case OperationType.OP_DISABLE_DISK: {
                     DisableDiskInfo info = (DisableDiskInfo) journal.data();
                     globalStateMgr.getNodeMgr().getClusterInfo().replayDisableDisks(info);
-                    break;
-                }
-                case OperationType.OP_CANCEL_DISABLE_DISK: {
-                    CancelDisableDiskInfo info = (CancelDisableDiskInfo) journal.data();
-                    globalStateMgr.getNodeMgr().getClusterInfo().replayCancelDisableDisks(info);
                     break;
                 }
                 case OperationType.OP_REPLICATION_JOB: {
@@ -1957,10 +1952,6 @@ public class EditLog {
 
     public void logDisableDisk(DisableDiskInfo info) {
         logEdit(OperationType.OP_DISABLE_DISK, info);
-    }
-
-    public void logCancelDisableDisk(CancelDisableDiskInfo info) {
-        logEdit(OperationType.OP_CANCEL_DISABLE_DISK, info);
     }
 
     public void logRecoverPartitionVersion(PartitionVersionRecoveryInfo info) {
