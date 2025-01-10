@@ -70,7 +70,9 @@ int init_test_env(int argc, char** argv) {
     CHECK(UserFunctionCache::instance()->init(config::user_function_dir).ok());
 
     date::init_date_cache();
-    TimezoneUtils::init_time_zones();
+    // Disable global cache of timezone info when running unit tests
+    // Save tons of time in parallel unit test mode
+    // TimezoneUtils::init_time_zones();
 
     std::vector<StorePath> paths;
     paths.emplace_back(config::storage_root_path);
