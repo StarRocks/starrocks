@@ -150,7 +150,7 @@ public:
             offsets.push_back(offsets.back() + 1);
         }
         if (dst->get()->is_nullable()) {
-            down_cast<NullableColumn*>(dst->get())->null_column_data().resize(dst->get()->size() + chunk_size);
+            down_cast<NullableColumn*>(dst->get())->null_column_data().resize(column->size());
         }
     }
 
