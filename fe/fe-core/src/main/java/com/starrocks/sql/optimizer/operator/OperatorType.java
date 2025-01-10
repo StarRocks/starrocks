@@ -132,6 +132,8 @@ public enum OperatorType {
     SUBQUERY,
     SUBFIELD,
     MULTI_IN,
+    DICTIONARY_GET,
+    MATCH_EXPR,
 
     /**
      * PATTERN
@@ -148,6 +150,4 @@ public enum OperatorType {
     //  /  \
     // table table
     PATTERN_MULTIJOIN,
-    DICTIONARY_GET,
-    MATCH_EXPR
 }
