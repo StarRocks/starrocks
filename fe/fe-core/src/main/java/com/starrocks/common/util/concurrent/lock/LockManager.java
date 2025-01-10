@@ -305,7 +305,7 @@ public class LockManager {
         }
     }
 
-    public boolean isOwnerInternal(long rid, Locker locker, LockType lockType, int lockTableIndex) {
+    private boolean isOwnerInternal(long rid, Locker locker, LockType lockType, int lockTableIndex) {
         final Map<Long, Lock> lockTable = lockTables[lockTableIndex];
         final Lock lock = lockTable.get(rid);
         return lock != null && lock.isOwner(locker, lockType);
