@@ -14,6 +14,8 @@ StarRocks provides the loading method HTTP-based Stream Load to help you load da
 
 Since v3.2.7, Stream Load supports compressing JSON data during transmission, reducing network bandwidth overhead. Users can specify different compression algorithms using parameters `compression` and `Content-Encoding`. Supported compression algorithms including GZIP, BZIP2, LZ4_FRAME, and ZSTD. For more information, see [data_desc](#data_desc).
 
+From v3.4.0, the system supports merging multiple Stream Load requests. For more information, see [Merge Commit parameters](#merge-commit-parameters).
+
 > **NOTICE**
 >
 > - After you load data into a StarRocks table by using Stream Load, the data of the materialized views that are created on that table is also updated.
@@ -131,6 +133,26 @@ The parameters in the `data_desc` descriptor can be divided into three types: co
 | compression, Content-Encoding | NO | The encoding algorithm that is applied to the data during transmission. Supported algorithms include GZIP, BZIP2, LZ4_FRAME, and ZSTD. Example: `curl --location-trusted -u root:  -v 'http://127.0.0.1:18030/api/db0/tbl_simple/_stream_load' \-X PUT  -H "expect:100-continue" \-H 'format: json' -H 'compression: lz4_frame'   -T ./b.json.lz4`. |
 
 When you load JSON data, also note that the size per JSON object cannot exceed 4 GB. If an individual JSON object in the JSON data file exceeds 4 GB in size, an error "This parser can't support a document that big." is reported.
+
+### Merge Commit parameters
+
+Enables Merge Commit for multiple concurrent Stream Load requests within a specified time window and to merge them into a single transaction.
+
+| **Parameter**            | **Required** | **Description**                                              |
+| ------------------------ | ------------ | ------------------------------------------------------------ |
+| enable_merge_commit      | No           | Whether to enable the Merge Commit for the loading request. Valid values: `true` and `false` (Default). |
+| merge_commit_async       | No           | The server's return mode. Valid values:<ul><li>`true`: Enables asynchronous mode, where the server returns immediately after receiving the data. This mode does not ensure the loading is successful.</li><li>`false`(Default): Enables synchronous mode, where the server returns only after the merged transaction is committed, ensuring the loading is successful and visible.</li></ul> |
+| merge_commit_interval_ms | Yes          | The size of the merging time window. Unit: milliseconds. Merge Commit attempts to merge loading requests received within this window into a single transaction. A larger window improves merging efficiency but increases latency. |
+| merge_commit_parallel    | Yes          | The degree of parallelism for the loading plan created for each merging window. Parallelism can be adjusted based on the load of ingestion. Increase this value if there are many requests and/or a large amount of data to load. The parallelism is limited to the number of BE nodes, calculated as `max(merge_commit_parallel, number of BE nodes)`. |
+
+:::note
+
+- Merge Commit only supports merging **homogeneous** loading requests into a single database and table. "Homogeneous" indicates that the Stream Load parameters are identical, including: common parameters, JSON format parameters, CSV format parameters, `opt_properties`, and Merge Commit parameters.
+- For loading CSV-formatted data, you must ensure that each row ends with a line separator. `skip_header` is not supported.
+- The server automatically generates labels for transactions. They will be ignored if specified.
+- Merge Commit merges multiple loading requests into a single transaction. If one request contains data quality issues, all requests in the transaction will fail.
+
+:::
 
 ### opt_properties
 
@@ -552,3 +574,34 @@ curl --location-trusted -u <username>:<password> \
 > **NOTE**
 >
 > In the preceding example, the outermost layer of the JSON data is an array structure as indicated by a pair of square brackets `[]`. The array structure consists of multiple JSON objects that each represent a data record. Therefore, you need to set `strip_outer_array` to `true` to strip the outermost array structure. The keys `title` and `timestamp` that you do not want to load are ignored during loading. Additionally, the `json_root` parameter is used to specify the root element, which is an array, of the JSON data.
+
+### Merge Stream Load requests
+
+- Run the following command to start a Stream Load job with Merge Commit enabled in synchronous mode, and set the merging window to `5000` milliseconds and degree of parallelism to `2`:
+
+  ```Bash
+  curl --location-trusted -u <username>:<password> \
+      -H "Expect:100-continue" \
+      -H "column_separator:," \
+      -H "columns: id, name, score" \
+      -H "enable_merge_commit:true" \
+      -H "merge_commit_interval_ms:5000" \
+      -H "merge_commit_parallel:2" \
+      -T example1.csv -XPUT \
+      http://<fe_host>:<fe_http_port>/api/mydatabase/table1/_stream_load
+  ```
+
+- Run the following command to start a Stream Load job with Merge Commit enabled in asynchronous mode, and set the merging window to `60000` milliseconds and degree of parallelism to `2`:
+
+  ```Bash
+  curl --location-trusted -u <username>:<password> \
+      -H "Expect:100-continue" \
+      -H "column_separator:," \
+      -H "columns: id, name, score" \
+      -H "enable_merge_commit:true" \
+      -H "merge_commit_async:true" \
+      -H "merge_commit_interval_ms:60000" \
+      -H "merge_commit_parallel:2" \
+      -T example1.csv -XPUT \
+      http://<fe_host>:<fe_http_port>/api/mydatabase/table1/_stream_load
+  ```
