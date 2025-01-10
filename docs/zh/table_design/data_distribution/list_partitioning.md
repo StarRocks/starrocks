@@ -3,9 +3,15 @@ displayed_sidebar: docs
 sidebar_position: 20
 ---
 
-# List 分区
+# List 分区（不推荐）
 
 自 v3.1 起，StarRocks 支持 List 分区，数据按照您显式定义的枚举值列表进行分区，适用于按枚举值来查询和管理数据。
+
+:::note
+
+从 v3.4 开始，[表达式分区](./expression_partitioning.md)方式进一步优化，以统一所有分区策略，并支持更复杂的解决方案。在大多数情况下，建议您使用表达式分区。表达式分区将在未来版本中逐渐取代 List 分区策略。
+
+:::
 
 ## 功能介绍
 
