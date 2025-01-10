@@ -171,70 +171,72 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
 
     Status::OK().to_protobuf(response->mutable_status());
     for (auto tablet_id : request->tablet_ids()) {
-        auto task = [&, tablet_id]() {
-            DeferOp defer([&] { latch.count_down(); });
-            scoped_refptr<Trace> child_trace(new Trace);
-            Trace* sub_trace = child_trace.get();
-            trace->AddChildTrace("PublishTablet", sub_trace);
+        auto task = std::make_shared<AutoCleanRunnable>(
+                [&, tablet_id] {
+                    scoped_refptr<Trace> child_trace(new Trace);
+                    Trace* sub_trace = child_trace.get();
+                    trace->AddChildTrace("PublishTablet", sub_trace);
 
-            ADOPT_TRACE(sub_trace);
-            TRACE("start publish tablet $0 at thread $1", tablet_id, Thread::current_thread()->tid());
+                    ADOPT_TRACE(sub_trace);
+                    TRACE("start publish tablet $0 at thread $1", tablet_id, Thread::current_thread()->tid());
 
-            auto run_ts = butil::gettimeofday_us();
-            auto queuing_latency = run_ts - start_ts;
-            g_publish_tablet_version_queuing_latency << queuing_latency;
+                    auto run_ts = butil::gettimeofday_us();
+                    auto queuing_latency = run_ts - start_ts;
+                    g_publish_tablet_version_queuing_latency << queuing_latency;
 
-            auto base_version = request->base_version();
-            auto new_version = request->new_version();
-            auto txns = std::vector<TxnInfoPB>();
-            if (request->txn_infos_size() > 0) {
-                txns.insert(txns.begin(), request->txn_infos().begin(), request->txn_infos().end());
-            } else { // This is a request from older version FE
-                // Construct TxnInfoPB from other fields
-                txns.reserve(request->txn_ids_size());
-                for (auto i = 0, sz = request->txn_ids_size(); i < sz; i++) {
-                    auto& info = txns.emplace_back();
-                    info.set_txn_id(request->txn_ids(i));
-                    info.set_txn_type(TXN_NORMAL);
-                    info.set_combined_txn_log(false);
-                    info.set_commit_time(request->commit_time());
-                    info.set_force_publish(false);
-                }
-            }
+                    auto base_version = request->base_version();
+                    auto new_version = request->new_version();
+                    auto txns = std::vector<TxnInfoPB>();
+                    if (request->txn_infos_size() > 0) {
+                        txns.insert(txns.begin(), request->txn_infos().begin(), request->txn_infos().end());
+                    } else { // This is a request from older version FE
+                        // Construct TxnInfoPB from other fields
+                        txns.reserve(request->txn_ids_size());
+                        for (auto i = 0, sz = request->txn_ids_size(); i < sz; i++) {
+                            auto& info = txns.emplace_back();
+                            info.set_txn_id(request->txn_ids(i));
+                            info.set_txn_type(TXN_NORMAL);
+                            info.set_combined_txn_log(false);
+                            info.set_commit_time(request->commit_time());
+                            info.set_force_publish(false);
+                        }
+                    }
 
-            TRACE_COUNTER_INCREMENT("tablet_id", tablet_id);
-            TRACE_COUNTER_INCREMENT("queuing_latency_us", queuing_latency);
+                    TRACE_COUNTER_INCREMENT("tablet_id", tablet_id);
+                    TRACE_COUNTER_INCREMENT("queuing_latency_us", queuing_latency);
 
-            StatusOr<TabletMetadataPtr> res;
-            if (std::chrono::system_clock::now() < timeout_deadline) {
-                res = lake::publish_version(_tablet_mgr, tablet_id, base_version, new_version, txns);
-            } else {
-                auto t = MilliSecondsSinceEpochFromTimePoint(timeout_deadline);
-                res = Status::TimedOut(fmt::format("reached deadline={}/timeout={}", t, timeout_ms));
-            }
-            if (res.ok()) {
-                auto metadata = std::move(res).value();
-                auto score = compaction_score(_tablet_mgr, metadata);
-                std::lock_guard l(response_mtx);
-                response->mutable_compaction_scores()->insert({tablet_id, score});
-            } else {
-                g_publish_version_failed_tasks << 1;
-                if (res.status().is_resource_busy()) {
-                    VLOG(2) << "Fail to publish version: " << res.status() << ". tablet_id=" << tablet_id
-                            << " txns=" << JoinMapped(txns, txn_info_string, ",") << " version=" << new_version;
-                } else {
-                    LOG(WARNING) << "Fail to publish version: " << res.status() << ". tablet_id=" << tablet_id
-                                 << " txn_ids=" << JoinMapped(txns, txn_info_string, ",") << " version=" << new_version;
-                }
-                std::lock_guard l(response_mtx);
-                response->add_failed_tablets(tablet_id);
-                res.status().to_protobuf(response->mutable_status());
-            }
-            TRACE("finished");
-            g_publish_tablet_version_latency << (butil::gettimeofday_us() - run_ts);
-        };
+                    StatusOr<TabletMetadataPtr> res;
+                    if (std::chrono::system_clock::now() < timeout_deadline) {
+                        res = lake::publish_version(_tablet_mgr, tablet_id, base_version, new_version, txns);
+                    } else {
+                        auto t = MilliSecondsSinceEpochFromTimePoint(timeout_deadline);
+                        res = Status::TimedOut(fmt::format("reached deadline={}/timeout={}", t, timeout_ms));
+                    }
+                    if (res.ok()) {
+                        auto metadata = std::move(res).value();
+                        auto score = compaction_score(_tablet_mgr, metadata);
+                        std::lock_guard l(response_mtx);
+                        response->mutable_compaction_scores()->insert({tablet_id, score});
+                    } else {
+                        g_publish_version_failed_tasks << 1;
+                        if (res.status().is_resource_busy()) {
+                            VLOG(2) << "Fail to publish version: " << res.status() << ". tablet_id=" << tablet_id
+                                    << " txns=" << JoinMapped(txns, txn_info_string, ",") << " version=" << new_version;
+                        } else {
+                            LOG(WARNING) << "Fail to publish version: " << res.status() << ". tablet_id=" << tablet_id
+                                         << " txn_ids=" << JoinMapped(txns, txn_info_string, ",")
+                                         << " version=" << new_version;
+                        }
+                        std::lock_guard l(response_mtx);
+                        response->add_failed_tablets(tablet_id);
+                        res.status().to_protobuf(response->mutable_status());
+                    }
+                    TRACE("finished");
+                    g_publish_tablet_version_latency << (butil::gettimeofday_us() - run_ts);
+                },
+                [&] { latch.count_down(); });
 
-        auto st = thread_pool_token.submit_func(std::move(task), timeout_deadline);
+        auto st = thread_pool_token.submit(std::move(task), timeout_deadline);
         if (!st.ok()) {
             g_publish_version_failed_tasks << 1;
             LOG(WARNING) << "Fail to submit publish version task: " << st << ". tablet_id=" << tablet_id
@@ -242,7 +244,6 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
             std::lock_guard l(response_mtx);
             response->add_failed_tablets(tablet_id);
             st.to_protobuf(response->mutable_status());
-            latch.count_down();
         }
     }
 
@@ -271,20 +272,21 @@ void LakeServiceImpl::_submit_publish_log_version_task(const int64_t* tablet_ids
 
     for (int i = 0; i < tablet_size; i++) {
         auto tablet_id = tablet_ids[i];
-        auto task = [&, tablet_id]() {
-            DeferOp defer([&] { latch.count_down(); });
-            auto st = lake::publish_log_version(_tablet_mgr, tablet_id, txn_infos, log_versions);
-            if (!st.ok()) {
-                g_publish_version_failed_tasks << 1;
-                LOG(WARNING) << "Fail to publish log version: " << st << " tablet_id=" << tablet_id
-                             << " txns=" << JoinMapped(txn_infos, txn_info_string, ",")
-                             << " versions=" << JoinElementsIterator(log_versions, log_versions + txn_size, ",");
-                std::lock_guard l(response_mtx);
-                response->add_failed_tablets(tablet_id);
-            }
-        };
+        auto task = std::make_shared<AutoCleanRunnable>(
+                [&, tablet_id] {
+                    auto st = lake::publish_log_version(_tablet_mgr, tablet_id, txn_infos, log_versions);
+                    if (!st.ok()) {
+                        g_publish_version_failed_tasks << 1;
+                        LOG(WARNING) << "Fail to publish log version: " << st << " tablet_id=" << tablet_id
+                                     << " txns=" << JoinMapped(txn_infos, txn_info_string, ",") << " versions="
+                                     << JoinElementsIterator(log_versions, log_versions + txn_size, ",");
+                        std::lock_guard l(response_mtx);
+                        response->add_failed_tablets(tablet_id);
+                    }
+                },
+                [&] { latch.count_down(); });
 
-        auto st = thread_pool->submit_func(task);
+        auto st = thread_pool->submit(std::move(task));
         if (!st.ok()) {
             g_publish_version_failed_tasks << 1;
             LOG(WARNING) << "Fail to submit publish log version task: " << st << " tablet_id=" << tablet_id
@@ -292,7 +294,6 @@ void LakeServiceImpl::_submit_publish_log_version_task(const int64_t* tablet_ids
                          << " versions=" << JoinElementsIterator(log_versions, log_versions + txn_size, ",");
             std::lock_guard l(response_mtx);
             response->add_failed_tablets(tablet_id);
-            latch.count_down();
         }
     }
 
@@ -397,30 +398,30 @@ void LakeServiceImpl::abort_txn(::google::protobuf::RpcController* controller,
 
     auto thread_pool = abort_txn_thread_pool(_env);
     auto latch = BThreadCountDownLatch(1);
-    auto task = [&]() {
-        DeferOp defer([&] { latch.count_down(); });
-        std::vector<TxnInfoPB> txn_infos;
-        if (request->txn_infos_size() > 0) {
-            txn_infos.insert(txn_infos.begin(), request->txn_infos().begin(), request->txn_infos().end());
-        } else {
-            // Construct TxnInfoPB from txn_id and txn_type
-            txn_infos.reserve(request->txn_ids_size());
-            auto has_txn_type = request->txn_types_size() == request->txn_ids_size();
-            for (int i = 0, sz = request->txn_ids_size(); i < sz; i++) {
-                auto& info = txn_infos.emplace_back();
-                info.set_txn_id(request->txn_ids(i));
-                info.set_txn_type(has_txn_type ? request->txn_types(i) : TXN_NORMAL);
-                info.set_combined_txn_log(false);
-            }
-        }
-        for (auto tablet_id : request->tablet_ids()) {
-            lake::abort_txn(_tablet_mgr, tablet_id, txn_infos);
-        }
-    };
-    auto st = thread_pool->submit_func(task);
+    auto task = std::make_shared<AutoCleanRunnable>(
+            [&] {
+                std::vector<TxnInfoPB> txn_infos;
+                if (request->txn_infos_size() > 0) {
+                    txn_infos.insert(txn_infos.begin(), request->txn_infos().begin(), request->txn_infos().end());
+                } else {
+                    // Construct TxnInfoPB from txn_id and txn_type
+                    txn_infos.reserve(request->txn_ids_size());
+                    auto has_txn_type = request->txn_types_size() == request->txn_ids_size();
+                    for (int i = 0, sz = request->txn_ids_size(); i < sz; i++) {
+                        auto& info = txn_infos.emplace_back();
+                        info.set_txn_id(request->txn_ids(i));
+                        info.set_txn_type(has_txn_type ? request->txn_types(i) : TXN_NORMAL);
+                        info.set_combined_txn_log(false);
+                    }
+                }
+                for (auto tablet_id : request->tablet_ids()) {
+                    lake::abort_txn(_tablet_mgr, tablet_id, txn_infos);
+                }
+            },
+            [&] { latch.count_down(); });
+    auto st = thread_pool->submit(std::move(task));
     if (!st.ok()) {
         LOG(WARNING) << "Fail to submit abort transaction task: " << st;
-        latch.count_down();
     }
 
     latch.wait();
@@ -443,14 +444,12 @@ void LakeServiceImpl::delete_tablet(::google::protobuf::RpcController* controlle
         return;
     }
     auto latch = BThreadCountDownLatch(1);
-    auto st = thread_pool->submit_func([&]() {
-        DeferOp defer([&] { latch.count_down(); });
-        lake::delete_tablets(_tablet_mgr, *request, response);
-    });
+    auto task = std::make_shared<AutoCleanRunnable>([&] { lake::delete_tablets(_tablet_mgr, *request, response); },
+                                                    [&] { latch.count_down(); });
+    auto st = thread_pool->submit(std::move(task));
     if (!st.ok()) {
         LOG(WARNING) << "Fail to submit delete tablet task: " << st;
         st.to_protobuf(response->mutable_status());
-        latch.count_down();
     }
 
     latch.wait();
@@ -484,15 +483,12 @@ void LakeServiceImpl::delete_txn_log(::google::protobuf::RpcController* controll
     }
 
     auto latch = BThreadCountDownLatch(1);
-    auto st = thread_pool->submit_func([&]() {
-        DeferOp defer([&] { latch.count_down(); });
-        lake::delete_txn_log(_tablet_mgr, *request, response);
-    });
-
+    auto task = std::make_shared<AutoCleanRunnable>([&] { lake::delete_txn_log(_tablet_mgr, *request, response); },
+                                                    [&] { latch.count_down(); });
+    auto st = thread_pool->submit(std::move(task));
     if (!st.ok()) {
         LOG(WARNING) << "Fail to submit vacuum task: " << st;
         st.to_protobuf(response->mutable_status());
-        latch.count_down();
     } else {
         Status::OK().to_protobuf(response->mutable_status());
     }
@@ -557,27 +553,27 @@ void LakeServiceImpl::drop_table(::google::protobuf::RpcController* controller,
               << " queued_tasks=" << thread_pool->num_queued_tasks();
 
     auto latch = BThreadCountDownLatch(1);
-    auto task = [&]() {
-        TEST_SYNC_POINT("LakeService::drop_table:task_run");
-        DeferOp defer([&] { latch.count_down(); });
-        auto location = _tablet_mgr->tablet_root_location(request->tablet_id());
-        auto st = fs::remove_all(location);
-        if (!st.ok() && !st.is_not_found()) {
-            LOG(ERROR) << "Fail to remove " << location << ": " << st << ". tablet_id=" << request->tablet_id()
-                       << " path=" << request->path();
-            st.to_protobuf(response->mutable_status());
-        } else {
-            LOG(INFO) << "Removed " << location << ". tablet_id=" << request->tablet_id() << " path=" << request->path()
-                      << " is_not_found=" << st.is_not_found();
-        }
-    };
+    auto task = std::make_shared<AutoCleanRunnable>(
+            [&] {
+                TEST_SYNC_POINT("LakeService::drop_table:task_run");
+                auto location = _tablet_mgr->tablet_root_location(request->tablet_id());
+                auto st = fs::remove_all(location);
+                if (!st.ok() && !st.is_not_found()) {
+                    LOG(ERROR) << "Fail to remove " << location << ": " << st << ". tablet_id=" << request->tablet_id()
+                               << " path=" << request->path();
+                    st.to_protobuf(response->mutable_status());
+                } else {
+                    LOG(INFO) << "Removed " << location << ". tablet_id=" << request->tablet_id()
+                              << " path=" << request->path() << " is_not_found=" << st.is_not_found();
+                }
+            },
+            [&] { latch.count_down(); });
 
-    auto st = thread_pool->submit_func(task);
+    auto st = thread_pool->submit(std::move(task));
     if (!st.ok()) {
         LOG(WARNING) << "Fail to submit drop table task: " << st << " tablet_id=" << request->tablet_id()
                      << " path=" << request->path();
         st.to_protobuf(response->mutable_status());
-        latch.count_down();
     }
 
     latch.wait();
@@ -606,30 +602,30 @@ void LakeServiceImpl::delete_data(::google::protobuf::RpcController* controller,
     auto latch = BThreadCountDownLatch(request->tablet_ids_size());
     bthread::Mutex response_mtx;
     for (auto tablet_id : request->tablet_ids()) {
-        auto task = [&, tablet_id]() {
-            DeferOp defer([&] { latch.count_down(); });
-            auto tablet = _tablet_mgr->get_tablet(tablet_id);
-            if (!tablet.ok()) {
-                LOG(WARNING) << "Fail to get tablet " << tablet_id << ": " << tablet.status();
-                std::lock_guard l(response_mtx);
-                response->add_failed_tablets(tablet_id);
-                return;
-            }
-            auto res = tablet->delete_data(request->txn_id(), request->delete_predicate());
-            if (!res.ok()) {
-                LOG(WARNING) << "Fail to delete data. tablet_id: " << tablet_id << ", txn_id: " << request->txn_id()
-                             << ", error: " << res;
-                std::lock_guard l(response_mtx);
-                response->add_failed_tablets(tablet_id);
-            }
-        };
+        auto task = std::make_shared<AutoCleanRunnable>(
+                [&, tablet_id] {
+                    auto tablet = _tablet_mgr->get_tablet(tablet_id);
+                    if (!tablet.ok()) {
+                        LOG(WARNING) << "Fail to get tablet " << tablet_id << ": " << tablet.status();
+                        std::lock_guard l(response_mtx);
+                        response->add_failed_tablets(tablet_id);
+                        return;
+                    }
+                    auto res = tablet->delete_data(request->txn_id(), request->delete_predicate());
+                    if (!res.ok()) {
+                        LOG(WARNING) << "Fail to delete data. tablet_id: " << tablet_id
+                                     << ", txn_id: " << request->txn_id() << ", error: " << res;
+                        std::lock_guard l(response_mtx);
+                        response->add_failed_tablets(tablet_id);
+                    }
+                },
+                [&] { latch.count_down(); });
 
-        auto st = thread_pool->submit_func(task);
+        auto st = thread_pool->submit(std::move(task));
         if (!st.ok()) {
             LOG(WARNING) << "Fail to submit delete data task: " << st;
             std::lock_guard l(response_mtx);
             response->add_failed_tablets(tablet_id);
-            latch.count_down();
         }
     }
 
@@ -659,44 +655,43 @@ void LakeServiceImpl::get_tablet_stats(::google::protobuf::RpcController* contro
     auto latch = BThreadCountDownLatch(request->tablet_infos_size());
     bthread::Mutex response_mtx;
     for (const auto& tablet_info : request->tablet_infos()) {
-        auto task = [&, tablet_info]() {
-            DeferOp defer([&] { latch.count_down(); });
+        auto task = std::make_shared<AutoCleanRunnable>(
+                [&, tablet_info] {
+                    int64_t tablet_id = tablet_info.tablet_id();
+                    int64_t version = tablet_info.version();
+                    if (std::chrono::system_clock::now() >= timeout_deadline) {
+                        LOG(WARNING) << "Cancelled tablet stat collection task due to timeout exceeded. tablet_id: "
+                                     << tablet_id << ", version: " << version;
+                        return;
+                    }
 
-            int64_t tablet_id = tablet_info.tablet_id();
-            int64_t version = tablet_info.version();
-            if (std::chrono::system_clock::now() >= timeout_deadline) {
-                LOG(WARNING) << "Cancelled tablet stat collection task due to timeout exceeded. tablet_id: "
-                             << tablet_id << ", version: " << version;
-                return;
-            }
+                    auto tablet_metadata = _tablet_mgr->get_tablet_metadata(tablet_id, version, /*fill_cache=*/false);
+                    if (!tablet_metadata.ok()) {
+                        LOG(WARNING) << "Fail to get tablet metadata. tablet_id: " << tablet_id
+                                     << ", version: " << version << ", error: " << tablet_metadata.status();
+                        return;
+                    }
 
-            auto tablet_metadata = _tablet_mgr->get_tablet_metadata(tablet_id, version, /*fill_cache=*/false);
-            if (!tablet_metadata.ok()) {
-                LOG(WARNING) << "Fail to get tablet metadata. tablet_id: " << tablet_id << ", version: " << version
-                             << ", error: " << tablet_metadata.status();
-                return;
-            }
+                    int64_t num_rows = 0;
+                    int64_t data_size = 0;
+                    for (const auto& rowset : (*tablet_metadata)->rowsets()) {
+                        num_rows += rowset.num_rows();
+                        data_size += rowset.data_size();
+                    }
+                    for (const auto& [_, file] : (*tablet_metadata)->delvec_meta().version_to_file()) {
+                        data_size += file.size();
+                    }
 
-            int64_t num_rows = 0;
-            int64_t data_size = 0;
-            for (const auto& rowset : (*tablet_metadata)->rowsets()) {
-                num_rows += rowset.num_rows();
-                data_size += rowset.data_size();
-            }
-            for (const auto& [_, file] : (*tablet_metadata)->delvec_meta().version_to_file()) {
-                data_size += file.size();
-            }
-
-            std::lock_guard l(response_mtx);
-            auto tablet_stat = response->add_tablet_stats();
-            tablet_stat->set_tablet_id(tablet_id);
-            tablet_stat->set_num_rows(num_rows);
-            tablet_stat->set_data_size(data_size);
-        };
+                    std::lock_guard l(response_mtx);
+                    auto tablet_stat = response->add_tablet_stats();
+                    tablet_stat->set_tablet_id(tablet_id);
+                    tablet_stat->set_num_rows(num_rows);
+                    tablet_stat->set_data_size(data_size);
+                },
+                [&] { latch.count_down(); });
         TEST_SYNC_POINT_CALLBACK("LakeServiceImpl::get_tablet_stats:before_submit", nullptr);
-        if (auto st = thread_pool_token.submit_func(std::move(task), timeout_deadline); !st.ok()) {
+        if (auto st = thread_pool_token.submit(std::move(task), timeout_deadline); !st.ok()) {
             LOG(WARNING) << "Fail to get tablet stats task: " << st;
-            latch.count_down();
         }
     }
 
@@ -735,19 +730,19 @@ void LakeServiceImpl::upload_snapshots(::google::protobuf::RpcController* contro
 
     auto thread_pool = _env->agent_server()->get_thread_pool(TTaskType::UPLOAD);
     auto latch = BThreadCountDownLatch(1);
-    auto task = [&]() {
-        DeferOp defer([&] { latch.count_down(); });
-        auto loader = std::make_unique<LakeSnapshotLoader>(_env);
-        auto st = loader->upload(request);
-        if (!st.ok()) {
-            cntl->SetFailed("Fail to upload snapshot");
-        }
-    };
-    auto st = thread_pool->submit_func(task);
+    auto task = std::make_shared<AutoCleanRunnable>(
+            [&] {
+                auto loader = std::make_unique<LakeSnapshotLoader>(_env);
+                auto st = loader->upload(request);
+                if (!st.ok()) {
+                    cntl->SetFailed("Fail to upload snapshot");
+                }
+            },
+            [&] { latch.count_down(); });
+    auto st = thread_pool->submit(std::move(task));
     if (!st.ok()) {
         LOG(WARNING) << "Fail to submit upload snapshots task: " << st;
         cntl->SetFailed(std::string(st.message()));
-        latch.count_down();
     }
     latch.wait();
 }
@@ -766,19 +761,19 @@ void LakeServiceImpl::restore_snapshots(::google::protobuf::RpcController* contr
 
     auto thread_pool = _env->agent_server()->get_thread_pool(TTaskType::DOWNLOAD);
     auto latch = BThreadCountDownLatch(1);
-    auto task = [&]() {
-        DeferOp defer([&] { latch.count_down(); });
-        auto loader = std::make_unique<LakeSnapshotLoader>(_env);
-        auto st = loader->restore(request);
-        if (!st.ok()) {
-            cntl->SetFailed("Fail to restore snapshot");
-        }
-    };
-    auto st = thread_pool->submit_func(task);
+    auto task = std::make_shared<AutoCleanRunnable>(
+            [&] {
+                auto loader = std::make_unique<LakeSnapshotLoader>(_env);
+                auto st = loader->restore(request);
+                if (!st.ok()) {
+                    cntl->SetFailed("Fail to restore snapshot");
+                }
+            },
+            [&] { latch.count_down(); });
+    auto st = thread_pool->submit(std::move(task));
     if (!st.ok()) {
         LOG(WARNING) << "Fail to submit restore snapshots task: " << st;
         cntl->SetFailed(std::string(st.message()));
-        latch.count_down();
     }
     latch.wait();
 }
@@ -857,14 +852,12 @@ void LakeServiceImpl::vacuum(::google::protobuf::RpcController* controller, cons
     TEST_SYNC_POINT("LakeServiceImpl::vacuum:2");
 
     auto latch = BThreadCountDownLatch(1);
-    auto st = thread_pool->submit_func([&]() {
-        DeferOp defer([&] { latch.count_down(); });
-        lake::vacuum(_tablet_mgr, *request, response);
-    });
+    auto task = std::make_shared<AutoCleanRunnable>([&] { lake::vacuum(_tablet_mgr, *request, response); },
+                                                    [&] { latch.count_down(); });
+    auto st = thread_pool->submit(std::move(task));
     if (!st.ok()) {
         LOG(WARNING) << "Fail to submit vacuum task: " << st;
         st.to_protobuf(response->mutable_status());
-        latch.count_down();
     }
 
     latch.wait();
@@ -881,14 +874,12 @@ void LakeServiceImpl::vacuum_full(::google::protobuf::RpcController* controller,
         return;
     }
     auto latch = BThreadCountDownLatch(1);
-    auto st = thread_pool->submit_func([&]() {
-        DeferOp defer([&] { latch.count_down(); });
-        lake::vacuum_full(_tablet_mgr, *request, response);
-    });
+    auto task = std::make_shared<AutoCleanRunnable>([&] { lake::vacuum_full(_tablet_mgr, *request, response); },
+                                                    [&] { latch.count_down(); });
+    auto st = thread_pool->submit(std::move(task));
     if (!st.ok()) {
         LOG(WARNING) << "Fail to submit vacuum task: " << st;
         st.to_protobuf(response->mutable_status());
-        latch.count_down();
     }
 
     latch.wait();
