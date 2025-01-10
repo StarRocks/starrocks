@@ -50,16 +50,6 @@ You can decide whether to add the `__op` field based on the data changes you wan
 
 - The columns that involve data changes must include the primary key column.
 
-## Prerequisites
-
-### Broker Load
-
-See the "Background information" section in [Load data from HDFS](../loading/hdfs_load.md) or [Load data from cloud storage](../loading/cloud_storage_load.md).
-
-### Routine load
-
-If you choose Routine Load, make sure that topics are created in your Apache Kafka® cluster. Assume that you have created four topics: `topic1`, `topic2`, `topic3`, and `topic4`.
-
 ## Basic operations
 
 This section provides examples of how to make data changes to a StarRocks table through loading. For detailed syntax and parameter descriptions, see [STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md), [BROKER LOAD](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md), and [CREATE ROUTINE LOAD](../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md).
