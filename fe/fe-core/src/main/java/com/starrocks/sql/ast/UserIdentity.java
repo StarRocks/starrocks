@@ -41,10 +41,8 @@ import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.PatternMatcher;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonPostProcessable;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.FeNameFormat;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -52,7 +50,6 @@ import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TUserIdentity;
 import com.starrocks.thrift.TUserRoles;
 
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -251,10 +248,7 @@ public class UserIdentity implements ParseNode, Writable, GsonPostProcessable {
         return sb.toString();
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        Text.writeString(out, GsonUtils.GSON.toJson(this));
-    }
+
 
     @Override
     public void gsonPostProcess() throws IOException {

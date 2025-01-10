@@ -26,7 +26,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -159,10 +158,7 @@ public class TransactionStateBatch implements Writable {
         }
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        Text.writeString(out, GsonUtils.GSON.toJson(this));
-    }
+
 
     public static TransactionStateBatch read(DataInput in) throws IOException {
         return GsonUtils.GSON.fromJson(Text.readString(in), TransactionStateBatch.class);

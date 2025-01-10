@@ -66,10 +66,7 @@ public class BinlogConsumeStateVO implements Writable {
         return GsonUtils.GSON.fromJson(Text.readString(input), BinlogConsumeStateVO.class);
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        Text.writeString(out, GsonUtils.GSON.toJson(this));
-    }
+
 
     @Override
     public boolean equals(Object o) {

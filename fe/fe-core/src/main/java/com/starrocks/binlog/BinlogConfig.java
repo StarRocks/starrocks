@@ -23,7 +23,6 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.thrift.TBinlogConfig;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
@@ -134,10 +133,7 @@ public class BinlogConfig implements Writable {
         return tBinlogConfig;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        Text.writeString(out, GsonUtils.GSON.toJson(this));
-    }
+
 
     public static BinlogConfig read(DataInput in) throws IOException {
         return GsonUtils.GSON.fromJson(Text.readString(in), BinlogConfig.class);

@@ -39,7 +39,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.Collection;
 import java.util.HashMap;
@@ -460,11 +459,7 @@ public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
         groupIdToUsage.set(newGroupIdToUsage);
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        String s = GsonUtils.GSON.toJson(this);
-        Text.writeString(out, s);
-    }
+
 
     public static ComputeNode read(DataInput in) throws IOException {
         String json = Text.readString(in);

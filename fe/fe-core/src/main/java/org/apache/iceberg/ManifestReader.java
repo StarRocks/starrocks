@@ -18,14 +18,6 @@
  */
 package org.apache.iceberg;
 
-import static org.apache.iceberg.expressions.Expressions.alwaysTrue;
-
-import java.io.IOException;
-import java.util.Collection;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-
 import com.google.common.cache.Cache;
 import com.starrocks.connector.iceberg.DataFileWrapper;
 import com.starrocks.connector.iceberg.DeleteFileWrapper;
@@ -49,6 +41,14 @@ import org.apache.iceberg.relocated.com.google.common.collect.Lists;
 import org.apache.iceberg.relocated.com.google.common.collect.Sets;
 import org.apache.iceberg.types.Types;
 import org.apache.iceberg.util.PartitionSet;
+
+import java.io.IOException;
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+import static org.apache.iceberg.expressions.Expressions.alwaysTrue;
 
 // copy from https://github.com/apache/iceberg/blob/apache-iceberg-1.5.0/core/src/main/java/org/apache/iceberg/ManifestReader.java
 public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup

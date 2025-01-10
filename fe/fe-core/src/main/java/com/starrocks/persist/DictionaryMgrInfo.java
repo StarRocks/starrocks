@@ -22,7 +22,6 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
 
@@ -66,9 +65,5 @@ public class DictionaryMgrInfo implements Writable {
         return GsonUtils.GSON.fromJson(json, DictionaryMgrInfo.class);
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        String json = GsonUtils.GSON.toJson(this);
-        Text.writeString(out, json);
-    }
+
 }

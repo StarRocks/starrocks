@@ -27,7 +27,6 @@ import com.starrocks.statistic.StatsConstants.ScheduleStatus;
 import com.starrocks.statistic.StatsConstants.ScheduleType;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -221,11 +220,7 @@ public class ExternalAnalyzeJob implements AnalyzeJob, Writable {
         }
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        String s = GsonUtils.GSON.toJson(this);
-        Text.writeString(out, s);
-    }
+
 
     public static ExternalAnalyzeJob read(DataInput in) throws IOException {
         String s = Text.readString(in);

@@ -25,18 +25,15 @@ import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.persist.gson.GsonPostProcessable;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.TabletMetadataUpdateAgentTask;
 import com.starrocks.task.TabletMetadataUpdateAgentTaskFactory;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections4.ListUtils;
 
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -149,11 +146,7 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
         this.schemaInfos = new ArrayList<>(((LakeTableAsyncFastSchemaChangeJob) job).schemaInfos);
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        String json = GsonUtils.GSON.toJson(this);
-        Text.writeString(out, json);
-    }
+
 
     private static class IndexSchemaInfo {
         @SerializedName("indexId")

@@ -18,12 +18,7 @@
 package com.starrocks.journal.bdbje;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.persist.gson.GsonUtils;
-
-import java.io.DataOutput;
-import java.io.IOException;
 
 // Write this class to bdb periodically
 public class Timestamp implements Writable {
@@ -38,10 +33,7 @@ public class Timestamp implements Writable {
         return this.timestamp;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        Text.writeString(out, GsonUtils.GSON.toJson(this));
-    }
+
 
     public String toString() {
         return "" + timestamp;

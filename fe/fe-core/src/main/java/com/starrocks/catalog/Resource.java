@@ -44,7 +44,6 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.sql.ast.CreateResourceStmt;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.Map;
 
@@ -145,11 +144,7 @@ public abstract class Resource implements Writable {
         return GsonUtils.GSON.toJson(this);
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        String json = GsonUtils.GSON.toJson(this);
-        Text.writeString(out, json);
-    }
+
 
     public static Resource read(DataInput in) throws IOException {
         String json = Text.readString(in);

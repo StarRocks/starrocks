@@ -27,7 +27,6 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.UserIdentity;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.Map;
 
@@ -232,11 +231,7 @@ public class Task implements Writable {
         return GsonUtils.GSON.fromJson(json, Task.class);
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        String json = GsonUtils.GSON.toJson(this);
-        Text.writeString(out, json);
-    }
+
 
     @Override
     public String toString() {
