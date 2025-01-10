@@ -243,6 +243,8 @@ public class EditLogDeserializer {
             .put(OperationType.OP_ALTER_WAREHOUSE, Warehouse.class)
             .put(OperationType.OP_DROP_WAREHOUSE, DropWarehouseLog.class)
             .put(OperationType.OP_CLUSTER_SNAPSHOT_LOG, ClusterSnapshotLog.class)
+            .put(OperationType.OP_ADD_SQL_QUERY_BLACK_LIST, AddSqlBlackList.class)
+            .put(OperationType.OP_DELETE_SQL_QUERY_BLACK_LIST, DeleteSqlBlackLists.class)
             .build();
 
     public static Writable deserialize(Short opCode, DataInput in) throws IOException {

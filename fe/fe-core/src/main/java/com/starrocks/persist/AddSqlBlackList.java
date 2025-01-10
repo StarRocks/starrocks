@@ -12,19 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.meta;
+package com.starrocks.persist;
+
+import com.google.gson.annotations.SerializedName;
+import com.starrocks.common.io.JsonWriter;
 
 import java.util.Objects;
-import java.util.regex.Pattern;
 
-public class BlackListSql {
-    public BlackListSql(Pattern pattern, long id) {
-        this.pattern = pattern;
+public class AddSqlBlackList extends JsonWriter {
+    public AddSqlBlackList(long id, String pattern) {
         this.id = id;
+        this.pattern = pattern;
     }
 
-    public Pattern pattern;
-    public long id;
+    @SerializedName("id")
+    public final long id;
+
+    @SerializedName("pattern")
+    public final String pattern;
 
     @Override
     public boolean equals(Object o) {
@@ -34,18 +39,12 @@ public class BlackListSql {
         if (o == null || getClass() != o.getClass()) {
             return false;
         }
-        BlackListSql that = (BlackListSql) o;
-        if (id != that.id) {
-            return false;
-        }
-        if (this.pattern == null) {
-            return that.pattern == null;
-        }
-        return Objects.equals(pattern.pattern(), that.pattern.pattern());
+        AddSqlBlackList that = (AddSqlBlackList) o;
+        return id == that.id && Objects.equals(pattern, that.pattern);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(pattern, id);
+        return Objects.hash(id, pattern);
     }
 }
