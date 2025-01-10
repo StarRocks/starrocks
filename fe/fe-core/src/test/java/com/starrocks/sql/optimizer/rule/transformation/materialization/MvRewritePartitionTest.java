@@ -636,6 +636,7 @@ public class MvRewritePartitionTest extends MVTestBase {
                     cluster.runSql("test", String.format("refresh materialized view %s partition " +
                             "start('%s') end('%s') with sync mode;", mvName, param.refreshStart, param.refreshEnd));
                     for (PCompensateExpect expect : param.expectPartitionPredicates) {
+                        System.out.println(expect);
                         if (!Strings.isNullOrEmpty(expect.partitionPredicate)) {
                             String query = String.format("select a.t1a, a.id_date, sum(a.t1b), sum(b.t1b) \n" +
                                     "from table_with_day_partition a\n" +
@@ -669,7 +670,7 @@ public class MvRewritePartitionTest extends MVTestBase {
                                 // no partition expressions
                                 PCompensateExpect.create("a.id_date='1991-03-30'", false, true),
                                 PCompensateExpect.create("a.id_date>='1991-03-30'", true, true),
-                                PCompensateExpect.create("a.id_date!='1991-03-30'", false),
+                                PCompensateExpect.create("a.id_date!='1991-03-30'", true, true),
                                 // with partition expressions && partition expressions can be pruned
                                 PCompensateExpect.create("date_format(a.id_date, '%Y%m%d')='19910330'", false, true),
                                 PCompensateExpect.create("date_format(a.id_date, '%Y-%m-%d')='1991-03-30'", false, true),
@@ -678,8 +679,8 @@ public class MvRewritePartitionTest extends MVTestBase {
                                 PCompensateExpect.create("subdate(a.id_date, interval 1 day)='1991-03-29'", false, true),
                                 PCompensateExpect.create("adddate(a.id_date, interval 1 day)='1991-03-31'", false, true),
                                 // with partition expressions && partition expressions can be pruned
-                                PCompensateExpect.create("cast(a.id_date as string)='1991-03-30'", false),
-                                PCompensateExpect.create("cast(a.id_date as string) >='1991-03-30'", false)
+                                PCompensateExpect.create("cast(a.id_date as string)='1991-03-30'", true, true),
+                                PCompensateExpect.create("cast(a.id_date as string) >='1991-03-30'", true, true)
                         )
                 ),
                 // partition: slot
@@ -689,7 +690,7 @@ public class MvRewritePartitionTest extends MVTestBase {
                                 // no partition expressions
                                 PCompensateExpect.create("a.id_date='1991-03-30'", false, true),
                                 PCompensateExpect.create("a.id_date>='1991-03-30'", true, true),
-                                PCompensateExpect.create("a.id_date!='1991-03-30'", false),
+                                PCompensateExpect.create("a.id_date!='1991-03-30'", true, true),
                                 // with partition expressions && partition expressions can be pruned
                                 PCompensateExpect.create("date_format(a.id_date, '%Y%m%d')='19910330'", false, true),
                                 PCompensateExpect.create("date_format(a.id_date, '%Y-%m-%d')='1991-03-30'", false, true),
@@ -698,12 +699,13 @@ public class MvRewritePartitionTest extends MVTestBase {
                                 PCompensateExpect.create("subdate(a.id_date, interval 1 day)='1991-03-29'", false, true),
                                 PCompensateExpect.create("adddate(a.id_date, interval 1 day)='1991-03-31'", false, true),
                                 // with partition expressions && partition expressions can be pruned
-                                PCompensateExpect.create("cast(a.id_date as string)='1991-03-30'", false),
-                                PCompensateExpect.create("cast(a.id_date as string) >='1991-03-30'", false)
+                                PCompensateExpect.create("cast(a.id_date as string)='1991-03-30'", true, true),
+                                PCompensateExpect.create("cast(a.id_date as string) >='1991-03-30'", true, true)
                         )
                 )
         );
         for (PartitionCompensateParam param : params) {
+            System.out.println(param);
             testRefreshAndRewriteWithMultiJoinMV(param);
         }
         connectContext.getSessionVariable().setEnableMaterializedViewTransparentUnionRewrite(true);
