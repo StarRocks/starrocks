@@ -571,8 +571,9 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
                 // read-through cache if file length is less than or equal to maximum length allowed to cache.
                 // do not cache metadata json files because the name could be same, like "v1.metadata.json"
                 // when re-create table with same name.
+                Path path = new Path(wrappedInputFile.location());
                 if (getLength() <= contentCache.maxContentLength() &&
-                        !HADOOP_CATALOG_METADATA_JSON_PATTERN.matcher(wrappedInputFile.location()).matches()) {
+                        !HADOOP_CATALOG_METADATA_JSON_PATTERN.matcher(path.getName()).matches()) {
                     return cachedStream();
                 }
 
