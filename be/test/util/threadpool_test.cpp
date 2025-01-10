@@ -43,7 +43,11 @@
 #include "gutil/strings/substitute.h"
 #include "gutil/sysinfo.h"
 #include "gutil/walltime.h"
+<<<<<<< HEAD
 #include "testutil/assert.h"
+=======
+#include "util/await.h"
+>>>>>>> e267ea0c38 ([BugFix] ensure the latch can be counted down (#54859))
 #include "util/countdown_latch.h"
 #include "util/metrics.h"
 #include "util/monotime.h"
@@ -824,6 +828,127 @@ TEST_F(ThreadPoolTest, TestTokenConcurrency) {
     LOG(INFO) << strings::Substitute("Tokens waited ($0 threads): $1", kWaitThreads, total_num_tokens_waited.load());
     LOG(INFO) << strings::Substitute("Tokens submitted ($0 threads): $1", kSubmitThreads,
                                      total_num_tokens_submitted.load());
+}
+
+TEST_F(ThreadPoolTest, TestAutoCleanRunnable) {
+    int run_count = 0;
+    int exit_count = 0;
+
+    auto run1 = std::make_shared<AutoCleanRunnable>([&] { ++run_count; }, [&] { ++exit_count; });
+    run1.reset();
+    // run1 doesn't run but will definitely exit
+    EXPECT_EQ(0, run_count);
+    EXPECT_EQ(1, exit_count);
+
+    auto run2 = std::make_shared<AutoCleanRunnable>([&] { ++run_count; }, [&] { ++exit_count; });
+    run2->run();
+    run2.reset();
+    // run2 runs and exits
+    EXPECT_EQ(1, run_count);
+    EXPECT_EQ(2, exit_count);
+}
+
+TEST_F(ThreadPoolTest, ConcurrencyLimitedThreadPoolTokenTest) {
+    // set init capacity to 0, so it will never succeed
+    auto thread_token = std::make_unique<ConcurrencyLimitedThreadPoolToken>(_pool.get(), 0);
+
+    int run_count = 0;
+    int exit_count = 0;
+    auto task = std::make_shared<AutoCleanRunnable>([&] { ++run_count; }, [&] { ++exit_count; });
+
+    auto deadline = std::chrono::system_clock::now() + std::chrono::milliseconds(400);
+    auto st = thread_token->submit(std::move(task), deadline);
+    EXPECT_FALSE(st.ok());
+    EXPECT_TRUE(st.is_time_out());
+    // task destroyed without run
+    EXPECT_EQ(0, run_count);
+    EXPECT_EQ(1, exit_count);
+
+    // submit_func, fails the same way
+    deadline = std::chrono::system_clock::now() + std::chrono::milliseconds(400);
+    auto st2 = thread_token->submit_func([&] { ++run_count; }, deadline);
+    EXPECT_FALSE(st2.ok());
+    EXPECT_TRUE(st2.is_time_out());
+    EXPECT_EQ(0, run_count);
+}
+
+TEST_F(ThreadPoolTest, ThreadPoolShutdownWithTaskAbandoned) {
+    // Create tasks into two groups, one is associated with latchA,
+    // the other is associated with latchB.
+    // submit all of them into the pool with only single thread
+    rebuild_pool_with_min_max(1, 1);
+    CountDownLatch latchA(1), latchB(1);
+    int run_count = 0;
+    int run_count_A = 0;
+    int run_count_B = 0;
+    int exit_count = 0;
+    int exit_count_A = 0;
+    int exit_count_B = 0;
+
+    int task_num = 10;
+    // group-A
+    for (int i = 0; i < task_num; ++i) {
+        auto st = _pool->submit(std::make_shared<AutoCleanRunnable>(
+                [&] {
+                    latchA.wait();
+                    ++run_count;
+                    ++run_count_A;
+                },
+                [&] {
+                    ++exit_count;
+                    ++exit_count_A;
+                }));
+        EXPECT_TRUE(st.ok());
+    }
+
+    // group-B
+    for (int i = 0; i < task_num; ++i) {
+        auto st = _pool->submit(std::make_shared<AutoCleanRunnable>(
+                [&] {
+                    latchB.wait();
+                    ++run_count;
+                    ++run_count_B;
+                },
+                [&] {
+                    ++exit_count;
+                    ++exit_count_B;
+                }));
+        EXPECT_TRUE(st.ok());
+    }
+    // suppose some of or all of the tasks in groupA can be executed
+    latchA.count_down();
+    EXPECT_TRUE(_pool->is_pool_status_ok());
+
+    // start a thread to stop the pool asynchronously
+    std::thread stop_async([&] { _pool->shutdown(); });
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+    // wait until the pool enters shutdown status
+    Awaitility().timeout(1000 * 1000).until([&] { return !_pool->is_pool_status_ok(); });
+    ASSERT_FALSE(_pool->is_pool_status_ok());
+    latchB.count_down();
+    stop_async.join();
+
+    auto done_tasks = _pool->total_executed_tasks();
+    EXPECT_EQ(task_num * 2, exit_count);
+    EXPECT_EQ(task_num, exit_count_A);
+    // 0 <= run_count_A <= task_num
+    if (done_tasks <= task_num) {
+        EXPECT_EQ(done_tasks, run_count_A);
+    } else {
+        EXPECT_EQ(task_num, run_count_A);
+    }
+
+    EXPECT_EQ(task_num, exit_count_B);
+    // 0 <= run_count_B <= 1, at most one task get chance to execute
+    EXPECT_LE(0, run_count_B);
+    EXPECT_GE(1, run_count_B);
+
+    // done_tasks = run_count_A + run_count_B
+    EXPECT_EQ(done_tasks, run_count_A + run_count_B);
+
+    // run_count < exit_count
+    EXPECT_LT(run_count, exit_count);
 }
 
 /*
