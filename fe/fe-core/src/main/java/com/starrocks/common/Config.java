@@ -3390,4 +3390,10 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = false)
     public static int query_deploy_threadpool_size = max(50, getRuntime().availableProcessors() * 10);
+
+    @ConfField(mutable = true)
+    public static long automated_cluster_snapshot_interval_seconds = 1800;
+
+    @ConfField(mutable = false)
+    public static int max_historical_automated_cluster_snapshot_jobs = 100;
 }
