@@ -373,6 +373,14 @@ Used to enable the streaming pre-aggregations. The default value is `false`, mea
 
 Used for MySQL client compatibility. No practical usage.
 
+### dynamic_overwrite
+
+* **Description**: Whether to enable the [Dynamic Overwrite](./sql-statements/loading_unloading/INSERT.md#dynamic-overwrite) semantic for INSERT OVERWRITE with partitioned tables. Valid values:
+  * `true`: Enables Dynamic Overwrite.
+  * `false`: Disables Dynamic Overwrite and uses the default semantic.
+* **Default**: false
+* **Introduced in**: v3.4.0
+
 <!--
 ### enable_collect_table_level_scan_stats (Invisible to users)
 
