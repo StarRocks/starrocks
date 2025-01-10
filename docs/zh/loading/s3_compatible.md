@@ -370,7 +370,7 @@ WHERE database_name = 'test_db' and label = 'label_brokerload_unqualifiedtest_82
 REJECTED_RECORD_PATH: 172.26.95.92:/home/disk1/sr/be/storage/rejected_record/test_db/label_brokerload_unqualifiedtest_0728/6/404a20b1e4db4d27_8aa9af1e8d6d8bdc
 ```
 
-有关返回字段的说明，参见 [`information_schema.loads`](../sql-reference/information_schema/loads.md)。
+有关返回字段的说明，参见 [`information_schema.loads`](../sql-reference/information_schema.md)。
 
 ## 取消导入作业
 
