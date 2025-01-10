@@ -110,7 +110,6 @@ public class ConfigBase {
         if (Files.isWritable(Path.of(propFile)) && !Util.isRunningInContainer()) {
             isPersisted = true;
         }
-
         replacedByEnv();
         setFields();
     }
