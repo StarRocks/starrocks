@@ -118,5 +118,5 @@ DISTRIBUTED BY HASH(`id`);
 - 不支持[动态](./dynamic_partitioning.md) List 分区。
 - StarRocks 存算分离模式 从 3.1.1 版本开始支持该功能。
 - 使用 `ALTER TABLE <table_name> DROP PARTITION <partition_name>;` 分区直接被删除并且不能被恢复。
-- List 分区表暂时不支持[备份与恢复](../../administration/management/Backup_and_restore.md)。
+- 自 v3.4.0、v3.3.8、v3.2.13 以及 v3.1.16 起，StarRocks 支持[备份与恢复](../../administration/management/Backup_and_restore.md) List 分区表。
 - 从 3.3.5 版本开始，[异步物化视图](../../using_starrocks/async_mv/Materialized_view.md)支持基于使用 List 分区的基表创建。
