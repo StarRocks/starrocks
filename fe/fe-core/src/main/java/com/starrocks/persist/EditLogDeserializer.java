@@ -37,6 +37,7 @@ import com.starrocks.epack.persist.ApplyOrRevokeRowAccessPolicyLog;
 import com.starrocks.epack.persist.CreateFailoverGroupLog;
 import com.starrocks.epack.persist.CreatePasswordPolicyLog;
 import com.starrocks.epack.persist.CreatePolicyLog;
+import com.starrocks.epack.persist.CreateTableInfoEPack;
 import com.starrocks.epack.persist.DropFailoverGroupLog;
 import com.starrocks.epack.persist.DropPasswordPolicyLog;
 import com.starrocks.epack.persist.DropPolicyLog;
@@ -100,7 +101,7 @@ public class EditLogDeserializer {
             .put(OperationType.OP_DROP_DB, DropDbInfo.class)
             .put(OperationType.OP_ALTER_DB_V2, DatabaseInfo.class)
             .put(OperationType.OP_RENAME_DB_V2, DatabaseInfo.class)
-            .put(OperationType.OP_CREATE_TABLE_V2, CreateTableInfo.class)
+            .put(OperationType.OP_CREATE_TABLE_V2, CreateTableInfoEPack.class)
             .put(OperationType.OP_DROP_TABLE_V2, DropInfo.class)
             .put(OperationType.OP_DROP_ROLLUP_V2, DropInfo.class)
             .put(OperationType.OP_ERASE_MULTI_TABLES, MultiEraseTableInfo.class)

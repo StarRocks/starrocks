@@ -215,7 +215,7 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
             return null;
         }
 
-        AlterViewClause alterViewClause = (AlterViewClause) statement.getAlterClause();
+        AlterClause alterViewClause = statement.getAlterClause();
         visit(alterViewClause, context);
         return null;
     }
