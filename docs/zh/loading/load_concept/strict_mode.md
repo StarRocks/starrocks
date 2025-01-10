@@ -22,7 +22,13 @@ displayed_sidebar: docs
 
 - 实际导入过程中，正确的数据行和错误的数据行都有可能存在 `NULL` 值。如果目标列不允许 `NULL` 值，则 StarRocks 会报错，并把这些包含 `NULL` 值的数据行过滤掉。
 
-- 对于 [Stream Load](../../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)、[Broker Load](../../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md)、[Routine Load](../../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md) 和 [Spark Load](../../sql-reference/sql-statements/loading_unloading/SPARK_LOAD.md)，导入作业能够容忍的因数据质量不合格而过滤掉的错误数据行所占的最大比例，由作业的可选参数 `max_filter_ratio` 控制。[INSERT](../../sql-reference/sql-statements/loading_unloading/INSERT.md) 导入方式当前不支持 `max_filter_ratio` 参数。
+- 导入作业能够容忍的因数据质量不合格而过滤掉的错误数据行所占的最大比例，由作业的可选参数 `max_filter_ratio` 控制。
+
+:::note
+
+INSERT 导入方式自 v3.4.0 起支持 `max_filter_ratio` 参数。
+
+:::
 
 下面以 CSV 格式的数据文件为例来说明严格模式的效果。假设目标列数据类型为 TINYINT [-128, 127]。以 `\N`（表示空值 null）、`abc`、`2000` 和 `1` 四个原始列值为例：
 
@@ -60,9 +66,15 @@ displayed_sidebar: docs
 
 ## 设置严格模式
 
-使用 [Stream Load](../../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)、[Broker Load](../../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md)、[Routine Load](../../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md) 和 [Spark Load](../../sql-reference/sql-statements/loading_unloading/SPARK_LOAD.md) 执行数据导入时，需要通过参数 `strict_mode` 来设置严格模式。参数取值范围：`true` 和 `false`。默认值：`false`。`true` 表示开启，`false` 表示关闭。
+您可以通过参数 `strict_mode` 来设置严格模式。参数取值范围：`true` 和 `false`。默认值：`false`。`true` 表示开启，`false` 表示关闭。INSERT 导入方式自 v3.4.0 起支持 `strict_mode` 参数，默认值：`true`。至此，除 Stream Load 外，其他所有导入方式的 `strict_mode` 都在 PROPERTIES 子句中以相同方式设置。
 
-使用 [INSERT](../../loading/InsertInto.md) 执行数据导入时，需要通过会话变量 `enable_insert_strict` 来设置严格模式。变量取值范围：`true` 和 `false`。默认值：`true`。`true` 表示开启，`false` 表示关闭。
+您也通过会话变量 `enable_insert_strict` 来设置严格模式。变量取值范围：`true` 和 `false`。默认值：`true`。`true` 表示开启，`false` 表示关闭。
+
+:::note
+
+从 v3.4.0 起，当 `enable_insert_strict` 设置为 `true` 时，系统只导入合格的数据行，过滤掉不合格行，并返回不合格行的详细信息。在早于 v3.4.0 的版本中，当 `enable_insert_strict` 设置为 `true` 时，INSERT 作业会在出现不合格行时失败。
+
+:::
 
 下面介绍使用不同的导入方式时设置严格模式的方法。
 
@@ -140,8 +152,11 @@ PROPERTIES
 ### INSERT
 
 ```SQL
-SET enable_insert_strict = {true | false};
-INSERT INTO <table_name> ...
+INSERT INTO [<database_name>.]<table_name>
+PROPERTIES(
+    "strict_mode" = "{true | false}"
+)
+<query_statement>
 ```
 
 有关 INSERT 的语法和参数说明，请参见 [INSERT](../../sql-reference/sql-statements/loading_unloading/INSERT.md)。
