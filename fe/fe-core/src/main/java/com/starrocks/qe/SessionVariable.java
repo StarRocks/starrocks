@@ -3981,6 +3981,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return analyzeTypeForMV;
     }
 
+    public void setAnalyzeForMv(String analyzeTypeForMV) {
+        this.analyzeTypeForMV = analyzeTypeForMV;
+    }
+
     public boolean isEnableBigQueryLog() {
         return enableBigQueryLog;
     }

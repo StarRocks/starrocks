@@ -66,11 +66,11 @@ public class ApplyRuleTask extends OptimizerTask {
             return;
         }
         // Apply rule and get all new OptExpressions
-        Pattern pattern = rule.getPattern();
-        Binder binder = new Binder(pattern, groupExpression);
+        final Pattern pattern = rule.getPattern();
+        final Binder binder = new Binder(context.getOptimizerContext(), pattern, groupExpression);
+        final List<OptExpression> newExpressions = Lists.newArrayList();
+        final List<OptExpression> extractExpressions = Lists.newArrayList();
         OptExpression extractExpr = binder.next();
-        List<OptExpression> newExpressions = Lists.newArrayList();
-        List<OptExpression> extractExpressions = Lists.newArrayList();
         while (extractExpr != null) {
             // Check if the rule has exhausted or not to avoid optimization time exceeding the limit.:
             // 1. binder.next() may be infinite loop if something is wrong.

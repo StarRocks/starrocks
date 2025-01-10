@@ -20,6 +20,8 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.sql.optimizer.GroupExpression;
 import com.starrocks.sql.optimizer.Memo;
 import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
@@ -31,6 +33,25 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 
 public class BinderTest {
+
+    private Binder buildBinder(Pattern pattern, OptExpression expr) {
+        Memo memo = new Memo();
+        OptimizerContext optimizerContext = new OptimizerContext(memo, new ColumnRefFactory());
+        return new Binder(optimizerContext, pattern, memo.init(expr));
+    }
+
+    private Binder buildBinder(Pattern pattern, GroupExpression qe) {
+        Memo memo = new Memo();
+        OptimizerContext optimizerContext = new OptimizerContext(memo, new ColumnRefFactory());
+        return new Binder(optimizerContext, pattern, qe);
+    }
+
+    private OptExpression bindNext(Pattern pattern, OptExpression expr) {
+        Memo memo = new Memo();
+        OptimizerContext optimizerContext = new OptimizerContext(memo, new ColumnRefFactory());
+        Binder binder = new Binder(optimizerContext, pattern, memo.init(expr));
+        return binder.next();
+    }
 
     @Test
     public void testBinder() {
@@ -46,8 +67,7 @@ public class BinderTest {
                 .addChildren(Pattern.create(OperatorType.PATTERN_LEAF))
                 .addChildren(Pattern.create(OperatorType.PATTERN_LEAF));
 
-        Memo memo = new Memo();
-        OptExpression result = Binder.bind(pattern, memo.init(expr));
+        OptExpression result = bindNext(pattern, expr);
 
         assertEquals(OperatorType.LOGICAL_JOIN, result.getOp().getOpType());
         assertEquals(OperatorType.LOGICAL_OLAP_SCAN, result.inputAt(0).getOp().getOpType());
@@ -64,8 +84,7 @@ public class BinderTest {
                 .addChildren(Pattern.create(OperatorType.LOGICAL_JOIN))
                 .addChildren(Pattern.create(OperatorType.PATTERN_LEAF));
 
-        Memo memo = new Memo();
-        OptExpression result = Binder.bind(pattern, memo.init(expr));
+        OptExpression result = bindNext(pattern, expr);
 
         assertNull(result);
     }
@@ -78,20 +97,18 @@ public class BinderTest {
 
         Pattern pattern = Pattern.create(OperatorType.LOGICAL_JOIN);
 
-        Memo memo = new Memo();
-        OptExpression result = Binder.bind(pattern, memo.init(expr));
+        OptExpression result = bindNext(pattern, expr);
 
         assertEquals(OperatorType.LOGICAL_JOIN, result.getOp().getOpType());
     }
 
+
+
     @Test
     public void testBinderOne() {
         OptExpression expr = OptExpression.create(new MockOperator(OperatorType.LOGICAL_JOIN));
-
         Pattern pattern = Pattern.create(OperatorType.LOGICAL_JOIN);
-
-        Memo memo = new Memo();
-        Binder binder = new Binder(pattern, memo.init(expr));
+        Binder binder = buildBinder(pattern, expr);
         OptExpression result = binder.next();
 
         assertEquals(OperatorType.LOGICAL_JOIN, result.getOp().getOpType());
@@ -109,8 +126,7 @@ public class BinderTest {
                 .addChildren(Pattern.create(OperatorType.LOGICAL_JOIN))
                 .addChildren(Pattern.create(OperatorType.PATTERN_LEAF));
 
-        Memo memo = new Memo();
-        OptExpression result = Binder.bind(pattern, memo.init(expr));
+        OptExpression result = bindNext(pattern, expr);
 
         assertEquals(OperatorType.LOGICAL_OLAP_SCAN, result.getOp().getOpType());
         assertEquals(OperatorType.LOGICAL_JOIN, result.inputAt(0).getOp().getOpType());
@@ -131,8 +147,7 @@ public class BinderTest {
                 .addChildren(Pattern.create(OperatorType.LOGICAL_JOIN))
                 .addChildren(Pattern.create(OperatorType.PATTERN_LEAF));
 
-        Memo memo = new Memo();
-        OptExpression result = Binder.bind(pattern1, memo.init(expr));
+        OptExpression result = bindNext(pattern1, expr);
 
         assertEquals(OperatorType.LOGICAL_PROJECT, result.getOp().getOpType());
         assertEquals(OperatorType.LOGICAL_JOIN, result.inputAt(0).getOp().getOpType());
@@ -142,8 +157,7 @@ public class BinderTest {
                 .addChildren(Pattern.create(OperatorType.LOGICAL_JOIN))
                 .addChildren(Pattern.create(OperatorType.PATTERN_LEAF));
 
-        memo = new Memo();
-        assertNull(Binder.bind(pattern2, memo.init(expr)));
+        assertNull(bindNext(pattern2, expr));
 
         Pattern pattern3 = Pattern.create(OperatorType.LOGICAL_PROJECT)
                 .addChildren(Pattern.create(OperatorType.LOGICAL_JOIN).addChildren(
@@ -151,8 +165,7 @@ public class BinderTest {
                         Pattern.create(OperatorType.PATTERN_LEAF)))
                 .addChildren(Pattern.create(OperatorType.LOGICAL_JOIN));
 
-        memo = new Memo();
-        result = Binder.bind(pattern3, memo.init(expr));
+        result = bindNext(pattern3, expr);
 
         assertEquals(OperatorType.LOGICAL_PROJECT, result.getOp().getOpType());
         assertEquals(OperatorType.LOGICAL_JOIN, result.inputAt(0).getOp().getOpType());
@@ -178,7 +191,7 @@ public class BinderTest {
                 .addChildren(Pattern.create(OperatorType.LOGICAL_OLAP_SCAN))
                 .addChildren(Pattern.create(OperatorType.LOGICAL_OLAP_SCAN));
 
-        Binder binder = new Binder(pattern, ge);
+        Binder binder = buildBinder(pattern, ge);
         OptExpression result;
 
         result = binder.next();
@@ -235,7 +248,7 @@ public class BinderTest {
                 .addChildren(Pattern.create(OperatorType.LOGICAL_OLAP_SCAN))
                 .addChildren(Pattern.create(OperatorType.PATTERN_LEAF));
 
-        Binder binder = new Binder(pattern, ge);
+        Binder binder = buildBinder(pattern, ge);
         OptExpression result;
 
         result = binder.next();
@@ -276,7 +289,7 @@ public class BinderTest {
                 .addChildren(Pattern.create(OperatorType.PATTERN_LEAF))
                 .addChildren(Pattern.create(OperatorType.PATTERN_LEAF));
 
-        Binder binder = new Binder(pattern, ge);
+        Binder binder = buildBinder(pattern, expr1);
         OptExpression result;
 
         result = binder.next();
@@ -306,7 +319,7 @@ public class BinderTest {
         Pattern pattern = Pattern.create(OperatorType.LOGICAL_JOIN)
                 .addChildren(Pattern.create(OperatorType.PATTERN_MULTI_LEAF));
 
-        Binder binder = new Binder(pattern, ge);
+        Binder binder = buildBinder(pattern, expr1);
         OptExpression result;
 
         result = binder.next();
@@ -347,7 +360,7 @@ public class BinderTest {
                 .addChildren(Pattern.create(OperatorType.PATTERN_MULTI_LEAF))
                 .addChildren(Pattern.create(OperatorType.LOGICAL_OLAP_SCAN));
 
-        Binder binder = new Binder(pattern, ge);
+        Binder binder = buildBinder(pattern, expr1);
         assertNull(binder.next());
     }
 
@@ -368,7 +381,7 @@ public class BinderTest {
                 .addChildren(Pattern.create(OperatorType.PATTERN_MULTI_LEAF))
                 .addChildren(Pattern.create(OperatorType.LOGICAL_PROJECT));
 
-        Binder binder = new Binder(pattern, ge);
+        Binder binder = buildBinder(pattern, expr1);
         OptExpression result;
 
         result = binder.next();
@@ -410,7 +423,7 @@ public class BinderTest {
         Pattern pattern = Pattern.create(OperatorType.LOGICAL_JOIN)
                 .addChildren(Pattern.create(OperatorType.PATTERN_MULTI_LEAF));
 
-        Binder binder = new Binder(pattern, ge);
+        Binder binder = buildBinder(pattern, expr1);
         OptExpression result;
 
         result = binder.next();
@@ -444,7 +457,7 @@ public class BinderTest {
                 .addChildren(Pattern.create(OperatorType.LOGICAL_OLAP_SCAN))
                 .addChildren(Pattern.create(OperatorType.PATTERN_MULTI_LEAF));
 
-        Binder binder = new Binder(pattern, ge);
+        Binder binder = buildBinder(pattern, ge);
         OptExpression result;
 
         result = binder.next();
