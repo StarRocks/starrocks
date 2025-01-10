@@ -53,6 +53,38 @@ displayed_sidebar: docs
 
 - 执行 INSERT OVERWRITE 语句后，系统将为目标分区创建相应的临时分区，并将数据写入临时分区，最后使用临时分区原子替换目标分区来实现覆盖写入。其所有过程均在在 Leader FE 节点执行。因此，如果 Leader FE 节点在覆盖写入过程中发生宕机，将会导致该次 INSERT OVERWRITE 导入失败，其过程中所创建的临时分区也会被删除。
 
+### Dynamic Overwrite
+
+从 v3.4.0 开始，StarRocks 支持分区表的 INSERT OVERWRITE 操作的新语义 — Dynamic Overwrite。
+
+当前 INSERT OVERWRITE 默认行为如下：
+
+- 当覆盖整个分区表（即未指定 PARTITION 子句）时，新数据会替换对应分区中的数据。如果存在表中已有分区未涉及覆盖操作，系统会清空该分区数据。
+- 当覆盖空的分区表（即其中没有任何分区）但指定了 PARTITION 子句时，系统会报错 `ERROR 1064 (HY000): Getting analyzing error. Detail message: Unknown partition 'xxx' in table 'yyy'`。
+- 当覆盖分区表时指定了不存在的分区，系统会报错 `ERROR 1064 (HY000): Getting analyzing error. Detail message: Unknown partition 'xxx' in table 'yyy'`。
+- 当覆盖分区表的数据与指定的分区不匹配时，如果开启严格模式，系统会报错 `ERROR 1064 (HY000): Insert has filtered data in strict mode`；如果未开启严格模式，系统会过滤不合格的数据。
+
+新的 Dynamic Overwrite 语义的行为与上述默认行为有很大不同：
+
+当覆盖整个分区表时，新数据会替换对应分区中的数据。但未涉及的分区会保留，而不会被清空或删除。如果新数据对应不存在的分区，系统会自动创建该分区。
+
+Dynamic Overwrite 语义默认禁用。如需启用，需要将系统变量 `dynamic_overwrite` 设置为 `true`。
+
+在当前 Session 中启用 Dynamic Overwrite:
+
+```SQL
+SET dynamic_overwrite = true;
+```
+
+您也可以在 INSERT OVERWRITE 语句中通过 Hint 启用 Dynamic Overwrite，仅对该语句生效：
+
+示例：
+
+```SQL
+INSERT OVERWRITE /*+set_var(set dynamic_overwrite = false)*/ insert_wiki_edit
+SELECT * FROM source_wiki_edit;
+```
+
 ## 示例
 
 以下示例基于表 `test`，其中包含两个列 `c1` 和 `c2`。`c2` 列有默认值 DEFAULT。
