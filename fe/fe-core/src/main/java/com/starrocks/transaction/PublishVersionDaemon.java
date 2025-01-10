@@ -568,10 +568,9 @@ public class PublishVersionDaemon extends FrontendDaemon {
             // and vacuum will clan the txn log finally if it failed.
             // make sure sync wait for the RPC call to avoid too many RPC call existed in BE/CN side
             Future<DeleteTxnLogResponse> responseFuture = lakeService.deleteTxnLog(request);
-            try {
-                DeleteTxnLogResponse response = responseFuture.get();
-            } catch (Exception e) {
-                LOG.warn("delete txn log error: " + e.getMessage());
+            DeleteTxnLogResponse response = responseFuture.get();
+            if (response.status.statusCode != 0) {
+                LOG.warn("delete txn log request return with err: " + response.status.errorMsgs.get(0));
             }
         } catch (Exception e) {
             LOG.warn("delete txn log error: " + e.getMessage());
