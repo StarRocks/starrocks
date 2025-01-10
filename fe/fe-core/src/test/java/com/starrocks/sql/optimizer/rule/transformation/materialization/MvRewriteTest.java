@@ -260,7 +260,6 @@ public class MvRewriteTest extends MVTestBase {
 
     @Test
     public void testJoinMvRewriteByForceRuleRewrite() throws Exception {
-        connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000000);
         {
             createAndRefreshMv("create materialized view join_mv_1" +
                     " distributed by hash(v1)" +
@@ -343,6 +342,7 @@ public class MvRewriteTest extends MVTestBase {
         String plan6 = getFragmentPlan(query6);
         PlanTestBase.assertNotContains(plan6, "join_mv_1");
 
+        connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
         dropMv("test", "join_mv_1");
     }
 
