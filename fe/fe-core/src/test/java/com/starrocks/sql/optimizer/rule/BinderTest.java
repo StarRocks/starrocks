@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.optimizer.rule;
 
+import com.google.common.base.Stopwatch;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.sql.optimizer.GroupExpression;
@@ -37,19 +38,22 @@ public class BinderTest {
     private Binder buildBinder(Pattern pattern, OptExpression expr) {
         Memo memo = new Memo();
         OptimizerContext optimizerContext = new OptimizerContext(memo, new ColumnRefFactory());
-        return new Binder(optimizerContext, pattern, memo.init(expr));
+        Stopwatch stopwatch = Stopwatch.createStarted();
+        return new Binder(optimizerContext, pattern, memo.init(expr), stopwatch);
     }
 
     private Binder buildBinder(Pattern pattern, GroupExpression qe) {
         Memo memo = new Memo();
         OptimizerContext optimizerContext = new OptimizerContext(memo, new ColumnRefFactory());
-        return new Binder(optimizerContext, pattern, qe);
+        Stopwatch stopwatch = Stopwatch.createStarted();
+        return new Binder(optimizerContext, pattern, qe, stopwatch);
     }
 
     private OptExpression bindNext(Pattern pattern, OptExpression expr) {
         Memo memo = new Memo();
         OptimizerContext optimizerContext = new OptimizerContext(memo, new ColumnRefFactory());
-        Binder binder = new Binder(optimizerContext, pattern, memo.init(expr));
+        Stopwatch stopwatch = Stopwatch.createStarted();
+        Binder binder = new Binder(optimizerContext, pattern, memo.init(expr), stopwatch);
         return binder.next();
     }
 

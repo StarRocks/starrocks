@@ -55,13 +55,14 @@ public class Binder {
      * @param groupExpression Search this for binding. Because GroupExpression's inputs are groups,
      *                        several Expressions matched the pattern should be bound from it
      */
-    public Binder(OptimizerContext optimizerContext, Pattern pattern, GroupExpression groupExpression) {
+    public Binder(OptimizerContext optimizerContext, Pattern pattern,
+                  GroupExpression groupExpression, Stopwatch stopwatch) {
         this.optimizerContext = optimizerContext;
         this.pattern = pattern;
         this.groupExpression = groupExpression;
         this.groupExpressionIndex = Lists.newArrayList(0);
 
-        this.multiJoinBinder = new MultiJoinBinder(optimizerContext);
+        this.multiJoinBinder = new MultiJoinBinder(optimizerContext, stopwatch);
         // MULTI_JOIN is a special pattern which can contain children groups if the input group expression
         // is not a scan node.
         this.isPatternWithoutChildren = pattern.isPatternMultiJoin()
@@ -192,13 +193,17 @@ public class Binder {
         private final SessionVariable sessionVariable;
         // Stopwatch to void infinite loop
         private final Stopwatch watch;
+        // Time limit for the entire optimization
+        private final long timeLimit;
         // to avoid stop watch costing too much time, only check exhausted every CHECK_EXHAUSTED_INTERVAL times
-        private static final int CHECK_EXHAUSTED_INTERVAL = 100;
+        private static final int CHECK_EXHAUSTED_INTERVAL = 1000;
         private long loopCount = 0;
 
-        public MultiJoinBinder(OptimizerContext optimizerContext) {
+        public MultiJoinBinder(OptimizerContext optimizerContext, Stopwatch stopwatch) {
             this.sessionVariable = optimizerContext.getSessionVariable();
-            this.watch = Stopwatch.createStarted();
+            this.watch = stopwatch;
+            this.timeLimit = Math.min(sessionVariable.getOptimizerMaterializedViewTimeLimitMillis(),
+                    sessionVariable.getOptimizerExecuteTimeout());
         }
 
         public OptExpression match(GroupExpression ge) {
@@ -211,14 +216,16 @@ public class Binder {
             return enumerate(ge);
         }
 
+        /**
+         * Check whether the binder is exhausted.
+         */
         private boolean exhausted() {
-            if (++loopCount % CHECK_EXHAUSTED_INTERVAL == 0) {
-                long elapsed = watch.elapsed(TimeUnit.MILLISECONDS);
-                long timeLimit = Math.min(sessionVariable.getOptimizerMaterializedViewTimeLimitMillis(),
-                        sessionVariable.getOptimizerExecuteTimeout());
-                boolean exhausted = elapsed > timeLimit;
+            if (loopCount++ % CHECK_EXHAUSTED_INTERVAL == 0) {
+                final long elapsed = watch.elapsed(TimeUnit.MILLISECONDS);
+                final boolean exhausted = elapsed > timeLimit;
                 if (exhausted) {
-                    Tracers.log(Tracers.Module.MV, args -> String.format("[MV TRACE] MultiJoinBinder %s exhausted\n", this));
+                    Tracers.log(Tracers.Module.MV, args ->
+                            String.format("[MV TRACE] MultiJoinBinder %s exhausted(loop:%s)\n", this, loopCount));
                 }
                 return exhausted;
             }
