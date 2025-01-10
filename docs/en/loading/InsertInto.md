@@ -20,6 +20,8 @@ StarRocks v2.4 further supports overwriting data into a table by using INSERT OV
 >
 > If you need to verify the data before overwriting it, instead of using INSERT OVERWRITE, you can follow the above procedures to overwrite your data and verify it before swapping the partitions.
 
+From v3.4.0 onwards, StarRocks supports a new semantic - Dynamic Overwrite for INSERT OVERWRITE with partitioned tables. For more information, see [Dynamic Overwrite](#dynamic-overwrite).
+
 ## Precautions
 
 - You can cancel a synchronous INSERT transaction only by pressing the **Ctrl** and **C** keys from your MySQL client.
@@ -354,6 +356,38 @@ WITH LABEL insert_load_wikipedia_ow_3
     channel
 )
 SELECT event_time, channel FROM source_wiki_edit;
+```
+
+### Dynamic Overwrite
+
+From v3.4.0 onwards, StarRocks supports a new semantic - Dynamic Overwrite for INSERT OVERWRITE with partitioned tables.
+
+Currently, the default behavior of INSERT OVERWRITE is as follows:
+
+- When overwriting a partitioned table as a whole (that is, without specifying the PARTITION clause), new data records will replace the data in their corresponding partitions. If there are partitions that are not involved, they will be truncated while the others are overwritten.
+- When overwriting an empty partitioned table (that is, with no partitions in it) and specifying the PARTITION clause, the system returns an error `ERROR 1064 (HY000): Getting analyzing error. Detail message: Unknown partition 'xxx' in table 'yyy'`.
+- When overwriting a partitioned table and specifying a non-existent partition in the PARTITION clause, the system returns an error `ERROR 1064 (HY000): Getting analyzing error. Detail message: Unknown partition 'xxx' in table 'yyy'`.
+- When overwriting a partitioned table with data records that do not match any of the specified partitions in the PARTITION clause, the system either returns an error `ERROR 1064 (HY000): Insert has filtered data in strict mode` (if the strict mode is enabled) or filters the unqualified data records (if the strict mode is disabled).
+
+The behavior of the new Dynamic Overwrite semantic is much different:
+
+When overwriting a partitioned table as a whole, new data records will replace the data in their corresponding partitions. If there are partitions that are not involved, they will be left alone, instead of being truncated or deleted. And if there are new data records correspond to a non-existent partition, the system will create the partition.
+
+The Dynamic Overwrite semantic is disabled by default. To enable it, you need to set the system variable `dynamic_overwrite` to `true`.
+
+Enable Dynamic Overwrite in the current session:
+
+```SQL
+SET dynamic_overwrite = true;
+```
+
+You can also set it in the hint of the INSERT OVERWRITE statement to allow it take effect for the statement only:.
+
+Example:
+
+```SQL
+INSERT OVERWRITE /*+set_var(set dynamic_overwrite = false)*/ insert_wiki_edit
+SELECT * FROM source_wiki_edit;
 ```
 
 ## Insert data into a table with generated columns

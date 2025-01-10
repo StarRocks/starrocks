@@ -386,6 +386,15 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 描述：用于兼容 MySQL 客户端，无实际作用。
 * 默认值：4
 * 类型：Int
+
+### dynamic_overwrite
+
+* 描述：是否为 INSERT OVERWRITE 语句覆盖写分区表时启用 [Dynamic Overwrite](./sql-statements/loading_unloading/INSERT.md#dynamic-overwrite) 语义。有效值：
+  * `true`：启用 Dynamic Overwrite。
+  * `false`：禁用 Dynamic Overwrite 并使用默认语义。
+* 默认值：false
+* 引入版本：v3.4.0
+
 <!--
 ### enable_collect_table_level_scan_stats (Invisible to users)
 
