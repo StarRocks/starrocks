@@ -432,19 +432,21 @@ public class Optimizer {
     private void ruleBasedMaterializedViewRewrite(OptExpression tree,
                                                   TaskContext rootTaskContext,
                                                   ColumnRefSet requiredColumns) {
-        if (!mvRewriteStrategy.enableMaterializedViewRewrite || context.getQueryMaterializationContext() == null ||
-                context.getQueryMaterializationContext().hasRewrittenSuccess()) {
+        if (!mvRewriteStrategy.enableMaterializedViewRewrite || context.getQueryMaterializationContext() == null) {
             return;
         }
 
         // do rule based mv rewrite
-        doRuleBasedMaterializedViewRewrite(tree, rootTaskContext);
+        if (!context.getQueryMaterializationContext().hasRewrittenSuccess()) {
+            doRuleBasedMaterializedViewRewrite(tree, rootTaskContext);
+        }
 
         // NOTE: Since union rewrite will generate Filter -> Union -> OlapScan -> OlapScan, need to push filter below Union
         // and do partition predicate again.
         // TODO: move this into doRuleBasedMaterializedViewRewrite
         // TODO: Do it in CBO if needed later.
         boolean isNeedFurtherPartitionPrune = Utils.isOptHasAppliedRule(tree, op -> op.isOpRuleBitSet(OP_MV_UNION_REWRITE));
+        OptimizerTraceUtil.logMVPrepare("is further partition prune: {}", isNeedFurtherPartitionPrune);
         if (isNeedFurtherPartitionPrune && context.getQueryMaterializationContext().hasRewrittenSuccess()) {
             // reset partition prune bit to do partition prune again.
             MvUtils.getScanOperator(tree).forEach(scan -> {
