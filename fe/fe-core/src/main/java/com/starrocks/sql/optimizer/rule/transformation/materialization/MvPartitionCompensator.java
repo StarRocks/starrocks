@@ -249,12 +249,9 @@ public class MvPartitionCompensator {
      */
     public static OptExpression getMvTransparentPlan(MaterializationContext mvContext,
                                                      MVCompensation mvCompensation,
-                                                     List<ColumnRefOperator> expectOutputColumns) {
+                                                     List<ColumnRefOperator> originalOutputColumns) {
+        Preconditions.checkArgument(originalOutputColumns != null);
         Preconditions.checkState(mvCompensation.getState().isCompensate());
-        final LogicalOlapScanOperator mvScanOperator = mvContext.getScanMvOperator();
-        final MaterializedView mv = mvContext.getMv();
-        final List<ColumnRefOperator> originalOutputColumns = expectOutputColumns == null ?
-                MvUtils.getMvScanOutputColumnRefs(mv, mvScanOperator) : expectOutputColumns;
 
         Pair<OptExpression, List<ColumnRefOperator>> mvScanPlans = getMvScanPlan(mvContext);
         if (mvScanPlans == null) {
