@@ -82,6 +82,7 @@ public class Trino2SRFunctionCallTransformer {
         registerMapFunctionTransformer();
         registerBinaryFunctionTransformer();
         registerHLLFunctionTransformer();
+        registerMathFunctionTransformer();
         // todo: support more function transform
     }
 
@@ -357,6 +358,13 @@ public class Trino2SRFunctionCallTransformer {
 
         // merge -> HLL_RAW_AGG
         registerFunctionTransformer("merge", 1, "hll_raw_agg", List.of(Expr.class));
+    }
+
+    private static void registerMathFunctionTransformer() {
+        // truncate(x) -> truncate(x, 0)
+        registerFunctionTransformer("truncate", 1, new FunctionCallExpr("truncate",
+                List.of(new PlaceholderExpr(1, Expr.class), new IntLiteral(0))));
+
     }
 
     private static void registerFunctionTransformer(String trinoFnName, int trinoFnArgNums, String starRocksFnName,
