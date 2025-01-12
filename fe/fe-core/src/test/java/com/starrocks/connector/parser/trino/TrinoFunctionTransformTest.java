@@ -379,6 +379,12 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
     }
 
     @Test
+    public void testMathFnTransform() throws Exception {
+        String sql = "select truncate(19.25)";
+        assertPlanContains(sql, "truncate(19.25, 0)");
+    }
+
+    @Test
     public void testUnicodeFnTransform() throws Exception {
         String sql = "select to_utf8('123')";
         assertPlanContains(sql, "to_binary('123', 'utf8')");
