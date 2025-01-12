@@ -57,6 +57,7 @@ public class IsomorphicBatchWrite implements LoadExecuteCallback {
     private final StreamLoadInfo streamLoadInfo;
     private final int batchWriteIntervalMs;
     private final int batchWriteParallel;
+    private final boolean asyncMode;
     private final StreamLoadKvParams loadParameters;
 
     /**
@@ -68,6 +69,9 @@ public class IsomorphicBatchWrite implements LoadExecuteCallback {
      * The executor to run batch write tasks.
      */
     private final Executor executor;
+
+    /** Update the transaction state of the backend if this is a sync mode. */
+    private final TxnStateDispatcher txnUpdateDispatch;
 
     /**
      * The factory to create query coordinators.
@@ -95,16 +99,19 @@ public class IsomorphicBatchWrite implements LoadExecuteCallback {
             int batchWriteParallel,
             StreamLoadKvParams loadParameters,
             CoordinatorBackendAssigner coordinatorBackendAssigner,
-            Executor executor) {
+            Executor executor,
+            TxnStateDispatcher txnUpdateDispatch) {
         this.id = id;
         this.tableId = tableId;
         this.warehouseName = warehouseName;
         this.streamLoadInfo = streamLoadInfo;
         this.batchWriteIntervalMs = batchWriteIntervalMs;
         this.batchWriteParallel = batchWriteParallel;
+        this.asyncMode = loadParameters.getBatchWriteAsync().orElse(false);
         this.loadParameters = loadParameters;
         this.coordinatorBackendAssigner = coordinatorBackendAssigner;
         this.executor = executor;
+        this.txnUpdateDispatch = txnUpdateDispatch;
         this.queryCoordinatorFactory = new DefaultCoordinator.Factory();
         this.loadExecutorMap = new ConcurrentHashMap<>();
         this.lock = new ReentrantReadWriteLock();
@@ -248,12 +255,24 @@ public class IsomorphicBatchWrite implements LoadExecuteCallback {
     }
 
     @Override
-    public void finishLoad(String label) {
+    public void finishLoad(LoadExecutor executor) {
         lock.writeLock().lock();
         try {
-            loadExecutorMap.remove(label);
+            loadExecutorMap.remove(executor.getLabel());
         } finally {
             lock.writeLock().unlock();
+        }
+
+        long txnId = executor.getTxnId();
+        if (!asyncMode && txnId > 0) {
+            for (long backendId : executor.getBackendIds()) {
+                try {
+                    txnUpdateDispatch.submitTask(tableId.getDbName(), txnId, backendId);
+                } catch (Exception e) {
+                    LOG.error("Fail to submit transaction state update task, db: {}, txn_id: {}, backend id: {}",
+                            tableId.getDbName(), txnId, backendId, e);
+                }
+            }
         }
     }
 
