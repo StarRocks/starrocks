@@ -25,9 +25,14 @@
 
 namespace starrocks {
 
-BatchWriteMgr::BatchWriteMgr(std::unique_ptr<bthreads::ThreadPoolExecutor> executor)
-        : _executor(std::move(executor)),
-          _txn_state_cache(new TxnStateCache(config::merge_commit_txn_state_cache_capacity)) {}
+BatchWriteMgr::BatchWriteMgr(std::unique_ptr<bthreads::ThreadPoolExecutor> executor) : _executor(std::move(executor)) {}
+
+Status BatchWriteMgr::init() {
+    std::unique_ptr<ThreadPoolToken> token =
+            _executor->get_thread_pool()->new_token(ThreadPool::ExecutionMode::CONCURRENT);
+    _txn_state_cache = std::make_unique<TxnStateCache>(config::merge_commit_txn_state_cache_capacity, std::move(token));
+    return _txn_state_cache->init();
+}
 
 Status BatchWriteMgr::register_stream_load_pipe(StreamLoadContext* pipe_ctx) {
     BatchWriteId batch_write_id = {
@@ -109,7 +114,10 @@ void BatchWriteMgr::stop() {
     for (auto& batch_write : stop_writes) {
         batch_write->stop();
     }
-    _txn_state_cache->stop();
+    if (_txn_state_cache) {
+        _txn_state_cache->stop();
+    }
+    _executor->get_thread_pool()->shutdown();
 }
 
 StatusOr<StreamLoadContext*> BatchWriteMgr::create_and_register_pipe(
@@ -256,8 +264,8 @@ void BatchWriteMgr::update_transaction_state(ExecEnv* exec_env, brpc::Controller
                                              PUpdateTransactionStateResponse* response) {
     for (int i = 0; i < request->states_size(); i++) {
         auto& txn_state = request->states(i);
-        auto st = _txn_state_cache->update_state(txn_state.txn_id(), to_thrift_txn_status(txn_state.status()),
-                                                 txn_state.reason());
+        auto st = _txn_state_cache->push_state(txn_state.txn_id(), to_thrift_txn_status(txn_state.status()),
+                                               txn_state.reason());
         if (!st.ok()) {
             LOG(WARNING) << "Failed to update transaction state, txn_id: " << txn_state.txn_id()
                          << ", txn status: " << TransactionStatusPB_Name(txn_state.status())

@@ -46,6 +46,7 @@ public:
                           .build(&thread_pool));
         auto executor = std::make_unique<bthreads::ThreadPoolExecutor>(thread_pool.release(), kTakesOwnership);
         _batch_write_mgr = std::make_unique<BatchWriteMgr>(std::move(executor));
+        ASSERT_OK(_batch_write_mgr->init());
     }
 
     void TearDown() override {
