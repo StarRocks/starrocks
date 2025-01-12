@@ -521,6 +521,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     auto batch_write_executor =
             std::make_unique<bthreads::ThreadPoolExecutor>(batch_write_thread_pool.release(), kTakesOwnership);
     _batch_write_mgr = new BatchWriteMgr(std::move(batch_write_executor));
+    RETURN_IF_ERROR(_batch_write_mgr->init());
 
     _routine_load_task_executor = new RoutineLoadTaskExecutor(this);
     RETURN_IF_ERROR(_routine_load_task_executor->init());

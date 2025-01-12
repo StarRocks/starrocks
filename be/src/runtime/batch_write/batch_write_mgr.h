@@ -39,6 +39,7 @@ class PUpdateTransactionStateResponse;
 class BatchWriteMgr {
 public:
     BatchWriteMgr(std::unique_ptr<bthreads::ThreadPoolExecutor> executor);
+    Status init();
 
     Status register_stream_load_pipe(StreamLoadContext* pipe_ctx);
     void unregister_stream_load_pipe(StreamLoadContext* pipe_ctx);
