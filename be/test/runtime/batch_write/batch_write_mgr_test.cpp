@@ -373,4 +373,57 @@ TEST_F(BatchWriteMgrTest, stream_load_rpc_fail) {
     }
 }
 
+TEST_F(BatchWriteMgrTest, update_transaction_state) {
+    brpc::Controller cntl;
+    PUpdateTransactionStateRequest request;
+    std::vector<TxnState> expected_cache_state;
+
+    auto prepare_state = request.add_states();
+    prepare_state->set_txn_id(1);
+    prepare_state->set_status(TransactionStatusPB::TRANS_PREPARE);
+    prepare_state->set_reason("");
+    expected_cache_state.push_back({TTransactionStatus::PREPARE, ""});
+
+    auto prepared_state = request.add_states();
+    prepared_state->set_txn_id(2);
+    prepared_state->set_status(TransactionStatusPB::TRANS_PREPARED);
+    prepared_state->set_reason("");
+    expected_cache_state.push_back({TTransactionStatus::PREPARED, ""});
+
+    auto commited_state = request.add_states();
+    commited_state->set_txn_id(3);
+    commited_state->set_status(TransactionStatusPB::TRANS_COMMITTED);
+    commited_state->set_reason("");
+    expected_cache_state.push_back({TTransactionStatus::COMMITTED, ""});
+
+    auto visible_state = request.add_states();
+    visible_state->set_txn_id(4);
+    visible_state->set_status(TransactionStatusPB::TRANS_VISIBLE);
+    visible_state->set_reason("");
+    expected_cache_state.push_back({TTransactionStatus::VISIBLE, ""});
+
+    auto aborted_state = request.add_states();
+    aborted_state->set_txn_id(5);
+    aborted_state->set_status(TransactionStatusPB::TRANS_ABORTED);
+    aborted_state->set_reason("artificial failure");
+    expected_cache_state.push_back({TTransactionStatus::ABORTED, "artificial failure"});
+
+    auto unknown_state = request.add_states();
+    unknown_state->set_txn_id(6);
+    unknown_state->set_status(TransactionStatusPB::TRANS_UNKNOWN);
+    unknown_state->set_reason("");
+    expected_cache_state.push_back({TTransactionStatus::UNKNOWN, ""});
+
+    PUpdateTransactionStateResponse response;
+    _batch_write_mgr->update_transaction_state(_exec_env, &cntl, &request, &response);
+    ASSERT_EQ(request.states_size(), response.results_size());
+    for (int i = 1; i <= expected_cache_state.size(); ++i) {
+        ASSERT_EQ(TStatusCode::OK, response.results(i - 1).status_code());
+        auto actual_state = _batch_write_mgr->txn_state_cache()->get_state(i);
+        ASSERT_OK(actual_state.status());
+        ASSERT_EQ(expected_cache_state[i - 1].txn_status, actual_state.value().txn_status);
+        ASSERT_EQ(expected_cache_state[i - 1].reason, actual_state.value().reason);
+    }
+}
+
 } // namespace starrocks
