@@ -261,6 +261,21 @@ void TxnStatePoller::_schedule_func() {
 
 void TxnStatePoller::_schedule_poll_tasks(const std::vector<TxnStatePollTask>& poll_tasks) {
     for (const auto& task : poll_tasks) {
+        // check current state of the txn, if it's not in cache or is final, skip poll
+        auto current_state = _txn_state_cache->get_state(task.txn_id);
+        if (!current_state.ok()) {
+            TRACE_BATCH_WRITE << "skip poll task because fail to get txn state, txn_id: " << task.txn_id
+                              << ", db: " << task.db << ", tbl: " << task.tbl << ", error: " << current_state.status();
+            continue;
+        }
+        TTransactionStatus::type txn_status = current_state.value().txn_status;
+        if (txn_status == TTransactionStatus::VISIBLE || txn_status == TTransactionStatus::ABORTED ||
+            txn_status == TTransactionStatus::UNKNOWN) {
+            TRACE_BATCH_WRITE << "skip poll task because txn state is final, txn_id: " << task.txn_id
+                              << ", db: " << task.db << ", tbl: " << task.tbl << ", state status: " << txn_status
+                              << ", reason: " << current_state.value().reason;
+            continue;
+        }
         Status status = _poll_token->submit_func([this, task] { _execute_poll(task); }, ThreadPool::HIGH_PRIORITY);
         if (!status.ok()) {
             _txn_state_cache->_notify_poll_result(
@@ -430,10 +445,13 @@ StatusOr<TxnStateDynamicCacheEntry*> TxnStateCache::_get_txn_entry(TxnStateDynam
     return entry;
 }
 
-void TxnStateCache::_notify_poll_result(const TxnStatePollTask& task, StatusOr<TxnState> result) {
+void TxnStateCache::_notify_poll_result(const TxnStatePollTask& task, const StatusOr<TxnState>& result) {
     auto cache = _get_txn_cache(task.txn_id);
     auto entry_st = _get_txn_entry(cache, task.txn_id, false);
     if (!entry_st.ok() || entry_st.value() == nullptr) {
+        TRACE_BATCH_WRITE << "skip notify poll result, txn_id: " << task.txn_id << ", db: " << task.db
+                          << ", tbl: " << task.tbl << ", entry status: "
+                          << (entry_st.ok() ? Status::NotFound("not in cache") : entry_st.status());
         return;
     }
     auto entry = entry_st.value();
