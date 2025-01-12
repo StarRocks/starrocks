@@ -343,13 +343,15 @@ TEST_F(TxnStateCacheTest, cache_push_state_notify_subscriber) {
     ASSERT_OK(s2_1.status());
     assert_txn_state_eq({TTransactionStatus::ABORTED, "artificial failure"}, s2_1.value()->current_state());
 
-    auto t1_1 = std::thread(
-            [&]() { wait_func(s1_1.value().get(), 60000000, StatusOr<TxnState>({TTransactionStatus::VISIBLE, ""})); });
+    auto t1_1 = std::thread([&]() {
+        wait_func(s1_1.value().get(), 60000000, StatusOr<TxnState>({TTransactionStatus::VISIBLE, ""}));
+    });
     ASSERT_OK(cache->push_state(1, TTransactionStatus::VISIBLE, ""));
     t1_1.join();
 
-    auto t1_2 = std::thread(
-            [&]() { wait_func(s1_2.value().get(), 60000000, StatusOr<TxnState>({TTransactionStatus::VISIBLE, ""})); });
+    auto t1_2 = std::thread([&]() {
+        wait_func(s1_2.value().get(), 60000000, StatusOr<TxnState>({TTransactionStatus::VISIBLE, ""}));
+    });
     t1_2.join();
 
     auto t2_1 = std::thread([&]() {
@@ -442,14 +444,18 @@ TEST_F(TxnStateCacheTest, cache_poll_state_notify_subscriber) {
     ASSERT_TRUE(poller->is_txn_pending(3));
     ASSERT_TRUE(poller->is_txn_pending(4));
 
-    auto t1_1 = std::thread(
-            [&]() { wait_func(s1_1.value().get(), 60000000, StatusOr<TxnState>({TTransactionStatus::VISIBLE, ""})); });
-    auto t1_2 = std::thread(
-            [&]() { wait_func(s1_2.value().get(), 60000000, StatusOr<TxnState>({TTransactionStatus::VISIBLE, ""})); });
-    auto t2_1 = std::thread(
-            [&]() { wait_func(s2_1.value().get(), 60000000, StatusOr<TxnState>({TTransactionStatus::VISIBLE, ""})); });
-    auto t3_1 = std::thread(
-            [&]() { wait_func(s3_1.value().get(), 60000000, StatusOr<TxnState>({TTransactionStatus::VISIBLE, ""})); });
+    auto t1_1 = std::thread([&]() {
+        wait_func(s1_1.value().get(), 60000000, StatusOr<TxnState>({TTransactionStatus::VISIBLE, ""}));
+    });
+    auto t1_2 = std::thread([&]() {
+        wait_func(s1_2.value().get(), 60000000, StatusOr<TxnState>({TTransactionStatus::VISIBLE, ""}));
+    });
+    auto t2_1 = std::thread([&]() {
+        wait_func(s2_1.value().get(), 60000000, StatusOr<TxnState>({TTransactionStatus::VISIBLE, ""}));
+    });
+    auto t3_1 = std::thread([&]() {
+        wait_func(s3_1.value().get(), 60000000, StatusOr<TxnState>({TTransactionStatus::VISIBLE, ""}));
+    });
 
     // advance time and should trigger txn 1, 2 and 3 to poll
     SyncPoint::GetInstance()->SetCallBack("TxnStatePoller::get_current_ms", [&](void* arg) { *((int64_t*)arg) = 160; });
@@ -468,8 +474,9 @@ TEST_F(TxnStateCacheTest, cache_poll_state_notify_subscriber) {
     ASSERT_EQ(3, num_rpc.load());
 
     assert_txn_state_eq({TTransactionStatus::PREPARE, ""}, s4_1.value()->current_state());
-    auto t4_1 = std::thread(
-            [&]() { wait_func(s4_1.value().get(), 60000000, StatusOr<TxnState>({TTransactionStatus::VISIBLE, ""})); });
+    auto t4_1 = std::thread([&]() {
+        wait_func(s4_1.value().get(), 60000000, StatusOr<TxnState>({TTransactionStatus::VISIBLE, ""}));
+    });
     SyncPoint::GetInstance()->SetCallBack("TxnStatePoller::_execute_poll::response", [&](void* arg) {
         TGetLoadTxnStatusResult* result = (TGetLoadTxnStatusResult*)arg;
         result->__set_status(TTransactionStatus::COMMITTED);
