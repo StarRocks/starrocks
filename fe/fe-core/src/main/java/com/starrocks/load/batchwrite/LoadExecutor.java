@@ -45,6 +45,7 @@ import org.apache.arrow.util.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
@@ -114,7 +115,7 @@ public class LoadExecutor implements Runnable {
             LOG.error("Failed to execute load, label: {}, load id: {}, txn id: {}",
                     label, DebugUtil.printId(loadId), txnId, e);
         } finally {
-            loadExecuteCallback.finishLoad(label);
+            loadExecuteCallback.finishLoad(this);
             timeTrace.finishTimeMs = System.currentTimeMillis();
             LOG.debug("Finish load, label: {}, load id: {}, txn_id: {}, {}",
                     label, DebugUtil.printId(loadId), txnId, timeTrace.summary());
@@ -123,6 +124,14 @@ public class LoadExecutor implements Runnable {
 
     public String getLabel() {
         return label;
+    }
+
+    public long getTxnId() {
+        return txnId;
+    }
+
+    public Set<Long> getBackendIds() {
+        return Collections.unmodifiableSet(coordinatorBackendIds);
     }
 
     /**
