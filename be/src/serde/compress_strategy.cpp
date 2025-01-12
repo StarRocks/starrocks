@@ -25,16 +25,17 @@ CompressStrategy::CompressStrategy() : _gen(std::random_device()()) {}
 
 void CompressStrategy::feedback(uint64_t uncompressed_bytes, uint64_t compressed_bytes, uint64_t serialization_time_ns,
                                 uint64_t compression_time_ns) {
-    if (uncompressed_bytes == 0 || compressed_bytes == 0) {
+    if (uncompressed_bytes == 0 || compressed_bytes == 0 || compression_time_ns == 0) {
         return;
     }
-    // TODO: consider the compression_time as reward factor
-    double compress_ratio = (uncompressed_bytes + 1) / (compressed_bytes + 1);
-    double reward_ratio = compress_ratio / config::lz4_expected_compression_ratio;
+    double compress_speed = uncompressed_bytes / compression_time_ns * (1e9 / 1024 / 1024); // MB/s
+    double compress_ratio = uncompressed_bytes / compressed_bytes;
+    double reward_ratio = (compress_ratio / config::lz4_expected_compression_ratio) *
+                          (compress_speed / config::lz4_expected_compression_speed_mbps);
     if (reward_ratio > 1.0) {
-        _alpha += reward_ratio * reward_ratio;
+        _alpha += 1;
     } else {
-        _beta += 1 / (reward_ratio * reward_ratio);
+        _beta += 1;
     }
 }
 

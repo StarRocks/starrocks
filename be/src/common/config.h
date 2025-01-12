@@ -220,6 +220,7 @@ CONF_mDouble(rpc_compress_ratio_threshold, "1.1");
 CONF_mInt32(lz4_acceleration, "1");
 // If compression ratio is larger than this threshold, consider it as a good compresiosn
 CONF_mDouble(lz4_expected_compression_ratio, "2.1");
+CONF_mDouble(lz4_expected_compression_speed_mbps, "600");
 
 // Serialize and deserialize each returned row batch.
 CONF_Bool(serialize_batch, "false");
