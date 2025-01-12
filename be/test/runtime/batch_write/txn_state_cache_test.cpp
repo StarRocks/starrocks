@@ -43,7 +43,8 @@ public:
     }
 
     std::unique_ptr<TxnStateCache> create_cache(int32_t capacity) {
-        std::unique_ptr<ThreadPoolToken> token = _thread_pool->new_token(ThreadPool::ExecutionMode::CONCURRENT);
+        // use serial mode to run poll task in the same order of their execution time, this is just used for testing
+        std::unique_ptr<ThreadPoolToken> token = _thread_pool->new_token(ThreadPool::ExecutionMode::SERIAL);
         std::unique_ptr<TxnStateCache> cache = std::make_unique<TxnStateCache>(capacity, std::move(token));
         EXPECT_OK(cache->init());
         return cache;
@@ -284,6 +285,57 @@ TEST_F(TxnStateCacheTest, handler_stop) {
     t3.join();
 }
 
+TEST_F(TxnStateCacheTest, poller_skip_schedule) {
+    auto cache = create_cache(2048);
+    auto old_poll_interval_ms = config::merge_commit_txn_state_poll_interval_ms;
+    config::merge_commit_txn_state_poll_interval_ms = 100;
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([&] {
+        SyncPoint::GetInstance()->ClearCallBack("TxnStatePoller::get_current_ms");
+        SyncPoint::GetInstance()->ClearCallBack("TxnStatePoller::_execute_poll::request");
+        SyncPoint::GetInstance()->ClearCallBack("TxnStatePoller::_execute_poll::status");
+        SyncPoint::GetInstance()->ClearCallBack("TxnStatePoller::_execute_poll::response");
+        SyncPoint::GetInstance()->DisableProcessing();
+        cache->stop();
+        config::merge_commit_txn_state_poll_interval_ms = old_poll_interval_ms;
+    });
+    std::atomic<int32_t> num_rpc = 0;
+    SyncPoint::GetInstance()->SetCallBack("TxnStatePoller::_execute_poll::request",
+                                          [&](void* arg) { num_rpc.fetch_add(1); });
+    SyncPoint::GetInstance()->SetCallBack("TxnStatePoller::_execute_poll::status",
+                                          [&](void* arg) { *((Status*)arg) = Status::OK(); });
+    SyncPoint::GetInstance()->SetCallBack("TxnStatePoller::_execute_poll::response", [&](void* arg) {
+        TGetLoadTxnStatusResult* result = (TGetLoadTxnStatusResult*)arg;
+        result->__set_status(TTransactionStatus::VISIBLE);
+        result->__set_reason("");
+    });
+    SyncPoint::GetInstance()->SetCallBack("TxnStatePoller::get_current_ms", [&](void* arg) { *((int64_t*)arg) = 0; });
+
+    TxnStatePoller* poller = cache->txn_state_poller();
+    ASSERT_TRUE(cache->get_state(1).status().is_not_found());
+    // create a subscriber to trigger the poll scheduling
+    auto s1 = cache->subscribe_state(1, "s1", _db, _tbl, _auth);
+    ASSERT_OK(s1.status());
+    ASSERT_TRUE(poller->is_txn_pending(1));
+
+    // transit the state to the final before scheduling the poll, and the poll should be skipped
+    ASSERT_OK(cache->push_state(1, TTransactionStatus::VISIBLE, ""));
+    assert_txn_state_eq({TTransactionStatus::VISIBLE, ""}, cache->get_state(1).value());
+    // advance the time to schedule the poll for txn 1
+    SyncPoint::GetInstance()->SetCallBack("TxnStatePoller::get_current_ms", [&](void* arg) { *((int64_t*)arg) = 200; });
+    // create subscriber for txn 2 to trigger the poll scheduling
+    auto s2 = cache->subscribe_state(2, "s2", _db, _tbl, _auth);
+    ASSERT_OK(s2.status());
+    ASSERT_TRUE(poller->is_txn_pending(2));
+    // advance the time to schedule the poll for txn 2
+    SyncPoint::GetInstance()->SetCallBack("TxnStatePoller::get_current_ms", [&](void* arg) { *((int64_t*)arg) = 400; });
+    // when state for txn 2 becomes visible, it means poll task for txn 2 has been finished. The thread pool token
+    // is serial, so the poll task (if not skipped) for txn 1 also should be finished
+    ASSERT_TRUE(Awaitility().timeout(5000000).until(
+            [&] { return s2.value()->current_state().txn_status == TTransactionStatus::VISIBLE; }));
+    ASSERT_EQ(1, num_rpc.load());
+}
+
 TEST_F(TxnStateCacheTest, cache_push_state) {
     auto cache = create_cache(2048);
     DeferOp defer([&] { cache->stop(); });
@@ -371,7 +423,6 @@ TEST_F(TxnStateCacheTest, cache_push_state_notify_subscriber) {
 
 TEST_F(TxnStateCacheTest, cache_poll_state_notify_subscriber) {
     auto cache = create_cache(2048);
-
     auto old_poll_interval_ms = config::merge_commit_txn_state_poll_interval_ms;
     config::merge_commit_txn_state_poll_interval_ms = 100;
     SyncPoint::GetInstance()->EnableProcessing();
@@ -384,7 +435,6 @@ TEST_F(TxnStateCacheTest, cache_poll_state_notify_subscriber) {
         cache->stop();
         config::merge_commit_txn_state_poll_interval_ms = old_poll_interval_ms;
     });
-    // disable poller to avoid unexpected txn state update
     SyncPoint::GetInstance()->SetCallBack("TxnStatePoller::get_current_ms", [&](void* arg) { *((int64_t*)arg) = 0; });
 
     auto wait_func = [&](TxnStateSubscriber* subscriber, int64_t timeout_us, StatusOr<TxnState> expected) {

@@ -256,7 +256,7 @@ private:
     // Return not ok status if error happens.
     StatusOr<TxnStateDynamicCacheEntry*> _get_txn_entry(TxnStateDynamicCache* cache, int64_t txn_id,
                                                         bool create_if_not_exist);
-    void _notify_poll_result(const TxnStatePollTask& task, StatusOr<TxnState> result);
+    void _notify_poll_result(const TxnStatePollTask& task, const StatusOr<TxnState>& result);
 
     size_t _capacity;
     std::unique_ptr<ThreadPoolToken> _poll_state_token;
