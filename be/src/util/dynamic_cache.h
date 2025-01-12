@@ -14,12 +14,12 @@
 
 #pragma once
 
+#include <bthread/mutex.h>
 #include <glog/logging.h>
 
 #include <atomic>
 #include <iostream>
 #include <list>
-#include <mutex>
 #include <unordered_map>
 #include <utility>
 
@@ -72,7 +72,7 @@ public:
 
     DynamicCache(size_t capacity) : _size(0), _capacity(capacity) {}
     ~DynamicCache() {
-        std::lock_guard<std::mutex> lg(_lock);
+        std::lock_guard<bthread::Mutex> lg(_lock);
         _object_size = 0;
         _size = 0;
         auto itr = _list.begin();
@@ -98,7 +98,7 @@ public:
 
     // get or return null
     Entry* get(const Key& key) {
-        std::lock_guard<std::mutex> lg(_lock);
+        std::lock_guard<bthread::Mutex> lg(_lock);
         auto itr = _map.find(key);
         if (itr == _map.end()) {
             return nullptr;
@@ -111,8 +111,8 @@ public:
 
     // atomic get_or_create operation, to prevent loading
     // same resource multiple times
-    Entry* get_or_create(const Key& key) {
-        std::lock_guard<std::mutex> lg(_lock);
+    Entry* get_or_create(const Key& key, size_t init_size = 0) {
+        std::lock_guard<bthread::Mutex> lg(_lock);
         auto itr = _map.find(key);
         if (itr == _map.end()) {
             // at first all created object is with size 0
@@ -123,6 +123,7 @@ public:
             insert->_handle = ret;
             _map[key] = ret;
             (*ret)->_ref++;
+            (*ret)->_size = init_size;
             _object_size++;
             if (insert->_size > 0) {
                 _size += insert->_size;
@@ -140,7 +141,7 @@ public:
 
     // release(unuse) an object get/get_or_create'ed earlier
     void release(Entry* entry) {
-        std::lock_guard<std::mutex> lg(_lock);
+        std::lock_guard<bthread::Mutex> lg(_lock);
         // CHECK _ref > 1
         entry->_ref--;
         if (entry->_ref > 0) {
@@ -159,7 +160,7 @@ public:
 
     // remove an object get/get_or_create'ed earlier
     bool remove(Entry* entry) {
-        std::lock_guard<std::mutex> lg(_lock);
+        std::lock_guard<bthread::Mutex> lg(_lock);
         entry->_ref--;
         if (entry->_ref != 1) {
             return false;
@@ -179,7 +180,7 @@ public:
     // if no one use this object, object will be removed
     // otherwise do not remove the object, return false
     bool try_remove_by_key(const Key& key) {
-        std::lock_guard<std::mutex> lg(_lock);
+        std::lock_guard<bthread::Mutex> lg(_lock);
         auto itr = _map.find(key);
         if (itr == _map.end()) {
             return true;
@@ -203,7 +204,7 @@ public:
     // remove object by key
     // return true if object exist and is removed
     bool remove_by_key(const Key& key) {
-        std::lock_guard<std::mutex> lg(_lock);
+        std::lock_guard<bthread::Mutex> lg(_lock);
         auto itr = _map.find(key);
         if (itr == _map.end()) {
             return false;
@@ -228,7 +229,7 @@ public:
     // track size changes and evict objects accordingly
     // return false if actual memory usage is larger than capacity
     bool update_object_size(Entry* entry, size_t new_size) {
-        std::lock_guard<std::mutex> lg(_lock);
+        std::lock_guard<bthread::Mutex> lg(_lock);
         _size += new_size - entry->_size;
         if (_mem_tracker) _mem_tracker->consume(new_size - entry->_size);
         entry->_size = new_size;
@@ -240,7 +241,7 @@ public:
         std::vector<Entry*> entry_list;
         {
             int64_t now = MonotonicMillis();
-            std::lock_guard<std::mutex> lg(_lock);
+            std::lock_guard<bthread::Mutex> lg(_lock);
             auto itr = _list.begin();
             while (itr != _list.end()) {
                 Entry* entry = (*itr);
@@ -266,7 +267,7 @@ public:
     void clear() {
         std::vector<Entry*> entry_list;
         {
-            std::lock_guard<std::mutex> lg(_lock);
+            std::lock_guard<bthread::Mutex> lg(_lock);
             auto itr = _list.begin();
             while (itr != _list.end()) {
                 Entry* entry = (*itr);
@@ -296,13 +297,13 @@ public:
     // adjust capacity
     // return false if actual memory usage is larger than capacity
     bool set_capacity(size_t capacity) {
-        std::lock_guard<std::mutex> lg(_lock);
+        std::lock_guard<bthread::Mutex> lg(_lock);
         _capacity = capacity;
         return _evict();
     }
 
     std::vector<std::pair<Key, size_t>> get_entry_sizes() const {
-        std::lock_guard<std::mutex> lg(_lock);
+        std::lock_guard<bthread::Mutex> lg(_lock);
         std::vector<std::pair<Key, size_t>> ret;
         ret.reserve(_map.size());
         auto itr = _list.begin();
@@ -317,13 +318,29 @@ public:
     void try_evict(size_t target_capacity) {
         std::vector<Entry*> entry_list;
         {
-            std::lock_guard<std::mutex> lg(_lock);
+            std::lock_guard<bthread::Mutex> lg(_lock);
             _evict(target_capacity, &entry_list);
         }
         for (Entry* entry : entry_list) {
             delete entry;
         }
         return;
+    }
+
+    std::vector<Entry*> get_all_entries() {
+        std::vector<Entry*> entry_list;
+        {
+            std::lock_guard<bthread::Mutex> lg(_lock);
+            entry_list.reserve(_list.size());
+            auto itr = _list.begin();
+            while (itr != _list.end()) {
+                Entry* entry = (*itr);
+                entry->_ref++;
+                entry_list.push_back(entry);
+                itr++;
+            }
+        }
+        return entry_list;
     }
 
     bool TEST_evict(size_t target_capacity, std::vector<Entry*>* entry_list) {
@@ -360,7 +377,7 @@ private:
         return ret;
     }
 
-    mutable std::mutex _lock;
+    mutable bthread::Mutex _lock;
     List _list;
     Map _map;
     size_t _object_size{0};

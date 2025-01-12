@@ -745,6 +745,7 @@ void ExecEnv::destroy() {
     SAFE_DELETE(_result_queue_mgr);
     SAFE_DELETE(_result_mgr);
     SAFE_DELETE(_stream_mgr);
+    SAFE_DELETE(_batch_write_mgr);
     SAFE_DELETE(_external_scan_context_mgr);
     SAFE_DELETE(_lake_tablet_manager);
     SAFE_DELETE(_lake_update_manager);
