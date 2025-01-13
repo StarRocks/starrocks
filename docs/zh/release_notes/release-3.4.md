@@ -41,7 +41,7 @@ displayed_sidebar: docs
 
 ### 存储引擎
 
-- 统一了表达式分区语法，支持多级分区，每级分区均可为任意表达式。
+- 统一多种分区方式为表达式分区，支持多级分区，每级分区均可为任意表达式。
 
 <!--
 - [Preview] 通过引入通用聚合函数状态存储框架，聚合表可以支持所有 StarRocks 原生聚合函数。
@@ -53,7 +53,7 @@ displayed_sidebar: docs
 - INSERT OVERWRITE 新增 Dynamic Overwrite 语义，启用后，系统将根据导入的数据自动创建分区或覆盖对应的现有分区，导入不涉及的分区不会被清空或删除，适用于恢复特定分区数据的场景。
 - 优化了 INSERT from FILES 导入，使其可以基本取代 Broker Load 成为首选导入方式： 
   - FILES 支持 LIST 远程存储中的文件，并提供文件的基本统计信息。
-  - INSERT 支持按名称匹配列，适用于导入列名相同的数据。（默认按位置匹配列。）
+  - INSERT 支持按名称匹配列，特别适用于导入列很多且列名相同的数据。（默认按位置匹配列。）
   - INSERT 支持指定 PROPERTIES，与其他导入方式保持一致。用户可通过指定 `strict_mode`、`max_filter_ratio` 和 `timeout` 来控制数据导入的行为和质量。
   - INSERT from FILES 支持将目标表的 Schema 检查下推到 FILES 的扫描阶段，从而更准确地推断源数据 Schema。
   - FILES 支持合并不同 Schema 的文件。Parquet 和 ORC 文件基于列名合并，CSV 文件基于列位置（顺序）合并。对于不匹配的列，用户可通过指定 `fill_mismatch_column_with` 属性选择填充 NULL 值或报错。
@@ -63,7 +63,7 @@ displayed_sidebar: docs
 - 支持将多个并发的 Stream Load 请求合并为一个事务批量提交，从而提高实时数据导入的吞吐能力，对于高并发、小批量（KB到几十MB）实时导入场景特别有用，可以减少频繁导入操作导致的数据版本过多、避免 Compaction 过程中的大量资源消耗，并且降低过多小文件带来的 IOPS 和 I/O 延迟。
 -->
 
-#### 其他
+### 其他
 
 - 优化 BE 和 CN 的优雅退出流程，将退出过程中的 BE 或 CN 节点状态展示为 `SHUTDOWN`。
 - 优化日志打印，避免占用过多磁盘空间。
@@ -73,7 +73,7 @@ displayed_sidebar: docs
 - [Preview] 支持在 Follower FE 上进行 CheckPoint，以避免 CheckPoint 期间 Leader FE 内存大量消耗，从而提升 Leader FE 的稳定性。
 -->
 
-#### 降级说明
+### 降级说明
 
 - 集群只可从 v3.4.0 降级至 v3.3.9 或更高版本。
 

@@ -41,19 +41,19 @@ Release date: January 13, 2025
 
 ### Storage Engine
 
-- Unified the expression partitioning syntax to support multi-level partitioning, where each level can be any expression.
+- Unified all partitioning methods into the expression partitioning and supported multi-level partitioning, where each level can be any expression.
 
 <!--
 - [Preview] Supports all native aggregate functions in Aggregate tables. By introducing a generic aggregate function state storage framework, all native aggregate functions supported by StarRocks can be used to define an Aggregate table.
 - Supports vector indexes, enabling fast approximate nearest neighbor searches (ANNS) of large-scale, high-dimensional vectors, which are commonly required in deep learning and machine learning scenarios. Currently, StarRocks supports two types of vector indexes: IVFPQ and HNSW.
 -->
 
-## Loading
+### Loading
 
 - INSERT OVERWRITE now supports a new semantic - Dynamic Overwrite. When this semantic is enabled, the ingested data will either create new partitions or overwrite existing partitions that correspond to the new data records. Partitions not involved will not be truncated or deleted. This semantic is especially useful when users want to recover data in specific partitions without specifying the partition names.
 - Optimized the data ingestion with INSERT from FILES to replace Broker Load as the preferred loading method:
   - FILES now supports listing files in remote storage, and providing basic statistics of the files.
-  - INSERT now supports matching columns by name, which is especially useful when users load data from columns with identical names. (The default behavior matches columns by their position.)
+  - INSERT now supports matching columns by name, which is especially useful when users load data from numerous columns with identical names. (The default behavior matches columns by their position.)
   - INSERT supports specifying PROPERTIES, aligning with other loading methods. Users can specify `strict_mode`, `max_filter_ratio`, and `timeout` for INSERT operations to control and behavior and quality of the data ingestion.
   - INSERT from FILES supports pushing down the target table schema check to the Scan stage of FILES to infer a more accurate source data schema.
   - FILES supports unionizing files with different schema. The schema of Parquet and ORC files are unionized based on the column names, and that of CSV files are unionized based on the position (order) of the columns. When there are mismatched columns, users can choose to fill the columns with NULL or return an error by specifying the property `fill_mismatch_column_with`.
