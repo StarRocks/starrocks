@@ -100,6 +100,8 @@ Usage: $0 <options>
      --with-source-file-relative-path {ON|OFF}
                         build source file with relative path. (default: $WITH_RELATIVE_SRC_PATH)
      --without-avx2     build Backend without avx2(instruction)
+     --with-maven-batch-mode {ON|OFF}
+                        build maven project in batch mode (default: $WITH_MAVEN_BATCH_MODE)
      -h,--help          Show this help message
   Eg.
     $0                                           build all
@@ -133,6 +135,7 @@ OPTS=$(getopt \
   -l 'with-compress-debug-symbol:' \
   -l 'with-source-file-relative-path:' \
   -l 'without-avx2' \
+  -l 'with-maven-batch-mode:' \
   -l 'help' \
   -- "$@")
 
@@ -156,6 +159,16 @@ WITH_STARCACHE=ON
 USE_STAROS=OFF
 BUILD_JAVA_EXT=ON
 WITH_RELATIVE_SRC_PATH=ON
+
+# Default to OFF, turn it ON if current shell is non-interactive
+WITH_MAVEN_BATCH_MODE=OFF
+if [ -x "$(command -v tty)" ] ; then
+    # has `tty` and `tty` cmd indicates a non-interactive shell.
+    if ! tty -s >/dev/null 2>&1; then
+        WITH_MAVEN_BATCH_MODE=ON
+    fi
+fi
+
 MSG=""
 MSG_FE="Frontend"
 MSG_DPP="Spark Dpp application"
@@ -241,6 +254,7 @@ else
             --without-avx2) USE_AVX2=OFF; shift ;;
             --with-compress-debug-symbol) WITH_COMPRESS=$2 ; shift 2 ;;
             --with-source-file-relative-path) WITH_RELATIVE_SRC_PATH=$2 ; shift 2 ;;
+            --with-maven-batch-mode) WITH_MAVEN_BATCH_MODE=$2 ; shift 2 ;;
             -h) HELP=1; shift ;;
             --help) HELP=1; shift ;;
             -j) PARALLEL=$2; shift 2 ;;
@@ -284,6 +298,7 @@ echo "Get params:
     ENABLE_FAULT_INJECTION -- $ENABLE_FAULT_INJECTION
     BUILD_JAVA_EXT      -- $BUILD_JAVA_EXT
     WITH_RELATIVE_SRC_PATH      -- $WITH_RELATIVE_SRC_PATH
+    WITH_MAVEN_BATCH_MODE       -- $WITH_MAVEN_BATCH_MODE
 "
 
 check_tool()
@@ -322,6 +337,12 @@ if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
     export LIBRARY_PATH=${JAVA_HOME}/jre/lib/aarch64/server/
 else
     export LIBRARY_PATH=${JAVA_HOME}/jre/lib/amd64/server/
+fi
+
+addon_mvn_opts=""
+if [ "x$WITH_MAVEN_BATCH_MODE" = "xON" ] ; then
+    # this option is only available with mvn >= 3.6
+    addon_mvn_opts="--batch-mode"
 fi
 
 # Clean and build Backend
@@ -393,7 +414,7 @@ if [ ${BUILD_BE} -eq 1 ] ; then
         if [ ${CLEAN} -eq 1 ]; then
             ${MVN_CMD} clean
         fi
-        ${MVN_CMD} package -DskipTests
+        ${MVN_CMD} $addon_mvn_opts package -DskipTests
         cd ${STARROCKS_HOME}
     else
         echo "Skip Building Java Extensions"
@@ -423,9 +444,9 @@ if [ ${FE_MODULES}x != ""x ]; then
     if [ ${CLEAN} -eq 1 ]; then
         ${MVN_CMD} clean
     fi
-    ${MVN_CMD} package -am -pl ${FE_MODULES} -DskipTests
+    ${MVN_CMD} $addon_mvn_opts package -am -pl ${FE_MODULES} -DskipTests
     cd ${STARROCKS_HOME}/java-extensions
-    ${MVN_CMD} package -am -pl hadoop-ext -DskipTests
+    ${MVN_CMD} $addon_mvn_opts package -am -pl hadoop-ext -DskipTests
     cd ${STARROCKS_HOME}
 fi
 
