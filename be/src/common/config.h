@@ -208,11 +208,20 @@ CONF_String(default_query_options, "");
 // or 3x the number of cores.  This keeps the cores busy without causing excessive
 // thrashing.
 CONF_Int32(num_threads_per_core, "3");
+
+// Compression related parameters
 // If true, compresses tuple data in Serialize.
 CONF_Bool(compress_rowbatches, "true");
 // Compress ratio when shuffle row_batches in network, not in storage engine.
 // If ratio is less than this value, use uncompressed data instead.
 CONF_mDouble(rpc_compress_ratio_threshold, "1.1");
+// Acceleration of LZ4 Compression, the larger the acceleration value, the faster the algorithm, but also the lesser the compression.
+// Default 1, MIN=1, MAX=65537
+CONF_mInt32(lz4_acceleration, "1");
+// If compression ratio is larger than this threshold, consider it as a good compresiosn
+CONF_mDouble(lz4_expected_compression_ratio, "2.1");
+CONF_mDouble(lz4_expected_compression_speed_mbps, "600");
+
 // Serialize and deserialize each returned row batch.
 CONF_Bool(serialize_batch, "false");
 // Interval between profile reports; in seconds.
