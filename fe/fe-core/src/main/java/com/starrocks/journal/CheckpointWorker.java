@@ -80,9 +80,11 @@ public abstract class CheckpointWorker extends FrontendDaemon {
         if (nextPoint == null) {
             return;
         }
+
         if (nextPoint.journalId <= getImageJournalId()) {
             return;
         }
+
         if (nextPoint.epoch != servingGlobalState.getEpoch()) {
             return;
         }

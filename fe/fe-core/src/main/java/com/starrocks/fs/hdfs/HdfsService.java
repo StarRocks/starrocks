@@ -59,6 +59,11 @@ public class HdfsService {
         LOG.info("Copied {} to local {}", srcPath, destPath);
     }
 
+    public void copyFromLocal(String srcPath, String destPath, Map<String, String> properties) throws StarRocksException {
+        fileSystemManager.copyFromLocal(srcPath, destPath, properties);
+        LOG.info("Copied local {} to {}", srcPath, destPath);
+    }
+
     public void listPath(TBrokerListPathRequest request, List<TBrokerFileStatus> fileStatuses, boolean skipDir,
                          boolean fileNameOnly) throws StarRocksException {
         LOG.info("receive a list path request, path: {}", request.path);

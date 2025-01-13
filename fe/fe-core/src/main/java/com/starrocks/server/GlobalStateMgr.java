@@ -139,6 +139,7 @@ import com.starrocks.lake.StarMgrMetaSyncer;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.compaction.CompactionControlScheduler;
 import com.starrocks.lake.compaction.CompactionMgr;
+import com.starrocks.lake.snapshot.ClusterSnapshotCheckpointScheduler;
 import com.starrocks.lake.snapshot.ClusterSnapshotMgr;
 import com.starrocks.lake.vacuum.AutovacuumDaemon;
 import com.starrocks.leader.CheckpointController;
@@ -361,6 +362,8 @@ public class GlobalStateMgr {
     private CheckpointController checkpointController;
     private CheckpointWorker checkpointWorker;
     private boolean checkpointWorkerStarted = false;
+
+    private ClusterSnapshotCheckpointScheduler clusterSnapshotCheckpointScheduler = null;
 
     private HAProtocol haProtocol = null;
 
@@ -760,6 +763,8 @@ public class GlobalStateMgr {
         this.gtidGenerator = new GtidGenerator();
         this.globalConstraintManager = new GlobalConstraintManager();
 
+        this.clusterSnapshotMgr = new ClusterSnapshotMgr();
+
         GlobalStateMgr gsm = this;
         this.execution = new StateChangeExecution() {
             @Override
@@ -820,8 +825,6 @@ public class GlobalStateMgr {
                         "query-deploy", true);
 
         this.warehouseIdleChecker = new WarehouseIdleChecker();
-
-        this.clusterSnapshotMgr = new ClusterSnapshotMgr();
     }
 
     public static void destroyCheckpoint() {
@@ -1320,6 +1323,12 @@ public class GlobalStateMgr {
         createBuiltinStorageVolume();
         resourceGroupMgr.createBuiltinResourceGroupsIfNotExist();
         keyMgr.initDefaultMasterKey();
+
+        // if leader change and the last cluster snapshot job has not been finished/error
+        // make the state as error, becase the job can not be continued in new leader.
+        if (clusterSnapshotMgr != null) {
+            clusterSnapshotMgr.resetLastUnFinishedAutomatedSnapshotJob();
+        }
     }
 
     public void setFrontendNodeType(FrontendNodeType newType) {
@@ -1341,6 +1350,10 @@ public class GlobalStateMgr {
         // start checkpoint thread
         checkpointController = new CheckpointController("global_state_checkpoint_controller", journal, "");
         checkpointController.start();
+
+        clusterSnapshotCheckpointScheduler = new ClusterSnapshotCheckpointScheduler(checkpointController,
+                                                  StarMgrServer.getCurrentState().getCheckpointController());
+        clusterSnapshotCheckpointScheduler.start();
 
         keyRotationDaemon.start();
 

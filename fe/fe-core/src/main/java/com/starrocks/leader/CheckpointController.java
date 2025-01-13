@@ -77,6 +77,7 @@ import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /**
  * CheckpointController daemon is running on master node. handle the checkpoint work for starrocks.
@@ -86,6 +87,7 @@ public class CheckpointController extends FrontendDaemon {
     private static final int PUT_TIMEOUT_SECOND = 3600;
     private static final int CONNECT_TIMEOUT_SECOND = 1;
     private static final int READ_TIMEOUT_SECOND = 1;
+    private static final ReentrantReadWriteLock RW_LOCK = new ReentrantReadWriteLock();
 
     private String imageDir;
     private final Journal journal;
@@ -108,12 +110,40 @@ public class CheckpointController extends FrontendDaemon {
         nodesToPushImage = new HashSet<>();
     }
 
+    public static void exclusiveLock() {
+        RW_LOCK.writeLock().lock();
+    }
+
+    public static void exclusiveUnlock() {
+        RW_LOCK.writeLock().unlock();
+    }
+
     @Override
     protected void runAfterCatalogReady() {
+        RW_LOCK.readLock().lock();
+        try {
+            runCheckpointController();
+        } finally {
+            RW_LOCK.readLock().unlock();
+        }
+    }
+
+    protected void runCheckpointController() {
         init();
 
+        Pair<Long, Long> getIdsRet = getCheckpointJournalIds();
+        if (getIdsRet == null) {
+            return;
+        }
+
+        // ignore return value in normal checkpoint controller
+        runCheckpointControllerWithIds(getIdsRet.first, getIdsRet.second);
+    }
+
+    public Pair<Long, Long> getCheckpointJournalIds() {
         long imageJournalId = 0;
         long maxJournalId = 0;
+
         try {
             Storage storage = new Storage(imageDir);
             // get max image version
@@ -123,9 +153,13 @@ public class CheckpointController extends FrontendDaemon {
             LOG.info("checkpoint imageJournalId {}, logJournalId {}", imageJournalId, maxJournalId);
         } catch (IOException e) {
             LOG.error("Failed to get storage info", e);
-            return;
+            return null;
         }
 
+        return Pair.create(imageJournalId, maxJournalId);
+    }
+
+    public Pair<Boolean, String> runCheckpointControllerWithIds(long imageJournalId, long maxJournalId) {
         // Step 1: create image
         Pair<Boolean, String> createImageRet = Pair.create(false, "");
         if (imageJournalId < maxJournalId) {
@@ -159,6 +193,8 @@ public class CheckpointController extends FrontendDaemon {
                 || (needToPushCnt > 0 && nodesToPushImage.isEmpty())) {
             deleteOldJournals(newImageVersion);
         }
+
+        return createImageRet;
     }
 
     private void init() {
@@ -468,5 +504,9 @@ public class CheckpointController extends FrontendDaemon {
         if (startTime > workerSelectedTime) {
             cancelCheckpoint(nodeName, "worker restarted");
         }
+    }
+
+    public Journal getJournal() {
+        return journal;
     }
 }
