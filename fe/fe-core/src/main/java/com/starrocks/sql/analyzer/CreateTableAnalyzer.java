@@ -646,7 +646,7 @@ public class CreateTableAnalyzer {
 
     public static void analyzeGeneratedColumn(CreateTableStmt stmt, ConnectContext context) {
         if (!stmt.isOlapEngine()) {
-            throw new SemanticException("Generated Column only support olap table");
+            throw new SemanticException("Generated Column only support table in share nothing mode");
         }
 
         KeysDesc keysDesc = Preconditions.checkNotNull(stmt.getKeysDesc());
