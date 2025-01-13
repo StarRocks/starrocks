@@ -10,6 +10,42 @@ displayed_sidebar: docs
 
 :::
 
+## 3.3.9
+
+发布日期：2025 年 1 月 12 日
+
+### 新增功能
+
+- 支持将 Trino SQL 翻译为 StarRocks SQL。[#54185](https://github.com/StarRocks/starrocks/pull/54185)
+
+### 功能优化
+
+- 在 FE 节点以 `bdbje_reset_election_group` 开头时，纠正 FE 节点名称以方便理解。[#54399](https://github.com/StarRocks/starrocks/pull/54399)
+- 在 ARM 结构上实现 IF 函数的向量化。[#53093](https://github.com/StarRocks/starrocks/pull/53093)
+- ALTER SYSTEM CREATE IMAGE 支持创建 StarManager 的 Image。[#54370](https://github.com/StarRocks/starrocks/pull/54370)
+- 存算分离集群支持删除主键表的云原生索引。[#53971](https://github.com/StarRocks/starrocks/pull/53971)
+- 指定 FORCE 关键词时，系统强制刷新物化视图。[#52081](https://github.com/StarRocks/starrocks/pull/52081)
+- CACHE SELECT 支持指定 Hint。[#54697](https://github.com/StarRocks/starrocks/pull/54697)
+- 支持通过 FILES() 函数导入压缩的 CSV 文件，支持的压缩格式包括 gzip、bz2、lz4、deflate 以及 zstd。[#54626](https://github.com/StarRocks/starrocks/pull/54626)
+- 允许在 UPDATE 中对同一列进行多个赋值。[#54534](https://github.com/StarRocks/starrocks/pull/54534)
+
+### 问题修复
+
+修复了如下问题：
+
+- JDBC Catalog 物化视图刷新时出现的意外错误。[#54487](https://github.com/StarRocks/starrocks/pull/54487)
+- Delta Lake 表 Join 自身时出现的结果不稳定。[#54473](https://github.com/StarRocks/starrocks/pull/54473)
+- 使用 HDFS 文件系统接口备份文件时的重试上传失败问题。[#53679](https://github.com/StarRocks/starrocks/pull/53679)
+- aarch64 架构上的 BFD 初始化错误。[#54372](https://github.com/StarRocks/starrocks/pull/54372)
+- BE 日志中记录敏感信息。[#54677](https://github.com/StarRocks/starrocks/pull/54677)
+- Profile 中 Compaction 相关的指标错误。[#54678](https://github.com/StarRocks/starrocks/pull/54678)
+- 创建 TIME 嵌套类型的表导致的 BE 崩溃。[#54601](https://github.com/StarRocks/starrocks/pull/54601)
+- 带有子查询 TOP-N 的 `LIMIT` 查询计划错误。[#54507](https://github.com/StarRocks/starrocks/pull/54507)
+
+### 降级说明
+
+- 集群只可从 v3.3.9 降级至 v3.2.11 或更高版本。
+
 ## 3.3.8
 
 发布日期：2025 年 1 月 3 日
