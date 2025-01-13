@@ -25,6 +25,7 @@ public:
     ~TxnStateCacheTest() override = default;
 
     void SetUp() override {
+        config::batch_write_trace_log_enable = true;
         _db = "test_db";
         _tbl = "test_tbl";
         _auth = {"test_user", "test_password"};

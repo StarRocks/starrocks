@@ -33,6 +33,7 @@ public:
     IsomorphicBatchWriteTest() = default;
     ~IsomorphicBatchWriteTest() override = default;
     void SetUp() override {
+        config::batch_write_trace_log_enable = true;
         _exec_env = ExecEnv::GetInstance();
         std::unique_ptr<ThreadPool> thread_pool;
         ASSERT_OK(ThreadPoolBuilder("IsomorphicBatchWriteTest")
