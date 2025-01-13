@@ -70,6 +70,8 @@ public:
 
     const uint64_t max_rss_rowid() const { return _max_rss_rowid; }
 
+    bool empty() const { return _map.size() == 0; }
+
 private:
     static void update_index_value(IndexValueWithVer* index_value_info, int64_t version, const IndexValue& value);
 
