@@ -1113,16 +1113,14 @@ public class EditLog {
                     break;
                 }
                 case OperationType.OP_ADD_SQL_QUERY_BLACK_LIST: {
-                    AddSqlBlackList addBlacklistRequest = (AddSqlBlackList) journal.data();
+                    SqlBlackListPersistInfo addBlacklistRequest = (SqlBlackListPersistInfo) journal.data();
                     GlobalStateMgr.getCurrentState().getSqlBlackList()
                             .put(addBlacklistRequest.id, Pattern.compile(addBlacklistRequest.pattern));
                     break;
                 }
                 case OperationType.OP_DELETE_SQL_QUERY_BLACK_LIST: {
                     DeleteSqlBlackLists deleteBlackListsRequest = (DeleteSqlBlackLists) journal.data();
-                    for (int i = 0; i < deleteBlackListsRequest.ids.size(); i++) {
-                        GlobalStateMgr.getCurrentState().getSqlBlackList().delete(deleteBlackListsRequest.ids.get(i));
-                    }
+                    GlobalStateMgr.getCurrentState().getSqlBlackList().delete(deleteBlackListsRequest.ids);
                     break;
                 }
                 default: {
@@ -1809,7 +1807,7 @@ public class EditLog {
         logEdit(OperationType.OP_ALTER_MATERIALIZED_VIEW_PROPERTIES, log);
     }
 
-    public void logAddSQLBlackList(AddSqlBlackList addBlackList) {
+    public void logAddSQLBlackList(SqlBlackListPersistInfo addBlackList) {
         logEdit(OperationType.OP_ADD_SQL_QUERY_BLACK_LIST, addBlackList);
     }
 

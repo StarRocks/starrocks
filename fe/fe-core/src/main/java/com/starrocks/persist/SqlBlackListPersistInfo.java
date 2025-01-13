@@ -19,8 +19,8 @@ import com.starrocks.common.io.JsonWriter;
 
 import java.util.Objects;
 
-public class AddSqlBlackList extends JsonWriter {
-    public AddSqlBlackList(long id, String pattern) {
+public class SqlBlackListPersistInfo extends JsonWriter {
+    public SqlBlackListPersistInfo(long id, String pattern) {
         this.id = id;
         this.pattern = pattern;
     }
@@ -39,7 +39,7 @@ public class AddSqlBlackList extends JsonWriter {
         if (o == null || getClass() != o.getClass()) {
             return false;
         }
-        AddSqlBlackList that = (AddSqlBlackList) o;
+        SqlBlackListPersistInfo that = (SqlBlackListPersistInfo) o;
         return id == that.id && Objects.equals(pattern, that.pattern);
     }
 

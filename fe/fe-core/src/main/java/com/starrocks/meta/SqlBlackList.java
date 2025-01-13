@@ -19,8 +19,8 @@ import com.staros.util.LockCloseable;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.persist.AddSqlBlackList;
 import com.starrocks.persist.ImageWriter;
+import com.starrocks.persist.SqlBlackListPersistInfo;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -63,8 +63,8 @@ public class SqlBlackList {
         try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
             int cnt = reader.readInt();
             for (int i = 0; i < cnt; i++) {
-                AddSqlBlackList addSqlBlackList = reader.readJson(AddSqlBlackList.class);
-                put(addSqlBlackList.id, Pattern.compile(addSqlBlackList.pattern));
+                SqlBlackListPersistInfo sqlBlackListPersistInfo = reader.readJson(SqlBlackListPersistInfo.class);
+                put(sqlBlackListPersistInfo.id, Pattern.compile(sqlBlackListPersistInfo.pattern));
             }
             LOG.info("loaded {} SQL blacklist patterns", sqlBlackListMap.size());
         }
@@ -105,6 +105,12 @@ public class SqlBlackList {
         }
     }
 
+    public void delete(List<Long> ids) {
+        for (Long id : ids) {
+            this.delete(id);
+        }
+    }
+
     public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
         try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
             // one for self and N for patterns
@@ -114,7 +120,7 @@ public class SqlBlackList {
             // write patterns
             writer.writeInt(sqlBlackListMap.size());
             for (BlackListSql p : sqlBlackListMap.values()) {
-                writer.writeJson(new AddSqlBlackList(p.id, p.pattern.pattern()));
+                writer.writeJson(new SqlBlackListPersistInfo(p.id, p.pattern.pattern()));
             }
             writer.close();
         }

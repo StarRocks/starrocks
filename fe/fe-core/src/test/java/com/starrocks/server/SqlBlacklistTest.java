@@ -14,17 +14,20 @@
 
 package com.starrocks.server;
 
-import com.starrocks.ha.FrontendNodeType;
+import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.meta.BlackListSql;
 import com.starrocks.meta.SqlBlackList;
-import com.starrocks.persist.AddSqlBlackList;
 import com.starrocks.persist.DeleteSqlBlackLists;
 import com.starrocks.persist.EditLog;
+import com.starrocks.persist.SqlBlackListPersistInfo;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ShowExecutor;
+import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+import com.starrocks.sql.ast.AddSqlBlackListStmt;
 import com.starrocks.sql.ast.DelSqlBlackListStmt;
-import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.ShowSqlBlackListStmt;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
@@ -68,7 +71,7 @@ public class SqlBlacklistTest {
 
         new Expectations(editLog) {
             {
-                editLog.logAddSQLBlackList(new AddSqlBlackList(0, ".+"));
+                editLog.logAddSQLBlackList(new SqlBlackListPersistInfo(0, ".+"));
                 times = 1;
             }
         };
@@ -76,7 +79,8 @@ public class SqlBlacklistTest {
         ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
         connectContext.setQueryId(UUID.randomUUID());
 
-        StatementBase addStatement = parseSql("ADD SQLBLACKLIST \".+\";");
+        AddSqlBlackListStmt addStatement = (AddSqlBlackListStmt) parseSql("ADD SQLBLACKLIST \".+\";");
+        Assert.assertEquals(addStatement.getSql(), ".+");
 
         StmtExecutor addStatementExecutor = new StmtExecutor(connectContext, addStatement);
         addStatementExecutor.execute();
@@ -84,6 +88,37 @@ public class SqlBlacklistTest {
         Assert.assertEquals(1, blackLists.size());
         Assert.assertEquals(0, blackLists.get(0).id);
         Assert.assertEquals(".+", blackLists.get(0).pattern.pattern());
+    }
+
+    @Test
+    public void testShowBlacklist() throws Exception {
+        GlobalStateMgr.getCurrentState().waitForReady();
+
+        SqlBlackList sqlBlackList = new SqlBlackList();
+
+        sqlBlackList.put(Pattern.compile("qwert"));
+        sqlBlackList.put(Pattern.compile("abcde"));
+
+        MockUp<GlobalStateMgr> mockUp = new MockUp<GlobalStateMgr>() {
+            @Mock
+            public SqlBlackList getSqlBlackList() {
+                return sqlBlackList;
+            }
+        };
+
+        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
+        connectContext.setQueryId(UUID.randomUUID());
+
+        ShowSqlBlackListStmt showSqlStatement = (ShowSqlBlackListStmt) parseSql("SHOW SQLBLACKLIST");
+
+        ShowResultSet resultSet = ShowExecutor.execute(showSqlStatement, connectContext);
+        Assert.assertTrue(resultSet.next());
+        Assert.assertEquals(0L, resultSet.getLong(0));
+        Assert.assertEquals("qwert", resultSet.getString(1));
+        Assert.assertTrue(resultSet.next());
+        Assert.assertEquals(1L, resultSet.getLong(0));
+        Assert.assertEquals("abcde", resultSet.getString(1));
+        Assert.assertFalse(resultSet.next());
     }
 
     @Test
@@ -120,27 +155,15 @@ public class SqlBlacklistTest {
     }
 
     @Test
-    public void testRedirectBlacklistOperationIfNotLeader() {
-        MockUp<GlobalStateMgr> mockUp = new MockUp<GlobalStateMgr>() {
-            @Mock
-            public FrontendNodeType getFeType() {
-                return FrontendNodeType.FOLLOWER;
-            }
-
-            @Mock
-            public boolean isLeader() {
-                return false;
-            }
-        };
-        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
-
-        StatementBase addStatement = parseSql("ADD SQLBLACKLIST \".+\";");
-        StmtExecutor addStatementExecutor = new StmtExecutor(connectContext, addStatement);
-        Assert.assertTrue(addStatementExecutor.isForwardToLeader());
-
-        StatementBase deleteStatement = parseSql("DELETE SQLBLACKLIST 1,2,3;");
-        StmtExecutor deleteStatementExecutor = new StmtExecutor(connectContext, deleteStatement);
-        Assert.assertTrue(deleteStatementExecutor.isForwardToLeader());
+    public void testRedirectStatus() {
+        Assert.assertEquals(
+                new AddSqlBlackListStmt("ADD SQLBLACKLIST \".+\";").getRedirectStatus(),
+                RedirectStatus.FORWARD_NO_SYNC
+        );
+        Assert.assertEquals(
+                new DelSqlBlackListStmt(List.of(1L, 2L)).getRedirectStatus(),
+                RedirectStatus.FORWARD_NO_SYNC
+        );
     }
 
     @Test
@@ -164,8 +187,8 @@ public class SqlBlacklistTest {
 
         // add blacklists
 
-        GlobalStateMgr.getCurrentState().getEditLog().logAddSQLBlackList(new AddSqlBlackList(123, "p1"));
-        GlobalStateMgr.getCurrentState().getEditLog().logAddSQLBlackList(new AddSqlBlackList(1234, "p2"));
+        GlobalStateMgr.getCurrentState().getEditLog().logAddSQLBlackList(new SqlBlackListPersistInfo(123, "p1"));
+        GlobalStateMgr.getCurrentState().getEditLog().logAddSQLBlackList(new SqlBlackListPersistInfo(1234, "p2"));
         UtFrameUtils.PseudoJournalReplayer.replayJournalToEnd();
 
         Assertions.assertIterableEquals(

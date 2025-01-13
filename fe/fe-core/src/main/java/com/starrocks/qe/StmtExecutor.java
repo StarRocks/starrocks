@@ -106,9 +106,9 @@ import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.mysql.MysqlEofPacket;
 import com.starrocks.mysql.MysqlSerializer;
-import com.starrocks.persist.AddSqlBlackList;
 import com.starrocks.persist.CreateInsertOverwriteJobLog;
 import com.starrocks.persist.DeleteSqlBlackLists;
+import com.starrocks.persist.SqlBlackListPersistInfo;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.planner.FileScanNode;
 import com.starrocks.planner.HiveTableSink;
@@ -444,11 +444,6 @@ public class StmtExecutor {
             if (!GlobalStateMgr.getCurrentState().canRead()) {
                 return true;
             }
-        }
-
-        // always redirect sql blacklist related queries to the leader
-        if (parsedStmt instanceof AddSqlBlackListStmt || parsedStmt instanceof DelSqlBlackListStmt) {
-            return true;
         }
 
         if (redirectStatus == null) {
@@ -1699,7 +1694,7 @@ public class StmtExecutor {
         AddSqlBlackListStmt addSqlBlackListStmt = (AddSqlBlackListStmt) parsedStmt;
         long id = GlobalStateMgr.getCurrentState().getSqlBlackList().put(addSqlBlackListStmt.getSqlPattern());
         GlobalStateMgr.getCurrentState().getEditLog()
-                .logAddSQLBlackList(new AddSqlBlackList(id, addSqlBlackListStmt.getSqlPattern().pattern()));
+                .logAddSQLBlackList(new SqlBlackListPersistInfo(id, addSqlBlackListStmt.getSqlPattern().pattern()));
     }
 
     private void handleDelSqlBlackListStmt() {
