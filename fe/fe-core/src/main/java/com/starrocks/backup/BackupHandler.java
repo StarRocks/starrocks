@@ -342,7 +342,10 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
         try {
             // Check if there is backup or restore job running on this database
             AbstractJob currentJob = dbIdToBackupOrRestoreJob.get(stmt.containsExternalCatalog() ? FAKE_DB_ID : db.getId());
-            if (currentJob != null && !currentJob.isDone()) {
+            if (currentJob != null && currentJob.getDbId() == FAKE_DB_ID && !currentJob.isDone()) {
+                ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR,
+                        "Can only run one backup or restore job of external catalog");
+            } else if (currentJob != null && !currentJob.isDone()) {
                 ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR,
                         "Can only run one backup or restore job of a database at same time");
             }
@@ -695,6 +698,14 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
         jobInfo.retainTables(allTbls);
     }
 
+    public AbstractJob getAbstractJob(boolean isExternalCatalog, String dbName) throws DdlException {
+        if (!isExternalCatalog) {
+            return getAbstractJobByDbName(dbName);
+        } else {
+            return dbIdToBackupOrRestoreJob.get(FAKE_DB_ID);
+        }
+    }
+
     public AbstractJob getAbstractJobByDbName(String dbName) throws DdlException {
         Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
         if (db == null) {
@@ -705,11 +716,7 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
 
     public void cancel(CancelBackupStmt stmt) throws DdlException {
         AbstractJob job = null;
-        if (!stmt.isExternalCatalog()) {
-            job = getAbstractJobByDbName(stmt.getDbName());
-        } else {
-            job = dbIdToBackupOrRestoreJob.get(FAKE_DB_ID);
-        }
+        job = getAbstractJob(stmt.isExternalCatalog(), stmt.getDbName());
         if (job == null || (job instanceof BackupJob && stmt.isRestore())
                 || (job instanceof RestoreJob && !stmt.isRestore())) {
             ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR, "No "
