@@ -34,11 +34,9 @@ void ParquetUTBase::create_conjunct_ctxs(ObjectPool* pool, RuntimeState* runtime
 
 void ParquetUTBase::append_decimal_conjunct(TExprOpcode::type opcode, SlotId slot_id, const std::string& value,
                                             std::vector<TExpr>* tExprs) {
-    TTypeDesc decimal_type = ExprsTestHelper::create_decimal_type_desc(TPrimitiveType::DECIMAL128, 27, 9);
-
     TExprNode binary_pred = ExprsTestHelper::create_binary_pred_node(TPrimitiveType::DECIMAL128, opcode);
     TExprNode decimal_col_ref = ExprsTestHelper::create_slot_expr_node_t<TYPE_DECIMAL128>(0, slot_id, true);
-    TExprNode decimal_literal = ExprsTestHelper::create_decimal_literal(value, decimal_type, false);
+    TExprNode decimal_literal = ExprsTestHelper::create_literal<TYPE_DECIMAL128, std::string>(value, false);
 
     TExpr t_expr;
     t_expr.nodes.emplace_back(binary_pred);

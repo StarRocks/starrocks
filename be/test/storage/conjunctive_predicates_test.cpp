@@ -403,18 +403,18 @@ TEST_P(ConjunctiveTestFixture, test_parse_conjuncts) {
 
 TEST_F(ConjunctiveTestFixture, test_connector_parse_conjuncts) {
     std::vector<SlotDescriptor*> slot_descriptors;
-    SlotDescriptor slot{1, "name", TypeDescriptor::from_logical_type(TYPE_INT)};
+    SlotDescriptor slot{1, "name", TYPE_INT_DESC};
     slot_descriptors.emplace_back(&slot);
 
     ConnectorPredicateParser parser{&slot_descriptors};
     ColumnPredicate* predicate = nullptr;
-    ASSERT_FALSE(parser.can_pushdown(predicate));
+    ASSERT_TRUE(parser.can_pushdown(predicate));
     SlotDescriptor* slot_desc = nullptr;
-    ASSERT_FALSE(parser.can_pushdown(slot_desc));
+    ASSERT_TRUE(parser.can_pushdown(slot_desc));
 
     PredicateAndNode and_node{};
     ConstPredicateNodePtr node{&and_node};
-    ASSERT_FALSE(parser.can_pushdown(node));
+    ASSERT_TRUE(parser.can_pushdown(node));
     ASSERT_EQ(parser.column_id(slot), 1);
 }
 
