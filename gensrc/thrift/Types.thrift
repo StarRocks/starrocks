@@ -530,6 +530,7 @@ enum TCompressionType {
     BZIP2 = 10;
     LZO = 11; // Deprecated
     BROTLI = 12;
+    AUTO = 13;
 }
 
 enum TWriteQuorumType {
