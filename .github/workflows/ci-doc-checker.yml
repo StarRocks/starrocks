@@ -76,17 +76,6 @@ jobs:
           echo "branch=${{github.base_ref}}" >> $GITHUB_OUTPUT
 
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 2
-          # `2` gives us `main` and the PR branch. We need main to use an approved package.json
-
-      - name: Store package.json from main in temp dir
-        run: |
-            mkdir -p ${{github.workspace}}/tmp
-            git checkout -q HEAD^ && \
-              cp docs/docusaurus/package.json ${{github.workspace}}/tmp && \
-              cp docs/docusaurus/yarn.lock ${{github.workspace}}/tmp && 
-              git switch -q -
 
       - name: Checkout PR
         run: |
@@ -139,8 +128,8 @@ jobs:
           rm -rf ./docs/release_notes ./docs/ecosystem_release
           mv ../zh ./i18n/zh/docusaurus-plugin-content-docs/current
           rm -rf ./i18n/zh/docusaurus-plugin-content-docs/current/release_notes ./i18n/zh/docusaurus-plugin-content-docs/current/ecosystem_release
-          cp ${{github.workspace}}/tmp/package.json package.json
-          cp ${{github.workspace}}/tmp/yarn.lock yarn.lock          
+          git fetch
+          git checkout origin/main -- docs/docusaurus/package.json docs/docusaurus/yarn.lock         
           yarn install --frozen-lockfile
           yarn clear
           yarn build
