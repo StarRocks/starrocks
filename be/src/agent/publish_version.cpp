@@ -109,7 +109,6 @@ void run_publish_version_task(ThreadPoolToken* token, const TPublishVersionReque
                 task.tablet_id = itr.first.tablet_id;
                 task.version = publish_version_req.partition_version_infos[i].version;
                 task.rowset = std::move(itr.second);
-                task.rowset->rowset_meta()->set_gtid(publish_version_req.gtid);
                 task.is_double_write = publish_version_req.partition_version_infos[i].__isset.is_double_write &&
                                        publish_version_req.partition_version_infos[i].is_double_write;
             }
@@ -148,6 +147,7 @@ void run_publish_version_task(ThreadPoolToken* token, const TPublishVersionReque
                     std::lock_guard lg(affected_dirs_lock);
                     affected_dirs.insert(tablet->data_dir());
                 }
+                task.rowset->rowset_meta()->set_gtid(publish_version_req.gtid);
                 if (is_replication_txn) {
                     task.st = StorageEngine::instance()->replication_txn_manager()->publish_txn(
                             task.txn_id, task.partition_id, tablet, task.version);
