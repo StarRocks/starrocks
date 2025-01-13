@@ -533,8 +533,8 @@ Status LakePersistentIndex::apply_opcompaction(const TxnLogPB_OpCompaction& op_c
 
 Status LakePersistentIndex::commit(MetaFileBuilder* builder) {
     if (too_many_rebuild_files() && !_memtable->empty()) {
-        // If we have too many files need to be rebult,
-        // we need to do flush to reduce rebult cost later.
+        // If we have too many files need to be rebuilt,
+        // we need to do flush to reduce index rebuild cost later.
         RETURN_IF_ERROR(flush_memtable());
     }
     PersistentIndexSstableMetaPB sstable_meta;
