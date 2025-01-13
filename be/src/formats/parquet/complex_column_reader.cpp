@@ -63,7 +63,7 @@ static void def_rep_to_offset(const LevelInfo& level_info, const level_t* def_le
     *num_offsets = offset_pos;
 }
 
-Status read_range(const Range<uint64_t>& range, const Filter* filter, Column* dst) override {
+Status ListColumnReader::read_range(const Range<uint64_t>& range, const Filter* filter, Column* dst) {
     NullableColumn* nullable_column = nullptr;
     ArrayColumn* array_column = nullptr;
     if (dst->is_nullable()) {

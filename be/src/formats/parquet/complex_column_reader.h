@@ -15,6 +15,7 @@
 #pragma once
 
 #include "formats/parquet/column_reader.h"
+#include "formats/parquet/schema.h"
 
 namespace starrocks::parquet {
 
