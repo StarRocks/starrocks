@@ -51,5 +51,16 @@ public class GlobalDictNotMatchExceptionTest {
                 Assert.assertEquals("test://test/abc", res.second.get());
             }
         }
+        status = new Status(TStatusCode.GLOBAL_DICT_NOT_MATCH,
+                "xxx, SlotId: x12, FileName: test://test/abc , file doesn't match global dict. xxx");
+        if (status.isGlobalDictError()) {
+            try {
+                throw new GlobalDictNotMatchException(status.getErrorMsg());
+            } catch (GlobalDictNotMatchException e) {
+                Pair<Optional<Integer>, Optional<String>> res = e.extract();
+                Assert.assertTrue(res.first.isEmpty());
+                Assert.assertTrue(res.second.isEmpty());
+            }
+        }
     }
 }
