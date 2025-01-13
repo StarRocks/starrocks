@@ -75,9 +75,13 @@ jobs:
           echo ${{github.base_ref}}
           echo "branch=${{github.base_ref}}" >> $GITHUB_OUTPUT
 
+<<<<<<< HEAD
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
+=======
+      - uses: actions/checkout@v4
+>>>>>>> e8fea61377 ([Doc] use safe package.json yarn.lock (#55027))
 
       - name: Checkout PR
         run: |
@@ -121,6 +125,12 @@ jobs:
           mkdir -p ./i18n/zh/docusaurus-plugin-content-docs
           mv ../en ./docs
           mv ../zh ./i18n/zh/docusaurus-plugin-content-docs/current
+<<<<<<< HEAD
+=======
+          rm -rf ./i18n/zh/docusaurus-plugin-content-docs/current/release_notes ./i18n/zh/docusaurus-plugin-content-docs/current/ecosystem_release
+          git fetch
+          git checkout origin/main -- docs/docusaurus/package.json docs/docusaurus/yarn.lock         
+>>>>>>> e8fea61377 ([Doc] use safe package.json yarn.lock (#55027))
           yarn install --frozen-lockfile
           yarn build
 
