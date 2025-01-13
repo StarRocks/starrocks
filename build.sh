@@ -102,13 +102,9 @@ Usage: $0 <options>
                         build with compressing debug symbol. (default: $WITH_COMPRESS)
      --with-source-file-relative-path {ON|OFF}
                         build source file with relative path. (default: $WITH_RELATIVE_SRC_PATH)
-<<<<<<< HEAD
      --without-avx2     build Backend without avx2(instruction)
-=======
-     --without-avx2     build Backend without avx2(instruction)    
      --with-maven-batch-mode {ON|OFF}
                         build maven project in batch mode (default: $WITH_MAVEN_BATCH_MODE)
->>>>>>> bee52f8147 ([Tool] support build maven project in batch mode (#54940))
      -h,--help          Show this help message
 
   Eg.
