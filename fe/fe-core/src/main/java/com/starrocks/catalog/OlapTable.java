@@ -3288,7 +3288,7 @@ public class OlapTable extends Table {
         // in recycle bin,
         // which make things easier.
         dropAllTempPartitions();
-        AlterMVJobExecutor.inactiveRelatedMaterializedView(db, this,
+        AlterMVJobExecutor.inactiveRelatedMaterializedView(this,
                 MaterializedViewExceptions.inactiveReasonForBaseTableNotExists(getName()), replay);
         if (!replay && hasAutoIncrementColumn()) {
             sendDropAutoIncrementMapTask();
