@@ -37,6 +37,7 @@
 #include "io/shared_buffered_input_stream.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/types.h"
 #include "testutil/assert.h"
 #include "testutil/column_test_helper.h"
 #include "testutil/exprs_test_helper.h"
@@ -3381,6 +3382,279 @@ TEST_F(FileReaderTest, min_max_filter_all_null_group) {
     ASSERT_TRUE(ret.ok());
     ASSERT_OK(file_reader->init(ret.value()));
     ASSERT_EQ(file_reader->row_group_size(), 0);
+}
+
+TEST_F(FileReaderTest, low_card_reader) {
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
+
+    const std::string small_page_file = "./be/test/formats/parquet/test_data/page_index_small_page.parquet";
+
+    Utils::SlotDesc slot_descs[] = {{"c0", TYPE_INT_DESC}, {"c2", TYPE_INT_DESC}, {""}};
+    auto ctx = _create_file_random_read_context(small_page_file, slot_descs);
+
+    std::vector<std::string> values;
+    for (int i = 0; i < 100; ++i) {
+        values.push_back(std::to_string(i));
+    }
+    std::sort(values.begin(), values.end());
+
+    ColumnIdToGlobalDictMap dict_map;
+    GlobalDictMap g_dict;
+    for (int i = 0; i < 100; ++i) {
+        g_dict[Slice(values[i])] = i;
+    }
+    dict_map[1] = &g_dict;
+
+    ctx->global_dictmaps = &dict_map;
+
+    std::vector<TExpr> t_conjuncts;
+    ParquetUTBase::create_dictmapping_string_conjunct(TExprOpcode::EQ, 1, "2", &t_conjuncts);
+    ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &ctx->conjunct_ctxs_by_slot[1]);
+    TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    ParquetUTBase::setup_conjuncts_manager(ctx->conjunct_ctxs_by_slot[1], tuple_desc, _runtime_state, ctx);
+
+    auto file_reader = _create_file_reader(small_page_file);
+    Status status = file_reader->init(ctx);
+    ASSERT_TRUE(status.ok());
+    size_t total_row_nums = 0;
+    while (!status.is_end_of_file()) {
+        chunk->reset();
+        status = file_reader->get_next(&chunk);
+        chunk->check_or_die();
+        total_row_nums += chunk->num_rows();
+        ColumnPtr c0 = chunk->get_column_by_index(0);
+        ColumnPtr c1 = chunk->get_column_by_index(1);
+        for (size_t row_index = 0; row_index < chunk->num_rows(); row_index++) {
+            int32_t c0_value = c0->get(row_index).get_int32();
+            if (c0_value % 10 == 0) {
+                EXPECT_TRUE(c1->is_null(row_index));
+            } else {
+                EXPECT_FALSE(c1->is_null(row_index));
+                std::string expected_string = std::to_string(c0_value % 100);
+                int32_t global_code = g_dict.at(Slice(expected_string));
+                EXPECT_EQ(global_code, c1->get(row_index).get_int32());
+            }
+        }
+    }
+
+    EXPECT_EQ(200, total_row_nums);
+    ctx->predicate_free_pool.clear();
+    ctx->conjuncts_manager = nullptr;
+}
+
+TEST_F(FileReaderTest, low_card_reader_filter_group) {
+    const std::string small_page_file = "./be/test/formats/parquet/test_data/page_index_small_page.parquet";
+
+    Utils::SlotDesc slot_descs[] = {{"c0", TYPE_INT_DESC}, {"c2", TYPE_INT_DESC}, {""}};
+    auto ctx = _create_file_random_read_context(small_page_file, slot_descs);
+
+    std::vector<std::string> values;
+    for (int i = 0; i < 100; ++i) {
+        values.push_back(std::to_string(i));
+    }
+    std::sort(values.begin(), values.end());
+
+    ColumnIdToGlobalDictMap dict_map;
+    GlobalDictMap g_dict;
+    for (int i = 0; i < 100; ++i) {
+        g_dict[Slice(values[i])] = i;
+    }
+    dict_map[1] = &g_dict;
+
+    ctx->global_dictmaps = &dict_map;
+
+    std::vector<TExpr> t_conjuncts;
+    ParquetUTBase::create_dictmapping_string_conjunct(TExprOpcode::GT, 1, "a", &t_conjuncts);
+    ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &ctx->conjunct_ctxs_by_slot[1]);
+    TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    tuple_desc->decoded_slots()[1]->type().type = TYPE_VARCHAR;
+    ParquetUTBase::setup_conjuncts_manager(ctx->conjunct_ctxs_by_slot[1], tuple_desc, _runtime_state, ctx);
+
+    auto file_reader = _create_file_reader(small_page_file);
+    Status status = file_reader->init(ctx);
+    ASSERT_TRUE(status.ok());
+    EXPECT_EQ(file_reader->row_group_size(), 0);
+    ctx->predicate_free_pool.clear();
+    ctx->conjuncts_manager = nullptr;
+}
+
+TEST_F(FileReaderTest, low_card_reader_dict_not_match) {
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
+
+    const std::string small_page_file = "./be/test/formats/parquet/test_data/page_index_small_page.parquet";
+
+    Utils::SlotDesc slot_descs[] = {{"c0", TYPE_INT_DESC}, {"c2", TYPE_INT_DESC}, {""}};
+    auto ctx = _create_file_random_read_context(small_page_file, slot_descs);
+
+    std::vector<std::string> values;
+    for (int i = 0; i < 90; ++i) {
+        values.push_back(std::to_string(i));
+    }
+    std::sort(values.begin(), values.end());
+
+    ColumnIdToGlobalDictMap dict_map;
+    GlobalDictMap g_dict;
+    for (int i = 0; i < 90; ++i) {
+        g_dict[Slice(values[i])] = i;
+    }
+    dict_map[1] = &g_dict;
+
+    ctx->global_dictmaps = &dict_map;
+
+    auto file_reader = _create_file_reader(small_page_file);
+    Status status = file_reader->init(ctx);
+    ASSERT_TRUE(status.ok());
+    while (!status.is_end_of_file()) {
+        chunk->reset();
+        status = file_reader->get_next(&chunk);
+        if (!status.ok()) {
+            ASSERT_EQ("Global dictionary not match", status.code_as_string());
+            return;
+        }
+    }
+
+    ASSERT_TRUE(false);
+}
+
+TEST_F(FileReaderTest, no_matched_reader) {
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
+
+    const std::string file = "./be/test/formats/parquet/test_data/page_index_repeated_nodict.parquet";
+
+    Utils::SlotDesc slot_descs[] = {{"c0", TYPE_INT_DESC}, {"c2", TYPE_INT_DESC}, {""}};
+    auto ctx = _create_file_random_read_context(file, slot_descs);
+
+    std::vector<std::string> values;
+    for (int i = 0; i < 100; ++i) {
+        values.push_back(std::to_string(i));
+    }
+    std::sort(values.begin(), values.end());
+
+    ColumnIdToGlobalDictMap dict_map;
+    GlobalDictMap g_dict;
+    for (int i = 0; i < 100; ++i) {
+        g_dict[Slice(values[i])] = i;
+    }
+    dict_map[1] = &g_dict;
+
+    ctx->global_dictmaps = &dict_map;
+
+    auto file_reader = _create_file_reader(file);
+    Status status = file_reader->init(ctx);
+    ASSERT_EQ("Global dictionary not match", status.code_as_string());
+}
+
+TEST_F(FileReaderTest, low_rows_reader) {
+    auto chunk = std::make_shared<Chunk>();
+
+    chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_INT_ARRAY_DESC, true), chunk->num_columns());
+
+    const std::string low_rows_file = "./be/test/formats/parquet/test_data/low_rows_non_dict.parquet";
+
+    Utils::SlotDesc slot_descs[] = {
+            {"c0", TYPE_INT_DESC}, {"c1", TYPE_INT_DESC}, {"c2", TYPE_INT_DESC}, {"c3", TYPE_INT_ARRAY_DESC}, {""}};
+    auto ctx = _create_file_random_read_context(low_rows_file, slot_descs);
+
+    std::vector<std::string> values;
+    for (int i = 0; i < 100; ++i) {
+        values.push_back(std::to_string(i));
+    }
+    std::sort(values.begin(), values.end());
+
+    ColumnIdToGlobalDictMap dict_map;
+    GlobalDictMap g_dict;
+    for (int i = 0; i < 100; ++i) {
+        g_dict[Slice(values[i])] = i;
+    }
+    dict_map[2] = &g_dict;
+    dict_map[3] = &g_dict;
+
+    ctx->global_dictmaps = &dict_map;
+
+    auto file_reader = _create_file_reader(low_rows_file);
+    Status status = file_reader->init(ctx);
+
+    ASSERT_TRUE(status.ok());
+    size_t total_row_nums = 0;
+    while (!status.is_end_of_file()) {
+        chunk->reset();
+        status = file_reader->get_next(&chunk);
+        chunk->check_or_die();
+        total_row_nums += chunk->num_rows();
+        ColumnPtr c0 = chunk->get_column_by_index(0);
+        ColumnPtr c1 = chunk->get_column_by_index(1);
+        ColumnPtr c2 = chunk->get_column_by_index(2);
+        ColumnPtr c3 = chunk->get_column_by_index(3);
+        for (size_t row_index = 0; row_index < chunk->num_rows(); row_index++) {
+            int32_t c0_value = c0->get(row_index).get_int32();
+            if (c0_value % 10 == 0) {
+                EXPECT_TRUE(c2->is_null(row_index));
+                EXPECT_TRUE(c3->is_null(row_index));
+            } else {
+                EXPECT_FALSE(c2->is_null(row_index));
+                EXPECT_FALSE(c3->is_null(row_index));
+                int32_t c1_value = c1->get(row_index).get_int32();
+                std::string expected_c0_string = std::to_string(c0_value % 100);
+                std::string expected_c1_string = std::to_string(c1_value % 100);
+                int32_t c0_global_code = g_dict.at(Slice(expected_c0_string));
+                int32_t c1_global_code = g_dict.at(Slice(expected_c1_string));
+                EXPECT_EQ(c0_global_code, c2->get(row_index).get_int32());
+                DatumArray c3_value = c3->get(row_index).get_array();
+                EXPECT_EQ(3, c3_value.size());
+                EXPECT_EQ(c0_global_code, c3_value[0].get_int32());
+                EXPECT_TRUE(c3_value[1].is_null());
+                EXPECT_EQ(c1_global_code, c3_value[2].get_int32());
+            }
+        }
+    }
+
+    EXPECT_EQ(100, total_row_nums);
+}
+
+TEST_F(FileReaderTest, low_rows_reader_filter_group) {
+    const std::string small_page_file = "./be/test/formats/parquet/test_data/low_rows_non_dict.parquet";
+
+    Utils::SlotDesc slot_descs[] = {{"c0", TYPE_INT_DESC}, {"c2", TYPE_INT_DESC}, {""}};
+    auto ctx = _create_file_random_read_context(small_page_file, slot_descs);
+
+    std::vector<std::string> values;
+    for (int i = 0; i < 100; ++i) {
+        values.push_back(std::to_string(i));
+    }
+    std::sort(values.begin(), values.end());
+
+    ColumnIdToGlobalDictMap dict_map;
+    GlobalDictMap g_dict;
+    for (int i = 0; i < 100; ++i) {
+        g_dict[Slice(values[i])] = i;
+    }
+    dict_map[1] = &g_dict;
+
+    ctx->global_dictmaps = &dict_map;
+
+    std::vector<TExpr> t_conjuncts;
+    ParquetUTBase::create_dictmapping_string_conjunct(TExprOpcode::EQ, 1, "a", &t_conjuncts);
+    ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &ctx->conjunct_ctxs_by_slot[1]);
+    TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    tuple_desc->decoded_slots()[1]->type().type = TYPE_VARCHAR;
+    ParquetUTBase::setup_conjuncts_manager(ctx->conjunct_ctxs_by_slot[1], tuple_desc, _runtime_state, ctx);
+
+    auto file_reader = _create_file_reader(small_page_file);
+    Status status = file_reader->init(ctx);
+    ASSERT_TRUE(status.ok());
+    EXPECT_EQ(file_reader->row_group_size(), 0);
+
+    ctx->predicate_free_pool.clear();
+    ctx->conjuncts_manager = nullptr;
 }
 
 } // namespace starrocks::parquet

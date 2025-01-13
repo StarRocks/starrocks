@@ -19,6 +19,9 @@
 #include "formats/parquet/zone_map_filter_evaluator.h"
 #include "gutil/casts.h"
 #include "io/shared_buffered_input_stream.h"
+#include "runtime/global_dict/dict_column.h"
+#include "runtime/types.h"
+#include "simd/gather.h"
 #include "simd/simd.h"
 #include "statistics_helper.h"
 
@@ -424,6 +427,183 @@ Status ScalarColumnReader::fill_dst_column(ColumnPtr& dst, ColumnPtr& src) {
         src->reset_column();
         src = _ori_column;
     }
+    return Status::OK();
+}
+
+// LowCardColumnReader
+
+Status LowCardColumnReader::read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) {
+    DCHECK(get_column_parquet_field()->is_nullable ? dst->is_nullable() : true);
+    ColumnContentType content_type = ColumnContentType::DICT_CODE;
+
+    if (_dict_code == nullptr) {
+        _dict_code = ColumnHelper::create_column(
+                TypeDescriptor::from_logical_type(ColumnDictFilterContext::kDictCodePrimitiveType), true);
+    }
+    _ori_column = dst;
+    dst = _dict_code;
+    dst->reserve(range.span_size());
+
+    {
+        SCOPED_RAW_TIMER(&_opts.stats->column_read_ns);
+        return _reader->read_range(range, filter, content_type, dst.get());
+    }
+}
+
+bool LowCardColumnReader::try_to_use_dict_filter(ExprContext* ctx, bool is_decode_needed, const SlotId slotId,
+                                                 const std::vector<std::string>& sub_field_path, const size_t& layer) {
+    if (sub_field_path.size() != layer) {
+        return false;
+    }
+
+    if (column_all_pages_dict_encoded()) {
+        if (_dict_filter_ctx == nullptr) {
+            _dict_filter_ctx = std::make_unique<ColumnDictFilterContext>();
+            _dict_filter_ctx->is_decode_needed = is_decode_needed;
+            _dict_filter_ctx->sub_field_path = sub_field_path;
+            _dict_filter_ctx->slot_id = slotId;
+        }
+        _dict_filter_ctx->conjunct_ctxs.push_back(ctx);
+        return true;
+    } else {
+        return false;
+    }
+}
+
+Status LowCardColumnReader::fill_dst_column(ColumnPtr& dst, ColumnPtr& src) {
+    if (!_code_convert_map.has_value()) {
+        RETURN_IF_ERROR(_check_current_dict());
+    }
+
+    dst->resize(src->size());
+
+    const ColumnPtr& dict_codes = src;
+    auto* codes_nullable_column = ColumnHelper::as_raw_column<NullableColumn>(dict_codes);
+    auto* codes_column = ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(codes_nullable_column->data_column());
+    const NullData& null_data_ptr = codes_nullable_column->immutable_null_column_data();
+
+    auto& codes = codes_column->get_data();
+    if (codes_nullable_column->has_null()) {
+        for (size_t i = 0; i < src->size(); i++) {
+            // if null, we assign dict code 0
+            // null = 0, mask = 0xffffffff
+            // null = 1, mask = 0x00000000
+            uint32_t mask = ~(static_cast<uint32_t>(-null_data_ptr[i]));
+            codes[i] = mask & codes[i];
+        }
+    }
+
+    auto* dst_data_column = down_cast<LowCardDictColumn*>(ColumnHelper::get_data_column(dst.get()));
+    SIMDGather::gather(dst_data_column->get_data().data(), _code_convert_map->data(), codes.data(),
+                       DICT_DECODE_MAX_SIZE, src->size());
+
+    if (dst->is_nullable()) {
+        auto* nullable_codes = down_cast<NullableColumn*>(dict_codes.get());
+        auto* nullable_dst = down_cast<NullableColumn*>(dst.get());
+        nullable_dst->null_column_data().swap(nullable_codes->null_column_data());
+        nullable_dst->set_has_null(nullable_codes->has_null());
+    }
+
+    src->reset_column();
+    src = _ori_column;
+
+    return Status::OK();
+}
+
+Status LowCardColumnReader::_check_current_dict() {
+    std::vector<int16_t> code_convert_map;
+
+    // create dict value chunk for evaluation.
+    ColumnPtr dict_value_column = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true);
+    RETURN_IF_ERROR(_reader->get_dict_values(dict_value_column.get()));
+
+    size_t dict_size = dict_value_column->size();
+
+    code_convert_map.resize(dict_size + 2);
+    std::fill(code_convert_map.begin(), code_convert_map.end(), 0);
+    auto* local_to_global = code_convert_map.data();
+
+    auto viewer = ColumnViewer<TYPE_VARCHAR>(dict_value_column);
+
+    for (int i = 0; i < dict_size; ++i) {
+        auto slice = viewer.value(i);
+        auto res = _dict->find(slice);
+        if (res == _dict->end()) {
+            if (slice.size > 0) {
+                // error message format used to extract info, carefully
+                return Status::GlobalDictNotMatch(
+                        fmt::format("SlotId: {}, FileName: {} , file doesn't match global dict. ", _slot_id,
+                                    _opts.file->filename()));
+            }
+        } else {
+            local_to_global[i] = res->second;
+        }
+    }
+
+#ifdef DEBUG
+    std::stringstream ss;
+    ss << "dict mapping: ";
+    for (int i = 0; i < dict_size; ++i) {
+        ss << code_convert_map[i] << " ";
+    }
+    LOG(INFO) << ss.str();
+#endif
+
+    _code_convert_map = std::move(code_convert_map);
+
+    return Status::OK();
+}
+
+// LowRowsColumnReader
+
+Status LowRowsColumnReader::read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) {
+    DCHECK(get_column_parquet_field()->is_nullable ? dst->is_nullable() : true);
+    ColumnContentType content_type = ColumnContentType::VALUE;
+
+    if (_tmp_column == nullptr) {
+        _tmp_column = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_VARCHAR), true);
+    }
+    _ori_column = dst;
+    dst = _tmp_column;
+    dst->reserve(range.span_size());
+
+    {
+        SCOPED_RAW_TIMER(&_opts.stats->column_read_ns);
+        return _reader->read_range(range, filter, content_type, dst.get());
+    }
+}
+
+Status LowRowsColumnReader::fill_dst_column(ColumnPtr& dst, ColumnPtr& src) {
+    dst->resize(src->size());
+
+    const ColumnPtr& readed_column = src;
+    auto* nullable_string_column = ColumnHelper::as_raw_column<NullableColumn>(readed_column);
+    auto* binary_column = ColumnHelper::as_raw_column<BinaryColumn>(nullable_string_column->data_column());
+    auto* dst_data_column = down_cast<LowCardDictColumn*>(ColumnHelper::get_data_column(dst.get()));
+    for (size_t i = 0; i < src->size(); i++) {
+        const auto& slice = binary_column->get_slice(i);
+        auto res = _dict->find(slice);
+        if (res == _dict->end()) {
+            if (slice.size > 0) {
+                // error message format used to extract info, carefully
+                return Status::GlobalDictNotMatch(
+                        fmt::format("SlotId: {}, FileName: {} , file doesn't match global dict. ", _slot_id,
+                                    _opts.file->filename()));
+            }
+        } else {
+            dst_data_column->get_data()[i] = res->second;
+        }
+    }
+
+    if (dst->is_nullable()) {
+        auto* nullable_dst = down_cast<NullableColumn*>(dst.get());
+        nullable_dst->null_column_data().swap(nullable_string_column->null_column_data());
+        nullable_dst->set_has_null(nullable_string_column->has_null());
+    }
+
+    src->reset_column();
+    src = _ori_column;
+
     return Status::OK();
 }
 } // namespace starrocks::parquet
