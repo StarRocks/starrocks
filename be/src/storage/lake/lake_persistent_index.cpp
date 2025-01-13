@@ -181,6 +181,10 @@ bool LakePersistentIndex::is_memtable_full() const {
     return mem_size_exceed || mem_tracker_exceed;
 }
 
+bool LakePersistentIndex::too_many_rebuild_files() const {
+    return _need_rebuild_file_cnt >= config::cloud_native_pk_index_rebuild_files_threshold;
+}
+
 Status LakePersistentIndex::minor_compact() {
     TRACE_COUNTER_SCOPE_LATENCY_US("minor_compact_latency_us");
     auto filename = gen_sst_filename();
@@ -223,6 +227,8 @@ Status LakePersistentIndex::flush_memtable() {
     auto max_rss_rowid = _memtable->max_rss_rowid();
     _memtable.reset();
     _memtable = std::make_unique<PersistentIndexMemtable>(max_rss_rowid);
+    // Reset rebuild file count, avoid useless flush.
+    _need_rebuild_file_cnt = 0;
     return Status::OK();
 }
 
@@ -526,6 +532,11 @@ Status LakePersistentIndex::apply_opcompaction(const TxnLogPB_OpCompaction& op_c
 }
 
 Status LakePersistentIndex::commit(MetaFileBuilder* builder) {
+    if (too_many_rebuild_files() && !_memtable->empty()) {
+        // If we have too many files need to be rebuilt,
+        // we need to do flush to reduce index rebuild cost later.
+        RETURN_IF_ERROR(flush_memtable());
+    }
     PersistentIndexSstableMetaPB sstable_meta;
     int64_t last_max_rss_rowid = 0;
     for (auto& sstable : _sstables) {
@@ -540,18 +551,20 @@ Status LakePersistentIndex::commit(MetaFileBuilder* builder) {
         sstable_pb->CopyFrom(sstable->sstable_pb());
     }
     builder->finalize_sstable_meta(sstable_meta);
+    _need_rebuild_file_cnt = need_rebuild_file_cnt(*builder->tablet_meta(), sstable_meta);
     return Status::OK();
 }
 
 // Rebuild index's memtable via del files, it will read from del file and write to index.
 // If it fail, SR will retry publish txn, and this index's memtable will be release and rebuild again.
 Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pkey_schema, int64_t rowset_version) {
-    TRACE_COUNTER_INCREMENT("rebuild_index_del_cnt", 1);
+    TRACE_COUNTER_SCOPE_LATENCY_US("rebuild_index_del_cost_us");
     // Build pk column struct from schema
     std::unique_ptr<Column> pk_column;
     RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
     // Iterate all del files and insert into index.
     for (int del_idx = 0; del_idx < rowset->metadata().del_files_size(); ++del_idx) {
+        TRACE_COUNTER_INCREMENT("rebuild_index_del_cnt", 1);
         const auto& del = rowset->metadata().del_files(del_idx);
         RandomAccessFileOptions ropts;
         if (!del.encryption_meta().empty()) {
@@ -639,6 +652,24 @@ bool LakePersistentIndex::needs_rowset_rebuild(const RowsetMetadataPB& rowset, u
     return true;
 }
 
+// Return the files cnt that need to rebuild.
+size_t LakePersistentIndex::need_rebuild_file_cnt(const TabletMetadataPB& metadata,
+                                                  const PersistentIndexSstableMetaPB& sstable_meta) {
+    size_t cnt = 0;
+    const auto& sstables = sstable_meta.sstables();
+    const uint32_t rebuild_rss_id = sstables.empty() ? 0 : sstables.rbegin()->max_rss_rowid() >> 32;
+    for (const auto& rowset : metadata.rowsets()) {
+        if (!needs_rowset_rebuild(rowset, rebuild_rss_id)) {
+            continue; // skip rowset
+        }
+        cnt += rowset.del_files_size();
+        // rowset id + segment id < rebuild_rss_id can be skip.
+        // so only some segments in this rowset need to rebuild
+        cnt += std::min(rowset.id() + rowset.segments_size() - rebuild_rss_id + 1, (uint32_t)rowset.segments_size());
+    }
+    return cnt;
+}
+
 Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata,
                                                   int64_t base_version, const MetaFileBuilder* builder) {
     // 1. create and set key column schema
@@ -648,6 +679,8 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
         pk_columns[i] = (ColumnId)i;
     }
     auto pkey_schema = ChunkHelper::convert_schema(tablet_schema, pk_columns);
+
+    _need_rebuild_file_cnt = need_rebuild_file_cnt(*metadata, metadata->sstable_meta());
 
     // Init PersistentIndex
     _key_size = PrimaryKeyEncoder::get_encoded_fixed_size(pkey_schema);
@@ -684,6 +717,7 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
         auto& itrs = res.value();
         CHECK(itrs.size() == rowset->num_segments()) << "itrs.size != num_segments";
         for (size_t i = 0; i < itrs.size(); i++) {
+            TRACE_COUNTER_SCOPE_LATENCY_US("rebuild_index_segment_cost_us");
             auto itr = itrs[i].get();
             if (itr == nullptr) {
                 continue;
