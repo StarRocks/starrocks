@@ -106,6 +106,7 @@ public class ConfigBase {
                 reader.close();
             }
         }
+
         if (Files.isWritable(Path.of(propFile)) && !Util.isRunningInContainer()) {
             isPersisted = true;
         }
