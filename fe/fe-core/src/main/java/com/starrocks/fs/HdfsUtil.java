@@ -70,6 +70,11 @@ public class HdfsUtil {
         hdfsService.copyToLocal(srcPath, destPath, properties);
     }
 
+    public static void copyFromLocal(String srcPath, String destPath, Map<String, String> properties)
+            throws StarRocksException {
+        hdfsService.copyFromLocal(srcPath, destPath, properties);
+    }
+
     /**
      * Parse file status in path with broker, except directory
      *
