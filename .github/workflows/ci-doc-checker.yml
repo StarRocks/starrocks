@@ -75,9 +75,13 @@ jobs:
           echo ${{github.base_ref}}
           echo "branch=${{github.base_ref}}" >> $GITHUB_OUTPUT
 
+<<<<<<< HEAD
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
+=======
+      - uses: actions/checkout@v4
+>>>>>>> e8fea61377 ([Doc] use safe package.json yarn.lock (#55027))
 
       - name: Checkout PR
         run: |
@@ -99,6 +103,42 @@ jobs:
           ignore: node_modules
           version: 0.28.1
 
+<<<<<<< HEAD
+=======
+      - name: docusaurus-mdx-checker
+        if: always()
+        run: |
+          npx docusaurus-mdx-checker -c docs
+
+      - name: link check
+        if: always()
+        uses: lycheeverse/lychee-action@v1.8.0
+        with:
+          fail: true
+          args: >
+            --config docs/lychee.toml
+            --offline "docs/**/*.md"
+
+      - name: Docusaurus build
+        env:
+          NODE_OPTIONS: --max-old-space-size=8192
+          DISABLE_VERSIONING: true
+        working-directory: ./docs/docusaurus
+        run: |
+          rm -rf ./docs
+          rm -rf ./i18n/zh/docusaurus-plugin-content-dos/current
+          mkdir -p ./i18n/zh/docusaurus-plugin-content-docs
+          mv ../en ./docs
+          rm -rf ./docs/release_notes ./docs/ecosystem_release
+          mv ../zh ./i18n/zh/docusaurus-plugin-content-docs/current
+          rm -rf ./i18n/zh/docusaurus-plugin-content-docs/current/release_notes ./i18n/zh/docusaurus-plugin-content-docs/current/ecosystem_release
+          git fetch
+          git checkout origin/main -- docs/docusaurus/package.json docs/docusaurus/yarn.lock         
+          yarn install --frozen-lockfile
+          yarn clear
+          yarn build
+
+>>>>>>> e8fea61377 ([Doc] use safe package.json yarn.lock (#55027))
   behavior-unchange:
     runs-on: ubuntu-latest
     needs: add-doc-label
