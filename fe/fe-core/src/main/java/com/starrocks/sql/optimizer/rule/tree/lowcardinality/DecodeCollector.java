@@ -59,6 +59,7 @@ import com.starrocks.thrift.TAccessPathType;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.jetbrains.annotations.TestOnly;
 
 import java.util.Collection;
 import java.util.Collections;
@@ -131,11 +132,15 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
 
     private final ColumnRefSet physicalOlapScanColumns = new ColumnRefSet();
 
+    // check if there is a blocking node in plan
+    private boolean canBlockingOutput = false;
+
     public DecodeCollector(SessionVariable session) {
         this.sessionVariable = session;
     }
 
     public void collect(OptExpression root, DecodeContext context) {
+        canBlockingOutput = new CheckBlockingNode().check(root);
         collectImpl(root, null);
         initContext(context);
     }
@@ -678,6 +683,11 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         return type.isVarchar() || (type.isArrayType() && ((ArrayType) type).getItemType().isVarchar());
     }
 
+    @TestOnly
+    public boolean canBlockingOutput() {
+        return canBlockingOutput;
+    }
+
     // Check if an expression can be optimized using a dictionary
     // If the expression only contains a string column, the expression can be optimized using a dictionary
     private static class DictExpressionCollector extends ScalarOperatorVisitor<ScalarOperator, Void> {
@@ -869,6 +879,35 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         public ScalarOperator visitMatchExprOperator(MatchExprOperator operator, Void context) {
             matchChildren.union((ColumnRefOperator) operator.getChildren().get(0));
             return merge(visitChildren(operator, context), operator);
+        }
+    }
+
+    public static class CheckBlockingNode extends OptExpressionVisitor<Boolean, Void> {
+        private boolean visitChild(OptExpression optExpression, Void context) {
+            if (optExpression.getInputs().size() != 1) {
+                return false;
+            }
+            OptExpression child = optExpression.getInputs().get(0);
+            return child.getOp().accept(this, child, context);
+        }
+
+        @Override
+        public Boolean visit(OptExpression optExpression, Void context) {
+            return visitChild(optExpression, context);
+        }
+
+        @Override
+        public Boolean visitPhysicalTopN(OptExpression optExpression, Void context) {
+            return true;
+        }
+
+        @Override
+        public Boolean visitPhysicalHashAggregate(OptExpression optExpression, Void context) {
+            return true;
+        }
+
+        public boolean check(OptExpression optExpression) {
+            return optExpression.getOp().accept(this, optExpression, null);
         }
     }
 }
