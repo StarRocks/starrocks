@@ -223,7 +223,8 @@ struct RuntimeColumnPredicateBuilder {
 } // namespace detail
 
 inline Status OlapRuntimeScanRangePruner::_update(const ColumnIdToGlobalDictMap* global_dictmaps,
-                                                  RuntimeFilterArrivedCallBack&& updater, size_t raw_read_rows) {
+                                                  RuntimeFilterArrivedCallBack&& updater, bool force,
+                                                  size_t raw_read_rows) {
     if (_arrived_runtime_filters_masks.empty()) {
         return Status::OK();
     }
@@ -234,7 +235,7 @@ inline Status OlapRuntimeScanRangePruner::_update(const ColumnIdToGlobalDictMap*
         if (auto rf = _unarrived_runtime_filters[i]->runtime_filter(_driver_sequence)) {
             size_t rf_version = rf->rf_version();
             if (!_arrived_runtime_filters_masks[i] ||
-                (rf_version > _rf_versions[i] && raw_read_rows - _raw_read_rows > rf_update_threshold)) {
+                (rf_version > _rf_versions[i] && (force || raw_read_rows - _raw_read_rows > rf_update_threshold))) {
                 ObjectPool pool;
 
                 ASSIGN_OR_RETURN(auto predicates, _get_predicates(global_dictmaps, i, &pool));

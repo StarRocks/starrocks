@@ -55,6 +55,8 @@ public:
     void TearDown() override {}
 
 protected:
+    using Int32RF = RuntimeBloomFilter<TYPE_INT>;
+
     StatusOr<RuntimeFilterProbeDescriptor*> gen_runtime_filter_desc(SlotId slot_id);
 
     std::unique_ptr<RandomAccessFile> _create_file(const std::string& file_path);
@@ -110,6 +112,8 @@ protected:
     StatusOr<HdfsScannerContext*> _create_context_for_filter_row_group_1(SlotId slot_id, int32_t start, int32_t end,
                                                                          bool has_null);
 
+    StatusOr<HdfsScannerContext*> _create_context_for_filter_row_group_update_rf(SlotId slot_id);
+
     StatusOr<HdfsScannerContext*> _create_context_for_filter_page_index(SlotId slot_id, int32_t start, int32_t end,
                                                                         bool has_null);
 
@@ -131,6 +135,7 @@ protected:
                                                          std::vector<ExprContext*>* conjunct_ctxs);
 
     static ChunkPtr _create_chunk();
+    static ChunkPtr _create_int_chunk();
     static ChunkPtr _create_multi_page_chunk();
     static ChunkPtr _create_struct_chunk();
     static ChunkPtr _create_required_array_chunk();
@@ -289,6 +294,22 @@ protected:
     //      +--------+--------+
     std::string _filter_row_group_path_2 =
             "./be/test/formats/parquet/test_data/file_read_test_filter_row_group_2.parquet";
+    // 3 row group, 3 rows per group
+    //      +--------+--------+
+    //      |   col1 |   col2 |
+    //      |--------+--------|
+    //      |      1 |     11 |
+    //      |      2 |     22 |
+    //      |      3 |     33 |
+    //      |      4 |     44 |
+    //      |      5 |     55 |
+    //      |      6 |     66 |
+    //      |      7 |     77 |
+    //      |      8 |     88 |
+    //      |      9 |     99 |
+    //      +--------+--------+
+    std::string _filter_row_group_path_3 =
+            "./be/test/formats/parquet/test_data/file_read_test_filter_row_group_update_rf.parquet";
 
     std::shared_ptr<RowDescriptor> _row_desc = nullptr;
     RuntimeState* _runtime_state = nullptr;
@@ -709,13 +730,30 @@ StatusOr<HdfsScannerContext*> FileReaderTest::_create_context_for_has_null_page_
     return scan_ctx;
 }
 
+StatusOr<HdfsScannerContext*> FileReaderTest::_create_context_for_filter_row_group_update_rf(SlotId slot_id) {
+    Utils::SlotDesc slot_descs[] = {{"col1", TYPE_INT_DESC, 0}, {"col2", TYPE_INT_DESC, 1}, {""}};
+    auto ctx = _create_scan_context(slot_descs, _filter_row_group_path_3);
+    ASSIGN_OR_RETURN(auto* rf_desc, gen_runtime_filter_desc(slot_id));
+
+    _rf_probe_collector->add_descriptor(rf_desc);
+
+    auto* pred_parser = _pool.add(new ConnectorPredicateParser(&ctx->slot_descs));
+    auto* rf_list = _pool.add(new UnarrivedRuntimeFilterList());
+    rf_list->driver_sequence = 1;
+    rf_list->unarrived_runtime_filters.emplace_back(rf_desc);
+    rf_list->slot_descs.emplace_back(ctx->slot_descs[0]);
+    ctx->rf_scan_range_pruner = _pool.add(new OlapRuntimeScanRangePruner(pred_parser, *rf_list));
+
+    return ctx;
+}
+
 StatusOr<HdfsScannerContext*> FileReaderTest::_create_context_for_filter_row_group_1(SlotId slot_id, int32_t start,
                                                                                      int32_t end, bool has_null) {
     Utils::SlotDesc slot_descs[] = {{"col1", TYPE_INT_DESC, 1}, {"col2", TYPE_INT_DESC, 2}, {"col3", TYPE_INT_DESC, 3},
                                     {"col4", TYPE_INT_DESC, 4}, {"col5", TYPE_INT_DESC, 5}, {""}};
     auto ctx = _create_scan_context(slot_descs, _filter_row_group_path_1);
 
-    auto* rf = _pool.add(new RuntimeBloomFilter<TYPE_INT>());
+    auto* rf = _pool.add(new Int32RF());
 
     ASSIGN_OR_RETURN(auto* rf_desc, gen_runtime_filter_desc(slot_id));
 
@@ -883,35 +921,12 @@ void FileReaderTest::_create_string_conjunct_ctxs(TExprOpcode::type opcode, Slot
                                                   std::vector<ExprContext*>* conjunct_ctxs) {
     std::vector<TExprNode> nodes;
 
-    TExprNode node0;
-    node0.node_type = TExprNodeType::BINARY_PRED;
-    node0.opcode = opcode;
-    node0.child_type = TPrimitiveType::VARCHAR;
-    node0.num_children = 2;
-    node0.__isset.opcode = true;
-    node0.__isset.child_type = true;
-    node0.type = gen_type_desc(TPrimitiveType::BOOLEAN);
+    TExprNode node0 = ExprsTestHelper::create_binary_pred_node(TPrimitiveType::VARCHAR, opcode);
+    TExprNode node1 = ExprsTestHelper::create_slot_expr_node_t<TYPE_VARCHAR>(0, slot_id, true);
+    TExprNode node2 = ExprsTestHelper::create_literal<TYPE_VARCHAR, std::string>(value, false);
+
     nodes.emplace_back(node0);
-
-    TExprNode node1;
-    node1.node_type = TExprNodeType::SLOT_REF;
-    node1.type = gen_type_desc(TPrimitiveType::VARCHAR);
-    node1.num_children = 0;
-    TSlotRef t_slot_ref = TSlotRef();
-    t_slot_ref.slot_id = slot_id;
-    t_slot_ref.tuple_id = 0;
-    node1.__set_slot_ref(t_slot_ref);
-    node1.is_nullable = true;
     nodes.emplace_back(node1);
-
-    TExprNode node2;
-    node2.node_type = TExprNodeType::STRING_LITERAL;
-    node2.type = gen_type_desc(TPrimitiveType::VARCHAR);
-    node2.num_children = 0;
-    TStringLiteral string_literal;
-    string_literal.value = value;
-    node2.__set_string_literal(string_literal);
-    node2.is_nullable = false;
     nodes.emplace_back(node2);
 
     TExpr t_expr;
@@ -932,14 +947,7 @@ void FileReaderTest::_create_struct_subfield_predicate_conjunct_ctxs(TExprOpcode
                                                                      std::vector<ExprContext*>* conjunct_ctxs) {
     std::vector<TExprNode> nodes;
 
-    TExprNode node0;
-    node0.node_type = TExprNodeType::BINARY_PRED;
-    node0.opcode = opcode;
-    node0.child_type = TPrimitiveType::VARCHAR;
-    node0.num_children = 2;
-    node0.__isset.opcode = true;
-    node0.__isset.child_type = true;
-    node0.type = gen_type_desc(TPrimitiveType::BOOLEAN);
+    TExprNode node0 = ExprsTestHelper::create_binary_pred_node(TPrimitiveType::VARCHAR, opcode);
     node0.__set_is_monotonic(true);
     nodes.emplace_back(node0);
 
@@ -1009,6 +1017,13 @@ ChunkPtr FileReaderTest::_create_chunk() {
     _append_column_for_chunk(LogicalType::TYPE_BIGINT, &chunk);
     _append_column_for_chunk(LogicalType::TYPE_VARCHAR, &chunk);
     _append_column_for_chunk(LogicalType::TYPE_DATETIME, &chunk);
+    return chunk;
+}
+
+ChunkPtr FileReaderTest::_create_int_chunk() {
+    ChunkPtr chunk = std::make_shared<Chunk>();
+    _append_column_for_chunk(LogicalType::TYPE_INT, &chunk);
+    _append_column_for_chunk(LogicalType::TYPE_INT, &chunk);
     return chunk;
 }
 
@@ -3175,6 +3190,38 @@ TEST_F(FileReaderTest, filter_row_group_with_rf_8) {
 
     ASSERT_OK(file_reader->init(ret.value()));
     ASSERT_EQ(file_reader->row_group_size(), 2);
+}
+
+TEST_F(FileReaderTest, update_rf_and_filter_row_group) {
+    config::parquet_advance_zonemap_filter = true;
+    SlotId slot_id = 0;
+
+    auto file_reader = _create_file_reader(_filter_row_group_path_3);
+    ASSIGN_OR_ASSERT_FAIL(auto* ctx, _create_context_for_filter_row_group_update_rf(slot_id));
+
+    ASSERT_OK(file_reader->init(ctx));
+    ASSERT_EQ(file_reader->row_group_size(), 3);
+
+    ChunkPtr chunk = _create_int_chunk();
+    ASSERT_OK(file_reader->get_next(&chunk));
+    ASSERT_EQ(chunk->num_rows(), 3);
+    ASSERT_EQ(chunk->debug_row(0), "[1, 11]");
+    ASSERT_EQ(chunk->debug_row(1), "[2, 22]");
+    ASSERT_EQ(chunk->debug_row(2), "[3, 33]");
+
+    auto* rf = Int32RF::create_with_range<false>(&_pool, 3, false);
+    ctx->runtime_filter_collector->descriptors().at(1)->set_runtime_filter(rf);
+
+    chunk->reset();
+    ASSERT_OK(file_reader->get_next(&chunk));
+    ASSERT_EQ(chunk->num_rows(), 3);
+    ASSERT_EQ(chunk->debug_row(0), "[4, 44]");
+    ASSERT_EQ(chunk->debug_row(1), "[5, 55]");
+    ASSERT_EQ(chunk->debug_row(2), "[6, 66]");
+
+    chunk->reset();
+    auto st = file_reader->get_next(&chunk);
+    ASSERT_TRUE(st.is_end_of_file());
 }
 
 TEST_F(FileReaderTest, filter_page_index_with_rf_has_null) {

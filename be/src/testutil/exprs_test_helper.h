@@ -346,6 +346,12 @@ public:
             string_literal.value = value;
             node.__set_string_literal(string_literal);
             node.node_type = TExprNodeType::STRING_LITERAL;
+        } else if constexpr (LType == TYPE_DECIMAL128) {
+            node.type = Decimal128TTypeDesc;
+            TDecimalLiteral decimal_literal;
+            decimal_literal.value = value;
+            node.__set_decimal_literal(decimal_literal);
+            node.node_type = TExprNodeType::DECIMAL_LITERAL;
         } else {
             // not implement
             CHECK(false);
@@ -359,20 +365,6 @@ public:
         TExprNode node;
         node.node_type = TExprNodeType::NULL_LITERAL;
         node.type = get_ttype_desc<LType>();
-        return node;
-    }
-
-    static TExprNode create_decimal_literal(const std::string& value, TTypeDesc t_type, bool is_nullable) {
-        TDecimalLiteral decimal_literal;
-        decimal_literal.value = value;
-
-        TExprNode node;
-        node.node_type = TExprNodeType::DECIMAL_LITERAL;
-        node.type = t_type;
-        node.num_children = 0;
-        node.__set_decimal_literal(decimal_literal);
-        node.is_nullable = is_nullable;
-
         return node;
     }
 
