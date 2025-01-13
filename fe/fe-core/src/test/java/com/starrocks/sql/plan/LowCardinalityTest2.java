@@ -17,9 +17,11 @@ package com.starrocks.sql.plan;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.common.FeConstants;
 import com.starrocks.planner.OlapScanNode;
+import com.starrocks.sql.optimizer.rule.tree.lowcardinality.DecodeCollector;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -356,6 +358,43 @@ public class LowCardinalityTest2 extends PlanTestBase {
             connectContext.getSessionVariable().setEnableLowCardinalityOptimize(enableLowCardinalityOptimize);
             connectContext.getSessionVariable().setNewPlanerAggStage(newPlannerAggStage);
         }
+    }
+
+    @Test
+    public void testIdentifyBlocking() throws Exception {
+        String sql = "select * from low_card_t1 order by 1";
+        boolean hasBlockingNode = new DecodeCollector.CheckBlockingNode().check(
+                UtFrameUtils.getPlanAndFragment(connectContext, sql).second.getPhysicalPlan());
+        Assert.assertTrue(hasBlockingNode);
+        sql = "select sum(cpc) from low_card_t1";
+        hasBlockingNode = new DecodeCollector.CheckBlockingNode().check(
+                UtFrameUtils.getPlanAndFragment(connectContext, sql).second.getPhysicalPlan());
+        Assert.assertTrue(hasBlockingNode);
+        sql = "(select sum(cpc) from low_card_t1) union all (select sum(cpc) from low_card_t2)";
+        hasBlockingNode = new DecodeCollector.CheckBlockingNode().check(
+                UtFrameUtils.getPlanAndFragment(connectContext, sql).second.getPhysicalPlan());
+        Assert.assertFalse(hasBlockingNode);
+        sql = "(select sum(cpc) from low_card_t1) union all (select sum(cpc) from low_card_t2) order by 1";
+        hasBlockingNode = new DecodeCollector.CheckBlockingNode().check(
+                UtFrameUtils.getPlanAndFragment(connectContext, sql).second.getPhysicalPlan());
+        Assert.assertTrue(hasBlockingNode);
+        sql = "select sum(ss) from " +
+                "((select sum(cpc) as ss from low_card_t1) union all (select sum(cpc) as ss from low_card_t2)) x";
+        hasBlockingNode = new DecodeCollector.CheckBlockingNode().check(
+                UtFrameUtils.getPlanAndFragment(connectContext, sql).second.getPhysicalPlan());
+        Assert.assertTrue(hasBlockingNode);
+        sql = "select * from low_card_t1 a join low_card_t2 b on a.cpc = b.cpc";
+        hasBlockingNode = new DecodeCollector.CheckBlockingNode().check(
+                UtFrameUtils.getPlanAndFragment(connectContext, sql).second.getPhysicalPlan());
+        Assert.assertFalse(hasBlockingNode);
+        sql = "select * from low_card_t1 a join low_card_t2 b on a.cpc = b.cpc order by 1";
+        hasBlockingNode = new DecodeCollector.CheckBlockingNode().check(
+                UtFrameUtils.getPlanAndFragment(connectContext, sql).second.getPhysicalPlan());
+        Assert.assertTrue(hasBlockingNode);
+        sql = "select sum(a.cpc) from low_card_t1 a join low_card_t2 b on a.cpc = b.cpc order by 1";
+        hasBlockingNode = new DecodeCollector.CheckBlockingNode().check(
+                UtFrameUtils.getPlanAndFragment(connectContext, sql).second.getPhysicalPlan());
+        Assert.assertTrue(hasBlockingNode);
     }
 
     @Test
