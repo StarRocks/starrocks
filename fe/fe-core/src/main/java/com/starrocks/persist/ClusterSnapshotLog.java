@@ -17,13 +17,15 @@ package com.starrocks.persist;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.lake.snapshot.ClusterSnapshot;
+import com.starrocks.lake.snapshot.ClusterSnapshotJob;
 import com.starrocks.persist.gson.GsonUtils;
 
 import java.io.DataInput;
 import java.io.IOException;
 
 public class ClusterSnapshotLog implements Writable {
-    public enum ClusterSnapshotLogType { NONE, CREATE_SNAPSHOT_PREFIX, DROP_SNAPSHOT }
+    public enum ClusterSnapshotLogType { NONE, CREATE_SNAPSHOT_PREFIX, DROP_SNAPSHOT, CREATE_SNAPSHOT, UPDATE_SNAPSHOT_JOB }
     @SerializedName(value = "type")
     private ClusterSnapshotLogType type = ClusterSnapshotLogType.NONE;
     // For CREATE_SNAPSHOT_PREFIX
@@ -34,6 +36,12 @@ public class ClusterSnapshotLog implements Writable {
     // For DROP_SNAPSHOT
     @SerializedName(value = "dropSnapshotName")
     private String dropSnapshotName = "";
+    // For CREATE_SNAPSHOT
+    @SerializedName(value = "snapshot")
+    private ClusterSnapshot snapshot = null;
+    // For UPDATE_SNAPSHOT_JOB
+    @SerializedName(value = "snapshotJob")
+    private ClusterSnapshotJob snapshotJob = null;
 
     public ClusterSnapshotLog() {}
 
@@ -46,6 +54,16 @@ public class ClusterSnapshotLog implements Writable {
     public void setDropSnapshot(String dropSnapshotName) {
         this.type = ClusterSnapshotLogType.DROP_SNAPSHOT;
         this.dropSnapshotName = dropSnapshotName;
+    }
+
+    public void setCreateSnapshot(ClusterSnapshot snapshot) {
+        this.type = ClusterSnapshotLogType.CREATE_SNAPSHOT;
+        this.snapshot = snapshot;
+    }
+
+    public void setSnapshotJob(ClusterSnapshotJob job) {
+        this.type = ClusterSnapshotLogType.UPDATE_SNAPSHOT_JOB;
+        this.snapshotJob = job;
     }
 
     public ClusterSnapshotLogType getType() {
@@ -62,6 +80,14 @@ public class ClusterSnapshotLog implements Writable {
 
     public String getDropSnapshotName() {
         return this.dropSnapshotName;
+    }
+
+    public ClusterSnapshot getSnapshot() {
+        return this.snapshot;
+    }
+
+    public ClusterSnapshotJob getSnapshotJob() {
+        return this.snapshotJob;
     }
 
     public static ClusterSnapshotLog read(DataInput in) throws IOException {

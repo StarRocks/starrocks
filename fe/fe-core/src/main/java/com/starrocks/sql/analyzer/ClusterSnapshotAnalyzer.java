@@ -17,6 +17,7 @@ package com.starrocks.sql.analyzer;
 import com.starrocks.common.DdlException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.sql.ast.AdminSetAutomatedSnapshotOffStmt;
 import com.starrocks.sql.ast.AdminSetAutomatedSnapshotOnStmt;
@@ -31,6 +32,10 @@ public class ClusterSnapshotAnalyzer {
     static class ClusterSnapshotAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
         @Override
         public Void visitAdminSetAutomatedSnapshotOnStatement(AdminSetAutomatedSnapshotOnStmt statement, ConnectContext context) {
+            if (!RunMode.isSharedDataMode()) {
+                throw new SemanticException("Automated snapshot only support share data mode");
+            }
+
             if (GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().isAutomatedSnapshotOn()) {
                 throw new SemanticException("Automated snapshot has been turn on");
             }
@@ -51,6 +56,10 @@ public class ClusterSnapshotAnalyzer {
         @Override
         public Void visitAdminSetAutomatedSnapshotOffStatement(AdminSetAutomatedSnapshotOffStmt statement,
                                                                ConnectContext context) {
+            if (!RunMode.isSharedDataMode()) {
+                throw new SemanticException("Automated snapshot only support share data mode");
+            }
+
             if (!GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().isAutomatedSnapshotOn()) {
                 throw new SemanticException("Automated snapshot has not been turn on");
             }

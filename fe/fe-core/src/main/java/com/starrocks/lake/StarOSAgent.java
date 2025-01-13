@@ -140,6 +140,10 @@ public class StarOSAgent {
         LOG.info("get serviceId {} from starMgr", serviceId);
     }
 
+    public String getRawServiceId() {
+        return serviceId;
+    }
+
     public String addFileStore(FileStoreInfo fsInfo) throws DdlException {
         try {
             return client.addFileStore(fsInfo, serviceId);

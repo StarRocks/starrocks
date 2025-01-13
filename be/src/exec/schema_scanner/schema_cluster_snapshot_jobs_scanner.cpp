@@ -25,8 +25,8 @@ namespace starrocks {
 SchemaScanner::ColumnDesc SchemaClusterSnapshotJobsScanner::_s_columns[] = {
         {"SNAPSHOT_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
         {"JOB_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(long), true},
-        {"CREATED_TIME", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(long), true},
-        {"FINISHED_TIME", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(long), true},
+        {"CREATED_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
+        {"FINISHED_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
         {"STATE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
         {"DETAIL_INFO", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
         {"ERROR_MESSAGE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
@@ -52,8 +52,16 @@ Status SchemaClusterSnapshotJobsScanner::_fill_chunk(ChunkPtr* chunk) {
     auto& slot_id_map = (*chunk)->get_slot_id_to_index_map();
     const TClusterSnapshotJobsItem& info = _result.items[_index];
     DatumArray datum_array{
-            Slice(info.snapshot_name), info.job_id,       info.created_time,
-            info.finished_time,        Slice(info.state), Slice(info.detail_info),
+            Slice(info.snapshot_name),
+            info.job_id,
+
+            TimestampValue::create_from_unixtime(info.created_time, _runtime_state->timezone_obj()),
+
+            TimestampValue::create_from_unixtime(info.finished_time, _runtime_state->timezone_obj()),
+
+            Slice(info.state),
+            Slice(info.detail_info),
+
             Slice(info.error_message),
     };
     for (const auto& [slot_id, index] : slot_id_map) {
