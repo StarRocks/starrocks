@@ -445,6 +445,8 @@ Status HiveDataSource::_decompose_conjunct_ctxs(RuntimeState* state) {
             _conjunct_ctxs_by_slot[slot_id].emplace_back(ctx);
         }
     }
+    // rewrite dict
+    RETURN_IF_ERROR(state->mutable_dict_optimize_parser()->rewrite_conjuncts(&_scanner_conjunct_ctxs));
     return Status::OK();
 }
 
