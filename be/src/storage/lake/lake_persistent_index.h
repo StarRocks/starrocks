@@ -152,10 +152,16 @@ public:
     // Check if this rowset need to rebuild, return `True` means need to rebuild this rowset.
     static bool needs_rowset_rebuild(const RowsetMetadataPB& rowset, uint32_t rebuild_rss_id);
 
+    // Return the files cnt that need to rebuild.
+    static size_t need_rebuild_file_cnt(const TabletMetadataPB& metadata,
+                                        const PersistentIndexSstableMetaPB& sstable_meta);
+
 private:
     Status flush_memtable();
 
     bool is_memtable_full() const;
+
+    bool too_many_rebuild_files() const;
 
     // batch get
     // |n|: size of key/value array
@@ -184,6 +190,7 @@ private:
     std::unique_ptr<PersistentIndexMemtable> _memtable;
     TabletManager* _tablet_mgr{nullptr};
     int64_t _tablet_id{0};
+    size_t _need_rebuild_file_cnt{0};
     // The size of sstables is not expected to be too large.
     // In major compaction, some sstables will be picked to be merged into one.
     // sstables are ordered with the smaller version on the left.
