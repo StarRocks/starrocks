@@ -699,11 +699,7 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
     }
 
     public AbstractJob getAbstractJob(boolean isExternalCatalog, String dbName) throws DdlException {
-        if (!isExternalCatalog) {
-            return getAbstractJobByDbName(dbName);
-        } else {
-            return dbIdToBackupOrRestoreJob.get(FAKE_DB_ID);
-        }
+        return isExternalCatalog ? dbIdToBackupOrRestoreJob.get(FAKE_DB_ID) : getAbstractJobByDbName(dbName);
     }
 
     public AbstractJob getAbstractJobByDbName(String dbName) throws DdlException {
