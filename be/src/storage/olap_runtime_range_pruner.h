@@ -55,9 +55,9 @@ public:
     }
 
     Status update_range_if_arrived(const ColumnIdToGlobalDictMap* global_dictmaps,
-                                   RuntimeFilterArrivedCallBack&& updater, size_t raw_read_rows) {
+                                   RuntimeFilterArrivedCallBack&& updater, bool force, size_t raw_read_rows) {
         if (_arrived_runtime_filters_masks.empty()) return Status::OK();
-        return _update(global_dictmaps, std::move(updater), raw_read_rows);
+        return _update(global_dictmaps, std::move(updater), force, raw_read_rows);
     }
 
 private:
@@ -73,7 +73,7 @@ private:
     StatusOr<PredicatesRawPtrs> _get_predicates(const ColumnIdToGlobalDictMap* global_dictmaps, size_t idx,
                                                 ObjectPool* pool);
 
-    Status _update(const ColumnIdToGlobalDictMap* global_dictmaps, RuntimeFilterArrivedCallBack&& updater,
+    Status _update(const ColumnIdToGlobalDictMap* global_dictmaps, RuntimeFilterArrivedCallBack&& updater, bool force,
                    size_t raw_read_rows);
 
     void _init(const UnarrivedRuntimeFilterList& params);
