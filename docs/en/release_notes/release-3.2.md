@@ -4,6 +4,24 @@ displayed_sidebar: docs
 
 # StarRocks version 3.2
 
+## 3.2.14
+
+Release date: January 8, 2025
+
+### Improvements
+
+- Supports collecting statistics of Paimon tables. [#52858](https://github.com/StarRocks/starrocks/pull/52858)
+- Included node information and histogram metrics in JSON metrics. [#53735](https://github.com/StarRocks/starrocks/pull/53735)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- The score of the Primary Key table index was not updated in the Commit phase. [#41737](https://github.com/StarRocks/starrocks/pull/41737)
+- Incorrect execution plans for `max(count(distinct))` when low-cardinality optimization is enabled. [#53403](https://github.com/StarRocks/starrocks/pull/53403)
+- When the List partition column has NULL values, queries against the Min/Max value of the partition column will lead to incorrect partition pruning. [#53235](https://github.com/StarRocks/starrocks/pull/53235)
+- Upload retries fail when backing up data to HDFS. [#53679](https://github.com/StarRocks/starrocks/pull/53679)
+
 ## 3.2.13
 
 Release date: December 13, 2024
