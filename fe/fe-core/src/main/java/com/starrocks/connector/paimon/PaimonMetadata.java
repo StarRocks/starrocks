@@ -294,7 +294,13 @@ public class PaimonMetadata implements ConnectorMetadata {
             int[] projected =
                     params.getFieldNames().stream().mapToInt(name -> (paimonTable.getFieldNames().indexOf(name))).toArray();
             List<Predicate> predicates = extractPredicates(paimonTable, params.getPredicate());
-            InnerTableScan scan = (InnerTableScan) readBuilder.withFilter(predicates).withProjection(projected).newScan();
+            boolean pruneManifestsByLimit = params.getLimit() != -1 && params.getLimit() < Integer.MAX_VALUE
+                    && onlyHasPartitionPredicate(table, predicate);
+            readBuilder = readBuilder.withFilter(predicates).withProjection(projected);
+            if (pruneManifestsByLimit) {
+                readBuilder = readBuilder.withLimit((int) limit);
+            }
+            InnerTableScan scan = (InnerTableScan) readBuilder.newScan();
             PaimonMetricRegistry paimonMetricRegistry = new PaimonMetricRegistry();
             List<Split> splits = scan.withMetricsRegistry(paimonMetricRegistry).plan().splits();
             traceScanMetrics(paimonMetricRegistry, splits, table.getCatalogTableName(), predicates);
@@ -650,5 +656,72 @@ public class PaimonMetadata implements ConnectorMetadata {
         } else {
             LOG.warn("Current catalog {} does not support cache.", catalogName);
         }
+    }
+
+    @Override
+    public void finishSink(String dbName, String tblName, List<TSinkCommitInfo> commitInfos) {
+        Identifier identifier = new Identifier(dbName, tblName);
+        List<TPaimonCommitMessage> commitMessageList = commitInfos.stream()
+                .map(TSinkCommitInfo::getPaimon_commit_message).collect(Collectors.toList());
+
+        try {
+            org.apache.paimon.table.Table paimonNativeTable = this.paimonNativeCatalog.getTable(identifier);
+            BatchWriteBuilder builder = paimonNativeTable.newBatchWriteBuilder();
+
+            if (commitInfos.get(0).isIs_overwrite()) {
+                builder.withOverwrite(new HashMap<>());
+            }
+            BatchTableCommit commit = builder.newCommit();
+
+            List<CommitMessage> messList = new ArrayList<>();
+            CommitMessageSerializer commitMessageSerializer = new CommitMessageSerializer();
+
+            for (TPaimonCommitMessage tPaimonCommitMessage : commitMessageList) {
+                String json = tPaimonCommitMessage.getCommit_info_string_list();
+                LOG.debug(json);
+                String[] stringArray = json.split(",");
+                List<CommitMessage> deserializedList = new ArrayList<>();
+                for (String s : stringArray) {
+                    byte[] b = Base64.getDecoder().decode(s);
+                    deserializedList.add(commitMessageSerializer.deserialize(3, b));
+                }
+                messList.addAll(deserializedList);
+            }
+            commit.commit(messList);
+            commit.close();
+        } catch (Exception e) {
+            throw new StarRocksConnectorException(e.getMessage());
+        }
+    }
+
+    public static boolean onlyHasPartitionPredicate(Table table, ScalarOperator predicate) {
+        if (predicate == null) {
+            return true;
+        }
+
+        List<ScalarOperator> scalarOperators = Utils.extractConjuncts(predicate);
+
+        List<String> predicateColumns = new ArrayList<>();
+        for (ScalarOperator operator : scalarOperators) {
+            String columnName = null;
+            if (operator.getChild(0) instanceof ColumnRefOperator) {
+                columnName = ((ColumnRefOperator) operator.getChild(0)).getName();
+            }
+
+            if (columnName == null || columnName.isEmpty()) {
+                return false;
+            }
+
+            predicateColumns.add(columnName);
+        }
+
+        List<String> partitionColNames = table.getPartitionColumnNames();
+        for (String columnName : predicateColumns) {
+            if (!partitionColNames.contains(columnName)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 }
