@@ -21,6 +21,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PrimitiveType;
@@ -396,10 +397,9 @@ public class StatisticsSQLTest extends PlanTestBase {
                         Type.DATE));
         assertContains(sql, "column_name in (\"col1\", \"col2\")");
         assertContains(sql, "column_name in (\"col3\")");
-        assertContains(sql, "column_name in (\"col4\", \"col5\")");
+        assertContains(sql, "column_name in (\"col4\", \"col5\", \"col6\")");
         assertContains(sql, "column_name in (\"col7\")");
-        assertContains(sql, "column_name in (\"col6\")");
-        Assert.assertEquals(4, StringUtils.countMatches(sql, "UNION ALL"));
+        Assert.assertEquals(3, StringUtils.countMatches(sql, "UNION ALL"));
 
         sql = StatisticSQLBuilder.buildQueryExternalFullStatisticsSQL("a",
                 Lists.newArrayList("col1", "col2", "col3", "col4", "col5", "col6", "col7"),
@@ -413,6 +413,13 @@ public class StatisticsSQLTest extends PlanTestBase {
                         ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 23, 8)));
         assertContains(sql, "column_name in (\"col1\", \"col2\")");
         Assert.assertEquals(5, StringUtils.countMatches(sql, "UNION ALL"));
+    }
+
+    @Test
+    public void testExternalTableCollectionStatsType() {
+        String sql = StatisticSQLBuilder.buildQueryExternalFullStatisticsSQL("a", Lists.newArrayList("col1", "col2"),
+                Lists.newArrayList(Type.ARRAY_INT, new MapType(Type.INT, Type.STRING)));
+        assertContains(sql, "cast(max(cast(max as string)) as string), cast(min(cast(min as string)) as string)");
     }
 
     @Test

@@ -160,7 +160,7 @@ public class StatisticSQLBuilder {
     }
 
     public static String buildQueryFullStatisticsSQL(Long tableId, List<String> columnNames, List<Type> columnTypes) {
-        Map<String, List<String>> nameGroups = groupByTypes(columnNames, columnTypes);
+        Map<String, List<String>> nameGroups = groupByTypes(columnNames, columnTypes, false);
 
         List<String> querySQL = new ArrayList<>();
         nameGroups.forEach((type, names) -> {
@@ -181,7 +181,7 @@ public class StatisticSQLBuilder {
 
     public static String buildQueryExternalFullStatisticsSQL(String tableUUID, List<String> columnNames,
                                                              List<Type> columnTypes) {
-        Map<String, List<String>> nameGroups = groupByTypes(columnNames, columnTypes);
+        Map<String, List<String>> nameGroups = groupByTypes(columnNames, columnTypes, true);
 
         List<String> querySQL = new ArrayList<>();
         nameGroups.forEach((type, names) -> {
@@ -196,13 +196,14 @@ public class StatisticSQLBuilder {
         return Joiner.on(" UNION ALL ").join(querySQL);
     }
 
-    private static Map<String, List<String>> groupByTypes(List<String> columnNames, List<Type> columnTypes) {
+    private static Map<String, List<String>> groupByTypes(List<String> columnNames, List<Type> columnTypes,
+                                                          boolean isExternal) {
         Map<String, List<String>> groupByTypeNames = Maps.newHashMap();
         for (int i = 0; i < columnNames.size(); i++) {
             String columnName = columnNames.get(i);
             Type columnType = columnTypes.get(i);
 
-            if (columnType.isStringType() || !columnType.canStatistic()) {
+            if (columnType.isStringType() || !columnType.canStatistic() || (isExternal && columnType.isComplexType())) {
                 groupByTypeNames.computeIfAbsent("string", k -> Lists.newArrayList()).add(columnName);
             } else if (columnType.isIntegerType()) {
                 groupByTypeNames.computeIfAbsent("bigint", k -> Lists.newArrayList()).add(columnName);
