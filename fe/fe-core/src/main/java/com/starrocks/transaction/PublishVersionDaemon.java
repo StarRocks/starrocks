@@ -53,6 +53,7 @@ import com.starrocks.lake.TxnInfoHelper;
 import com.starrocks.lake.Utils;
 import com.starrocks.lake.compaction.Quantiles;
 import com.starrocks.proto.DeleteTxnLogRequest;
+import com.starrocks.proto.DeleteTxnLogResponse;
 import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
@@ -79,6 +80,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Future;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.stream.Collectors;
 import javax.validation.constraints.NotNull;
@@ -558,6 +560,62 @@ public class PublishVersionDaemon extends FrontendDaemon {
         return true;
     }
 
+<<<<<<< HEAD
+=======
+    private void deleteTxnLogIgnoreError(ComputeNode node, DeleteTxnLogRequest request) {
+        try {
+            LakeService lakeService = BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort());
+            // just ignore the response, for we don't care the result of delete txn log
+            // and vacuum will clan the txn log finally if it failed.
+            // make sure sync wait for the RPC call to avoid too many RPC call existed in BE/CN side
+            Future<DeleteTxnLogResponse> responseFuture = lakeService.deleteTxnLog(request);
+            DeleteTxnLogResponse response = responseFuture.get();
+            if (response != null && response.status != null && response.status.statusCode != 0) {
+                LOG.warn("delete txn log request return with err: " + response.status.errorMsgs.get(0));
+            }
+        } catch (Exception e) {
+            LOG.warn("delete txn log error: " + e.getMessage());
+        }
+    }
+
+    private Runnable getDeleteTxnLogTask(TransactionStateBatch batch, List<Long> txnIds) {
+        return () -> {
+            // For each partition, send a delete request to all the tablets in the partition
+            for (Map.Entry<Long, Map<ComputeNode, Set<Long>>> entry : batch.getPartitionToTablets().entrySet()) {
+                Map<ComputeNode, Set<Long>> nodeToTablets = entry.getValue();
+                for (Map.Entry<ComputeNode, Set<Long>> entryItem : nodeToTablets.entrySet()) {
+                    ComputeNode node = entryItem.getKey();
+                    DeleteTxnLogRequest request = new DeleteTxnLogRequest();
+                    request.tabletIds = new ArrayList<>(entryItem.getValue());
+                    request.txnIds = txnIds;
+                    deleteTxnLogIgnoreError(node, request);
+                }
+            }
+        };
+    }
+
+    private Runnable getDeleteCombinedTxnLogTask(TransactionStateBatch batch, List<Long> txnIds) {
+        return () -> {
+            List<TxnInfoPB> txnInfoPBList = new ArrayList<>();
+            for (Long txnId : txnIds) {
+                TxnInfoPB txnInfoPB = new TxnInfoPB();
+                txnInfoPB.txnId = txnId;
+                txnInfoPB.combinedTxnLog = true;
+                txnInfoPBList.add(txnInfoPB);
+            }
+            // For each partition, send a delete request to any tablet in the partition
+            for (Map.Entry<Long, Map<ComputeNode, Set<Long>>> entry : batch.getPartitionToTablets().entrySet()) {
+                Map.Entry<ComputeNode, Set<Long>> entryItem = entry.getValue().entrySet().iterator().next();
+                ComputeNode node = entryItem.getKey();
+                DeleteTxnLogRequest request = new DeleteTxnLogRequest();
+                request.tabletIds = new ArrayList<>(entryItem.getValue());
+                request.txnInfos = txnInfoPBList;
+                deleteTxnLogIgnoreError(node, request);
+            }
+        };
+    }
+
+>>>>>>> a6b14d75ae ([BugFix] Fix unlimit delete_txn_log request from FE side (#54857))
     private void submitDeleteTxnLogJob(TransactionStateBatch txnStateBatch) {
         try {
             // TODO: do not send abortTxn() requests for transactions with combined txn log.
