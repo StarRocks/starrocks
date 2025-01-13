@@ -615,7 +615,6 @@ public class ColumnTypeConverter {
                 primitiveType = PrimitiveType.DATETIME;
                 break;
             case STRING:
-            case UUID:
                 return ScalarType.createDefaultExternalTableString();
             case DECIMAL:
                 int precision = ((Types.DecimalType) icebergType).precision();
@@ -649,6 +648,7 @@ public class ColumnTypeConverter {
                 }
                 return new StructType(structFields);
             case BINARY:
+            case UUID:
                 return Type.VARBINARY;
             case TIME:
             case FIXED:
