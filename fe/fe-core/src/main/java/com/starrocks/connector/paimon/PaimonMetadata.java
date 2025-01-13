@@ -918,4 +918,20 @@ public class PaimonMetadata implements ConnectorMetadata {
             throw new StarRocksConnectorException(e.getMessage());
         }
     }
+
+    public static boolean onlyHasPartitionPredicate(Table table, ScalarOperator predicate) {
+        if (predicate == null) {
+            return true;
+        }
+
+        List<ColumnRefOperator> columnRefOperators = predicate.getColumnRefs();
+        List<String> partitionColNames = table.getPartitionColumnNames();
+        for (ColumnRefOperator c : columnRefOperators) {
+            if (!partitionColNames.contains(c.getName())) {
+                return false;
+            }
+        }
+
+        return true;
+    }
 }
