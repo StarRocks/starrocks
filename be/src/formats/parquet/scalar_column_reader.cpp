@@ -22,23 +22,13 @@
 
 namespace starrocks::parquet {
 
-Status ScalarColumnReader::read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) {
+Status ScalarColumnReader::read_range(const Range<uint64_t>& range, const Filter* filter, Column* dst) {
     DCHECK(_field->is_nullable ? dst->is_nullable() : true);
-    _need_lazy_decode =
-            _dict_filter_ctx != nullptr || (_can_lazy_decode && filter != nullptr &&
-                                            SIMD::count_nonzero(*filter) * 1.0 / filter->size() < FILTER_RATIO);
-    ColumnContentType content_type = !_need_lazy_decode ? ColumnContentType::VALUE : ColumnContentType::DICT_CODE;
-    if (_need_lazy_decode) {
-        if (_dict_code == nullptr) {
-            _dict_code = ColumnHelper::create_column(
-                    TypeDescriptor::from_logical_type(ColumnDictFilterContext::kDictCodePrimitiveType), true);
-        }
-        dst = _dict_code;
-        dst->reserve(range.span_size());
-    }
+    ColumnContentType content_type =
+            _dict_filter_ctx == nullptr ? ColumnContentType::VALUE : ColumnContentType::DICT_CODE;
     if (!_converter->need_convert) {
         SCOPED_RAW_TIMER(&_opts.stats->column_read_ns);
-        return _reader->read_range(range, filter, content_type, dst.get());
+        return _reader->read_range(range, filter, content_type, dst);
     } else {
         auto column = _converter->create_src_column();
         {
@@ -46,7 +36,7 @@ Status ScalarColumnReader::read_range(const Range<uint64_t>& range, const Filter
             RETURN_IF_ERROR(_reader->read_range(range, filter, content_type, column.get()));
         }
         SCOPED_RAW_TIMER(&_opts.stats->column_convert_ns);
-        return _converter->convert(column, dst.get());
+        return _converter->convert(column, dst);
     }
 }
 
@@ -75,12 +65,12 @@ bool ScalarColumnReader::try_to_use_dict_filter(ExprContext* ctx, bool is_decode
 }
 
 Status ScalarColumnReader::fill_dst_column(ColumnPtr& dst, const ColumnPtr& src) {
-    if (!_need_lazy_decode) {
+    if (_dict_filter_ctx == nullptr) {
         dst->swap_column(*src);
     } else {
-        if (_dict_filter_ctx == nullptr || _dict_filter_ctx->is_decode_needed) {
+        if (_dict_filter_ctx->is_decode_needed) {
             ColumnPtr& dict_values = dst;
-            dict_values->reserve(src->size());
+            dict_values->resize(0);
 
             // decode dict code to dict values.
             // note that in dict code, there could be null value.
@@ -170,7 +160,7 @@ void ScalarColumnReader::collect_column_io_range(std::vector<io::SharedBufferedI
     const auto& column = _opts.row_group_meta->columns[_field->physical_column_index];
     if (type == ColumnIOType::PAGES) {
         const tparquet::ColumnMetaData& column_metadata = column.meta_data;
-        if (_offset_index_ctx != nullptr) {
+        if (_offset_index_ctx != nullptr && !_offset_index_ctx->page_selected.empty()) {
             // add dict page
             if (column_metadata.__isset.dictionary_page_offset) {
                 auto r = io::SharedBufferedInputStream::IORange(

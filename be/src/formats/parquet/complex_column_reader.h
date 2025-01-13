@@ -29,7 +29,7 @@ public:
         return Status::OK();
     }
 
-    Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) override;
+    Status read_range(const Range<uint64_t>& range, const Filter* filter, Column* dst) override;
 
     void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) override {
         _element_reader->get_levels(def_levels, rep_levels, num_levels);
@@ -72,7 +72,7 @@ public:
         return Status::OK();
     }
 
-    Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) override;
+    Status read_range(const Range<uint64_t>& range, const Filter* filter, Column* dst) override;
 
     void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) override {
         // check _value_reader
@@ -143,14 +143,7 @@ public:
         return Status::InternalError("No existed parquet subfield column reader in StructColumn");
     }
 
-    Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) override;
-
-    void set_can_lazy_decode(bool can_lazy_decode) override {
-        for (const auto& kv : _child_readers) {
-            if (kv.second == nullptr) continue;
-            kv.second->set_can_lazy_decode(can_lazy_decode);
-        }
-    }
+    Status read_range(const Range<uint64_t>& range, const Filter* filter, Column* dst) override;
 
     // get_levels functions only called by complex type
     // If parent is a struct type, only def_levels has value.
@@ -182,6 +175,23 @@ public:
         const std::string& sub_field = sub_field_path[layer];
         return _child_readers[sub_field]->rewrite_conjunct_ctxs_to_predicate(is_group_filtered, sub_field_path,
                                                                              layer + 1);
+    }
+
+    void init_dict_column(ColumnPtr& column, const std::vector<std::string>& sub_field_path,
+                          const size_t& layer) override {
+        const std::string& sub_field = sub_field_path[layer];
+        StructColumn* struct_column = nullptr;
+        if (column->is_nullable()) {
+            NullableColumn* nullable_column = down_cast<NullableColumn*>(column.get());
+            DCHECK(nullable_column->mutable_data_column()->is_struct());
+            struct_column = down_cast<StructColumn*>(nullable_column->mutable_data_column());
+        } else {
+            DCHECK(column->is_struct());
+            DCHECK(!_field->is_nullable);
+            struct_column = down_cast<StructColumn*>(column.get());
+        }
+        return _child_readers[sub_field]->init_dict_column(struct_column->field_column(sub_field), sub_field_path,
+                                                           layer + 1);
     }
 
     Status filter_dict_column(const ColumnPtr& column, Filter* filter, const std::vector<std::string>& sub_field_path,

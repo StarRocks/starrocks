@@ -63,19 +63,19 @@ static void def_rep_to_offset(const LevelInfo& level_info, const level_t* def_le
     *num_offsets = offset_pos;
 }
 
-Status ListColumnReader::read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) {
+Status read_range(const Range<uint64_t>& range, const Filter* filter, Column* dst) override {
     NullableColumn* nullable_column = nullptr;
     ArrayColumn* array_column = nullptr;
     if (dst->is_nullable()) {
-        nullable_column = down_cast<NullableColumn*>(dst.get());
+        nullable_column = down_cast<NullableColumn*>(dst);
         DCHECK(nullable_column->mutable_data_column()->is_array());
         array_column = down_cast<ArrayColumn*>(nullable_column->mutable_data_column());
     } else {
         DCHECK(dst->is_array());
         DCHECK(!_field->is_nullable);
-        array_column = down_cast<ArrayColumn*>(dst.get());
+        array_column = down_cast<ArrayColumn*>(dst);
     }
-    auto& child_column = array_column->elements_column();
+    auto* child_column = array_column->elements_column().get();
     RETURN_IF_ERROR(_element_reader->read_range(range, filter, child_column));
 
     level_t* def_levels = nullptr;
@@ -103,20 +103,20 @@ Status ListColumnReader::read_range(const Range<uint64_t>& range, const Filter* 
     return Status::OK();
 }
 
-Status MapColumnReader::read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) {
+Status MapColumnReader::read_range(const Range<uint64_t>& range, const Filter* filter, Column* dst) {
     NullableColumn* nullable_column = nullptr;
     MapColumn* map_column = nullptr;
     if (dst->is_nullable()) {
-        nullable_column = down_cast<NullableColumn*>(dst.get());
+        nullable_column = down_cast<NullableColumn*>(dst);
         DCHECK(nullable_column->mutable_data_column()->is_map());
         map_column = down_cast<MapColumn*>(nullable_column->mutable_data_column());
     } else {
         DCHECK(dst->is_map());
         DCHECK(!_field->is_nullable);
-        map_column = down_cast<MapColumn*>(dst.get());
+        map_column = down_cast<MapColumn*>(dst);
     }
-    auto& key_column = map_column->keys_column();
-    auto& value_column = map_column->values_column();
+    auto* key_column = map_column->keys_column().get();
+    auto* value_column = map_column->values_column().get();
     if (_key_reader != nullptr) {
         RETURN_IF_ERROR(_key_reader->read_range(range, filter, key_column));
     }
@@ -170,17 +170,17 @@ Status MapColumnReader::read_range(const Range<uint64_t>& range, const Filter* f
     return Status::OK();
 }
 
-Status StructColumnReader::read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) {
+Status StructColumnReader::read_range(const Range<uint64_t>& range, const Filter* filter, Column* dst) {
     NullableColumn* nullable_column = nullptr;
     StructColumn* struct_column = nullptr;
     if (dst->is_nullable()) {
-        nullable_column = down_cast<NullableColumn*>(dst.get());
+        nullable_column = down_cast<NullableColumn*>(dst);
         DCHECK(nullable_column->mutable_data_column()->is_struct());
         struct_column = down_cast<StructColumn*>(nullable_column->mutable_data_column());
     } else {
         DCHECK(dst->is_struct());
         DCHECK(!_field->is_nullable);
-        struct_column = down_cast<StructColumn*>(dst.get());
+        struct_column = down_cast<StructColumn*>(dst);
     }
 
     const auto& field_names = struct_column->field_names();
@@ -194,7 +194,7 @@ Status StructColumnReader::read_range(const Range<uint64_t>& range, const Filter
         const auto& field_name = field_names[i];
         if (LIKELY(_child_readers.find(field_name) != _child_readers.end())) {
             if (_child_readers[field_name] != nullptr) {
-                auto& child_column = struct_column->field_column(field_name);
+                Column* child_column = struct_column->field_column(field_name).get();
                 RETURN_IF_ERROR(_child_readers[field_name]->read_range(range, filter, child_column));
                 real_read = child_column->size();
                 first_read = false;

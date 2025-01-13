@@ -36,7 +36,7 @@ public:
         return StoredColumnReader::create(_opts, field, chunk_metadata, &_reader);
     }
 
-    Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) override;
+    Status read_range(const Range<uint64_t>& range, const Filter* filter, Column* dst) override;
 
     void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) override {
         _reader->get_levels(def_levels, rep_levels, num_levels);
@@ -56,10 +56,6 @@ public:
                                               const size_t& layer) override {
         DCHECK_EQ(sub_field_path.size(), layer);
         return _dict_filter_ctx->rewrite_conjunct_ctxs_to_predicate(_reader.get(), is_group_filtered);
-    }
-
-    void set_can_lazy_decode(bool can_lazy_decode) override {
-        _can_lazy_decode = can_lazy_decode && _col_type->is_string_type() && _column_all_pages_dict_encoded();
     }
 
     Status filter_dict_column(const ColumnPtr& column, Filter* filter, const std::vector<std::string>& sub_field_path,
@@ -111,14 +107,6 @@ private:
     const TypeDescriptor* _col_type = nullptr;
     const tparquet::ColumnChunk* _chunk_metadata = nullptr;
     std::unique_ptr<ColumnOffsetIndexCtx> _offset_index_ctx;
-
-    // _can_lazy_decode means string type and all page dict code
-    bool _can_lazy_decode = false;
-    // we use lazy decode adaptively because of RLE && decoder may be better than filter && decoder
-    static constexpr double FILTER_RATIO = 0.2;
-    bool _need_lazy_decode = false;
-    // dict code
-    ColumnPtr _dict_code = nullptr;
 };
 
 } // namespace starrocks::parquet
