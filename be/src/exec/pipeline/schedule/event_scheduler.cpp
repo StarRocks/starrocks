@@ -44,7 +44,7 @@ void EventScheduler::try_schedule(const DriverRawPtr driver) {
 
     // The logic in the pipeline poller is basically the same.
     auto fragment_ctx = driver->fragment_ctx();
-    if (fragment_ctx->is_canceled() && !driver->pending_finish()) {
+    if (fragment_ctx->is_canceled() && !driver->is_operator_cancelled()) {
         add_to_ready_queue = true;
     } else if (driver->need_report_exec_state()) {
         add_to_ready_queue = true;

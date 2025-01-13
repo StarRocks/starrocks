@@ -505,6 +505,7 @@ public:
 
     PipelineObserver* observer() { return &_observer; }
     void assign_observer();
+    bool is_operator_cancelled() const { return _is_operator_cancelled; }
 
 protected:
     PipelineDriver()
@@ -589,6 +590,8 @@ protected:
     std::atomic<bool> _need_check_reschedule{false};
 
     std::atomic<bool> _has_log_cancelled{false};
+
+    std::atomic<bool> _is_operator_cancelled{false};
 
     PipelineObserver _observer;
 

@@ -46,8 +46,8 @@ void PipelineObserver::_do_update(int event) {
     auto sink = driver->sink_operator();
     auto source = driver->source_operator();
 
-    if (auto state = driver->driver_state(); state == DriverState::INPUT_EMPTY || state == DriverState::OUTPUT_FULL) {
-        TRACE_SCHEDULE_LOG << "notify driver:" << driver << " state:" << driver->driver_state()
+    if (auto state = driver->driver_state(); state != DriverState::FINISH) {
+        TRACE_SCHEDULE_LOG << "notify driver:" << driver << " state:" << driver->driver_state() << " event:" << event
                            << " in_block_queue:" << driver->is_in_blocked()
                            << " source finished:" << source->is_finished()
                            << " operator has output:" << source->has_output()

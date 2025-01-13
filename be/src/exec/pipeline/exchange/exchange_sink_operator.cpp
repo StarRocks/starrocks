@@ -772,6 +772,12 @@ int64_t ExchangeSinkOperator::construct_brpc_attachment(const PTransmitChunkPara
     return attachment_physical_bytes;
 }
 
+std::string ExchangeSinkOperator::get_name() const {
+    std::string finished = is_finished() ? "X" : "O";
+    return fmt::format("{}_{}_{}({}) {{ pending_finish:{} }}", _name, _plan_node_id, (void*)this, finished,
+                       pending_finish());
+}
+
 ExchangeSinkOperatorFactory::ExchangeSinkOperatorFactory(
         int32_t id, int32_t plan_node_id, std::shared_ptr<SinkBuffer> buffer, TPartitionType::type part_type,
         const std::vector<TPlanFragmentDestination>& destinations, bool is_pipeline_level_shuffle,

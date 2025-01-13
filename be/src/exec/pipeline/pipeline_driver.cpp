@@ -575,6 +575,7 @@ void PipelineDriver::cancel_operators(RuntimeState* runtime_state) {
         WARN_IF_ERROR(_mark_operator_cancelled(op, runtime_state),
                       fmt::format("cancel pipeline driver error [driver={}]", to_readable_string()));
     }
+    _is_operator_cancelled = true;
 }
 
 void PipelineDriver::_close_operators(RuntimeState* runtime_state) {
