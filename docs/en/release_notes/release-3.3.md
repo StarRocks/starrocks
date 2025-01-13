@@ -10,6 +10,42 @@ After upgrading StarRocks to v3.3, DO NOT downgrade it directly to v3.2.0, v3.2.
 
 :::
 
+## 3.3.9
+
+Release date: January 12, 2025
+
+### New Features
+
+- Supports the translation of Trino SQL into StarRocks SQL. [#54185](https://github.com/StarRocks/starrocks/pull/54185)
+
+### Improvements
+
+- Corrected FE node names starting with `bdbje_reset_election_group` to enhance clarity. [#54399](https://github.com/StarRocks/starrocks/pull/54399)
+- Implemented vectorization for the `IF` function on ARM architectures. [#53093](https://github.com/StarRocks/starrocks/pull/53093)
+- `ALTER SYSTEM CREATE IMAGE` supports creating an image for StarManager. [#54370](https://github.com/StarRocks/starrocks/pull/54370)
+- Supports deleting cloud-native indexes of Primary Key tables in shared-data clusters. [#53971](https://github.com/StarRocks/starrocks/pull/53971)
+- Enforced the refresh of materialized views when the `FORCE` keyword is specified. [#52081](https://github.com/StarRocks/starrocks/pull/52081)
+- Supports specifying hints in `CACHE SELECT`. [#54697](https://github.com/StarRocks/starrocks/pull/54697)
+- Supports loading compressed CSV files using the `FILES()` function. Supported compression formats include gzip, bz2, lz4, deflate, and zstd. [#54626](https://github.com/StarRocks/starrocks/pull/54626)
+- Supports assigning multiple values to the same column in an `UPDATE` statement. [#54534](https://github.com/StarRocks/starrocks/pull/54534)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- Unexpected errors when refreshing materialized views built on JDBC catalogs. [#54487](https://github.com/StarRocks/starrocks/pull/54487)
+- Instability in results when a Delta Lake table joins itself. [#54473](https://github.com/StarRocks/starrocks/pull/54473)
+- Upload retries fail when backing up data to HDFS. [#53679](https://github.com/StarRocks/starrocks/pull/53679)
+- BFD initialization errors on the aarch64 architecture. [#54372](https://github.com/StarRocks/starrocks/pull/54372)
+- Sensitive information recorded in BE logs. [#54677](https://github.com/StarRocks/starrocks/pull/54677)
+- Errors in Compaction-related metrics in profiles. [#54678](https://github.com/StarRocks/starrocks/pull/54678)
+- BE crashes caused by creating tables with nested `TIME` types. [#54601](https://github.com/StarRocks/starrocks/pull/54601)
+- Query plan errors for `LIMIT` queries with subquery TOP-N. [#54507](https://github.com/StarRocks/starrocks/pull/54507)
+
+### Downgrade notes
+
+- Clusters can be downgraded from v3.3.9 only to v3.2.11 and later.
+
 ## 3.3.8
 
 Release date: January 3, 2025
