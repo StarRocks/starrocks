@@ -30,6 +30,7 @@ import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import mockit.Expectations;
 import org.apache.hadoop.hive.metastore.api.NoSuchObjectException;
+import org.jetbrains.annotations.NotNull;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -39,8 +40,10 @@ import java.lang.reflect.InvocationTargetException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.starrocks.connector.hive.RemoteFileInputFormat.ORC;
 import static org.apache.hadoop.hive.common.StatsSetupConst.TASK;
@@ -52,6 +55,7 @@ public class CachingHiveMetastoreTest {
     private ExecutorService executor;
     private long expireAfterWriteSec = 30;
     private long refreshAfterWriteSec = -1;
+    private AtomicInteger count = new AtomicInteger(0);
 
     @Before
     public void setUp() throws Exception {
@@ -491,7 +495,7 @@ public class CachingHiveMetastoreTest {
     @Test
     public void testAutoRefreshPartition() throws InterruptedException {
         CachingHiveMetastore cachingHiveMetastore = new CachingHiveMetastore(
-                metastore, executor, executor,
+                metastore, executor, new MyExecutors(executor),
                 expireAfterWriteSec, 1, 1000L, false);
         HiveTable table = (HiveTable) cachingHiveMetastore.getTable("db1", "tbl1");
         Partition partition = cachingHiveMetastore.getPartition(
@@ -505,17 +509,36 @@ public class CachingHiveMetastoreTest {
         Assert.assertFalse(cachingHiveMetastore.isCachedExternalTable(
                 DatabaseTableName.of("db1", "tbl1")));
 
-        // Get partition for 5 times every 1s
+        // Get partition for 5 times every 2s
         String mangedTableMark = partition.getParameters().get(TASK);
         String externalTableMark = externalPartition.getParameters().get(TASK);
         for (int i = 0; i < 5; i++) {
+            // Sleep for 2s to make sure each time we get will trigger the refresh
+            Thread.sleep(2000);
             partition =
-              cachingHiveMetastore.getPartition("db1", "tbl1", Lists.newArrayList("par1"));
+                    cachingHiveMetastore.getPartition("db1", "tbl1", Lists.newArrayList("par1"));
             externalPartition =
-              cachingHiveMetastore.getPartition("db1", "external_table", Lists.newArrayList("par1"));
-            Thread.sleep(1000);
+                    cachingHiveMetastore.getPartition("db1", "external_table", Lists.newArrayList("par1"));
         }
         Assert.assertEquals(partition.getParameters().get(TASK), mangedTableMark);
         Assert.assertNotEquals(externalPartition.getParameters().get(TASK), externalTableMark);
+        // Sleep for 1s to make sure async refresh already submit
+        Thread.sleep(1000);
+        Assert.assertEquals(5, count.get());
+    }
+
+    private class MyExecutors implements Executor {
+
+        private final Executor coreExecutor;
+
+        public MyExecutors(Executor coreExecutor) {
+            this.coreExecutor = coreExecutor;
+        }
+
+        @Override
+        public void execute(@NotNull Runnable command) {
+            count.incrementAndGet();
+            coreExecutor.execute(command);
+        }
     }
 }
