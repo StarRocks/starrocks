@@ -615,8 +615,12 @@ public class ColumnTypeConverter {
                 primitiveType = PrimitiveType.DATETIME;
                 break;
             case STRING:
+<<<<<<< HEAD
             case UUID:
                 return ScalarType.createDefaultExternalTableString();
+=======
+                return ScalarType.createDefaultCatalogString();
+>>>>>>> 68a180a995 ([BugFix]uuid in iceberg should be binary (#54978))
             case DECIMAL:
                 int precision = ((Types.DecimalType) icebergType).precision();
                 int scale = ((Types.DecimalType) icebergType).scale();
@@ -649,6 +653,7 @@ public class ColumnTypeConverter {
                 }
                 return new StructType(structFields);
             case BINARY:
+            case UUID:
                 return Type.VARBINARY;
             case TIME:
             case FIXED:
