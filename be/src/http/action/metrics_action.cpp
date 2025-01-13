@@ -23,6 +23,7 @@
 #include <rapidjson/rapidjson.h>
 #include <rapidjson/stringbuffer.h>
 #include <rapidjson/writer.h>
+#include <util/time.h>
 
 #include <string>
 
@@ -329,6 +330,9 @@ void JsonMetricsVisitor::visit(const std::string& prefix, const std::string& nam
 }
 
 void MetricsAction::handle(HttpRequest* req) {
+    LOG(INFO) << "Start collecting metrics";
+    int64_t t0 = MonotonicMillis();
+
     auto scoped_span = trace::Scope(Tracer::Instance().start_trace("http_handle_metrics"));
     const std::string& type = req->param("type");
     std::string str;
@@ -370,6 +374,8 @@ void MetricsAction::handle(HttpRequest* req) {
     } else {
         (*_mock_func)(str);
     }
+    int64_t t1 = MonotonicMillis();
+    LOG(INFO) << "Finish collecting metrics, cost " << t1 - t0 << "ms";
 }
 
 void MetricsAction::_collect_table_metrics(starrocks::MetricsVisitor* visitor) {
