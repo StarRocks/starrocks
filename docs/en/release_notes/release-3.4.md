@@ -6,7 +6,7 @@ displayed_sidebar: docs
 
 ## 3.4.0 RC-01
 
-Release date: January 10, 2025
+Release date: January 13, 2025
 
 ### Data Lake Analytics
 
