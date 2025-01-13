@@ -735,6 +735,8 @@ public:
 
     void start() { _sw.start(); }
 
+    int64_t elapsed_time() { return _sw.elapsed_time(); }
+
     bool is_cancelled() { return _is_cancelled != nullptr && *_is_cancelled; }
 
     void UpdateCounter() {
