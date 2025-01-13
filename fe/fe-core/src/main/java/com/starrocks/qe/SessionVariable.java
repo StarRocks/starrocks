@@ -43,7 +43,7 @@ import com.google.common.reflect.TypeToken;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.ToNumberPolicy;
-import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.VectorSearchOptions;
@@ -1799,7 +1799,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private String dataCachePopulateMode = DataCachePopulateMode.AUTO.modeName();
 
     @VariableMgr.VarAttr(name = CATALOG, flag = VariableMgr.SESSION_ONLY)
-    private String catalog = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
+    private String catalog = Config.default_session_catalog;
 
     public void setCatalog(String catalog) {
         this.catalog = catalog;

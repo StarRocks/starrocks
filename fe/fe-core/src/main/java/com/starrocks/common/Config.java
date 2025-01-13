@@ -1501,6 +1501,12 @@ public class Config extends ConfigBase {
     public static long catalog_try_lock_timeout_ms = 5000; // 5 sec
 
     /**
+     * Configure the default catalog at the session level.
+     */
+    @ConfField(mutable = true)
+    public static String default_session_catalog = "default_catalog"; // 5 sec
+
+    /**
      * if this is set to true
      * all pending load job will fail when call begin txn api
      * all prepare load job will fail when call commit txn api
