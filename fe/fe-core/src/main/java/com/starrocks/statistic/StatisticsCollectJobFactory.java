@@ -35,6 +35,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
@@ -109,8 +110,24 @@ public class StatisticsCollectJobFactory {
         LOG.debug("statistics job work on table: {}, type: {}", table.getName(), analyzeType.name());
         if (analyzeType.equals(StatsConstants.AnalyzeType.SAMPLE)) {
             if (partitionIdList == null) {
-                partitionIdList = table.getPartitions().stream().filter(Partition::hasData)
-                        .map(Partition::getId).collect(Collectors.toList());
+                Collection<Partition> partitions = table.getPartitions();
+                BasicStatsMeta basicStatsMeta = GlobalStateMgr.getCurrentState().getAnalyzeMgr()
+                        .getTableBasicStatsMeta(table.getId());
+
+                if (basicStatsMeta != null) {
+                    partitionIdList = partitions.stream()
+                            .filter(partition -> {
+                                LocalDateTime partitionUpdateTime = StatisticUtils.getPartitionLastUpdateTime(partition);
+                                return basicStatsMeta.getUpdateTime().isBefore(partitionUpdateTime) && partition.hasData();
+                            })
+                            .map(Partition::getId)
+                            .collect(Collectors.toList());
+                } else {
+                    partitionIdList = partitions.stream()
+                            .filter(Partition::hasData)
+                            .map(Partition::getId)
+                            .collect(Collectors.toList());
+                }
             }
             
             if (Config.statistic_use_meta_statistics) {
