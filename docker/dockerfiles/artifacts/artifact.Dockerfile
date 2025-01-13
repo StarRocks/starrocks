@@ -21,7 +21,7 @@ ARG BUILD_ROOT
 COPY . ${BUILD_ROOT}
 WORKDIR ${BUILD_ROOT}
 # clean and build Frontend and Spark Dpp application
-RUN --mount=type=cache,target=/root/.m2/ STARROCKS_VERSION=${RELEASE_VERSION} BUILD_TYPE=${BUILD_TYPE} MAVEN_OPTS=${MAVEN_OPTS} ./build.sh --fe --clean
+RUN --mount=type=cache,target=/root/.m2/ STARROCKS_VERSION=${RELEASE_VERSION} BUILD_TYPE=${BUILD_TYPE} MAVEN_OPTS=${MAVEN_OPTS} ./build.sh --fe --with-maven-batch-mode ON --clean
 
 
 FROM ${builder} as broker-builder
