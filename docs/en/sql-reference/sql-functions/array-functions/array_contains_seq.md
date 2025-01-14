@@ -18,7 +18,7 @@ This function is supported from v3.3 onwards.
 ## Syntax
 
 ~~~Haskell
-BOOLEAN array_contains_all(arr1, arr2)
+BOOLEAN array_contains_seq(arr1, arr2)
 ~~~
 
 ## Parameters
