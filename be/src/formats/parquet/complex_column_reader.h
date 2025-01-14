@@ -192,7 +192,7 @@ public:
             struct_column = down_cast<StructColumn*>(nullable_column->mutable_data_column());
         } else {
             DCHECK(column->is_struct());
-            DCHECK(!_field->is_nullable);
+            DCHECK(!get_column_parquet_field()->is_nullable);
             struct_column = down_cast<StructColumn*>(column.get());
         }
         return _child_readers[sub_field]->init_dict_column(struct_column->field_column(sub_field), sub_field_path,
