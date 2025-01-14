@@ -51,6 +51,10 @@ public class Constants {
         public boolean isMergeable() {
             return this == MV;
         }
+
+        public boolean isMVTask() {
+            return this == MV;
+        }
     }
 
     //                   ------> FAILED
