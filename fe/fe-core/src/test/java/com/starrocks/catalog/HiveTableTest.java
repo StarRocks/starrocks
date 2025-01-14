@@ -260,7 +260,7 @@ public class HiveTableTest {
         targetFormats.add("RCBINARY");
         targetFormats.add("RCTEXT");
         targetFormats.add("SEQUENCE");
-
+        targetFormats.add("JSONTEXT");
         for (String targetFormat : targetFormats) {
             HiveTable oTable = createExternalTableByFormat(targetFormat);
             String inputFormatClass = HiveStorageFormat.get(targetFormat).getInputFormat();
@@ -290,6 +290,8 @@ public class HiveTableTest {
             TTableDescriptor tTableDescriptor = hiveTable.toThrift(partitions);
 
             Assert.assertEquals(tTableDescriptor.getHdfsTable().getInput_format(), inputFormatClass);
+            Assert.assertNotEquals(tTableDescriptor.getHdfsTable().getInput_format(),"UNSUPPORTED");
+            Assert.assertNotEquals(tTableDescriptor.getHdfsTable().getSerde_lib(),"UNSUPPORTED");
             Assert.assertEquals(tTableDescriptor.getHdfsTable().getSerde_lib(), serde);
             Assert.assertEquals(tTableDescriptor.getHdfsTable().getHive_column_names(), "col2");
             Assert.assertEquals(tTableDescriptor.getHdfsTable().getHive_column_types(), "INT");
