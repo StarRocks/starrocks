@@ -412,9 +412,9 @@ public class ScalarOperatorToIcebergExpr {
                 case DATETIME:
                     ZoneId zoneId;
                     if (Types.TimestampType.withZone().equals(context)) {
-                        zoneId = TimeUtils.getTimeZone().toZoneId();
-                    } else {
                         zoneId = ZoneOffset.UTC;
+                    } else {
+                        zoneId = TimeUtils.getTimeZone().toZoneId();
                     }
 
                     long value = operator.getDatetime().atZone(zoneId).toEpochSecond() * 1000
