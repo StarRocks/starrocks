@@ -39,7 +39,10 @@ import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.Nullable;
 
-/** Dispatch transaction state to backends after the load finished. */
+/**
+ * Dispatch transaction state to backends after the load finished.
+ * TODO send txn states on the same backend in batch
+ */
 public class TxnStateDispatcher {
 
     private static final Logger LOG = LoggerFactory.getLogger(TxnStateDispatcher.class);

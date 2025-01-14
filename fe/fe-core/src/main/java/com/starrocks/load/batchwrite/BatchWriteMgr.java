@@ -63,7 +63,7 @@ public class BatchWriteMgr extends FrontendDaemon {
     private final TxnStateDispatcher txnStateDispatcher;
 
     public BatchWriteMgr() {
-        super("group-commit-mgr", Config.merge_commit_gc_check_interval_ms);
+        super("merge-commit-mgr", Config.merge_commit_gc_check_interval_ms);
         this.idGenerator = new AtomicLong(0L);
         this.isomorphicBatchWriteMap = new ConcurrentHashMap<>();
         this.lock = new ReentrantReadWriteLock();
