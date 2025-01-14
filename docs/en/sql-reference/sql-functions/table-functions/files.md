@@ -210,7 +210,7 @@ The system unionizes the schema of Parquet and ORC files based on the column nam
 
 ##### Infer STRUCT type from Parquet
 
-From v3.4.0 onwards, FILES() supports inferring the STRUCT type data from Parquet files. Although Parquet file itself does not support the STRUCT type, the system can infer STRUCT and nested STRUCT values from the STRING type column of the file. 
+From v3.4.0 onwards, FILES() supports inferring the STRUCT type data from Parquet files.
 
 #### StorageCredentialParams
 
