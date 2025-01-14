@@ -749,6 +749,25 @@ public class StarOSAgentTest {
                 () -> starosAgent.createWorkerGroup("size", 1, "aaa"));
     }
 
+    @Test
+    public void testUpdateWorkerGroup() throws StarClientException, DdlException, StarRocksException {
+        new MockUp<StarClient>() {
+            @Mock
+            public WorkerGroupDetailInfo updateWorkerGroup(String serviceId, long groupId,
+                    Map<String, String> labels, Map<String, String> properties, int replicaNumber,
+                    ReplicationType replicationType) throws StarClientException {
+                return WorkerGroupDetailInfo.newBuilder().build();
+            }
+        };
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+        starosAgent.updateWorkerGroup(123, 1, null);
+        starosAgent.updateWorkerGroup(123, 1, "sync");
+        starosAgent.updateWorkerGroup(123, 1, "async");
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Unknown replication type aaa",
+                () -> starosAgent.updateWorkerGroup(123, 1, "aaa"));
+    }
+
     private Set<Long> getBackendIdsByShard(long shardId, long workerGroupId) throws StarRocksException {
         return starosAgent.getAllNodeIdsByShard(shardId, workerGroupId, false);
     }
