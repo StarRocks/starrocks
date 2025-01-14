@@ -530,8 +530,13 @@ public class AlterJobMgr {
             }
             view.setNewFullSchema(newFullSchema);
             view.setComment(comment);
+<<<<<<< HEAD
             LocalMetastore.inactiveRelatedMaterializedView(db, view,
                     MaterializedViewExceptions.inactiveReasonForBaseViewChanged(viewName));
+=======
+            AlterMVJobExecutor.inactiveRelatedMaterializedView(view,
+                    MaterializedViewExceptions.inactiveReasonForBaseViewChanged(viewName), isReplay);
+>>>>>>> e9f711c43 ([BugFix] InactiveRelatedMaterializedView not working across databases (#54846))
             db.dropTable(viewName);
             db.registerTableUnlocked(view);
 

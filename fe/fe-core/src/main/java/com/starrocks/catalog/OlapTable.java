@@ -3271,8 +3271,13 @@ public class OlapTable extends Table {
         // in recycle bin,
         // which make things easier.
         dropAllTempPartitions();
+<<<<<<< HEAD
         LocalMetastore.inactiveRelatedMaterializedView(db, this,
                 MaterializedViewExceptions.inactiveReasonForBaseTableNotExists(getName()));
+=======
+        AlterMVJobExecutor.inactiveRelatedMaterializedView(this,
+                MaterializedViewExceptions.inactiveReasonForBaseTableNotExists(getName()), replay);
+>>>>>>> e9f711c43 ([BugFix] InactiveRelatedMaterializedView not working across databases (#54846))
         if (!replay && hasAutoIncrementColumn()) {
             sendDropAutoIncrementMapTask();
         }
