@@ -51,33 +51,26 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
     private static final Logger LOG = LogManager.getLogger(RewriteSimpleAggToHDFSScanRule.class);
 
     public static final RewriteSimpleAggToHDFSScanRule HIVE_SCAN_NO_PROJECT =
-            new RewriteSimpleAggToHDFSScanRule(OperatorType.LOGICAL_HIVE_SCAN, true);
+            new RewriteSimpleAggToHDFSScanRule(OperatorType.LOGICAL_HIVE_SCAN, false);
     public static final RewriteSimpleAggToHDFSScanRule ICEBERG_SCAN_NO_PROJECT =
-            new RewriteSimpleAggToHDFSScanRule(OperatorType.LOGICAL_ICEBERG_SCAN, true);
+            new RewriteSimpleAggToHDFSScanRule(OperatorType.LOGICAL_ICEBERG_SCAN, false);
     public static final RewriteSimpleAggToHDFSScanRule FILE_SCAN_NO_PROJECT =
-            new RewriteSimpleAggToHDFSScanRule(OperatorType.LOGICAL_FILE_SCAN, true);
+            new RewriteSimpleAggToHDFSScanRule(OperatorType.LOGICAL_FILE_SCAN, false);
 
     public static final RewriteSimpleAggToHDFSScanRule HIVE_SCAN =
-            new RewriteSimpleAggToHDFSScanRule(OperatorType.LOGICAL_HIVE_SCAN);
+            new RewriteSimpleAggToHDFSScanRule(OperatorType.LOGICAL_HIVE_SCAN, true);
     public static final RewriteSimpleAggToHDFSScanRule ICEBERG_SCAN =
-            new RewriteSimpleAggToHDFSScanRule(OperatorType.LOGICAL_ICEBERG_SCAN);
+            new RewriteSimpleAggToHDFSScanRule(OperatorType.LOGICAL_ICEBERG_SCAN, true);
     public static final RewriteSimpleAggToHDFSScanRule FILE_SCAN =
-            new RewriteSimpleAggToHDFSScanRule(OperatorType.LOGICAL_FILE_SCAN);
+            new RewriteSimpleAggToHDFSScanRule(OperatorType.LOGICAL_FILE_SCAN, true);
 
     final OperatorType scanOperatorType;
     final boolean hasProjectOperator;
 
-    private RewriteSimpleAggToHDFSScanRule(OperatorType logicalOperatorType, boolean withoutProject) {
+    private RewriteSimpleAggToHDFSScanRule(OperatorType logicalOperatorType, boolean hasProject) {
         super(RuleType.TF_REWRITE_SIMPLE_AGG, Pattern.create(OperatorType.LOGICAL_AGGR)
                 .addChildren(Pattern.create(logicalOperatorType)));
-        hasProjectOperator = false;
-        scanOperatorType = logicalOperatorType;
-    }
-
-    private RewriteSimpleAggToHDFSScanRule(OperatorType logicalOperatorType) {
-        super(RuleType.TF_REWRITE_SIMPLE_AGG, Pattern.create(OperatorType.LOGICAL_AGGR)
-                .addChildren(Pattern.create(OperatorType.LOGICAL_PROJECT, logicalOperatorType)));
-        hasProjectOperator = true;
+        hasProjectOperator = hasProject;
         scanOperatorType = logicalOperatorType;
     }
 
