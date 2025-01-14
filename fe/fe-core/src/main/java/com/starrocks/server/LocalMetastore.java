@@ -3554,6 +3554,16 @@ public class LocalMetastore implements ConnectorMetadata, MemoryTrackable {
             db.writeUnlock();
         }
 
+<<<<<<< HEAD
+=======
+        olapTable.checkAndSetName(newTableName, false);
+
+        db.dropTable(oldTableName);
+        db.registerTableUnlocked(olapTable);
+        AlterMVJobExecutor.inactiveRelatedMaterializedView(olapTable,
+                MaterializedViewExceptions.inactiveReasonForBaseTableRenamed(oldTableName), false);
+
+>>>>>>> e9f711c43e ([BugFix] InactiveRelatedMaterializedView not working across databases (#54846))
         TableInfo tableInfo = TableInfo.createForTableRename(db.getId(), olapTable.getId(), newTableName);
         GlobalStateMgr.getCurrentState().getEditLog().logTableRename(tableInfo);
         LOG.info("rename table[{}] to {}, tableId: {}", oldTableName, newTableName, olapTable.getId());

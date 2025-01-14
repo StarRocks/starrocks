@@ -1229,12 +1229,18 @@ public class AlterJobMgr {
                 throw new DdlException("failed to init view stmt", e);
             }
             view.setNewFullSchema(newFullSchema);
+<<<<<<< HEAD
             if (comment != null) {
                 view.setComment(comment);
             }
 
             LocalMetastore.inactiveRelatedMaterializedView(db, view,
                     MaterializedViewExceptions.inactiveReasonForBaseViewChanged(viewName));
+=======
+            view.setComment(comment);
+            AlterMVJobExecutor.inactiveRelatedMaterializedView(view,
+                    MaterializedViewExceptions.inactiveReasonForBaseViewChanged(viewName), isReplay);
+>>>>>>> e9f711c43e ([BugFix] InactiveRelatedMaterializedView not working across databases (#54846))
             db.dropTable(viewName);
             db.registerTableUnlocked(view);
 
