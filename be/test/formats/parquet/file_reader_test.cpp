@@ -563,6 +563,7 @@ StatusOr<HdfsScannerContext*> FileReaderTest::_create_context_for_filter_row_gro
     TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     Utils::make_column_info_vector(tuple_desc, &ctx->materialized_columns);
     ctx->scan_range = _create_scan_range(_filter_row_group_path_1);
+    ctx->tuple_desc = tuple_desc;
 
     auto* rf_collector = _pool.add(new RuntimeFilterProbeCollector());
     auto* rf = _pool.add(new RuntimeBloomFilter<TYPE_INT>());
