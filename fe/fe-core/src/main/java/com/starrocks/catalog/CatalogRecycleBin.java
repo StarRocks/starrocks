@@ -181,12 +181,12 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
             nameToTableInfo.remove(dbId, table.getName());
             nameToTableInfo.put(dbId, oldTable.getName(), oldTableInfo);
             // Speed up the deletion of this renamed table by modifying its recycle time to zero
-            idToRecycleTime.put(oldTable.getId(), 0L);
+            idToRecycleTime.put(oldTable.getId(), System.currentTimeMillis());
         }
 
         // If the table was force dropped, set recycle time to zero so that this table will be deleted immediately
         // in the next cleanup round.
-        idToRecycleTime.put(table.getId(), !recoverable ? 0 : System.currentTimeMillis());
+        idToRecycleTime.put(table.getId(), System.currentTimeMillis());
         idToTableInfo.put(dbId, table.getId(), newTableInfo);
         nameToTableInfo.put(dbId, table.getName(), newTableInfo);
 
@@ -228,8 +228,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
 
         disableRecoverPartitionWithSameName(dbId, tableId, partitionName);
 
-        long recycleTime = recyclePartitionInfo.isRecoverable() ? System.currentTimeMillis() : 0;
-        idToRecycleTime.put(partitionId, recycleTime);
+        idToRecycleTime.put(partitionId, System.currentTimeMillis());
         idToPartition.put(partitionId, recyclePartitionInfo);
         LOG.info("Finished put partition '{}' to recycle bin. dbId: {} tableId: {} partitionId: {} recoverable: {}",
                 partitionName, dbId, tableId, partitionId, recyclePartitionInfo.isRecoverable());
@@ -300,12 +299,39 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
                 .collect(Collectors.toList());
     }
 
+    private synchronized long getAdjustedRecycleTimestamp(long id, long currentTimeMs) {
+        long originalRecycleTime = idToRecycleTime.get(id);
+        if (originalRecycleTime >
+                GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getValidDeletionTimeMsByAutomatedSnapshot()) {
+            return currentTimeMs; // can not be erased
+        }
+
+        Map<Long, RecycleTableInfo> idToRecycleTableInfo =  Maps.newHashMap();
+        for (Map<Long, RecycleTableInfo> tableEntry : idToTableInfo.rowMap().values()) {
+            for (Map.Entry<Long, RecycleTableInfo> entry : tableEntry.entrySet()) {
+                idToRecycleTableInfo.put(entry.getKey(), entry.getValue());
+            }
+        }
+
+        RecycleTableInfo tableInfo = idToRecycleTableInfo.get(id);
+        if (tableInfo != null && !tableInfo.isRecoverable()) {
+            return 0;
+        }
+
+        RecyclePartitionInfo partitionInfo = idToPartition.get(id);
+        if (partitionInfo != null && !partitionInfo.isRecoverable()) {
+            return 0;
+        }
+
+        return originalRecycleTime;
+    }
+
     /**
      * if we can erase this instance, we should check if anyone enable erase later.
      * Only used by main loop.
      */
     private synchronized boolean timeExpired(long id, long currentTimeMs) {
-        long latencyMs = currentTimeMs - idToRecycleTime.get(id);
+        long latencyMs = currentTimeMs - getAdjustedRecycleTimestamp(id, currentTimeMs);
         long expireMs = max(Config.catalog_trash_expire_second * 1000L, MIN_ERASE_LATENCY);
         if (enableEraseLater.contains(id)) {
             // if enableEraseLater is set, extend the timeout by LATE_RECYCLE_INTERVAL_SECONDS
@@ -355,7 +381,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
             return false;
         }
         // 2. will expire after quite a long time, don't worry
-        long latency = currentTimeMs - idToRecycleTime.get(id);
+        long latency = currentTimeMs - getAdjustedRecycleTimestamp(id, currentTimeMs);
         if (latency < (Config.catalog_trash_expire_second - LATE_RECYCLE_INTERVAL_SECONDS) * 1000L) {
             return true;
         }
@@ -635,7 +661,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
                 continue;
             }
             partitionInfo.setRecoverable(false);
-            idToRecycleTime.replace(partitionInfo.getPartition().getId(), 0L);
+            idToRecycleTime.replace(partitionInfo.getPartition().getId(), System.currentTimeMillis());
             break;
         }
     }
