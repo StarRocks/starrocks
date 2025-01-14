@@ -35,8 +35,8 @@
 #include "io/shared_buffered_input_stream.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
-#include "util/runtime_profile.h"
 #include "storage/range.h"
+#include "util/runtime_profile.h"
 
 namespace starrocks {
 class RandomAccessFile;
