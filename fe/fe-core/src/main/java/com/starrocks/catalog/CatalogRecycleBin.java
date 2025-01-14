@@ -996,7 +996,6 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         long currentTimeMs = System.currentTimeMillis();
         // should follow the partition/table/db order
         // in case of partition(table) is still in recycle bin but table(db) is missing
-        LOG.info("catalog recycle begin");
         try {
             erasePartition(currentTimeMs);
             // synchronized is unfair lock, sleep here allows other high-priority operations to obtain a lock
@@ -1008,7 +1007,6 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         } catch (InterruptedException e) {
             LOG.warn("Failed to execute runAfterCatalogReady", e);
         }
-        LOG.info("catalog recycle finished");
     }
 
     @VisibleForTesting
