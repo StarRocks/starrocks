@@ -778,10 +778,21 @@ public class StarOSAgent {
         return result.getGroupId();
     }
 
-    public void updateWorkerGroup(long workerGroupId, int replicaNumber) throws DdlException {
+    public void updateWorkerGroup(long workerGroupId, int replicaNumber, String replicationTypeStr)
+            throws DdlException {
         prepare();
         try {
-            client.updateWorkerGroup(serviceId, workerGroupId, null, null, replicaNumber);
+            ReplicationType replicationType = ReplicationType.NO_REPLICATION;
+            if (replicationTypeStr == null || replicationTypeStr.equalsIgnoreCase("NONE")) {
+                replicationType = ReplicationType.NO_REPLICATION;
+            } else if (replicationTypeStr.equalsIgnoreCase("SYNC")) {
+                replicationType = ReplicationType.SYNC;
+            } else if (replicationTypeStr.equalsIgnoreCase("ASYNC")) {
+                replicationType = ReplicationType.ASYNC;
+            } else {
+                throw new DdlException("Unknown replication type " + replicationTypeStr);
+            }
+            client.updateWorkerGroup(serviceId, workerGroupId, null, null, replicaNumber, replicationType);
         } catch (StarClientException e) {
             LOG.warn("Failed to update worker group. error: {}", e.getMessage());
             throw new DdlException("Failed to update worker group. error: " + e.getMessage());
