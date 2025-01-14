@@ -129,6 +129,7 @@ public class Log4jConfig extends XmlConfiguration {
             "        </Delete>\n" +
             "      </DefaultRolloverStrategy>\n" +
             "    </RollingFile>\n" +
+
             "    <RollingFile name=\"ProfileFile\" fileName=\"${profile_log_dir}/fe.profile.log\" filePattern=\"${profile_log_dir}/fe.profile.log.${profile_file_pattern}-%i\">\n" +
             "      ${syslog_profile_layout}\n" +
             "      <Policies>\n" +
@@ -142,6 +143,22 @@ public class Log4jConfig extends XmlConfiguration {
             "        </Delete>\n" +
             "      </DefaultRolloverStrategy>\n" +
             "    </RollingFile>\n" +
+
+            "    <RollingFile name=\"FeaturesFile\" fileName=\"${profile_log_dir}/fe.features.log\" " +
+            "filePattern=\"${profile_log_dir}/fe.features.log.${profile_file_pattern}-%i\">\n" +
+            "      ${syslog_profile_layout}\n" +
+            "      <Policies>\n" +
+            "        <TimeBasedTriggeringPolicy/>\n" +
+            "        <SizeBasedTriggeringPolicy size=\"${profile_log_roll_size_mb}MB\"/>\n" +
+            "      </Policies>\n" +
+            "      <DefaultRolloverStrategy max=\"${profile_log_roll_num}\" fileIndex=\"min\">\n" +
+            "        <Delete basePath=\"${profile_log_dir}/\" maxDepth=\"1\" followLinks=\"true\">\n" +
+            "          <IfFileName glob=\"fe.features.log.*\" />\n" +
+            "          <IfLastModified age=\"${profile_log_delete_age}\" />\n" +
+            "        </Delete>\n" +
+            "      </DefaultRolloverStrategy>\n" +
+            "    </RollingFile>\n" +
+
             "    <RollingFile name=\"InternalFile\" fileName=\"${internal_log_dir}/fe.internal.log\" filePattern=\"${internal_log_dir}/fe.internal.log.${internal_file_pattern}-%i\">\n" +
             "      ${syslog_default_layout}\n" +
             "      <Policies>\n" +
@@ -174,6 +191,9 @@ public class Log4jConfig extends XmlConfiguration {
             "    </Logger>\n" +
             "    <Logger name=\"profile\" level=\"INFO\" additivity=\"false\">\n" +
             "      <AppenderRef ref=\"ProfileFile\"/>\n" +
+            "    </Logger>\n" +
+            "    <Logger name=\"features\" level=\"INFO\" additivity=\"false\">\n" +
+            "      <AppenderRef ref=\"FeaturesFile\"/>\n" +
             "    </Logger>\n" +
             "<!--REPLACED BY AUDIT AND VERBOSE MODULE NAMES-->" +
             "  </Loggers>\n" +

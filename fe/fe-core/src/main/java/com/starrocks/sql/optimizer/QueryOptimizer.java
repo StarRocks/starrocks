@@ -268,6 +268,15 @@ public class QueryOptimizer extends Optimizer {
         final CostEstimate costs = Explain.buildCost(result);
         connectContext.getAuditEventBuilder().setPlanCpuCosts(costs.getCpuCost())
                 .setPlanMemCosts(costs.getMemoryCost());
+
+        // Record the plan features into the log
+        // NOTE: only support SELECT right now
+        if (Config.enable_plan_feature_collection && connectContext.getState().isQuery()) {
+            PlanFeatures planFeatures = Explain.buildFeatures(result);
+            String features = planFeatures.toFeatureString();
+            connectContext.getAuditEventBuilder().setPlanFeatures(features);
+        }
+
         OptExpression finalPlan;
         try (Timer ignored = Tracers.watchScope("PhysicalRewrite")) {
             finalPlan = physicalRuleRewrite(connectContext, rootTaskContext, result);
