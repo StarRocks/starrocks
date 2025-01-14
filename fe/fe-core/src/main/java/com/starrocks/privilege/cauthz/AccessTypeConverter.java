@@ -11,16 +11,14 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package com.starrocks.authorization;
+package com.starrocks.privilege.cauthz;
 
-public abstract class ExternalAccessController implements AccessController {
-    private final boolean supportsColumnLevelPrivileges;  
-  
-    public ExternalAccessController(boolean supportsColumnLevelPrivileges) {  
-        this.supportsColumnLevelPrivileges = supportsColumnLevelPrivileges;  
-    }  
-  
-    public boolean supportsColumnLevelPrivileges() {  
-        return supportsColumnLevelPrivileges;  
-    }
+import com.starrocks.privilege.PrivilegeType;
+
+/**
+ * Interface for converting a PrivilegeType to an access type string.
+ * For example, SELECT -> "select".
+ */
+public interface AccessTypeConverter {
+    String convertToAccessType(PrivilegeType privilegeType);
 }

@@ -85,11 +85,15 @@ public class ColumnPrivilege {
         }
 
         Set<TableName> tableUsedExternalAccessController = new HashSet<>();
+        Map<TableName, Boolean> tableSupportsColumnLevelPrivileges = new HashMap<>();
         for (TableName tableName : tableNameTableObj.keySet()) {
             String catalog = tableName.getCatalog() == null ?
                     InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME : tableName.getCatalog();
-            if (Authorizer.getInstance().getAccessControlOrDefault(catalog) instanceof ExternalAccessController) {
+            AccessController accessController = Authorizer.getInstance().getAccessControlOrDefault(catalog);
+            if (accessController instanceof ExternalAccessController) { 
+                ExternalAccessController externalAccessController = (ExternalAccessController) accessController;
                 tableUsedExternalAccessController.add(tableName);
+                tableSupportsColumnLevelPrivileges.put(tableName, externalAccessController.supportsColumnLevelPrivileges());
             }
         }
 
@@ -124,7 +128,7 @@ public class ColumnPrivilege {
                 continue;
             }
 
-            if (tableUsedExternalAccessController.contains(tableName)) {
+            if (tableUsedExternalAccessController.contains(tableName) && tableSupportsColumnLevelPrivileges.get(tableName)) {
                 Set<String> columns = scanColumns.getOrDefault(tableName, new HashSet<>());
                 for (String column : columns) {
                     try {

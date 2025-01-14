@@ -183,6 +183,13 @@ import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockLoader;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.plugin.PluginMgr;
+import com.starrocks.privilege.AccessControlProvider;
+import com.starrocks.privilege.AuthorizationMgr;
+import com.starrocks.privilege.DefaultAuthorizationProvider;
+import com.starrocks.privilege.NativeAccessController;
+import com.starrocks.privilege.PrivilegeException;
+import com.starrocks.privilege.cauthz.starrocks.CauthzStarRocksAccessController;
+import com.starrocks.privilege.ranger.starrocks.RangerStarRocksAccessController;
 import com.starrocks.qe.AuditEventProcessor;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
@@ -812,6 +819,9 @@ public class GlobalStateMgr {
         AccessControlProvider accessControlProvider;
         if (Config.access_control.equals("ranger")) {
             accessControlProvider = new AccessControlProvider(new AuthorizerStmtVisitor(), new RangerStarRocksAccessController());
+        } else if (Config.access_control.equals("cauthz")) {
+            accessControlProvider = new AccessControlProvider(new AuthorizerStmtVisitor(), 
+                                                              new CauthzStarRocksAccessController());
         } else {
             accessControlProvider = new AccessControlProvider(new AuthorizerStmtVisitor(), new NativeAccessController());
         }

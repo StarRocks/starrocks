@@ -42,6 +42,7 @@ public abstract class RangerAccessController extends ExternalAccessController im
     protected final RangerBasePlugin rangerPlugin;
 
     public RangerAccessController(String serviceType, String serviceName) {
+        super(true);
         RangerPluginConfig rangerPluginContext = buildRangerPluginContext(serviceType, serviceName);
         rangerPlugin = new RangerBasePlugin(rangerPluginContext);
         rangerPlugin.init(); // this will initialize policy engine and policy refresher
