@@ -76,6 +76,8 @@ jobs:
           echo "branch=${{github.base_ref}}" >> $GITHUB_OUTPUT
 
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Checkout PR
         run: |
@@ -128,8 +130,6 @@ jobs:
           rm -rf ./docs/release_notes ./docs/ecosystem_release
           mv ../zh ./i18n/zh/docusaurus-plugin-content-docs/current
           rm -rf ./i18n/zh/docusaurus-plugin-content-docs/current/release_notes ./i18n/zh/docusaurus-plugin-content-docs/current/ecosystem_release
-          git fetch
-          git checkout origin/main -- docs/docusaurus/package.json docs/docusaurus/yarn.lock         
           yarn install --frozen-lockfile
           yarn clear
           yarn build
