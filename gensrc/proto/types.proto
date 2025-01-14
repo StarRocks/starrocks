@@ -205,3 +205,18 @@ message PersistentIndexSstableMetaPB {
     // sstables are ordered with the smaller version on the left.
     repeated PersistentIndexSstablePB sstables = 1;
 }
+
+enum TransactionStatusPB {
+    TRANS_UNKNOWN = 0;
+    TRANS_PREPARE = 1;
+    TRANS_COMMITTED = 2;
+    TRANS_VISIBLE = 3;
+    TRANS_ABORTED = 4;
+    TRANS_PREPARED = 5;
+}
+
+message TransactionStatePB {
+    optional int64 txn_id = 1;
+    optional TransactionStatusPB status = 2;
+    optional string reason = 3;
+}
