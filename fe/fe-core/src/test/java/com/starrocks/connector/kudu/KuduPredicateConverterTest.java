@@ -78,10 +78,10 @@ public class KuduPredicateConverterTest {
 
     @Test
     public void testEqCast() {
-        ConstantOperator value = ConstantOperator.createInt(5);
+        ConstantOperator value = ConstantOperator.createVarchar("5");
         ScalarOperator op = new BinaryPredicateOperator(BinaryType.EQ, F0_CAST, value);
         List<KuduPredicate> result = CONVERTER.convert(op);
-        Assert.assertEquals(result.size(), 0);
+        Assert.assertEquals(result.get(0).toString(), "`f0` = 5");
     }
 
     @Test
