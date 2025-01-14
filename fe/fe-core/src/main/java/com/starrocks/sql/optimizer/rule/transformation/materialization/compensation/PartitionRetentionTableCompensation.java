@@ -26,9 +26,9 @@ import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
+import com.starrocks.sql.optimizer.rewrite.scalar.NegateFilterShuttle;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTransparentState;
 
 import java.util.List;
@@ -68,7 +68,7 @@ public final class PartitionRetentionTableCompensation extends TableCompensation
             return scanOperator;
         }
         // build final predicate
-        ScalarOperator compensate = CompoundPredicateOperator.not(scalarOperator);
+        ScalarOperator compensate =  NegateFilterShuttle.getInstance().negateFilter(scalarOperator);
         compensate.setRedundant(true);
         ScalarOperator finalPredicate = Utils.compoundAnd(scanOperator.getPredicate(), compensate);
         // build new scan operator
@@ -80,7 +80,8 @@ public final class PartitionRetentionTableCompensation extends TableCompensation
 
     @Override
     public String toString() {
-        return String.format("NOT(%s)", compensateOperator.debugString());
+        ScalarOperator compensate =  NegateFilterShuttle.getInstance().negateFilter(compensateOperator);
+        return String.format("%)", compensate.debugString());
     }
 
     public static TableCompensation build(Table refBaseTable,

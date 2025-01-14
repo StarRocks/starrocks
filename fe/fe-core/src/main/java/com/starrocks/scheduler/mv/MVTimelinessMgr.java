@@ -20,6 +20,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvRefreshArbiter;
 import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.TableProperty;
+import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.memory.MemoryTrackable;
 
@@ -59,6 +60,10 @@ public class MVTimelinessMgr implements MemoryTrackable {
     }
 
     public static boolean isEnableMVTimelinessGlobalCache(MaterializedView mv) {
+        // To avoid bad cases, we disable the global cache for MV timeliness
+        if (!Config.enable_mv_query_context_cache) {
+            return false;
+        }
         TableProperty.QueryRewriteConsistencyMode consistencyMode =
                 mv.getTableProperty().getQueryRewriteConsistencyMode();
         return consistencyMode == TableProperty.QueryRewriteConsistencyMode.FORCE_MV;

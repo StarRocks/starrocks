@@ -326,11 +326,8 @@ public abstract class MVTimelinessArbiter {
             return null;
         }
         Map<String, PCell> adds = diff.getAdds();
-        // no partition added
-        if (CollectionUtils.sizeIsEmpty(adds)) {
-            return MvUpdateInfo.noRefresh(mv);
-        }
         MvUpdateInfo mvUpdateInfo = MvUpdateInfo.partialRefresh(mv, TableProperty.QueryRewriteConsistencyMode.FORCE_MV);
+        addEmptyPartitionsToRefresh(mvUpdateInfo);
         if (!CollectionUtils.sizeIsEmpty(adds)) {
             adds.keySet().stream().forEach(mvPartitionName ->
                     mvUpdateInfo.getMvToRefreshPartitionNames().add(mvPartitionName));
