@@ -247,6 +247,8 @@ std::string Status::code_as_string() const {
         return "Duplicate RPC invocation";
     case TStatusCode::GLOBAL_DICT_ERROR:
         return "Global dictionary error";
+    case TStatusCode::GLOBAL_DICT_NOT_MATCH:
+        return "Global dictionary not match";
     case TStatusCode::UNKNOWN:
         return "Unknown";
     case TStatusCode::TXN_NOT_EXISTS:
