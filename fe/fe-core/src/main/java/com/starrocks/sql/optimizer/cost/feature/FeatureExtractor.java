@@ -53,6 +53,10 @@ public class FeatureExtractor {
         var sumVector = PlanFeatures.aggregate(root);
         planFeatures.addOperatorFeatures(sumVector);
 
+        // TODO: significant variables
+        // TODO: concurrent queries
+        // TODO: cluster status
+
         return planFeatures;
     }
 
@@ -81,6 +85,13 @@ public class FeatureExtractor {
             CostEstimate cost = CostModel.calculateCostEstimate(new ExpressionContext(optExpression));
             Statistics stats = optExpression.getStatistics();
             return new OperatorFeatures.ScanOperatorFeatures(optExpression, cost, stats);
+        }
+
+        @Override
+        public OperatorFeatures visitPhysicalHashJoin(OptExpression optExpression, Void context) {
+            CostEstimate cost = CostModel.calculateCostEstimate(new ExpressionContext(optExpression));
+            Statistics stats = optExpression.getStatistics();
+            return new OperatorFeatures.JoinOperatorFeatures(optExpression, cost, stats);
         }
 
     }

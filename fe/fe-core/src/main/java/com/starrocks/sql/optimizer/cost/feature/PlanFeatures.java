@@ -39,7 +39,7 @@ public class PlanFeatures {
     );
 
     private List<Long> operatorFeatureVectors;
-    private Set<Table> tables = Sets.newHashSet();
+    private final Set<Table> tables = Sets.newHashSet();
 
     public PlanFeatures() {
     }
@@ -64,7 +64,7 @@ public class PlanFeatures {
         this.tables.addAll(tables);
     }
 
-    public void addOperatorFeatures(Map<OperatorType, SummarizedFeature> operatorFeatures) {
+    public void addOperatorFeatures(Map<OperatorType, AggregatedFeature> operatorFeatures) {
         // Make sure all plan have equal-size vector
         List<Long> operatorVector = Lists.newArrayList();
         for (int start = OperatorType.PHYSICAL.ordinal();
@@ -74,26 +74,25 @@ public class PlanFeatures {
             if (EXCLUDE_OPERATORS.contains(opType)) {
                 continue;
             }
-            PlanFeatures.SummarizedFeature vector = operatorFeatures.get(opType);
+            AggregatedFeature vector = operatorFeatures.get(opType);
             if (vector != null) {
                 operatorVector.addAll(vector.finish());
             } else {
-                operatorVector.addAll(PlanFeatures.SummarizedFeature.empty(opType));
+                operatorVector.addAll(AggregatedFeature.empty(opType));
             }
         }
         this.operatorFeatureVectors = operatorVector;
     }
 
-    // a simple aggregator with SUM/AVG
-    public static Map<OperatorType, SummarizedFeature> aggregate(OperatorFeatures tree) {
-        Map<OperatorType, PlanFeatures.SummarizedFeature> sum = Maps.newHashMap();
+    public static Map<OperatorType, AggregatedFeature> aggregate(OperatorFeatures tree) {
+        Map<OperatorType, AggregatedFeature> sum = Maps.newHashMap();
         aggregate(tree, sum);
         return sum;
     }
 
-    private static void aggregate(OperatorFeatures tree, Map<OperatorType, PlanFeatures.SummarizedFeature> sum) {
+    private static void aggregate(OperatorFeatures tree, Map<OperatorType, AggregatedFeature> sum) {
         OperatorType opType = tree.opType;
-        SummarizedFeature exist = sum.computeIfAbsent(opType, (x) -> new SummarizedFeature(opType));
+        AggregatedFeature exist = sum.computeIfAbsent(opType, (x) -> new AggregatedFeature(opType));
         exist.merge(tree);
 
         for (var child : tree.getChildren()) {
@@ -120,12 +119,15 @@ public class PlanFeatures {
         return result;
     }
 
-    public static class SummarizedFeature {
+    /**
+     * Aggregate vectors of same operators
+     */
+    public static class AggregatedFeature {
         private final OperatorType opType;
         private final List<Long> vector;
         private int count = 0;
 
-        SummarizedFeature(OperatorType type) {
+        public AggregatedFeature(OperatorType type) {
             this.opType = type;
             int len = OperatorFeatures.vectorLength(type);
             this.vector = Lists.newArrayListWithCapacity(len);

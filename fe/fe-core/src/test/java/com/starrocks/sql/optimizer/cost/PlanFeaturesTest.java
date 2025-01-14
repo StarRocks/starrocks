@@ -26,14 +26,14 @@ class PlanFeaturesTest extends PlanTestBase {
 
     @Test
     public void testBasic() throws Exception {
-        ExecPlan execPlan = getExecPlan("select count(*) from t0");
+        ExecPlan execPlan = getExecPlan("select count(*) from t0 where v1 < 100 limit 100");
         OptExpression physicalPlan = execPlan.getPhysicalPlan();
         PlanFeatures planFeatures = FeatureExtractor.extractFeatures(physicalPlan);
         String string = planFeatures.toFeatureString();
         Assertions.assertTrue(string.startsWith("tables=[0,0,10003]"), string);
-        Assertions.assertTrue(string.contains("38,0,0,0,0"), string);
-        Assertions.assertTrue(string.contains("40,1,1,8,9"), string);
-        Assertions.assertTrue(string.contains("44,1,1,9,9,100,50"), string);
+        Assertions.assertTrue(string.contains("38,0,0,0,0,0"), string);
+        Assertions.assertTrue(string.contains("40,1,1,8,9,100"), string);
+        Assertions.assertTrue(string.contains("44,1,1,9,9,0,100,50,1,1"), string);
     }
 
 }
