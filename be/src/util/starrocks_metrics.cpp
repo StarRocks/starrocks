@@ -61,6 +61,7 @@ StarRocksMetrics::StarRocksMetrics() : _metrics(_s_registry_name) {
     REGISTER_STARROCKS_METRIC(pipe_poller_block_queue_len);
 
     REGISTER_STARROCKS_METRIC(load_channel_add_chunks_total);
+    REGISTER_STARROCKS_METRIC(load_channel_add_chunks_eos_total);
     REGISTER_STARROCKS_METRIC(load_channel_add_chunks_duration_us);
     REGISTER_STARROCKS_METRIC(load_channel_add_chunks_wait_memtable_duration_us);
     REGISTER_STARROCKS_METRIC(load_channel_add_chunks_wait_writer_duration_us);
@@ -71,8 +72,12 @@ StarRocksMetrics::StarRocksMetrics() : _metrics(_s_registry_name) {
     REGISTER_STARROCKS_METRIC(async_delta_writer_task_execute_duration_us);
     REGISTER_STARROCKS_METRIC(async_delta_writer_task_pending_duration_us);
 
+    REGISTER_STARROCKS_METRIC(delta_writer_commit_task_total);
+    REGISTER_STARROCKS_METRIC(delta_writer_wait_flush_task_total);
     REGISTER_STARROCKS_METRIC(delta_writer_wait_flush_duration_us);
+    REGISTER_STARROCKS_METRIC(delta_writer_pk_preload_duration_us);
     REGISTER_STARROCKS_METRIC(delta_writer_wait_replica_duration_us);
+    REGISTER_STARROCKS_METRIC(delta_writer_txn_commit_duration_us);
 
     REGISTER_STARROCKS_METRIC(memtable_flush_total);
     REGISTER_STARROCKS_METRIC(memtable_finalize_duration_us);
