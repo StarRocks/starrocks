@@ -469,7 +469,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
     /**
      * Inactive related materialized views because of base table/view is changed or dropped in the leader background.
      */
-    public static void inactiveRelatedMaterializedView(Database db, Table olapTable, String reason, boolean isReplay) {
+    public static void inactiveRelatedMaterializedView(Table olapTable, String reason, boolean isReplay) {
         if (!Config.enable_mv_automatic_inactive_by_base_table_changes) {
             LOG.warn("Skip to inactive related materialized views because of automatic inactive is disabled, " +
                     "table:{}, reason:{}", olapTable.getName(), reason);
@@ -483,8 +483,15 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             return;
         }
         for (MvId mvId : olapTable.getRelatedMaterializedViews()) {
-            MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(db.getId(), mvId.getId());
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mvId.getDbId());
+            if (db == null) {
+                LOG.warn("Table {} inactive MaterializedView, viewId {} ,db {} not found",
+                        olapTable.getName(),
+                        mvId.getId(),
+                        mvId.getDbId());
+                continue;
+            }
+            MaterializedView mv = (MaterializedView) db.getTable(mvId.getId());
             if (mv != null) {
                 LOG.warn("Inactive MV {}/{} because {}", mv.getName(), mv.getId(), reason);
                 // inactive mv by reason
@@ -500,7 +507,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                     mv.setInactiveAndReason(reason);
                 }
                 // recursive inactive
-                inactiveRelatedMaterializedView(db, mv,
+                inactiveRelatedMaterializedView(mv,
                         MaterializedViewExceptions.inactiveReasonForBaseTableActive(mv.getName()), false);
             } else {
                 LOG.info("Ignore materialized view {} does not exists", mvId);
