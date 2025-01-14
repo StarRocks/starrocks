@@ -43,7 +43,6 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalTreeAnchorOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.rule.Rule;
-import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.task.RewriteTreeTask;
 import com.starrocks.sql.optimizer.task.TaskContext;
@@ -96,17 +95,17 @@ public class MvRewritePreprocessorTest extends MVTestBase {
         Optimizer optimizer = new Optimizer();
         Assert.assertFalse(optimizer.getOptimizerConfig().isRuleBased());
         Assert.assertFalse(optimizer.getOptimizerConfig().isRuleDisable(RuleType.TF_MERGE_TWO_PROJECT));
-        Assert.assertFalse(optimizer.getOptimizerConfig().isRuleSetTypeDisable(RuleSetType.AGGREGATE_REWRITE));
+        Assert.assertFalse(optimizer.getOptimizerConfig().isRuleDisable(RuleType.GP_AGGREGATE_REWRITE));
 
         OptimizerConfig optimizerConfig = new OptimizerConfig(OptimizerConfig.OptimizerAlgorithm.RULE_BASED);
         optimizerConfig.disableRule(RuleType.TF_MERGE_TWO_PROJECT);
-        optimizerConfig.disableRuleSet(RuleSetType.PUSH_DOWN_PREDICATE);
+        optimizerConfig.disableRule(RuleType.GP_PUSH_DOWN_PREDICATE);
         Optimizer optimizer1 = new Optimizer(optimizerConfig);
         Assert.assertTrue(optimizer1.getOptimizerConfig().isRuleBased());
         Assert.assertFalse(optimizer1.getOptimizerConfig().isRuleDisable(RuleType.TF_MERGE_TWO_AGG_RULE));
         Assert.assertTrue(optimizer1.getOptimizerConfig().isRuleDisable(RuleType.TF_MERGE_TWO_PROJECT));
-        Assert.assertFalse(optimizer1.getOptimizerConfig().isRuleSetTypeDisable(RuleSetType.COLLECT_CTE));
-        Assert.assertTrue(optimizer1.getOptimizerConfig().isRuleSetTypeDisable(RuleSetType.PUSH_DOWN_PREDICATE));
+        Assert.assertFalse(optimizer1.getOptimizerConfig().isRuleDisable(RuleType.GP_COLLECT_CTE));
+        Assert.assertTrue(optimizer1.getOptimizerConfig().isRuleDisable(RuleType.GP_PUSH_DOWN_PREDICATE));
 
         String sql = "select v1, sum(v3) from t0 where v1 < 10 group by v1";
         Pair<String, ExecPlan> result = UtFrameUtils.getPlanAndFragment(connectContext, sql);
@@ -136,7 +135,7 @@ public class MvRewritePreprocessorTest extends MVTestBase {
         Rule timeoutRule = new TimeoutRule(RuleType.TF_MV_ONLY_JOIN_RULE, Pattern.create(OperatorType.PATTERN));
         OptExpression tree = OptExpression.create(new LogicalTreeAnchorOperator(), logicalPlan.getRoot());
         optimizer1.getContext().getTaskScheduler().pushTask(
-                new RewriteTreeTask(rootTaskContext, tree, Lists.newArrayList(timeoutRule), true));
+                new RewriteTreeTask(rootTaskContext, tree, timeoutRule, true));
         try {
             optimizer1.getContext().getTaskScheduler().executeTasks(rootTaskContext);
         } catch (Exception e) {

@@ -22,7 +22,6 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
-import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
@@ -40,12 +39,12 @@ public class MaterializedViewOptimizer {
         OptimizerConfig optimizerConfig = new OptimizerConfig(OptimizerConfig.OptimizerAlgorithm.RULE_BASED);
         // Disable partition prune for mv's plan so no needs  to compensate pruned predicates anymore.
         // Only needs to compensate mv's ref-base-table's partition predicates when mv's freshness cannot be satisfied.
-        optimizerConfig.disableRuleSet(RuleSetType.PARTITION_PRUNE);
-        optimizerConfig.disableRuleSet(RuleSetType.ALL_MV_REWRITE);
+        optimizerConfig.disableRule(RuleType.GP_PARTITION_PRUNE);
+        optimizerConfig.disableRule(RuleType.GP_ALL_MV_REWRITE);
         // INTERSECT_REWRITE is used for INTERSECT related plan optimize, which can not be SPJG;
         // And INTERSECT_REWRITE should be based on PARTITION_PRUNE rule set.
         // So exclude it
-        optimizerConfig.disableRuleSet(RuleSetType.INTERSECT_REWRITE);
+        optimizerConfig.disableRule(RuleType.GP_INTERSECT_REWRITE);
         optimizerConfig.disableRule(RuleType.TF_REWRITE_GROUP_BY_COUNT_DISTINCT);
         optimizerConfig.disableRule(RuleType.TF_PRUNE_EMPTY_SCAN);
         optimizerConfig.disableRule(RuleType.TF_MV_TEXT_MATCH_REWRITE_RULE);
