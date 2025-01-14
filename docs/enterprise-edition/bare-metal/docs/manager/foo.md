@@ -1,0 +1,222 @@
+1
+![img](../_assets/manager/001.svg)
+2
+![img](../_assets/manager/002.png)
+3
+![img](../_assets/manager/003.png)
+4
+![img](../_assets/manager/004.jpeg)
+5
+![img](../_assets/manager/005.png)
+6
+![img](../_assets/manager/006.png)
+7
+![img](../_assets/manager/007.jpeg)
+8
+![img](../_assets/manager/008.png)
+9
+   ![img](../_assets/manager/009.jpeg)
+10
+   ![img](../_assets/manager/010.png)
+11
+![img](../_assets/manager/011.png)
+12
+![img](../_assets/manager/012.jpeg)
+13
+![img](../_assets/manager/013.jpeg)
+foo
+![img](../_assets/manager/014.jpeg)
+foo
+![img](../_assets/manager/015.png)
+foo
+![img](../_assets/manager/016.png)
+foo
+![img](../_assets/manager/017.png)
+foo
+![img](../_assets/manager/018.png)
+foo
+![img](../_assets/manager/019.png)
+foo
+![img](../_assets/manager/020.png)
+foo
+![img](../_assets/manager/021.png)
+foo
+![img](../_assets/manager/022.png)
+foo
+![img](../_assets/manager/023.png)
+foo
+![img](../_assets/manager/024.png)
+foo
+![img](../_assets/manager/025.png)
+foo
+![img](../_assets/manager/026.png)
+foo
+![img](../_assets/manager/027.png)
+foo
+![img](../_assets/manager/028.png)
+foo
+![img](../_assets/manager/029.png)
+foo
+![img](../_assets/manager/030.png)
+foo
+![img](../_assets/manager/032.png)
+foo
+![img](../_assets/manager/033.png)
+foo
+![img](../_assets/manager/034.png)
+foo
+![img](../_assets/manager/035.png)
+foo
+![img](../_assets/manager/036.png)
+foo
+![img](../_assets/manager/037.png)
+foo
+  ![img](../_assets/manager/038.png)
+foo
+![img](../_assets/manager/039.png)
+foo
+![img](../_assets/manager/040.png)
+foo
+![img](../_assets/manager/041.png)
+foo
+![img](../_assets/manager/042.png)
+foo
+![img](../_assets/manager/043.png)
+foo
+![img](../_assets/manager/044.png)
+foo
+![img](../_assets/manager/045.png)
+foo
+![img](../_assets/manager/046.png)
+foo
+![img](../_assets/manager/047.png)
+foo
+![img](../_assets/manager/048.png)
+foo
+![img](../_assets/manager/049.png)
+foo
+![img](../_assets/manager/050.png)
+foo
+![img](../_assets/manager/051.png)
+foo
+![img](../_assets/manager/052.png)
+foo
+![img](../_assets/manager/053.png)
+foo
+![img](../_assets/manager/054.png)
+foo
+![img](../_assets/manager/055.png)
+foo
+![img](../_assets/manager/056.png)
+foo
+![img](../_assets/manager/057.png)
+foo
+![img](../_assets/manager/058.png)
+foo
+![img](../_assets/manager/059.png)
+foo
+![img](../_assets/manager/060.png)
+foo
+![img](../_assets/manager/061.png)
+foo
+![img](../_assets/manager/062.png)
+foo
+![img](../_assets/manager/063.png)
+foo
+    ![img](../_assets/manager/064.png)
+foo
+    ![img](../_assets/manager/065.png)
+foo
+    ![img](../_assets/manager/066.png)
+foo
+    ![img](../_assets/manager/067.png)
+foo
+  ![img](../_assets/manager/068.png)
+foo
+  ![img](../_assets/manager/069.png)
+foo
+    ![img](../_assets/manager/070.png)
+foo
+    ![img](../_assets/manager/071.png)
+foo
+    ![img](../_assets/manager/072.png)
+foo
+    ![img](../_assets/manager/073.png)
+foo
+    ![img](../_assets/manager/074.png)
+foo
+    ![img](../_assets/manager/075.png)
+foo
+    ![img](../_assets/manager/076.png)
+foo
+    ![img](../_assets/manager/077.png)
+foo
+    ![img](../_assets/manager/078.png)
+foo
+    ![img](../_assets/manager/079.png)
+foo
+    ![img](../_assets/manager/080.png)
+foo
+    ![img](../_assets/manager/081.png)
+foo
+![img](../_assets/manager/082.png)
+foo
+![img](../_assets/manager/083.png)
+foo
+    ![img](../_assets/manager/084.png)
+foo
+    ![img](../_assets/manager/085.png)
+foo
+    ![img](../_assets/manager/086.png)
+foo
+![img](../_assets/manager/087.png)
+foo
+    ![img](../_assets/manager/088.png)
+foo
+      ![img](../_assets/manager/089.png)
+foo
+      ![img](../_assets/manager/090.png)
+foo
+    ![img](../_assets/manager/091.png)
+foo
+![img](../_assets/manager/092.png)
+foo
+![img](../_assets/manager/093.png)
+foo
+![img](../_assets/manager/094.png)
+foo
+![img](../_assets/manager/095.png)
+foo
+![img](../_assets/manager/096.png)
+foo
+![img](../_assets/manager/097.png)
+foo
+![img](../_assets/manager/098.png)
+foo
+![img](../_assets/manager/099.png)
+foo
+![img](../_assets/manager/100.png)
+foo
+![img](../_assets/manager/101.png)
+foo
+![img](../_assets/manager/102.png)
+foo
+![img](../_assets/manager/103.png)
+foo
+![img](../_assets/manager/104.png)
+foo
+![img](../_assets/manager/105.png)
+foo
+![img](../_assets/manager/106.png)
+foo
+![img](../_assets/manager/107.png)
+foo
+![img](../_assets/manager/108.png)
+foo
+![img](../_assets/manager/109.png)
+foo
+![img](../_assets/manager/110.png)
+foo
+![img](../_assets/manager/111.png)
+foo
+![img](../_assets/manager/112.png)

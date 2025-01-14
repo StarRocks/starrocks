@@ -1,0 +1,7 @@
+position: 10 # float position is supported
+label: 'CelerData Manager'
+collapsible: true
+collapsed: true
+link:
+  type: generated-index
+
