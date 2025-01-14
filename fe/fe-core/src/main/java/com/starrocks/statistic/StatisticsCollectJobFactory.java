@@ -110,24 +110,8 @@ public class StatisticsCollectJobFactory {
         LOG.debug("statistics job work on table: {}, type: {}", table.getName(), analyzeType.name());
         if (analyzeType.equals(StatsConstants.AnalyzeType.SAMPLE)) {
             if (partitionIdList == null) {
-                Collection<Partition> partitions = table.getPartitions();
-                BasicStatsMeta basicStatsMeta = GlobalStateMgr.getCurrentState().getAnalyzeMgr()
-                        .getTableBasicStatsMeta(table.getId());
-
-                if (basicStatsMeta != null) {
-                    partitionIdList = partitions.stream()
-                            .filter(partition -> {
-                                LocalDateTime partitionUpdateTime = StatisticUtils.getPartitionLastUpdateTime(partition);
-                                return basicStatsMeta.getUpdateTime().isBefore(partitionUpdateTime) && partition.hasData();
-                            })
-                            .map(Partition::getId)
-                            .collect(Collectors.toList());
-                } else {
-                    partitionIdList = partitions.stream()
-                            .filter(Partition::hasData)
-                            .map(Partition::getId)
-                            .collect(Collectors.toList());
-                }
+                partitionIdList = table.getPartitions().stream().filter(Partition::hasData)
+                        .map(Partition::getId).collect(Collectors.toList());
             }
             
             if (Config.statistic_use_meta_statistics) {
@@ -550,7 +534,26 @@ public class StatisticsCollectJobFactory {
     private static void createSampleStatsJob(List<StatisticsCollectJob> allTableJobMap, NativeAnalyzeJob job,
                                              Database db, Table table, List<String> columnNames,
                                              List<Type> columnTypes) {
-        StatisticsCollectJob sample = buildStatisticsCollectJob(db, table, null, columnNames, columnTypes,
+        Collection<Partition> partitions = table.getPartitions();
+        BasicStatsMeta basicStatsMeta = GlobalStateMgr.getCurrentState().getAnalyzeMgr()
+                .getTableBasicStatsMeta(table.getId());
+        List<Long> partitionIdList;
+        if (basicStatsMeta != null) {
+            partitionIdList = partitions.stream()
+                    .filter(partition -> {
+                        LocalDateTime partitionUpdateTime = StatisticUtils.getPartitionLastUpdateTime(partition);
+                        return basicStatsMeta.getUpdateTime().isBefore(partitionUpdateTime) && partition.hasData();
+                    })
+                    .map(Partition::getId)
+                    .collect(Collectors.toList());
+        } else {
+            partitionIdList = partitions.stream()
+                    .filter(Partition::hasData)
+                    .map(Partition::getId)
+                    .collect(Collectors.toList());
+        }
+
+        StatisticsCollectJob sample = buildStatisticsCollectJob(db, table, partitionIdList, columnNames, columnTypes,
                 StatsConstants.AnalyzeType.SAMPLE, job.getScheduleType(), job.getProperties());
         allTableJobMap.add(sample);
     }
