@@ -2600,13 +2600,13 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                                         if (status.getUserIdentity() != null) {
                                             context.setCurrentUserIdentity(status.getUserIdentity());
                                         } else {
-                                            context.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp(status.getUser(), "%"));
+                                            context.setCurrentUserIdentity(
+                                                    UserIdentity.createAnalyzedUserIdentWithIp(status.getUser(), "%"));
                                         }
                                         context.setCurrentRoleIds(context.getCurrentUserIdentity());
                                         context.getState().reset();
                                         context.setQueryId(UUID.fromString(status.getQueryId()));
                                         context.setIsLastStmt(true);
-                                        context.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp(status.getUser(), "%"));
                                         context.getSessionVariable().setAnalyzeForMv("full");
                                         context.setThreadLocalInfo();
                                         return context;
