@@ -160,7 +160,7 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
         if (!isAutomatedSnapshotOn()) {
             return Long.MAX_VALUE;
         }
-        
+
         boolean findLastSuccess = false;
         long previousAutomatedSnapshotCreatedTimsMs = 0;
         for (Map.Entry<Long, ClusterSnapshotJob> entry : historyAutomatedSnapshotJobs.descendingMap().entrySet()) {

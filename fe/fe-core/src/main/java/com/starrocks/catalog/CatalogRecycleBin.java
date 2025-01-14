@@ -303,7 +303,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         if (!idToRecycleTime.containsKey(id)) {
             return true;
         }
-        return idToRecycleTime.get(id) > GlobalStateMgr.getCurrentState()
+        return idToRecycleTime.get(id) < GlobalStateMgr.getCurrentState()
                               .getClusterSnapshotMgr().getValidDeletionTimeMsByAutomatedSnapshot();
     }
 
