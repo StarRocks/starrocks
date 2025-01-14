@@ -18,7 +18,7 @@ displayed_sidebar: docs
 ## 语法
 
 ~~~Haskell
-BOOLEAN array_contains_all(arr1, arr2)
+BOOLEAN array_contains_seq(arr1, arr2)
 ~~~
 
 ## 参数
