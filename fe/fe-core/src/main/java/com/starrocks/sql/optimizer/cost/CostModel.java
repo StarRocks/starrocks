@@ -177,13 +177,8 @@ public class CostModel {
 
             // ScanOperator use a ChunkBuffer to implement async-io, which may takes significant memory for certain
             // cases
-            final long FACTORY_NUM_CHUNKS = 8;
             SessionVariable variables = ConnectContext.get().getSessionVariable();
-            double memCost = (double) statistics.getAvgRowSize() *
-                    variables.getIoTasksPerScanOperator() *
-                    variables.getDegreeOfParallelism() *
-                    variables.getChunkSize() *
-                    FACTORY_NUM_CHUNKS;
+            double memCost = (double) statistics.getAvgRowSize() * variables.getDegreeOfParallelism();
             return CostEstimate.of(statistics.getComputeSize(), memCost, 0);
         }
 
