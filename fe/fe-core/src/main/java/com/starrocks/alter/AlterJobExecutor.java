@@ -137,6 +137,25 @@ public class AlterJobExecutor extends AstVisitor<Void, ConnectContext> {
                 if (!(origTable.isMaterializedView() && newTbl.isMaterializedView())) {
                     throw new AlterJobException("Materialized view can only SWAP WITH materialized view");
                 }
+<<<<<<< HEAD
+=======
+
+                // inactive the related MVs
+                AlterMVJobExecutor.inactiveRelatedMaterializedView(origTable,
+                        MaterializedViewExceptions.inactiveReasonForBaseTableSwapped(origTblName), false);
+                AlterMVJobExecutor.inactiveRelatedMaterializedView(olapNewTbl,
+                        MaterializedViewExceptions.inactiveReasonForBaseTableSwapped(newTblName), false);
+
+                SwapTableOperationLog log = new SwapTableOperationLog(db.getId(), origTable.getId(), olapNewTbl.getId());
+                GlobalStateMgr.getCurrentState().getAlterJobMgr().swapTableInternal(log);
+                GlobalStateMgr.getCurrentState().getEditLog().logSwapTable(log);
+
+                LOG.info("finish swap table {}-{} with table {}-{}", origTable.getId(), origTblName, newTbl.getId(),
+                        newTblName);
+                return null;
+            } catch (DdlException e) {
+                throw new AlterJobException(e.getMessage(), e);
+>>>>>>> e9f711c43e ([BugFix] InactiveRelatedMaterializedView not working across databases (#54846))
             }
 
             // inactive the related MVs
