@@ -254,7 +254,7 @@ public:
         stats->append(kIOCountRemoteIndex, index_read_stats.io_count_remote);
         stats->append(kIONsReadLocalDiskIndex, index_read_stats.io_ns_read_local_disk);
         stats->append(kIONsWriteLocalDiskIndex, index_read_stats.io_ns_write_local_disk);
-        stats->append(kIONsRemoteIndex, index_read_stats.io_ns_remote);
+        stats->append(kIONsRemoteIndex, index_read_stats.io_ns_read_remote);
         return std::move(stats);
     }
 
