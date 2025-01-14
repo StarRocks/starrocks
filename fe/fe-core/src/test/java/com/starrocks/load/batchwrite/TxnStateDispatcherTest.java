@@ -206,8 +206,15 @@ public class TxnStateDispatcherTest {
                 result = null;
             }
         };
-        TxnStateDispatcher.DispatchResult expected = TxnStateDispatcher.DispatchResult.fail(
-                TxnStateDispatcher.DispatchStatus.ABORT, "can't find database");
+        TransactionStateSnapshot txnState = new TransactionStateSnapshot(TransactionStatus.UNKNOWN, "can't find database db1");
+        TxnStateDispatcher.DispatchResult expected = TxnStateDispatcher.DispatchResult.success(txnState);
+        PUpdateTransactionStateResponse response = new PUpdateTransactionStateResponse();
+        StatusPB statusPB = new StatusPB();
+        statusPB.setStatusCode(0);
+        response.setResults(Collections.singletonList(statusPB));
+        CompletableFuture<PUpdateTransactionStateResponse> future = new CompletableFuture<>();
+        future.complete(response);
+        backendService.addResponseFuture(future);
         testDispatchBase("db1", 1, 1, expected, 0);
     }
 
@@ -224,8 +231,16 @@ public class TxnStateDispatcherTest {
                 result = new Exception("artificial failure");
             }
         };
-        TxnStateDispatcher.DispatchResult expected = TxnStateDispatcher.DispatchResult.fail(
-                TxnStateDispatcher.DispatchStatus.ABORT, "can't get txn state, exception: artificial failure");
+        TransactionStateSnapshot txnState = new TransactionStateSnapshot(TransactionStatus.UNKNOWN,
+                "can't get txn state, exception: artificial failure");
+        TxnStateDispatcher.DispatchResult expected = TxnStateDispatcher.DispatchResult.success(txnState);
+        PUpdateTransactionStateResponse response = new PUpdateTransactionStateResponse();
+        StatusPB statusPB = new StatusPB();
+        statusPB.setStatusCode(0);
+        response.setResults(Collections.singletonList(statusPB));
+        CompletableFuture<PUpdateTransactionStateResponse> future = new CompletableFuture<>();
+        future.complete(response);
+        backendService.addResponseFuture(future);
         testDispatchBase("db1", 1, 1, expected, 0);
     }
 

@@ -26,7 +26,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.transaction.TransactionStateSnapshot;
-import jline.internal.Nullable;
+import com.starrocks.transaction.TransactionStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -37,6 +37,7 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicLong;
+import javax.annotation.Nullable;
 
 /** Dispatch transaction state to backends after the load finished. */
 public class TxnStateDispatcher {
@@ -144,15 +145,16 @@ public class TxnStateDispatcher {
         }
         TNetworkAddress address = new TNetworkAddress(computeNode.getHost(), computeNode.getBrpcPort());
         Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
-        if (db == null) {
-            return DispatchResult.fail(DispatchStatus.ABORT, "can't find database");
-        }
         TransactionStateSnapshot state;
-        try {
-            state = globalStateMgr.getGlobalTransactionMgr().getTxnState(db, txnId);
-        } catch (Throwable e) {
-            return DispatchResult.fail(DispatchStatus.ABORT,
-                    "can't get txn state, exception: " + e.getMessage());
+        if (db == null) {
+            state = new TransactionStateSnapshot(TransactionStatus.UNKNOWN, "can't find database " + dbName);
+        } else {
+            try {
+                state = globalStateMgr.getGlobalTransactionMgr().getTxnState(db, txnId);
+            } catch (Throwable e) {
+                state = new TransactionStateSnapshot(TransactionStatus.UNKNOWN,
+                        "can't get txn state, exception: " + e.getMessage());
+            }
         }
         try {
             TransactionStatePB statePB = new TransactionStatePB();

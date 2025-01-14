@@ -168,11 +168,11 @@ public class LoadExecutor implements Runnable {
 
     private void commitAndPublishTxn() throws Exception {
         timeTrace.commitTxnTimeMs = System.currentTimeMillis();
-        Pair<Database, OlapTable> pair = getDbAndTable();
+        Database database = getDb();
         long publishTimeoutMs =
                 streamLoadInfo.getTimeout() * 1000L - (timeTrace.commitTxnTimeMs - timeTrace.beginTxnTimeMs);
         boolean publishSuccess = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().commitAndPublishTransaction(
-                pair.first, txnId, tabletCommitInfo, tabletFailInfo, publishTimeoutMs, null);
+                database, txnId, tabletCommitInfo, tabletFailInfo, publishTimeoutMs, null);
         if (!publishSuccess) {
             LOG.warn("Publish timeout, txn_id: {}, label: {}, total timeout: {} ms, publish timeout: {} ms",
                         txnId, label, streamLoadInfo.getTimeout() * 1000, publishTimeoutMs);
@@ -184,9 +184,9 @@ public class LoadExecutor implements Runnable {
             return;
         }
         try {
-            Pair<Database, OlapTable> pair = getDbAndTable();
+            Database database = getDb();
             GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().abortTransaction(
-                    pair.first.getId(), txnId, reason == null ? "" : reason.getMessage());
+                    database.getId(), txnId, reason == null ? "" : reason.getMessage());
         } catch (Exception e) {
             LOG.error("Failed to abort transaction {}", txnId, e);
         }
@@ -260,6 +260,16 @@ public class LoadExecutor implements Runnable {
         } finally {
             QeProcessorImpl.INSTANCE.unregisterQuery(loadId);
         }
+    }
+
+    private Database getDb() throws Exception {
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        Database db = globalStateMgr.getLocalMetastore().getDb(tableId.getDbName());
+        if (db == null) {
+            throw new LoadException(String.format("Database %s does not exist", tableId.getDbName()));
+        }
+
+        return db;
     }
 
     private Pair<Database, OlapTable> getDbAndTable() throws Exception {
