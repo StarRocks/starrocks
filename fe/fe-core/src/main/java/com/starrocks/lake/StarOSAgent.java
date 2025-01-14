@@ -768,6 +768,30 @@ public class StarOSAgent {
         return result.getGroupId();
     }
 
+<<<<<<< HEAD
+=======
+    public void updateWorkerGroup(long workerGroupId, int replicaNumber, String replicationTypeStr)
+            throws DdlException {
+        prepare();
+        try {
+            ReplicationType replicationType = ReplicationType.NO_REPLICATION;
+            if (replicationTypeStr == null || replicationTypeStr.equalsIgnoreCase("NONE")) {
+                replicationType = ReplicationType.NO_REPLICATION;
+            } else if (replicationTypeStr.equalsIgnoreCase("SYNC")) {
+                replicationType = ReplicationType.SYNC;
+            } else if (replicationTypeStr.equalsIgnoreCase("ASYNC")) {
+                replicationType = ReplicationType.ASYNC;
+            } else {
+                throw new DdlException("Unknown replication type " + replicationTypeStr);
+            }
+            client.updateWorkerGroup(serviceId, workerGroupId, null, null, replicaNumber, replicationType);
+        } catch (StarClientException e) {
+            LOG.warn("Failed to update worker group. error: {}", e.getMessage());
+            throw new DdlException("Failed to update worker group. error: " + e.getMessage());
+        }
+    }
+
+>>>>>>> ece066f55 ([Enhancement] update staros 3.4-rc3 (#54974))
     public void deleteWorkerGroup(long groupId) throws DdlException {
         prepare();
         try {
