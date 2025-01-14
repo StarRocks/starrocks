@@ -60,7 +60,7 @@ collect_env_info()
     POD_INDEX=`echo $POD_FQDN | awk -F'.' '{print $1}' | awk -F'-' '{print $NF}'`
 
     # edit_log_port from conf file
-    local edit_port=`parse_confval_from_fe_conf "edit_log_port"`
+    local edit_log_port=`parse_confval_from_fe_conf "edit_log_port"`
     if [[ "x$edit_log_port" != "x" ]] ; then
         EDIT_LOG_PORT=$edit_log_port
     fi
