@@ -20,6 +20,7 @@
 
 #include "column/column_helper.h"
 #include "exec/hdfs_scanner.h"
+#include "formats/parquet/column_reader_factory.h"
 #include "fs/fs.h"
 #include "runtime/descriptor_helper.h"
 
@@ -35,9 +36,10 @@ public:
 
 class MockColumnReader : public ColumnReader {
 public:
-    MockColumnReader() = default;
-    explicit MockColumnReader(tparquet::Type::type type) : _type(type) {}
+    explicit MockColumnReader(tparquet::Type::type type) : ColumnReader(nullptr), _type(type) {}
     ~MockColumnReader() override = default;
+
+    Status prepare() override { return Status::OK(); }
 
     Status read_range(const Range<uint64_t>& range, const Filter* filter, Column* dst) override {
         size_t num_rows = static_cast<size_t>(range.span_size());
@@ -372,6 +374,8 @@ TEST_F(GroupReaderTest, TestInit) {
 
     // init row group reader
     status = group_reader->init();
+    ASSERT_TRUE(status.ok());
+    status = group_reader->prepare();
     // timezone is empty
     ASSERT_FALSE(status.ok());
     //ASSERT_TRUE(status.is_end_of_file());
@@ -413,6 +417,8 @@ TEST_F(GroupReaderTest, TestGetNext) {
 
     // init row group reader
     status = group_reader->init();
+    ASSERT_TRUE(status.ok());
+    status = group_reader->prepare();
     ASSERT_FALSE(status.ok());
 
     // replace column readers

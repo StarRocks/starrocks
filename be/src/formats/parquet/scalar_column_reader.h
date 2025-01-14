@@ -22,18 +22,17 @@
 
 namespace starrocks::parquet {
 
-class ScalarColumnReader : public ColumnReader {
+class ScalarColumnReader final : public ColumnReader {
 public:
-    explicit ScalarColumnReader(const ColumnReaderOptions& opts) : _opts(opts) {}
+    explicit ScalarColumnReader(const ParquetField* parquet_field, const tparquet::ColumnChunk* column_chunk_metadata,
+                                const TypeDescriptor* col_type, const ColumnReaderOptions& opts)
+            : ColumnReader(parquet_field), _opts(opts), _col_type(col_type), _chunk_metadata(column_chunk_metadata) {}
     ~ScalarColumnReader() override = default;
 
-    Status init(const ParquetField* field, const TypeDescriptor& col_type,
-                const tparquet::ColumnChunk* chunk_metadata) {
-        _field = field;
-        _col_type = &col_type;
-        _chunk_metadata = chunk_metadata;
-        RETURN_IF_ERROR(ColumnConverterFactory::create_converter(*field, col_type, _opts.timezone, &_converter));
-        return StoredColumnReader::create(_opts, field, chunk_metadata, &_reader);
+    Status prepare() override {
+        RETURN_IF_ERROR(ColumnConverterFactory::create_converter(*get_column_parquet_field(), *_col_type,
+                                                                 _opts.timezone, &_converter));
+        return StoredColumnReader::create(_opts, get_column_parquet_field(), get_chunk_metadata(), &_reader);
     }
 
     Status read_range(const Range<uint64_t>& range, const Filter* filter, Column* dst) override;
@@ -78,16 +77,14 @@ public:
     void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
                                  ColumnIOType type, bool active) override;
 
-    const tparquet::ColumnChunk* get_chunk_metadata() override { return _chunk_metadata; }
-
-    const ParquetField* get_column_parquet_field() override { return _field; }
+    const tparquet::ColumnChunk* get_chunk_metadata() const override { return _chunk_metadata; }
 
     StatusOr<tparquet::OffsetIndex*> get_offset_index(const uint64_t rg_first_row) override {
         if (_offset_index_ctx == nullptr) {
             _offset_index_ctx = std::make_unique<ColumnOffsetIndexCtx>();
             _offset_index_ctx->rg_first_row = rg_first_row;
-            int64_t offset_index_offset = _chunk_metadata->offset_index_offset;
-            uint32_t offset_index_length = _chunk_metadata->offset_index_length;
+            int64_t offset_index_offset = get_chunk_metadata()->offset_index_offset;
+            uint32_t offset_index_length = get_chunk_metadata()->offset_index_length;
             std::vector<uint8_t> offset_index_data;
             offset_index_data.reserve(offset_index_length);
             RETURN_IF_ERROR(
@@ -108,7 +105,6 @@ private:
     const ColumnReaderOptions& _opts;
 
     std::unique_ptr<StoredColumnReader> _reader;
-    const ParquetField* _field = nullptr;
 
     std::unique_ptr<ColumnConverter> _converter;
 

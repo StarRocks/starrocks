@@ -14,8 +14,12 @@
 
 #pragma once
 
+#include <string>
+
 #include "common/status.h"
+#include "exec/hdfs_scanner.h"
 #include "formats/parquet/schema.h"
+#include "fs/fs.h"
 #include "gen_cpp/parquet_types.h"
 
 namespace starrocks::parquet {
@@ -92,6 +96,40 @@ private:
     uint64_t _num_rows{0};
     SchemaDescriptor _schema;
     ApplicationVersion _writer_version;
+};
+
+using FileMetaDataPtr = std::shared_ptr<FileMetaData>;
+
+// FileMetaDataParser parse FileMetaData through below way:
+// 1. try to reuse SplitContext's FileMetaData
+// 2. if DataCache is enabled, retrieve FileMetaData from DataCache. Otherwise, parse FileMetaData normally
+class FileMetaDataParser {
+public:
+    FileMetaDataParser(RandomAccessFile* file, const HdfsScannerContext* scanner_context, BlockCache* cache,
+                       const DataCacheOptions* datacache_options, uint64_t file_size)
+            : _file(file),
+              _scanner_ctx(scanner_context),
+              _cache(cache),
+              _datacache_options(datacache_options),
+              _file_size(file_size) {}
+    StatusOr<FileMetaDataPtr> get_file_metadata();
+
+private:
+    Status _parse_footer(FileMetaDataPtr* file_metadata_ptr, int64_t* file_metadata_size);
+    StatusOr<uint32_t> _get_footer_read_size() const;
+    StatusOr<uint32_t> _parse_metadata_length(const std::vector<char>& footer_buff) const;
+    static std::string _build_metacache_key(const std::string& filename, int64_t modification_time, uint64_t file_size);
+    RandomAccessFile* _file = nullptr;
+    const HdfsScannerContext* _scanner_ctx = nullptr;
+    BlockCache* _cache = nullptr;
+    const DataCacheOptions* _datacache_options = nullptr;
+    uint64_t _file_size = 0;
+
+    // contains magic number (4 bytes) and footer length (4 bytes)
+    constexpr static const uint32_t PARQUET_FOOTER_SIZE = 8;
+    constexpr static const uint64_t DEFAULT_FOOTER_BUFFER_SIZE = 48 * 1024;
+    constexpr static const char* PARQUET_MAGIC_NUMBER = "PAR1";
+    constexpr static const char* PARQUET_EMAIC_NUMBER = "PARE";
 };
 
 SortOrder sort_order_of_logical_type(LogicalType type);
