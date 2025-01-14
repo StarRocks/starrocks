@@ -14,7 +14,6 @@
 
 #include "exec/pipeline/schedule/observer.h"
 
-#include <bits/types/struct_timespec.h>
 #include <unistd.h>
 
 #include <atomic>
