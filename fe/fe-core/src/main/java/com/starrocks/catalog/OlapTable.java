@@ -2449,8 +2449,28 @@ public class OlapTable extends Table {
         // drop all temp partitions of this table, so that there is no temp partitions in recycle bin,
         // which make things easier.
         dropAllTempPartitions();
+<<<<<<< HEAD
         LocalMetastore.inactiveRelatedMaterializedView(db, this,
                 MaterializedViewExceptions.inactiveReasonForBaseTableNotExists(getName()));
+=======
+        AlterMVJobExecutor.inactiveRelatedMaterializedView(this,
+                MaterializedViewExceptions.inactiveReasonForBaseTableNotExists(getName()), replay);
+        if (!replay && hasAutoIncrementColumn()) {
+            sendDropAutoIncrementMapTask();
+        }
+
+        updateBaseCompactionForbiddenTimeRanges(true);
+
+        // unregister constraints from global state manager
+        GlobalConstraintManager globalConstraintManager = GlobalStateMgr.getCurrentState().getGlobalConstraintManager();
+        globalConstraintManager.unRegisterConstraint(this);
+    }
+
+    public void removeTableBinds(boolean isReplay) {
+        GlobalStateMgr.getCurrentState().getLocalMetastore().removeAutoIncrementIdByTableId(getId(), isReplay);
+        GlobalStateMgr.getCurrentState().getColocateTableIndex().removeTable(getId(), this, isReplay);
+        GlobalStateMgr.getCurrentState().getStorageVolumeMgr().unbindTableToStorageVolume(getId());
+>>>>>>> e9f711c43e ([BugFix] InactiveRelatedMaterializedView not working across databases (#54846))
     }
 
     @Override

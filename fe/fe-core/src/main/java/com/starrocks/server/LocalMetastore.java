@@ -4162,9 +4162,15 @@ public class LocalMetastore implements ConnectorMetadata {
         olapTable.checkAndSetName(newTableName, false);
 
         db.dropTable(oldTableName);
+<<<<<<< HEAD
         db.createTable(olapTable);
         inactiveRelatedMaterializedView(db, olapTable,
                 MaterializedViewExceptions.inactiveReasonForBaseTableRenamed(oldTableName));
+=======
+        db.registerTableUnlocked(olapTable);
+        AlterMVJobExecutor.inactiveRelatedMaterializedView(olapTable,
+                MaterializedViewExceptions.inactiveReasonForBaseTableRenamed(oldTableName), false);
+>>>>>>> e9f711c43e ([BugFix] InactiveRelatedMaterializedView not working across databases (#54846))
 
         TableInfo tableInfo = TableInfo.createForTableRename(db.getId(), olapTable.getId(), newTableName);
         GlobalStateMgr.getCurrentState().getEditLog().logTableRename(tableInfo);
