@@ -1,9 +1,36 @@
+From 676d0175085a7996f909d9d2e63ab7b4683ef475 Mon Sep 17 00:00:00 2001
+From: before-Sunrise <unclejyj@gmail.com>
+Date: Tue, 14 Jan 2025 18:41:46 +0800
+Subject: [PATCH] patch
+
+Signed-off-by: before-Sunrise <unclejyj@gmail.com>
+---
+ CMakeLists.txt        | 5 +----
+ include/streamvbyte.h | 2 +-
+ 2 files changed, 2 insertions(+), 5 deletions(-)
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 39df85d..1e32b0c 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -32,10 +32,7 @@ if (MSVC)
+ endif()
+ # test for arm
+ if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64.*|AARCH64.*)")
+-   set(BASE_FLAGS
+-    ${BASE_FLAGS}
+-    "-D__ARM_NEON__"
+-    )
++    add_compile_options(-D__ARM_NEON__)
+ endif()
+ set(STREAMVBYTE_SRCS
+   ${PROJECT_SOURCE_DIR}/src/streamvbyte_encode.c
 diff --git a/include/streamvbyte.h b/include/streamvbyte.h
 index bc9533c..a6cbb1a 100644
 --- a/include/streamvbyte.h
 +++ b/include/streamvbyte.h
 @@ -1,7 +1,7 @@
-
+ 
  #ifndef INCLUDE_STREAMVBYTE_H_
  #define INCLUDE_STREAMVBYTE_H_
 -#define __STDC_FORMAT_MACROS
@@ -11,3 +38,6 @@ index bc9533c..a6cbb1a 100644
  #include <inttypes.h>
  #include <stdint.h>// please use a C99-compatible compiler
  #include <stddef.h>
+-- 
+2.34.1
+
