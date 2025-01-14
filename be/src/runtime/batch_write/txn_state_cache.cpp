@@ -48,7 +48,7 @@ bool TxnStateHandler::poll_state(const StatusOr<TxnState>& result) {
     }
     if (!result.status().ok()) {
         _num_poll_failure += 1;
-        TRACE_BATCH_WRITE << "notify poll failure, txn_id: " << _txn_id << ", num_poll_failure: " << _num_poll_failure
+        TRACE_BATCH_WRITE << "handler poll failure, txn_id: " << _txn_id << ", num_poll_failure: " << _num_poll_failure
                           << ", status: " << result.status();
         // fast fail if there is failure between FE and BE
         if (_num_poll_failure >= config::merge_commit_txn_state_poll_max_fail_times) {
@@ -58,7 +58,7 @@ bool TxnStateHandler::poll_state(const StatusOr<TxnState>& result) {
                                false);
         }
     } else {
-        TRACE_BATCH_WRITE << "notify poll failure, txn_id: " << _txn_id << ", " << result.value();
+        TRACE_BATCH_WRITE << "handler poll success, txn_id: " << _txn_id << ", " << result.value();
         _num_poll_failure = 0;
         _transit_txn_state(result.value().txn_status, result.value().reason, false);
     }
@@ -138,7 +138,7 @@ void TxnStateHandler::_transit_txn_state(TTransactionStatus::type new_status, co
     TRACE_BATCH_WRITE << "receive new txn state, txn_id: " << _txn_id
                       << ", current status: " << to_string(_txn_state.txn_status)
                       << ", current reason: " << _txn_state.reason << ", new status: " << new_status
-                      << ", current reason: " << reason << ", from_fe: " << from_fe;
+                      << ", new reason: " << reason << ", from_fe: " << from_fe;
     // special case for COMMITTED status. If it's notified by FE, it means the load finished with
     // publish timeout, _is_finished_txn_state() should return true, and notify subscribers.
     if (new_status == TTransactionStatus::COMMITTED && from_fe) {
@@ -457,8 +457,8 @@ void TxnStateCache::_notify_poll_result(const TxnStatePollTask& task, const Stat
     auto entry = entry_st.value();
     DeferOp defer([&] { cache->release(entry); });
     bool continue_poll = entry->value().poll_state(result);
-    TRACE_BATCH_WRITE << "notify cache poll result, txn_id: " << task.txn_id << ", db: " << task.db
-                      << ", tbl: " << task.tbl << ", continue_poll: " << continue_poll;
+    TRACE_BATCH_WRITE << "notify poll result, txn_id: " << task.txn_id << ", db: " << task.db << ", tbl: " << task.tbl
+                      << ", continue_poll: " << continue_poll;
     if (continue_poll) {
         _txn_state_poller->submit(task, config::merge_commit_txn_state_poll_interval_ms);
     }
