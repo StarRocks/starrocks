@@ -99,13 +99,6 @@ private:
     // get partition column idx in param.partition_columns
     int32_t _get_partition_column_idx(const std::string& col_name) const;
 
-    // get min/max value from row group stats
-    Status _get_min_max_value(const SlotDescriptor* slot, const tparquet::ColumnMetaData* column_meta,
-                              const ParquetField* field, std::vector<std::string>& min_values,
-                              std::vector<std::string>& max_values) const;
-
-    bool _has_correct_min_max_stats(const tparquet::ColumnMetaData& column_meta, const SortOrder& sort_order) const;
-
     Status _build_split_tasks();
 
     RandomAccessFile* _file = nullptr;

@@ -419,7 +419,8 @@ Status FileReader::_read_min_max_chunk(const GroupReaderPtr& group_reader, const
                 return Status::InternalError(strings::Substitute("Can't get $0 field", slot->col_name()));
             }
 
-            RETURN_IF_ERROR(_get_min_max_value(slot, column_meta, field, min_values, max_values));
+            RETURN_IF_ERROR(StatisticsHelper::get_min_max_value(_file_metadata.get(), slot->type(), column_meta, field,
+                                                                min_values, max_values));
             RETURN_IF_ERROR(StatisticsHelper::decode_value_into_column((*min_chunk)->columns()[i], min_values,
                                                                        slot->type(), field, ctx.timezone));
             RETURN_IF_ERROR(StatisticsHelper::decode_value_into_column((*max_chunk)->columns()[i], max_values,
@@ -437,40 +438,6 @@ int32_t FileReader::_get_partition_column_idx(const std::string& col_name) const
         }
     }
     return -1;
-}
-
-Status FileReader::_get_min_max_value(const SlotDescriptor* slot, const tparquet::ColumnMetaData* column_meta,
-                                      const ParquetField* field, std::vector<std::string>& min_values,
-                                      std::vector<std::string>& max_values) const {
-    // When statistics is empty, column_meta->__isset.statistics is still true,
-    // but statistics.__isset.xxx may be false, so judgment is required here.
-    bool is_set_min_max = (column_meta->statistics.__isset.max && column_meta->statistics.__isset.min) ||
-                          (column_meta->statistics.__isset.max_value && column_meta->statistics.__isset.min_value);
-    if (!is_set_min_max) {
-        return Status::Aborted("No exist min/max");
-    }
-
-    DCHECK_EQ(field->physical_type, column_meta->type);
-    auto sort_order = sort_order_of_logical_type(slot->type().type);
-
-    if (!_has_correct_min_max_stats(*column_meta, sort_order)) {
-        return Status::Aborted("The file has incorrect order");
-    }
-
-    if (column_meta->statistics.__isset.min_value) {
-        min_values.emplace_back(column_meta->statistics.min_value);
-        max_values.emplace_back(column_meta->statistics.max_value);
-    } else {
-        min_values.emplace_back(column_meta->statistics.min);
-        max_values.emplace_back(column_meta->statistics.max);
-    }
-
-    return Status::OK();
-}
-
-bool FileReader::_has_correct_min_max_stats(const tparquet::ColumnMetaData& column_meta,
-                                            const SortOrder& sort_order) const {
-    return _file_metadata->writer_version().HasCorrectStatistics(column_meta, sort_order);
 }
 
 void FileReader::_prepare_read_columns(std::unordered_set<std::string>& existed_column_names) {
