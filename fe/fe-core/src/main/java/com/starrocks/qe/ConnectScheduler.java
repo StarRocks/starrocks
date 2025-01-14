@@ -105,7 +105,9 @@ public class ConnectScheduler {
                     ArrayList<Long> connectionIds = new ArrayList<>(connectionMap.keySet());
                     for (Long connectId : connectionIds) {
                         ConnectContext connectContext = connectionMap.get(connectId);
-                        connectContext.checkTimeout(now);
+                        try (var guard = connectContext.bindScope()) {
+                            connectContext.checkTimeout(now);
+                        }
                     }
 
                     // remove arrow flight sql timeout connect
@@ -113,12 +115,14 @@ public class ConnectScheduler {
                             new ArrayList<>(arrowFlightSqlConnectContextMap.keySet());
                     for (String token : arrowFlightSqlConnections) {
                         ConnectContext connectContext = arrowFlightSqlConnectContextMap.get(token);
-                        connectContext.checkTimeout(now);
+                        try (var guard = connectContext.bindScope()) {
+                            connectContext.checkTimeout(now);
+                        }
                     }
                 }
             } catch (Throwable e) {
-                //Catch Exception to avoid thread exit
-                LOG.warn("Timeout checker exception, Internal error : {}", e.getMessage(), e);
+                // Catch Exception to avoid thread exit
+                LOG.warn("Timeout checker exception, Internal error:", e);
             }
         }
     }
