@@ -58,6 +58,15 @@ public:
         return _dict_filter_ctx->rewrite_conjunct_ctxs_to_predicate(_reader.get(), is_group_filtered);
     }
 
+    void init_dict_column(ColumnPtr& column, const std::vector<std::string>& sub_field_path,
+                          const size_t& layer) override {
+        DCHECK_EQ(sub_field_path.size(), layer);
+        auto dict_code_column = ColumnHelper::create_column(
+                TypeDescriptor::from_logical_type(ColumnDictFilterContext::kDictCodePrimitiveType), true);
+        dict_code_column->reserve(column->size());
+        column = dict_code_column;
+    }
+
     Status filter_dict_column(const ColumnPtr& column, Filter* filter, const std::vector<std::string>& sub_field_path,
                               const size_t& layer) override {
         DCHECK_EQ(sub_field_path.size(), layer);
