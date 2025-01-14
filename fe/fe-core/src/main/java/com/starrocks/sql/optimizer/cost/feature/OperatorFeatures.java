@@ -23,6 +23,7 @@ import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.cost.CostEstimate;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -76,6 +77,9 @@ public class OperatorFeatures extends TreeNode<OperatorFeatures> {
         }
         if (opType == OperatorType.PHYSICAL_HASH_JOIN) {
             return JoinOperatorFeatures.VECTOR_LENGTH;
+        }
+        if (opType == OperatorType.PHYSICAL_HASH_AGG) {
+            return AggOperatorFeatures.VECTOR_LENGTH;
         }
         return VECTOR_LENGTH;
     }
@@ -160,6 +164,40 @@ public class OperatorFeatures extends TreeNode<OperatorFeatures> {
             res.add(isBroadcast ? 1L : 0L);
             return res;
         }
+    }
+
+    public static class AggOperatorFeatures extends OperatorFeatures {
+
+        public static final int VECTOR_LENGTH = OperatorFeatures.VECTOR_LENGTH + 4;
+
+        // TODO: group by columns
+        protected final double inputRows;
+        protected final int numGroupByColumns;
+        protected final int numAggregations;
+        protected final double aggRatio;
+
+        public AggOperatorFeatures(OptExpression optExpr, CostEstimate cost, Statistics stats) {
+            super(optExpr, cost, stats);
+
+            PhysicalHashAggregateOperator hashAgg = (PhysicalHashAggregateOperator) optExpr.getOp();
+            this.numGroupByColumns = hashAgg.getGroupBys().size();
+            this.numAggregations = hashAgg.getAggregations().size();
+
+            OptExpression input = optExpr.getInputs().get(0);
+            this.inputRows = input.getStatistics().getOutputRowCount();
+            this.aggRatio = (1 + inputRows) / (1 + stats.getOutputRowCount());
+        }
+
+        @Override
+        public List<Long> toVector() {
+            List<Long> res = super.toVector();
+            res.add((long) inputRows);
+            res.add((long) numGroupByColumns);
+            res.add((long) numAggregations);
+            res.add((long) aggRatio);
+            return res;
+        }
+
     }
 
 }

@@ -22,6 +22,7 @@ import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.cost.CostEstimate;
 import com.starrocks.sql.optimizer.cost.CostModel;
 import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import org.apache.commons.collections.CollectionUtils;
 
@@ -66,7 +67,7 @@ public class FeatureExtractor {
         public OperatorFeatures visit(OptExpression optExpression, Void context) {
             CostEstimate cost = CostModel.calculateCostEstimate(new ExpressionContext(optExpression));
             Statistics stats = optExpression.getStatistics();
-            OperatorFeatures node = new OperatorFeatures(optExpression, cost, stats);
+            OperatorFeatures node = createOperatorFeatures(optExpression, cost, stats);
 
             visitChildren(optExpression, context, node);
             return node;
@@ -80,19 +81,20 @@ public class FeatureExtractor {
             }
         }
 
-        @Override
-        public OperatorFeatures visitPhysicalScan(OptExpression optExpression, Void context) {
-            CostEstimate cost = CostModel.calculateCostEstimate(new ExpressionContext(optExpression));
-            Statistics stats = optExpression.getStatistics();
-            return new OperatorFeatures.ScanOperatorFeatures(optExpression, cost, stats);
+        private OperatorFeatures createOperatorFeatures(OptExpression optExpression, CostEstimate cost,
+                                                        Statistics stats) {
+            OperatorType opType = optExpression.getOp().getOpType();
+            if (opType.isPhysicalScan()) {
+                return new OperatorFeatures.ScanOperatorFeatures(optExpression, cost, stats);
+            }
+            switch (opType) {
+                case PHYSICAL_HASH_JOIN:
+                    return new OperatorFeatures.JoinOperatorFeatures(optExpression, cost, stats);
+                case PHYSICAL_HASH_AGG:
+                    return new OperatorFeatures.AggOperatorFeatures(optExpression, cost, stats);
+                default:
+                    return new OperatorFeatures(optExpression, cost, stats);
+            }
         }
-
-        @Override
-        public OperatorFeatures visitPhysicalHashJoin(OptExpression optExpression, Void context) {
-            CostEstimate cost = CostModel.calculateCostEstimate(new ExpressionContext(optExpression));
-            Statistics stats = optExpression.getStatistics();
-            return new OperatorFeatures.JoinOperatorFeatures(optExpression, cost, stats);
-        }
-
     }
 }
