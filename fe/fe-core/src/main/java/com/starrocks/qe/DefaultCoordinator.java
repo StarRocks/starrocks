@@ -854,7 +854,14 @@ public class DefaultCoordinator extends Coordinator {
                         copyStatus.getErrorMsg().equals(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR)) {
                     ec = InternalErrorCode.CANCEL_NODE_NOT_ALIVE_ERR;
                 } else if (copyStatus.isTimeout()) {
+<<<<<<< HEAD
                     ErrorReport.reportTimeoutException(ErrorCode.ERR_QUERY_TIMEOUT, errMsg);
+=======
+                    ErrorReport.reportTimeoutException(
+                            ErrorCode.ERR_TIMEOUT, "Query", jobSpec.getQueryOptions().query_timeout,
+                            String.format("please increase the '%s' session variable and retry",
+                                    SessionVariable.QUERY_TIMEOUT));
+>>>>>>> 8ec9ca3402 ([BugFix] Fix Timer-check NPE and errorMsg (#55049))
                 }
                 throw new UserException(ec, errMsg);
             }

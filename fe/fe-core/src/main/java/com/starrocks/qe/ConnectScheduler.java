@@ -106,12 +106,27 @@ public class ConnectScheduler {
                     ArrayList<Long> connectionIds = new ArrayList<>(connectionMap.keySet());
                     for (Long connectId : connectionIds) {
                         ConnectContext connectContext = connectionMap.get(connectId);
-                        connectContext.checkTimeout(now);
+                        try (var guard = connectContext.bindScope()) {
+                            connectContext.checkTimeout(now);
+                        }
                     }
+<<<<<<< HEAD
+=======
+
+                    // remove arrow flight sql timeout connect
+                    ArrayList<String> arrowFlightSqlConnections =
+                            new ArrayList<>(arrowFlightSqlConnectContextMap.keySet());
+                    for (String token : arrowFlightSqlConnections) {
+                        ConnectContext connectContext = arrowFlightSqlConnectContextMap.get(token);
+                        try (var guard = connectContext.bindScope()) {
+                            connectContext.checkTimeout(now);
+                        }
+                    }
+>>>>>>> 8ec9ca3402 ([BugFix] Fix Timer-check NPE and errorMsg (#55049))
                 }
             } catch (Throwable e) {
-                //Catch Exception to avoid thread exit
-                LOG.warn("Timeout checker exception, Internal error : {}", e.getMessage(), e);
+                // Catch Exception to avoid thread exit
+                LOG.warn("Timeout checker exception, Internal error:", e);
             }
         }
     }
