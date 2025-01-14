@@ -26,8 +26,8 @@ class PlanFeaturesTest extends PlanTestBase {
     public void testBasic() throws Exception {
         ExecPlan execPlan = getExecPlan("select count(*) from t0");
         OptExpression physicalPlan = execPlan.getPhysicalPlan();
-        PlanFeatures.FeatureVector featureVector = PlanFeatures.flattenFeatures(physicalPlan);
-        String string = featureVector.toFeatureString();
+        PlanFeatures planFeatures = FeatureExtractor.flattenFeatures(physicalPlan);
+        String string = planFeatures.toFeatureString();
         Assert.assertTrue(string, string.startsWith("0,0,10003"));
         Assert.assertTrue(string, string.contains("38,0,0,0,0"));
         Assert.assertTrue(string, string.contains("40,1,1,8,9"));
