@@ -614,10 +614,9 @@ public class ExpressionStatisticCalculator {
                     distinctValues = left.getDistinctValuesCount() * averageRowSize / left.getAverageRowSize();
                     break;
                 case FunctionSet.LIKE:
-                    minValue = left.getMinValue();
-                    maxValue = left.getMaxValue();
-                    averageRowSize = left.getAverageRowSize();
-                    distinctValues = left.getDistinctValuesCount();
+                    minValue = 0;
+                    maxValue = 1;
+                    distinctValues = 2;
                     break;
                 default:
                     return ColumnStatistic.unknown();
