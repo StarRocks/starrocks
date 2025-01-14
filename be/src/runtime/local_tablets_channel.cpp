@@ -1068,7 +1068,7 @@ void LocalTabletsChannel::_update_peer_replica_profile(DeltaWriter* writer, Runt
     ADD_AND_UPDATE_TIMER(profile, "CommitTime", writer_stat.commit_time_ns);
     ADD_AND_UPDATE_TIMER(profile, "CommitWaitFlushTime", writer_stat.commit_wait_flush_time_ns);
     ADD_AND_UPDATE_TIMER(profile, "CommitRowsetBuildTime", writer_stat.commit_rowset_build_time_ns);
-    ADD_AND_UPDATE_TIMER(profile, "CommitFinishPkTime", writer_stat.commit_finish_pk_time_ns);
+    ADD_AND_UPDATE_TIMER(profile, "CommitPkPreloadTime", writer_stat.commit_pk_preload_time_ns);
     ADD_AND_UPDATE_TIMER(profile, "CommitWaitReplicaTime", writer_stat.commit_wait_replica_time_ns);
     ADD_AND_UPDATE_TIMER(profile, "CommitTxnCommitTime", writer_stat.commit_txn_commit_time_ns);
 
@@ -1114,7 +1114,7 @@ void LocalTabletsChannel::_update_secondary_replica_profile(DeltaWriter* writer,
     ADD_AND_UPDATE_TIMER(profile, "AddSegmentIOTime", writer_stat.add_segment_io_time_ns);
     ADD_AND_UPDATE_TIMER(profile, "CommitTime", writer_stat.commit_time_ns);
     ADD_AND_UPDATE_TIMER(profile, "CommitRowsetBuildTime", writer_stat.commit_rowset_build_time_ns);
-    ADD_AND_UPDATE_TIMER(profile, "CommitFinishPkTime", writer_stat.commit_finish_pk_time_ns);
+    ADD_AND_UPDATE_TIMER(profile, "CommitPkPreloadTime", writer_stat.commit_pk_preload_time_ns);
     ADD_AND_UPDATE_TIMER(profile, "CommitTxnCommitTime", writer_stat.commit_txn_commit_time_ns);
 
     auto* segment_flush_token = writer->segment_flush_token();
