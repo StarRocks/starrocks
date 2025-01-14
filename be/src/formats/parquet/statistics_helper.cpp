@@ -273,4 +273,47 @@ Status StatisticsHelper::in_filter_on_min_max_stat(const std::vector<std::string
     return Status::OK();
 }
 
+Status StatisticsHelper::get_min_max_value(const FileMetaData* file_metadata, const TypeDescriptor& type,
+                                           const tparquet::ColumnMetaData* column_meta, const ParquetField* field,
+                                           std::vector<std::string>& min_values, std::vector<std::string>& max_values) {
+    // When statistics is empty, column_meta->__isset.statistics is still true,
+    // but statistics.__isset.xxx may be false, so judgment is required here.
+    bool is_set_min_max = (column_meta->statistics.__isset.max && column_meta->statistics.__isset.min) ||
+                          (column_meta->statistics.__isset.max_value && column_meta->statistics.__isset.min_value);
+    if (!is_set_min_max) {
+        return Status::Aborted("No exist min/max");
+    }
+
+    DCHECK_EQ(field->physical_type, column_meta->type);
+    auto sort_order = sort_order_of_logical_type(type.type);
+
+    if (!has_correct_min_max_stats(file_metadata, *column_meta, sort_order)) {
+        return Status::Aborted("The file has incorrect order");
+    }
+
+    if (column_meta->statistics.__isset.min_value) {
+        min_values.emplace_back(column_meta->statistics.min_value);
+        max_values.emplace_back(column_meta->statistics.max_value);
+    } else {
+        min_values.emplace_back(column_meta->statistics.min);
+        max_values.emplace_back(column_meta->statistics.max);
+    }
+
+    return Status::OK();
+}
+
+Status StatisticsHelper::get_has_nulls(const tparquet::ColumnMetaData* column_meta, std::vector<bool>& has_nulls) {
+    if (!column_meta->statistics.__isset.null_count) {
+        return Status::Aborted("No null_count in column statistics");
+    }
+    has_nulls.emplace_back(column_meta->statistics.null_count > 0);
+    return Status::OK();
+}
+
+bool StatisticsHelper::has_correct_min_max_stats(const FileMetaData* file_metadata,
+                                                 const tparquet::ColumnMetaData& column_meta,
+                                                 const SortOrder& sort_order) {
+    return file_metadata->writer_version().HasCorrectStatistics(column_meta, sort_order);
+}
+
 } // namespace starrocks::parquet

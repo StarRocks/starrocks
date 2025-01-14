@@ -37,6 +37,7 @@
 #include "runtime/descriptor_helper.h"
 #include "runtime/mem_tracker.h"
 #include "testutil/assert.h"
+#include "testutil/exprs_test_helper.h"
 
 namespace starrocks::parquet {
 
@@ -45,10 +46,15 @@ using starrocks::HdfsScannerContext;
 
 class FileReaderTest : public testing::Test {
 public:
-    void SetUp() override { _runtime_state = _pool.add(new RuntimeState(TQueryGlobals())); }
+    void SetUp() override {
+        _runtime_state = _pool.add(new RuntimeState(TQueryGlobals()));
+        _type_int = TypeDescriptor::from_logical_type(TYPE_INT);
+    }
     void TearDown() override {}
 
 protected:
+    StatusOr<RuntimeFilterProbeDescriptor*> gen_runtime_filter_desc(SlotId slot_id);
+
     std::unique_ptr<RandomAccessFile> _create_file(const std::string& file_path);
     DataCacheOptions _mock_datacache_options();
 
@@ -78,6 +84,9 @@ protected:
     HdfsScannerContext* _create_file_map_char_key_context();
     HdfsScannerContext* _create_file_map_base_context();
     HdfsScannerContext* _create_file_map_partial_materialize_context();
+
+    StatusOr<HdfsScannerContext*> _create_context_for_filter_row_group_1(SlotId slot_id, int32_t start, int32_t end,
+                                                                         bool has_null);
 
     HdfsScannerContext* _create_file_random_read_context(const std::string& file_path);
 
@@ -226,10 +235,58 @@ protected:
     // The length of binary type is greater than 4k, and there is no min max statistics
     std::string _file_no_min_max_stats_path = "./be/test/exec/test_data/parquet_scanner/no_min_max_statistics.parquet";
 
+    // 2 row group, 3 row per row group
+    //        +--------+--------+
+    //        |   col1 |   col2 |
+    //        |--------+--------|
+    //        |      1 |     11 |
+    //        |      2 |     22 |
+    //        |      3 |     33 |
+    //        |      4 |     44 |
+    //        |      5 |     55 |
+    //        |      6 |     66 |
+    //        +--------+--------+
+    std::string _filter_row_group_path_1 =
+            "./be/test/formats/parquet/test_data/file_read_test_filter_row_group_1.parquet";
+
+    // 2 row group, 3 rows per group
+    //      +--------+--------+
+    //      |   col1 |   col2 |
+    //      |--------+--------|
+    //      |    nan |     11 |
+    //      |      2 |     22 |
+    //      |      3 |     33 |
+    //      |      4 |     44 |
+    //      |      5 |     55 |
+    //      |      6 |     66 |
+    //      +--------+--------+
+    std::string _filter_row_group_path_2 =
+            "./be/test/formats/parquet/test_data/file_read_test_filter_row_group_2.parquet";
+
     std::shared_ptr<RowDescriptor> _row_desc = nullptr;
     RuntimeState* _runtime_state = nullptr;
     ObjectPool _pool;
+    const size_t _chunk_size = 4096;
+    TypeDescriptor _type_int;
 };
+
+StatusOr<RuntimeFilterProbeDescriptor*> FileReaderTest::gen_runtime_filter_desc(SlotId slot_id) {
+    TRuntimeFilterDescription tRuntimeFilterDescription;
+    tRuntimeFilterDescription.__set_filter_id(1);
+    tRuntimeFilterDescription.__set_has_remote_targets(false);
+    tRuntimeFilterDescription.__set_build_plan_node_id(1);
+    tRuntimeFilterDescription.__set_build_join_mode(TRuntimeFilterBuildJoinMode::BORADCAST);
+    tRuntimeFilterDescription.__set_filter_type(TRuntimeFilterBuildType::TOPN_FILTER);
+
+    TExpr col_ref = ExprsTestHelper::create_column_ref_t_expr<TYPE_INT>(slot_id, true);
+    tRuntimeFilterDescription.__isset.plan_node_id_to_target_expr = true;
+    tRuntimeFilterDescription.plan_node_id_to_target_expr.emplace(1, col_ref);
+
+    auto* runtime_filter_desc = _pool.add(new RuntimeFilterProbeDescriptor());
+    RETURN_IF_ERROR(runtime_filter_desc->init(&_pool, tRuntimeFilterDescription, 1, _runtime_state));
+
+    return runtime_filter_desc;
+}
 
 std::unique_ptr<RandomAccessFile> FileReaderTest::_create_file(const std::string& file_path) {
     return *FileSystem::Default()->new_random_access_file(file_path);
@@ -493,6 +550,46 @@ HdfsScannerContext* FileReaderTest::_create_file6_base_context() {
     ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
     ctx->scan_range = (_create_scan_range(_file6_path));
+
+    return ctx;
+}
+
+StatusOr<HdfsScannerContext*> FileReaderTest::_create_context_for_filter_row_group_1(SlotId slot_id, int32_t start,
+                                                                                     int32_t end, bool has_null) {
+    auto ctx = _create_scan_context();
+
+    Utils::SlotDesc slot_descs[] = {{"col1", _type_int, 1}, {"col2", _type_int, 2}, {"col3", _type_int, 3},
+                                    {"col4", _type_int, 4}, {"col5", _type_int, 5}, {""}};
+    TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    Utils::make_column_info_vector(tuple_desc, &ctx->materialized_columns);
+    ctx->slot_descs = tuple_desc->slots();
+    ctx->scan_range = _create_scan_range(_filter_row_group_path_1);
+
+    auto* rf_collector = _pool.add(new RuntimeFilterProbeCollector());
+    auto* rf = _pool.add(new RuntimeBloomFilter<TYPE_INT>());
+
+    ASSIGN_OR_RETURN(auto* rf_desc, gen_runtime_filter_desc(slot_id));
+
+    rf->init(10);
+    rf->insert(start);
+    rf->insert(end);
+    if (has_null) {
+        rf->insert_null();
+    }
+
+    rf_desc->set_runtime_filter(rf);
+    rf_collector->add_descriptor(rf_desc);
+    ctx->runtime_filter_collector = rf_collector;
+
+    ColumnPtr partition_col3 = ColumnHelper::create_const_column<TYPE_INT>(5, 1);
+    ColumnPtr partition_col4 = ColumnHelper::create_const_column<TYPE_INT>(2, 1);
+    ColumnPtr partition_col5 = ColumnHelper::create_const_null_column(1);
+    ctx->partition_columns.emplace_back(HdfsScannerContext::ColumnInfo{3, tuple_desc->slots()[2], false});
+    ctx->partition_columns.emplace_back(HdfsScannerContext::ColumnInfo{4, tuple_desc->slots()[3], false});
+    ctx->partition_columns.emplace_back(HdfsScannerContext::ColumnInfo{5, tuple_desc->slots()[3], false});
+    ctx->partition_values.emplace_back(partition_col3);
+    ctx->partition_values.emplace_back(partition_col4);
+    ctx->partition_values.emplace_back(partition_col5);
 
     return ctx;
 }
@@ -1180,7 +1277,6 @@ TEST_F(FileReaderTest, TestReadWithUpperPred) {
     auto chunk = _create_struct_chunk();
     status = file_reader->get_next(&chunk);
     ASSERT_TRUE(status.ok());
-    LOG(ERROR) << "status: " << status.message();
     ASSERT_EQ(3, chunk->num_rows());
 
     ColumnPtr int_col = chunk->get_column_by_slot_id(0);
@@ -1203,7 +1299,7 @@ TEST_F(FileReaderTest, TestReadArray2dColumn) {
     Status status = file_reader->init(ctx);
     ASSERT_TRUE(status.ok());
 
-    EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
+    EXPECT_EQ(file_reader->row_group_size(), 1);
     std::vector<io::SharedBufferedInputStream::IORange> ranges;
     int64_t end_offset = 0;
     file_reader->_row_group_readers[0]->collect_io_ranges(&ranges, &end_offset);
@@ -1265,7 +1361,7 @@ TEST_F(FileReaderTest, TestReadMapCharKeyColumn) {
     Status status = file_reader->init(ctx);
     ASSERT_TRUE(status.ok()) << status.message();
 
-    EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
+    EXPECT_EQ(file_reader->row_group_size(), 1);
     std::vector<io::SharedBufferedInputStream::IORange> ranges;
     int64_t end_offset = 0;
     file_reader->_row_group_readers[0]->collect_io_ranges(&ranges, &end_offset);
@@ -1306,7 +1402,7 @@ TEST_F(FileReaderTest, TestReadMapColumn) {
     Status status = file_reader->init(ctx);
     ASSERT_TRUE(status.ok());
 
-    EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
+    EXPECT_EQ(file_reader->row_group_size(), 1);
     std::vector<io::SharedBufferedInputStream::IORange> ranges;
     int64_t end_offset = 0;
     file_reader->_row_group_readers[0]->collect_io_ranges(&ranges, &end_offset);
@@ -1404,7 +1500,7 @@ TEST_F(FileReaderTest, TestReadStruct) {
     Status status = file_reader->init(ctx);
     ASSERT_TRUE(status.ok());
 
-    EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
+    EXPECT_EQ(file_reader->row_group_size(), 1);
     std::vector<io::SharedBufferedInputStream::IORange> ranges;
     int64_t end_offset = 0;
     file_reader->_row_group_readers[0]->collect_io_ranges(&ranges, &end_offset);
@@ -1486,7 +1582,7 @@ TEST_F(FileReaderTest, TestReadStructSubField) {
     Status status = file_reader->init(ctx);
     ASSERT_TRUE(status.ok());
 
-    EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
+    EXPECT_EQ(file_reader->row_group_size(), 1);
     std::vector<io::SharedBufferedInputStream::IORange> ranges;
     int64_t end_offset = 0;
     file_reader->_row_group_readers[0]->collect_io_ranges(&ranges, &end_offset);
@@ -1561,7 +1657,7 @@ TEST_F(FileReaderTest, TestReadStructAbsentSubField) {
     Status status = file_reader->init(ctx);
     ASSERT_TRUE(status.ok());
 
-    EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
+    EXPECT_EQ(file_reader->row_group_size(), 1);
 
     auto chunk = std::make_shared<Chunk>();
     chunk->append_column(ColumnHelper::create_column(c1, true), chunk->num_columns());
@@ -1614,7 +1710,7 @@ TEST_F(FileReaderTest, TestReadStructCaseSensitive) {
     }
     ASSERT_TRUE(status.ok());
 
-    EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
+    EXPECT_EQ(file_reader->row_group_size(), 1);
 
     auto chunk = std::make_shared<Chunk>();
     chunk->append_column(ColumnHelper::create_column(c1, true), chunk->num_columns());
@@ -1664,7 +1760,7 @@ TEST_F(FileReaderTest, TestReadStructCaseSensitiveError) {
 
     Status status = file_reader->init(ctx);
     EXPECT_TRUE(status.ok());
-    EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
+    EXPECT_EQ(file_reader->row_group_size(), 1);
 
     auto chunk = std::make_shared<Chunk>();
     chunk->append_column(ColumnHelper::create_column(c1, true), chunk->num_columns());
@@ -1719,7 +1815,7 @@ TEST_F(FileReaderTest, TestReadStructNull) {
     }
     ASSERT_TRUE(status.ok());
 
-    EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
+    EXPECT_EQ(file_reader->row_group_size(), 1);
 
     auto chunk = std::make_shared<Chunk>();
     chunk->append_column(ColumnHelper::create_column(c0, true), chunk->num_columns());
@@ -1764,7 +1860,7 @@ TEST_F(FileReaderTest, TestReadBinary) {
     }
     ASSERT_TRUE(status.ok());
 
-    EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
+    EXPECT_EQ(file_reader->row_group_size(), 1);
 
     auto chunk = std::make_shared<Chunk>();
     chunk->append_column(ColumnHelper::create_column(k1, true), chunk->num_columns());
@@ -1790,7 +1886,7 @@ TEST_F(FileReaderTest, TestReadMapColumnWithPartialMaterialize) {
     Status status = file_reader->init(ctx);
     ASSERT_TRUE(status.ok());
 
-    EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
+    EXPECT_EQ(file_reader->row_group_size(), 1);
 
     std::vector<io::SharedBufferedInputStream::IORange> ranges;
     int64_t end_offset = 0;
@@ -2120,7 +2216,7 @@ TEST_F(FileReaderTest, TestStructArrayNull) {
         Status status = file_reader->init(ctx);
         ASSERT_TRUE(status.ok());
 
-        EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
+        EXPECT_EQ(file_reader->row_group_size(), 1);
 
         auto chunk = std::make_shared<Chunk>();
         chunk->append_column(ColumnHelper::create_column(type_int, true), chunk->num_columns());
@@ -2195,7 +2291,7 @@ TEST_F(FileReaderTest, TestStructArrayNull) {
         Status status = file_reader->init(ctx);
         ASSERT_TRUE(status.ok());
 
-        EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
+        EXPECT_EQ(file_reader->row_group_size(), 1);
 
         auto chunk = std::make_shared<Chunk>();
         chunk->append_column(ColumnHelper::create_column(type_int, true), chunk->num_columns());
@@ -2286,7 +2382,7 @@ TEST_F(FileReaderTest, TestComplexTypeNotNull) {
     Status status = file_reader->init(ctx);
     ASSERT_TRUE(status.ok());
 
-    EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
+    EXPECT_EQ(file_reader->row_group_size(), 1);
 
     auto chunk = std::make_shared<Chunk>();
     chunk->append_column(ColumnHelper::create_column(type_int, true), chunk->num_columns());
@@ -2353,7 +2449,7 @@ TEST_F(FileReaderTest, TestHudiMORTwoNestedLevelArray) {
     // Illegal parquet files, will treat illegal column as null
     ASSERT_TRUE(status.ok()) << status.message();
 
-    EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
+    EXPECT_EQ(file_reader->row_group_size(), 1);
 
     auto chunk = std::make_shared<Chunk>();
     chunk->append_column(ColumnHelper::create_column(type_string, true), chunk->num_columns());
@@ -2421,7 +2517,7 @@ TEST_F(FileReaderTest, TestLateMaterializationAboutRequiredComplexType) {
     Status status = file_reader->init(ctx);
     ASSERT_TRUE(status.ok());
 
-    EXPECT_EQ(file_reader->_row_group_readers.size(), 3);
+    EXPECT_EQ(file_reader->row_group_size(), 3);
 
     auto chunk = std::make_shared<Chunk>();
     chunk->append_column(ColumnHelper::create_column(type_a, true), chunk->num_columns());
@@ -2502,7 +2598,7 @@ TEST_F(FileReaderTest, TestLateMaterializationAboutOptionalComplexType) {
     Status status = file_reader->init(ctx);
     ASSERT_TRUE(status.ok());
 
-    EXPECT_EQ(file_reader->_row_group_readers.size(), 3);
+    EXPECT_EQ(file_reader->row_group_size(), 3);
 
     auto chunk = std::make_shared<Chunk>();
     chunk->append_column(ColumnHelper::create_column(type_a, true), chunk->num_columns());
@@ -3148,7 +3244,7 @@ TEST_F(FileReaderTest, TestTime) {
     Status status = file_reader->init(ctx);
     ASSERT_TRUE(status.ok());
 
-    EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
+    EXPECT_EQ(file_reader->row_group_size(), 1);
 
     auto chunk = std::make_shared<Chunk>();
     chunk->append_column(ColumnHelper::create_column(type_int, true), chunk->num_columns());
@@ -3217,7 +3313,7 @@ TEST_F(FileReaderTest, TestReadNoMinMaxStatistics) {
     Status status = file_reader->init(ctx);
     ASSERT_TRUE(status.ok());
 
-    EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
+    EXPECT_EQ(file_reader->row_group_size(), 1);
 
     auto chunk = std::make_shared<Chunk>();
     chunk->append_column(ColumnHelper::create_column(type_varchar, true), chunk->num_columns());
@@ -3257,7 +3353,7 @@ TEST_F(FileReaderTest, TestIsNotNullStatistics) {
 
     Status status = file_reader->init(ctx);
     ASSERT_TRUE(status.ok());
-    EXPECT_EQ(file_reader->_row_group_readers.size(), 0);
+    EXPECT_EQ(file_reader->row_group_size(), 0);
 }
 
 TEST_F(FileReaderTest, TestIsNullStatistics) {
@@ -3273,7 +3369,7 @@ TEST_F(FileReaderTest, TestIsNullStatistics) {
 
     Status status = file_reader->init(ctx);
     ASSERT_TRUE(status.ok());
-    EXPECT_EQ(file_reader->_row_group_readers.size(), 0);
+    EXPECT_EQ(file_reader->row_group_size(), 0);
 }
 
 TEST_F(FileReaderTest, TestInFilterStatitics) {
@@ -3292,7 +3388,163 @@ TEST_F(FileReaderTest, TestInFilterStatitics) {
 
     Status status = file_reader->init(ctx);
     ASSERT_TRUE(status.ok());
-    EXPECT_EQ(file_reader->_row_group_readers.size(), 2);
+    EXPECT_EQ(file_reader->row_group_size(), 2);
+}
+
+// parquet has no null
+// filter the first row group
+TEST_F(FileReaderTest, filter_row_group_with_rf_1) {
+    config::parquet_advance_zonemap_filter = false;
+    DeferOp defer([&]() { config::parquet_advance_zonemap_filter = true; });
+    SlotId slot_id = 1;
+    auto file = _create_file(_filter_row_group_path_1);
+    uint64_t file_size = std::filesystem::file_size(_filter_row_group_path_1);
+    auto file_reader = std::make_shared<FileReader>(_chunk_size, file.get(), file_size, _mock_datacache_options());
+
+    auto ret = _create_context_for_filter_row_group_1(slot_id, 5, 6, false);
+    ASSERT_TRUE(ret.ok());
+
+    Status st = file_reader->init(ret.value());
+    ASSERT_TRUE(st.ok());
+
+    ASSERT_EQ(file_reader->row_group_size(), 1);
+}
+
+// parquet has no null
+// filter no group
+TEST_F(FileReaderTest, filter_row_group_with_rf_2) {
+    config::parquet_advance_zonemap_filter = false;
+    DeferOp defer([&]() { config::parquet_advance_zonemap_filter = true; });
+    SlotId slot_id = 1;
+    auto file = _create_file(_filter_row_group_path_1);
+    uint64_t file_size = std::filesystem::file_size(_filter_row_group_path_1);
+    auto file_reader = std::make_shared<FileReader>(_chunk_size, file.get(), file_size, _mock_datacache_options());
+
+    auto ret = _create_context_for_filter_row_group_1(slot_id, 2, 5, false);
+    ASSERT_TRUE(ret.ok());
+
+    Status st = file_reader->init(ret.value());
+    ASSERT_TRUE(st.ok());
+
+    ASSERT_EQ(file_reader->row_group_size(), 2);
+}
+
+// parquet has no null
+// filter all group
+TEST_F(FileReaderTest, filter_row_group_with_rf_3) {
+    config::parquet_advance_zonemap_filter = false;
+    DeferOp defer([&]() { config::parquet_advance_zonemap_filter = true; });
+    SlotId slot_id = 1;
+    auto file = _create_file(_filter_row_group_path_1);
+    uint64_t file_size = std::filesystem::file_size(_filter_row_group_path_1);
+    auto file_reader = std::make_shared<FileReader>(_chunk_size, file.get(), file_size, _mock_datacache_options());
+
+    auto ret = _create_context_for_filter_row_group_1(slot_id, 7, 10, false);
+    ASSERT_TRUE(ret.ok());
+
+    Status st = file_reader->init(ret.value());
+    ASSERT_TRUE(st.ok());
+
+    ASSERT_EQ(file_reader->row_group_size(), 0);
+}
+
+// parquet has null
+// filter no group
+TEST_F(FileReaderTest, filter_row_group_with_rf_4) {
+    config::parquet_advance_zonemap_filter = false;
+    DeferOp defer([&]() { config::parquet_advance_zonemap_filter = true; });
+    SlotId slot_id = 1;
+    auto file = _create_file(_filter_row_group_path_2);
+    uint64_t file_size = std::filesystem::file_size(_filter_row_group_path_2);
+    auto file_reader = std::make_shared<FileReader>(_chunk_size, file.get(), file_size, _mock_datacache_options());
+
+    auto ret = _create_context_for_filter_row_group_1(slot_id, 5, 6, true);
+    ASSERT_TRUE(ret.ok());
+
+    Status st = file_reader->init(ret.value());
+    ASSERT_TRUE(st.ok());
+
+    ASSERT_EQ(file_reader->row_group_size(), 2);
+}
+
+// parquet has null
+// partition column has no null
+// filter no group
+TEST_F(FileReaderTest, filter_row_group_with_rf_5) {
+    config::parquet_advance_zonemap_filter = false;
+    DeferOp defer([&]() { config::parquet_advance_zonemap_filter = true; });
+    SlotId slot_id = 3;
+    auto file = _create_file(_filter_row_group_path_2);
+    uint64_t file_size = std::filesystem::file_size(_filter_row_group_path_2);
+    auto file_reader = std::make_shared<FileReader>(_chunk_size, file.get(), file_size, _mock_datacache_options());
+
+    auto ret = _create_context_for_filter_row_group_1(slot_id, 5, 6, true);
+    ASSERT_TRUE(ret.ok());
+
+    Status st = file_reader->init(ret.value());
+    ASSERT_TRUE(st.ok());
+
+    ASSERT_EQ(file_reader->row_group_size(), 2);
+}
+
+// parquet has null
+// partition column has no null
+// filter all group
+TEST_F(FileReaderTest, filter_row_group_with_rf_6) {
+    config::parquet_advance_zonemap_filter = false;
+    DeferOp defer([&]() { config::parquet_advance_zonemap_filter = true; });
+    SlotId slot_id = 4;
+    auto file = _create_file(_filter_row_group_path_2);
+    uint64_t file_size = std::filesystem::file_size(_filter_row_group_path_2);
+    auto file_reader = std::make_shared<FileReader>(_chunk_size, file.get(), file_size, _mock_datacache_options());
+
+    auto ret = _create_context_for_filter_row_group_1(slot_id, 5, 6, true);
+    ASSERT_TRUE(ret.ok());
+
+    Status st = file_reader->init(ret.value());
+    ASSERT_TRUE(st.ok());
+
+    ASSERT_EQ(file_reader->row_group_size(), 0);
+}
+
+// parquet has null
+// partition column has null
+// filter no group
+TEST_F(FileReaderTest, filter_row_group_with_rf_7) {
+    config::parquet_advance_zonemap_filter = false;
+    DeferOp defer([&]() { config::parquet_advance_zonemap_filter = true; });
+    SlotId slot_id = 5;
+    auto file = _create_file(_filter_row_group_path_2);
+    uint64_t file_size = std::filesystem::file_size(_filter_row_group_path_2);
+    auto file_reader = std::make_shared<FileReader>(_chunk_size, file.get(), file_size, _mock_datacache_options());
+
+    auto ret = _create_context_for_filter_row_group_1(slot_id, 5, 6, true);
+    ASSERT_TRUE(ret.ok());
+
+    Status st = file_reader->init(ret.value());
+    ASSERT_TRUE(st.ok());
+
+    ASSERT_EQ(file_reader->row_group_size(), 2);
+}
+
+// parquet has null
+// column not exist
+// filter no group
+TEST_F(FileReaderTest, filter_row_group_with_rf_8) {
+    config::parquet_advance_zonemap_filter = false;
+    DeferOp defer([&]() { config::parquet_advance_zonemap_filter = true; });
+    SlotId slot_id = 8;
+    auto file = _create_file(_filter_row_group_path_2);
+    uint64_t file_size = std::filesystem::file_size(_filter_row_group_path_2);
+    auto file_reader = std::make_shared<FileReader>(_chunk_size, file.get(), file_size, _mock_datacache_options());
+
+    auto ret = _create_context_for_filter_row_group_1(slot_id, 5, 6, true);
+    ASSERT_TRUE(ret.ok());
+
+    Status st = file_reader->init(ret.value());
+    ASSERT_TRUE(st.ok());
+
+    ASSERT_EQ(file_reader->row_group_size(), 2);
 }
 
 } // namespace starrocks::parquet

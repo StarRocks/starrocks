@@ -221,7 +221,7 @@ bool FileReader::_filter_group_with_bloom_filter_min_max_conjuncts(const GroupRe
             // external node won't have colocate runtime filter
             const JoinRuntimeFilter* filter = rf_desc->runtime_filter(-1);
             SlotId probe_slot_id;
-            if (filter == nullptr || filter->has_null() || !rf_desc->is_probe_slot_ref(&probe_slot_id)) continue;
+            if (filter == nullptr || !rf_desc->is_probe_slot_ref(&probe_slot_id)) continue;
             // !!linear search slot by slot_id.
             SlotDescriptor* slot = nullptr;
             for (SlotDescriptor* s : slots) {
@@ -232,15 +232,28 @@ bool FileReader::_filter_group_with_bloom_filter_min_max_conjuncts(const GroupRe
             }
             if (!slot) continue;
             min_max_slots[0] = slot;
-            ChunkPtr min_chunk = ChunkHelper::new_chunk(min_max_slots, 0);
-            ChunkPtr max_chunk = ChunkHelper::new_chunk(min_max_slots, 0);
 
-            auto st = _read_min_max_chunk(group_reader, min_max_slots, &min_chunk, &max_chunk);
-            if (!st.ok()) continue;
-            bool discard = RuntimeFilterHelper::filter_zonemap_with_min_max(
-                    slot->type().type, filter, min_chunk->columns()[0].get(), max_chunk->columns()[0].get());
-            if (discard) {
-                return true;
+            if (filter->has_null()) {
+                std::vector<bool> has_nulls;
+                auto st = _read_has_nulls(group_reader, min_max_slots, &has_nulls);
+                if (!st.ok()) continue;
+
+                if (has_nulls[0]) {
+                    continue;
+                }
+            }
+
+            {
+                ChunkPtr min_chunk = ChunkHelper::new_chunk(min_max_slots, 0);
+                ChunkPtr max_chunk = ChunkHelper::new_chunk(min_max_slots, 0);
+
+                auto st = _read_min_max_chunk(group_reader, min_max_slots, &min_chunk, &max_chunk);
+                if (!st.ok()) continue;
+                bool discard = RuntimeFilterHelper::filter_zonemap_with_min_max(
+                        slot->type().type, filter, min_chunk->columns()[0].get(), max_chunk->columns()[0].get());
+                if (discard) {
+                    return true;
+                }
             }
         }
     }
@@ -287,7 +300,8 @@ bool FileReader::_filter_group_with_more_filter(const GroupReaderPtr& group_read
                         LOG(WARNING) << "Can't get " + slot->col_name() + "'s ParquetField in _read_min_max_chunk.";
                         continue;
                     }
-                    auto st = _get_min_max_value(slot, column_meta, field, min_values, max_values);
+                    auto st = StatisticsHelper::get_min_max_value(_file_metadata.get(), slot->type(), column_meta,
+                                                                  field, min_values, max_values);
                     if (!st.ok()) continue;
                     Filter selected(min_values.size(), 1);
                     st = StatisticsHelper::in_filter_on_min_max_stat(min_values, max_values, ctx, field,
@@ -319,6 +333,48 @@ bool FileReader::_filter_group(const GroupReaderPtr& group_reader) {
     }
 
     return false;
+}
+
+Status FileReader::_read_has_nulls(const GroupReaderPtr& group_reader, const std::vector<SlotDescriptor*>& slots,
+                                   std::vector<bool>* has_nulls) {
+    const HdfsScannerContext& ctx = *_scanner_ctx;
+
+    for (size_t i = 0; i < slots.size(); i++) {
+        const SlotDescriptor* slot = slots[i];
+        const tparquet::ColumnMetaData* column_meta = nullptr;
+        const tparquet::ColumnChunk* column_chunk = group_reader->get_chunk_metadata(slot->id());
+        if (column_chunk && column_chunk->__isset.meta_data) {
+            column_meta = &column_chunk->meta_data;
+        }
+        if (column_meta == nullptr) {
+            int col_idx = _get_partition_column_idx(slot->col_name());
+            if (col_idx < 0) {
+                // column not exist in parquet file
+                (*has_nulls).emplace_back(true);
+            } else {
+                // is partition column
+                auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(ctx.partition_values[col_idx]);
+                ColumnPtr data_column = const_column->data_column();
+                if (data_column->is_nullable()) {
+                    (*has_nulls).emplace_back(true);
+                } else {
+                    (*has_nulls).emplace_back(false);
+                }
+            }
+        } else if (!column_meta->__isset.statistics) {
+            // statistics not exist in parquet file
+            return Status::Aborted("No exist statistics");
+        } else {
+            const ParquetField* field = group_reader->get_column_parquet_field(slot->id());
+            if (field == nullptr) {
+                LOG(WARNING) << "Can't get " + slot->col_name() + "'s ParquetField in _read_has_nulls.";
+                return Status::InternalError(strings::Substitute("Can't get $0 field", slot->col_name()));
+            }
+            RETURN_IF_ERROR(StatisticsHelper::get_has_nulls(column_meta, *has_nulls));
+        }
+    }
+
+    return Status::OK();
 }
 
 Status FileReader::_read_min_max_chunk(const GroupReaderPtr& group_reader, const std::vector<SlotDescriptor*>& slots,
