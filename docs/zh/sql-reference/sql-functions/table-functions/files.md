@@ -209,7 +209,7 @@ FILES() 的 Schema 检测并不是完全严格的。例如，在读取 CSV 文�
 
 ##### 推断 Parquet 文件中的 STRUCT 类型
 
-从 v3.4.0 版本开始，FILES() 支持从 Parquet 文件中推断 STRUCT 类型的数据。尽管 Parquet 文件本身不支持 STRUCT 类型，但系统可以从文件中的 STRING 类型列推断 STRUCT 及嵌套 STRUCT 值。
+从 v3.4.0 版本开始，FILES() 支持从 Parquet 文件中推断 STRUCT 类型的数据。
 
 #### StorageCredentialParams
 
