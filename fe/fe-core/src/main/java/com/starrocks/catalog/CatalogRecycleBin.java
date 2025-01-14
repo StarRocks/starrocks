@@ -299,13 +299,15 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
                 .collect(Collectors.toList());
     }
 
-    private synchronized long getAdjustedRecycleTimestamp(long id, long currentTimeMs) {
-        long originalRecycleTime = idToRecycleTime.get(id);
-        if (originalRecycleTime >
-                GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getValidDeletionTimeMsByAutomatedSnapshot()) {
-            return currentTimeMs; // can not be erased
+    private synchronized boolean checkValidDeletionByClusterSnapshot(long id) {
+        if (!idToRecycleTime.containsKey(id)) {
+            return true;
         }
+        return idToRecycleTime.get(id) > GlobalStateMgr.getCurrentState()
+                              .getClusterSnapshotMgr().getValidDeletionTimeMsByAutomatedSnapshot();
+    }
 
+    private synchronized long getAdjustedRecycleTimestamp(long id) {
         Map<Long, RecycleTableInfo> idToRecycleTableInfo =  Maps.newHashMap();
         for (Map<Long, RecycleTableInfo> tableEntry : idToTableInfo.rowMap().values()) {
             for (Map.Entry<Long, RecycleTableInfo> entry : tableEntry.entrySet()) {
@@ -323,7 +325,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
             return 0;
         }
 
-        return originalRecycleTime;
+        return idToRecycleTime.get(id);
     }
 
     /**
@@ -331,7 +333,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
      * Only used by main loop.
      */
     private synchronized boolean timeExpired(long id, long currentTimeMs) {
-        long latencyMs = currentTimeMs - getAdjustedRecycleTimestamp(id, currentTimeMs);
+        long latencyMs = currentTimeMs - getAdjustedRecycleTimestamp(id);
         long expireMs = max(Config.catalog_trash_expire_second * 1000L, MIN_ERASE_LATENCY);
         if (enableEraseLater.contains(id)) {
             // if enableEraseLater is set, extend the timeout by LATE_RECYCLE_INTERVAL_SECONDS
@@ -341,6 +343,10 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
     }
 
     private synchronized boolean canEraseTable(RecycleTableInfo tableInfo, long currentTimeMs) {
+        if (!checkValidDeletionByClusterSnapshot(tableInfo.getTable().getId())) {
+            return false;
+        }
+
         if (timeExpired(tableInfo.getTable().getId(), currentTimeMs)) {
             return true;
         }
@@ -353,6 +359,10 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
     }
 
     private synchronized boolean canErasePartition(RecyclePartitionInfo partitionInfo, long currentTimeMs) {
+        if (!checkValidDeletionByClusterSnapshot(partitionInfo.getPartition().getId())) {
+            return false;
+        }
+
         if (timeExpired(partitionInfo.getPartition().getId(), currentTimeMs)) {
             return true;
         }
@@ -381,11 +391,15 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
             return false;
         }
         // 2. will expire after quite a long time, don't worry
-        long latency = currentTimeMs - getAdjustedRecycleTimestamp(id, currentTimeMs);
+        long latency = currentTimeMs - getAdjustedRecycleTimestamp(id);
         if (latency < (Config.catalog_trash_expire_second - LATE_RECYCLE_INTERVAL_SECONDS) * 1000L) {
             return true;
         }
-        // 3. already expired, sorry.
+        // 3. check valid by cluster snapshot
+        if (!checkValidDeletionByClusterSnapshot(id)) {
+            return true;
+        } 
+        // 4. already expired, sorry.
         if (latency > Config.catalog_trash_expire_second * 1000L) {
             return false;
         }
@@ -400,7 +414,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
             Map.Entry<Long, RecycleDatabaseInfo> entry = dbIter.next();
             RecycleDatabaseInfo dbInfo = entry.getValue();
             Database db = dbInfo.getDb();
-            if (timeExpired(db.getId(), currentTimeMs)) {
+            if (timeExpired(db.getId(), currentTimeMs) && checkValidDeletionByClusterSnapshot(db.getId())) {
                 // erase db
                 dbIter.remove();
                 removeRecycleMarkers(entry.getKey());
@@ -982,6 +996,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         long currentTimeMs = System.currentTimeMillis();
         // should follow the partition/table/db order
         // in case of partition(table) is still in recycle bin but table(db) is missing
+        LOG.info("catalog recycle begin");
         try {
             erasePartition(currentTimeMs);
             // synchronized is unfair lock, sleep here allows other high-priority operations to obtain a lock
@@ -993,6 +1008,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         } catch (InterruptedException e) {
             LOG.warn("Failed to execute runAfterCatalogReady", e);
         }
+        LOG.info("catalog recycle finished");
     }
 
     @VisibleForTesting

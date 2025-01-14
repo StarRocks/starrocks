@@ -33,6 +33,8 @@ public class ClusterSnapshotCheckpointScheduler extends FrontendDaemon {
     private final CheckpointController feController;
     private final CheckpointController starMgrController;
 
+    private boolean hasfinished = false;
+
     public ClusterSnapshotCheckpointScheduler(CheckpointController feController, CheckpointController starMgrController) {
         super("cluster_snapshot_checkpoint_scheduler", Config.automated_cluster_snapshot_interval_seconds * 1000L);
         this.feController = feController;
@@ -42,6 +44,10 @@ public class ClusterSnapshotCheckpointScheduler extends FrontendDaemon {
     @Override
     protected void runAfterCatalogReady() {
         if (!GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().isAutomatedSnapshotOn()) {
+            return;
+        }
+
+        if (hasfinished) {
             return;
         }
 
@@ -115,6 +121,7 @@ public class ClusterSnapshotCheckpointScheduler extends FrontendDaemon {
             job.addAutomatedClusterSnapshot();
             LOG.info("Finish Cluster Snapshot checkpoint, FE checkpoint journal Id: {}, StarMgr checkpoint journal Id: {}",
                      job.getFeJournalId(), job.getStarMgrJournalId());
+            hasfinished = true;
         }
     }
 
