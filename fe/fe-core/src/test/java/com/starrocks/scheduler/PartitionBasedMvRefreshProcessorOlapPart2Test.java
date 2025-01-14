@@ -22,6 +22,7 @@ import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.UUIDUtil;
@@ -630,8 +631,9 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVTestBase {
                         starRocksAssert.alterMvProperties(alterMVSql);
                         String plan = getFragmentPlan(query);
                         PlanTestBase.assertContains(plan, ":UNION");
-                        PlanTestBase.assertContains(plan, String.format("TABLE: %s\n" +
+                        PlanTestBase.assertMatches(plan, String.format("     TABLE: %s\n" +
                                 "     PREAGGREGATION: ON\n" +
+                                "     PREDICATES: .*\n" +
                                 "     partitions=4/6", tableName));
                         PlanTestBase.assertContains(plan, "TABLE: test_mv1\n" +
                                 "     PREAGGREGATION: ON\n" +
@@ -643,8 +645,9 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVTestBase {
                     {
                         String plan = getFragmentPlan(query);
                         PlanTestBase.assertContains(plan, ":UNION");
-                        PlanTestBase.assertContains(plan, String.format("TABLE: %s\n" +
+                        PlanTestBase.assertMatches(plan, String.format("     TABLE: %s\n" +
                                 "     PREAGGREGATION: ON\n" +
+                                "     PREDICATES: .*\n" +
                                 "     partitions=4/6", tableName));
                         PlanTestBase.assertContains(plan, "TABLE: test_mv1\n" +
                                 "     PREAGGREGATION: ON\n" +
@@ -653,18 +656,42 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVTestBase {
                     {
                         String query2 = String.format("select * from %s where dt >= current_date() - interval 1 month ",
                                 tableName);
+                        FeConstants.enablePruneEmptyOutputScan = true;
                         String plan = getFragmentPlan(query2);
                         PlanTestBase.assertNotContains(plan, ":UNION");
                         PlanTestBase.assertContains(plan, "     TABLE: test_mv1\n" +
                                 "     PREAGGREGATION: ON\n" +
                                 "     partitions=2/2\n" +
                                 "     rollup: test_mv1");
+                        FeConstants.enablePruneEmptyOutputScan = false;
                     }
                 });
     }
 
     @Test
     public void testMVRefreshWithTTLConditionTT1() {
+        connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
+        starRocksAssert.withTable(R1,
+                (obj) -> {
+                    String tableName = (String) obj;
+                    testMVRefreshWithTTLCondition(tableName);
+                });
+        connectContext.getSessionVariable().setMaterializedViewRewriteMode("default");
+    }
+
+    @Test
+    public void testMVRefreshWithTTLConditionTT2() {
+        connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
+        starRocksAssert.withTable(R2,
+                (obj) -> {
+                    String tableName = (String) obj;
+                    testMVRefreshWithTTLCondition(tableName);
+                });
+        connectContext.getSessionVariable().setMaterializedViewRewriteMode("default");
+    }
+
+    @Test
+    public void testMVRefreshWithTTLConditionTT3() {
         starRocksAssert.withTable(R1,
                 (obj) -> {
                     String tableName = (String) obj;
@@ -673,7 +700,7 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVTestBase {
     }
 
     @Test
-    public void testMVRefreshWithTTLConditionTT2() {
+    public void testMVRefreshWithTTLConditionTT4() {
         starRocksAssert.withTable(R2,
                 (obj) -> {
                     String tableName = (String) obj;

@@ -433,11 +433,12 @@ public class Optimizer {
     private void ruleBasedMaterializedViewRewrite(OptExpression tree,
                                                   TaskContext rootTaskContext,
                                                   ColumnRefSet requiredColumns) {
+        // skip if mv rewrite is disabled
         if (!mvRewriteStrategy.enableMaterializedViewRewrite || context.getQueryMaterializationContext() == null) {
             return;
         }
 
-        // do rule based mv rewrite
+        // do rule based mv rewrite if needed
         if (!context.getQueryMaterializationContext().hasRewrittenSuccess()) {
             doRuleBasedMaterializedViewRewrite(tree, rootTaskContext);
         }
@@ -490,7 +491,7 @@ public class Optimizer {
 
     private void doMVRewriteWithMultiStages(OptExpression tree,
                                             TaskContext rootTaskContext) {
-        if (!mvRewriteStrategy.mvStrategy.isMultiStages()) {
+        if (!mvRewriteStrategy.enableMaterializedViewRewrite || !mvRewriteStrategy.mvStrategy.isMultiStages()) {
             return;
         }
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PARTITION_PRUNE);

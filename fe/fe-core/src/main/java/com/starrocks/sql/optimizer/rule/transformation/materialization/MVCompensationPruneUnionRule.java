@@ -21,10 +21,10 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
-import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.OpRuleBit;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
@@ -49,6 +49,10 @@ public class MVCompensationPruneUnionRule extends TransformationRule {
 
     public boolean check(final OptExpression input, OptimizerContext context) {
         if (input.getInputs().size() != 2) {
+            return false;
+        }
+        // If the materialized view force rewrite is disabled, we don't need to prune the iceberg scan.
+        if (!context.getSessionVariable().isEnableMaterializedViewForceRewrite()) {
             return false;
         }
         List<LogicalScanOperator> scanOperators = MvUtils.getScanOperator(input);
@@ -89,7 +93,10 @@ public class MVCompensationPruneUnionRule extends TransformationRule {
         if (partitionIds == null || partitionIds.isEmpty()) {
             return false;
         }
-        return partitionIds.size() < olapTable.getVisiblePartitions().size();
+        // If the partition number of iceberg scan is less than the total partition number of mv,
+        // we can prune the iceberg scan.
+        long mvTotalPartitionNum = mv.getVisiblePartitions().stream().filter(p -> p.hasData()).count();
+        return partitionIds.size() < mvTotalPartitionNum;
     }
 
     @Override
@@ -110,7 +117,7 @@ public class MVCompensationPruneUnionRule extends TransformationRule {
         for (int i = 0; i < unionColRefs.size(); i++) {
             newProjectionMap.put(unionColRefs.get(i), childColRefs.get(i));
         }
-        OptExpression child = input.inputAt(reserveIdx);
-        return Lists.newArrayList(Utils.mergeProjection(child, newProjectionMap));
+        LogicalProjectOperator projectOperator = new LogicalProjectOperator(newProjectionMap);
+        return Lists.newArrayList(OptExpression.create(projectOperator, input.inputAt(reserveIdx)));
     }
 }
