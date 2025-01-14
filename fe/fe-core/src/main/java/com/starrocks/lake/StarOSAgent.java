@@ -272,7 +272,6 @@ public class StarOSAgent {
                 workerId = workerToId.get(workerIpPort);
 
             } else {
-                prepare();
                 // When FE && staros restart, workerToId is Empty, but staros already persisted
                 // worker infos, so we need to get workerId from starMgr
                 try {
@@ -354,7 +353,6 @@ public class StarOSAgent {
         if (prevWorkerId < 0) {
             return;
         }
-        prepare();
         try {
             client.removeWorker(serviceId, prevWorkerId);
         } catch (StarClientException e) {
