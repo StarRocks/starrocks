@@ -513,9 +513,9 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
 
     std::unique_ptr<ThreadPool> batch_write_thread_pool;
     RETURN_IF_ERROR(ThreadPoolBuilder("batch_write")
-                            .set_min_threads(config::batch_write_thread_pool_num_min)
-                            .set_max_threads(config::batch_write_thread_pool_num_max)
-                            .set_max_queue_size(config::batch_write_thread_pool_queue_size)
+                            .set_min_threads(config::merge_commit_thread_pool_num_min)
+                            .set_max_threads(config::merge_commit_thread_pool_num_max)
+                            .set_max_queue_size(config::merge_commit_thread_pool_queue_size)
                             .set_idle_timeout(MonoDelta::FromMilliseconds(10000))
                             .build(&batch_write_thread_pool));
     auto batch_write_executor =

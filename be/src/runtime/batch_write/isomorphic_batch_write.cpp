@@ -306,7 +306,7 @@ Status IsomorphicBatchWrite::_execute_write(AsyncAppendDataContext* async_ctx) {
             SCOPED_RAW_TIMER(&write_data_cost_ns);
             st = _write_data_to_pipe(async_ctx);
         }
-        if (st.ok() || num_retries >= config::batch_write_rpc_request_retry_num) {
+        if (st.ok() || num_retries >= config::merge_commit_rpc_request_retry_num) {
             break;
         }
         num_retries += 1;
@@ -321,7 +321,7 @@ Status IsomorphicBatchWrite::_execute_write(AsyncAppendDataContext* async_ctx) {
             SCOPED_RAW_TIMER(&wait_pipe_cost_ns);
             std::unique_lock<bthread::Mutex> lock(_mutex);
             if (_alive_stream_load_pipe_ctxs.empty()) {
-                _cv.wait_for(lock, config::batch_write_rpc_request_retry_interval_ms * 1000);
+                _cv.wait_for(lock, config::merge_commit_rpc_request_retry_interval_ms * 1000);
             }
         }
     }
@@ -401,7 +401,7 @@ Status IsomorphicBatchWrite::_send_rpc_request(StreamLoadContext* data_ctx) {
     st = ThriftRpcHelper::rpc<FrontendServiceClient>(
             master_addr.hostname, master_addr.port,
             [&request, &response](FrontendServiceConnection& client) { client->requestMergeCommit(response, request); },
-            config::batch_write_rpc_reqeust_timeout_ms);
+            config::merge_commit_rpc_reqeust_timeout_ms);
     TRACE_BATCH_WRITE << "receive requestBatchWrite response, " << _batch_write_id
                       << ", user label: " << data_ctx->label << ", master: " << master_addr
                       << ", cost: " << ((MonotonicNanos() - start_ts) / 1000) << "us, status: " << st
@@ -417,7 +417,7 @@ Status IsomorphicBatchWrite::_send_rpc_request(StreamLoadContext* data_ctx) {
 
 Status IsomorphicBatchWrite::_wait_for_load_finish(StreamLoadContext* data_ctx) {
     int64_t total_timeout_ms =
-            data_ctx->timeout_second > 0 ? data_ctx->timeout_second * 1000 : config::batch_write_default_timeout_ms;
+            data_ctx->timeout_second > 0 ? data_ctx->timeout_second * 1000 : config::merge_commit_default_timeout_ms;
     int64_t left_timeout_ms =
             std::max((int64_t)0, total_timeout_ms - (MonotonicNanos() - data_ctx->start_nanos) / 1000000);
     StatusOr<TxnStateSubscriberPtr> subscriber_status = _txn_state_cache->subscribe_state(

@@ -33,7 +33,7 @@ public:
     IsomorphicBatchWriteTest() = default;
     ~IsomorphicBatchWriteTest() override = default;
     void SetUp() override {
-        config::batch_write_trace_log_enable = true;
+        config::merge_commit_trace_log_enable = true;
         _exec_env = ExecEnv::GetInstance();
         std::unique_ptr<ThreadPool> thread_pool;
         ASSERT_OK(ThreadPoolBuilder("IsomorphicBatchWriteTest")
@@ -354,18 +354,18 @@ TEST_F(IsomorphicBatchWriteTest, reach_max_rpc_retry) {
     ASSERT_OK(batch_write->init());
     DeferOp defer_writer([&] { batch_write->stop(); });
 
-    auto old_retry_num = config::batch_write_rpc_request_retry_num;
-    auto old_retry_interval = config::batch_write_rpc_request_retry_interval_ms;
-    config::batch_write_rpc_request_retry_num = 5;
-    config::batch_write_rpc_request_retry_interval_ms = 10;
+    auto old_retry_num = config::merge_commit_rpc_request_retry_num;
+    auto old_retry_interval = config::merge_commit_rpc_request_retry_interval_ms;
+    config::merge_commit_rpc_request_retry_num = 5;
+    config::merge_commit_rpc_request_retry_interval_ms = 10;
     SyncPoint::GetInstance()->EnableProcessing();
     DeferOp defer([&]() {
         SyncPoint::GetInstance()->ClearCallBack("IsomorphicBatchWrite::send_rpc_request::request");
         SyncPoint::GetInstance()->ClearCallBack("IsomorphicBatchWrite::send_rpc_request::status");
         SyncPoint::GetInstance()->ClearCallBack("IsomorphicBatchWrite::send_rpc_request::response");
         SyncPoint::GetInstance()->DisableProcessing();
-        config::batch_write_rpc_request_retry_num = old_retry_num;
-        config::batch_write_rpc_request_retry_interval_ms = old_retry_interval;
+        config::merge_commit_rpc_request_retry_num = old_retry_num;
+        config::merge_commit_rpc_request_retry_interval_ms = old_retry_interval;
     });
 
     int num_rpc_request = 0;
@@ -395,18 +395,18 @@ TEST_F(IsomorphicBatchWriteTest, stop_retry_if_rpc_failed) {
     ASSERT_OK(batch_write->init());
     DeferOp defer_writer([&] { batch_write->stop(); });
 
-    auto old_retry_num = config::batch_write_rpc_request_retry_num;
-    auto old_retry_interval = config::batch_write_rpc_request_retry_interval_ms;
-    config::batch_write_rpc_request_retry_num = 5;
-    config::batch_write_rpc_request_retry_interval_ms = 10;
+    auto old_retry_num = config::merge_commit_rpc_request_retry_num;
+    auto old_retry_interval = config::merge_commit_rpc_request_retry_interval_ms;
+    config::merge_commit_rpc_request_retry_num = 5;
+    config::merge_commit_rpc_request_retry_interval_ms = 10;
     SyncPoint::GetInstance()->EnableProcessing();
     DeferOp defer([&]() {
         SyncPoint::GetInstance()->ClearCallBack("IsomorphicBatchWrite::send_rpc_request::request");
         SyncPoint::GetInstance()->ClearCallBack("IsomorphicBatchWrite::send_rpc_request::status");
         SyncPoint::GetInstance()->ClearCallBack("IsomorphicBatchWrite::send_rpc_request::response");
         SyncPoint::GetInstance()->DisableProcessing();
-        config::batch_write_rpc_request_retry_num = old_retry_num;
-        config::batch_write_rpc_request_retry_interval_ms = old_retry_interval;
+        config::merge_commit_rpc_request_retry_num = old_retry_num;
+        config::merge_commit_rpc_request_retry_interval_ms = old_retry_interval;
     });
 
     // rpc failed
