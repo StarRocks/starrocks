@@ -12,13 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.sql.optimizer.cost;
+package com.starrocks.sql.optimizer.cost.feature;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.TreeNode;
 import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.cost.CostEstimate;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
@@ -26,29 +27,26 @@ import com.starrocks.sql.optimizer.statistics.Statistics;
 
 import java.util.List;
 
-// TODO: build specific features for operator
+/**
+ * Represents features for each operator.
+ * Different operators can have features of varying lengths.
+ */
 public class OperatorFeatures extends TreeNode<OperatorFeatures> {
+
+    public static final int VECTOR_LENGTH = 3;
 
     protected OperatorType opType;
     protected CostEstimate cost;
     protected Statistics stats;
 
-    protected OperatorFeatures(OptExpression optExpr, CostEstimate cost, Statistics stats) {
+    public OperatorFeatures(OptExpression optExpr, CostEstimate cost, Statistics stats) {
         this.opType = optExpr.getOp().getOpType();
         this.cost = cost;
         this.stats = stats;
     }
 
-    static OperatorFeatures build(OptExpression optExpr, CostEstimate cost, Statistics stats) {
-        if (optExpr.getOp() instanceof PhysicalScanOperator) {
-            return new ScanOperatorFeatures(optExpr, cost, stats);
-        }
-        return new OperatorFeatures(optExpr, cost, stats);
-    }
-
     public List<Long> toVector() {
         List<Long> res = Lists.newArrayList();
-        // TODO: remove this feature, which has no impact to the model
         res.add((long) stats.getOutputRowCount());
         res.add((long) cost.getMemoryCost());
         res.add((long) cost.getCpuCost());
@@ -56,21 +54,23 @@ public class OperatorFeatures extends TreeNode<OperatorFeatures> {
         return res;
     }
 
-    public static int numFeatures(OperatorType opType) {
-        if (opType == OperatorType.PHYSICAL_OLAP_SCAN) {
-            return 3 + 2;
+    public static int vectorLength(OperatorType opType) {
+        if (opType.isPhysicalScan()) {
+            return ScanOperatorFeatures.VECTOR_LENGTH;
         }
-        return 3;
+        return VECTOR_LENGTH;
     }
 
-    static class ScanOperatorFeatures extends OperatorFeatures {
+    public static class ScanOperatorFeatures extends OperatorFeatures {
+
+        public static final int VECTOR_LENGTH = 2 + OperatorFeatures.VECTOR_LENGTH;
 
         protected OptExpression optExpression;
         protected final Table table;
         protected final double tabletRatio;
         protected final double partitionRatio;
 
-        protected ScanOperatorFeatures(OptExpression optExpr, CostEstimate cost, Statistics stats) {
+        public ScanOperatorFeatures(OptExpression optExpr, CostEstimate cost, Statistics stats) {
             super(optExpr, cost, stats);
             this.optExpression = optExpr;
             PhysicalScanOperator scanOperator = (PhysicalScanOperator) optExpr.getOp();

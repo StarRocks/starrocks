@@ -15,9 +15,11 @@
 package com.starrocks.sql.optimizer.cost;
 
 import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.cost.feature.FeatureExtractor;
+import com.starrocks.sql.optimizer.cost.feature.PlanFeatures;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
-import org.junit.Assert;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 class PlanFeaturesTest extends PlanTestBase {
@@ -26,12 +28,12 @@ class PlanFeaturesTest extends PlanTestBase {
     public void testBasic() throws Exception {
         ExecPlan execPlan = getExecPlan("select count(*) from t0");
         OptExpression physicalPlan = execPlan.getPhysicalPlan();
-        PlanFeatures planFeatures = FeatureExtractor.flattenFeatures(physicalPlan);
+        PlanFeatures planFeatures = FeatureExtractor.extractFeatures(physicalPlan);
         String string = planFeatures.toFeatureString();
-        Assert.assertTrue(string, string.startsWith("0,0,10003"));
-        Assert.assertTrue(string, string.contains("38,0,0,0,0"));
-        Assert.assertTrue(string, string.contains("40,1,1,8,9"));
-        Assert.assertTrue(string, string.contains("44,1,1,1179648,9"));
+        Assertions.assertTrue(string.startsWith("tables=[0,0,10003]"), string);
+        Assertions.assertTrue(string.contains("38,0,0,0,0"), string);
+        Assertions.assertTrue(string.contains("40,1,1,8,9"), string);
+        Assertions.assertTrue(string.contains("44,1,1,9,9,100,50"), string);
     }
 
 }

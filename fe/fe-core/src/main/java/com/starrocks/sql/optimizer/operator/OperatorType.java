@@ -149,5 +149,9 @@ public enum OperatorType {
     //  join   table
     //  /  \
     // table table
-    PATTERN_MULTIJOIN,
+    PATTERN_MULTIJOIN;
+
+    public boolean isPhysicalScan() {
+        return name().startsWith("PHYSICAL") && name().endsWith("SCAN");
+    }
 }
