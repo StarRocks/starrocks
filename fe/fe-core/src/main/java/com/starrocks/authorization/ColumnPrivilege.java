@@ -43,7 +43,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.rule.RuleSetType;
+import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.MVTransformerContext;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
@@ -111,9 +111,9 @@ public class ColumnPrivilege {
             logicalPlan = new RelationTransformer(transformerContext).transformWithSelectLimit(stmt.getQueryRelation());
 
             OptimizerConfig optimizerConfig = new OptimizerConfig(OptimizerConfig.OptimizerAlgorithm.RULE_BASED);
-            optimizerConfig.disableRuleSet(RuleSetType.SINGLE_TABLE_MV_REWRITE);
-            optimizerConfig.disableRuleSet(RuleSetType.MULTI_TABLE_MV_REWRITE);
-            optimizerConfig.disableRuleSet(RuleSetType.PRUNE_EMPTY_OPERATOR);
+            optimizerConfig.disableRule(RuleType.GP_SINGLE_TABLE_MV_REWRITE);
+            optimizerConfig.disableRule(RuleType.GP_MULTI_TABLE_MV_REWRITE);
+            optimizerConfig.disableRule(RuleType.GP_PRUNE_EMPTY_OPERATOR);
             Optimizer optimizer = new Optimizer(optimizerConfig);
             optimizedPlan = optimizer.optimize(context, logicalPlan.getRoot(),
                     new PhysicalPropertySet(), new ColumnRefSet(logicalPlan.getOutputColumn()), columnRefFactory);

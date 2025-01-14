@@ -32,7 +32,6 @@ import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.rewrite.JoinPredicatePushdown;
 import com.starrocks.sql.optimizer.rule.RuleSet;
 import com.starrocks.sql.optimizer.rule.RuleType;
-import com.starrocks.sql.optimizer.task.SeriallyTaskScheduler;
 import com.starrocks.sql.optimizer.task.TaskContext;
 import com.starrocks.sql.optimizer.task.TaskScheduler;
 
@@ -92,7 +91,7 @@ public class OptimizerContext {
         this.memo = memo;
         this.ruleSet = new RuleSet();
         this.globalStateMgr = GlobalStateMgr.getCurrentState();
-        this.taskScheduler = SeriallyTaskScheduler.create();
+        this.taskScheduler = TaskScheduler.create();
         this.columnRefFactory = columnRefFactory;
         this.sessionVariable = GlobalStateMgr.getCurrentState().getVariableMgr().newSessionVariable();
         this.optimizerConfig = new OptimizerConfig();
@@ -110,7 +109,7 @@ public class OptimizerContext {
         this.memo = memo;
         this.ruleSet = new RuleSet();
         this.globalStateMgr = GlobalStateMgr.getCurrentState();
-        this.taskScheduler = SeriallyTaskScheduler.create();
+        this.taskScheduler = TaskScheduler.create();
         this.columnRefFactory = columnRefFactory;
         this.queryId = connectContext.getQueryId();
         this.sessionVariable = connectContext.getSessionVariable();
