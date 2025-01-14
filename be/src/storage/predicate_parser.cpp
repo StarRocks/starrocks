@@ -126,15 +126,15 @@ uint32_t OlapPredicateParser::column_id(const SlotDescriptor& slot_desc) const {
 }
 
 bool ConnectorPredicateParser::can_pushdown(const ColumnPredicate* predicate) const {
-    return false;
+    return true;
 }
 
 bool ConnectorPredicateParser::can_pushdown(const SlotDescriptor* slot_desc) const {
-    return false;
+    return true;
 }
 
 bool ConnectorPredicateParser::can_pushdown(const ConstPredicateNodePtr& pred_tree) const {
-    return false;
+    return true;
 }
 
 ColumnPredicate* ConnectorPredicateParser::parse_thrift_cond(const TCondition& condition) const {

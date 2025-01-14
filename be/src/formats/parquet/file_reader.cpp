@@ -16,23 +16,18 @@
 
 #include <glog/logging.h>
 
-#include <algorithm>
-#include <atomic>
 #include <cstring>
 #include <iterator>
 #include <map>
 #include <sstream>
-#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <vector>
 
 #include "block_cache/kv_cache.h"
-#include "column/chunk.h"
 #include "column/column.h"
 #include "column/column_helper.h"
 #include "column/const_column.h"
-#include "column/datum.h"
 #include "column/vectorized_fwd.h"
 #include "common/compiler_util.h"
 #include "common/config.h"
@@ -43,7 +38,6 @@
 #include "exprs/expr_context.h"
 #include "exprs/runtime_filter.h"
 #include "exprs/runtime_filter_bank.h"
-#include "formats/parquet/column_converter.h"
 #include "formats/parquet/metadata.h"
 #include "formats/parquet/scalar_column_reader.h"
 #include "formats/parquet/schema.h"
@@ -51,15 +45,12 @@
 #include "formats/parquet/utils.h"
 #include "formats/parquet/zone_map_filter_evaluator.h"
 #include "fs/fs.h"
-#include "gen_cpp/PlanNodes_types.h"
 #include "gen_cpp/parquet_types.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
 #include "io/shared_buffered_input_stream.h"
 #include "runtime/descriptors.h"
-#include "runtime/types.h"
 #include "storage/chunk_helper.h"
-#include "util/thrift_util.h"
 
 namespace starrocks::parquet {
 
@@ -358,6 +349,9 @@ bool FileReader::_filter_group_with_more_filter(const GroupReaderPtr& group_read
 // status and lead to the query failed.
 bool FileReader::_filter_group(const GroupReaderPtr& group_reader) {
     if (config::parquet_advance_zonemap_filter) {
+        if (_scanner_ctx->rf_scan_range_pruner != nullptr) {
+            _rf_scan_range_pruner = std::make_shared<OlapRuntimeScanRangePruner>(*_scanner_ctx->rf_scan_range_pruner);
+        }
         auto res = _scanner_ctx->predicate_tree.visit(
                 ZoneMapEvaluator<FilterLevel::ROW_GROUP>{_scanner_ctx->predicate_tree, group_reader.get()});
         if (!res.ok()) {
@@ -384,6 +378,29 @@ bool FileReader::_filter_group(const GroupReaderPtr& group_reader) {
 
         return false;
     }
+}
+
+StatusOr<bool> FileReader::_update_rf_and_filter_group(const GroupReaderPtr& group_reader) {
+    bool filter = false;
+    if (config::parquet_advance_zonemap_filter && _rf_scan_range_pruner != nullptr) {
+        RETURN_IF_ERROR(_rf_scan_range_pruner->update_range_if_arrived(
+                &EMPTY_GLOBAL_DICTMAPS,
+                [&filter, &group_reader](auto cid, const PredicateList& predicates) {
+                    PredicateCompoundNode<CompoundNodeType::AND> pred_tree;
+                    for (const auto& pred : predicates) {
+                        pred_tree.add_child(PredicateColumnNode{pred});
+                    }
+                    auto real_tree = PredicateTree::create(std::move(pred_tree));
+
+                    auto res = real_tree.visit(ZoneMapEvaluator<FilterLevel::ROW_GROUP>{real_tree, group_reader.get()});
+                    if (res.ok() && res->has_value() && res->value().span_size() == 0) {
+                        filter = true;
+                    }
+                    return Status::OK();
+                },
+                true, 0));
+    }
+    return filter;
 }
 
 Status FileReader::_read_has_nulls(const GroupReaderPtr& group_reader, const std::vector<SlotDescriptor*>& slots,
@@ -545,8 +562,8 @@ Status FileReader::_init_group_readers() {
             continue;
         }
 
-        auto row_group_reader = std::make_shared<GroupReader>(_group_reader_param, i, &_skip_rows_ctx->need_skip_rowids,
-                                                              row_group_first_row);
+        auto row_group_reader =
+                std::make_shared<GroupReader>(_group_reader_param, i, _skip_rows_ctx, row_group_first_row);
         RETURN_IF_ERROR(row_group_reader->init());
 
         _group_reader_param.stats->parquet_total_row_groups += 1;
@@ -560,11 +577,11 @@ Status FileReader::_init_group_readers() {
 
         _row_group_readers.emplace_back(row_group_reader);
         int64_t num_rows = _file_metadata->t_metadata().row_groups[i].num_rows;
-        // for iceberg v2 pos delete
-        if (_skip_rows_ctx != nullptr && !_skip_rows_ctx->need_skip_rowids.empty()) {
-            auto start_iter = _skip_rows_ctx->need_skip_rowids.lower_bound(row_group_first_row);
-            auto end_iter = _skip_rows_ctx->need_skip_rowids.upper_bound(row_group_first_row + num_rows - 1);
-            num_rows -= std::distance(start_iter, end_iter);
+        // for skip rows which already deleted
+        if (_skip_rows_ctx != nullptr && _skip_rows_ctx->has_skip_rows()) {
+            uint64_t deletion_rows = _skip_rows_ctx->deletion_bitmap->get_range_cardinality(
+                    row_group_first_row, row_group_first_row + num_rows);
+            num_rows -= deletion_rows;
         }
         _total_row_count += num_rows;
     }
@@ -609,12 +626,31 @@ Status FileReader::get_next(ChunkPtr* chunk) {
             }
             if (status.is_end_of_file()) {
                 // release previous RowGroupReader
-                _row_group_readers[_cur_row_group_idx] = nullptr;
-                _cur_row_group_idx++;
-                if (_cur_row_group_idx < _row_group_size) {
-                    // prepare new group
-                    RETURN_IF_ERROR(_row_group_readers[_cur_row_group_idx]->prepare());
-                }
+                do {
+                    _row_group_readers[_cur_row_group_idx] = nullptr;
+                    _cur_row_group_idx++;
+                    if (_cur_row_group_idx < _row_group_size) {
+                        const auto& cur_row_group = _row_group_readers[_cur_row_group_idx];
+                        auto ret = _update_rf_and_filter_group(cur_row_group);
+                        if (ret.ok() && ret.value()) {
+                            // row group is filtered by runtime filter
+                            _group_reader_param.stats->parquet_filtered_row_groups += 1;
+                            continue;
+                        } else if (ret.status().is_end_of_file()) {
+                            // If rf is always false, will return eof
+                            _group_reader_param.stats->parquet_filtered_row_groups +=
+                                    (_row_group_size - _cur_row_group_idx);
+                            _row_group_readers.assign(_row_group_readers.size(), nullptr);
+                            _cur_row_group_idx = _row_group_size;
+                            break;
+                        } else {
+                            // do nothing, ignore the error code
+                        }
+
+                        RETURN_IF_ERROR(cur_row_group->prepare());
+                    }
+                    break;
+                } while (true);
 
                 return Status::OK();
             }

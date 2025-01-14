@@ -16,13 +16,14 @@
 
 #include "block_cache/block_cache_hit_rate_counter.hpp"
 #include "column/column_helper.h"
-#include "connector/deletion_vector//deletion_vector.h"
+#include "connector/deletion_vector/deletion_vector.h"
 #include "exec/exec_node.h"
 #include "fs/hdfs/fs_hdfs.h"
 #include "io/cache_select_input_stream.hpp"
 #include "io/compressed_input_stream.h"
 #include "io/shared_buffered_input_stream.h"
 #include "pipeline/fragment_context.h"
+#include "storage/olap_runtime_range_pruner.hpp"
 #include "storage/predicate_parser.h"
 #include "util/compression/compression_utils.h"
 #include "util/compression/stream_compression.h"
@@ -184,9 +185,11 @@ Status HdfsScanner::_build_scanner_context() {
         opts.pred_tree_params = _runtime_state->fragment_ctx()->pred_tree_params();
         ctx.conjuncts_manager = std::make_unique<ScanConjunctsManager>(std::move(opts));
         RETURN_IF_ERROR(ctx.conjuncts_manager->parse_conjuncts());
-        ConnectorPredicateParser predicate_parser{&ctx.slot_descs};
+        auto* predicate_parser = opts.obj_pool->add(new ConnectorPredicateParser(&ctx.slot_descs));
         ASSIGN_OR_RETURN(ctx.predicate_tree,
-                         ctx.conjuncts_manager->get_predicate_tree(&predicate_parser, ctx.predicate_free_pool));
+                         ctx.conjuncts_manager->get_predicate_tree(predicate_parser, ctx.predicate_free_pool));
+        ctx.rf_scan_range_pruner = opts.obj_pool->add(
+                new OlapRuntimeScanRangePruner(predicate_parser, ctx.conjuncts_manager->unarrived_runtime_filters()));
     }
     return Status::OK();
 }
@@ -333,6 +336,9 @@ void HdfsScanner::do_update_iceberg_v2_counter(RuntimeProfile* parent_profile, c
 }
 
 void HdfsScanner::do_update_deletion_vector_counter(RuntimeProfile* parent_profile) {
+    if (_scanner_ctx.enable_split_tasks && !has_split_tasks()) {
+        return;
+    }
     const std::string DV_TIMER = DeletionVector::DELETION_VECTOR;
     ADD_COUNTER(parent_profile, DV_TIMER, TUnit::NONE);
 

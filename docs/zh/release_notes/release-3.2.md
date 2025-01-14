@@ -4,6 +4,24 @@ displayed_sidebar: docs
 
 # StarRocks version 3.2
 
+## 3.2.14
+
+发布日期：2025 年 1 月 8 日
+
+### 功能优化
+
+- 支持收集 Paimon 表的统计信息。[#52858](https://github.com/StarRocks/starrocks/pull/52858)
+- JSON 指标中添加节点信息和直方图指标。[#53735](https://github.com/StarRocks/starrocks/pull/53735)
+
+### 问题修复
+
+修复了如下问题：
+
+- 主键表索引的 Score 没有在 Commit 阶段进行更新。[#41737](https://github.com/StarRocks/starrocks/pull/41737)
+- 在启用低基数优化时，`max(count(distinct))` 执行计划错误。[#53403](https://github.com/StarRocks/starrocks/pull/53403)
+- 当 List 分区列含有 NULL 值时，查询分区列的 Min/Max 值会导致分区裁剪错误。[#53235](https://github.com/StarRocks/starrocks/pull/53235)
+- 使用 HDFS 备份数据时上传重试失败。[#53679](https://github.com/StarRocks/starrocks/pull/53679)
+
 ## 3.2.13
 
 发布日期：2024 年 12 月 13 日

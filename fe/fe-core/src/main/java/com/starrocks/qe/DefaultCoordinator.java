@@ -923,7 +923,9 @@ public class DefaultCoordinator extends Coordinator {
                     ec = InternalErrorCode.CANCEL_NODE_NOT_ALIVE_ERR;
                 } else if (copyStatus.isTimeout()) {
                     ErrorReport.reportTimeoutException(
-                            ErrorCode.ERR_TIMEOUT, "Query", jobSpec.getQueryOptions().query_timeout, errMsg);
+                            ErrorCode.ERR_TIMEOUT, "Query", jobSpec.getQueryOptions().query_timeout,
+                            String.format("please increase the '%s' session variable and retry",
+                                    SessionVariable.QUERY_TIMEOUT));
                 }
                 throw new StarRocksException(ec, errMsg);
             }

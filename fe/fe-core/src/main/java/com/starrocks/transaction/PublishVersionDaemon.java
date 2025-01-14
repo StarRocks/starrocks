@@ -53,6 +53,7 @@ import com.starrocks.lake.TxnInfoHelper;
 import com.starrocks.lake.Utils;
 import com.starrocks.lake.compaction.Quantiles;
 import com.starrocks.proto.DeleteTxnLogRequest;
+import com.starrocks.proto.DeleteTxnLogResponse;
 import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
@@ -79,6 +80,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Future;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.stream.Collectors;
 import javax.validation.constraints.NotNull;
@@ -564,7 +566,12 @@ public class PublishVersionDaemon extends FrontendDaemon {
             LakeService lakeService = BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort());
             // just ignore the response, for we don't care the result of delete txn log
             // and vacuum will clan the txn log finally if it failed.
-            lakeService.deleteTxnLog(request);
+            // make sure sync wait for the RPC call to avoid too many RPC call existed in BE/CN side
+            Future<DeleteTxnLogResponse> responseFuture = lakeService.deleteTxnLog(request);
+            DeleteTxnLogResponse response = responseFuture.get();
+            if (response != null && response.status != null && response.status.statusCode != 0) {
+                LOG.warn("delete txn log request return with err: " + response.status.errorMsgs.get(0));
+            }
         } catch (Exception e) {
             LOG.warn("delete txn log error: " + e.getMessage());
         }
