@@ -259,8 +259,7 @@ TTransactionStatus::type to_thrift_txn_status(TransactionStatusPB status) {
     }
 }
 
-void BatchWriteMgr::update_transaction_state(ExecEnv* exec_env, brpc::Controller* cntl,
-                                             const PUpdateTransactionStateRequest* request,
+void BatchWriteMgr::update_transaction_state(const PUpdateTransactionStateRequest* request,
                                              PUpdateTransactionStateResponse* response) {
     for (int i = 0; i < request->states_size(); i++) {
         auto& txn_state = request->states(i);

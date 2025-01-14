@@ -1288,8 +1288,7 @@ void PInternalServiceImplBase<T>::update_transaction_state(google::protobuf::Rpc
                                                            PUpdateTransactionStateResponse* response,
                                                            google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
-    auto* cntl = static_cast<brpc::Controller*>(cntl_base);
-    _exec_env->batch_write_mgr()->update_transaction_state(_exec_env, cntl, request, response);
+    _exec_env->batch_write_mgr()->update_transaction_state(request, response);
 }
 
 template class PInternalServiceImplBase<PInternalService>;

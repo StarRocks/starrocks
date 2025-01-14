@@ -60,8 +60,7 @@ public:
     void receive_stream_load_rpc(ExecEnv* exec_env, brpc::Controller* cntl, const PStreamLoadRequest* request,
                                  PStreamLoadResponse* response);
 
-    void update_transaction_state(ExecEnv* exec_env, brpc::Controller* cntl,
-                                  const PUpdateTransactionStateRequest* request,
+    void update_transaction_state(const PUpdateTransactionStateRequest* request,
                                   PUpdateTransactionStateResponse* response);
 
 private:

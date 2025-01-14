@@ -376,7 +376,6 @@ TEST_F(BatchWriteMgrTest, stream_load_rpc_fail) {
 }
 
 TEST_F(BatchWriteMgrTest, update_transaction_state) {
-    brpc::Controller cntl;
     PUpdateTransactionStateRequest request;
     std::vector<TxnState> expected_cache_state;
 
@@ -417,7 +416,7 @@ TEST_F(BatchWriteMgrTest, update_transaction_state) {
     expected_cache_state.push_back({TTransactionStatus::UNKNOWN, ""});
 
     PUpdateTransactionStateResponse response;
-    _batch_write_mgr->update_transaction_state(_exec_env, &cntl, &request, &response);
+    _batch_write_mgr->update_transaction_state(&request, &response);
     ASSERT_EQ(request.states_size(), response.results_size());
     for (int i = 1; i <= expected_cache_state.size(); ++i) {
         ASSERT_EQ(TStatusCode::OK, response.results(i - 1).status_code());
