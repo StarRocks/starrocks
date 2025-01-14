@@ -318,10 +318,17 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
                 }
 
                 // inactive the related MVs
+<<<<<<< HEAD
                 LocalMetastore.inactiveRelatedMaterializedView(db, origTable,
                         MaterializedViewExceptions.inactiveReasonForBaseTableSwapped(origTblName));
                 LocalMetastore.inactiveRelatedMaterializedView(db, olapNewTbl,
                         MaterializedViewExceptions.inactiveReasonForBaseTableSwapped(newTblName));
+=======
+                AlterMVJobExecutor.inactiveRelatedMaterializedView(origTable,
+                        MaterializedViewExceptions.inactiveReasonForBaseTableSwapped(origTblName), false);
+                AlterMVJobExecutor.inactiveRelatedMaterializedView(olapNewTbl,
+                        MaterializedViewExceptions.inactiveReasonForBaseTableSwapped(newTblName), false);
+>>>>>>> e9f711c43e ([BugFix] InactiveRelatedMaterializedView not working across databases (#54846))
 
                 SwapTableOperationLog log = new SwapTableOperationLog(db.getId(), origTable.getId(), olapNewTbl.getId());
                 GlobalStateMgr.getCurrentState().getAlterJobMgr().swapTableInternal(log);
