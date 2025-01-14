@@ -63,13 +63,13 @@ public class BatchWriteMgr extends FrontendDaemon {
     private final TxnStateDispatcher txnStateDispatcher;
 
     public BatchWriteMgr() {
-        super("group-commit-mgr", Config.batch_write_gc_check_interval_ms);
+        super("group-commit-mgr", Config.merge_commit_gc_check_interval_ms);
         this.idGenerator = new AtomicLong(0L);
         this.isomorphicBatchWriteMap = new ConcurrentHashMap<>();
         this.lock = new ReentrantReadWriteLock();
         this.coordinatorBackendAssigner = new CoordinatorBackendAssignerImpl();
         this.threadPoolExecutor = ThreadPoolManager.newDaemonCacheThreadPool(
-                        Config.batch_write_executor_threads_num, "batch-write-load", true);
+                        Config.merge_commit_executor_threads_num, "batch-write-load", true);
         this.txnStateDispatcher = new TxnStateDispatcher(threadPoolExecutor);
     }
 
@@ -82,7 +82,7 @@ public class BatchWriteMgr extends FrontendDaemon {
 
     @Override
     protected void runAfterCatalogReady() {
-        setInterval(Config.batch_write_gc_check_interval_ms);
+        setInterval(Config.merge_commit_gc_check_interval_ms);
         cleanupInactiveBatchWrite();
     }
 

@@ -3366,18 +3366,24 @@ public class Config extends ConfigBase {
     public static int lake_remove_table_thread_num = 4;
 
     @ConfField(mutable = true)
-    public static int batch_write_gc_check_interval_ms = 60000;
+    public static int merge_commit_gc_check_interval_ms = 60000;
 
     @ConfField(mutable = true)
-    public static int batch_write_idle_ms = 3600000;
+    public static int merge_commit_idle_ms = 3600000;
 
-    public static int batch_write_executor_threads_num = 4096;
+    public static int merge_commit_executor_threads_num = 4096;
 
     @ConfField(mutable = true)
     public static int merge_commit_txn_state_dispatch_retry_times = 3;
 
     @ConfField(mutable = true)
     public static int merge_commit_txn_state_dispatch_retry_interval_ms = 200;
+
+    public static int merge_commit_be_assigner_schedule_interval_ms = 5000;
+
+    @ConfField(mutable = true, comment = "Defines the maximum balance factor allowed " +
+            "between any two nodes before triggering a balance")
+    public static double merge_commit_be_assigner_balance_factor_threshold = 0.1;
 
     /**
      * Enable Arrow Flight SQL server only when the port is set to positive value.
@@ -3390,12 +3396,6 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static int arrow_token_cache_expire = 3600;
-
-    public static int batch_write_be_assigner_schedule_interval_ms = 5000;
-
-    @ConfField(mutable = true, comment = "Defines the maximum balance factor allowed " +
-            "between any two nodes before triggering a balance")
-    public static double batch_write_be_assigner_balance_factor_threshold = 0.1;
 
     @ConfField(mutable = false)
     public static int query_deploy_threadpool_size = max(50, getRuntime().availableProcessors() * 10);

@@ -49,7 +49,7 @@ public class IsomorphicBatchWrite implements LoadExecuteCallback {
 
     private static final Logger LOG = LoggerFactory.getLogger(IsomorphicBatchWrite.class);
 
-    private static final String LABEL_PREFIX = "batch_write_";
+    private static final String LABEL_PREFIX = "merge_commit_";
 
     private final long id;
     private final TableId tableId;
@@ -251,7 +251,7 @@ public class IsomorphicBatchWrite implements LoadExecuteCallback {
      */
     public boolean isActive() {
         long idleTime = System.currentTimeMillis() - lastLoadCreateTimeMs.get();
-        return !loadExecutorMap.isEmpty() || idleTime < Config.batch_write_idle_ms;
+        return !loadExecutorMap.isEmpty() || idleTime < Config.merge_commit_idle_ms;
     }
 
     @Override
