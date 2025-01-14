@@ -133,7 +133,10 @@ public:
         return Status(TStatusCode::DATA_QUALITY_ERROR, msg);
     }
 
+    // used for global dict collection
     static Status GlobalDictError(std::string_view msg) { return Status(TStatusCode::GLOBAL_DICT_ERROR, msg); }
+    // used for global dict match
+    static Status GlobalDictNotMatch(std::string_view msg) { return Status(TStatusCode::GLOBAL_DICT_NOT_MATCH, msg); }
 
     static Status TransactionInProcessing(std::string_view msg) { return Status(TStatusCode::TXN_IN_PROCESSING, msg); }
     static Status TransactionNotExists(std::string_view msg) { return Status(TStatusCode::TXN_NOT_EXISTS, msg); }
