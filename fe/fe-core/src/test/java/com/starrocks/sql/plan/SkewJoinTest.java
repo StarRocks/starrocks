@@ -220,8 +220,8 @@ public class SkewJoinTest extends PlanTestBase {
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 10: rand_col = 17: rand_col\n" +
                 "  |  equal join conjunct: 9: cast = 5: v1",
-                "<slot 10> : CASE WHEN 2: c1.a[true] IS NULL THEN 24: round WHEN 2: c1.a[true] IN (1, 2) THEN 24: " +
-                        "round ELSE 0 END");
+                "<slot 10> : CASE WHEN 2: c1.a[true] IS NULL THEN 23: round WHEN 2: c1.a[true] IN (1, 2) THEN " +
+                        "23: round ELSE 0 END");
     }
 
     @Test

@@ -23,6 +23,7 @@ import com.starrocks.sql.optimizer.GroupExpression;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.pattern.MultiOpPattern;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 
 import java.util.List;
@@ -65,9 +66,9 @@ public class Binder {
         this.multiJoinBinder = new MultiJoinBinder(optimizerContext, stopwatch);
         // MULTI_JOIN is a special pattern which can contain children groups if the input group expression
         // is not a scan node.
-        this.isPatternWithoutChildren = pattern.isPatternMultiJoin()
-                ? Pattern.ALL_SCAN_TYPES.contains(groupExpression.getOp().getOpType())
-                : pattern.children().size() == 0;
+        this.isPatternWithoutChildren = pattern.is(OperatorType.PATTERN_MULTIJOIN)
+                ? MultiOpPattern.ALL_SCAN_TYPES.contains(groupExpression.getOp().getOpType())
+                : pattern.children().isEmpty();
     }
 
     /*
@@ -108,12 +109,11 @@ public class Binder {
         return expression;
     }
 
-
     /**
      * Pattern tree match groupExpression tree
      */
     private OptExpression match(Pattern pattern, GroupExpression groupExpression) {
-        if (pattern.isPatternMultiJoin()) {
+        if (pattern.is(OperatorType.PATTERN_MULTIJOIN)) {
             return multiJoinBinder.match(groupExpression);
         }
 
@@ -142,7 +142,7 @@ public class Binder {
                 resultInputs.add(opt);
             }
 
-            if (!(childPattern.isPatternMultiLeaf() &&
+            if (!(childPattern.is(OperatorType.PATTERN_MULTI_LEAF) &&
                     geSize - groupExpressionIndex > patternSize - patternIndex)) {
                 patternIndex++;
             }
@@ -165,7 +165,7 @@ public class Binder {
      */
     private GroupExpression extractGroupExpression(Pattern pattern, Group group) {
         final int valueIndex = groupExpressionIndex.get(groupTraceKey);
-        if (pattern.isPatternLeaf() || pattern.isPatternMultiLeaf()) {
+        if (pattern.is(OperatorType.PATTERN_LEAF) || pattern.is(OperatorType.PATTERN_MULTI_LEAF)) {
             if (valueIndex > 0) {
                 groupExpressionIndex.remove(groupTraceKey);
                 return null;
@@ -276,7 +276,7 @@ public class Binder {
             }
 
             // shortcut for no child group expression
-            if (valueIndex > 0 && Pattern.ALL_SCAN_TYPES.contains(next.getOp().getOpType())) {
+            if (valueIndex > 0 && MultiOpPattern.ALL_SCAN_TYPES.contains(next.getOp().getOpType())) {
                 groupExpressionIndex.remove(groupTraceKey);
                 return null;
             }
@@ -307,7 +307,8 @@ public class Binder {
 
         private boolean isMultiJoinOp(GroupExpression ge) {
             OperatorType operatorType = ge.getOp().getOpType();
-            return operatorType.equals(OperatorType.LOGICAL_JOIN) || Pattern.ALL_SCAN_TYPES.contains(operatorType);
+            return operatorType.equals(OperatorType.LOGICAL_JOIN) ||
+                    MultiOpPattern.ALL_SCAN_TYPES.contains(operatorType);
         }
 
         private boolean isMultiJoin(GroupExpression ge) {
@@ -342,6 +343,7 @@ public class Binder {
 
         /**
          * Check Group's logical expressions except the first has already been rewritten by mv rules.
+         *
          * @param g : Group to check whether it has been rewritten by mv rules.
          * @return : true if the Group has GroupExpression which is rewritten by mv rules.
          */
