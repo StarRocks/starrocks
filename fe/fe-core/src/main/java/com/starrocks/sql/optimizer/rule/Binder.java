@@ -31,7 +31,6 @@ import java.util.concurrent.TimeUnit;
 
 // Used to extract matched expression from GroupExpression
 public class Binder {
-    private final OptimizerContext optimizerContext;
     private final Pattern pattern;
     private final GroupExpression groupExpression;
     // binder status
@@ -58,7 +57,6 @@ public class Binder {
      */
     public Binder(OptimizerContext optimizerContext, Pattern pattern,
                   GroupExpression groupExpression, Stopwatch stopwatch) {
-        this.optimizerContext = optimizerContext;
         this.pattern = pattern;
         this.groupExpression = groupExpression;
         this.groupExpressionIndex = Lists.newArrayList(0);
@@ -190,7 +188,6 @@ public class Binder {
      * binding state and check the expression at the same time. But MULTI_JOIN could enumerate the GE without any check
      */
     private class MultiJoinBinder {
-        private final SessionVariable sessionVariable;
         // Stopwatch to void infinite loop
         private final Stopwatch watch;
         // Time limit for the entire optimization
@@ -200,7 +197,7 @@ public class Binder {
         private long loopCount = 0;
 
         public MultiJoinBinder(OptimizerContext optimizerContext, Stopwatch stopwatch) {
-            this.sessionVariable = optimizerContext.getSessionVariable();
+            SessionVariable sessionVariable = optimizerContext.getSessionVariable();
             this.watch = stopwatch;
             this.timeLimit = Math.min(sessionVariable.getOptimizerMaterializedViewTimeLimitMillis(),
                     sessionVariable.getOptimizerExecuteTimeout());

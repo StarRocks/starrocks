@@ -52,13 +52,13 @@ import java.util.stream.Collectors;
 public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
     private static final Logger LOG = LogManager.getLogger(RewriteSimpleAggToHDFSScanRule.class);
 
-    public static final RewriteSimpleAggToHDFSScanRule SCAN_NO_PROJECT =
-            new RewriteSimpleAggToHDFSScanRule(false);
-
     private static final Set<OperatorType> SUPPORTED = Set.of(OperatorType.LOGICAL_HIVE_SCAN,
             OperatorType.LOGICAL_ICEBERG_SCAN,
             OperatorType.LOGICAL_FILE_SCAN
     );
+
+    public static final RewriteSimpleAggToHDFSScanRule SCAN_NO_PROJECT =
+            new RewriteSimpleAggToHDFSScanRule(false);
 
     private final boolean hasProjectOperator;
 
