@@ -151,11 +151,14 @@ public final class CoordinatorBackendAssignerImpl implements CoordinatorBackendA
                         task.getScheduleType(), task.getTaskId(), System.currentTimeMillis() - startTime, e);
                 throwable = e;
             } finally {
+                // numExecutedTasks is just for testing. Should update it before calling task.finish()
+                // which may notify the waiting thread. So that after the thread wakes up, it can get
+                // the correct numExecutedTasks including this one.
+                numExecutedTasks.incrementAndGet();
                 task.finish(throwable);
                 if (task.getScheduleType() == EventType.DETECT_UNAVAILABLE_NODES) {
                     numPendingTasksForDetectUnavailableNodes.decrementAndGet();
                 }
-                numExecutedTasks.incrementAndGet();
             }
         }
     }
