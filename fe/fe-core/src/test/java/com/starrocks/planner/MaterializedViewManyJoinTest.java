@@ -25,7 +25,6 @@ import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Timeout;
-import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
@@ -138,26 +137,9 @@ public class MaterializedViewManyJoinTest extends MaterializedViewTestBase {
         super.setUp();
     }
 
-    @ParameterizedTest(name = "{index}-{0}")
-<<<<<<< HEAD
-    @MethodSource("generateManyJoinArguments")
-    @Timeout(5)
-    public void testManyJoins(String name, String mvQuery, String query, boolean expectHitMv) throws Exception {
-        LOG.info("create mv {}", mvQuery);
-        String mvName = "mv_manyjoin";
-        String createMv = "CREATE MATERIALIZED VIEW " + mvName + "\n" +
-                "REFRESH  DEFERRED MANUAL \n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\"=\"1\"\n" +
-                ")\n" +
-                "AS " + mvQuery;
-        starRocksAssert.withMaterializedView(createMv);
-
-=======
     @MethodSource("generateArguments")
     @Timeout(30)
     public void testManyJoins(String name, String query, boolean expectHitMv) throws Exception {
->>>>>>> 6d4f6c27ce ([BugFix] Add exhausted check for MultiJoinBinder (#54917))
         Stopwatch watch = Stopwatch.createStarted();
         // Make sure it's not empty
         String plan = getFragmentPlan(query, "MV");
@@ -315,5 +297,4 @@ public class MaterializedViewManyJoinTest extends MaterializedViewTestBase {
         }
         return sb.toString();
     }
-
 }
