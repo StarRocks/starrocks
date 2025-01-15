@@ -39,7 +39,7 @@ import java.util.List;
  */
 public class OperatorFeatures extends TreeNode<OperatorFeatures> {
 
-    public static final int VECTOR_LENGTH = 4;
+    public static final int VECTOR_LENGTH = 5;
 
     protected OptExpression optExpression;
     protected OperatorType opType;
@@ -59,6 +59,7 @@ public class OperatorFeatures extends TreeNode<OperatorFeatures> {
     public List<Long> toVector() {
         List<Long> res = Lists.newArrayList();
         res.add((long) stats.getOutputRowCount());
+        res.add((long) stats.getAvgRowSize());
         res.add((long) cost.getMemoryCost());
         res.add((long) cost.getCpuCost());
 
