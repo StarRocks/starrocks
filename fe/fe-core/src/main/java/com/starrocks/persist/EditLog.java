@@ -343,13 +343,8 @@ public class EditLog {
                     break;
                 }
                 case OperationType.OP_MODIFY_VIEW_DEF: {
-<<<<<<< HEAD
                     AlterViewInfo info = (AlterViewInfo) journal.getData();
-                    globalStateMgr.getAlterJobMgr().alterView(info);
-=======
-                    AlterViewInfo info = (AlterViewInfo) journal.data();
                     globalStateMgr.getAlterJobMgr().alterView(info, true);
->>>>>>> 48b9d6ece ([BugFix] Only inactive related materialized views because of base table/view is changed in Leader and not replay (#54732))
                     break;
                 }
                 case OperationType.OP_RENAME_PARTITION_V2: {

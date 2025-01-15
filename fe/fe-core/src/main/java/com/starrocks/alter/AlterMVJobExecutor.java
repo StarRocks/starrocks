@@ -19,11 +19,8 @@ import com.google.common.collect.Maps;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
-<<<<<<< HEAD
-=======
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
->>>>>>> 48b9d6ece ([BugFix] Only inactive related materialized views because of base table/view is changed in Leader and not replay (#54732))
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.MvPlanContext;
