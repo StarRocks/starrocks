@@ -37,7 +37,7 @@ void ParquetUTBase::append_decimal_conjunct(TExprOpcode::type opcode, SlotId slo
     TTypeDesc decimal_type = ExprsTestHelper::create_decimal_type_desc(TPrimitiveType::DECIMAL128, 27, 9);
 
     TExprNode binary_pred = ExprsTestHelper::create_binary_pred_node(TPrimitiveType::DECIMAL128, opcode);
-    TExprNode decimal_col_ref = ExprsTestHelper::create_slot_expr_node(0, slot_id, decimal_type, true);
+    TExprNode decimal_col_ref = ExprsTestHelper::create_slot_expr_node_t<TYPE_DECIMAL128>(0, slot_id, true);
     TExprNode decimal_literal = ExprsTestHelper::create_decimal_literal(value, decimal_type, false);
 
     TExpr t_expr;
@@ -50,11 +50,9 @@ void ParquetUTBase::append_decimal_conjunct(TExprOpcode::type opcode, SlotId slo
 
 void ParquetUTBase::append_smallint_conjunct(TExprOpcode::type opcode, SlotId slot_id, int value,
                                              std::vector<TExpr>* tExprs) {
-    TTypeDesc smallint_type = ExprsTestHelper::create_scalar_type_desc(TPrimitiveType::SMALLINT);
-
     TExprNode pred_node = ExprsTestHelper::create_binary_pred_node(TPrimitiveType::SMALLINT, opcode);
-    TExprNode smallint_col_ref = ExprsTestHelper::create_slot_expr_node(0, slot_id, smallint_type, true);
-    TExprNode smallint_literal = ExprsTestHelper::create_int_literal<int32_t>(value, smallint_type, false);
+    TExprNode smallint_col_ref = ExprsTestHelper::create_slot_expr_node_t<TYPE_SMALLINT>(0, slot_id, true);
+    TExprNode smallint_literal = ExprsTestHelper::create_literal<TYPE_SMALLINT, int32_t>(value, false);
 
     TExpr t_expr;
     t_expr.nodes.emplace_back(pred_node);
@@ -66,11 +64,9 @@ void ParquetUTBase::append_smallint_conjunct(TExprOpcode::type opcode, SlotId sl
 
 void ParquetUTBase::append_int_conjunct(TExprOpcode::type opcode, SlotId slot_id, int value,
                                         std::vector<TExpr>* tExprs) {
-    TTypeDesc int_type = ExprsTestHelper::create_scalar_type_desc(TPrimitiveType::INT);
-
     TExprNode pred_node = ExprsTestHelper::create_binary_pred_node(TPrimitiveType::INT, opcode);
-    TExprNode int_col_ref = ExprsTestHelper::create_slot_expr_node(0, slot_id, int_type, true);
-    TExprNode int_literal = ExprsTestHelper::create_int_literal<int32_t>(value, int_type, false);
+    TExprNode int_col_ref = ExprsTestHelper::create_slot_expr_node_t<TYPE_INT>(0, slot_id, true);
+    TExprNode int_literal = ExprsTestHelper::create_literal<TYPE_INT, int32_t>(value, false);
 
     TExpr t_expr;
     t_expr.nodes.emplace_back(pred_node);
@@ -82,11 +78,9 @@ void ParquetUTBase::append_int_conjunct(TExprOpcode::type opcode, SlotId slot_id
 
 void ParquetUTBase::append_bigint_conjunct(TExprOpcode::type opcode, SlotId slot_id, int64_t value,
                                            std::vector<TExpr>* tExprs) {
-    TTypeDesc int_type = ExprsTestHelper::create_scalar_type_desc(TPrimitiveType::BIGINT);
-
     TExprNode pred_node = ExprsTestHelper::create_binary_pred_node(TPrimitiveType::BIGINT, opcode);
-    TExprNode int_col_ref = ExprsTestHelper::create_slot_expr_node(0, slot_id, int_type, true);
-    TExprNode int_literal = ExprsTestHelper::create_int_literal<int64_t>(value, int_type, false);
+    TExprNode int_col_ref = ExprsTestHelper::create_slot_expr_node_t<TYPE_BIGINT>(0, slot_id, true);
+    TExprNode int_literal = ExprsTestHelper::create_literal<TYPE_BIGINT, int64_t>(value, false);
 
     TExpr t_expr;
     t_expr.nodes.emplace_back(pred_node);
@@ -98,11 +92,9 @@ void ParquetUTBase::append_bigint_conjunct(TExprOpcode::type opcode, SlotId slot
 
 void ParquetUTBase::append_datetime_conjunct(TExprOpcode::type opcode, SlotId slot_id, const std::string& value,
                                              std::vector<TExpr>* tExprs) {
-    TTypeDesc datetime_type = ExprsTestHelper::create_scalar_type_desc(TPrimitiveType::DATETIME);
-
     TExprNode pred_node = ExprsTestHelper::create_binary_pred_node(TPrimitiveType::DATETIME, opcode);
-    TExprNode datetime_col_ref = ExprsTestHelper::create_slot_expr_node(0, slot_id, datetime_type, true);
-    TExprNode datetime_literal = ExprsTestHelper::create_date_literal(value, datetime_type, false);
+    TExprNode datetime_col_ref = ExprsTestHelper::create_slot_expr_node_t<TYPE_DATETIME>(0, slot_id, true);
+    TExprNode datetime_literal = ExprsTestHelper::create_literal<TYPE_DATETIME>(value, false);
 
     TExpr t_expr;
     t_expr.nodes.emplace_back(pred_node);
@@ -117,8 +109,8 @@ void ParquetUTBase::append_string_conjunct(TExprOpcode::type opcode, starrocks::
     TTypeDesc varchar_type = ExprsTestHelper::create_varchar_type_desc(10);
 
     TExprNode pre_node = ExprsTestHelper::create_binary_pred_node(TPrimitiveType::VARCHAR, opcode);
-    TExprNode varchar_col_ref = ExprsTestHelper::create_slot_expr_node(0, slot_id, varchar_type, true);
-    TExprNode varchar_literal = ExprsTestHelper::create_varchar_literal(value, varchar_type, false);
+    TExprNode varchar_col_ref = ExprsTestHelper::create_slot_expr_node_t<TYPE_VARCHAR>(0, slot_id, true);
+    TExprNode varchar_literal = ExprsTestHelper::create_literal<TYPE_VARCHAR, std::string>(value, false);
 
     TExpr t_expr;
     t_expr.nodes.emplace_back(pre_node);
@@ -160,37 +152,11 @@ void ParquetUTBase::create_in_predicate_int_conjunct_ctxs(TExprOpcode::type opco
                                                           std::set<int32_t>& values, std::vector<TExpr>* tExprs) {
     std::vector<TExprNode> nodes;
 
-    TExprNode node0;
-    node0.node_type = TExprNodeType::IN_PRED;
-    node0.opcode = opcode;
-    node0.child_type = TPrimitiveType::INT;
-    node0.num_children = values.size() + 1;
-    node0.__isset.opcode = true;
-    node0.__isset.child_type = true;
-    node0.type = gen_type_desc(TPrimitiveType::BOOLEAN);
-    nodes.emplace_back(node0);
-
-    TExprNode node1;
-    node1.node_type = TExprNodeType::SLOT_REF;
-    node1.type = gen_type_desc(TPrimitiveType::INT);
-    node1.num_children = 0;
-    TSlotRef t_slot_ref = TSlotRef();
-    t_slot_ref.slot_id = slot_id;
-    t_slot_ref.tuple_id = 0;
-    node1.__set_slot_ref(t_slot_ref);
-    node1.is_nullable = true;
-    nodes.emplace_back(node1);
+    nodes.emplace_back(ExprsTestHelper::create_in_pred_node<TYPE_INT>(values.size() + 1));
+    nodes.emplace_back(ExprsTestHelper::create_slot_expr_node_t<TYPE_INT>(0, slot_id, true));
 
     for (int32_t value : values) {
-        TExprNode node;
-        node.node_type = TExprNodeType::INT_LITERAL;
-        node.type = gen_type_desc(TPrimitiveType::INT);
-        node.num_children = 0;
-        TIntLiteral int_literal;
-        int_literal.value = value;
-        node.__set_int_literal(int_literal);
-        node.is_nullable = false;
-        nodes.emplace_back(node);
+        nodes.emplace_back(ExprsTestHelper::create_literal<TYPE_INT, int32_t>(value, false));
     }
 
     TExpr t_expr;
