@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <bthread/mutex.h>
+
 #include <map>
 #include <unordered_set>
 #include <utility>
@@ -32,7 +34,7 @@ class ThreadPoolToken;
 class TxnStateHandler;
 class TxnStateSubscriber;
 class TxnStateCache;
-using TxnStateDynamicCache = DynamicCache<int64_t, TxnStateHandler>;
+using TxnStateDynamicCache = DynamicCache<int64_t, TxnStateHandler, bthread::Mutex>;
 using TxnStateDynamicCachePtr = std::unique_ptr<TxnStateDynamicCache>;
 using TxnStateDynamicCacheEntry = TxnStateDynamicCache::Entry;
 
