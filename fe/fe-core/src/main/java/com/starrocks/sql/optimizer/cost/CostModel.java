@@ -175,11 +175,7 @@ public class CostModel {
                 }
             }
 
-            // ScanOperator use a ChunkBuffer to implement async-io, which may takes significant memory for certain
-            // cases
-            SessionVariable variables = ConnectContext.get().getSessionVariable();
-            double memCost = (double) statistics.getAvgRowSize() * variables.getDegreeOfParallelism();
-            return CostEstimate.of(statistics.getComputeSize(), memCost, 0);
+            return CostEstimate.of(statistics.getComputeSize(), 0, 0);
         }
 
         @Override
