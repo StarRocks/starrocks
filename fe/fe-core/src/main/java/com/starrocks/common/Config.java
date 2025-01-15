@@ -3041,6 +3041,9 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean enable_mv_automatic_active_check = true;
+    @ConfField(mutable = true, comment = "Whether to enable the automatic related materialized views since of base table's " +
+            "schema changes")
+    public static boolean enable_mv_automatic_inactive_by_base_table_changes = true;
 
     @ConfField(mutable = true, comment = "The max retry times for base table change when refreshing materialized view")
     public static int max_mv_check_base_table_change_retry_times = 10;
