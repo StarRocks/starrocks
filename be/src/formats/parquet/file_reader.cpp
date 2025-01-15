@@ -294,6 +294,7 @@ bool FileReader::_filter_group_with_more_filter(const GroupReaderPtr& group_read
                 } else if (filter_type == StatisticsHelper::StatSupportedFilter::FILTER_IN) {
                     std::vector<string> min_values;
                     std::vector<string> max_values;
+                    std::vector<int64_t> null_counts;
 
                     const ParquetField* field = group_reader->get_column_parquet_field(slot->id());
                     if (field == nullptr) {
@@ -303,8 +304,10 @@ bool FileReader::_filter_group_with_more_filter(const GroupReaderPtr& group_read
                     auto st = StatisticsHelper::get_min_max_value(_file_metadata.get(), slot->type(), column_meta,
                                                                   field, min_values, max_values);
                     if (!st.ok()) continue;
+                    st = StatisticsHelper::get_null_counts(column_meta, null_counts);
+                    if (!st.ok()) continue;
                     Filter selected(min_values.size(), 1);
-                    st = StatisticsHelper::in_filter_on_min_max_stat(min_values, max_values, ctx, field,
+                    st = StatisticsHelper::in_filter_on_min_max_stat(min_values, max_values, null_counts, ctx, field,
                                                                      _scanner_ctx->timezone, selected);
                     if (!st.ok()) continue;
                     if (!selected[0]) {

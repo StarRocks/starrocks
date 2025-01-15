@@ -174,7 +174,8 @@ Status PageIndexReader::_deal_with_more_conjunct(const std::vector<ExprContext*>
                 }
             } else if (filter_type == StatisticsHelper::StatSupportedFilter::FILTER_IN) {
                 RETURN_IF_ERROR(StatisticsHelper::in_filter_on_min_max_stat(
-                        column_index.min_values, column_index.max_values, ctx, field, timezone, page_filter));
+                        column_index.min_values, column_index.max_values, column_index.null_counts, ctx, field,
+                        timezone, page_filter));
             }
         }
     }
