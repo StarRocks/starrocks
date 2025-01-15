@@ -67,7 +67,6 @@ public:
     void subscribe(bool& trigger_poll);
     // Remove a subscriber which has called subscribe() before
     void unsubscribe();
-    int32_t num_subscriber();
     // A subscriber calls this function to wait for the txn state to reach
     // a finished state or error happens.
     StatusOr<TxnState> wait_finished_state(const std::string& subscriber_name, int64_t timeout_us);
@@ -82,8 +81,11 @@ public:
 
     void stop();
 
+    // For testing
+    int32_t TEST_num_subscriber() { return _num_subscriber; }
+
 private:
-    void _transit_txn_state(TTransactionStatus::type new_status, const std::string& reason, bool from_fe);
+    void _transition_txn_state(TTransactionStatus::type new_status, const std::string& reason, bool from_fe);
     // Whether the current status indicate the load is finished
     bool _is_finished_txn_state();
 
@@ -101,11 +103,6 @@ private:
     int32_t _num_poll_failure{0};
     bool _stopped{false};
 };
-
-inline int32_t TxnStateHandler::num_subscriber() {
-    std::unique_lock<bthread::Mutex> lock(_mutex);
-    return _num_subscriber;
-}
 
 inline int32_t TxnStateHandler::num_waiting_finished_state() {
     std::unique_lock<bthread::Mutex> lock(_mutex);
@@ -177,9 +174,9 @@ public:
     void stop();
 
     // For testing
-    bool is_txn_pending(int64_t txn_id);
-    StatusOr<int64_t> pending_execution_time(int64_t txn_id);
-    bool is_scheduling();
+    bool TEST_is_txn_pending(int64_t txn_id);
+    StatusOr<int64_t> TEST_pending_execution_time(int64_t txn_id);
+    bool TEST_is_scheduling();
 
 private:
     void _schedule_func();

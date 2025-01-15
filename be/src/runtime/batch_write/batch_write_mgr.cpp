@@ -240,7 +240,7 @@ void BatchWriteMgr::receive_stream_load_rpc(ExecEnv* exec_env, brpc::Controller*
     ctx->status = append_data(ctx);
 }
 
-TTransactionStatus::type to_thrift_txn_status(TransactionStatusPB status) {
+static TTransactionStatus::type to_thrift_txn_status(TransactionStatusPB status) {
     switch (status) {
     case TRANS_UNKNOWN:
         return TTransactionStatus::UNKNOWN;

@@ -35,7 +35,7 @@ void TxnStateHandler::push_state(TTransactionStatus::type new_status, const std:
     if (_stopped) {
         return;
     }
-    _transit_txn_state(new_status, reason, true);
+    _transition_txn_state(new_status, reason, true);
     if (_is_finished_txn_state()) {
         _cv.notify_all();
     }
@@ -52,15 +52,15 @@ bool TxnStateHandler::poll_state(const StatusOr<TxnState>& result) {
                           << ", status: " << result.status();
         // fast fail if there is failure between FE and BE
         if (_num_poll_failure >= config::merge_commit_txn_state_poll_max_fail_times) {
-            _transit_txn_state(TTransactionStatus::UNKNOWN,
-                               fmt::format("poll txn state failure exceeds max times {}, last error: {}",
-                                           _num_poll_failure, result.status().to_string(false)),
-                               false);
+            _transition_txn_state(TTransactionStatus::UNKNOWN,
+                                  fmt::format("poll txn state failure exceeds max times {}, last error: {}",
+                                              _num_poll_failure, result.status().to_string(false)),
+                                  false);
         }
     } else {
         TRACE_BATCH_WRITE << "handler poll success, txn_id: " << _txn_id << ", " << result.value();
         _num_poll_failure = 0;
-        _transit_txn_state(result.value().txn_status, result.value().reason, false);
+        _transition_txn_state(result.value().txn_status, result.value().reason, false);
     }
     // stop polling if reach the finished state or there is no subscriber
     if (_is_finished_txn_state()) {
@@ -133,7 +133,8 @@ std::string TxnStateHandler::debug_string() {
             _num_waiting_finished_state, _stopped);
 }
 
-void TxnStateHandler::_transit_txn_state(TTransactionStatus::type new_status, const std::string& reason, bool from_fe) {
+void TxnStateHandler::_transition_txn_state(TTransactionStatus::type new_status, const std::string& reason,
+                                            bool from_fe) {
     TTransactionStatus::type old_status = _txn_state.txn_status;
     TRACE_BATCH_WRITE << "receive new txn state, txn_id: " << _txn_id
                       << ", current status: " << to_string(_txn_state.txn_status)
@@ -317,12 +318,12 @@ void TxnStatePoller::_execute_poll(const TxnStatePollTask& task) {
     }
 }
 
-bool TxnStatePoller::is_txn_pending(int64_t txn_id) {
+bool TxnStatePoller::TEST_is_txn_pending(int64_t txn_id) {
     std::unique_lock<bthread::Mutex> lock(_mutex);
     return _pending_txn_ids.find(txn_id) != _pending_txn_ids.end();
 }
 
-StatusOr<int64_t> TxnStatePoller::pending_execution_time(int64_t txn_id) {
+StatusOr<int64_t> TxnStatePoller::TEST_pending_execution_time(int64_t txn_id) {
     std::unique_lock<bthread::Mutex> lock(_mutex);
     auto it = _pending_tasks.begin();
     while (it != _pending_tasks.end()) {
@@ -334,7 +335,7 @@ StatusOr<int64_t> TxnStatePoller::pending_execution_time(int64_t txn_id) {
     return Status::NotFound("no task found");
 }
 
-bool TxnStatePoller::is_scheduling() {
+bool TxnStatePoller::TEST_is_scheduling() {
     std::unique_lock<bthread::Mutex> lock(_mutex);
     return _is_scheduling;
 }
@@ -436,11 +437,14 @@ StatusOr<TxnStateDynamicCacheEntry*> TxnStateCache::_get_txn_entry(TxnStateDynam
     if (_stopped) {
         return Status::ServiceUnavailable("Transaction state cache is stopped");
     }
-    TxnStateDynamicCacheEntry* entry = create_if_not_exist ? cache->get_or_create(txn_id, 1) : cache->get(txn_id);
+    TxnStateDynamicCacheEntry* entry = nullptr;
     if (create_if_not_exist) {
+        entry = cache->get_or_create(txn_id, 1);
         DCHECK(entry != nullptr);
         // initialize txn_id
         entry->value().set_txn_id(txn_id);
+    } else {
+        entry = cache->get(txn_id);
     }
     return entry;
 }

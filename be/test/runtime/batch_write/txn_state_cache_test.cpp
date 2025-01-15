@@ -186,18 +186,18 @@ TEST_F(TxnStateCacheTest, handler_subscriber) {
     TxnStateHandler handler;
     bool trigger_poll = false;
     handler.subscribe(trigger_poll);
-    ASSERT_EQ(1, handler.num_subscriber());
+    ASSERT_EQ(1, handler.TEST_num_subscriber());
     ASSERT_TRUE(trigger_poll);
     handler.subscribe(trigger_poll);
-    ASSERT_EQ(2, handler.num_subscriber());
+    ASSERT_EQ(2, handler.TEST_num_subscriber());
     ASSERT_FALSE(trigger_poll);
     handler.push_state(TTransactionStatus::VISIBLE, "");
     handler.unsubscribe();
-    ASSERT_EQ(1, handler.num_subscriber());
+    ASSERT_EQ(1, handler.TEST_num_subscriber());
     handler.unsubscribe();
-    ASSERT_EQ(0, handler.num_subscriber());
+    ASSERT_EQ(0, handler.TEST_num_subscriber());
     handler.subscribe(trigger_poll);
-    ASSERT_EQ(1, handler.num_subscriber());
+    ASSERT_EQ(1, handler.TEST_num_subscriber());
     ASSERT_FALSE(trigger_poll);
 }
 
@@ -317,7 +317,7 @@ TEST_F(TxnStateCacheTest, poller_skip_schedule) {
     // create a subscriber to trigger the poll scheduling
     auto s1 = cache->subscribe_state(1, "s1", _db, _tbl, _auth);
     ASSERT_OK(s1.status());
-    ASSERT_TRUE(poller->is_txn_pending(1));
+    ASSERT_TRUE(poller->TEST_is_txn_pending(1));
 
     // transit the state to the final before scheduling the poll, and the poll should be skipped
     ASSERT_OK(cache->push_state(1, TTransactionStatus::VISIBLE, ""));
@@ -327,7 +327,7 @@ TEST_F(TxnStateCacheTest, poller_skip_schedule) {
     // create subscriber for txn 2 to trigger the poll scheduling
     auto s2 = cache->subscribe_state(2, "s2", _db, _tbl, _auth);
     ASSERT_OK(s2.status());
-    ASSERT_TRUE(poller->is_txn_pending(2));
+    ASSERT_TRUE(poller->TEST_is_txn_pending(2));
     // advance the time to schedule the poll for txn 2
     SyncPoint::GetInstance()->SetCallBack("TxnStatePoller::get_current_ms", [&](void* arg) { *((int64_t*)arg) = 400; });
     // when state for txn 2 becomes visible, it means poll task for txn 2 has been finished. The thread pool token
@@ -462,7 +462,7 @@ TEST_F(TxnStateCacheTest, cache_poll_state_notify_subscriber) {
     ASSERT_TRUE(cache->get_state(1).status().is_not_found());
     auto s1_1 = cache->subscribe_state(1, "s1_1", _db, _tbl, _auth);
     ASSERT_OK(s1_1.status());
-    ASSERT_TRUE(poller->is_txn_pending(1));
+    ASSERT_TRUE(poller->TEST_is_txn_pending(1));
     assert_txn_state_eq({TTransactionStatus::PREPARE, ""}, s1_1.value()->current_state());
     auto s1_2 = cache->subscribe_state(1, "s1_2", _db, _tbl, _auth);
     ASSERT_OK(s1_2.status());
@@ -472,7 +472,7 @@ TEST_F(TxnStateCacheTest, cache_poll_state_notify_subscriber) {
     auto s2_1 = cache->subscribe_state(2, "s2_1", _db, _tbl, _auth);
     ASSERT_OK(s2_1.status());
     assert_txn_state_eq({TTransactionStatus::PREPARE, ""}, s2_1.value()->current_state());
-    ASSERT_TRUE(poller->is_txn_pending(2));
+    ASSERT_TRUE(poller->TEST_is_txn_pending(2));
 
     SyncPoint::GetInstance()->SetCallBack("TxnStatePoller::get_current_ms", [&](void* arg) { *((int64_t*)arg) = 50; });
     // txn 3 should be scheduled at time 150, current is 50
@@ -480,9 +480,9 @@ TEST_F(TxnStateCacheTest, cache_poll_state_notify_subscriber) {
     auto s3_1 = cache->subscribe_state(3, "s3_1", _db, _tbl, _auth);
     ASSERT_OK(s3_1.status());
     assert_txn_state_eq({TTransactionStatus::PREPARE, ""}, s3_1.value()->current_state());
-    ASSERT_TRUE(poller->is_txn_pending(1));
-    ASSERT_TRUE(poller->is_txn_pending(2));
-    ASSERT_TRUE(poller->is_txn_pending(3));
+    ASSERT_TRUE(poller->TEST_is_txn_pending(1));
+    ASSERT_TRUE(poller->TEST_is_txn_pending(2));
+    ASSERT_TRUE(poller->TEST_is_txn_pending(3));
 
     SyncPoint::GetInstance()->SetCallBack("TxnStatePoller::get_current_ms", [&](void* arg) { *((int64_t*)arg) = 80; });
     // txn 4 should be scheduled at time 180, current is 80
@@ -490,10 +490,10 @@ TEST_F(TxnStateCacheTest, cache_poll_state_notify_subscriber) {
     auto s4_1 = cache->subscribe_state(4, "s4_1", _db, _tbl, _auth);
     ASSERT_OK(s4_1.status());
     assert_txn_state_eq({TTransactionStatus::PREPARE, ""}, s4_1.value()->current_state());
-    ASSERT_TRUE(poller->is_txn_pending(1));
-    ASSERT_TRUE(poller->is_txn_pending(2));
-    ASSERT_TRUE(poller->is_txn_pending(3));
-    ASSERT_TRUE(poller->is_txn_pending(4));
+    ASSERT_TRUE(poller->TEST_is_txn_pending(1));
+    ASSERT_TRUE(poller->TEST_is_txn_pending(2));
+    ASSERT_TRUE(poller->TEST_is_txn_pending(3));
+    ASSERT_TRUE(poller->TEST_is_txn_pending(4));
 
     auto t1_1 = std::thread([&]() {
         wait_func(s1_1.value().get(), 60000000, StatusOr<TxnState>({TTransactionStatus::VISIBLE, ""}));
@@ -518,10 +518,10 @@ TEST_F(TxnStateCacheTest, cache_poll_state_notify_subscriber) {
     assert_txn_state_eq({TTransactionStatus::VISIBLE, ""}, s1_1.value()->current_state());
     assert_txn_state_eq({TTransactionStatus::VISIBLE, ""}, s2_1.value()->current_state());
     assert_txn_state_eq({TTransactionStatus::VISIBLE, ""}, s3_1.value()->current_state());
-    ASSERT_FALSE(poller->is_txn_pending(1));
-    ASSERT_FALSE(poller->is_txn_pending(2));
-    ASSERT_FALSE(poller->is_txn_pending(3));
-    ASSERT_TRUE(poller->is_txn_pending(4));
+    ASSERT_FALSE(poller->TEST_is_txn_pending(1));
+    ASSERT_FALSE(poller->TEST_is_txn_pending(2));
+    ASSERT_FALSE(poller->TEST_is_txn_pending(3));
+    ASSERT_TRUE(poller->TEST_is_txn_pending(4));
     ASSERT_EQ(3, num_rpc.load());
 
     assert_txn_state_eq({TTransactionStatus::PREPARE, ""}, s4_1.value()->current_state());
@@ -537,7 +537,7 @@ TEST_F(TxnStateCacheTest, cache_poll_state_notify_subscriber) {
     // the state is COMMITTED which is not final. next poll time is 300
     SyncPoint::GetInstance()->SetCallBack("TxnStatePoller::get_current_ms", [&](void* arg) { *((int64_t*)arg) = 200; });
     ASSERT_TRUE(Awaitility().timeout(5000000).until([&] {
-        auto st = poller->pending_execution_time(4);
+        auto st = poller->TEST_pending_execution_time(4);
         return st.ok() && st.value() == 300;
     }));
     assert_txn_state_eq({TTransactionStatus::COMMITTED, ""}, s4_1.value()->current_state());
@@ -663,7 +663,7 @@ TEST_F(TxnStateCacheTest, cache_stop) {
     expected_status = Status::ServiceUnavailable("Transaction state cache is stopped");
     ASSERT_EQ(expected_status.to_string(), cache->push_state(3, TTransactionStatus::VISIBLE, "").to_string(false));
     ASSERT_EQ(expected_status.to_string(), cache->subscribe_state(3, "s4", _db, _tbl, _auth).status().to_string(false));
-    ASSERT_FALSE(cache->txn_state_poller()->is_scheduling());
+    ASSERT_FALSE(cache->txn_state_poller()->TEST_is_scheduling());
 }
 
 } // namespace starrocks
