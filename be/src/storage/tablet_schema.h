@@ -331,6 +331,8 @@ public:
     }
     void set_num_short_key_columns(uint16_t num_short_key_columns) { _num_short_key_columns = num_short_key_columns; }
 
+    bool has_separate_sort_key() const;
+
     std::string debug_string() const;
 
     int64_t mem_usage() const;

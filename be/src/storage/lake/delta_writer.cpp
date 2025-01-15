@@ -272,7 +272,9 @@ Status DeltaWriterImpl::build_schema_and_writer() {
                                                                              _txn_id, false);
         }
         RETURN_IF_ERROR(_tablet_writer->open());
-        if (config::enable_load_spill) {
+        if (config::enable_load_spill &&
+            !(_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS &&
+              (!_merge_condition.empty() || is_partial_update() || _tablet_schema->has_separate_sort_key()))) {
             if (_load_spill_block_mgr == nullptr) {
                 _load_spill_block_mgr =
                         std::make_unique<LoadSpillBlockManager>(UniqueId(_load_id).to_thrift(), _tablet_id, _txn_id,
