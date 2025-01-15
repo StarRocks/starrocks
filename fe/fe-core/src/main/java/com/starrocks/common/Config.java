@@ -3371,6 +3371,7 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int merge_commit_idle_ms = 3600000;
 
+    @ConfField(mutable = false)
     public static int merge_commit_executor_threads_num = 4096;
 
     @ConfField(mutable = true)
@@ -3379,6 +3380,7 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int merge_commit_txn_state_dispatch_retry_interval_ms = 200;
 
+    @ConfField(mutable = true)
     public static int merge_commit_be_assigner_schedule_interval_ms = 5000;
 
     @ConfField(mutable = true, comment = "Defines the maximum balance factor allowed " +
