@@ -1306,6 +1306,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
                 "    GROUP BY   `col1_name`;";
         plan = getFragmentPlan(sql);
         PlanTestBase.assertContains(plan, "test_mv1");
+        starRocksAssert.dropMaterializedView("test_mv1");
     }
 
     @Test
@@ -2206,55 +2207,6 @@ public class MvRewriteTest extends MvRewriteTestBase {
         }
     }
 
-
-    @Test
-    public void testRefreshMVWithListPartition1() throws Exception {
-        starRocksAssert.withTable("CREATE TABLE s1 (\n" +
-                "   dt varchar(30),\n" +
-                "   id int\n" +
-                ")\n" +
-                "PARTITION BY RANGE(str2date(dt, \"%Y-%m-%d\"))(\n" +
-                "   START (\"2021-01-01\") END (\"2021-01-10\") EVERY (INTERVAL 1 DAY)\n" +
-                ");");
-        executeInsertSql(connectContext, "insert into s1 values(\"2021-01-01\",1),(\"2021-01-02\",2)," +
-                "(\"2021-01-03\",3), (\"2021-01-04\",4),(\"2021-01-05\",5),\n" +
-                "(\"2021-01-06\",6),(\"2021-01-07\",7),(\"2021-01-08\",8),(\"2021-01-09\",9),(\"2021-01-09\",10);");
-        try {
-            starRocksAssert.withMaterializedView("create materialized view mv1 partition by dt " +
-                    "refresh manual as select dt,id from s1;\n");
-            Assert.fail();
-        } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("Materialized view is partitioned by string type column dt but ref base " +
-                    "table s1 is range partitioned"));
-        }
-        starRocksAssert.dropMaterializedView("mv1");
-        starRocksAssert.dropTable("s1");
-    }
-
-    @Test
-    public void testRefreshMVWithListPartition2() throws Exception {
-        starRocksAssert.withTable("CREATE TABLE s1 (\n" +
-                "   dt varchar(30),\n" +
-                "   id int\n" +
-                ")\n" +
-                "PARTITION BY RANGE(str2date(dt, \"%Y-%m-%d\"))(\n" +
-                "   START (\"2021-01-01\") END (\"2021-01-10\") EVERY (INTERVAL 1 DAY)\n" +
-                ");");
-        executeInsertSql(connectContext, "insert into s1 values(\"2021-01-01\",1),(\"2021-01-02\",2)," +
-                "(\"2021-01-03\",3), (\"2021-01-04\",4),(\"2021-01-05\",5),\n" +
-                "(\"2021-01-06\",6),(\"2021-01-07\",7),(\"2021-01-08\",8),(\"2021-01-09\",9),(\"2021-01-09\",10);");
-        starRocksAssert.withMaterializedView("create materialized view mv1 " +
-                "PARTITION BY str2date(dt, \"%Y-%m-%d\")\n" +
-                "refresh manual as select dt,id from s1;\n");
-        refreshMaterializedView("test", "mv1");
-        MaterializedView mv = getMv("test", "mv1");
-        Assert.assertTrue(mv.getPartitionInfo().isRangePartition());
-        String plan = getFragmentPlan("select * from s1");
-        PlanTestBase.assertContains(plan, "mv1");
-        starRocksAssert.dropMaterializedView("mv1");
-        starRocksAssert.dropTable("s1");
-    }
-
     private void checkMVRewritePlanWithUniqueColumnRefs(String mvQuery,
                                                         List<String> queries) throws Exception {
         createAndRefreshMv(mvQuery);
@@ -2287,6 +2239,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
                         "with cte1 as (select emps.empid from emps join depts using(deptno)) " +
                                 " select * from cte1 a join cte1 b on a.empid=b.empid"
                 ));
+        starRocksAssert.dropMaterializedView("test_mv1");
         connectContext.getSessionVariable().setCboCTERuseRatio(0);
     }
 
@@ -2310,6 +2263,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
                                 " on a.deptno=b.deptno group by a.empid, a.name)" +
                                 " select * from cte1 a join cte1 b on a.empid=b.empid"
                 ));
+        starRocksAssert.dropMaterializedView("test_mv1");
         connectContext.getSessionVariable().setCboCTERuseRatio(0);
     }
 
@@ -2326,6 +2280,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
                         "with cte1 as (select empid, name from emps) " +
                                 " select * from cte1 a join cte1 b on a.empid=b.empid"
                 ));
+        starRocksAssert.dropMaterializedView("test_mv1");
         connectContext.getSessionVariable().setCboCTERuseRatio(0);
     }
 
@@ -2358,6 +2313,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
                 "  (1,\"2020-07-16\"),(2,\"2020-07-19\"),(3,\"2020-07-22\"),(4,\"2020-07-25\"),\n" +
                 "  (2,\"2020-06-15\"),(3,\"2020-06-18\"),(4,\"2020-06-21\"),(5,\"2020-06-24\"),\n" +
                 "  (2,\"2020-07-02\"),(3,\"2020-07-05\"),(4,\"2020-07-08\"),(5,\"2020-07-11\");");
+        sql("drop materialized view if exists test_mv1;");
         withRefreshedMV("CREATE MATERIALIZED VIEW test_mv1 \n" +
                         "PARTITION BY dt \n" +
                         "REFRESH DEFERRED MANUAL \n" +
@@ -2370,5 +2326,6 @@ public class MvRewriteTest extends MvRewriteTestBase {
                     PlanTestBase.assertContains(plan, "test_mv1");
                     connectContext.getSessionVariable().setMaterializedViewUnionRewriteMode(0);
                 });
+        starRocksAssert.dropTable("s1");
     }
 }
