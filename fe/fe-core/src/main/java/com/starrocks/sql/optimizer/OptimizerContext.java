@@ -203,6 +203,10 @@ public class OptimizerContext {
         return optimizerTimer.elapsed(TimeUnit.MILLISECONDS);
     }
 
+    public Stopwatch getStopwatch(RuleType ruleType) {
+        return ruleWatchMap.computeIfAbsent(ruleType, (k) -> Stopwatch.createStarted());
+    }
+
     public boolean isObtainedFromInternalStatistics() {
         return isObtainedFromInternalStatistics;
     }
