@@ -47,8 +47,8 @@ public class ConnectorPartitionTraitsTest {
     public void testMaxPartitionRefreshTs() {
 
         Map<String, PartitionInfo> fakePartitionInfo = new HashMap<>();
-        Partition p1 = new Partition("p1", 100);
-        Partition p2 = new Partition("p2", 200);
+        Partition p1 = new Partition("p1", 100, null, null, null);
+        Partition p2 = new Partition("p2", 200, null, null, null);
         fakePartitionInfo.put("p1", p1);
         fakePartitionInfo.put("p2", p2);
         new MockUp<DefaultTraits>() {
