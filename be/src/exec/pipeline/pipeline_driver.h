@@ -394,6 +394,8 @@ public:
         }
     }
 
+    void set_all_global_rf_timeout() { _all_global_rf_ready_or_timeout = true; }
+
     bool has_precondition() const {
         return !_local_rf_holders.empty() || !_dependencies.empty() || !_global_rf_descriptors.empty();
     }

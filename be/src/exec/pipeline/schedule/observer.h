@@ -121,6 +121,8 @@ public:
         }
     }
 
+    void notify_runtime_filter_timeout();
+
     size_t num_observers() const { return _observers.size(); }
 
     std::string to_string() const;

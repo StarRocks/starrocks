@@ -84,4 +84,11 @@ std::string Observable::to_string() const {
     return str;
 }
 
+void Observable::notify_runtime_filter_timeout() {
+    for (auto* observer : _observers) {
+        observer->driver()->set_all_global_rf_timeout();
+        observer->source_trigger();
+    }
+}
+
 } // namespace starrocks::pipeline
