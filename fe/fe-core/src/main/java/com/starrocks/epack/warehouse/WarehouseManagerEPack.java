@@ -380,7 +380,8 @@ public class WarehouseManagerEPack extends WarehouseManager {
                 StarOSAgent starOSAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
                 for (Cluster cluster : warehouse.getClusters().values()) {
                     try {
-                        starOSAgent.updateWorkerGroup(cluster.getWorkerGroupId(), warehouseProperty.getComputeReplica());
+                        starOSAgent.updateWorkerGroup(cluster.getWorkerGroupId(), warehouseProperty.getComputeReplica(),
+                                null);
                     } catch (DdlException e) {
                         LOG.warn(e);
                         throw new DdlException("alter warehouse " + warehouse.getName() + " failed, reason: " + e);

@@ -71,7 +71,8 @@ public class StarOSAgentEpack extends StarOSAgent {
     public void updateWorkerGroup(long workerGroupId, int replicaNumber) throws DdlException {
         prepare();
         try {
-            client.updateWorkerGroup(serviceId, workerGroupId, null, null, replicaNumber);
+            client.updateWorkerGroup(serviceId, workerGroupId, null, null, replicaNumber,
+                    ReplicationType.NO_SET);
         } catch (StarClientException e) {
             LOG.warn("Failed to update worker group. error: {}", e.getMessage());
             throw new DdlException("Failed to update worker group. error: " + e.getMessage());
