@@ -92,11 +92,11 @@ public class PlanFeatures {
     public void addOperatorFeatures(Map<OperatorType, AggregatedFeature> operatorFeatures) {
         // Make sure all plan have equal-size vector
         List<Long> operatorVector = Lists.newArrayList();
-        for (int start = OperatorType.PHYSICAL.ordinal();
+        for (int start = OperatorType.PHYSICAL.ordinal() + 1;
                 start < OperatorType.SCALAR.ordinal();
                 start++) {
             OperatorType opType = OperatorType.values()[start];
-            if (EXCLUDE_OPERATORS.contains(opType)) {
+            if (skipOperator(opType)) {
                 continue;
             }
             AggregatedFeature vector = operatorFeatures.get(opType);
@@ -107,6 +107,19 @@ public class PlanFeatures {
             }
         }
         this.operatorFeatureVectors = operatorVector;
+    }
+
+    public boolean skipOperator(OperatorType operatorType) {
+        if (EXCLUDE_OPERATORS.contains(operatorType)) {
+            return true;
+        }
+        /**
+         * {@link OperatorFeatures.ScanOperatorFeatures}
+         */
+        if (operatorType.isPhysicalScan() && (operatorType != OperatorType.PHYSICAL_OLAP_SCAN)) {
+            return true;
+        }
+        return false;
     }
 
     public static Map<OperatorType, AggregatedFeature> aggregate(OperatorFeatures tree) {

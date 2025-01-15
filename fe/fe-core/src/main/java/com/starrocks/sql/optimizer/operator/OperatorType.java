@@ -67,6 +67,8 @@ public enum OperatorType {
     PHYSICAL_HASH_JOIN,
     PHYSICAL_MERGE_JOIN,
     PHYSICAL_NESTLOOP_JOIN,
+
+    // TODO: collapse these verbose scans
     PHYSICAL_OLAP_SCAN,
     PHYSICAL_HIVE_SCAN,
     PHYSICAL_FILE_SCAN,
@@ -83,6 +85,7 @@ public enum OperatorType {
     PHYSICAL_META_SCAN,
     PHYSICAL_ES_SCAN,
     PHYSICAL_JDBC_SCAN,
+
     PHYSICAL_PROJECT,
     PHYSICAL_SORT,
     PHYSICAL_TOPN,

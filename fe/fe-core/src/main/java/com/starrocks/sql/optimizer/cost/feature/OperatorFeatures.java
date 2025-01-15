@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.cost.feature;
 
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.TreeNode;
@@ -26,6 +27,7 @@ import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -58,10 +60,10 @@ public class OperatorFeatures extends TreeNode<OperatorFeatures> {
      */
     public List<Long> toVector() {
         List<Long> res = Lists.newArrayList();
-        res.add((long) stats.getOutputRowCount());
+        res.add(encodeLargeSize((long) stats.getOutputRowCount()));
         res.add((long) stats.getAvgRowSize());
-        res.add((long) cost.getMemoryCost());
-        res.add((long) cost.getCpuCost());
+        res.add(encodeLargeSize((long) cost.getMemoryCost()));
+        res.add(encodeLargeSize((long) cost.getCpuCost()));
 
         // LIMIT
         long limit = this.optExpression.getOp().getLimit();
@@ -90,6 +92,13 @@ public class OperatorFeatures extends TreeNode<OperatorFeatures> {
         return VECTOR_LENGTH;
     }
 
+    /**
+     * Apply log transformation on the large int
+     */
+    public static long encodeLargeSize(long size) {
+        return (long) Math.log1p(size);
+    }
+
     public static class ScanOperatorFeatures extends OperatorFeatures {
 
         public static final int VECTOR_LENGTH = OperatorFeatures.VECTOR_LENGTH + 4;
@@ -102,6 +111,10 @@ public class OperatorFeatures extends TreeNode<OperatorFeatures> {
 
         public ScanOperatorFeatures(OptExpression optExpr, CostEstimate cost, Statistics stats) {
             super(optExpr, cost, stats);
+            // NOTE: collapse all scans into OLAP_SCAN, to avoid explode the feature vector
+            // If needed to deal with some scan operators specifically, it's better to extend this feature
+            this.opType = OperatorType.PHYSICAL_OLAP_SCAN;
+
             PhysicalScanOperator scanOperator = (PhysicalScanOperator) optExpr.getOp();
             if (scanOperator instanceof PhysicalOlapScanOperator olapScanOperator) {
                 OlapTable olapTable = (OlapTable) scanOperator.getTable();
@@ -148,10 +161,12 @@ public class OperatorFeatures extends TreeNode<OperatorFeatures> {
 
     public static class JoinOperatorFeatures extends OperatorFeatures {
 
-        public static final int VECTOR_LENGTH = OperatorFeatures.VECTOR_LENGTH + 2;
+        public static final int VECTOR_LENGTH = OperatorFeatures.VECTOR_LENGTH + 3;
 
+        // TODO: consider the join cardinality
         protected final double rightSize;
         protected final boolean isBroadcast;
+        protected final JoinOperator joinOperator;
 
         public JoinOperatorFeatures(OptExpression optExpr, CostEstimate cost, Statistics stats) {
             super(optExpr, cost, stats);
@@ -159,15 +174,19 @@ public class OperatorFeatures extends TreeNode<OperatorFeatures> {
             OptExpression rightOp = optExpr.getInputs().get(1);
             Statistics rightStats = rightOp.getStatistics();
             this.rightSize = rightStats.getOutputSize(rightOp.getOutputColumns());
-
             this.isBroadcast = rightOp.getOutputProperty().getDistributionProperty().isBroadcast();
+
+            PhysicalHashJoinOperator hashJoin = (PhysicalHashJoinOperator) optExpr.getOp();
+            this.joinOperator = hashJoin.getJoinType();
         }
 
         @Override
         public List<Long> toVector() {
             List<Long> res = super.toVector();
-            res.add((long) rightSize);
+            res.add(encodeLargeSize((long) rightSize));
             res.add(isBroadcast ? 1L : 0L);
+            // TODO: one-hot encoding
+            res.add((long) joinOperator.ordinal());
             return res;
         }
     }
@@ -176,7 +195,6 @@ public class OperatorFeatures extends TreeNode<OperatorFeatures> {
 
         public static final int VECTOR_LENGTH = OperatorFeatures.VECTOR_LENGTH + 4;
 
-        // TODO: group by columns
         protected final double inputRows;
         protected final int numGroupByColumns;
         protected final int numAggregations;
@@ -197,7 +215,7 @@ public class OperatorFeatures extends TreeNode<OperatorFeatures> {
         @Override
         public List<Long> toVector() {
             List<Long> res = super.toVector();
-            res.add((long) inputRows);
+            res.add(encodeLargeSize((long) inputRows));
             res.add((long) numGroupByColumns);
             res.add((long) numAggregations);
             res.add((long) aggRatio);
