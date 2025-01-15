@@ -169,6 +169,10 @@ public class MvRewriteTestBase {
         starRocksAssert.dropMaterializedView(mvName);
     }
 
+    public static OptExpression getOptimizedPlan(String sql) {
+        return getOptimizedPlan(sql, connectContext);
+    }
+
     public static OptExpression getOptimizedPlan(String sql, ConnectContext connectContext) {
         StatementBase mvStmt;
         try {
