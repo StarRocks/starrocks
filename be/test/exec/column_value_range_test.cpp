@@ -35,7 +35,7 @@ TEST_F(ColumnValueRangeTest, add_range_le_max) {
 
     ASSERT_OK(range.add_range(SQLFilterOp::FILTER_LESS_OR_EQUAL, _int32_max_value));
     std::vector<TCondition> filters;
-    range.to_olap_filter<false>(filters);
+    range.to_olap_filter(filters);
 
     ASSERT_EQ(filters.size(), 1);
     _ss << filters[0];
@@ -48,7 +48,7 @@ TEST_F(ColumnValueRangeTest, add_range_ge_min) {
 
     ASSERT_OK(range.add_range(SQLFilterOp::FILTER_LARGER_OR_EQUAL, _int32_min_value));
     std::vector<TCondition> filters;
-    range.to_olap_filter<false>(filters);
+    range.to_olap_filter(filters);
 
     ASSERT_EQ(filters.size(), 1);
     _ss << filters[0];
