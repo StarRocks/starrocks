@@ -24,6 +24,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.ImportColumnsStmt;
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.StatementBase;
@@ -64,6 +65,8 @@ public class SqlParser {
         try {
             if (sessionVariable.getSqlDialect().equalsIgnoreCase("trino")) {
                 return parseWithTrinoDialect(sql, sessionVariable);
+            } else if (sessionVariable.getSqlDialect().equalsIgnoreCase("pinot")) {
+                return parseWithPinotDialect(sql, sessionVariable);
             } else {
                 return parseWithStarRocksDialect(sql, sessionVariable);
             }
@@ -71,6 +74,33 @@ public class SqlParser {
             LOG.warn("parser out of memory, sql is:" + sql);
             throw e;
         }
+    }
+
+    private static List<StatementBase> parseWithPinotDialect(String sql, SessionVariable sessionVariable) {
+        List<StatementBase> statements = Lists.newArrayList();
+        Pair<ParserRuleContext, StarRocksParser> pair = invokeParser(sql, sessionVariable, StarRocksParser::sqlStatements);
+        StarRocksParser.SqlStatementsContext sqlStatementsContext = (StarRocksParser.SqlStatementsContext) pair.first;
+        List<StarRocksParser.SingleStatementContext> singleStatementContexts = sqlStatementsContext.singleStatement();
+        for (int idx = 0; idx < singleStatementContexts.size(); ++idx) {
+            // collect hint info
+            HintCollector collector = new HintCollector((CommonTokenStream) pair.second.getTokenStream(), sessionVariable);
+            collector.collect(singleStatementContexts.get(idx));
+            AstBuilder astBuilder = GlobalStateMgr.getCurrentState().getSqlParser().astBuilderFactory
+                    .createPinotAst(sessionVariable.getSqlMode(), collector.getContextWithHintMap());
+
+            StatementBase statement = (StatementBase) astBuilder.visitSingleStatement(singleStatementContexts.get(idx));
+            if (astBuilder.getParameters() != null && astBuilder.getParameters().size() != 0
+                    && !(statement instanceof PrepareStmt)) {
+                // for prepare stm1 from  '', here statement is inner statement
+                statement = new PrepareStmt("", statement, astBuilder.getParameters());
+            } else {
+                statement.setOrigStmt(new OriginStatement(sql, idx));
+            }
+            statements.add(statement);
+        }
+        String sqlTrans = AstToSQLBuilder.toSQL(statements.get(0));
+        System.out.println("sqlTrans: " + sqlTrans);
+        return statements;
     }
 
     private static List<StatementBase> parseWithTrinoDialect(String sql, SessionVariable sessionVariable) {
