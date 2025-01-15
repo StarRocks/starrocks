@@ -58,7 +58,7 @@ import java.util.Map;
 public class OptExpressionDuplicator {
     private final ColumnRefFactory columnRefFactory;
     // old ColumnRefOperator -> new ColumnRefOperator
-    private final Map<ColumnRefOperator, ScalarOperator> columnMapping;
+    private final Map<ColumnRefOperator, ColumnRefOperator> columnMapping;
     private final ReplaceColumnRefRewriter rewriter;
     private final Table partitionByTable;
     private final Column partitionColumn;
@@ -79,8 +79,15 @@ public class OptExpressionDuplicator {
         return source.getOp().accept(visitor, source, null);
     }
 
-    public Map<ColumnRefOperator, ScalarOperator> getColumnMapping() {
+    public Map<ColumnRefOperator, ColumnRefOperator> getColumnMapping() {
         return columnMapping;
+    }
+
+    /**
+     * Rewrite input scalar input into new scalar operator by new column mapping.
+     */
+    public ScalarOperator rewriteAfterDuplicate(ScalarOperator input) {
+        return rewriter.rewrite(input);
     }
 
     public List<ColumnRefOperator> getMappedColumns(List<ColumnRefOperator> originColumns) {
@@ -299,7 +306,7 @@ public class OptExpressionDuplicator {
         private HashDistributionSpec processHashDistributionSpec(
                 HashDistributionSpec originSpec,
                 ColumnRefFactory columnRefFactory,
-                Map<ColumnRefOperator, ScalarOperator> columnMapping) {
+                Map<ColumnRefOperator, ColumnRefOperator> columnMapping) {
 
             // HashDistributionDesc
             List<DistributionCol> newColumns = Lists.newArrayList();

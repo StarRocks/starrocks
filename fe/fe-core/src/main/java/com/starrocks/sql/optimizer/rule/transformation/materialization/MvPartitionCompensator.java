@@ -136,45 +136,9 @@ public class MvPartitionCompensator {
 
         // If no partition table and columns, no need compensate
         MaterializedView mv = mvContext.getMv();
-<<<<<<< HEAD
         Pair<Table, Column> partitionTableAndColumns = mv.getBaseTableAndPartitionColumn();
         if (partitionTableAndColumns == null) {
             return Optional.of(false);
-=======
-        if (mv.getRefBaseTablePartitionColumns() == null) {
-            return null;
-        }
-        return OptCompensator.getMVCompensatePlan(mvContext.getOptimizerContext(),
-                mv, mvCompensation, mvQueryPlan);
-    }
-
-    /**
-     * <p> What's the transparent plan of mv? </p>
-     *
-     * Transparent MV: select * from t(all partition refreshed) union all select * from mv's defined query
-     *  (all to-refresh partitions)
-     *
-     * eg:
-     * MV       : select col1, col2 from t;
-     * MV refreshed partition: dt = '2023-11-01'
-     *
-     * Query    : select col1, col2 from t where dt in ('2023-11-01', '2023-11-02')
-     * Rewritten: select col1, col2 from <Transparent MV> where dt in ('2023-11-01', '2023-11-02')
-     *
-     * Transparent MV : Refreshed MV Partitions union all To-Refresh MV Partitions
-     * = select * from mv where dt='2023-11-01' union all select * from t where dt = '2023-11-02'
-     */
-    public static OptExpression getMvTransparentPlan(MaterializationContext mvContext,
-                                                     MVCompensation mvCompensation,
-                                                     List<ColumnRefOperator> originalOutputColumns) {
-        Preconditions.checkArgument(originalOutputColumns != null);
-        Preconditions.checkState(mvCompensation.getState().isCompensate());
-
-        Pair<OptExpression, List<ColumnRefOperator>> mvScanPlans = getMvScanPlan(mvContext);
-        if (mvScanPlans == null) {
-            logMVRewrite(mvContext, "Get mv scan transparent plan failed");
-            return null;
->>>>>>> 8f4c6aadff ([BugFix] Ensure mv rewrite plan output column refs unique (#54863))
         }
 
         // only set this when `queryExpression` contains ref table, otherwise the cached value maybe dirty.

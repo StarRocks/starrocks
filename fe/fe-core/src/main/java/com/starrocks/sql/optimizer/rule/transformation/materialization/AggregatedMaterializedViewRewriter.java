@@ -393,12 +393,7 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
         return rewriteGroupingKeys;
     }
 
-<<<<<<< HEAD
-
     private Map<ColumnRefOperator, ScalarOperator> rewriteAggregations(RewriteContext rewriteContext,
-=======
-    private Map<ColumnRefOperator, CallOperator> rewriteAggregations(RewriteContext rewriteContext,
->>>>>>> 8f4c6aadff ([BugFix] Ensure mv rewrite plan output column refs unique (#54863))
                                                                        ColumnRewriter columnRewriter,
                                                                        Map<ColumnRefOperator, CallOperator> aggregations,
                                                                        boolean rewriteViewToQuery) {

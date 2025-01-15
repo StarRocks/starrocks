@@ -50,11 +50,7 @@ import org.junit.Test;
 import org.junit.runners.MethodSorters;
 
 import java.sql.SQLException;
-<<<<<<< HEAD
-=======
-import java.time.LocalDate;
 import java.util.HashSet;
->>>>>>> 8f4c6aadff ([BugFix] Ensure mv rewrite plan output column refs unique (#54863))
 import java.util.List;
 import java.util.Set;
 import java.util.function.Function;
@@ -2209,9 +2205,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
             starRocksAssert.dropMaterializedView("mv_order_by_v2");
         }
     }
-<<<<<<< HEAD
-}
-=======
+
 
     @Test
     public void testRefreshMVWithListPartition1() throws Exception {
@@ -2358,7 +2352,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
                 "  PARTITION p20200711 VALUES [(\"2020-07-11 00:00:00\"), (\"2020-07-12 00:00:00\"))\n" +
                 ")\n" +
                 "DISTRIBUTED BY HASH(`num`);");
-        executeInsertSql("INSERT INTO s1 VALUES \n" +
+        executeInsertSql(connectContext, "INSERT INTO s1 VALUES \n" +
                 "  (1,\"2020-06-15\"),(2,\"2020-06-18\"),(3,\"2020-06-21\"),(4,\"2020-06-24\"),\n" +
                 "  (1,\"2020-07-02\"),(2,\"2020-07-05\"),(3,\"2020-07-08\"),(4,\"2020-07-11\"),\n" +
                 "  (1,\"2020-07-16\"),(2,\"2020-07-19\"),(3,\"2020-07-22\"),(4,\"2020-07-25\"),\n" +
@@ -2378,4 +2372,3 @@ public class MvRewriteTest extends MvRewriteTestBase {
                 });
     }
 }
->>>>>>> 8f4c6aadff ([BugFix] Ensure mv rewrite plan output column refs unique (#54863))
