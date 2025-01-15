@@ -23,6 +23,7 @@ StatusOr<bool> DeletionBitmap::fill_filter(uint64_t start, uint64_t end, Filter&
     if (start >= end) {
         return false;
     }
+
     roaring64_iterator_t* it = roaring64_iterator_create(_bitmap);
     DeferOp defer([&it] { roaring64_iterator_free(it); });
     if (!roaring64_iterator_move_equalorlarger(it, start)) {
@@ -30,11 +31,14 @@ StatusOr<bool> DeletionBitmap::fill_filter(uint64_t start, uint64_t end, Filter&
     }
 
     bool has_filter = false;
+    std::vector<uint64_t> buf(kBatchSize, 0);
     while (roaring64_iterator_has_value(it) && roaring64_iterator_value(it) < end) {
-        uint64_t value = roaring64_iterator_value(it);
-        filter[value - start] = 0;
+        uint64_t count = roaring64_iterator_read(it, buf.data(), kBatchSize);
+        for (uint64_t i = 0; i < count && buf[i] < end; ++i) {
+            filter[buf[i] - start] = 0;
+        }
+
         has_filter = true;
-        roaring64_iterator_advance(it);
     }
 
     return has_filter;

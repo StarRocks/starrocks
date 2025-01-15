@@ -40,6 +40,8 @@ public:
     void to_array(std::vector<uint64_t>& array) const;
 
 private:
+    static const uint64_t kBatchSize = 256;
+
     roaring64_bitmap_t* _bitmap = nullptr;
 };
 
