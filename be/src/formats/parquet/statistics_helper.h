@@ -18,6 +18,7 @@
 #include "common/status.h"
 #include "exprs/expr_context.h"
 #include "exprs/in_const_predicate.hpp"
+#include "formats/parquet/metadata.h"
 #include "formats/parquet/schema.h"
 #include "runtime/types.h"
 
@@ -36,6 +37,16 @@ public:
     static Status in_filter_on_min_max_stat(const std::vector<std::string>& min_values,
                                             const std::vector<std::string>& max_values, ExprContext* ctx,
                                             const ParquetField* field, const std::string& timezone, Filter& selected);
+
+    // get min/max value from row group stats
+    static Status get_min_max_value(const FileMetaData* file_meta_data, const TypeDescriptor& type,
+                                    const tparquet::ColumnMetaData* column_meta, const ParquetField* field,
+                                    std::vector<std::string>& min_values, std::vector<std::string>& max_values);
+
+    static Status get_has_nulls(const tparquet::ColumnMetaData* column_meta, std::vector<bool>& has_nulls);
+
+    static bool has_correct_min_max_stats(const FileMetaData* file_metadata,
+                                          const tparquet::ColumnMetaData& column_meta, const SortOrder& sort_order);
 };
 
 } // namespace starrocks::parquet
