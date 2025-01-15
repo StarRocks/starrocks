@@ -43,7 +43,17 @@ All parameters are in the `"key" = "value"` pairs.
 
 #### data_location
 
-The URI used to access the files. You can specify a path or a file.
+The URI used to access the files.
+
+You can specify a path or a file. For example, you can specify this parameter as `"hdfs://<hdfs_host>:<hdfs_port>/user/data/tablename/20210411"` to load a data file named `20210411` from the path `/user/data/tablename` on the HDFS server.
+
+You can also specify this parameter as the save path of multiple data files by using wildcards `?`, `*`, `[]`, `{}`, or `^`. For example, you can specify this parameter as `"hdfs://<hdfs_host>:<hdfs_port>/user/data/tablename/*/*"` or `"hdfs://<hdfs_host>:<hdfs_port>/user/data/tablename/dt=202104*/*"` to load the data files from all partitions or only `202104` partitions in the path `/user/data/tablename` on the HDFS server.
+
+:::note
+
+Wildcards can also be used to specify intermediate paths.
+
+:::
 
 - To access HDFS, you need to specify this parameter as:
 

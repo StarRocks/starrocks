@@ -42,7 +42,17 @@ FILES( data_location , [data_format] [, schema_detect ] [, StorageCredentialPara
 
 #### data_location
 
-用于访问文件的 URI。可以指定路径或文件名。
+用于访问文件的 URI。
+
+可以指定路径或文件名。例如，通过指定 `"hdfs://<hdfs_host>:<hdfs_port>/user/data/tablename/20210411"` 可以匹配 HDFS 服务器上 `/user/data/tablename` 目录下名为 `20210411` 的数据文件。
+
+您也可以用通配符指定导入某个路径下所有的数据文件。FILES 支持如下通配符：`?`、`*`、`[]`、`{}` 和 `^`。例如， 通过指定 `"hdfs://<hdfs_host>:<hdfs_port>/user/data/tablename/*/*"` 路径可以匹配 HDFS 服务器上 `/user/data/tablename` 目录下所有分区内的数据文件，通过 `"hdfs://<hdfs_host>:<hdfs_port>/user/data/tablename/dt=202104*/*"` 路径可以匹配 HDFS 服务器上 `/user/data/tablename` 目录下所有 `202104` 分区内的数据文件。
+
+:::note
+
+中间的目录也可以使用通配符匹配。
+
+:::
 
 - 要访问 HDFS，您需要将此参数指定为：
 
