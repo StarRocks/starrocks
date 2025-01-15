@@ -262,6 +262,19 @@ public:
         }
     }
 
+<<<<<<< HEAD
+=======
+    void release_without_root(int64_t bytes) {
+        if (bytes == 0 || _all_trackers.empty()) {
+            return;
+        }
+
+        for (size_t i = 0; i < _all_trackers.size() - 1; i++) {
+            _all_trackers[i]->_consumption->add(-bytes);
+        }
+    }
+
+>>>>>>> 1abe63d19d ([BugFix] Fix MemTracker::release_without_root (#55095))
     // Returns true if a valid limit of this tracker or one of its ancestors is exceeded.
     bool any_limit_exceeded() {
         for (auto& _limit_tracker : _limit_trackers) {
