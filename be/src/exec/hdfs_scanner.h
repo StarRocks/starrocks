@@ -417,7 +417,8 @@ protected:
     static CompressionTypePB get_compression_type_from_path(const std::string& filename);
 
     void do_update_iceberg_v2_counter(RuntimeProfile* parquet_profile, const std::string& parent_name);
-    void do_update_deletion_vector_counter(RuntimeProfile* parent_profile);
+    void do_update_deletion_vector_build_counter(RuntimeProfile* parent_profile);
+    void do_update_deletion_vector_filter_counter(RuntimeProfile* parent_profile);
 
 private:
     bool _opened = false;
