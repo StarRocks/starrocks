@@ -61,7 +61,7 @@ public class PlanFeatures {
         sb.append("tables=[").append(Joiner.on(",").join(topTables));
         sb.append("]|");
 
-        sb.append(String.format("env=[%d,%d,%d]|", numBeNodes, avgCpuCoreOfBE, memCapacityOfBE));
+        sb.append(String.format("env=[%d,%d,%d]|", numBeNodes, avgCpuCoreOfBE, (long) Math.log1p(memCapacityOfBE)));
         sb.append(String.format("var=[%d]|", dop));
         sb.append("operators=[").append(Joiner.on(",").join(operatorFeatureVectors));
         sb.append("]");
