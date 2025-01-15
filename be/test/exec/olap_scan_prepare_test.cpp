@@ -141,8 +141,10 @@ StatusOr<RuntimeFilterProbeCollector*> ChunkPredicateBuilderTest::_gen_range_run
 
 TEST_F(ChunkPredicateBuilderTest, normalized_in_has_null) {
     SlotId slot_id = 1;
+    RuntimeFilterProbeCollector collector;
     parquet::Utils::SlotDesc slot_descs[] = {{"c1", TYPE_INT_DESC, 1}, {"c2", TYPE_INT_DESC, 2}, {""}};
     _opts.tuple_desc = parquet::Utils::create_tuple_descriptor(&_runtime_state, &_pool, slot_descs);
+    _opts.runtime_filters = &collector;
 
     std::vector<int32_t> values{1, 3, 5, 7, 9};
     _texprs.emplace_back(ExprsTestHelper::create_in_pred_texpr<TYPE_INT, int32_t>(slot_id, values, true));
@@ -161,8 +163,10 @@ TEST_F(ChunkPredicateBuilderTest, normalized_in_has_null) {
 
 TEST_F(ChunkPredicateBuilderTest, normalized_in_has_null_larger_than_1024) {
     SlotId slot_id = 1;
+    RuntimeFilterProbeCollector collector;
     parquet::Utils::SlotDesc slot_descs[] = {{"c1", TYPE_INT_DESC, 1}, {"c2", TYPE_INT_DESC, 2}, {""}};
     _opts.tuple_desc = parquet::Utils::create_tuple_descriptor(&_runtime_state, &_pool, slot_descs);
+    _opts.runtime_filters = &collector;
 
     std::vector<int32_t> values;
     for (int32_t i = 0; i < 2048; i++) {
@@ -186,6 +190,8 @@ TEST_F(ChunkPredicateBuilderTest, normalized_in_has_null_null_equal) {
     SlotId slot_id = 1;
     parquet::Utils::SlotDesc slot_descs[] = {{"c1", TYPE_INT_DESC, 1}, {"c2", TYPE_INT_DESC, 2}, {""}};
     _opts.tuple_desc = parquet::Utils::create_tuple_descriptor(&_runtime_state, &_pool, slot_descs);
+    RuntimeFilterProbeCollector collector;
+    _opts.runtime_filters = &collector;
 
     std::vector<int32_t> values{1, 3, 5, 7, 9};
     _texprs.emplace_back(ExprsTestHelper::create_in_pred_texpr<TYPE_INT, int32_t>(slot_id, values, true));
@@ -206,8 +212,10 @@ TEST_F(ChunkPredicateBuilderTest, normalized_in_has_null_null_equal) {
 
 TEST_F(ChunkPredicateBuilderTest, normalized_in_has_null_date) {
     SlotId slot_id = 1;
+    RuntimeFilterProbeCollector collector;
     parquet::Utils::SlotDesc slot_descs[] = {{"c1", TYPE_DATE_DESC, 1}, {"c2", TYPE_DATE_DESC, 2}, {""}};
     _opts.tuple_desc = parquet::Utils::create_tuple_descriptor(&_runtime_state, &_pool, slot_descs);
+    _opts.runtime_filters = &collector;
 
     _texprs.emplace_back(ExprsTestHelper::create_in_pred_texpr<TYPE_DATE, std::string>(
             slot_id, {"2014-01-01", "2014-01-02", "2014-01-03"}, true));
@@ -226,8 +234,10 @@ TEST_F(ChunkPredicateBuilderTest, normalized_in_has_null_date) {
 
 TEST_F(ChunkPredicateBuilderTest, normalized_in_has_null_date_null_equal) {
     SlotId slot_id = 1;
+    RuntimeFilterProbeCollector collector;
     parquet::Utils::SlotDesc slot_descs[] = {{"c1", TYPE_DATE_DESC, 1}, {"c2", TYPE_DATE_DESC, 2}, {""}};
     _opts.tuple_desc = parquet::Utils::create_tuple_descriptor(&_runtime_state, &_pool, slot_descs);
+    _opts.runtime_filters = &collector;
 
     _texprs.emplace_back(ExprsTestHelper::create_in_pred_texpr<TYPE_DATE, std::string>(
             slot_id, {"2014-01-01", "2014-01-02", "2014-01-03"}, true));
@@ -289,6 +299,8 @@ TEST_F(ChunkPredicateBuilderTest, normalized_not_in_has_null) {
     SlotId slot_id = 1;
     parquet::Utils::SlotDesc slot_descs[] = {{"c1", TYPE_INT_DESC, 1}, {"c2", TYPE_INT_DESC, 2}, {""}};
     _opts.tuple_desc = parquet::Utils::create_tuple_descriptor(&_runtime_state, &_pool, slot_descs);
+    RuntimeFilterProbeCollector collector;
+    _opts.runtime_filters = &collector;
 
     _texprs.emplace_back(ExprsTestHelper::create_not_in_pred_texpr<TYPE_INT, int32_t>(slot_id, {1, 3, 5, 7, 9}, true));
     ASSERT_OK(ExprsTestHelper::create_and_open_conjunct_ctxs(&_pool, &_runtime_state, &_texprs, &_expr_ctxs));
@@ -305,6 +317,8 @@ TEST_F(ChunkPredicateBuilderTest, normalized_not_in_has_null_larger_than_1024) {
     SlotId slot_id = 1;
     parquet::Utils::SlotDesc slot_descs[] = {{"c1", TYPE_INT_DESC, 1}, {"c2", TYPE_INT_DESC, 2}, {""}};
     _opts.tuple_desc = parquet::Utils::create_tuple_descriptor(&_runtime_state, &_pool, slot_descs);
+    RuntimeFilterProbeCollector collector;
+    _opts.runtime_filters = &collector;
 
     std::vector<int32_t> values;
     for (int32_t i = 0; i < 2048; i++) {
