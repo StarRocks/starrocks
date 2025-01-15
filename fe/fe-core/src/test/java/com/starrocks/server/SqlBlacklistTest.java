@@ -15,6 +15,7 @@
 package com.starrocks.server;
 
 import com.starrocks.analysis.RedirectStatus;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.meta.BlackListSql;
 import com.starrocks.meta.SqlBlackList;
 import com.starrocks.persist.DeleteSqlBlackLists;
@@ -32,11 +33,12 @@ import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
-import mockit.Mocked;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.jupiter.api.Assertions;
+import org.mockito.Mockito;
 
 import java.util.List;
 import java.util.UUID;
@@ -45,39 +47,34 @@ import java.util.regex.Pattern;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.parseSql;
 
 public class SqlBlacklistTest {
+    GlobalStateMgr state;
+    SqlBlackList sqlBlackList;
+    EditLog editLog;
+    ConnectContext connectContext;
+
     @BeforeClass
-    public static void beforeEach() throws Exception {
-        UtFrameUtils.createMinStarRocksCluster();
+    public static void beforeClass() throws Exception {
         AnalyzeTestUtil.init();
-        UtFrameUtils.setUpForPersistTest();
+    }
+
+    @Before
+    public void beforeEach() {
+        state = Deencapsulation.newInstance(GlobalStateMgr.class);
+        sqlBlackList = new SqlBlackList();
+        connectContext = UtFrameUtils.createDefaultCtx();
+        editLog = Mockito.mock(EditLog.class);
+        connectContext.setQueryId(UUID.randomUUID());
     }
 
     @Test
-    public void testAddSQLBlacklist(@Mocked EditLog editLog) throws Exception {
-        GlobalStateMgr.getCurrentState().waitForReady();
-
-        SqlBlackList sqlBlackList = new SqlBlackList();
-
-        MockUp<GlobalStateMgr> mockUp = new MockUp<GlobalStateMgr>() {
-            @Mock
-            public SqlBlackList getSqlBlackList() {
-                return sqlBlackList;
-            }
-            @Mock
-            public EditLog getEditLog() {
-                return editLog;
-            }
-        };
-
-        new Expectations(editLog) {
+    public void testAddSQLBlacklist() throws Exception {
+        mockupGlobalState();
+        new Expectations() {
             {
                 editLog.logAddSQLBlackList(new SqlBlackListPersistInfo(0, ".+"));
                 times = 1;
             }
         };
-
-        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
-        connectContext.setQueryId(UUID.randomUUID());
 
         AddSqlBlackListStmt addStatement = (AddSqlBlackListStmt) parseSql("ADD SQLBLACKLIST \".+\";");
         Assert.assertEquals(addStatement.getSql(), ".+");
@@ -91,23 +88,10 @@ public class SqlBlacklistTest {
     }
 
     @Test
-    public void testShowBlacklist() throws Exception {
-        GlobalStateMgr.getCurrentState().waitForReady();
-
-        SqlBlackList sqlBlackList = new SqlBlackList();
-
+    public void testShowBlacklist() {
+        mockupGlobalState();
         sqlBlackList.put(Pattern.compile("qwert"));
         sqlBlackList.put(Pattern.compile("abcde"));
-
-        MockUp<GlobalStateMgr> mockUp = new MockUp<GlobalStateMgr>() {
-            @Mock
-            public SqlBlackList getSqlBlackList() {
-                return sqlBlackList;
-            }
-        };
-
-        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
-        connectContext.setQueryId(UUID.randomUUID());
 
         ShowSqlBlackListStmt showSqlStatement = (ShowSqlBlackListStmt) parseSql("SHOW SQLBLACKLIST");
 
@@ -122,31 +106,17 @@ public class SqlBlacklistTest {
     }
 
     @Test
-    public void testDeleteSqlBlacklist(@Mocked EditLog editLog) throws Exception {
-        SqlBlackList sqlBlackList = new SqlBlackList();
+    public void testDeleteSqlBlacklist() throws Exception {
+        mockupGlobalState();
         long id1 = sqlBlackList.put(Pattern.compile("qwert"));
         long id2 = sqlBlackList.put(Pattern.compile("abcde"));
 
-        MockUp<GlobalStateMgr> mockUp = new MockUp<GlobalStateMgr>() {
-            @Mock
-            public SqlBlackList getSqlBlackList() {
-                return sqlBlackList;
-            }
-            @Mock
-            public EditLog getEditLog() {
-                return editLog;
-            }
-        };
-
-        new Expectations(editLog) {
+        new Expectations() {
             {
                 editLog.logDeleteSQLBlackList(new DeleteSqlBlackLists(List.of(id1, id2)));
                 times = 1;
             }
         };
-
-        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
-        connectContext.setQueryId(UUID.randomUUID());
 
         StmtExecutor deleteStatementExecutor = new StmtExecutor(connectContext, new DelSqlBlackListStmt(List.of(id1, id2)));
         deleteStatementExecutor.execute();
@@ -183,6 +153,8 @@ public class SqlBlacklistTest {
 
     @Test
     public void testSqlBlacklistJournalOperations() throws Exception {
+        UtFrameUtils.createMinStarRocksCluster();
+        UtFrameUtils.setUpForPersistTest();
         UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
 
         // add blacklists
@@ -209,4 +181,27 @@ public class SqlBlacklistTest {
 
     }
 
+    private void mockupGlobalState() {
+        MockUp<GlobalStateMgr> mockUp = new MockUp<GlobalStateMgr>() {
+            @Mock
+            GlobalStateMgr getCurrentState() {
+                return state;
+            }
+
+            @Mock
+            public SqlBlackList getSqlBlackList() {
+                return sqlBlackList;
+            }
+
+            @Mock
+            public boolean isLeader() {
+                return true;
+            }
+
+            @Mock
+            public EditLog getEditLog() {
+                return editLog;
+            }
+        };
+    }
 }
