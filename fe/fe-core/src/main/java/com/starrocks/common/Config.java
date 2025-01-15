@@ -2825,7 +2825,7 @@ public class Config extends ConfigBase {
     public static long warehouse_idle_check_interval_seconds = 60;
 
     @ConfField(mutable = true, comment = "True to start warehouse idle checker")
-    public static boolean warehouse_idle_check_enable = false;
+    public static boolean warehouse_idle_check_enable = true;
 
     // e.g. "tableId1;tableId2"
     @ConfField(mutable = true)
