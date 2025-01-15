@@ -277,6 +277,9 @@ public class HudiTable extends Table {
             {
                 RemoteFileInfo fileInfo = hudiPartitions.get(i);
                 for (RemoteFileDesc desc : fileInfo.getFiles()) {
+                    if (!(desc instanceof HudiRemoteFileDesc)) {
+                        continue;
+                    }
                     HudiRemoteFileDesc hudiDesc = (HudiRemoteFileDesc) desc;
                     HoodieInstant instant = hudiDesc.getHudiInstant();
                     if (instant == null) {
