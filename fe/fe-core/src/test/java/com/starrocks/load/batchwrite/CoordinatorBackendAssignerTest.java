@@ -173,7 +173,7 @@ public class CoordinatorBackendAssignerTest extends BatchWriteTestBase {
             nodes.get().forEach(node -> backendIds.add(node.getId()));
         }
         assertEquals(5, backendIds.size());
-        assertTrue(assigner.currentLoadDiffRatio(1) < Config.batch_write_be_assigner_balance_factor_threshold);
+        assertTrue(assigner.currentLoadDiffRatio(1) < Config.merge_commit_be_assigner_balance_factor_threshold);
 
 
         // create empty warehouse meta
@@ -195,7 +195,7 @@ public class CoordinatorBackendAssignerTest extends BatchWriteTestBase {
             backendIds.clear();
             assigner.runPeriodicalCheck();
             assertNull(assigner.getWarehouseMeta(2));
-            assertTrue(assigner.currentLoadDiffRatio(1) < Config.batch_write_be_assigner_balance_factor_threshold);
+            assertTrue(assigner.currentLoadDiffRatio(1) < Config.merge_commit_be_assigner_balance_factor_threshold);
             for (int i = 1; i <= 100; i++) {
                 Optional<List<ComputeNode>> nodes = assigner.getBackends(i);
                 assertTrue(nodes.isPresent());
@@ -203,7 +203,7 @@ public class CoordinatorBackendAssignerTest extends BatchWriteTestBase {
                 nodes.get().forEach(node -> backendIds.add(node.getId()));
             }
             assertEquals(10, backendIds.size());
-            assertTrue(assigner.currentLoadDiffRatio(1) < Config.batch_write_be_assigner_balance_factor_threshold);
+            assertTrue(assigner.currentLoadDiffRatio(1) < Config.merge_commit_be_assigner_balance_factor_threshold);
         } finally {
             for (int i = 10006; i <= 10010; i++) {
                 UtFrameUtils.dropMockBackend(i);
