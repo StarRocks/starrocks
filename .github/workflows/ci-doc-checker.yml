@@ -130,6 +130,11 @@ jobs:
           rm -rf ./docs/release_notes ./docs/ecosystem_release
           mv ../zh ./i18n/zh/docusaurus-plugin-content-docs/current
           rm -rf ./i18n/zh/docusaurus-plugin-content-docs/current/release_notes ./i18n/zh/docusaurus-plugin-content-docs/current/ecosystem_release
+          # Using package.json and yarn.lock from a PR is not safe, so copy from main branch.
+          rm package.json
+          rm yarn.lock
+          curl -O https://raw.githubusercontent.com/StarRocks/starrocks/refs/heads/main/docs/docusaurus/package.json
+          curl -O https://raw.githubusercontent.com/StarRocks/starrocks/refs/heads/main/docs/docusaurus/yarn.lock
           yarn install --frozen-lockfile
           yarn clear
           yarn build
