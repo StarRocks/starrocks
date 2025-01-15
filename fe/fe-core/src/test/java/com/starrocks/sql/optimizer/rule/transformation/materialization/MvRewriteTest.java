@@ -1307,6 +1307,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
                 "    GROUP BY   `col1_name`;";
         plan = getFragmentPlan(sql);
         PlanTestBase.assertContains(plan, "test_mv1");
+        starRocksAssert.dropMaterializedView("test_mv1");
     }
 
     @Test
@@ -2391,6 +2392,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
                         "with cte1 as (select emps.empid from emps join depts using(deptno)) " +
                                 " select * from cte1 a join cte1 b on a.empid=b.empid"
                 ));
+        starRocksAssert.dropMaterializedView("test_mv1");
         connectContext.getSessionVariable().setCboCTERuseRatio(0);
     }
 
@@ -2414,6 +2416,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
                                 " on a.deptno=b.deptno group by a.empid, a.name)" +
                                 " select * from cte1 a join cte1 b on a.empid=b.empid"
                 ));
+        starRocksAssert.dropMaterializedView("test_mv1");
         connectContext.getSessionVariable().setCboCTERuseRatio(0);
     }
 
@@ -2430,6 +2433,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
                         "with cte1 as (select empid, name from emps) " +
                                 " select * from cte1 a join cte1 b on a.empid=b.empid"
                 ));
+        starRocksAssert.dropMaterializedView("test_mv1");
         connectContext.getSessionVariable().setCboCTERuseRatio(0);
     }
 
@@ -2462,6 +2466,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
                 "  (1,\"2020-07-16\"),(2,\"2020-07-19\"),(3,\"2020-07-22\"),(4,\"2020-07-25\"),\n" +
                 "  (2,\"2020-06-15\"),(3,\"2020-06-18\"),(4,\"2020-06-21\"),(5,\"2020-06-24\"),\n" +
                 "  (2,\"2020-07-02\"),(3,\"2020-07-05\"),(4,\"2020-07-08\"),(5,\"2020-07-11\");");
+        sql("drop materialized view if exists test_mv1;");
         withRefreshedMV("CREATE MATERIALIZED VIEW test_mv1 \n" +
                         "PARTITION BY dt \n" +
                         "REFRESH DEFERRED MANUAL \n" +
@@ -2474,5 +2479,6 @@ public class MvRewriteTest extends MvRewriteTestBase {
                     PlanTestBase.assertContains(plan, "test_mv1");
                     connectContext.getSessionVariable().setMaterializedViewUnionRewriteMode(0);
                 });
+        starRocksAssert.dropTable("s1");
     }
 }
