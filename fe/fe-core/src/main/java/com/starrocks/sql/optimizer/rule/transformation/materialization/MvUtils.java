@@ -102,7 +102,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.rule.Rule;
-import com.starrocks.sql.optimizer.rule.RuleSetType;
+import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.rule.mv.MVUtils;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
@@ -1516,8 +1516,8 @@ public class MvUtils {
                                                  ColumnRefSet requiredColumns,
                                                  ColumnRefFactory columnRefFactory) {
         OptimizerConfig optimizerConfig = new OptimizerConfig(OptimizerConfig.OptimizerAlgorithm.RULE_BASED);
-        optimizerConfig.disableRuleSet(RuleSetType.SINGLE_TABLE_MV_REWRITE);
-        optimizerConfig.disableRuleSet(RuleSetType.MULTI_TABLE_MV_REWRITE);
+        optimizerConfig.disableRule(RuleType.GP_SINGLE_TABLE_MV_REWRITE);
+        optimizerConfig.disableRule(RuleType.GP_MULTI_TABLE_MV_REWRITE);
         Optimizer optimizer = new Optimizer(optimizerConfig);
         OptExpression optimizedViewPlan = optimizer.optimize(connectContext, logicalTree,
                 new PhysicalPropertySet(), requiredColumns, columnRefFactory);
