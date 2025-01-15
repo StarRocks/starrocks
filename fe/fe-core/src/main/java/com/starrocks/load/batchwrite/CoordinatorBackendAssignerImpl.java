@@ -122,7 +122,7 @@ public final class CoordinatorBackendAssignerImpl implements CoordinatorBackendA
                     checkIntervalMs = Integer.MAX_VALUE;
                     LOG.info("Disable periodical schedule because there is no load");
                 } else {
-                    checkIntervalMs = Math.max(MIN_CHECK_INTERVAL_MS, Config.batch_write_be_assigner_schedule_interval_ms);
+                    checkIntervalMs = Math.max(MIN_CHECK_INTERVAL_MS, Config.merge_commit_be_assigner_schedule_interval_ms);
                     LOG.debug("Set schedule interval to {} ms", checkIntervalMs);
                 }
                 task = taskPriorityQueue.poll(checkIntervalMs, TimeUnit.MILLISECONDS);
@@ -379,7 +379,7 @@ public final class CoordinatorBackendAssignerImpl implements CoordinatorBackendA
                     LOG.info("Remove empty warehouse {}", warehouseMeta.warehouseId);
                 } else {
                     checkNodeStatusAndReassignment(warehouseMeta);
-                    doBalanceIfNeeded(warehouseMeta, Config.batch_write_be_assigner_balance_factor_threshold);
+                    doBalanceIfNeeded(warehouseMeta, Config.merge_commit_be_assigner_balance_factor_threshold);
                     if (LOG.isDebugEnabled()) {
                         logStatistics(warehouseMeta);
                     }
