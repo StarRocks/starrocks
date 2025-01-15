@@ -332,8 +332,8 @@ void HdfsScanner::do_update_iceberg_v2_counter(RuntimeProfile* parent_profile, c
     COUNTER_UPDATE(delete_file_per_scan_counter, _app_stats.iceberg_delete_files_per_scan);
 }
 
-void HdfsScanner::do_update_deletion_vector_counter(RuntimeProfile* parent_profile) {
-    if (_scanner_ctx.enable_split_tasks && !has_split_tasks()) {
+void HdfsScanner::do_update_deletion_vector_build_counter(RuntimeProfile* parent_profile) {
+    if (_app_stats.deletion_vector_build_count == 0) {
         return;
     }
     const std::string DV_TIMER = DeletionVector::DELETION_VECTOR;
@@ -341,14 +341,22 @@ void HdfsScanner::do_update_deletion_vector_counter(RuntimeProfile* parent_profi
 
     RuntimeProfile::Counter* delete_build_timer =
             ADD_CHILD_COUNTER(parent_profile, "DeletionVectorBuildTime", TUnit::TIME_NS, DV_TIMER);
-    RuntimeProfile::Counter* delete_file_build_filter_timer =
-            ADD_CHILD_COUNTER(parent_profile, "DeletionVectorBuildRowIdFilterTime", TUnit::TIME_NS, DV_TIMER);
+
     RuntimeProfile::Counter* delete_file_per_scan_counter =
             ADD_CHILD_COUNTER(parent_profile, "DeletionVectorBuildCount", TUnit::UNIT, DV_TIMER);
 
     COUNTER_UPDATE(delete_build_timer, _app_stats.deletion_vector_build_ns);
-    COUNTER_UPDATE(delete_file_build_filter_timer, _app_stats.build_rowid_filter_ns);
+
     COUNTER_UPDATE(delete_file_per_scan_counter, _app_stats.deletion_vector_build_count);
+}
+
+void HdfsScanner::do_update_deletion_vector_filter_counter(RuntimeProfile* parent_profile) {
+    const std::string DV_TIMER = DeletionVector::DELETION_VECTOR;
+    ADD_COUNTER(parent_profile, DV_TIMER, TUnit::NONE);
+
+    RuntimeProfile::Counter* delete_file_build_filter_timer =
+            ADD_CHILD_COUNTER(parent_profile, "DeletionVectorBuildRowIdFilterTime", TUnit::TIME_NS, DV_TIMER);
+    COUNTER_UPDATE(delete_file_build_filter_timer, _app_stats.build_rowid_filter_ns);
 }
 
 int64_t HdfsScanner::estimated_mem_usage() const {
