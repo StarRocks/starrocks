@@ -52,17 +52,17 @@ public class PlanFeatures {
 
 
     /**
-     * The string representation like: tables=[1,2,3],operators=[4,5,6],....
+     * The string representation like: tables=[1,2,3]|operators=[4,5,6]|....
      */
     public String toFeatureString() {
         StringBuilder sb = new StringBuilder();
 
         var topTables = extractTopTables();
         sb.append("tables=[").append(Joiner.on(",").join(topTables));
-        sb.append("],");
+        sb.append("]|");
 
-        sb.append(String.format("env=[%d,%d,%d],", numBeNodes, avgCpuCoreOfBE, memCapacityOfBE));
-        sb.append(String.format("var=[%d],", dop));
+        sb.append(String.format("env=[%d,%d,%d]|", numBeNodes, avgCpuCoreOfBE, memCapacityOfBE));
+        sb.append(String.format("var=[%d]|", dop));
         sb.append("operators=[").append(Joiner.on(",").join(operatorFeatureVectors));
         sb.append("]");
 
@@ -113,8 +113,8 @@ public class PlanFeatures {
         if (EXCLUDE_OPERATORS.contains(operatorType)) {
             return true;
         }
-        /**
-         * {@link OperatorFeatures.ScanOperatorFeatures}
+        /*
+          {@link OperatorFeatures.ScanOperatorFeatures}
          */
         if (operatorType.isPhysicalScan() && (operatorType != OperatorType.PHYSICAL_OLAP_SCAN)) {
             return true;

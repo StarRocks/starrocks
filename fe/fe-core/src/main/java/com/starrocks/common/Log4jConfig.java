@@ -145,16 +145,16 @@ public class Log4jConfig extends XmlConfiguration {
             "    </RollingFile>\n" +
 
             "    <RollingFile name=\"FeaturesFile\" fileName=\"${profile_log_dir}/fe.features.log\" " +
-            "filePattern=\"${profile_log_dir}/fe.features.log.${profile_file_pattern}-%i\">\n" +
+            "       filePattern=\"${profile_log_dir}/fe.features.log.${feature_file_pattern}-%i\">\n" +
             "      ${syslog_profile_layout}\n" +
             "      <Policies>\n" +
             "        <TimeBasedTriggeringPolicy/>\n" +
-            "        <SizeBasedTriggeringPolicy size=\"${profile_log_roll_size_mb}MB\"/>\n" +
+            "        <SizeBasedTriggeringPolicy size=\"${feature_log_roll_size_mb}MB\"/>\n" +
             "      </Policies>\n" +
-            "      <DefaultRolloverStrategy max=\"${profile_log_roll_num}\" fileIndex=\"min\">\n" +
-            "        <Delete basePath=\"${profile_log_dir}/\" maxDepth=\"1\" followLinks=\"true\">\n" +
+            "      <DefaultRolloverStrategy max=\"${feature_log_roll_num}\" fileIndex=\"min\">\n" +
+            "        <Delete basePath=\"${feature_log_dir}/\" maxDepth=\"1\" followLinks=\"true\">\n" +
             "          <IfFileName glob=\"fe.features.log.*\" />\n" +
-            "          <IfLastModified age=\"${profile_log_delete_age}\" />\n" +
+            "          <IfLastModified age=\"${feature_log_delete_age}\" />\n" +
             "        </Delete>\n" +
             "      </DefaultRolloverStrategy>\n" +
             "    </RollingFile>\n" +
@@ -271,6 +271,14 @@ public class Log4jConfig extends XmlConfiguration {
         properties.put("profile_log_delete_age", String.valueOf(Config.profile_log_delete_age));
         properties.put("profile_file_pattern",
                 getIntervalPattern("profile_log_roll_interval", Config.profile_log_roll_interval));
+
+        // feature log config
+        properties.put("feature_log_dir", Config.feature_log_dir);
+        properties.put("feature_log_roll_size_mb", String.valueOf(Config.feature_log_roll_size_mb));
+        properties.put("feature_log_roll_num", String.valueOf(Config.feature_log_roll_num));
+        properties.put("feature_log_delete_age", String.valueOf(Config.feature_log_delete_age));
+        properties.put("feature_file_pattern",
+                getIntervalPattern("feature_log_roll_interval", Config.feature_log_roll_interval));
 
         // internal log config
         properties.put("internal_log_dir", Config.internal_log_dir);

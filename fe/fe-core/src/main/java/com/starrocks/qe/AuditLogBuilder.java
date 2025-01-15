@@ -177,7 +177,7 @@ public class AuditLogBuilder extends Plugin implements AuditPlugin {
                     execution.append("|state=").append(event.state);
                     execution.append("|catalog=").append(event.catalog);
                     execution.append("|database=").append(event.db);
-                    execution.append("|features=").append(event.features);
+                    execution.append("|").append(event.features);
                     AuditLog.getFeaturesAudit().info(execution.toString());
                     // reset the features to avoid be recorded into audit log again
                     event.features = null;
