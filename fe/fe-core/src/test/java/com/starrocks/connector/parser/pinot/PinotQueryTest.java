@@ -193,7 +193,8 @@ public class PinotQueryTest extends PinotTestBase {
                 ") AS ts\n" +
                 "FROM test.tall";
         assertPlanContains(sql, "1:Project\n" +
-                "  |  <slot 12> : floor(CAST(CAST(unix_timestamp(convert_tz(date_trunc('week', 8: th), 'UTC', 'UTC')) AS DECIMAL128(18,0)) * 1.0 AS DOUBLE))");
+                "  |  <slot 12> : floor(CAST(CAST(unix_timestamp(convert_tz(date_trunc('week', 8: th), 'UTC', 'UTC')) " +
+                "AS DECIMAL128(18,0)) * 1.0 AS DOUBLE))");
 
         sql = "select dateTrunc(\n" +
                 "  'week', \n" +
@@ -204,7 +205,8 @@ public class PinotQueryTest extends PinotTestBase {
                 ") AS ts\n" +
                 "FROM test.tall";
         assertPlanContains(sql, "1:Project\n" +
-                "  |  <slot 12> : floor(CAST(CAST(unix_timestamp(convert_tz(date_trunc('week', 8: th), 'CET', 'UTC')) AS DECIMAL128(18,0)) * 1.0 AS DOUBLE))");
+                "  |  <slot 12> : floor(CAST(CAST(unix_timestamp(convert_tz(date_trunc('week', 8: th), " +
+                "'CET', 'UTC')) AS DECIMAL128(18,0)) * 1.0 AS DOUBLE))");
 
         sql = "select dateTrunc(\n" +
                 "  'quarter', \n" +
@@ -215,7 +217,8 @@ public class PinotQueryTest extends PinotTestBase {
                 ") AS ts\n" +
                 "FROM test.tall";
         assertPlanContains(sql, "1:Project\n" +
-                "  |  <slot 12> : floor(CAST(CAST(unix_timestamp(convert_tz(date_trunc('quarter', 8: th), 'America/Los_Angeles', 'UTC')) AS DECIMAL128(18,0)) * 0.0002777777777777778 AS DOUBLE))");
+                "  |  <slot 12> : floor(CAST(CAST(unix_timestamp(convert_tz(date_trunc('quarter', 8: th), " +
+                "'America/Los_Angeles', 'UTC')) AS DECIMAL128(18,0)) * 0.0002777777777777778 AS DOUBLE))");
     }
 
     @Test
@@ -228,7 +231,8 @@ public class PinotQueryTest extends PinotTestBase {
                 "       ) AS convertedTime\n" +
                 "from test.tall";
         assertPlanContains(sql, "1:Project\n" +
-                "  |  <slot 12> : floor(CAST(CAST(unix_timestamp(time_slice(8: th, 1, 'day', 'floor')) AS DECIMAL128(18,0)) * 0.000011574074074074073 AS DOUBLE))");
+                "  |  <slot 12> : floor(CAST(CAST(unix_timestamp(time_slice(8: th, 1, 'day', 'floor')) " +
+                "AS DECIMAL128(18,0)) * 0.000011574074074074073 AS DOUBLE))");
 
         sql = "select DATETIMECONVERT(\n" +
                 "         th, \n" +
@@ -238,7 +242,8 @@ public class PinotQueryTest extends PinotTestBase {
                 "       ) AS convertedTime\n" +
                 "from test.tall";
         assertPlanContains(sql, "1:Project\n" +
-                "  |  <slot 12> : floor(CAST(CAST(unix_timestamp(time_slice(8: th, 1, 'day', 'floor')) AS DECIMAL128(18,0)) * 1000.0 AS DOUBLE))");
+                "  |  <slot 12> : floor(CAST(CAST(unix_timestamp(time_slice(8: th, 1, 'day', 'floor')) " +
+                "AS DECIMAL128(18,0)) * 1000.0 AS DOUBLE))");
 
         sql = "select DATETIMECONVERT(\n" +
                 "         th, \n" +
@@ -249,7 +254,8 @@ public class PinotQueryTest extends PinotTestBase {
                 "       ) AS convertedTime\n" +
                 "from test.tall";
         assertPlanContains(sql, "1:Project\n" +
-                "  |  <slot 12> : floor(CAST(CAST(unix_timestamp(convert_tz(time_slice(8: th, 1, 'day', 'floor'), 'Europe/Berlin', 'UTC')) AS DECIMAL128(18,0)) * 1000.0 AS DOUBLE))");
+                "  |  <slot 12> : floor(CAST(CAST(unix_timestamp(convert_tz(time_slice(8: th, 1, 'day', 'floor'), " +
+                "'Europe/Berlin', 'UTC')) AS DECIMAL128(18,0)) * 1000.0 AS DOUBLE))");
 
         sql = "select DATETIMECONVERT(\n" +
                 "         th, \n" +
@@ -259,7 +265,8 @@ public class PinotQueryTest extends PinotTestBase {
                 "       ) AS convertedTime\n" +
                 "from test.tall";
         assertPlanContains(sql, "1:Project\n" +
-                "  |  <slot 12> : floor(CAST(CAST(unix_timestamp(time_slice(8: th, 15, 'minute', 'floor')) AS DECIMAL128(18,0)) * 1000.0 AS DOUBLE))");
+                "  |  <slot 12> : floor(CAST(CAST(unix_timestamp(time_slice(8: th, 15, 'minute', 'floor')) " +
+                "AS DECIMAL128(18,0)) * 1000.0 AS DOUBLE))");
 
 
         sql = "select DATETIMECONVERT(\n" +
@@ -280,7 +287,8 @@ public class PinotQueryTest extends PinotTestBase {
                 "       ) AS convertedTime\n" +
                 "from test.tall";
         assertPlanContains(sql, "1:Project\n" +
-                "  |  <slot 12> : date_format(time_slice(convert_tz(8: th, 'UTC', 'Pacific/Kiritimati'), 1, 'millisecond', 'floor'), '%Y-%m-%d %H:%i')");
+                "  |  <slot 12> : date_format(time_slice(convert_tz(8: th, 'UTC', 'Pacific/Kiritimati'), 1, " +
+                "'millisecond', 'floor'), '%Y-%m-%d %H:%i')");
 
 
         sql = "select DATETIMECONVERT(\n" +
@@ -291,7 +299,8 @@ public class PinotQueryTest extends PinotTestBase {
                 "       ) AS convertedTime\n" +
                 "from test.tall";
         assertPlanContains(sql, "1:Project\n" +
-                "  |  <slot 12> : date_format(time_slice(convert_tz(8: th, 'UTC', 'Pacific/Kiritimati'), 1, 'day', 'floor'), '%Y-%m-%d %H:%i')");
+                "  |  <slot 12> : date_format(time_slice(convert_tz(8: th, 'UTC', 'Pacific/Kiritimati'), 1, " +
+                "'day', 'floor'), '%Y-%m-%d %H:%i')");
 
         sql = "select DATETIMECONVERT(\n" +
                 "         th, \n" +
@@ -302,7 +311,8 @@ public class PinotQueryTest extends PinotTestBase {
                 "       ) AS convertedTime\n" +
                 "from test.tall";
         assertPlanContains(sql, "1:Project\n" +
-                "  |  <slot 12> : date_format(convert_tz(time_slice(convert_tz(8: th, 'UTC', 'UTC'), 1, 'day', 'floor'), 'Europe/Berlin', 'UTC'), '%Y-%m-%d %H:%i')");
+                "  |  <slot 12> : date_format(convert_tz(time_slice(convert_tz(8: th, 'UTC', 'UTC'), 1, " +
+                "'day', 'floor'), 'Europe/Berlin', 'UTC'), '%Y-%m-%d %H:%i')");
     }
 
     @Test
@@ -324,7 +334,8 @@ public class PinotQueryTest extends PinotTestBase {
                 "    'CET'\n" +
                 "    ) AS dateTimeString from test.tall";
         assertPlanContains(sql, "1:Project\n" +
-                "  |  <slot 12> : convert_tz(CAST(date_format(8: th, '%Y-%m-%d %H:%i:%S ') AS DATETIME), 'Asia/Shanghai', 'CET')");
+                "  |  <slot 12> : convert_tz(CAST(date_format(8: th, '%Y-%m-%d %H:%i:%S ') " +
+                "AS DATETIME), 'Asia/Shanghai', 'CET')");
     }
 
     @Test
@@ -392,6 +403,7 @@ public class PinotQueryTest extends PinotTestBase {
 
         sql = "select text_match(ta, '\"Machine learning\" AND gpu AND python') AS value from test.tall";
         assertPlanContains(sql, "1:Project\n" +
-                "  |  <slot 12> : ((regexp(1: ta, '\\\\bMachine learning\\\\b')) AND (regexp(1: ta, '\\\\bgpu\\\\b'))) AND (regexp(1: ta, '\\\\bpython\\\\b'))");
+                "  |  <slot 12> : ((regexp(1: ta, '\\\\bMachine learning\\\\b')) AND " +
+                "(regexp(1: ta, '\\\\bgpu\\\\b'))) AND (regexp(1: ta, '\\\\bpython\\\\b'))");
     }
 }

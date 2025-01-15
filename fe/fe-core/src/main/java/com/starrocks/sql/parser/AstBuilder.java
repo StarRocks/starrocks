@@ -602,8 +602,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         public AstBuilder create(long sqlMode, IdentityHashMap<ParserRuleContext, List<HintNode>> hintMap) {
             return new AstBuilder(sqlMode, hintMap);
         }
-        public com.starrocks.connector.parser.pinot.AstBuilder createPinotAst(long sqlMode, IdentityHashMap<ParserRuleContext, List<HintNode>> hintMap) {
-            return new com.starrocks.connector.parser.pinot.AstBuilder (sqlMode, hintMap);
+        public com.starrocks.connector.parser.pinot.AstBuilder createPinotAst(long sqlMode, IdentityHashMap<ParserRuleContext,
+                List<HintNode>> hintMap) {
+            return new com.starrocks.connector.parser.pinot.AstBuilder(sqlMode, hintMap);
         }
     }
 

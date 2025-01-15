@@ -15,7 +15,14 @@ package com.starrocks.connector.parser.pinot;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.*;
+import com.starrocks.analysis.ArithmeticExpr;
+import com.starrocks.analysis.CompoundPredicate;
+import com.starrocks.analysis.DecimalLiteral;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.analysis.FunctionParams;
+import com.starrocks.analysis.IntLiteral;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -23,8 +30,8 @@ import com.starrocks.sql.ast.IntervalLiteral;
 import com.starrocks.sql.ast.UnitIdentifier;
 
 import java.math.BigDecimal;
-import java.util.Arrays;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -46,7 +53,8 @@ public class ComplexFunctionCallTransformer {
             String timeFormat = outputFormatList.get(2);
 
             if (timeFormat.contains("EPOCH")) {
-                IntervalLiteral intervalLiteral = new IntervalLiteral(new IntLiteral(Integer.parseInt(granularity.get(0))), new UnitIdentifier(granularity.get(1)));
+                IntervalLiteral intervalLiteral = new IntervalLiteral(new IntLiteral(Integer.parseInt(granularity.get(0))),
+                        new UnitIdentifier(granularity.get(1)));
                 FunctionCallExpr timeSlice = new FunctionCallExpr(FunctionSet.TIME_SLICE,
                         getArgumentsForTimeSlice(argumentsList.get(0),
                                 intervalLiteral.getValue(), intervalLiteral.getUnitIdentifier().getDescription().toLowerCase(),
@@ -58,8 +66,10 @@ public class ComplexFunctionCallTransformer {
                             new FunctionParams(ImmutableList.of(timeSlice, argumentsList.get(4), new StringLiteral("UTC"))));
                 }
 
-                FunctionCallExpr unixTimestamp = new FunctionCallExpr(FunctionSet.UNIX_TIMESTAMP, new FunctionParams(ImmutableList.of(timeSliceTZ)));
-                ArithmeticExpr outputTimeUnit = new ArithmeticExpr(ArithmeticExpr.Operator.MULTIPLY, unixTimestamp, new DecimalLiteral(BigDecimal.valueOf(PinotParserUtils.getMultiplier(outputFormatList.get(1)))));
+                FunctionCallExpr unixTimestamp = new FunctionCallExpr(FunctionSet.UNIX_TIMESTAMP,
+                        new FunctionParams(ImmutableList.of(timeSliceTZ)));
+                ArithmeticExpr outputTimeUnit = new ArithmeticExpr(ArithmeticExpr.Operator.MULTIPLY, unixTimestamp,
+                        new DecimalLiteral(BigDecimal.valueOf(PinotParserUtils.getMultiplier(outputFormatList.get(1)))));
                 return new FunctionCallExpr(FunctionSet.FLOOR, new FunctionParams(ImmutableList.of(outputTimeUnit)));
 
             } else {
@@ -68,9 +78,11 @@ public class ComplexFunctionCallTransformer {
                 String formatValue = PinotParserUtils.convertToStrftimeFormat(timePattern[0]);
                 String timeZone = timePattern[1] == null ? "UTC" : timePattern[1];
                 FunctionCallExpr convertTz = new FunctionCallExpr(FunctionSet.CONVERT_TZ,
-                        new FunctionParams(ImmutableList.of(argumentsList.get(0), new StringLiteral("UTC"), new StringLiteral(timeZone))));
+                        new FunctionParams(ImmutableList.of(argumentsList.get(0),
+                                new StringLiteral("UTC"), new StringLiteral(timeZone))));
 
-                IntervalLiteral intervalLiteral = new IntervalLiteral(new IntLiteral(Integer.parseInt(granularity.get(0))), new UnitIdentifier(granularity.get(1)));
+                IntervalLiteral intervalLiteral = new IntervalLiteral(new IntLiteral(Integer.parseInt(granularity.get(0))),
+                        new UnitIdentifier(granularity.get(1)));
                 FunctionCallExpr timeSlice = new FunctionCallExpr(FunctionSet.TIME_SLICE,
                         getArgumentsForTimeSlice(convertTz,
                                 intervalLiteral.getValue(), intervalLiteral.getUnitIdentifier().getDescription().toLowerCase(),
@@ -91,22 +103,37 @@ public class ComplexFunctionCallTransformer {
             }
             // DATETRUNC(unit, timeValue)  or DATETRUNC(unit, timeValue, inputTimeUnitStr) output is milliseconds -->  unix_timestamp(date_trunc('day',event_timestamp)) * 1000
             // DATETRUNC(unit, timeValue, inputTimeUnitStr, timeZone) output is milliseconds   -->  unix_timestamp(convertz_tz(date_trunc('day', event_timestamp), "UTC", timeZone)) * 1000
-            // DATETRUNC(unit, timeValue, inputTimeUnitStr, timeZone, outputTimeUnitStr)  -→ unix_timestamp(convertz_tz(date_trunc('day', event_timestamp), "UTC", timeZone)), output can be NANOSECONDS, MICROSECONDS, MILLISECONDS, SECONDS, MINUTES, HOURS, DAYS
+            // DATETRUNC(unit, timeValue, inputTimeUnitStr, timeZone, outputTimeUnitStr)  -→ unix_timestamp(convertz_tz(date_trunc('day', event_timestamp), "UTC", timeZone)),
+            // output can be NANOSECONDS, MICROSECONDS, MILLISECONDS, SECONDS, MINUTES, HOURS, DAYS
             if (args.length < 4) {
-                FunctionCallExpr dateTrunc = new FunctionCallExpr(FunctionSet.DATE_TRUNC, new FunctionParams(ImmutableList.of(args[0], args[1])));
-                FunctionCallExpr unixTimestamp = new FunctionCallExpr(FunctionSet.UNIX_TIMESTAMP, new FunctionParams(ImmutableList.of(dateTrunc)));
-                return new ArithmeticExpr(ArithmeticExpr.Operator.MULTIPLY, unixTimestamp, new IntLiteral(1000));
+                FunctionCallExpr dateTrunc = new FunctionCallExpr(FunctionSet.DATE_TRUNC,
+                        new FunctionParams(ImmutableList.of(args[0], args[1])));
+                FunctionCallExpr unixTimestamp = new FunctionCallExpr(FunctionSet.UNIX_TIMESTAMP,
+                        new FunctionParams(ImmutableList.of(dateTrunc)));
+                return new ArithmeticExpr(ArithmeticExpr.Operator.MULTIPLY, unixTimestamp,
+                        new IntLiteral(1000));
             } else if (args.length == 4) {
-                FunctionCallExpr dateTrunc = new FunctionCallExpr(FunctionSet.DATE_TRUNC, new FunctionParams(ImmutableList.of(args[0], args[1])));
-                FunctionCallExpr convertTz = new FunctionCallExpr(FunctionSet.CONVERT_TZ, new FunctionParams(ImmutableList.of(dateTrunc, args[3], new StringLiteral("UTC"))));
-                FunctionCallExpr unixTimestamp = new FunctionCallExpr(FunctionSet.UNIX_TIMESTAMP, new FunctionParams(ImmutableList.of(convertTz)));
-                return new ArithmeticExpr(ArithmeticExpr.Operator.MULTIPLY, unixTimestamp, new IntLiteral(1000));
+                FunctionCallExpr dateTrunc = new FunctionCallExpr(FunctionSet.DATE_TRUNC,
+                        new FunctionParams(ImmutableList.of(args[0], args[1])));
+                FunctionCallExpr convertTz = new FunctionCallExpr(FunctionSet.CONVERT_TZ,
+                        new FunctionParams(ImmutableList.of(dateTrunc, args[3],
+                            new StringLiteral("UTC"))));
+                FunctionCallExpr unixTimestamp = new FunctionCallExpr(FunctionSet.UNIX_TIMESTAMP,
+                        new FunctionParams(ImmutableList.of(convertTz)));
+                return new ArithmeticExpr(ArithmeticExpr.Operator.MULTIPLY, unixTimestamp,
+                        new IntLiteral(1000));
             } else if (args.length == 5) {
-                FunctionCallExpr dateTrunc = new FunctionCallExpr(FunctionSet.DATE_TRUNC, new FunctionParams(ImmutableList.of(args[0], args[1])));
-                FunctionCallExpr convertTz = new FunctionCallExpr(FunctionSet.CONVERT_TZ, new FunctionParams(ImmutableList.of(dateTrunc, args[3], new StringLiteral("UTC"))));
-                FunctionCallExpr unixTimestamp = new FunctionCallExpr(FunctionSet.UNIX_TIMESTAMP, new FunctionParams(ImmutableList.of(convertTz)));
+                FunctionCallExpr dateTrunc = new FunctionCallExpr(FunctionSet.DATE_TRUNC,
+                        new FunctionParams(ImmutableList.of(args[0], args[1])));
+                FunctionCallExpr convertTz = new FunctionCallExpr(FunctionSet.CONVERT_TZ,
+                        new FunctionParams(ImmutableList.of(dateTrunc, args[3],
+                            new StringLiteral("UTC"))));
+                FunctionCallExpr unixTimestamp = new FunctionCallExpr(FunctionSet.UNIX_TIMESTAMP,
+                        new FunctionParams(ImmutableList.of(convertTz)));
                 StringLiteral outputTimeUnitStr = (StringLiteral) args[4];
-                ArithmeticExpr outputTimeUnit = new ArithmeticExpr(ArithmeticExpr.Operator.MULTIPLY, unixTimestamp, new DecimalLiteral(BigDecimal.valueOf(PinotParserUtils.getMultiplier(outputTimeUnitStr.getStringValue()))));
+                ArithmeticExpr outputTimeUnit = new ArithmeticExpr(ArithmeticExpr.Operator.MULTIPLY, unixTimestamp,
+                        new DecimalLiteral(BigDecimal.valueOf(PinotParserUtils.getMultiplier(outputTimeUnitStr.getStringValue()
+                        ))));
                 return new FunctionCallExpr(FunctionSet.FLOOR, new FunctionParams(ImmutableList.of(outputTimeUnit)));
             }
         } else if (functionName.equalsIgnoreCase("text_match")) {
@@ -129,7 +156,9 @@ public class ComplexFunctionCallTransformer {
             String element = parsedList.get(i);
 
             if (!element.equals("AND") && !element.equals("OR")) {
-                FunctionCallExpr regexFunc = new FunctionCallExpr(FunctionSet.REGEXP, new FunctionParams(ImmutableList.of(argumentsList.get(0), new StringLiteral(element))));
+                FunctionCallExpr regexFunc = new FunctionCallExpr(FunctionSet.REGEXP,
+                        new FunctionParams(ImmutableList.of(argumentsList.get(0),
+                            new StringLiteral(element))));
                 if (current == null) {
                     current = regexFunc;
                 } else {
@@ -139,8 +168,10 @@ public class ComplexFunctionCallTransformer {
             } else if (element.equals("AND") || element.equals("OR")) {
                 String operator = element;
                 String nextElement = parsedList.get(++i);
-                FunctionCallExpr rightFunction =  new FunctionCallExpr(FunctionSet.REGEXP, new FunctionParams(ImmutableList.of(argumentsList.get(0), new StringLiteral(nextElement))));
-                current = new CompoundPredicate(operator.equals("AND") ? CompoundPredicate.Operator.AND : CompoundPredicate.Operator.OR, current, rightFunction);
+                FunctionCallExpr rightFunction =  new FunctionCallExpr(FunctionSet.REGEXP,
+                        new FunctionParams(ImmutableList.of(argumentsList.get(0), new StringLiteral(nextElement))));
+                current = new CompoundPredicate(operator.equals("AND") ? CompoundPredicate.Operator.AND :
+                        CompoundPredicate.Operator.OR, current, rightFunction);
             }
         }
 

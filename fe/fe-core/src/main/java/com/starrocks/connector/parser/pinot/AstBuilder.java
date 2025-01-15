@@ -13,13 +13,23 @@
 // limitations under the License.
 package com.starrocks.connector.parser.pinot;
 
-import com.starrocks.analysis.*;
+import com.starrocks.analysis.AnalyticExpr;
+import com.starrocks.analysis.AnalyticWindow;
+import com.starrocks.analysis.ArithmeticExpr;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.analysis.FunctionName;
+import com.starrocks.analysis.FunctionParams;
+import com.starrocks.analysis.HintNode;
+import com.starrocks.analysis.IntLiteral;
+import com.starrocks.analysis.OrderByElement;
+import com.starrocks.analysis.ParseNode;
 import com.starrocks.sql.ast.Identifier;
 import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.sql.parser.StarRocksParser;
 import com.starrocks.sql.parser.SyntaxSugars;
 import org.antlr.v4.runtime.ParserRuleContext;
-import com.starrocks.sql.parser.StarRocksParser;
 import org.antlr.v4.runtime.RuleContext;
 import org.antlr.v4.runtime.tree.ParseTree;
 import org.antlr.v4.runtime.tree.TerminalNode;
@@ -57,7 +67,8 @@ public class AstBuilder extends com.starrocks.sql.parser.AstBuilder {
 
         if (convertedFunctionCall != null) {
             if (functionName.equalsIgnoreCase("fromdatetime")) {
-                ArithmeticExpr toMillis = new ArithmeticExpr(ArithmeticExpr.Operator.MULTIPLY, convertedFunctionCall, new IntLiteral(1000));
+                ArithmeticExpr toMillis = new ArithmeticExpr(ArithmeticExpr.Operator.MULTIPLY,
+                        convertedFunctionCall, new IntLiteral(1000));
                 return toMillis;
             }
             return convertedFunctionCall;

@@ -15,7 +15,12 @@ package com.starrocks.connector.parser.pinot;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.*;
+import com.starrocks.analysis.DecimalLiteral;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.analysis.IntLiteral;
+import com.starrocks.analysis.StringLiteral;
+import com.starrocks.analysis.VariableExpr;
 import com.starrocks.connector.parser.trino.FunctionCallTransformer;
 import com.starrocks.connector.parser.trino.PlaceholderExpr;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -48,7 +53,8 @@ public class Pinot2SRFunctionCallTransformer {
             case "todatetime":
             case "fromdatetime":
                 if (children.size() < 2 || children.size() > 3) {
-                    throw new SemanticException("The todatetime/fromdatetime function must include between 2 and 3 parameters, inclusive.");
+                    throw new SemanticException("The todatetime/fromdatetime function must include between " +
+                            "2 and 3 parameters, inclusive.");
                 }
                 // transform date format
                 children.set(1, transformDateFormat(children.get(1)));
@@ -78,7 +84,7 @@ public class Pinot2SRFunctionCallTransformer {
     private static Expr transformPercentileValue(Expr child) {
         if (child instanceof IntLiteral) {
             double value = ((IntLiteral) child).getValue();
-            return new DecimalLiteral(new BigDecimal(Double.toString(value/100)));
+            return new DecimalLiteral(new BigDecimal(Double.toString(value / 100)));
         } else if (child instanceof DecimalLiteral) {
             BigDecimal value = ((DecimalLiteral) child).getValue();
             return new DecimalLiteral(value.divide(new BigDecimal(100)));
@@ -132,7 +138,8 @@ public class Pinot2SRFunctionCallTransformer {
 
         // fromdatetime -> str_to_date
         registerFunctionTransformer("fromdatetime", 2, new FunctionCallExpr("unix_timestamp",
-                List.of(new FunctionCallExpr("str_to_date", List.of(new PlaceholderExpr(1, Expr.class), new PlaceholderExpr(2, Expr.class))))));
+                List.of(new FunctionCallExpr("str_to_date", List.of(new PlaceholderExpr(1, Expr.class),
+                        new PlaceholderExpr(2, Expr.class))))));
     }
 
     private static void registerAggregateFunctionTransformer() {

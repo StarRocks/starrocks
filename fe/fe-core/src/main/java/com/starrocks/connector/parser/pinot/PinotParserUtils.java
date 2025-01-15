@@ -21,7 +21,15 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.util.DateUtils;
 
 import java.time.format.DateTimeParseException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -232,7 +240,7 @@ public class PinotParserUtils {
             timeZone = m.group(3);
         }
 
-        return new String[]{dateFormat, timeZone};
+        return new String[] {dateFormat, timeZone};
     }
 
 }
