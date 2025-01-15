@@ -155,6 +155,7 @@ set(EXEC_FILES
         ./exprs/subfield_expr_test.cpp
         ./exprs/vectorized_literal_test.cpp
         ./exprs/min_max_predicate_test.cpp
+        ./exprs/in_const_predicate_test.cpp
         ./formats/csv/array_converter_test.cpp
         ./formats/csv/boolean_converter_test.cpp
         ./formats/csv/csv_file_writer_test.cpp
