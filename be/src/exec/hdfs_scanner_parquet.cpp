@@ -62,9 +62,9 @@ Status HdfsParquetScanner::do_init(RuntimeState* runtime_state, const HdfsScanne
 
 void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     RuntimeProfile* root = profile->runtime_profile;
-    // deletion vector build only in the first task which used for splite sub-tasks,
+    // deletion vector build only in the first task which used for split sub-tasks,
     // and do not need to re-build in sub io tasks.
-    do_update_deletion_vector_counter(root);
+    do_update_deletion_vector_build_counter(root);
     // if we have split tasks, we don't need to update counter
     // and we will update those counters in sub io tasks.
     if (has_split_tasks()) {
@@ -171,6 +171,7 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     COUNTER_UPDATE(page_skip, _app_stats.page_skip);
     group_min_round_cost->set(_app_stats.group_min_round_cost);
     do_update_iceberg_v2_counter(root, kParquetProfileSectionPrefix);
+    do_update_deletion_vector_filter_counter(root);
     COUNTER_UPDATE(rows_before_page_index, _app_stats.rows_before_page_index);
     COUNTER_UPDATE(page_index_timer, _app_stats.page_index_ns);
     COUNTER_UPDATE(total_row_groups, _app_stats.parquet_total_row_groups);
