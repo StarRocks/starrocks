@@ -60,14 +60,17 @@ public class BatchWriteMgr extends FrontendDaemon {
     // A thread pool executor for executing batch write tasks.
     private final ThreadPoolExecutor threadPoolExecutor;
 
+    private final TxnStateDispatcher txnStateDispatcher;
+
     public BatchWriteMgr() {
-        super("group-commit-mgr", Config.batch_write_gc_check_interval_ms);
+        super("merge-commit-mgr", Config.merge_commit_gc_check_interval_ms);
         this.idGenerator = new AtomicLong(0L);
         this.isomorphicBatchWriteMap = new ConcurrentHashMap<>();
         this.lock = new ReentrantReadWriteLock();
         this.coordinatorBackendAssigner = new CoordinatorBackendAssignerImpl();
         this.threadPoolExecutor = ThreadPoolManager.newDaemonCacheThreadPool(
-                        Config.batch_write_executor_threads_num, "batch-write-load", true);
+                        Config.merge_commit_executor_threads_num, "batch-write-load", true);
+        this.txnStateDispatcher = new TxnStateDispatcher(threadPoolExecutor);
     }
 
     @Override
@@ -79,7 +82,7 @@ public class BatchWriteMgr extends FrontendDaemon {
 
     @Override
     protected void runAfterCatalogReady() {
-        setInterval(Config.batch_write_gc_check_interval_ms);
+        setInterval(Config.merge_commit_gc_check_interval_ms);
         cleanupInactiveBatchWrite();
     }
 
@@ -194,7 +197,7 @@ public class BatchWriteMgr extends FrontendDaemon {
                 long id = idGenerator.getAndIncrement();
                 IsomorphicBatchWrite newLoad = new IsomorphicBatchWrite(
                         id, tableId, warehouseName, streamLoadInfo, batchWriteIntervalMs, batchWriteParallel,
-                        params, coordinatorBackendAssigner, threadPoolExecutor);
+                        params, coordinatorBackendAssigner, threadPoolExecutor, txnStateDispatcher);
                 coordinatorBackendAssigner.registerBatchWrite(id, newLoad.getWarehouseId(), tableId,
                         newLoad.getBatchWriteParallel());
                 return newLoad;

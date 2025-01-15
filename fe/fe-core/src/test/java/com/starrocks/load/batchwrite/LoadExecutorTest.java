@@ -321,8 +321,8 @@ public class LoadExecutorTest extends BatchWriteTestBase {
         }
 
         @Override
-        public void finishLoad(String label) {
-            finishedLoads.add(label);
+        public void finishLoad(LoadExecutor loadExecutor) {
+            finishedLoads.add(loadExecutor.getLabel());
         }
     }
     

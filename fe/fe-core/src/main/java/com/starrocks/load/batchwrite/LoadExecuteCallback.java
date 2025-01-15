@@ -22,7 +22,7 @@ public interface LoadExecuteCallback {
     /**
      * Called when the load operation is finished.
      *
-     * @param label The label associated with the load operation.
+     * @param loadExecutor The executor associated with the load operation.
      */
-    void finishLoad(String label);
+    void finishLoad(LoadExecutor loadExecutor);
 }
