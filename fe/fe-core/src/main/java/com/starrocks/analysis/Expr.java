@@ -1227,6 +1227,12 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         return GlobalStateMgr.getCurrentState().getFunction(searchDesc, mode);
     }
 
+    public static Function getBuiltinFunction(String name, Type[] argTypes, boolean varArgs, Type retType, Function.CompareMode mode) {
+        FunctionName fnName = new FunctionName(name);
+        Function searchDesc = new Function(fnName, argTypes, retType, varArgs);
+        return GlobalStateMgr.getCurrentState().getFunction(searchDesc, mode);
+    }
+
     /**
      * Pushes negation to the individual operands of a predicate
      * tree rooted at 'root'.
