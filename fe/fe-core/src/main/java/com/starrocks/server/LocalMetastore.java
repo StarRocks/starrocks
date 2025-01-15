@@ -3612,25 +3612,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         table.setComment(clause.getNewComment());
     }
 
-<<<<<<< HEAD
-    public static void inactiveRelatedMaterializedView(Database db, Table olapTable, String reason) {
-        for (MvId mvId : olapTable.getRelatedMaterializedViews()) {
-            MaterializedView mv = (MaterializedView) db.getTable(mvId.getId());
-            if (mv != null) {
-                LOG.warn("Inactive MV {}/{} because {}", mv.getName(), mv.getId(), reason);
-                mv.setInactiveAndReason(reason);
-
-                // recursive inactive
-                inactiveRelatedMaterializedView(db, mv,
-                        MaterializedViewExceptions.inactiveReasonForBaseTableActive(mv.getName()));
-            } else {
-                LOG.info("Ignore materialized view {} does not exists", mvId);
-            }
-        }
-    }
-
-=======
->>>>>>> 48b9d6ecea ([BugFix] Only inactive related materialized views because of base table/view is changed in Leader and not replay (#54732))
     public void replayRenameTable(TableInfo tableInfo) {
         long dbId = tableInfo.getDbId();
         long tableId = tableInfo.getTableId();

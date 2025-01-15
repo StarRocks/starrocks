@@ -68,14 +68,13 @@ public class AlterMaterializedViewStatusLog implements Writable {
         this.status = status;
     }
 
-<<<<<<< HEAD
     @Override
     public void write(DataOutput out) throws IOException {
         Text.writeString(out, GsonUtils.GSON.toJson(this));
-=======
+    }
+    
     public String getReason() {
         return reason;
->>>>>>> 48b9d6ecea ([BugFix] Only inactive related materialized views because of base table/view is changed in Leader and not replay (#54732))
     }
 
     public static AlterMaterializedViewStatusLog read(DataInput in) throws IOException {

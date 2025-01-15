@@ -332,13 +332,9 @@ public class AlterJobMgr {
         }
 
         Locker locker = new Locker();
-<<<<<<< HEAD
         locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(mv.getId()), LockType.WRITE);
-=======
-        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(mv.getId()), LockType.WRITE);
         // To be compatible with the old version, if the reason is empty, use the default reason
         String reason = Strings.isEmpty(log.getReason()) ? MANUAL_INACTIVE_MV_REASON : log.getReason();
->>>>>>> 48b9d6ecea ([BugFix] Only inactive related materialized views because of base table/view is changed in Leader and not replay (#54732))
         try {
             alterMaterializedViewStatus(mv, log.getStatus(), reason, true);
         } catch (Throwable e) {

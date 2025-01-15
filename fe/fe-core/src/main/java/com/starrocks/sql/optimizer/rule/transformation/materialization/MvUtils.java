@@ -1124,7 +1124,6 @@ public class MvUtils {
         return joinOperator.isLeftOuterJoin() || joinOperator.isInnerJoin();
     }
 
-<<<<<<< HEAD
     public static SlotRef extractPartitionSlotRef(Expr paritionExpr) {
         List<SlotRef> slotRefs = Lists.newArrayList();
         paritionExpr.collect(SlotRef.class, slotRefs);
@@ -1132,77 +1131,6 @@ public class MvUtils {
         return slotRefs.get(0);
     }
 
-    /**
-     * Inactive related mvs after modified columns have been done. Only inactive mvs after
-     * modified columns have done because the modified process may be failed and in this situation
-     * should not inactive mvs then.
-     */
-    public static void inactiveRelatedMaterializedViews(Database db,
-                                                        OlapTable olapTable,
-                                                        Set<String> modifiedColumns) {
-        if (modifiedColumns == null || modifiedColumns.isEmpty()) {
-            return;
-        }
-        // inactive related asynchronous mvs
-        for (MvId mvId : olapTable.getRelatedMaterializedViews()) {
-            MaterializedView mv = (MaterializedView) db.getTable(mvId.getId());
-            if (mv == null) {
-                LOG.warn("Ignore materialized view {} does not exists", mvId);
-                continue;
-
-            }
-            // TODO: support more types for base table's schema change.
-            try {
-                List<MvPlanContext> mvPlanContexts = MvPlanContextBuilder.getPlanContext(mv);
-                for (MvPlanContext mvPlanContext : mvPlanContexts) {
-                    if (mvPlanContext != null) {
-                        OptExpression mvPlan = mvPlanContext.getLogicalPlan();
-                        Set<ColumnRefOperator> usedColRefs = MvUtils.collectScanColumn(mvPlan, scan -> {
-                            if (scan == null) {
-                                return false;
-                            }
-                            Table table = scan.getTable();
-                            return table.getId() == olapTable.getId();
-                        });
-                        Set<String> usedColNames = usedColRefs.stream()
-                                .map(x -> x.getName())
-                                .collect(Collectors.toCollection(() -> new TreeSet<>(String.CASE_INSENSITIVE_ORDER)));
-                        for (String modifiedColumn : modifiedColumns) {
-                            if (usedColNames.contains(modifiedColumn)) {
-                                LOG.warn("Setting the materialized view {}({}) to invalid because " +
-                                                "the column {} of the table {} was modified.", mv.getName(), mv.getId(),
-                                        modifiedColumn, olapTable.getName());
-                                mv.setInactiveAndReason(
-                                        MaterializedViewExceptions.inactiveReasonForColumnChanged(modifiedColumns));
-                            }
-                        }
-                    }
-                }
-            } catch (SemanticException e) {
-                LOG.warn("Get related materialized view {} failed:", mv.getName(), e);
-                LOG.warn("Setting the materialized view {}({}) to invalid because " +
-                                "the columns  of the table {} was modified.", mv.getName(), mv.getId(),
-                        olapTable.getName());
-                mv.setInactiveAndReason(MaterializedViewExceptions.inactiveReasonForColumnChanged(modifiedColumns));
-            } catch (Exception e) {
-                LOG.warn("Get related materialized view {} failed:", mv.getName(), e);
-                // basic check: may lose some situations
-                for (Column mvColumn : mv.getColumns()) {
-                    if (modifiedColumns.contains(mvColumn.getName())) {
-                        LOG.warn("Setting the materialized view {}({}) to invalid because " +
-                                        "the column {} of the table {} was modified.", mv.getName(), mv.getId(),
-                                mvColumn.getName(), olapTable.getName());
-                        mv.setInactiveAndReason(
-                                MaterializedViewExceptions.inactiveReasonForColumnChanged(modifiedColumns));
-                        break;
-                    }
-                }
-            }
-        }
-    }
-
-=======
->>>>>>> 48b9d6ecea ([BugFix] Only inactive related materialized views because of base table/view is changed in Leader and not replay (#54732))
     public static void collectViewScanOperator(OptExpression tree, Collection<Operator> viewScanOperators) {
         if (tree.getOp() instanceof LogicalViewScanOperator) {
             viewScanOperators.add(tree.getOp());
