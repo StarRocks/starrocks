@@ -38,11 +38,18 @@ public class PlanFeatures {
             OperatorType.PHYSICAL_STREAM_AGG
     );
 
+    // query plan
     private List<Long> operatorFeatureVectors;
     private final Set<Table> tables = Sets.newHashSet();
 
-    public PlanFeatures() {
-    }
+    // environment
+    private long numBeNodes;
+    private long avgCpuCoreOfBE;
+    private long memCapacityOfBE;
+
+    // variables
+    private long dop;
+
 
     /**
      * The string representation like: tables=[1,2,3],operators=[4,5,6],....
@@ -54,10 +61,28 @@ public class PlanFeatures {
         sb.append("tables=[").append(Joiner.on(",").join(topTables));
         sb.append("],");
 
+        sb.append(String.format("env=[%d,%d,%d],", numBeNodes, avgCpuCoreOfBE, memCapacityOfBE));
+        sb.append(String.format("var=[%d],", dop));
         sb.append("operators=[").append(Joiner.on(",").join(operatorFeatureVectors));
         sb.append("]");
 
         return sb.toString();
+    }
+
+    public void setNumBeNodes(int numBeNodes) {
+        this.numBeNodes = numBeNodes;
+    }
+
+    public void setAvgCpuCoreOfBe(int avgCpuCoreOfBe) {
+        this.avgCpuCoreOfBE = avgCpuCoreOfBe;
+    }
+
+    public void setMemCapacityOfBE(long memCapacityOfBE) {
+        this.memCapacityOfBE = memCapacityOfBE;
+    }
+
+    public void setDop(int dop) {
+        this.dop = dop;
     }
 
     public void addTableFeatures(Set<Table> tables) {

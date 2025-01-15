@@ -16,6 +16,7 @@ package com.starrocks.sql.optimizer.cost.feature;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Table;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -24,6 +25,7 @@ import com.starrocks.sql.optimizer.cost.CostModel;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.system.BackendResourceStat;
 import org.apache.commons.collections.CollectionUtils;
 
 import java.util.List;
@@ -54,9 +56,16 @@ public class FeatureExtractor {
         var sumVector = PlanFeatures.aggregate(root);
         planFeatures.addOperatorFeatures(sumVector);
 
-        // TODO: significant variables
-        // TODO: concurrent queries
-        // TODO: cluster status
+        // environment
+        planFeatures.setAvgCpuCoreOfBe(BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe());
+        planFeatures.setNumBeNodes(BackendResourceStat.getInstance().getNumBes());
+        planFeatures.setMemCapacityOfBE(BackendResourceStat.getInstance().getAvgMemLimitBytes());
+
+        // variables
+        ConnectContext ctx = ConnectContext.get();
+        if (ctx != null) {
+            planFeatures.setDop(ctx.getSessionVariable().getPipelineDop());
+        }
 
         return planFeatures;
     }
