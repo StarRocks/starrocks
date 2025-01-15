@@ -20,9 +20,11 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.TreeNode;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.cost.CostEstimate;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
@@ -80,6 +82,9 @@ public class OperatorFeatures extends TreeNode<OperatorFeatures> {
         }
         if (opType == OperatorType.PHYSICAL_HASH_AGG) {
             return AggOperatorFeatures.VECTOR_LENGTH;
+        }
+        if (opType == OperatorType.PHYSICAL_DISTRIBUTION) {
+            return ExchangeOperatorFeatures.VECTOR_LENGTH;
         }
         return VECTOR_LENGTH;
     }
@@ -198,6 +203,28 @@ public class OperatorFeatures extends TreeNode<OperatorFeatures> {
             return res;
         }
 
+    }
+
+    public static class ExchangeOperatorFeatures extends OperatorFeatures {
+
+        public static final int VECTOR_LENGTH = OperatorFeatures.VECTOR_LENGTH + 1;
+
+        private final DistributionSpec.DistributionType distributionType;
+
+        public ExchangeOperatorFeatures(OptExpression optExpr, CostEstimate cost, Statistics stats) {
+            super(optExpr, cost, stats);
+
+            PhysicalDistributionOperator op = (PhysicalDistributionOperator) optExpr.getOp();
+            this.distributionType = op.getDistributionSpec().getType();
+        }
+
+        @Override
+        public List<Long> toVector() {
+            List<Long> res = super.toVector();
+            // TODO: apply one-hot encoding
+            res.add((long) distributionType.ordinal());
+            return res;
+        }
     }
 
 }

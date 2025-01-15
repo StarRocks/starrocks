@@ -101,6 +101,8 @@ public class FeatureExtractor {
                     return new OperatorFeatures.JoinOperatorFeatures(optExpression, cost, stats);
                 case PHYSICAL_HASH_AGG:
                     return new OperatorFeatures.AggOperatorFeatures(optExpression, cost, stats);
+                case PHYSICAL_DISTRIBUTION:
+                    return new OperatorFeatures.ExchangeOperatorFeatures(optExpression, cost, stats);
                 default:
                     return new OperatorFeatures(optExpression, cost, stats);
             }
