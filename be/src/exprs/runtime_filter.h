@@ -431,18 +431,33 @@ public:
     void update_min_max(CppType val) {
         // now slice have not support update min/max
         if constexpr (IsSlice<CppType>) {
-            return;
-        }
-
-        if constexpr (is_min) {
-            if (_min < val) {
-                _min = val;
-                _update_version();
+            std::lock_guard<std::mutex> lk(_slice_mutex);
+            if constexpr (is_min) {
+                if (_min < val) {
+                    _slice_min = val.to_string();
+                    _min.data = _slice_min.data();
+                    _min.size = _slice_min.size();
+                    _update_version();
+                }
+            } else {
+                if (_max > val) {
+                    _slice_max = val.to_string();
+                    _max.data = _slice_max.data();
+                    _max.size = _slice_max.size();
+                    _update_version();
+                }
             }
         } else {
-            if (_max > val) {
-                _max = val;
-                _update_version();
+            if constexpr (is_min) {
+                if (_min < val) {
+                    _min = val;
+                    _update_version();
+                }
+            } else {
+                if (_max > val) {
+                    _max = val;
+                    _update_version();
+                }
             }
         }
     }
@@ -490,9 +505,25 @@ public:
 
     void insert_null() { _has_null = true; }
 
-    CppType min_value() const { return _min; }
+    CppType min_value(ObjectPool* pool) const {
+        if constexpr (IsSlice<CppType>) {
+            std::lock_guard<std::mutex> lk(_slice_mutex);
+            auto* str = pool->template add(new std::string(_slice_min));
+            return Slice(*str);
+        } else {
+            return _min;
+        }
+    }
 
-    CppType max_value() const { return _max; }
+    CppType max_value(ObjectPool* pool) const {
+        if constexpr (IsSlice<CppType>) {
+            std::lock_guard<std::mutex> lk(_slice_mutex);
+            auto* str = pool->template add(new std::string(_slice_max));
+            return Slice(*str);
+        } else {
+            return _max;
+        }
+    }
 
     void set_left_close_interval(bool close_interval) { _left_close_interval = close_interval; }
     void set_right_close_interval(bool close_interval) { _right_close_interval = close_interval; }
@@ -808,6 +839,7 @@ private:
             _max = std::max(_max, bf->_max);
 
             if constexpr (IsSlice<CppType>) {
+                std::lock_guard<std::mutex> lk(_slice_mutex);
                 // maybe we are refering to another runtime filter instance
                 // for security we have to copy that back to our instance.
                 if (_min.size != 0 && _min.data != _slice_min.data()) {
@@ -922,6 +954,7 @@ private:
     CppType _max;
     std::string _slice_min;
     std::string _slice_max;
+    mutable std::mutex _slice_mutex;
     bool _has_min_max = true;
     bool _left_close_interval = true;
     bool _right_close_interval = true;
