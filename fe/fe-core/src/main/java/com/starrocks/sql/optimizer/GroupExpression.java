@@ -349,7 +349,7 @@ public class GroupExpression {
     }
 
     public boolean hasAppliedMVRules() {
-        if (isAppliedMVRules.isEmpty()) {
+        if (!isAppliedMVRules.isPresent()) {
             isAppliedMVRules = Optional.of(ALL_MV_REWRITE_RULES.stream().anyMatch(rule -> hasRuleApplied(rule)));
         }
         return isAppliedMVRules.get();
