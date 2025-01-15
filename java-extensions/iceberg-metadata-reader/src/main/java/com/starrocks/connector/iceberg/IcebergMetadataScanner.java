@@ -19,6 +19,7 @@ import com.esotericsoftware.kryo.io.Output;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.connector.share.iceberg.CommonMetadataBean;
 import com.starrocks.connector.share.iceberg.IcebergMetricsBean;
+import org.apache.connector.iceberg.UnmodifiableCollectionsSerializer;
 import com.starrocks.jni.connector.ColumnValue;
 import org.apache.iceberg.ContentFile;
 import org.apache.iceberg.ManifestContent;
