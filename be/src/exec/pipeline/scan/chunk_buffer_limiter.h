@@ -133,7 +133,6 @@ public:
         }
         return false;
     }
-    // bool is_full() const override { return _pinned_chunks_counter > _capacity; }
     size_t size() const override { return _pinned_chunks_counter; }
     size_t capacity() const override { return _capacity; }
     size_t default_capacity() const override { return _default_capacity; }
