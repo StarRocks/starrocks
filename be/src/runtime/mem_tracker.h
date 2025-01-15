@@ -267,7 +267,7 @@ public:
     }
 
     void release_without_root(int64_t bytes) {
-        if (bytes == 0) {
+        if (bytes == 0 || _all_trackers.empty()) {
             return;
         }
 
