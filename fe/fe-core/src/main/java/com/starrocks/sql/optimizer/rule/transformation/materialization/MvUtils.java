@@ -42,11 +42,9 @@ import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.MvPlanContext;
-import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.RangeUtils;
@@ -56,7 +54,6 @@ import com.starrocks.mv.analyzer.MVPartitionExpr;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.QueryRelation;
@@ -69,7 +66,6 @@ import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.MaterializedViewOptimizer;
-import com.starrocks.sql.optimizer.MvPlanContextBuilder;
 import com.starrocks.sql.optimizer.MvRewritePreprocessor;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -128,7 +124,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.TreeSet;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -1163,76 +1158,6 @@ public class MvUtils {
 
     public static boolean isSupportViewDelta(JoinOperator joinOperator) {
         return joinOperator.isLeftOuterJoin() || joinOperator.isInnerJoin();
-    }
-
-    /**
-     * Inactive related mvs after modified columns have been done. Only inactive mvs after
-     * modified columns have done because the modified process may be failed and in this situation
-     * should not inactive mvs then.
-     */
-    public static void inactiveRelatedMaterializedViews(Database db,
-                                                        OlapTable olapTable,
-                                                        Set<String> modifiedColumns) {
-        if (modifiedColumns == null || modifiedColumns.isEmpty()) {
-            return;
-        }
-        // inactive related asynchronous mvs
-        for (MvId mvId : olapTable.getRelatedMaterializedViews()) {
-            MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                        .getTable(db.getId(), mvId.getId());
-            if (mv == null) {
-                LOG.warn("Ignore materialized view {} does not exists", mvId);
-                continue;
-
-            }
-            // TODO: support more types for base table's schema change.
-            try {
-                List<MvPlanContext> mvPlanContexts = MvPlanContextBuilder.getPlanContext(mv);
-                for (MvPlanContext mvPlanContext : mvPlanContexts) {
-                    if (mvPlanContext != null) {
-                        OptExpression mvPlan = mvPlanContext.getLogicalPlan();
-                        Set<ColumnRefOperator> usedColRefs = MvUtils.collectScanColumn(mvPlan, scan -> {
-                            if (scan == null) {
-                                return false;
-                            }
-                            Table table = scan.getTable();
-                            return table.getId() == olapTable.getId();
-                        });
-                        Set<String> usedColNames = usedColRefs.stream()
-                                .map(x -> x.getName())
-                                .collect(Collectors.toCollection(() -> new TreeSet<>(String.CASE_INSENSITIVE_ORDER)));
-                        for (String modifiedColumn : modifiedColumns) {
-                            if (usedColNames.contains(modifiedColumn)) {
-                                LOG.warn("Setting the materialized view {}({}) to invalid because " +
-                                                "the column {} of the table {} was modified.", mv.getName(), mv.getId(),
-                                        modifiedColumn, olapTable.getName());
-                                mv.setInactiveAndReason(
-                                        MaterializedViewExceptions.inactiveReasonForColumnChanged(modifiedColumns));
-                            }
-                        }
-                    }
-                }
-            } catch (SemanticException e) {
-                LOG.warn("Get related materialized view {} failed:", mv.getName(), e);
-                LOG.warn("Setting the materialized view {}({}) to invalid because " +
-                                "the columns  of the table {} was modified.", mv.getName(), mv.getId(),
-                        olapTable.getName());
-                mv.setInactiveAndReason(MaterializedViewExceptions.inactiveReasonForColumnChanged(modifiedColumns));
-            } catch (Exception e) {
-                LOG.warn("Get related materialized view {} failed:", mv.getName(), e);
-                // basic check: may lose some situations
-                for (Column mvColumn : mv.getColumns()) {
-                    if (modifiedColumns.contains(mvColumn.getName())) {
-                        LOG.warn("Setting the materialized view {}({}) to invalid because " +
-                                        "the column {} of the table {} was modified.", mv.getName(), mv.getId(),
-                                mvColumn.getName(), olapTable.getName());
-                        mv.setInactiveAndReason(
-                                MaterializedViewExceptions.inactiveReasonForColumnChanged(modifiedColumns));
-                        break;
-                    }
-                }
-            }
-        }
     }
 
     public static void collectViewScanOperator(OptExpression tree, Collection<Operator> viewScanOperators) {
