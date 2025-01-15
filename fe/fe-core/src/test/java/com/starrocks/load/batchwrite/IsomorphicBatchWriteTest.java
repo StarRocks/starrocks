@@ -60,6 +60,7 @@ public class IsomorphicBatchWriteTest extends BatchWriteTestBase {
     @Mocked
     private CoordinatorBackendAssigner assigner;
     private TestThreadPoolExecutor executor;
+    private TxnStateDispatcher txnStateDispatcher;
     private int parallel;
 
     private IsomorphicBatchWrite load;
@@ -67,12 +68,13 @@ public class IsomorphicBatchWriteTest extends BatchWriteTestBase {
     @Before
     public void setup() throws Exception {
         executor = new TestThreadPoolExecutor();
+        txnStateDispatcher = new TxnStateDispatcher(executor);
         parallel = 4;
         assertTrue("Number nodes " + allNodes.size(), parallel < allNodes.size());
         Map<String, String> map = new HashMap<>();
         map.put(StreamLoadHttpHeader.HTTP_FORMAT, "json");
         map.put(StreamLoadHttpHeader.HTTP_ENABLE_BATCH_WRITE, "true");
-        map.put(StreamLoadHttpHeader.HTTP_BATCH_WRITE_ASYNC, "true");
+        map.put(StreamLoadHttpHeader.HTTP_BATCH_WRITE_ASYNC, "false");
         StreamLoadKvParams params = new StreamLoadKvParams(map);
         StreamLoadInfo streamLoadInfo =
                 StreamLoadInfo.fromHttpStreamLoadRequest(null, -1, Optional.empty(), params);
@@ -85,7 +87,8 @@ public class IsomorphicBatchWriteTest extends BatchWriteTestBase {
                 parallel,
                 params,
                 assigner,
-                executor);
+                executor,
+                txnStateDispatcher);
     }
 
     @Test
@@ -156,6 +159,7 @@ public class IsomorphicBatchWriteTest extends BatchWriteTestBase {
         assertEquals(TransactionStatus.VISIBLE, getTxnStatus(label));
         assertNull(load.getLoadExecutor(label));
         assertEquals(0, load.numRunningLoads());
+        assertEquals(loadExecutor.getBackendIds().size(), txnStateDispatcher.getNumSubmittedTasks());
     }
 
     @Test
@@ -193,10 +197,14 @@ public class IsomorphicBatchWriteTest extends BatchWriteTestBase {
         assertEquals(expectNodeIds, loadExecutor2.getCoordinatorBackendIds());
 
         executor.manualRun(loadExecutor1);
-        executor.manualRun(loadExecutor2);
-
         assertEquals(TransactionStatus.VISIBLE, getTxnStatus(label1));
+        assertEquals(loadExecutor1.getCoordinatorBackendIds().size(), txnStateDispatcher.getNumSubmittedTasks());
+
+        executor.manualRun(loadExecutor2);
         assertEquals(TransactionStatus.VISIBLE, getTxnStatus(label2));
+        assertEquals(loadExecutor1.getBackendIds().size() + loadExecutor2.getBackendIds().size(),
+                txnStateDispatcher.getNumSubmittedTasks());
+
         assertEquals(0, load.numRunningLoads());
     }
 
