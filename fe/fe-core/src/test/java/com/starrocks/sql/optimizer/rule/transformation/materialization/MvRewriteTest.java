@@ -2456,7 +2456,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
                 "  PARTITION p20200711 VALUES [(\"2020-07-11 00:00:00\"), (\"2020-07-12 00:00:00\"))\n" +
                 ")\n" +
                 "DISTRIBUTED BY HASH(`num`);");
-        executeInsertSql("INSERT INTO s1 VALUES \n" +
+        executeInsertSql(connectContext, "INSERT INTO s1 VALUES \n" +
                 "  (1,\"2020-06-15\"),(2,\"2020-06-18\"),(3,\"2020-06-21\"),(4,\"2020-06-24\"),\n" +
                 "  (1,\"2020-07-02\"),(2,\"2020-07-05\"),(3,\"2020-07-08\"),(4,\"2020-07-11\"),\n" +
                 "  (1,\"2020-07-16\"),(2,\"2020-07-19\"),(3,\"2020-07-22\"),(4,\"2020-07-25\"),\n" +
