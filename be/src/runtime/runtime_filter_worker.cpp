@@ -59,11 +59,7 @@ static inline std::pair<pipeline::QueryContextPtr, std::shared_ptr<MemTracker>> 
 
 static void send_rpc_runtime_filter(const TNetworkAddress& dest, RuntimeFilterRpcClosure* rpc_closure, int timeout_ms,
                                     int64_t http_min_size, const PTransmitRuntimeFilterParams& request) {
-<<<<<<< HEAD
-    doris::PBackendService_Stub* stub = nullptr;
-=======
     std::shared_ptr<PInternalService_RecoverableStub> stub = nullptr;
->>>>>>> cddf14194f ([BugFix] Fix brpc continuously fail after backend host restart (#40229))
     bool via_http = request.data().size() >= http_min_size;
     if (via_http) {
         if (auto res = HttpBrpcStubCache::getInstance()->get_http_stub(dest); res.ok()) {
