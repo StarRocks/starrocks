@@ -34,6 +34,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalFileScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
+import com.starrocks.sql.optimizer.operator.pattern.MultiOpPattern;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -45,40 +46,32 @@ import org.apache.logging.log4j.Logger;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
     private static final Logger LOG = LogManager.getLogger(RewriteSimpleAggToHDFSScanRule.class);
 
-    public static final RewriteSimpleAggToHDFSScanRule HIVE_SCAN_NO_PROJECT =
-            new RewriteSimpleAggToHDFSScanRule(OperatorType.LOGICAL_HIVE_SCAN, true);
-    public static final RewriteSimpleAggToHDFSScanRule ICEBERG_SCAN_NO_PROJECT =
-            new RewriteSimpleAggToHDFSScanRule(OperatorType.LOGICAL_ICEBERG_SCAN, true);
-    public static final RewriteSimpleAggToHDFSScanRule FILE_SCAN_NO_PROJECT =
-            new RewriteSimpleAggToHDFSScanRule(OperatorType.LOGICAL_FILE_SCAN, true);
+    private static final Set<OperatorType> SUPPORTED = Set.of(OperatorType.LOGICAL_HIVE_SCAN,
+            OperatorType.LOGICAL_ICEBERG_SCAN,
+            OperatorType.LOGICAL_FILE_SCAN
+    );
 
-    public static final RewriteSimpleAggToHDFSScanRule HIVE_SCAN =
-            new RewriteSimpleAggToHDFSScanRule(OperatorType.LOGICAL_HIVE_SCAN);
-    public static final RewriteSimpleAggToHDFSScanRule ICEBERG_SCAN =
-            new RewriteSimpleAggToHDFSScanRule(OperatorType.LOGICAL_ICEBERG_SCAN);
-    public static final RewriteSimpleAggToHDFSScanRule FILE_SCAN =
-            new RewriteSimpleAggToHDFSScanRule(OperatorType.LOGICAL_FILE_SCAN);
+    public static final RewriteSimpleAggToHDFSScanRule SCAN_NO_PROJECT =
+            new RewriteSimpleAggToHDFSScanRule(false);
 
-    final OperatorType scanOperatorType;
-    final boolean hasProjectOperator;
+    private final boolean hasProjectOperator;
 
-    private RewriteSimpleAggToHDFSScanRule(OperatorType logicalOperatorType, boolean withoutProject) {
+    private RewriteSimpleAggToHDFSScanRule(boolean withoutProject) {
         super(RuleType.TF_REWRITE_SIMPLE_AGG, Pattern.create(OperatorType.LOGICAL_AGGR)
-                .addChildren(Pattern.create(logicalOperatorType)));
-        hasProjectOperator = false;
-        scanOperatorType = logicalOperatorType;
+                .addChildren(MultiOpPattern.of(SUPPORTED)));
+        hasProjectOperator = withoutProject;
     }
 
-    private RewriteSimpleAggToHDFSScanRule(OperatorType logicalOperatorType) {
+    public RewriteSimpleAggToHDFSScanRule() {
         super(RuleType.TF_REWRITE_SIMPLE_AGG, Pattern.create(OperatorType.LOGICAL_AGGR)
-                .addChildren(Pattern.create(OperatorType.LOGICAL_PROJECT, logicalOperatorType)));
+                .addChildren(Pattern.create(OperatorType.LOGICAL_PROJECT).addChildren(MultiOpPattern.of(SUPPORTED))));
         hasProjectOperator = true;
-        scanOperatorType = logicalOperatorType;
     }
 
     private OptExpression buildAggScanOperator(LogicalAggregationOperator aggregationOperator,
@@ -97,7 +90,7 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
             if (tableRelationId == -1) {
                 tableRelationId = relationId;
             } else if (tableRelationId != relationId) {
-                LOG.warn("Table relationIds are different in columns, tableRelationId = %d, relationId = %d",
+                LOG.warn("Table relationIds are different in columns, tableRelationId = {}, relationId = {}",
                         tableRelationId, relationId);
                 return null;
             }
@@ -222,7 +215,7 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
             return false;
         }
 
-        if (scanOperatorType == OperatorType.LOGICAL_ICEBERG_SCAN) {
+        if (scanOperator.getOpType() == OperatorType.LOGICAL_ICEBERG_SCAN) {
             IcebergTable icebergTable = (IcebergTable) scanOperator.getTable();
             if (!icebergTable.isUnPartitioned() && !icebergTable.isAllPartitionColumnsAlwaysIdentity()) {
                 return false;
