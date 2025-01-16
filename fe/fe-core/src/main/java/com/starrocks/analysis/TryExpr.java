@@ -86,7 +86,7 @@ public class TryExpr extends Expr {
 
     @Override
     public Expr clone() {
-        return new TryExpr(this);
+        return new TryExpr(getChild(0).clone(), pos);
     }
 
     @Override

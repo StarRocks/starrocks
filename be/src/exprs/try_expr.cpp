@@ -31,10 +31,10 @@ public:
 
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* chunk) override {
         auto&& status = _children[0]->evaluate_checked(context, chunk);
-        if (LIKELY(!status.ok())) {
-            return ColumnHelper::create_const_null_column(chunk->num_rows());
-        }
-        return status;
+    	if (LIKELY(status.ok())) {
+        	return status;
+    	}
+    	return ColumnHelper::create_const_null_column(chunk->num_rows());
     }
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new TryExpr(*this)); }

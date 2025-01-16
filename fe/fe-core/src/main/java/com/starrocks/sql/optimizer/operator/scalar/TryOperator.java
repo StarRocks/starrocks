@@ -62,12 +62,14 @@ public class TryOperator extends ScalarOperator {
 
     @Override
     public boolean equals(Object other) {
-        return this == other;
+        if (this == other) return true;
+        if (other == null || getClass() != other.getClass()) return false;
+        TryOperator that = (TryOperator) other;
+        return Objects.equals(arguments, that.arguments);
     }
 
     @Override
     public <R, C> R accept(ScalarOperatorVisitor<R, C> visitor, C context) {
-        System.out.println("================");
         return visitor.visitTryOperator(this, context);
     }
 
