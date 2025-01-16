@@ -134,6 +134,7 @@ public enum OperatorType {
     MULTI_IN,
     DICTIONARY_GET,
     MATCH_EXPR,
+    TRY,
 
     /**
      * PATTERN

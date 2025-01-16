@@ -49,6 +49,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TimestampArithmeticExpr;
+import com.starrocks.analysis.TryExpr;
 import com.starrocks.analysis.UserVariableExpr;
 import com.starrocks.analysis.UserVariableHint;
 import com.starrocks.analysis.VariableExpr;
@@ -1464,6 +1465,10 @@ public interface AstVisitor<R, C> {
     }
 
     default R visitTimestampArithmeticExpr(TimestampArithmeticExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
+    default R visitTryExpr(TryExpr node, C context) {
         return visitExpression(node, context);
     }
 

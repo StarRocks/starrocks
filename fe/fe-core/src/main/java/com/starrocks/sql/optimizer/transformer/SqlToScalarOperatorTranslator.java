@@ -47,6 +47,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TimestampArithmeticExpr;
+import com.starrocks.analysis.TryExpr;
 import com.starrocks.analysis.UserVariableExpr;
 import com.starrocks.analysis.VariableExpr;
 import com.starrocks.catalog.Function;
@@ -101,6 +102,7 @@ import com.starrocks.sql.optimizer.operator.scalar.MultiInPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
+import com.starrocks.sql.optimizer.operator.scalar.TryOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -868,6 +870,11 @@ public final class SqlToScalarOperatorTranslator {
         @Override
         public ScalarOperator visitCloneExpr(CloneExpr node, Context context) {
             return new CloneOperator(visit(node.getChild(0), context.clone(node)));
+        }
+
+        @Override
+        public ScalarOperator visitTryExpr(TryExpr node, Context context) {
+            return new TryOperator(visit(node.getChild(0), context.clone(node)));
         }
 
         @Override

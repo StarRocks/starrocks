@@ -1,0 +1,4 @@
+-- name: test_try_index_out_of_bound
+trino: select try(cast(1 as tinyint));
+-- result:
+NULL

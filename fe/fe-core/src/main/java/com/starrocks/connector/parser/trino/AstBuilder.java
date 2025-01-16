@@ -53,6 +53,7 @@ import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TimestampArithmeticExpr;
+import com.starrocks.analysis.TryExpr;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.analysis.VarBinaryLiteral;
 import com.starrocks.analysis.VariableExpr;
@@ -868,7 +869,8 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
 
     @Override
     protected ParseNode visitTryExpression(TryExpression node, ParseTreeContext context) {
-        return visit(node.getInnerExpression(), context);
+        List<Expr> children = visit(node, context, Expr.class);
+        return new TryExpr(children.get(0));
     }
 
     @Override

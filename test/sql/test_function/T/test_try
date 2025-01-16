@@ -1,0 +1,2 @@
+-- name: test_try_index_out_of_bound
+trino: SELECT try(array[1, 2, 3][4]);

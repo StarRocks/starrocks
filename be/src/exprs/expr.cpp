@@ -72,6 +72,7 @@
 #include "exprs/match_expr.h"
 #include "exprs/placeholder_ref.h"
 #include "exprs/subfield_expr.h"
+#include "exprs/try_expr.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_state.h"
@@ -466,6 +467,9 @@ Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks
         break;
     case TExprNodeType::MATCH_EXPR:
         *expr = pool->add(new MatchExpr(texpr_node));
+        break;
+    case TExprNodeType::TRY_EXPR:
+        *expr = pool->add(TryExprFactory::from_thrift(texpr_node));
         break;
     case TExprNodeType::ARRAY_SLICE_EXPR:
     case TExprNodeType::AGG_EXPR:

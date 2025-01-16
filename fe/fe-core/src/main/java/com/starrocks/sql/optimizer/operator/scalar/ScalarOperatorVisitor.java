@@ -115,6 +115,10 @@ public abstract class ScalarOperatorVisitor<R, C> {
         return visit(operator, context);
     }
 
+    public R visitTryOperator(TryOperator operator, C context) {
+        return visit(operator, context);
+    }
+
     public R visitSubqueryOperator(SubqueryOperator operator, C context) {
         return visit(operator, context);
     }

@@ -53,6 +53,7 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TableName;
+import com.starrocks.analysis.TryExpr;
 import com.starrocks.analysis.VarBinaryLiteral;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.Type;
@@ -88,6 +89,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
+import com.starrocks.sql.optimizer.operator.scalar.TryOperator;
 import com.starrocks.thrift.TExprOpcode;
 import com.starrocks.thrift.TFunctionBinaryType;
 
@@ -502,6 +504,8 @@ public class ScalarOperatorToExpr {
                     callExpr.setFn(call.getFunction());
                     callExpr.setIgnoreNulls(call.getIgnoreNulls());
                     break;
+                case "try":
+                    callExpr = new TryExpr(buildExpr.build(call.getChildren().get(0), context));
                 default:
                     List<Expr> arg = call.getChildren().stream()
                             .map(expr -> buildExpr.build(expr, context))
@@ -634,6 +638,11 @@ public class ScalarOperatorToExpr {
         @Override
         public Expr visitCloneOperator(CloneOperator operator, FormatterContext context) {
             return new CloneExpr(buildExpr.build(operator.getChild(0), context));
+        }
+
+        @Override
+        public Expr visitTryOperator(TryOperator operator, FormatterContext context) {
+            return new TryExpr(buildExpr.build(operator.getChild(0), context));
         }
 
         @Override

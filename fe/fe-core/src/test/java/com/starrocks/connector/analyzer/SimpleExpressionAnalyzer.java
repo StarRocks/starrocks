@@ -46,6 +46,7 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TimestampArithmeticExpr;
+import com.starrocks.analysis.TryExpr;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
@@ -778,6 +779,11 @@ public class SimpleExpressionAnalyzer {
 
         @Override
         public Void visitCloneExpr(CloneExpr node, Scope context) {
+            return null;
+        }
+
+        @Override
+        public Void visitTryExpr(TryExpr node, Scope context) {
             return null;
         }
     }

@@ -43,6 +43,7 @@ import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TimestampArithmeticExpr;
+import com.starrocks.analysis.TryExpr;
 import com.starrocks.analysis.VariableExpr;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.qe.ConnectContext;
@@ -352,6 +353,11 @@ public class AggregationAnalyzer {
 
         @Override
         public Boolean visitCloneExpr(CloneExpr node, Void context) {
+            return visit(node.getChild(0));
+        }
+
+        @Override
+        public Boolean visitTryExpr(TryExpr node, Void context) {
             return visit(node.getChild(0));
         }
 
