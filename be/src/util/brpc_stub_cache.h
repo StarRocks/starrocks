@@ -67,11 +67,7 @@ public:
         }
     }
 
-<<<<<<< HEAD
-    doris::PBackendService_Stub* get_stub(const butil::EndPoint& endpoint) {
-=======
     std::shared_ptr<PInternalService_RecoverableStub> get_stub(const butil::EndPoint& endpoint) {
->>>>>>> cddf14194f ([BugFix] Fix brpc continuously fail after backend host restart (#40229))
         std::lock_guard<SpinLock> l(_lock);
         auto stub_pool = _stub_map.seek(endpoint);
         if (stub_pool == nullptr) {
@@ -82,17 +78,11 @@ public:
         return (*stub_pool)->get_or_create(endpoint);
     }
 
-<<<<<<< HEAD
-    doris::PBackendService_Stub* get_stub(const TNetworkAddress& taddr) { return get_stub(taddr.hostname, taddr.port); }
-
-    doris::PBackendService_Stub* get_stub(const std::string& host, int port) {
-=======
     std::shared_ptr<PInternalService_RecoverableStub> get_stub(const TNetworkAddress& taddr) {
         return get_stub(taddr.hostname, taddr.port);
     }
 
     std::shared_ptr<PInternalService_RecoverableStub> get_stub(const std::string& host, int port) {
->>>>>>> cddf14194f ([BugFix] Fix brpc continuously fail after backend host restart (#40229))
         butil::EndPoint endpoint;
         std::string realhost;
         realhost = host;
@@ -117,27 +107,12 @@ private:
     struct StubPool {
         StubPool() { _stubs.reserve(config::brpc_max_connections_per_server); }
 
-<<<<<<< HEAD
-        ~StubPool() {
-            for (auto& stub : _stubs) {
-                delete stub;
-            }
-        }
-
-        doris::PBackendService_Stub* get_or_create(const butil::EndPoint& endpoint) {
-=======
         std::shared_ptr<PInternalService_RecoverableStub> get_or_create(const butil::EndPoint& endpoint) {
->>>>>>> cddf14194f ([BugFix] Fix brpc continuously fail after backend host restart (#40229))
             if (UNLIKELY(_stubs.size() < config::brpc_max_connections_per_server)) {
                 auto stub = std::make_shared<PInternalService_RecoverableStub>(endpoint);
                 if (!stub->reset_channel().ok()) {
                     return nullptr;
                 }
-<<<<<<< HEAD
-                auto stub = new doris::PBackendService_Stub(channel.release(),
-                                                            google::protobuf::Service::STUB_OWNS_CHANNEL);
-=======
->>>>>>> cddf14194f ([BugFix] Fix brpc continuously fail after backend host restart (#40229))
                 _stubs.push_back(stub);
                 return stub;
             }
@@ -147,11 +122,7 @@ private:
             return _stubs[_idx];
         }
 
-<<<<<<< HEAD
-        std::vector<doris::PBackendService_Stub*> _stubs;
-=======
         std::vector<std::shared_ptr<PInternalService_RecoverableStub>> _stubs;
->>>>>>> cddf14194f ([BugFix] Fix brpc continuously fail after backend host restart (#40229))
         int64_t _idx = -1;
     };
 
@@ -166,11 +137,7 @@ public:
         return &cache;
     }
 
-<<<<<<< HEAD
-    StatusOr<doris::PBackendService_Stub*> get_http_stub(const TNetworkAddress& taddr) {
-=======
     StatusOr<std::shared_ptr<PInternalService_RecoverableStub>> get_http_stub(const TNetworkAddress& taddr) {
->>>>>>> cddf14194f ([BugFix] Fix brpc continuously fail after backend host restart (#40229))
         butil::EndPoint endpoint;
         std::string realhost;
         realhost = taddr.hostname;
@@ -195,10 +162,6 @@ public:
             return Status::RuntimeError("init brpc http channel error on " + taddr.hostname + ":" +
                                         std::to_string(taddr.port));
         }
-<<<<<<< HEAD
-        auto stub = new doris::PBackendService_Stub(channel.release(), google::protobuf::Service::STUB_OWNS_CHANNEL);
-=======
->>>>>>> cddf14194f ([BugFix] Fix brpc continuously fail after backend host restart (#40229))
         _stub_map.insert(endpoint, stub);
         return stub;
     }
@@ -209,11 +172,7 @@ private:
     HttpBrpcStubCache& operator=(const HttpBrpcStubCache& cache) = delete;
 
     SpinLock _lock;
-<<<<<<< HEAD
-    butil::FlatMap<butil::EndPoint, doris::PBackendService_Stub*> _stub_map;
-=======
     butil::FlatMap<butil::EndPoint, std::shared_ptr<PInternalService_RecoverableStub>> _stub_map;
->>>>>>> cddf14194f ([BugFix] Fix brpc continuously fail after backend host restart (#40229))
 };
 
 } // namespace starrocks
