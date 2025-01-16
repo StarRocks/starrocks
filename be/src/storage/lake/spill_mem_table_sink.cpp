@@ -218,7 +218,7 @@ Status SpillMemTableSink::merge_blocks_to_segments() {
         total_merges++;
         // PK shouldn't do agg because pk support order key different from primary key,
         // in that case, data is sorted by order key and cannot be aggregated by primary key
-        bool do_agg = _schema->keys_type() == TKeysType::AGG_KEYS || _schema->keys_type() == TKeysType::UNIQUE_KEYS;
+        bool do_agg = _schema->keys_type() == KeysType::AGG_KEYS || _schema->keys_type() == KeysType::UNIQUE_KEYS;
         auto tmp_itr = new_heap_merge_iterator(merge_inputs);
         auto merge_itr = do_agg ? new_aggregate_iterator(tmp_itr) : tmp_itr;
         RETURN_IF_ERROR(merge_itr->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
