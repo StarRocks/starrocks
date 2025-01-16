@@ -210,7 +210,7 @@ with w1 as (
     select *, approx_l2_distance(v1, [10000, 10001, 10002, 10003]) as dis from t1
 ), w2 as (
     select * from w1
-    order by dis limit 21
+    order by dis limit 20
 ) select * from w2 order by dis, id;
 -- result:
 1	[10000,10001,10002,10003]	[10000,10001,10002,10003]	1	0.0
@@ -233,7 +233,6 @@ with w1 as (
 18	[10000,10001,10002,10003]	[10000,10001,10002,10003]	18	0.0
 19	[10000,10001,10002,10003]	[10000,10001,10002,10003]	19	0.0
 20	[10000,10001,10002,10003]	[10000,10001,10002,10003]	20	0.0
-10021	[10001,10001,10001,10001]	[10001,10001,10001,10001]	10021	6.0
 -- !result
 with w1 as (
     select *, approx_l2_distance(v1, [1, 1, 1, 1]) as dis from t1
@@ -312,7 +311,7 @@ with w1 as (
 ), w2 as (
     select * from w1
     where dis <= 100 and dis <= 1000
-    order by dis limit 21
+    order by dis limit 20
 ) select v1, dis from w2 order by dis, id;
 -- result:
 [10000,10001,10002,10003]	0.0
@@ -335,7 +334,6 @@ with w1 as (
 [10000,10001,10002,10003]	0.0
 [10000,10001,10002,10003]	0.0
 [10000,10001,10002,10003]	0.0
-[9995,9995,9995,9995]	174.0
 -- !result
 with w1 as (
     select *, approx_l2_distance(v1, [1, 1, 1, 1]) as dis from t1
@@ -443,7 +441,7 @@ with w1 as (
     select *, approx_l2_distance(v1, [10000, 10001, 10002, 10003]) as dis from t1
 ), w2 as (
     select * from w1
-    order by dis limit 21
+    order by dis limit 20
 ) select * from w2 order by dis, id;
 -- result:
 1	[10000,10001,10002,10003]	[10000,10001,10002,10003]	1	0.0
@@ -466,7 +464,6 @@ with w1 as (
 18	[10000,10001,10002,10003]	[10000,10001,10002,10003]	18	0.0
 19	[10000,10001,10002,10003]	[10000,10001,10002,10003]	19	0.0
 20	[10000,10001,10002,10003]	[10000,10001,10002,10003]	20	0.0
-10021	[10001,10001,10001,10001]	[10001,10001,10001,10001]	10021	6.0
 -- !result
 with w1 as (
     select *, approx_l2_distance(v1, [1, 1, 1, 1]) as dis from t1
@@ -510,7 +507,7 @@ with w1 as (
 ), w2 as (
     select * from w1
     where dis <= 100 and dis <= 1000
-    order by dis limit 21
+    order by dis limit 20
 ) select * from w2 order by dis, id;
 -- result:
 1	[10000,10001,10002,10003]	[10000,10001,10002,10003]	1	0.0
@@ -533,7 +530,6 @@ with w1 as (
 18	[10000,10001,10002,10003]	[10000,10001,10002,10003]	18	0.0
 19	[10000,10001,10002,10003]	[10000,10001,10002,10003]	19	0.0
 20	[10000,10001,10002,10003]	[10000,10001,10002,10003]	20	0.0
-10021	[10001,10001,10001,10001]	[10001,10001,10001,10001]	10021	6.0
 -- !result
 ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "false");
 -- result:

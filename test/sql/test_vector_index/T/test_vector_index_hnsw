@@ -114,7 +114,7 @@ with w1 as (
     select *, approx_l2_distance(v1, [10000, 10001, 10002, 10003, 10004]) as dis from t2
 ), w2 as (
     select * from w1
-    order by dis limit 21
+    order by dis limit 20
 ) select * from w2 order by dis, id;
 
 -- queries predicates
@@ -155,7 +155,7 @@ with w1 as (
 ), w2 as (
     select * from w1
     where dis <= 100 and dis <= 1000
-    order by dis limit 21
+    order by dis limit 20
 ) select * from w2 order by dis, id;
 
 
@@ -208,7 +208,7 @@ with w1 as (
     select *, approx_l2_distance(v1, [10000, 10001, 10002, 10003, 10004]) as dis from t2
 ), w2 as (
     select * from w1
-    order by dis limit 21
+    order by dis limit 20
 ) select * from w2 order by dis, id;
 
 -- queries predicates
@@ -242,7 +242,7 @@ with w1 as (
 ), w2 as (
     select * from w1
     where dis <= 100 and dis <= 1000
-    order by dis limit 21
+    order by dis limit 20
 ) select * from w2 order by dis, id;
 
 

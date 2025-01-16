@@ -1,4 +1,4 @@
--- name: test_create_vector_index
+-- name: test_create_vector_index @sequential
 ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "true");
 -- result:
 -- !result
@@ -17,6 +17,13 @@ PROPERTIES (
 "compression" = "LZ4"
 );
 -- result:
+-- !result
+DROP INDEX index_vector1 ON t_test_vector_table;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
 -- !result
 CREATE INDEX index_vector2 ON t_test_vector_table (vector2) USING VECTOR ("metric_type" = "l2_distance", "is_vector_normed" = "false", "index_type" = "ivfpq", "dim"="5", "nlist" = "256", "nbits"="10");
 -- result:
@@ -50,8 +57,14 @@ None
 DROP TABLE t_test_vector_table;
 -- result:
 -- !result
+ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "false");
+-- result:
+-- !result
 
--- name: test_vector_index
+-- name: test_vector_index @sequential
+ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "true");
+-- result:
+-- !result
 CREATE TABLE `t_test_vector_table` (
   `id` bigint(20) NOT NULL COMMENT "",
   `vector1` ARRAY<FLOAT> NOT NULL COMMENT "",
@@ -87,5 +100,9 @@ select * from (select id, approx_l2_distance([1,1,1,1,1], vector1) score from t_
 -- !result
 
 DROP TABLE t_test_vector_table;
+-- result:
+-- !result
+
+ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "false");
 -- result:
 -- !result
