@@ -493,6 +493,11 @@ private:
     bool _is_first_pending = true;
 
     TLateMaterializeMode::type _late_materialization_mode;
+<<<<<<< HEAD
+=======
+
+    starrocks::pipeline::Observable _observable;
+>>>>>>> 37ed8644bb ([Enhancement] add  session variable parallel_merge_late_materialization_mode control the parallel merge behaviour (#55082))
 };
 
 } // namespace starrocks::merge_path
