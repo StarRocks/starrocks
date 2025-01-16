@@ -31,6 +31,7 @@
 #include "service/backend_options.h"
 #include "util/brpc_stub_cache.h"
 #include "util/defer_op.h"
+#include "util/internal_service_recoverable_stub.h"
 #include "util/thread.h"
 #include "util/time.h"
 
@@ -58,7 +59,7 @@ static inline std::pair<pipeline::QueryContextPtr, std::shared_ptr<MemTracker>> 
 
 static void send_rpc_runtime_filter(const TNetworkAddress& dest, RuntimeFilterRpcClosure* rpc_closure, int timeout_ms,
                                     int64_t http_min_size, const PTransmitRuntimeFilterParams& request) {
-    doris::PBackendService_Stub* stub = nullptr;
+    std::shared_ptr<PInternalService_RecoverableStub> stub = nullptr;
     bool via_http = request.data().size() >= http_min_size;
     if (via_http) {
         if (auto res = HttpBrpcStubCache::getInstance()->get_http_stub(dest); res.ok()) {

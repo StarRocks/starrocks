@@ -22,6 +22,7 @@
 #include "gen_cpp/doris_internal_service.pb.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "storage/olap_define.h"
+#include "util/internal_service_recoverable_stub.h"
 #include "util/reusable_closure.h"
 #include "util/spinlock.h"
 #include "util/threadpool.h"
@@ -65,7 +66,7 @@ private:
     const int64_t _node_id;
 
     ReusableClosure<PTabletWriterAddSegmentResult>* _closure = nullptr;
-    doris::PBackendService_Stub* _stub = nullptr;
+    std::shared_ptr<PInternalService_RecoverableStub> _stub = nullptr;
 
     bool _inited = false;
     Status _st = Status::OK();
