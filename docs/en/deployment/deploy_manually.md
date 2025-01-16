@@ -167,66 +167,7 @@ The following procedures are performed on the BE instances.
 
 ## Step 3: Set up the cluster
 
-<<<<<<< HEAD
-A Compute Node (CN) is a stateless computing service that does not maintain data itself. You can optionally add CN nodes to your cluster to provide extra computing resources for queries. You can deploy CN nodes with the BE deployment files. Compute Nodes are supported since v2.4.
-
-1. Navigate to the directory that stores the [StarRocks BE deployment files](../deployment/prepare_deployment_files.md) you prepared earlier, and modify the CN configuration file **be/conf/cn.conf**.
-
-   a. If any of the CN ports mentioned in the [Environment Configuration Checklist](../deployment/environment_configurations.md) are occupied, you must assign valid alternatives in the CN configuration file.
-
-      ```YAML
-      be_port = vvvv                   # Default: 9060
-      be_http_port = xxxx              # Default: 8040
-      heartbeat_service_port = yyyy    # Default: 9050
-      brpc_port = zzzz                 # Default: 8060
-      ```
-
-   b. If you want to enable IP address access for your cluster, you must add the configuration item `priority_networks` in the configuration file and assign a dedicated IP address (in the CIDR format) to the CN node. You can ignore this configuration item if you want to enable FQDN access for your cluster.
-
-      ```YAML
-      priority_networks = x.x.x.x/x
-      ```
-
-      > **NOTE**
-      >
-      > You can run `ifconfig` in your terminal to view the IP address(es) owned by the instance.
-
-   c. If you have multiple JDKs installed on the instance, and you want to use a specific JDK that is different from the one specified in the environment variable `JAVA_HOME`, you must specify the path where the chosen JDK is installed by adding the configuration item `JAVA_HOME` in the configuration file.
-
-      ```YAML
-      # Replace <path_to_JDK> with the path where the chosen JDK is installed.
-      JAVA_HOME = <path_to_JDK>
-      ```
-
-   For information about advanced configuration items, see [Parameter Configuration - BE configuration items](../administration/management/BE_configuration.md) because most of CN's parameters are inherited from BE.
-
-2. Start the CN node.
-
-   ```Bash
-   ./be/bin/start_cn.sh --daemon
-   ```
-
-   > **CAUTION**
-   >
-   > - Before starting the CN node with FQDN access enabled, make sure you have assigned hostnames for all instances in **/etc/hosts**. See [Environment Configuration Checklist - Hostnames](../deployment/environment_configurations.md#hostnames) for more information.
-   > - You do not need to specify the parameter `--host_type` when you start CN nodes.
-
-3. Check the CN logs to verify if the CN node is started successfully.
-
-   ```Bash
-   cat be/log/cn.INFO | grep heartbeat
-   ```
-
-   A record of log like "I0313 15:03:45.820030 412450 thrift_server.cpp:375] heartbeat has started listening port on 9050" suggests that the CN node is started properly.
-
-4. You can start new CN nodes by repeating the above procedures on other instances.
-
-## Step 4: Set up the cluster
-
-After all FE, BE nodes, and CN nodes are started properly, you can set up the StarRocks cluster.
-=======
 After all FE and BE nodes are started properly, you can set up the StarRocks cluster.
->>>>>>> 4b791364b2 ([Doc] Remove CN deployment from shared-nothing (#55138))
 
 The following procedures are performed on a MySQL client. You must have MySQL client 5.5.0 or later installed.
 
