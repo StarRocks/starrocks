@@ -170,10 +170,20 @@ Status QueryContext::init_query_once(workgroup::WorkGroup* wg) {
 void QueryContext::release_workgroup_token_once() {
     auto* old = _wg_running_query_token_atomic_ptr.load();
     if (old != nullptr && _wg_running_query_token_atomic_ptr.compare_exchange_strong(old, nullptr)) {
+        // The release_workgroup_token_once function is called by FragmentContext::cancel
+        // to detach the QueryContext from the workgroup.
+        // When the workgroup undergoes a configuration change, the old version of the workgroup is released,
+        // and a new version is created. The old workgroup will only be physically destroyed once no
+        // QueryContext is attached to it.
+        // However, the MemTracker of the old workgroup outlives the workgroup itself because
+        // it is accessed during the destruction of the QueryContext through its MemTracker
+        // (the workgroup's MemTracker serves as the parent of the QueryContext's MemTracker).
+        // To prevent the MemTracker from being released prematurely, it must be explicitly retained
+        // to ensure it remains valid until it is no longer needed.
+        _wg_mem_tracker = _wg_running_query_token_ptr->get_wg()->grab_mem_tracker();
         _wg_running_query_token_ptr.reset();
     }
 }
-
 void QueryContext::set_query_trace(std::shared_ptr<starrocks::debug::QueryTrace> query_trace) {
     std::call_once(_query_trace_init_flag, [this, &query_trace]() { _query_trace = std::move(query_trace); });
 }
