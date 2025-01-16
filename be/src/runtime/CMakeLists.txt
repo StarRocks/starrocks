@@ -62,6 +62,7 @@ set(RUNTIME_FILES
     batch_write/isomorphic_batch_write.cpp
     batch_write/batch_write_mgr.cpp
     batch_write/batch_write_util.cpp
+    batch_write/txn_state_cache.cpp
     routine_load/data_consumer.cpp
     routine_load/data_consumer_group.cpp
     routine_load/data_consumer_pool.cpp

@@ -25,6 +25,7 @@
 
 #include "common/statusor.h"
 #include "runtime/batch_write/batch_write_util.h"
+#include "runtime/batch_write/txn_state_cache.h"
 #include "util/countdown_latch.h"
 
 namespace starrocks {
@@ -44,7 +45,8 @@ struct Task {
 
 class IsomorphicBatchWrite {
 public:
-    explicit IsomorphicBatchWrite(BatchWriteId batch_write_id, bthreads::ThreadPoolExecutor* executor);
+    explicit IsomorphicBatchWrite(BatchWriteId batch_write_id, bthreads::ThreadPoolExecutor* executor,
+                                  TxnStateCache* txn_state_cache);
 
     Status init();
 
@@ -65,10 +67,11 @@ private:
     Status _execute_write(AsyncAppendDataContext* async_ctx);
     Status _write_data_to_pipe(AsyncAppendDataContext* data_ctx);
     Status _send_rpc_request(StreamLoadContext* data_ctx);
-    Status _wait_for_load_status(StreamLoadContext* data_ctx, int64_t timeout_ns);
+    Status _wait_for_load_finish(StreamLoadContext* data_ctx);
 
     BatchWriteId _batch_write_id;
     bthreads::ThreadPoolExecutor* _executor;
+    TxnStateCache* _txn_state_cache;
     bool _batch_write_async{false};
 
     bthread::Mutex _mutex;
