@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.TableName;
+import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
@@ -76,7 +76,7 @@ public class AnalyzeAlterTableStatementTest {
     }
 
     @Test(expected = SemanticException.class)
-    public void testCompactionClause()  {
+    public void testCompactionClause() {
         new MockUp<RunMode>() {
             @Mock
             public RunMode getCurrentRunMode() {
@@ -117,6 +117,63 @@ public class AnalyzeAlterTableStatementTest {
                 .contains(
                         "BITMAP index only used in columns of " +
                                 "DUP_KEYS/PRIMARY_KEYS table or key columns of UNIQUE_KEYS/AGG_KEYS table");
+    }
+
+    @Test
+    public void testCreateIndexWithVector() throws Exception {
+        Config.enable_experimental_vector = true;
+
+        {
+            String sql = "CREATE TABLE t2222 ("
+                    + " c0 INT,"
+                    + " c1 array<float>,"
+                    + " c2 array<float>,"
+                    + " INDEX index_vector1 (c1) USING VECTOR ('metric_type' = 'cosine_similarity', "
+                    + "'is_vector_normed' = 'false', 'M' = '512', 'index_type' = 'hnsw', 'dim'='5') "
+                    + ") "
+                    + "DUPLICATE KEY(c0) "
+                    + "DISTRIBUTED BY HASH(c0) BUCKETS 1 "
+                    + "PROPERTIES ('replication_num'='1');";
+            analyzeSuccess(sql);
+        }
+
+        //        {
+        //            String sql = "CREATE TABLE t2222 ("
+        //                    + " c0 INT,"
+        //                    + " c1 array<float>,"
+        //                    + " c2 array<float>,"
+        //                    + " INDEX index_vector1 (c1) USING VECTOR ('metric_type' = 'cosine_similarity', "
+        //                    + "'is_vector_normed' = 'false', 'M' = '512', 'index_type' = 'hnsw', 'dim'='5') "
+        //                    + ","
+        //                    + " INDEX index_vector2 (c2) USING VECTOR ('metric_type' = 'cosine_similarity', "
+        //                    + "'is_vector_normed' = 'false', 'M' = '512', 'index_type' = 'hnsw', 'dim'='5') "
+        //                    + ") "
+        //                    + "DUPLICATE KEY(c0) "
+        //                    + "DISTRIBUTED BY HASH(c0) BUCKETS 1 "
+        //                    + "PROPERTIES ('replication_num'='1');";
+        //            analyzeSuccess(sql);
+        //        }
+
+        //        {
+        //            String sql = "CREATE TABLE t2222 ("
+        //                    + " c0 INT,"
+        //                    + " c1 array<float>,"
+        //                    + " c2 array<float>,"
+        //                    + " INDEX index_vector1 (c1) USING VECTOR ('metric_type' = 'cosine_similarity', "
+        //                    + "'is_vector_normed' = 'false', 'M' = '512', 'index_type' = 'hnsw', 'dim'='5') "
+        //                    + ") "
+        //                    + "DUPLICATE KEY(c0) "
+        //                    + "DISTRIBUTED BY HASH(c0) BUCKETS 1 "
+        //                    + "PROPERTIES ('replication_num'='1');";
+        //            AnalyzeTestUtil.getStarRocksAssert().withTable(sql);
+        //
+        //            String sql2 = "ALTER TABLE t2222 ADD INDEX index_vector1 (c2) USING VECTOR ('metric_type' = 'cosine_similarity', "
+        //                    + "'is_vector_normed' = 'false', 'M' = '512', 'index_type' = 'hnsw', 'dim'='5')";
+        //            StatementBase statement = SqlParser.parseSingleStatement(sql2, connectContext.getSessionVariable().getSqlMode());
+        //            StmtExecutor stmtExecutor = new StmtExecutor(connectContext, statement);
+        //            stmtExecutor.execute();
+        //            System.out.println(connectContext.getState().getErrorMessage());
+        //        }
     }
 
     @Test
