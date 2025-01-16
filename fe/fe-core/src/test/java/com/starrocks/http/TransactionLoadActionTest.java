@@ -19,8 +19,6 @@ import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.http.rest.ActionStatus;
 import com.starrocks.http.rest.TransactionLoadAction;
@@ -60,7 +58,6 @@ import org.assertj.core.util.Lists;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.junit.AfterClass;
-import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.FixMethodOrder;
 import org.junit.Ignore;
@@ -385,14 +382,12 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                 reqBuilder.addHeader(CHANNEL_NUM_STR, "2");
                 reqBuilder.addHeader(WAREHOUSE_KEY, "non_exist_warehouse");
             });
-            try {
-                networkClient.newCall(request).execute();
-            } catch (Exception e) {
-                Assert.assertTrue(e instanceof ErrorReportException);
-                Assert.assertEquals(ErrorCode.ERR_UNKNOWN_WAREHOUSE, ((ErrorReportException) e).getErrorCode());
-                return;
+            try (Response response = networkClient.newCall(request).execute()) {
+                Map<String, Object> body = parseResponseBody(response);
+                assertEquals(FAILED, body.get(TransactionResult.STATUS_KEY));
+                assertTrue(Objects.toString(body.get(TransactionResult.MESSAGE_KEY))
+                        .contains("Warehouse name: non_exist_warehouse not exist"));
             }
-            Assert.fail("should throw ERR_UNKNOWN_WAREHOUSE exception");
         }
     }
 
