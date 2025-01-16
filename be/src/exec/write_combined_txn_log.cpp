@@ -24,7 +24,7 @@ namespace starrocks {
 
 class TxnLogTask : public Runnable {
 public:
-    TxnLogTask(const CombinedTxnLogPB& logs, lake::TabletManager* tablet_mgr, std::promise<Status> promise)
+    TxnLogTask(const CombinedTxnLogPB logs, lake::TabletManager* tablet_mgr, std::promise<Status> promise)
             : _logs(logs), _tablet_mgr(tablet_mgr), _promise(std::move(promise)) {}
 
     void run() override {

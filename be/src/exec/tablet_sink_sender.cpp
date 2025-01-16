@@ -370,21 +370,13 @@ bool TabletSinkSender::get_immutable_partition_ids(std::set<int64_t>* partition_
 }
 
 Status TabletSinkSender::_write_combined_txn_log() {
-    int64_t t_start = MonotonicMillis();
     if (config::enable_put_combinded_txn_log_parallel) {
-        Status st = write_combined_txn_log(_txn_log_map);
-        if (config::output_combined_txn_log) {
-            LOG(INFO) << "write_combined_txn_log parallel cost time: " << MonotonicMillis() - t_start;
-        }
-        return st;
+        return write_combined_txn_log(_txn_log_map);
     }
 
     for (const auto& [partition_id, logs] : _txn_log_map) {
         (void)partition_id;
         RETURN_IF_ERROR(write_combined_txn_log(logs));
-    }
-    if (config::output_combined_txn_log) {
-        LOG(INFO) << "write_combined_txn_log non-parallel cost time: " << MonotonicMillis() - t_start;
     }
     return Status::OK();
 }
