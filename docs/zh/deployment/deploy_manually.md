@@ -171,68 +171,7 @@ displayed_sidebar: docs
 
 ## 第三步：搭建集群
 
-<<<<<<< HEAD
-Compute Node（CN）是一种无状态的计算服务，本身不存储数据。您可以通过添加 CN 节点为查询提供额外的计算资源。您可以使用 BE 部署文件部署 CN 节点。CN 节点自 v2.4 版本起支持。
-
-1. 进入先前准备好的 [StarRocks BE 部署文件](../deployment/prepare_deployment_files.md)所在路径，修改 CN 配置文件 **be/conf/cn.conf**。
-
-   a. 如果任何在 [环境配置清单](../deployment/environment_configurations.md) 中提到的 CN 端口被占用，您必须在 CN 配置文件中为其分配其他可用端口。.
-
-      ```YAML
-      be_port = vvvv                   # 默认值：9060 （自 v3.1 起，该配置项由 `thrift_port` 更名为 `be_port`。）
-      be_http_port = xxxx              # 默认值：8040
-      heartbeat_service_port = yyyy    # 默认值：9050
-      brpc_port = zzzz                 # 默认值：8060
-      ```
-
-   b. 如需为集群启用 IP 地址访问，您必须在配置文件中添加配置项 `priority_networks`，为 CN 节点分配一个专有的 IP 地址（CIDR格式）。如需为集群启用 FQDN 访问，则可以忽略该配置项。.
-
-      ```YAML
-      priority_networks = x.x.x.x/x
-      ```
-
-      > **说明**
-      >
-      > 您可以在终端中运行 `ifconfig` 以查看当前实例拥有的 IP 地址。
-
-   c. 如果您的实例安装了多个 JDK，并且您要使用 JDK 与环境变量 `JAVA_HOME` 中指定的不同，则必须在配置文件中添加配置项 `JAVA_HOME` 来指定所选该 JDK 的安装路径。
-
-      ```YAML
-      # 将 <path_to_JDK> 替换为所选 JDK 的安装路径。
-      JAVA_HOME = <path_to_JDK>
-      ```
-
-   d.  由于大部分 CN 参数都继承自 BE 节点，您可以参考 [参数配置 - BE 配置项](../administration/management/BE_configuration.md) 了解更多 CN 高级配置项。
-
-2. 启动 CN 节点。
-
-   ```Bash
-   ./be/bin/start_cn.sh --daemon
-   ```
-
-   > **注意**
-   >
-   > - 如需启用 FQDN 访问，在启动 CN 节点之前，请确保您已经在 **/etc/hosts** 中为所有实例分配了主机名。有关详细信息，请参考 [环境配置清单 - 主机名](../deployment/environment_configurations.md#主机名)。
-   > - 启动 CN 节点时无需指定参数 `--host_type`。
-
-3. 查看 CN 日志，检查 CN 节点是否启动成功。
-
-   ```Bash
-   cat be/log/cn.INFO | grep heartbeat
-   ```
-
-   如果日志打印以下内容，则说明该 CN 节点启动成功：
-
-   "I0313 15:03:45.820030 412450 thrift_server.cpp:375] heartbeat has started listening port on 9050"
-
-4. 在其他实例上重复以上步骤，即可启动新的 CN 节点。
-
-## 第四步：搭建集群
-
-当所有 FE、BE、CN 节点启动成功后，即可搭建 StarRocks 集群。
-=======
 当所有 FE 和 BE 节点启动成功后，即可搭建 StarRocks 集群。
->>>>>>> 4b791364b2 ([Doc] Remove CN deployment from shared-nothing (#55138))
 
 以下过程在 MySQL 客户端实例上执行。您必须安装 MySQL 客户端（5.5.0 或更高版本）。
 
