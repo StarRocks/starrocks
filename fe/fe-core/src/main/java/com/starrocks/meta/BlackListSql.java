@@ -14,7 +14,6 @@
 
 package com.starrocks.meta;
 
-import java.util.Objects;
 import java.util.regex.Pattern;
 
 public class BlackListSql {
@@ -25,27 +24,4 @@ public class BlackListSql {
 
     public Pattern pattern;
     public long id;
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
-        BlackListSql that = (BlackListSql) o;
-        if (id != that.id) {
-            return false;
-        }
-        if (this.pattern == null) {
-            return that.pattern == null;
-        }
-        return Objects.equals(pattern.pattern(), that.pattern.pattern());
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(pattern, id);
-    }
 }

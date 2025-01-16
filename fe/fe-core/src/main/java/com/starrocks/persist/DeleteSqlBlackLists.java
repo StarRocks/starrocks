@@ -18,7 +18,6 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.JsonWriter;
 
 import java.util.List;
-import java.util.Objects;
 
 public class DeleteSqlBlackLists extends JsonWriter {
     public DeleteSqlBlackLists(List<Long> ids) {
@@ -27,21 +26,4 @@ public class DeleteSqlBlackLists extends JsonWriter {
 
     @SerializedName("ids")
     public final List<Long> ids;
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
-        DeleteSqlBlackLists that = (DeleteSqlBlackLists) o;
-        return Objects.equals(ids, that.ids);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hashCode(ids);
-    }
 }

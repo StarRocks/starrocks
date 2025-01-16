@@ -17,8 +17,6 @@ package com.starrocks.persist;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.JsonWriter;
 
-import java.util.Objects;
-
 public class SqlBlackListPersistInfo extends JsonWriter {
     public SqlBlackListPersistInfo(long id, String pattern) {
         this.id = id;
@@ -30,21 +28,4 @@ public class SqlBlackListPersistInfo extends JsonWriter {
 
     @SerializedName("pattern")
     public final String pattern;
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
-        SqlBlackListPersistInfo that = (SqlBlackListPersistInfo) o;
-        return id == that.id && Objects.equals(pattern, that.pattern);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(id, pattern);
-    }
 }
