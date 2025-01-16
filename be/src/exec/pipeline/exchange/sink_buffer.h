@@ -50,11 +50,7 @@ struct TransmitChunkInfo {
     // a same exchange source fragment instance, so we should use fragment_instance_id
     // of the destination as the key of destination instead of channel_id.
     TUniqueId fragment_instance_id;
-<<<<<<< HEAD
-    doris::PBackendService_Stub* brpc_stub;
-=======
     std::shared_ptr<PInternalService_RecoverableStub> brpc_stub;
->>>>>>> cddf14194f ([BugFix] Fix brpc continuously fail after backend host restart (#40229))
     PTransmitChunkParamsPtr params;
     butil::IOBuf attachment;
     int64_t attachment_physical_bytes;
