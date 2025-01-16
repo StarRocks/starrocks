@@ -3515,9 +3515,6 @@ TEST_F(FileReaderTest, filter_row_group_with_rf_8) {
 }
 
 TEST_F(FileReaderTest, filter_page_index_with_rf_has_null) {
-    config::parquet_advance_zonemap_filter = false;
-    DeferOp defer([&]() { config::parquet_advance_zonemap_filter = true; });
-
     SlotId slot_id = 1;
     auto file = _create_file(_filter_page_index_with_rf_has_null);
     uint64_t file_size = std::filesystem::file_size(_filter_page_index_with_rf_has_null);
