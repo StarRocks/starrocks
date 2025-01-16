@@ -346,6 +346,10 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> TopNNode::_decompose_to_
                 ->set_tuple_desc(_materialized_tuple_desc);
         down_cast<LocalParallelMergeSortSourceOperatorFactory*>(source_operator.get())->set_is_gathered(need_merge);
     }
+    if (enable_parallel_merge && _tnode.sort_node.__isset.parallel_merge_late_materialize_mode) {
+        down_cast<LocalParallelMergeSortSourceOperatorFactory*>(source_operator.get())
+                ->set_materialized_mode(_tnode.sort_node.parallel_merge_late_materialize_mode);
+    }
 
     ops_sink_with_sort.emplace_back(std::move(sink_operator));
     context->add_pipeline(ops_sink_with_sort);
