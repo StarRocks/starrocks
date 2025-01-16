@@ -541,7 +541,6 @@ StatusOr<HdfsScannerContext*> FileReaderTest::_create_context_for_filter_row_gro
                                     {"col4", TYPE_INT_DESC, 4}, {"col5", TYPE_INT_DESC, 5}, {""}};
     TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     Utils::make_column_info_vector(tuple_desc, &ctx->materialized_columns);
-    ctx->slot_descs = tuple_desc->slots();
     ctx->scan_range = _create_scan_range(_filter_row_group_path_1);
 
     auto* rf_collector = _pool.add(new RuntimeFilterProbeCollector());
@@ -3351,16 +3350,6 @@ TEST_F(FileReaderTest, TestIsNullStatistics) {
     ParquetUTBase::is_null_pred(0, true, &t_conjuncts);
     ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &ctx->conjunct_ctxs_by_slot[0]);
 
-    // setup OlapScanConjunctsManager
-    TypeDescriptor type_array(LogicalType::TYPE_ARRAY);
-    type_array.children.emplace_back(TYPE_INT_DESC);
-    // tuple desc
-    Utils::SlotDesc slot_descs[] = {
-            {"c0", TYPE_INT_DESC}, {"c1", TYPE_INT_DESC}, {"c2", TYPE_VARCHAR_DESC}, {"c3", type_array}, {""},
-    };
-    TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
-    ParquetUTBase::setup_conjuncts_manager(ctx->conjunct_ctxs_by_slot[0], tuple_desc, _runtime_state, ctx);
-
     Status status = file_reader->init(ctx);
     ASSERT_TRUE(status.ok());
     EXPECT_EQ(file_reader->row_group_size(), 0);
@@ -3379,16 +3368,6 @@ TEST_F(FileReaderTest, TestInFilterStatitics) {
     std::vector<TExpr> t_conjuncts;
     ParquetUTBase::create_in_predicate_int_conjunct_ctxs(TExprOpcode::FILTER_IN, 0, in_oprands, &t_conjuncts);
     ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &ctx->conjunct_ctxs_by_slot[0]);
-
-    // setup OlapScanConjunctsManager
-    TypeDescriptor type_array(LogicalType::TYPE_ARRAY);
-    type_array.children.emplace_back(TYPE_INT_DESC);
-    // tuple desc
-    Utils::SlotDesc slot_descs[] = {
-            {"c0", TYPE_INT_DESC}, {"c1", TYPE_INT_DESC}, {"c2", TYPE_VARCHAR_DESC}, {"c3", type_array}, {""},
-    };
-    TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
-    ParquetUTBase::setup_conjuncts_manager(ctx->conjunct_ctxs_by_slot[0], tuple_desc, _runtime_state, ctx);
 
     Status status = file_reader->init(ctx);
     ASSERT_TRUE(status.ok());
