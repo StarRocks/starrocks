@@ -622,11 +622,11 @@ TEST_F(TxnStateCacheTest, cache_set_capacity) {
 }
 
 TEST_F(TxnStateCacheTest, cache_clean_txn_state) {
-    auto cache = create_cache(2048);
     auto old_clean_interval_sec = config::merge_commit_txn_state_clean_interval_sec;
     auto old_expire_time_sec = config::merge_commit_txn_state_expire_time_sec;
     config::merge_commit_txn_state_clean_interval_sec = 1;
     config::merge_commit_txn_state_expire_time_sec = 1;
+    auto cache = create_cache(2048);
     SyncPoint::GetInstance()->EnableProcessing();
     DeferOp defer([&] {
         SyncPoint::GetInstance()->ClearCallBack("TxnStateHandler::destruct");
