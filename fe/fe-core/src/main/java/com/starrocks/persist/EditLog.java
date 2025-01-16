@@ -124,6 +124,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutionException;
+import java.util.regex.Pattern;
 
 /**
  * EditLog maintains a log of the memory modifications.
@@ -1111,6 +1112,17 @@ public class EditLog {
                     globalStateMgr.getClusterSnapshotMgr().replayLog(log);
                     break;
                 }
+                case OperationType.OP_ADD_SQL_QUERY_BLACK_LIST: {
+                    SqlBlackListPersistInfo addBlacklistRequest = (SqlBlackListPersistInfo) journal.data();
+                    GlobalStateMgr.getCurrentState().getSqlBlackList()
+                            .put(addBlacklistRequest.id, Pattern.compile(addBlacklistRequest.pattern));
+                    break;
+                }
+                case OperationType.OP_DELETE_SQL_QUERY_BLACK_LIST: {
+                    DeleteSqlBlackLists deleteBlackListsRequest = (DeleteSqlBlackLists) journal.data();
+                    GlobalStateMgr.getCurrentState().getSqlBlackList().delete(deleteBlackListsRequest.ids);
+                    break;
+                }
                 default: {
                     if (Config.metadata_ignore_unknown_operation_type) {
                         LOG.warn("UNKNOWN Operation Type {}", opCode);
@@ -1794,6 +1806,15 @@ public class EditLog {
     public void logAlterMaterializedViewProperties(ModifyTablePropertyOperationLog log) {
         logEdit(OperationType.OP_ALTER_MATERIALIZED_VIEW_PROPERTIES, log);
     }
+
+    public void logAddSQLBlackList(SqlBlackListPersistInfo addBlackList) {
+        logEdit(OperationType.OP_ADD_SQL_QUERY_BLACK_LIST, addBlackList);
+    }
+
+    public void logDeleteSQLBlackList(DeleteSqlBlackLists deleteBlacklists) {
+        logEdit(OperationType.OP_DELETE_SQL_QUERY_BLACK_LIST, deleteBlacklists);
+    }
+
 
     public void logStarMgrOperation(StarMgrJournal journal) {
         logEdit(OperationType.OP_STARMGR, journal);

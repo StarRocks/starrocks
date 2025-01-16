@@ -99,7 +99,6 @@ import com.starrocks.load.InsertOverwriteJob;
 import com.starrocks.load.InsertOverwriteJobMgr;
 import com.starrocks.load.loadv2.InsertLoadJob;
 import com.starrocks.load.loadv2.LoadJob;
-import com.starrocks.meta.SqlBlackList;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.metric.TableMetricsRegistry;
@@ -108,6 +107,8 @@ import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.mysql.MysqlEofPacket;
 import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.persist.CreateInsertOverwriteJobLog;
+import com.starrocks.persist.DeleteSqlBlackLists;
+import com.starrocks.persist.SqlBlackListPersistInfo;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.planner.FileScanNode;
 import com.starrocks.planner.HiveTableSink;
@@ -631,7 +632,7 @@ public class StmtExecutor {
                     String originSql = origStmt.originStmt.trim()
                             .toLowerCase().replaceAll(" +", " ");
                     // If this sql is in blacklist, show message.
-                    SqlBlackList.verifying(originSql);
+                    GlobalStateMgr.getCurrentState().getSqlBlackList().verifying(originSql);
                 }
             }
 
@@ -1691,7 +1692,9 @@ public class StmtExecutor {
 
     private void handleAddSqlBlackListStmt() {
         AddSqlBlackListStmt addSqlBlackListStmt = (AddSqlBlackListStmt) parsedStmt;
-        SqlBlackList.getInstance().put(addSqlBlackListStmt.getSqlPattern());
+        long id = GlobalStateMgr.getCurrentState().getSqlBlackList().put(addSqlBlackListStmt.getSqlPattern());
+        GlobalStateMgr.getCurrentState().getEditLog()
+                .logAddSQLBlackList(new SqlBlackListPersistInfo(id, addSqlBlackListStmt.getSqlPattern().pattern()));
     }
 
     private void handleDelSqlBlackListStmt() {
@@ -1699,8 +1702,10 @@ public class StmtExecutor {
         List<Long> indexs = delSqlBlackListStmt.getIndexs();
         if (indexs != null) {
             for (long id : indexs) {
-                SqlBlackList.getInstance().delete(id);
+                GlobalStateMgr.getCurrentState().getSqlBlackList().delete(id);
             }
+            GlobalStateMgr.getCurrentState().getEditLog()
+                    .logDeleteSQLBlackList(new DeleteSqlBlackLists(indexs));
         }
     }
 

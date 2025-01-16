@@ -591,6 +591,11 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_CLUSTER_SNAPSHOT_LOG = 13513;
 
+    @IgnorableOnReplayFailed
+    public static final short OP_ADD_SQL_QUERY_BLACK_LIST = 13520;
+    @IgnorableOnReplayFailed
+    public static final short OP_DELETE_SQL_QUERY_BLACK_LIST = 13521;
+
     /**
      * NOTICE: OperationType cannot use a value exceeding 20000, please follow the above sequence number
      */
