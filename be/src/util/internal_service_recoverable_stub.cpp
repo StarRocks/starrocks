@@ -154,11 +154,4 @@ void PInternalService_RecoverableStub::execute_command(::google::protobuf::RpcCo
     _stub->execute_command(controller, request, response, closure);
 }
 
-void PInternalService_RecoverableStub::process_dictionary_cache(
-        ::google::protobuf::RpcController* controller, const ::starrocks::PProcessDictionaryCacheRequest* request,
-        ::starrocks::PProcessDictionaryCacheResult* response, ::google::protobuf::Closure* done) {
-    auto closure = new RecoverableClosure(shared_from_this(), controller, done);
-    _stub->process_dictionary_cache(controller, request, response, closure);
-}
-
 } // namespace starrocks
