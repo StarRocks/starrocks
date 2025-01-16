@@ -42,6 +42,7 @@ protected:
     void _check_equal(const Filter& real, const std::vector<uint8_t>& expect);
 
     using Int32RF = RuntimeBloomFilter<TYPE_INT>;
+    using StringRF = RuntimeBloomFilter<TYPE_VARCHAR>;
     ObjectPool _pool;
 };
 
@@ -50,6 +51,10 @@ void RuntimeBloomFilterTest::_check_equal(const Filter& real, const std::vector<
     for (size_t i = 0; i < real.size(); i++) {
         ASSERT_EQ(real[i], expect[i]);
     }
+}
+
+TEST_F(RuntimeBloomFilterTest, create_with_range) {
+    auto* rf = StringRF::create_with_range<true>(&_pool, "00001");
 }
 
 TEST_F(RuntimeBloomFilterTest, evaluate_with_min_max) {

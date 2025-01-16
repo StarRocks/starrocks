@@ -401,8 +401,13 @@ public:
         p->init(1);
 
         if constexpr (IsSlice<CppType>) {
-            p->_slice_min = val.to_string();
-            val = Slice(p->_slice_min.data(), val.get_size());
+            if constexpr (is_min) {
+                p->_slice_min = val.to_string();
+                val = Slice(p->_slice_min.data(), p->_slice_min.size());
+            } else {
+                p->_slice_max = val.to_string();
+                val = Slice(p->_slice_max.data(), p->_slice_max.data());
+            }
         }
 
         if constexpr (is_min) {
