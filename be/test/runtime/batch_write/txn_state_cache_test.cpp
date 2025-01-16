@@ -621,6 +621,31 @@ TEST_F(TxnStateCacheTest, cache_set_capacity) {
     }
 }
 
+TEST_F(TxnStateCacheTest, cache_clean_txn_state) {
+    auto cache = create_cache(2048);
+    auto old_clean_interval_sec = config::merge_commit_txn_state_clean_interval_sec;
+    auto old_expire_time_sec = config::merge_commit_txn_state_expire_time_sec;
+    config::merge_commit_txn_state_clean_interval_sec = 1;
+    config::merge_commit_txn_state_expire_time_sec = 1;
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([&] {
+        SyncPoint::GetInstance()->ClearCallBack("TxnStateHandler::destruct");
+        SyncPoint::GetInstance()->DisableProcessing();
+        cache->stop();
+        config::merge_commit_txn_state_clean_interval_sec = old_clean_interval_sec;
+        config::merge_commit_txn_state_expire_time_sec = old_expire_time_sec;
+    });
+    std::atomic<int32_t> num_evict = 0;
+    SyncPoint::GetInstance()->SetCallBack("TxnStateHandler::destruct", [&](void* arg) { num_evict += 1; });
+    ASSERT_OK(cache->push_state(1, TTransactionStatus::VISIBLE, ""));
+    ASSERT_OK(cache->push_state(2, TTransactionStatus::VISIBLE, ""));
+    ASSERT_OK(cache->push_state(3, TTransactionStatus::VISIBLE, ""));
+    ASSERT_TRUE(Awaitility().timeout(10000000).until([&] { return num_evict == 3; }));
+    for (auto shard : cache->get_cache_shards()) {
+        ASSERT_EQ(0, shard->object_size());
+    }
+}
+
 TEST_F(TxnStateCacheTest, cache_stop) {
     auto cache = create_cache(2048);
     SyncPoint::GetInstance()->EnableProcessing();

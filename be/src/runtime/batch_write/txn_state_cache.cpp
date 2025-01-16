@@ -350,7 +350,10 @@ TxnStateCache::TxnStateCache(size_t capacity, std::unique_ptr<ThreadPoolToken> p
 
 Status TxnStateCache::init() {
     _txn_state_poller = std::make_unique<TxnStatePoller>(this, _poll_state_token.get());
-    return _txn_state_poller->init();
+    RETURN_IF_ERROR(_txn_state_poller->init());
+    _txn_state_clean_thread = std::make_unique<std::thread>([this] { _txn_state_clean_func(); });
+    Thread::set_thread_name(*_txn_state_clean_thread.get(), "txn_state_clean");
+    return Status::OK();
 }
 
 Status TxnStateCache::push_state(int64_t txn_id, TTransactionStatus::type status, const std::string& reason) {
@@ -420,6 +423,10 @@ void TxnStateCache::stop() {
         _txn_state_poller->stop();
     }
     _poll_state_token->shutdown();
+    _txn_state_clean_stop_latch.count_down();
+    if (_txn_state_clean_thread && _txn_state_clean_thread->joinable()) {
+        _txn_state_clean_thread->join();
+    }
 }
 
 int32_t TxnStateCache::size() {
@@ -446,6 +453,10 @@ StatusOr<TxnStateDynamicCacheEntry*> TxnStateCache::_get_txn_entry(TxnStateDynam
     } else {
         entry = cache->get(txn_id);
     }
+    if (entry) {
+        // expire time does not need very accurate and monotonic, so do not protect it from concurrent update
+        entry->update_expire_time(get_current_ms() + config::merge_commit_txn_state_expire_time_sec * 1000);
+    }
     return entry;
 }
 
@@ -465,6 +476,19 @@ void TxnStateCache::_notify_poll_result(const TxnStatePollTask& task, const Stat
                       << ", continue_poll: " << continue_poll;
     if (continue_poll) {
         _txn_state_poller->submit(task, config::merge_commit_txn_state_poll_interval_ms);
+    }
+}
+
+void TxnStateCache::_txn_state_clean_func() {
+    while (!_stopped) {
+        int32_t clean_interval_sec = config::merge_commit_txn_state_clean_interval_sec;
+        _txn_state_clean_stop_latch.wait_for(std::chrono::seconds(clean_interval_sec));
+        if (_stopped) {
+            break;
+        }
+        for (auto& cache : _shards) {
+            cache->clear_expired();
+        }
     }
 }
 

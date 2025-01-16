@@ -24,6 +24,7 @@
 #include "common/utils.h"
 #include "testutil/sync_point.h"
 #include "util/bthreads/bthread_shared_mutex.h"
+#include "util/countdown_latch.h"
 #include "util/dynamic_cache.h"
 #include "util/threadpool.h"
 #include "util/thrift_rpc_helper.h"
@@ -256,6 +257,7 @@ private:
     StatusOr<TxnStateDynamicCacheEntry*> _get_txn_entry(TxnStateDynamicCache* cache, int64_t txn_id,
                                                         bool create_if_not_exist);
     void _notify_poll_result(const TxnStatePollTask& task, const StatusOr<TxnState>& result);
+    void _txn_state_clean_func();
 
     size_t _capacity;
     std::unique_ptr<ThreadPoolToken> _poll_state_token;
@@ -263,7 +265,11 @@ private:
     std::unique_ptr<TxnStatePoller> _txn_state_poller;
     // protect the cache from being accessed after it is stopped
     bthreads::BThreadSharedMutex _rw_mutex;
-    bool _stopped{false};
+    std::atomic<bool> _stopped{false};
+
+    std::unique_ptr<std::thread> _txn_state_clean_thread;
+    // used to notify the clean thread to stop
+    CountDownLatch _txn_state_clean_stop_latch{1};
 };
 
 inline TxnStateDynamicCache* TxnStateCache::_get_txn_cache(int64_t txn_id) {

@@ -1535,6 +1535,8 @@ CONF_mInt32(merge_commit_rpc_request_retry_interval_ms, "500");
 CONF_mInt32(merge_commit_rpc_reqeust_timeout_ms, "10000");
 CONF_mBool(merge_commit_trace_log_enable, "false");
 CONF_mInt32(merge_commit_txn_state_cache_capacity, "4096");
+CONF_mInt32(merge_commit_txn_state_clean_interval_sec, "300");
+CONF_mInt32(merge_commit_txn_state_expire_time_sec, "1800");
 CONF_mInt32(merge_commit_txn_state_poll_interval_ms, "2000");
 CONF_mInt32(merge_commit_txn_state_poll_max_fail_times, "2");
 
