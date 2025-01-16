@@ -78,10 +78,6 @@ public:
     void execute_command(::google::protobuf::RpcController* controller,
                          const ::starrocks::ExecuteCommandRequestPB* request,
                          ::starrocks::ExecuteCommandResultPB* response, ::google::protobuf::Closure* done);
-    void process_dictionary_cache(::google::protobuf::RpcController* controller,
-                                  const ::starrocks::PProcessDictionaryCacheRequest* request,
-                                  ::starrocks::PProcessDictionaryCacheResult* response,
-                                  ::google::protobuf::Closure* done);
 
 private:
     std::shared_ptr<starrocks::PInternalService_Stub> _stub;
