@@ -242,6 +242,9 @@ void LoadChannel::add_chunks(const PTabletWriterAddChunksRequest& req, PTabletWr
     StarRocksMetrics::instance()->load_channel_add_chunks_eos_total.increment(eos_count);
     StarRocksMetrics::instance()->load_channel_add_chunks_duration_us.increment(total_time_us);
 
+    report_profile(response, config::pipeline_print_profile);
+
+    // log profile if rpc timeout
     if (total_time_us > timeout_ms * 1000) {
         // update profile
         auto channels = _get_all_channels();
@@ -251,10 +254,9 @@ void LoadChannel::add_chunks(const PTabletWriterAddChunksRequest& req, PTabletWr
 
         std::stringstream ss;
         _root_profile->pretty_print(&ss);
-        LOG(WARNING) << "tablet writer add chunk timeout. txn_id=" << _txn_id << ", cost=" << total_time_us / 1000
-                     << "ms, timeout=" << timeout_ms << "ms, profile=" << ss.str();
-    } else {
-        report_profile(response, config::pipeline_print_profile);
+        LOG_EVERY_N(WARNING, timeout_ms > config::load_rpc_slow_log_frequency_threshold_seconds ? 1 : 10)
+                << "tablet writer add chunk timeout. txn_id=" << _txn_id << ", cost=" << total_time_us / 1000
+                << "ms, timeout=" << timeout_ms << "ms, profile=" << ss.str();
     }
 }
 

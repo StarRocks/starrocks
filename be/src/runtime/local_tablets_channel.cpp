@@ -306,12 +306,11 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
 
     // NOTE: Must close sender *AFTER* the write requests submitted, otherwise a delta writer commit request may
     // be executed ahead of the write requests submitted by other senders.
-    auto finish_submit_commit_task_ts = finish_submit_write_task_ts;
     if (request.eos() && _close_sender(request.partition_ids().data(), request.partition_ids_size()) == 0) {
         close_channel = true;
         _commit_tablets(request, context);
-        finish_submit_commit_task_ts = watch.elapsed_time();
     }
+    auto finish_submit_commit_task_ts = watch.elapsed_time();
 
     // Must reset the context pointer before waiting on the |count_down_latch|,
     // because the |count_down_latch| is decreased in the destructor of the context,
@@ -596,6 +595,7 @@ void LocalTabletsChannel::_commit_tablets(const PTabletWriterAddChunkRequest& re
                 } else {
                     auto cb = new WriteCallback(context);
                     delta_writer->commit(cb);
+                    commit_tablet_ids.emplace_back(tablet_id);
                 }
             }
         }
