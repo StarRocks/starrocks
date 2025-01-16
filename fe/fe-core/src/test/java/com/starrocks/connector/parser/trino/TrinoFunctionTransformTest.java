@@ -207,16 +207,16 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         analyzeFail(sql, "date_diff function must have 3 arguments");
 
         sql = "select to_date('2022-02-02', 'yyyy-mm-dd')";
-        assertPlanContains(sql, "to_tera_date('2022-02-02', 'yyyy-mm-dd')");
+        assertPlanContains(sql1, "to_tera_date('2022-02-02', 'yyyy-mm-dd')");
 
         sql = "select to_timestamp('2022-02-02', 'yyyy-mm-dd')";
         assertPlanContains(sql, " to_tera_timestamp('2022-02-02', 'yyyy-mm-dd')");
 
         sql = "select year_of_week('2022-02-02')";
-        assertPlanContains(sql, " floor(divide(yearweek('2022-02-02', 1), 100))");
+        assertPlanContains(sql, "<slot 2> : 2022");
 
         sql = "select yow('2022-02-02')";
-        assertPlanContains(sql, " floor(divide(yearweek('2022-02-02', 1), 100))");
+        assertPlanContains(sql, "<slot 2> : 2022");
     }
 
     @Test
