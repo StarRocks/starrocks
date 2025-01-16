@@ -371,7 +371,8 @@ public:
     MergePathCascadeMerger(const size_t chunk_size, const int32_t degree_of_parallelism,
                            std::vector<ExprContext*> sort_exprs, const SortDescs& sort_descs,
                            const TupleDescriptor* tuple_desc, const TTopNType::type topn_type, const int64_t offset,
-                           const int64_t limit, std::vector<MergePathChunkProvider> chunk_providers);
+                           const int64_t limit, std::vector<MergePathChunkProvider> chunk_providers,
+                           TLateMaterializeMode::type mode = TLateMaterializeMode::AUTO);
     const std::vector<ExprContext*>& sort_exprs() const { return _sort_exprs; }
     const SortDescs& sort_descs() const { return _sort_descs; }
 
@@ -490,6 +491,13 @@ private:
     std::chrono::steady_clock::time_point _pending_start;
     // First pending should not be recorded, because it all comes from the operator dependency
     bool _is_first_pending = true;
+<<<<<<< HEAD
+=======
+
+    TLateMaterializeMode::type _late_materialization_mode;
+
+    starrocks::pipeline::Observable _observable;
+>>>>>>> 37ed8644b ([Enhancement] add  session variable parallel_merge_late_materialization_mode control the parallel merge behaviour (#55082))
 };
 
 } // namespace starrocks::merge_path

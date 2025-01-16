@@ -105,6 +105,7 @@ public:
     void close_stream_recvr();
 
     SourceOperatorFactory::AdaptiveState adaptive_initial_state() const override { return AdaptiveState::ACTIVE; }
+    void set_materialized_mode(TLateMaterializeMode::type mode) { _late_materialize_mode = mode; }
 
 private:
     const int32_t _num_sender;
@@ -114,6 +115,7 @@ private:
     const std::vector<bool>& _nulls_first;
     const int64_t _offset;
     const int64_t _limit;
+    TLateMaterializeMode::type _late_materialize_mode = TLateMaterializeMode::AUTO;
 
     std::shared_ptr<DataStreamRecvr> _stream_recvr;
     std::atomic<int64_t> _stream_recvr_cnt = 0;

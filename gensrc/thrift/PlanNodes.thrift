@@ -788,18 +788,6 @@ enum TAggregationOp {
   PERCENT_RANK
 }
 
-//struct TAggregateFunctionCall {
-  // The aggregate function to call.
-//  1: required Types.TFunction fn
-
-  // The input exprs to this aggregate function
-//  2: required list<Exprs.TExpr> input_exprs
-
-  // If set, this aggregate function udf has varargs and this is the index for the
-  // first variable argument.
-//  3: optional i32 vararg_start_idx
-//}
-
 struct TAggregationNode {
   1: optional list<Exprs.TExpr> grouping_exprs
   // aggregate exprs. The root of each expr is the aggregate function. The
@@ -873,6 +861,12 @@ enum TTopNType {
   DENSE_RANK
 }
 
+enum TLateMaterializeMode {
+  AUTO,
+  ALWAYS,
+  NEVER,
+}
+
 struct TSortNode {
   1: required TSortInfo sort_info
   // Indicates whether the backend service should use topn vs. sorting
@@ -912,6 +906,7 @@ struct TSortNode {
   32: optional list<Exprs.TExpr> pre_agg_exprs;
   33: optional list<Types.TSlotId> pre_agg_output_slot_id;
   34: optional bool pre_agg_insert_local_shuffle;
+  40: optional TLateMaterializeMode parallel_merge_late_materialize_mode;
 }
 
 enum TAnalyticWindowType {
@@ -1070,6 +1065,7 @@ struct TExchangeNode {
   // Sender's partition type
   4: optional Partitions.TPartitionType partition_type;
   5: optional bool enable_parallel_merge
+  6: optional TLateMaterializeMode parallel_merge_late_materialize_mode;
 }
 
 // This contains all of the information computed by the plan as part of the resource
