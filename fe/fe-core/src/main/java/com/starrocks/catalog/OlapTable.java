@@ -3105,8 +3105,7 @@ public class OlapTable extends Table {
      */
     @Override
     public boolean hasForeignKeyConstraints() {
-        return tableProperty != null && tableProperty.getForeignKeyConstraints() != null &&
-                !tableProperty.getForeignKeyConstraints().isEmpty();
+        return tableProperty != null && CollectionUtils.isNotEmpty(getForeignKeyConstraints());
     }
 
     @Override
@@ -3451,7 +3450,7 @@ public class OlapTable extends Table {
 
         // foreign key constraint
         String foreignKeyConstraint = tableProperties.get(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT);
-        if (!Strings.isNullOrEmpty(foreignKeyConstraint)) {
+        if (!Strings.isNullOrEmpty(foreignKeyConstraint) && hasForeignKeyConstraints()) {
             properties.put(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT,
                     ForeignKeyConstraint.getShowCreateTableConstraintDesc(this, getForeignKeyConstraints()));
         }
