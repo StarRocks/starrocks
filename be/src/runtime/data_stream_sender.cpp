@@ -179,11 +179,7 @@ private:
 
     size_t _current_request_bytes = 0;
 
-<<<<<<< HEAD
-    doris::PBackendService_Stub* _brpc_stub = nullptr;
-=======
     std::shared_ptr<PInternalService_RecoverableStub> _brpc_stub;
->>>>>>> cddf14194f ([BugFix] Fix brpc continuously fail after backend host restart (#40229))
 
     int32_t _brpc_timeout_ms = 500;
     // whether the dest can be treated as query statistics transfer chain.
