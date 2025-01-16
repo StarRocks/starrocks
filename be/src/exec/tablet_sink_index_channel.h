@@ -219,11 +219,7 @@ private:
 
     std::unique_ptr<RowDescriptor> _row_desc;
 
-<<<<<<< HEAD
-    doris::PBackendService_Stub* _stub = nullptr;
-=======
     std::shared_ptr<PInternalService_RecoverableStub> _stub;
->>>>>>> cddf14194f ([BugFix] Fix brpc continuously fail after backend host restart (#40229))
     std::vector<RefCountClosure<PTabletWriterOpenResult>*> _open_closures;
 
     std::map<int64_t, std::vector<PTabletWithPartition>> _index_tablets_map;
