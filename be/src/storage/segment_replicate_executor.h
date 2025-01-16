@@ -66,7 +66,7 @@ private:
     const int64_t _node_id;
 
     ReusableClosure<PTabletWriterAddSegmentResult>* _closure = nullptr;
-    doris::PBackendService_Stub* _stub = nullptr;
+    std::shared_ptr<PInternalService_RecoverableStub> _brpc_stub = nullptr;
 
     bool _inited = false;
     Status _st = Status::OK();
