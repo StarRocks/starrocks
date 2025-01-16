@@ -1526,15 +1526,19 @@ CONF_mInt32(apply_version_slow_log_sec, "30");
 CONF_mInt32(merge_commit_stream_load_pipe_block_wait_us, "500");
 // The maximum number of bytes that the merge commit stream load pipe can buffer.
 CONF_mInt64(merge_commit_stream_load_pipe_max_buffered_bytes, "1073741824");
-CONF_Int32(batch_write_thread_pool_num_min, "0");
-CONF_Int32(batch_write_thread_pool_num_max, "512");
-CONF_Int32(batch_write_thread_pool_queue_size, "4096");
-CONF_mInt32(batch_write_default_timeout_ms, "600000");
-CONF_mInt32(batch_write_rpc_request_retry_num, "10");
-CONF_mInt32(batch_write_rpc_request_retry_interval_ms, "500");
-CONF_mInt32(batch_write_rpc_reqeust_timeout_ms, "10000");
-CONF_mInt32(batch_write_poll_load_status_interval_ms, "200");
-CONF_mBool(batch_write_trace_log_enable, "false");
+CONF_Int32(merge_commit_thread_pool_num_min, "0");
+CONF_Int32(merge_commit_thread_pool_num_max, "512");
+CONF_Int32(merge_commit_thread_pool_queue_size, "4096");
+CONF_mInt32(merge_commit_default_timeout_ms, "600000");
+CONF_mInt32(merge_commit_rpc_request_retry_num, "10");
+CONF_mInt32(merge_commit_rpc_request_retry_interval_ms, "500");
+CONF_mInt32(merge_commit_rpc_reqeust_timeout_ms, "10000");
+CONF_mBool(merge_commit_trace_log_enable, "false");
+CONF_mInt32(merge_commit_txn_state_cache_capacity, "4096");
+CONF_mInt32(merge_commit_txn_state_clean_interval_sec, "300");
+CONF_mInt32(merge_commit_txn_state_expire_time_sec, "1800");
+CONF_mInt32(merge_commit_txn_state_poll_interval_ms, "2000");
+CONF_mInt32(merge_commit_txn_state_poll_max_fail_times, "2");
 
 CONF_mBool(enable_load_spill, "false");
 // Max chunk bytes which allow to spill per flush. Default is 10MB.

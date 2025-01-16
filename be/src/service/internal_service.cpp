@@ -1279,7 +1279,16 @@ void PInternalServiceImplBase<T>::stream_load(google::protobuf::RpcController* c
                                               google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
     auto* cntl = static_cast<brpc::Controller*>(cntl_base);
-    BatchWriteMgr::receive_stream_load_rpc(_exec_env, cntl, request, response);
+    _exec_env->batch_write_mgr()->receive_stream_load_rpc(_exec_env, cntl, request, response);
+}
+
+template <typename T>
+void PInternalServiceImplBase<T>::update_transaction_state(google::protobuf::RpcController* cntl_base,
+                                                           const PUpdateTransactionStateRequest* request,
+                                                           PUpdateTransactionStateResponse* response,
+                                                           google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+    _exec_env->batch_write_mgr()->update_transaction_state(request, response);
 }
 
 template class PInternalServiceImplBase<PInternalService>;

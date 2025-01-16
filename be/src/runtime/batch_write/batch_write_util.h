@@ -22,7 +22,7 @@
 
 namespace starrocks {
 
-#define TRACE_BATCH_WRITE LOG_IF(INFO, config::batch_write_trace_log_enable)
+#define TRACE_BATCH_WRITE LOG_IF(INFO, config::merge_commit_trace_log_enable)
 
 using BatchWriteLoadParams = std::map<std::string, std::string>;
 

@@ -33,6 +33,7 @@ public:
     IsomorphicBatchWriteTest() = default;
     ~IsomorphicBatchWriteTest() override = default;
     void SetUp() override {
+        config::merge_commit_trace_log_enable = true;
         _exec_env = ExecEnv::GetInstance();
         std::unique_ptr<ThreadPool> thread_pool;
         ASSERT_OK(ThreadPoolBuilder("IsomorphicBatchWriteTest")
@@ -42,11 +43,21 @@ public:
                           .set_idle_timeout(MonoDelta::FromMilliseconds(10000))
                           .build(&thread_pool));
         _executor = std::make_unique<bthreads::ThreadPoolExecutor>(thread_pool.release(), kTakesOwnership);
+        std::unique_ptr<ThreadPoolToken> token =
+                _executor->get_thread_pool()->new_token(ThreadPool::ExecutionMode::CONCURRENT);
+        _txn_state_cache = std::make_unique<TxnStateCache>(2048, std::move(token));
+        ASSERT_OK(_txn_state_cache->init());
     }
 
     void TearDown() override {
         for (auto* ctx : _to_release_contexts) {
             StreamLoadContext::release(ctx);
+        }
+        if (_txn_state_cache) {
+            _txn_state_cache->stop();
+        }
+        if (_executor) {
+            _executor->get_thread_pool()->shutdown();
         }
     }
 
@@ -84,12 +95,13 @@ public:
         return ctx;
     }
 
-    void test_append_data_sync_base(const Status& rpc_status, const TGetLoadTxnStatusResult& expect_result,
+    void test_append_data_sync_base(int64_t txn_id, std::string label, const TxnState& txn_state,
                                     const Status& expect_st);
 
 protected:
     ExecEnv* _exec_env;
     std::unique_ptr<bthreads::ThreadPoolExecutor> _executor;
+    std::unique_ptr<TxnStateCache> _txn_state_cache;
     std::unordered_set<StreamLoadContext*> _to_release_contexts;
 };
 
@@ -102,7 +114,8 @@ void verify_data(std::string expected, ByteBufferPtr actual) {
 
 TEST_F(IsomorphicBatchWriteTest, register_and_unregister_pipe) {
     BatchWriteId batch_write_id{.db = "db", .table = "table", .load_params = {}};
-    IsomorphicBatchWriteSharedPtr batch_write = std::make_shared<IsomorphicBatchWrite>(batch_write_id, _executor.get());
+    IsomorphicBatchWriteSharedPtr batch_write =
+            std::make_shared<IsomorphicBatchWrite>(batch_write_id, _executor.get(), _txn_state_cache.get());
     ASSERT_OK(batch_write->init());
     DeferOp defer_writer([&] { batch_write->stop(); });
 
@@ -134,7 +147,8 @@ TEST_F(IsomorphicBatchWriteTest, register_and_unregister_pipe) {
 
 TEST_F(IsomorphicBatchWriteTest, append_data_async) {
     BatchWriteId batch_write_id{.db = "db", .table = "table", .load_params = {{HTTP_MERGE_COMMIT_ASYNC, "true"}}};
-    IsomorphicBatchWriteSharedPtr batch_write = std::make_shared<IsomorphicBatchWrite>(batch_write_id, _executor.get());
+    IsomorphicBatchWriteSharedPtr batch_write =
+            std::make_shared<IsomorphicBatchWrite>(batch_write_id, _executor.get(), _txn_state_cache.get());
     ASSERT_OK(batch_write->init());
     DeferOp defer_writer([&] { batch_write->stop(); });
 
@@ -244,34 +258,21 @@ TEST_F(IsomorphicBatchWriteTest, append_data_async) {
 }
 
 TEST_F(IsomorphicBatchWriteTest, append_data_sync) {
-    TGetLoadTxnStatusResult expect_result;
-    expect_result.__set_status(TTransactionStatus::UNKNOWN);
-    test_append_data_sync_base(Status::InternalError("Artificial failure"), expect_result,
-                               Status::InternalError("Failed to get load status, Internal error: Artificial failure"));
-    expect_result.__set_status(TTransactionStatus::PREPARE);
-    test_append_data_sync_base(Status::OK(), expect_result, Status::TimedOut("load timeout, txn status: PREPARE"));
-    expect_result.__set_status(TTransactionStatus::PREPARED);
-    test_append_data_sync_base(Status::OK(), expect_result, Status::TimedOut("load timeout, txn status: PREPARED"));
-    expect_result.__set_status(TTransactionStatus::COMMITTED);
-    test_append_data_sync_base(Status::OK(), expect_result,
+    test_append_data_sync_base(1, "label1", {TTransactionStatus::UNKNOWN, ""},
+                               Status::InternalError("Can't find the transaction, reason: "));
+    test_append_data_sync_base(2, "label2", {TTransactionStatus::COMMITTED, ""},
                                Status::PublishTimeout("Load has not been published before timeout"));
-    expect_result.__set_status(TTransactionStatus::VISIBLE);
-    test_append_data_sync_base(Status::OK(), expect_result, Status::OK());
-    expect_result.__set_status(TTransactionStatus::ABORTED);
-    expect_result.__set_reason("artificial failure");
-    test_append_data_sync_base(Status::OK(), expect_result,
+    test_append_data_sync_base(3, "label3", {TTransactionStatus::VISIBLE, ""}, Status::OK());
+    test_append_data_sync_base(4, "label4", {TTransactionStatus::ABORTED, "artificial failure"},
                                Status::InternalError("Load is aborted, reason: artificial failure"));
-    expect_result.__set_status(TTransactionStatus::UNKNOWN);
-    expect_result.__set_reason("");
-    test_append_data_sync_base(Status::OK(), expect_result, Status::InternalError("Load status is unknown: UNKNOWN"));
 }
 
-void IsomorphicBatchWriteTest::test_append_data_sync_base(const Status& rpc_status,
-                                                          const TGetLoadTxnStatusResult& expect_result,
+void IsomorphicBatchWriteTest::test_append_data_sync_base(int64_t txn_id, std::string label, const TxnState& txn_state,
                                                           const Status& expect_st) {
     BatchWriteId batch_write_id{
             .db = "db", .table = "table", .load_params = {{HTTP_MERGE_COMMIT_ASYNC, "false"}, {HTTP_TIMEOUT, "1"}}};
-    IsomorphicBatchWriteSharedPtr batch_write = std::make_shared<IsomorphicBatchWrite>(batch_write_id, _executor.get());
+    IsomorphicBatchWriteSharedPtr batch_write =
+            std::make_shared<IsomorphicBatchWrite>(batch_write_id, _executor.get(), _txn_state_cache.get());
     ASSERT_OK(batch_write->init());
     DeferOp defer_writer([&] { batch_write->stop(); });
 
@@ -281,9 +282,6 @@ void IsomorphicBatchWriteTest::test_append_data_sync_base(const Status& rpc_stat
         SyncPoint::GetInstance()->ClearCallBack("IsomorphicBatchWrite::send_rpc_request::request");
         SyncPoint::GetInstance()->ClearCallBack("IsomorphicBatchWrite::send_rpc_request::status");
         SyncPoint::GetInstance()->ClearCallBack("IsomorphicBatchWrite::send_rpc_request::response");
-        SyncPoint::GetInstance()->ClearCallBack("IsomorphicBatchWrite::_wait_for_load_status::request");
-        SyncPoint::GetInstance()->ClearCallBack("IsomorphicBatchWrite::_wait_for_load_status::status");
-        SyncPoint::GetInstance()->ClearCallBack("IsomorphicBatchWrite::_wait_for_load_status::response");
         SyncPoint::GetInstance()->DisableProcessing();
     });
 
@@ -293,7 +291,7 @@ void IsomorphicBatchWriteTest::test_append_data_sync_base(const Status& rpc_stat
     SyncPoint::GetInstance()->SetCallBack("TimeBoundedStreamLoadPipe::get_current_ns",
                                           [&](void* arg) { *((int64_t*)arg) = 0; });
     StreamLoadContext* pipe_ctx1 =
-            build_pipe_context("label1", 1, batch_write_id, std::make_shared<TimeBoundedStreamLoadPipe>("p1", 1000));
+            build_pipe_context(label, txn_id, batch_write_id, std::make_shared<TimeBoundedStreamLoadPipe>("p1", 1000));
     SyncPoint::GetInstance()->SetCallBack("IsomorphicBatchWrite::send_rpc_request::status",
                                           [&](void* arg) { *((Status*)arg) = Status::OK(); });
     SyncPoint::GetInstance()->SetCallBack("IsomorphicBatchWrite::send_rpc_request::response", [&](void* arg) {
@@ -301,26 +299,14 @@ void IsomorphicBatchWriteTest::test_append_data_sync_base(const Status& rpc_stat
         TStatus status;
         status.__set_status_code(TStatusCode::OK);
         result->__set_status(status);
-        result->__set_label("label1");
+        result->__set_label(label);
         ASSERT_OK(batch_write->register_stream_load_pipe(pipe_ctx1));
     });
 
     // stream pipe left time is 100ms
     SyncPoint::GetInstance()->SetCallBack("TimeBoundedStreamLoadPipe::get_current_ns",
                                           [&](void* arg) { *((int64_t*)arg) = 900000000; });
-    SyncPoint::GetInstance()->SetCallBack("IsomorphicBatchWrite::_wait_for_load_status::request", [&](void* arg) {
-        TGetLoadTxnStatusRequest* request = (TGetLoadTxnStatusRequest*)arg;
-        EXPECT_EQ(batch_write_id.db, request->db);
-        EXPECT_EQ(batch_write_id.table, request->tbl);
-        EXPECT_EQ(1, request->txnId);
-    });
-    SyncPoint::GetInstance()->SetCallBack("IsomorphicBatchWrite::_wait_for_load_status::status",
-                                          [&](void* arg) { *((Status*)arg) = rpc_status; });
-    SyncPoint::GetInstance()->SetCallBack("IsomorphicBatchWrite::_wait_for_load_status::response", [&](void* arg) {
-        TGetLoadTxnStatusResult* result = (TGetLoadTxnStatusResult*)arg;
-        result->__set_status(expect_result.status);
-        result->__set_reason(expect_result.reason);
-    });
+    ASSERT_OK(_txn_state_cache->push_state(txn_id, txn_state.txn_status, txn_state.reason));
     StreamLoadContext* data_ctx1 = build_data_context(batch_write_id, "data1");
     Status result = batch_write->append_data(data_ctx1);
     ASSERT_EQ(1, num_rpc_request);
@@ -332,7 +318,8 @@ void IsomorphicBatchWriteTest::test_append_data_sync_base(const Status& rpc_stat
 
 TEST_F(IsomorphicBatchWriteTest, stop_write) {
     BatchWriteId batch_write_id{.db = "db", .table = "table", .load_params = {}};
-    IsomorphicBatchWriteSharedPtr batch_write = std::make_shared<IsomorphicBatchWrite>(batch_write_id, _executor.get());
+    IsomorphicBatchWriteSharedPtr batch_write =
+            std::make_shared<IsomorphicBatchWrite>(batch_write_id, _executor.get(), _txn_state_cache.get());
     ASSERT_OK(batch_write->init());
     DeferOp defer_writer([&] { batch_write->stop(); });
 
@@ -362,22 +349,23 @@ TEST_F(IsomorphicBatchWriteTest, stop_write) {
 
 TEST_F(IsomorphicBatchWriteTest, reach_max_rpc_retry) {
     BatchWriteId batch_write_id{.db = "db", .table = "table", .load_params = {{HTTP_MERGE_COMMIT_ASYNC, "true"}}};
-    IsomorphicBatchWriteSharedPtr batch_write = std::make_shared<IsomorphicBatchWrite>(batch_write_id, _executor.get());
+    IsomorphicBatchWriteSharedPtr batch_write =
+            std::make_shared<IsomorphicBatchWrite>(batch_write_id, _executor.get(), _txn_state_cache.get());
     ASSERT_OK(batch_write->init());
     DeferOp defer_writer([&] { batch_write->stop(); });
 
-    auto old_retry_num = config::batch_write_rpc_request_retry_num;
-    auto old_retry_interval = config::batch_write_rpc_request_retry_interval_ms;
-    config::batch_write_rpc_request_retry_num = 5;
-    config::batch_write_rpc_request_retry_interval_ms = 10;
+    auto old_retry_num = config::merge_commit_rpc_request_retry_num;
+    auto old_retry_interval = config::merge_commit_rpc_request_retry_interval_ms;
+    config::merge_commit_rpc_request_retry_num = 5;
+    config::merge_commit_rpc_request_retry_interval_ms = 10;
     SyncPoint::GetInstance()->EnableProcessing();
     DeferOp defer([&]() {
         SyncPoint::GetInstance()->ClearCallBack("IsomorphicBatchWrite::send_rpc_request::request");
         SyncPoint::GetInstance()->ClearCallBack("IsomorphicBatchWrite::send_rpc_request::status");
         SyncPoint::GetInstance()->ClearCallBack("IsomorphicBatchWrite::send_rpc_request::response");
         SyncPoint::GetInstance()->DisableProcessing();
-        config::batch_write_rpc_request_retry_num = old_retry_num;
-        config::batch_write_rpc_request_retry_interval_ms = old_retry_interval;
+        config::merge_commit_rpc_request_retry_num = old_retry_num;
+        config::merge_commit_rpc_request_retry_interval_ms = old_retry_interval;
     });
 
     int num_rpc_request = 0;
@@ -402,22 +390,23 @@ TEST_F(IsomorphicBatchWriteTest, reach_max_rpc_retry) {
 
 TEST_F(IsomorphicBatchWriteTest, stop_retry_if_rpc_failed) {
     BatchWriteId batch_write_id{.db = "db", .table = "table", .load_params = {{HTTP_MERGE_COMMIT_ASYNC, "true"}}};
-    IsomorphicBatchWriteSharedPtr batch_write = std::make_shared<IsomorphicBatchWrite>(batch_write_id, _executor.get());
+    IsomorphicBatchWriteSharedPtr batch_write =
+            std::make_shared<IsomorphicBatchWrite>(batch_write_id, _executor.get(), _txn_state_cache.get());
     ASSERT_OK(batch_write->init());
     DeferOp defer_writer([&] { batch_write->stop(); });
 
-    auto old_retry_num = config::batch_write_rpc_request_retry_num;
-    auto old_retry_interval = config::batch_write_rpc_request_retry_interval_ms;
-    config::batch_write_rpc_request_retry_num = 5;
-    config::batch_write_rpc_request_retry_interval_ms = 10;
+    auto old_retry_num = config::merge_commit_rpc_request_retry_num;
+    auto old_retry_interval = config::merge_commit_rpc_request_retry_interval_ms;
+    config::merge_commit_rpc_request_retry_num = 5;
+    config::merge_commit_rpc_request_retry_interval_ms = 10;
     SyncPoint::GetInstance()->EnableProcessing();
     DeferOp defer([&]() {
         SyncPoint::GetInstance()->ClearCallBack("IsomorphicBatchWrite::send_rpc_request::request");
         SyncPoint::GetInstance()->ClearCallBack("IsomorphicBatchWrite::send_rpc_request::status");
         SyncPoint::GetInstance()->ClearCallBack("IsomorphicBatchWrite::send_rpc_request::response");
         SyncPoint::GetInstance()->DisableProcessing();
-        config::batch_write_rpc_request_retry_num = old_retry_num;
-        config::batch_write_rpc_request_retry_interval_ms = old_retry_interval;
+        config::merge_commit_rpc_request_retry_num = old_retry_num;
+        config::merge_commit_rpc_request_retry_interval_ms = old_retry_interval;
     });
 
     // rpc failed
