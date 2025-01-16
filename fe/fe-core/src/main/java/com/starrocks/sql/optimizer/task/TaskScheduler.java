@@ -79,11 +79,10 @@ public class TaskScheduler {
         executeTasks(rootTaskContext);
     }
 
-    public boolean rewriteOnce(OptExpression tree, TaskContext rootTaskContext, Rule rule) {
+    public void rewriteOnce(OptExpression tree, TaskContext rootTaskContext, Rule rule) {
         RewriteTreeTask rewriteTreeTask = new RewriteTreeTask(rootTaskContext, tree, rule, true);
         pushTask(rewriteTreeTask);
         executeTasks(rootTaskContext);
-        return rewriteTreeTask.hasChange();
     }
 
     public void rewriteAtMostOnce(OptExpression tree, TaskContext rootTaskContext, Rule rule) {

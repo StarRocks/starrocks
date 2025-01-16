@@ -124,7 +124,7 @@ public class RewriteTreeTask extends OptimizerTask {
         }
 
         if (!pattern.children().isEmpty() && pattern.children().size() != root.getInputs().size() &&
-                pattern.children().stream().noneMatch(Pattern::isPatternMultiLeaf)) {
+                pattern.children().stream().noneMatch(p -> p.is(OperatorType.PATTERN_MULTI_LEAF))) {
             return false;
         }
         int patternIndex = 0;
@@ -138,7 +138,7 @@ public class RewriteTreeTask extends OptimizerTask {
                 return false;
             }
 
-            if (!(childPattern.isPatternMultiLeaf() && (root.getInputs().size() - childIndex) >
+            if (!(childPattern.is(OperatorType.PATTERN_MULTI_LEAF) && (root.getInputs().size() - childIndex) >
                     (pattern.children().size() - patternIndex))) {
                 patternIndex++;
             }

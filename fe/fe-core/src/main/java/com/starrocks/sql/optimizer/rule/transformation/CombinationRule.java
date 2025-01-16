@@ -14,37 +14,38 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
+import com.google.common.collect.Sets;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.pattern.OpPattern;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 
 public class CombinationRule extends TransformationRule {
     private final List<Rule> rules;
-    private int patternHash = 0;
+    private final Set<OperatorType> ops = Sets.newHashSet();
 
     public CombinationRule(RuleType ruleType, List<Rule> rules) {
         super(ruleType, Pattern.create(OperatorType.PATTERN_LEAF));
         this.rules = rules;
 
-        if (rules.stream().anyMatch(rule -> rule.getPattern().getOpType().ordinal() > OperatorType.PATTERN.ordinal())) {
-            patternHash = Integer.MAX_VALUE;
-        } else {
+        if (rules.stream().allMatch(rule -> rule.getPattern().isFixedPattern())) {
             for (Rule rule : rules) {
-                OperatorType type = rule.getPattern().getOpType();
-                patternHash = patternHash | type.hashCode();
+                OperatorType type = ((OpPattern) rule.getPattern()).getOpType();
+                ops.add(type);
             }
         }
     }
 
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
-        return (patternHash & input.getOp().getOpType().hashCode()) != 0;
+        return ops.isEmpty() || ops.contains(input.getOp().getOpType());
     }
 
     @Override

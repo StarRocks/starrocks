@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -25,6 +26,7 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
+import com.starrocks.sql.optimizer.operator.pattern.MultiOpPattern;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -38,44 +40,28 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public class PushDownPredicateScanRule extends TransformationRule {
-    public static final PushDownPredicateScanRule OLAP_SCAN =
-            new PushDownPredicateScanRule(OperatorType.LOGICAL_OLAP_SCAN);
-    public static final PushDownPredicateScanRule HIVE_SCAN =
-            new PushDownPredicateScanRule(OperatorType.LOGICAL_HIVE_SCAN);
-    public static final PushDownPredicateScanRule ICEBERG_SCAN =
-            new PushDownPredicateScanRule(OperatorType.LOGICAL_ICEBERG_SCAN);
-    public static final PushDownPredicateScanRule HUDI_SCAN =
-            new PushDownPredicateScanRule(OperatorType.LOGICAL_HUDI_SCAN);
-    public static final PushDownPredicateScanRule DELTALAKE_SCAN =
-            new PushDownPredicateScanRule(OperatorType.LOGICAL_DELTALAKE_SCAN);
-    public static final PushDownPredicateScanRule FILE_SCAN =
-            new PushDownPredicateScanRule(OperatorType.LOGICAL_FILE_SCAN);
-    public static final PushDownPredicateScanRule PAIMON_SCAN =
-            new PushDownPredicateScanRule(OperatorType.LOGICAL_PAIMON_SCAN);
-    public static final PushDownPredicateScanRule ICEBERG_METADATA_SCAN =
-            new PushDownPredicateScanRule(OperatorType.LOGICAL_ICEBERG_METADATA_SCAN);
+    private static final ImmutableSet<OperatorType> SUPPORT = ImmutableSet.of(
+            OperatorType.LOGICAL_OLAP_SCAN,
+            OperatorType.LOGICAL_HIVE_SCAN,
+            OperatorType.LOGICAL_ICEBERG_SCAN,
+            OperatorType.LOGICAL_HUDI_SCAN,
+            OperatorType.LOGICAL_DELTALAKE_SCAN,
+            OperatorType.LOGICAL_FILE_SCAN,
+            OperatorType.LOGICAL_PAIMON_SCAN,
+            OperatorType.LOGICAL_ICEBERG_METADATA_SCAN,
+            OperatorType.LOGICAL_ICEBERG_EQUALITY_DELETE_SCAN,
+            OperatorType.LOGICAL_KUDU_SCAN,
+            OperatorType.LOGICAL_SCHEMA_SCAN,
+            OperatorType.LOGICAL_ES_SCAN,
+            OperatorType.LOGICAL_META_SCAN,
+            OperatorType.LOGICAL_BINLOG_SCAN,
+            OperatorType.LOGICAL_VIEW_SCAN,
+            OperatorType.LOGICAL_TABLE_FUNCTION_TABLE_SCAN
+    );
 
-    public static final PushDownPredicateScanRule ICEBERG_EQUALITY_DELETE_SCAN =
-            new PushDownPredicateScanRule(OperatorType.LOGICAL_ICEBERG_EQUALITY_DELETE_SCAN);
-    public static final PushDownPredicateScanRule KUDU_SCAN =
-            new PushDownPredicateScanRule(OperatorType.LOGICAL_KUDU_SCAN);
-    public static final PushDownPredicateScanRule SCHEMA_SCAN =
-            new PushDownPredicateScanRule(OperatorType.LOGICAL_SCHEMA_SCAN);
-    public static final PushDownPredicateScanRule ES_SCAN = new PushDownPredicateScanRule(OperatorType.LOGICAL_ES_SCAN);
-    public static final PushDownPredicateScanRule META_SCAN =
-            new PushDownPredicateScanRule(OperatorType.LOGICAL_META_SCAN);
-    public static final PushDownPredicateScanRule JDBC_SCAN =
-            new PushDownPredicateScanRule(OperatorType.LOGICAL_JDBC_SCAN);
-    public static final PushDownPredicateScanRule BINLOG_SCAN =
-            new PushDownPredicateScanRule(OperatorType.LOGICAL_BINLOG_SCAN);
-    public static final PushDownPredicateScanRule VIEW_SCAN =
-            new PushDownPredicateScanRule(OperatorType.LOGICAL_VIEW_SCAN);
-
-    public static final PushDownPredicateScanRule TABLE_FUNCTION_TABLE_SCAN =
-            new PushDownPredicateScanRule(OperatorType.LOGICAL_TABLE_FUNCTION_TABLE_SCAN);
-
-    public PushDownPredicateScanRule(OperatorType type) {
-        super(RuleType.TF_PUSH_DOWN_PREDICATE_SCAN, Pattern.create(OperatorType.LOGICAL_FILTER, type));
+    public PushDownPredicateScanRule() {
+        super(RuleType.TF_PUSH_DOWN_PREDICATE_SCAN, Pattern.create(OperatorType.LOGICAL_FILTER).addChildren(
+                MultiOpPattern.of(SUPPORT)));
     }
 
     @Override
@@ -84,9 +70,6 @@ public class PushDownPredicateScanRule extends TransformationRule {
 
         OptExpression scan = input.getInputs().get(0);
         LogicalScanOperator logicalScanOperator = (LogicalScanOperator) scan.getOp();
-
-        ScalarOperator scanPredicate = logicalScanOperator.getPredicate();
-        ScalarOperator filterPredicate = lfo.getPredicate();
 
         ScalarOperatorRewriter scalarOperatorRewriter = new ScalarOperatorRewriter();
         ScalarOperator predicates = Utils.compoundAnd(lfo.getPredicate(), logicalScanOperator.getPredicate());
