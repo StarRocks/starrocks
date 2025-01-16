@@ -54,7 +54,21 @@ void RuntimeBloomFilterTest::_check_equal(const Filter& real, const std::vector<
 }
 
 TEST_F(RuntimeBloomFilterTest, create_with_range) {
-    auto* rf = StringRF::create_with_range<true>(&_pool, "00001");
+    auto* rf = StringRF::create_with_range<true>(&_pool, "00001", true);
+    ASSERT_EQ(rf->min_value(&_pool), Slice("00001"));
+    ASSERT_TRUE(rf->left_close_interval());
+
+    rf = StringRF::create_with_range<false>(&_pool, "00009", true);
+    ASSERT_EQ(rf->max_value(&_pool), Slice("00009"));
+    ASSERT_TRUE(rf->right_close_interval());
+
+    auto* int_rf = Int32RF::create_with_range<true>(&_pool, 1, true);
+    ASSERT_EQ(int_rf->min_value(&_pool), 1);
+    ASSERT_TRUE(int_rf->left_close_interval());
+
+    int_rf = Int32RF ::create_with_range<false>(&_pool, 9, true);
+    ASSERT_EQ(int_rf->min_value(&_pool), 9);
+    ASSERT_TRUE(int_rf->right_close_interval());
 }
 
 TEST_F(RuntimeBloomFilterTest, evaluate_with_min_max) {
@@ -145,10 +159,10 @@ TEST_F(RuntimeBloomFilterTest, create_with_full_range_without_null) {
     ASSERT_FALSE(rf->has_null());
 }
 
-TEST_F(RuntimeBloomFilterTest, create_with_range) {
+TEST_F(RuntimeBloomFilterTest, create_with_range_nullable) {
     auto* rf = Int32RF::create_with_range<true>(&_pool, 10, true, true);
-    ASSERT_EQ(rf->min_value(), 10);
-    ASSERT_EQ(rf->max_value(), std::numeric_limits<int32_t>::max());
+    ASSERT_EQ(rf->min_value(&_pool), 10);
+    ASSERT_EQ(rf->max_value(&_pool), std::numeric_limits<int32_t>::max());
     ASSERT_TRUE(rf->has_null());
 }
 

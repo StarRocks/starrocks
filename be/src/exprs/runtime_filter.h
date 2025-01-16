@@ -513,7 +513,7 @@ public:
     CppType min_value(ObjectPool* pool) const {
         if constexpr (IsSlice<CppType>) {
             std::lock_guard<std::mutex> lk(_slice_mutex);
-            auto* str = pool->template add(new std::string(_slice_min));
+            auto* str = pool->template add(new std::string(_min.get_data(), _min.get_size()));
             return Slice(*str);
         } else {
             return _min;
@@ -523,7 +523,7 @@ public:
     CppType max_value(ObjectPool* pool) const {
         if constexpr (IsSlice<CppType>) {
             std::lock_guard<std::mutex> lk(_slice_mutex);
-            auto* str = pool->template add(new std::string(_slice_max));
+            auto* str = pool->template add(new std::string(_max.get_data(), _max.get_size()));
             return Slice(*str);
         } else {
             return _max;
