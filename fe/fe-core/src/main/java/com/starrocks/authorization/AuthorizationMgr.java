@@ -210,7 +210,9 @@ public class AuthorizationMgr {
                     ObjectType.FUNCTION,
                     ObjectType.GLOBAL_FUNCTION,
                     ObjectType.STORAGE_VOLUME,
-                    ObjectType.PIPE)) {
+                    ObjectType.PIPE,
+                    // EMR feature: grant warehouse usage to db_admin role
+                    ObjectType.WAREHOUSE)) {
                 initPrivilegeCollectionAllObjects(rolePrivilegeCollection, t, provider.getAvailablePrivType(t));
             }
             rolePrivilegeCollection.disableMutable(); // not mutable
