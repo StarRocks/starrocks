@@ -52,6 +52,8 @@
 #include "http/http_headers.h"
 #include "http/http_request.h"
 #include "http/http_status.h"
+#include "runtime/batch_write/batch_write_mgr.h"
+#include "runtime/batch_write/txn_state_cache.h"
 #include "storage/compaction_manager.h"
 #include "storage/lake/compaction_scheduler.h"
 #include "storage/lake/tablet_manager.h"
@@ -313,6 +315,14 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             auto tablet_manager = _exec_env->lake_tablet_manager();
             if (tablet_manager != nullptr) {
                 tablet_manager->compaction_scheduler()->update_compact_threads(config::compact_threads);
+            }
+            return Status::OK();
+        });
+        _config_callback.emplace("merge_commit_txn_state_cache_capacity", [&]() -> Status {
+            LOG(INFO) << "set merge_commit_txn_state_cache_capacity: " << config::merge_commit_txn_state_cache_capacity;
+            auto batch_write_mgr = _exec_env->batch_write_mgr();
+            if (batch_write_mgr) {
+                batch_write_mgr->txn_state_cache()->set_capacity(config::merge_commit_txn_state_cache_capacity);
             }
             return Status::OK();
         });
