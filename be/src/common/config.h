@@ -1545,6 +1545,8 @@ CONF_mInt64(load_spill_max_merge_bytes, "1073741824");
 CONF_mInt64(load_spill_merge_memory_limit_percent, "30");
 // Upper bound of spill merge thread count
 CONF_mInt64(load_spill_merge_max_thread, "16");
+// Do lazy load when PK column larger than this threshold. Default is 300MB.
+CONF_mInt64(pk_column_lazy_load_threshold_bytes, "314572800");
 
 // ignore union type tag in avro kafka routine load
 CONF_mBool(avro_ignore_union_type_tag, "false");

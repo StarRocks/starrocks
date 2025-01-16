@@ -71,7 +71,7 @@ protected:
     explicit TestBase(std::string test_dir, int64_t cache_limit = 1024 * 1024)
             : _test_dir(std::move(test_dir)),
               _parent_tracker(std::make_unique<MemTracker>(-1)),
-              _mem_tracker(std::make_unique<MemTracker>(1024 * 1024, "", _parent_tracker.get())),
+              _mem_tracker(std::make_unique<MemTracker>(10 * 1024 * 1024, "", _parent_tracker.get())),
               _lp(std::make_shared<FixedLocationProvider>(_test_dir)),
               _update_mgr(std::make_unique<UpdateManager>(_lp, _mem_tracker.get())),
               _tablet_mgr(std::make_unique<TabletManager>(_lp, _update_mgr.get(), cache_limit)) {}
