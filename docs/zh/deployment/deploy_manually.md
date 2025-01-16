@@ -169,66 +169,9 @@ displayed_sidebar: docs
 >
 > 在一个 StarRocks 集群中部署并添加至少 3 个 BE 节点后，这些节点将自动形成一个 BE 高可用集群。
 
-## 第三步：（可选）启动 CN 服务
+## 第三步：搭建集群
 
-Compute Node（CN）是一种无状态的计算服务，本身不存储数据。您可以通过添加 CN 节点为查询提供额外的计算资源。您可以使用 BE 部署文件部署 CN 节点。CN 节点自 v2.4 版本起支持。
-
-1. 进入先前准备好的 [StarRocks BE 部署文件](../deployment/prepare_deployment_files.md)所在路径，修改 CN 配置文件 **be/conf/cn.conf**。
-
-   a. 如果任何在 [环境配置清单](../deployment/environment_configurations.md) 中提到的 CN 端口被占用，您必须在 CN 配置文件中为其分配其他可用端口。.
-
-      ```YAML
-      be_port = vvvv                   # 默认值：9060 （自 v3.1 起，该配置项由 `thrift_port` 更名为 `be_port`。）
-      be_http_port = xxxx              # 默认值：8040
-      heartbeat_service_port = yyyy    # 默认值：9050
-      brpc_port = zzzz                 # 默认值：8060
-      ```
-
-   b. 如需为集群启用 IP 地址访问，您必须在配置文件中添加配置项 `priority_networks`，为 CN 节点分配一个专有的 IP 地址（CIDR格式）。如需为集群启用 FQDN 访问，则可以忽略该配置项。.
-
-      ```YAML
-      priority_networks = x.x.x.x/x
-      ```
-
-      > **说明**
-      >
-      > 您可以在终端中运行 `ifconfig` 以查看当前实例拥有的 IP 地址。
-
-   c. 如果您的实例安装了多个 JDK，并且您要使用 JDK 与环境变量 `JAVA_HOME` 中指定的不同，则必须在配置文件中添加配置项 `JAVA_HOME` 来指定所选该 JDK 的安装路径。
-
-      ```YAML
-      # 将 <path_to_JDK> 替换为所选 JDK 的安装路径。
-      JAVA_HOME = <path_to_JDK>
-      ```
-
-   d.  由于大部分 CN 参数都继承自 BE 节点，您可以参考 [参数配置 - BE 配置项](../administration/management/BE_configuration.md) 了解更多 CN 高级配置项。
-
-2. 启动 CN 节点。
-
-   ```Bash
-   ./be/bin/start_cn.sh --daemon
-   ```
-
-   > **注意**
-   >
-   > - 如需启用 FQDN 访问，在启动 CN 节点之前，请确保您已经在 **/etc/hosts** 中为所有实例分配了主机名。有关详细信息，请参考 [环境配置清单 - 主机名](../deployment/environment_configurations.md#主机名)。
-   > - 启动 CN 节点时无需指定参数 `--host_type`。
-
-3. 查看 CN 日志，检查 CN 节点是否启动成功。
-
-   ```Bash
-   cat be/log/cn.INFO | grep heartbeat
-   ```
-
-   如果日志打印以下内容，则说明该 CN 节点启动成功：
-
-   "I0313 15:03:45.820030 412450 thrift_server.cpp:375] heartbeat has started listening port on 9050"
-
-4. 在其他实例上重复以上步骤，即可启动新的 CN 节点。
-
-## 第四步：搭建集群
-
-当所有 FE、BE、CN 节点启动成功后，即可搭建 StarRocks 集群。
+当所有 FE 和 BE 节点启动成功后，即可搭建 StarRocks 集群。
 
 以下过程在 MySQL 客户端实例上执行。您必须安装 MySQL 客户端（5.5.0 或更高版本）。
 
@@ -327,51 +270,7 @@ Compute Node（CN）是一种无状态的计算服务，本身不存储数据。
 
    如果字段 `Alive` 为 `true`，说明该 BE 节点正常启动并加入集群。
 
-5. （可选）添加 CN 节点至集群。
-
-   ```SQL
-   -- 将 <cn_address> 替换为 CN 节点的 IP 地址（priority_networks）或 FQDN，
-   -- 并将 <heartbeat_service_port>（默认：9050）替换为您在 cn.conf 中指定的 heartbeat_service_port。
-   ALTER SYSTEM ADD COMPUTE NODE "<cn_address>:<heartbeat_service_port>", "<cn2_address>:<heartbeat_service_port>", "<cn3_address>:<heartbeat_service_port>";
-   ```
-
-   > **说明**
-   >
-   > 您可以通过一条 SQL 添加多个 CN 节点。每对 `<cn_address>:<heartbeat_service_port>` 代表一个 CN 节点。
-
-6. （可选）执行以下 SQL 查看 CN 节点状态。
-
-   ```SQL
-   SHOW PROC '/compute_nodes'\G
-   ```
-
-   示例：
-
-   ```Plain
-   MySQL [(none)]> SHOW PROC '/compute_nodes'\G
-   *************************** 1. row ***************************
-           ComputeNodeId: 10003
-                      IP: x.x.x.x
-           HeartbeatPort: 9050
-                  BePort: 9060
-                HttpPort: 8040
-                BrpcPort: 8060
-           LastStartTime: 2023-03-13 15:11:13
-           LastHeartbeat: 2023-03-13 15:11:13
-                   Alive: true
-    SystemDecommissioned: false
-   ClusterDecommissioned: false
-                  ErrMsg: 
-                 Version: 2.5.2-c3772fb
-   1 row in set (0.00 sec)
-   ```
-
-   如果字段 `Alive` 为 `true`，说明该 CN 节点正常启动并加入集群。
-
-   如果执行查询时需要使用 CN 节点扩展算力，则需要设置系统变量 `SET
-prefer_compute_node = true;` 和 `SET use_compute_nodes = -1;`。系统变量的更多信息，请参见[系统变量](../sql-reference/System_variable.md#支持的变量)。
-
-## 第五步：（可选）部署高可用 FE 集群
+## 第四步：（可选）部署高可用 FE 集群
 
 高可用的 FE 集群需要在 StarRocks 集群中部署至少三个 Follower FE 节点。如需部署高可用的 FE 集群，您需要额外再启动两个新的 FE 节点。
 
@@ -519,15 +418,9 @@ prefer_compute_node = true;` 和 `SET use_compute_nodes = -1;`。系统变量的
   ./be/bin/stop_be.sh --daemon
   ```
 
-- 停止 CN 节点。
-
-  ```Bash
-  ./be/bin/stop_cn.sh --daemon
-  ```
-
 ## 故障排除
 
-如果启动 FE、BE 或 CN 节点失败，尝试以下步骤来发现问题：
+如果启动 FE 或 BE 节点失败，尝试以下步骤来发现问题：
 
 - 如果 FE 节点没有正常启动，您可以通过查看 **fe/log/fe.warn.log** 中的日志来确定问题所在。
 
@@ -544,14 +437,6 @@ prefer_compute_node = true;` 和 `SET use_compute_nodes = -1;`。系统变量的
   ```
 
   确定并解决问题后，您首先需要终止当前 BE 进程，删除现有的 **storage** 路径，新建数据存储路径，然后以正确的配置重启该 BE 节点。
-
-- 如果 CN 节点没有正常启动，您可以通过查看 **be/log/cn.WARNING** 中的日志来确定问题所在。
-
-  ```Bash
-  cat be/log/cn.WARNING
-  ```
-
-  确定并解决问题后，您首先需要终止当前 CN 进程，然后以正确的配置重启该 CN 节点。
 
 ## 下一步
 
