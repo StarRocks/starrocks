@@ -22,6 +22,7 @@ import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.http.rest.transaction.TransactionOperationParams.Channel;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.lang3.Validate;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -57,9 +58,18 @@ public class TransactionWithChannelHandler implements TransactionOperationHandle
                     throw new DdlException(String.format(
                             "Channel ID should be between [0, %d].", (channel.getNum() - 1)));
                 }
+<<<<<<< HEAD
 
                 GlobalStateMgr.getCurrentState().getStreamLoadMgr().beginLoadTask(
                         dbName, tableName, label, "", "", timeoutMillis, channel.getNum(), channel.getId(), result);
+=======
+                String warehouseName = txnOperationParams.getWarehouseName();
+                Warehouse warehouse =
+                        GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName);
+                GlobalStateMgr.getCurrentState().getStreamLoadMgr().beginLoadTaskFromFrontend(
+                        dbName, tableName, label, "", "", timeoutMillis, channel.getNum(), channel.getId(), result,
+                        warehouse.getId());
+>>>>>>> c2c766692 ([BugFix] Fix warehouse property might not take effect when executing load stmts (#49684))
                 return new ResultWrapper(result);
             case TXN_PREPARE:
                 GlobalStateMgr.getCurrentState().getStreamLoadMgr().prepareLoadTask(
