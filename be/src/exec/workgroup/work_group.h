@@ -107,6 +107,7 @@ struct RunningQueryToken {
 public:
     RunningQueryToken(WorkGroupPtr wg) : wg(std::move(wg)) {}
     ~RunningQueryToken();
+    WorkGroupPtr get_wg() { return wg; }
 
 private:
     WorkGroupPtr wg;
@@ -133,6 +134,7 @@ public:
     void copy_metrics(const WorkGroup& rhs);
 
     MemTracker* mem_tracker() { return _mem_tracker.get(); }
+    std::shared_ptr<MemTracker> grab_mem_tracker() { return _mem_tracker; }
     const MemTracker* mem_tracker() const { return _mem_tracker.get(); }
 
     int64_t id() const { return _id; }

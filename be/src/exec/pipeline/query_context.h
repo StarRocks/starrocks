@@ -246,7 +246,10 @@ private:
     int64_t _big_query_profile_threshold_ns = 0;
     int64_t _runtime_profile_report_interval_ns = std::numeric_limits<int64_t>::max();
     TPipelineProfileLevel::type _profile_level;
+<<<<<<< HEAD
     std::shared_ptr<MemTracker> _mem_tracker;
+=======
+>>>>>>> 957ecfe9c0 ([BugFix] destruct workgroup's MemTracker prematurely (#55134))
     ObjectPool _object_pool;
     DescriptorTbl* _desc_tbl = nullptr;
     std::once_flag _query_trace_init_flag;
@@ -280,8 +283,14 @@ private:
     std::shared_ptr<QueryStatisticsRecvr> _sub_plan_query_statistics_recvr; // For receive
 
     int64_t _scan_limit = 0;
+    // _wg_mem_tracker is used to grab mem_tracker in workgroup to prevent it from
+    // being released prematurely in FragmentContext::cancel, otherwise accessing
+    // workgroup's mem_tracker in QueryContext's dtor shall cause segmentation fault.
+    std::shared_ptr<MemTracker> _wg_mem_tracker = nullptr;
     workgroup::RunningQueryTokenPtr _wg_running_query_token_ptr;
     std::atomic<workgroup::RunningQueryToken*> _wg_running_query_token_atomic_ptr = nullptr;
+    std::shared_ptr<MemTracker> _mem_tracker;
+    std::shared_ptr<MemTracker> _connector_scan_mem_tracker;
 
     // STREAM MV
     std::shared_ptr<StreamEpochManager> _stream_epoch_manager;
