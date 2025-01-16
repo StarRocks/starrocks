@@ -1,4 +1,8 @@
 -- name: test_try_index_out_of_bound
-trino: select try(cast(1 as tinyint));
+set sql_dialect='trino';
 -- result:
-NULL
+-- !result
+select try(array[1, 2, 3][4]);
+-- result:
+None
+-- !result
