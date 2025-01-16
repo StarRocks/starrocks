@@ -99,6 +99,8 @@ public class SRMetaBlockID {
 
     public static final SRMetaBlockID CLUSTER_SNAPSHOT_MGR = new SRMetaBlockID(33);
 
+    public static final SRMetaBlockID BLACKLIST_MGR = new SRMetaBlockID(34);
+
     /**
      * NOTICE: SRMetaBlockID cannot use a value exceeding 20000, please follow the above sequence number
      */
