@@ -87,23 +87,17 @@ int RuntimeFilterHelper::deserialize_runtime_filter(ObjectPool* pool, JoinRuntim
     uint8_t version = 0;
     memcpy(&version, data, sizeof(version));
     offset += sizeof(version);
-    if (version != RF_VERSION && version != RF_VERSION_V2) {
+    if (version != RF_VERSION_V2) {
         // version mismatch and skip this chunk.
         LOG(WARNING) << "unrecognized version:" << version;
         return 0;
     }
 
     // peek logical type.
-    LogicalType ltype = TYPE_UNKNOWN;
-    if (version == RF_VERSION) {
-        RuntimeFilterSerializeType::PrimitiveType type;
-        memcpy(&type, data + offset, sizeof(type));
-        ltype = RuntimeFilterSerializeType::from_serialize_type(type);
-    } else {
-        TPrimitiveType::type type;
-        memcpy(&type, data + offset, sizeof(type));
-        ltype = thrift_to_type(type);
-    }
+    TPrimitiveType::type type;
+    memcpy(&type, data + offset, sizeof(type));
+    LogicalType ltype = thrift_to_type(type);
+
     JoinRuntimeFilter* filter = create_join_runtime_filter(pool, ltype);
     DCHECK(filter != nullptr);
     if (filter != nullptr) {
