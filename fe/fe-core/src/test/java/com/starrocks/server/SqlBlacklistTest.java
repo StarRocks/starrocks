@@ -69,6 +69,7 @@ public class SqlBlacklistTest {
     @Test
     public void testAddSQLBlacklist() throws Exception {
         mockupGlobalState();
+
         new Expectations() {
             {
                 editLog.logAddSQLBlackList(new SqlBlackListPersistInfo(0, ".+"));
