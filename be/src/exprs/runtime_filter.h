@@ -406,7 +406,7 @@ public:
                 val = Slice(p->_slice_min.data(), p->_slice_min.size());
             } else {
                 p->_slice_max = val.to_string();
-                val = Slice(p->_slice_max.data(), p->_slice_max.data());
+                val = Slice(p->_slice_max.data(), p->_slice_max.size());
             }
         }
 
