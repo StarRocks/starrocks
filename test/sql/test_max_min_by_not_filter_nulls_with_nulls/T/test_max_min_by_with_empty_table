@@ -1,0 +1,32 @@
+-- name: test_max_min_by_with_empty_table
+CREATE TABLE `primary_table_with_null_partition` (
+                `k1` date not null,
+                `k2` datetime not null,
+                `k3` varchar(20) not null,
+                `k4` varchar(20) not null,
+                `k5` boolean not null,
+                `v1` tinyint,
+                `v2` smallint,
+                `v3` int,
+                `v4` bigint,
+                `v5` largeint,
+                `v6` float,
+                `v7` double,
+                `v8` decimal(27,9)
+            ) 
+            PRIMARY KEY(`k1`, `k2`,`k3`)
+            COMMENT "OLAP"
+            PARTITION BY RANGE(`k1`)
+            (
+                PARTITION `p202006` VALUES LESS THAN ("2020-07-01"),
+                PARTITION `p202007` VALUES LESS THAN ("2020-08-01"),
+                PARTITION `p202008` VALUES LESS THAN ("2020-09-01")
+            )
+            DISTRIBUTED BY HASH(`k1`, `k2`) BUCKETS 3
+            PROPERTIES (
+                "replication_num" = "1",
+                "enable_persistent_index" = "true",
+                "storage_format" = "v2" 
+            );
+
+select max_by(k1,k1) from primary_table_with_null_partition;

@@ -42,8 +42,8 @@
 
 namespace starrocks {
 
-static const std::unordered_set<std::string> ALWAYS_NULLABLE_RESULT_AGG_FUNCS = {"variance_samp", "var_samp",
-                                                                                 "stddev_samp", "covar_samp", "corr"};
+static const std::unordered_set<std::string> ALWAYS_NULLABLE_RESULT_AGG_FUNCS = {
+        "variance_samp", "var_samp", "stddev_samp", "covar_samp", "corr", "max_by_v2", "min_by_v2"};
 
 static const std::string AGG_STATE_UNION_SUFFIX = "_union";
 static const std::string AGG_STATE_MERGE_SUFFIX = "_merge";
