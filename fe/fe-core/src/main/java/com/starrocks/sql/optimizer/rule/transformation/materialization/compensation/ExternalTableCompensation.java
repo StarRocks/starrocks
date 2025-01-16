@@ -62,6 +62,7 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.MvPartiti
 import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.Snapshot;
 
 import java.util.Collection;
@@ -123,10 +124,10 @@ public final class ExternalTableCompensation extends TableCompensation {
                     Optional.ofNullable(((IcebergTable) currentTable).getNativeTable().currentSnapshot())
                             .map(Snapshot::snapshotId));
             builder.setTableVersionRange(versionRange);
-            externalExtraPredicate = getIcebergTableCompensation(optimizerContext, mv, refBaseTable, refTableName,
-                    refPartitionColRefs);
+            externalExtraPredicate = getIcebergTableCompensation(optimizerContext, mv, (IcebergTable) currentTable,
+                    refTableName, refPartitionColRefs);
         } else {
-            externalExtraPredicate = convertPartitionKeyRangesToListPredicate(refPartitionColRefs, compensations);
+            externalExtraPredicate = convertPartitionKeyRangesToListPredicate(refPartitionColRefs, compensations, true);
         }
         Preconditions.checkState(externalExtraPredicate != null);
         externalExtraPredicate.setRedundant(true);
@@ -137,12 +138,28 @@ public final class ExternalTableCompensation extends TableCompensation {
 
     private ScalarOperator getIcebergTableCompensation(OptimizerContext optimizerContext,
                                                        MaterializedView mv,
-                                                       Table refBaseTable,
+                                                       IcebergTable icebergTable,
                                                        TableName refTableName,
                                                        List<ColumnRefOperator> refPartitionColRefs) {
         PartitionInfo mvPartitionInfo = mv.getPartitionInfo();
         if (!mvPartitionInfo.isListPartition()) {
-            return convertPartitionKeyRangesToListPredicate(refPartitionColRefs, compensations);
+            // check whether the iceberg table contains partition transformations
+            final List<Column> refBaseTablePartitionCols = refPartitionColRefs.stream()
+                    .map(ref -> icebergTable.getColumn(ref.getName()))
+                    .collect(Collectors.toList());
+            final List<PartitionField> partitionFields = Lists.newArrayList();
+            for (Column column : refBaseTablePartitionCols) {
+                for (PartitionField field : icebergTable.getNativeTable().spec().fields()) {
+                    final String partitionFieldName = icebergTable.getNativeTable().schema().findColumnName(field.sourceId());
+                    if (partitionFieldName.equalsIgnoreCase(column.getName())) {
+                        partitionFields.add(field);
+                    }
+                }
+            }
+            final boolean isContainPartitionTransform = partitionFields
+                    .stream()
+                    .anyMatch(field -> field.transform().dedupName().equalsIgnoreCase("time"));
+            return convertPartitionKeyRangesToListPredicate(refPartitionColRefs, compensations, !isContainPartitionTransform);
         }
         List<Column> mvPartitionCols = mv.getPartitionColumns();
         // to iceberg, `partitionKeys` are using LocalTime as partition values which cannot be used to prune iceberg
@@ -150,8 +167,8 @@ public final class ExternalTableCompensation extends TableCompensation {
         // convert `partitionKeys` to iceberg utc time here.
         // Please see MVPCTRefreshListPartitioner#genPartitionPredicate for more details.
         Map<Table, List<SlotRef>> refBaseTablePartitionSlotRefs = mv.getRefBaseTablePartitionSlots();
-        Preconditions.checkArgument(refBaseTablePartitionSlotRefs.containsKey(refBaseTable));
-        List<SlotRef> refBaseTableSlotRefs = refBaseTablePartitionSlotRefs.get(refBaseTable);
+        Preconditions.checkArgument(refBaseTablePartitionSlotRefs.containsKey(icebergTable));
+        final List<SlotRef> refBaseTableSlotRefs = refBaseTablePartitionSlotRefs.get(icebergTable);
         ExpressionMapping expressionMapping =
                 new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields()),
                         Lists.newArrayList());
@@ -161,14 +178,14 @@ public final class ExternalTableCompensation extends TableCompensation {
             expressionMapping.put(refBaseTablePartitionExpr, refPartitionColRef);
         }
         AnalyzeState analyzeState = new AnalyzeState();
-        Scope scope = new Scope(RelationId.anonymous(), new RelationFields(
-                refBaseTable.getBaseSchema().stream()
+        final Scope scope = new Scope(RelationId.anonymous(), new RelationFields(
+                icebergTable.getBaseSchema().stream()
                         .map(col -> new Field(col.getName(),
                                 col.getType(), refTableName, null))
                         .collect(Collectors.toList())));
         List<ScalarOperator> externalPredicates = Lists.newArrayList();
-        List<Column> refBaseTablePartitionCols = refPartitionColRefs.stream()
-                .map(ref -> refBaseTable.getColumn(ref.getName()))
+        final List<Column> refBaseTablePartitionCols = refPartitionColRefs.stream()
+                .map(ref -> icebergTable.getColumn(ref.getName()))
                 .collect(Collectors.toList());
         for (PRangeCell pRangeCell : compensations) {
             List<LiteralExpr> literalExprs = pRangeCell.getRange().lowerEndpoint().getKeys();
@@ -187,7 +204,7 @@ public final class ExternalTableCompensation extends TableCompensation {
                 } else {
                     SlotRef refBaseTablePartitionExpr = refBaseTableSlotRefs.get(i);
                     Column refColumn = refBaseTablePartitionCols.get(i);
-                    Expr predicateExpr = getIcebergTablePartitionPredicateExpr((IcebergTable) refBaseTable,
+                    Expr predicateExpr = getIcebergTablePartitionPredicateExpr(icebergTable,
                             refColumn.getName(), refBaseTablePartitionExpr, literalExpr);
                     ExpressionAnalyzer.analyzeExpression(predicateExpr, analyzeState, scope, ConnectContext.get());
                     ScalarOperator predicate = SqlToScalarOperatorTranslator.translate(predicateExpr, expressionMapping,

@@ -1474,13 +1474,13 @@ public class MvUtils {
     }
 
     public static ScalarOperator convertPartitionKeyRangesToListPredicate(List<? extends ScalarOperator> partitionColRefs,
-                                                                          Collection<PRangeCell> pRangeCells) {
+                                                                          Collection<PRangeCell> pRangeCells,
+                                                                          boolean areAllRangePartitionsSingleton) {
         final List<Range<PartitionKey>> partitionRanges = pRangeCells
                 .stream()
                 .map(PRangeCell::getRange)
                 .collect(Collectors.toList());
-        final boolean areAllRangePartitionsSingleton = partitionRanges
-                .stream().allMatch(x -> x.lowerEndpoint().equals(x.upperEndpoint()));
+
         return convertPartitionKeysToListPredicate(partitionColRefs, partitionRanges, areAllRangePartitionsSingleton);
     }
 
