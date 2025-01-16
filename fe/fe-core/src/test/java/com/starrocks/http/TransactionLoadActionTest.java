@@ -330,22 +330,22 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
         {
             new Expectations() {
                 {
-                    streamLoadMgr.beginLoadTaskFromFrontend(
+                    streamLoadMgr.beginLoadTask(
                             anyString, anyString, anyString, anyString, anyString,
                             anyLong, anyInt, anyInt, (TransactionResult) any, anyLong);
                     times = 1;
                     result = new Delegate<Void>() {
 
-                        public void beginLoadTaskFromFrontend(String dbName,
-                                                              String tableName,
-                                                              String label,
-                                                              String user,
-                                                              String clientIp,
-                                                              long timeoutMillis,
-                                                              int channelNum,
-                                                              int channelId,
-                                                              TransactionResult resp,
-                                                              long warehouseId) {
+                        public void beginLoadTask(String dbName,
+                                                  String tableName,
+                                                  String label,
+                                                  String user,
+                                                  String clientIp,
+                                                  long timeoutMillis,
+                                                  int channelNum,
+                                                  int channelId,
+                                                  TransactionResult resp,
+                                                  long warehouseId) {
                             resp.addResultEntry(TransactionResult.LABEL_KEY, label);
                         }
 
