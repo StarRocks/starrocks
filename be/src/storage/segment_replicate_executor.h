@@ -66,12 +66,7 @@ private:
     const int64_t _node_id;
 
     ReusableClosure<PTabletWriterAddSegmentResult>* _closure = nullptr;
-<<<<<<< HEAD
     doris::PBackendService_Stub* _stub = nullptr;
-=======
-    std::shared_ptr<PInternalService_RecoverableStub> _stub;
-    MemTracker* _mem_tracker = nullptr;
->>>>>>> cddf14194f ([BugFix] Fix brpc continuously fail after backend host restart (#40229))
 
     bool _inited = false;
     Status _st = Status::OK();
