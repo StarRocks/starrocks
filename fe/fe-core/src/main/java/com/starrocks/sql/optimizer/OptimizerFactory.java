@@ -54,6 +54,6 @@ public class OptimizerFactory {
     }
 
     public static Optimizer create(OptimizerContext context) {
-        return new Optimizer(context);
+        return new QueryOptimizer(context);
     }
 }

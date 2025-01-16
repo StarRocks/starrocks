@@ -19,6 +19,7 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
 import com.starrocks.sql.optimizer.OptimizerFactory;
+import com.starrocks.sql.optimizer.QueryOptimizer;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
@@ -60,8 +61,8 @@ public class MvRewriteStrategyTest extends MVTestBase {
                 " as" +
                 " select t1a, id_date, t1b from table_with_partition");
         String sql =  "select t1a, id_date, t1b from table_with_partition";
-        Optimizer optimizer =
-                OptimizerFactory.create(OptimizerFactory.mockContext(connectContext, new ColumnRefFactory()));
+        QueryOptimizer optimizer = (QueryOptimizer) OptimizerFactory.create(
+                OptimizerFactory.mockContext(connectContext, new ColumnRefFactory()));
         OptExpression optExpression = optimize(optimizer, sql);
         Assert.assertTrue(optExpression != null);
         MvRewriteStrategy mvRewriteStrategy = optimizer.getMvRewriteStrategy();
