@@ -427,7 +427,7 @@ public class PaimonMetadataTest {
 
         PaimonTable paimonTable = (PaimonTable) metadata.getTable("db1", "tbl1");
 
-        ExternalScanPartitionPruneRule rule0 = ExternalScanPartitionPruneRule.PAIMON_SCAN;
+        ExternalScanPartitionPruneRule rule0 = new ExternalScanPartitionPruneRule();
 
         ColumnRefOperator colRef1 = new ColumnRefOperator(1, Type.INT, "f2", true);
         Column col1 = new Column("f2", Type.INT, true);

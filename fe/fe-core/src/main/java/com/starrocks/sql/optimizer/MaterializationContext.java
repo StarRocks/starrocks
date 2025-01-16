@@ -31,7 +31,7 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
-import com.starrocks.sql.optimizer.operator.pattern.Pattern;
+import com.starrocks.sql.optimizer.operator.pattern.MultiOpPattern;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MaterializedViewRewriter;
@@ -323,7 +323,7 @@ public class MaterializationContext {
                 return 1;
             } else if (op == OperatorType.LOGICAL_JOIN) {
                 return 2;
-            } else if (Pattern.isScanOperator(op)) {
+            } else if (MultiOpPattern.ALL_SCAN_TYPES.contains(op)) {
                 return 3;
             } else {
                 return 4;

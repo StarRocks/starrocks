@@ -51,6 +51,7 @@ import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
+import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
@@ -94,6 +95,12 @@ public class SkewJoinOptimizeRule extends TransformationRule {
     public SkewJoinOptimizeRule() {
         super(RuleType.TF_SKEW_JOIN_OPTIMIZE_RULE,
                 Pattern.create(OperatorType.LOGICAL_JOIN, OperatorType.PATTERN_LEAF, OperatorType.PATTERN_LEAF));
+    }
+
+    @Override
+    public List<Rule> successorRules() {
+        // skew join generate new join and on predicate, need to push down join on expression to child project again
+        return Lists.newArrayList(new PushDownJoinOnExpressionToChildProject());
     }
 
     @Override
