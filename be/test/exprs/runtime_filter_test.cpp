@@ -66,8 +66,8 @@ TEST_F(RuntimeBloomFilterTest, create_with_range) {
     ASSERT_EQ(int_rf->min_value(&_pool), 1);
     ASSERT_TRUE(int_rf->left_close_interval());
 
-    int_rf = Int32RF ::create_with_range<false>(&_pool, 9, true);
-    ASSERT_EQ(int_rf->min_value(&_pool), 9);
+    int_rf = Int32RF::create_with_range<false>(&_pool, 9, true);
+    ASSERT_EQ(int_rf->max_value(&_pool), 9);
     ASSERT_TRUE(int_rf->right_close_interval());
 }
 
@@ -952,7 +952,7 @@ TEST_F(RuntimeBloomFilterTest, TestGlobalRuntimeFilterMinMax) {
 
 void test_pipeline_level_helper(TRuntimeFilterBuildJoinMode::type join_mode, const RuntimeFilterLayout& layout,
                                 size_t num_rows, size_t num_partitions) {
-    auto part_by_func_gen = [=](bool is_reduce) -> auto{
+    auto part_by_func_gen = [=](bool is_reduce) -> auto {
         return [is_reduce, layout, num_rows, num_partitions](BinaryColumn* column, std::vector<uint32_t>& hash_values,
                                                              std::vector<size_t>& num_rows_per_partitions) {
             if (is_reduce) {
