@@ -18,31 +18,6 @@
 #include "util/compression/stream_compression.h"
 
 namespace starrocks {
-// TODO: remove it
-LogicalType RuntimeFilterSerializeType::from_serialize_type(RuntimeFilterSerializeType::PrimitiveType ptype) {
-    switch (ptype) {
-#define CONVERT_PTYPE(type_name)                       \
-    case RuntimeFilterSerializeType::TYPE_##type_name: \
-        return LogicalType::TYPE_##type_name;
-        APPLY_FOR_SCALAR_THRIFT_TYPE(CONVERT_PTYPE);
-#undef CONVERT_PTYPE
-    default:
-        return TYPE_UNKNOWN;
-    }
-}
-
-RuntimeFilterSerializeType::PrimitiveType RuntimeFilterSerializeType::to_serialize_type(LogicalType type) {
-    switch (type) {
-#define CONVERT_TYPE(type_name)         \
-    case LogicalType::TYPE_##type_name: \
-        return RuntimeFilterSerializeType::TYPE_##type_name;
-        APPLY_FOR_SCALAR_THRIFT_TYPE(CONVERT_TYPE);
-#undef CONVERT_TYPE
-    default:
-        return RuntimeFilterSerializeType::TYPE_NULL;
-    }
-}
-
 void SimdBlockFilter::init(size_t nums) {
     nums = std::max(MINIMUM_ELEMENT_NUM, nums);
     int log_heap_space = std::ceil(std::log2(nums));
