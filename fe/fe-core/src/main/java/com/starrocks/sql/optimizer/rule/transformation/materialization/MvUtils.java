@@ -73,6 +73,7 @@ import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.Optimizer;
 import com.starrocks.sql.optimizer.OptimizerConfig;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -486,13 +487,13 @@ public class MvUtils {
         TransformerContext transformerContext =
                 new TransformerContext(columnRefFactory, connectContext, inlineView, null);
         LogicalPlan logicalPlan = new RelationTransformer(transformerContext).transform(query);
-        Optimizer optimizer = new Optimizer(optimizerConfig);
+        Optimizer optimizer =
+                OptimizerFactory.create(
+                        OptimizerFactory.initContext(connectContext, columnRefFactory, optimizerConfig));
         OptExpression optimizedPlan = optimizer.optimize(
-                connectContext,
                 logicalPlan.getRoot(),
                 new PhysicalPropertySet(),
-                new ColumnRefSet(logicalPlan.getOutputColumn()),
-                columnRefFactory);
+                new ColumnRefSet(logicalPlan.getOutputColumn()));
         return Pair.create(optimizedPlan, logicalPlan);
     }
 
@@ -1572,9 +1573,10 @@ public class MvUtils {
         OptimizerConfig optimizerConfig = new OptimizerConfig(OptimizerConfig.OptimizerAlgorithm.RULE_BASED);
         optimizerConfig.disableRule(RuleType.GP_SINGLE_TABLE_MV_REWRITE);
         optimizerConfig.disableRule(RuleType.GP_MULTI_TABLE_MV_REWRITE);
-        Optimizer optimizer = new Optimizer(optimizerConfig);
-        OptExpression optimizedViewPlan = optimizer.optimize(connectContext, logicalTree,
-                new PhysicalPropertySet(), requiredColumns, columnRefFactory);
+        Optimizer optimizer = OptimizerFactory.create(
+                OptimizerFactory.initContext(connectContext, columnRefFactory, optimizerConfig));
+        OptExpression optimizedViewPlan = optimizer.optimize(logicalTree,
+                new PhysicalPropertySet(), requiredColumns);
         return optimizedViewPlan;
     }
 

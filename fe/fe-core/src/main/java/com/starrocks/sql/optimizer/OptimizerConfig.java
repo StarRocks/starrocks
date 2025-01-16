@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer;
 
 import com.starrocks.sql.optimizer.rule.RuleType;
@@ -28,12 +27,6 @@ public class OptimizerConfig {
     private final OptimizerAlgorithm optimizerAlgorithm;
 
     private final BitSet ruleSwitches;
-
-    private static final OptimizerConfig DEFAULT_CONFIG = new OptimizerConfig();
-
-    public static OptimizerConfig defaultConfig() {
-        return DEFAULT_CONFIG;
-    }
 
     public OptimizerConfig() {
         this(OptimizerAlgorithm.COST_BASED);
@@ -55,5 +48,11 @@ public class OptimizerConfig {
 
     public boolean isRuleDisable(RuleType ruleType) {
         return !ruleSwitches.get(ruleType.ordinal());
+    }
+
+    private static final OptimizerConfig DEFAULT_CONFIG = new OptimizerConfig();
+
+    public static OptimizerConfig defaultConfig() {
+        return DEFAULT_CONFIG;
     }
 }

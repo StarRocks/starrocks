@@ -60,6 +60,8 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
+import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.OptimizerTraceUtil;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -234,7 +236,7 @@ public class StatementPlanner {
                                             ConnectContext session,
                                             TResultSinkType resultSinkType) {
         QueryStatement queryStmt = (QueryStatement) stmt;
-        QueryRelation query = (QueryRelation) queryStmt.getQueryRelation();
+        QueryRelation query = queryStmt.getQueryRelation();
         List<String> colNames = query.getColumnOutputNames();
         // 1. Build Logical plan
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
@@ -252,15 +254,14 @@ public class StatementPlanner {
         OptExpression optimizedPlan;
         try (Timer ignored = Tracers.watchScope("Optimizer")) {
             // 2. Optimize logical plan and build physical plan
-            Optimizer optimizer = new Optimizer();
-            optimizedPlan = optimizer.optimize(
-                    session,
-                    root,
-                    mvTransformerContext,
-                    stmt,
+            OptimizerContext optimizerContext = OptimizerFactory.initContext(session, columnRefFactory);
+            optimizerContext.setMvTransformerContext(mvTransformerContext);
+            optimizerContext.setStatement(stmt);
+
+            Optimizer optimizer = OptimizerFactory.create(optimizerContext);
+            optimizedPlan = optimizer.optimize(root,
                     new PhysicalPropertySet(),
-                    new ColumnRefSet(logicalPlan.getOutputColumn()),
-                    columnRefFactory);
+                    new ColumnRefSet(logicalPlan.getOutputColumn()));
         }
 
         try (Timer ignored = Tracers.watchScope("ExecPlanBuild")) {
@@ -316,21 +317,19 @@ public class StatementPlanner {
 
             OptExpression optimizedPlan;
             try (Timer ignored = Tracers.watchScope("Optimizer")) {
+                OptimizerContext optimizerContext = OptimizerFactory.initContext(session, columnRefFactory);
                 // 2. Optimize logical plan and build physical plan
-                Optimizer optimizer = new Optimizer();
                 // FIXME: refactor this into Optimizer.optimize() method.
                 // set query tables into OptimizeContext so can be added for mv rewrite
                 if (Config.skip_whole_phase_lock_mv_limit >= 0) {
-                    optimizer.setQueryTables(olapTables);
+                    optimizerContext.setQueryTables(olapTables);
                 }
-                optimizedPlan = optimizer.optimize(
-                        session,
-                        root,
-                        mvTransformerContext,
-                        queryStmt,
-                        new PhysicalPropertySet(),
-                        new ColumnRefSet(logicalPlan.getOutputColumn()),
-                        columnRefFactory);
+                optimizerContext.setMvTransformerContext(mvTransformerContext);
+                optimizerContext.setStatement(queryStmt);
+
+                Optimizer optimizer = OptimizerFactory.create(optimizerContext);
+                optimizedPlan = optimizer.optimize(root, new PhysicalPropertySet(),
+                        new ColumnRefSet(logicalPlan.getOutputColumn()));
             }
 
             try (Timer ignored = Tracers.watchScope("ExecPlanBuild")) {

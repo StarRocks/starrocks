@@ -19,7 +19,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.ConnectContext;
@@ -27,7 +26,6 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.feedback.OperatorTuningGuides;
 import com.starrocks.qe.feedback.PlanTuningAdvisor;
 import com.starrocks.sql.Explain;
-import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
@@ -120,14 +118,12 @@ import com.starrocks.sql.optimizer.task.OptimizeGroupTask;
 import com.starrocks.sql.optimizer.task.PrepareCollectMetaTask;
 import com.starrocks.sql.optimizer.task.TaskContext;
 import com.starrocks.sql.optimizer.task.TaskScheduler;
-import com.starrocks.sql.optimizer.transformer.MVTransformerContext;
 import com.starrocks.sql.optimizer.validate.MVRewriteValidator;
 import com.starrocks.sql.optimizer.validate.OptExpressionValidator;
 import com.starrocks.sql.optimizer.validate.PlanValidator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -143,26 +139,17 @@ import static com.starrocks.sql.optimizer.rule.RuleType.TF_MATERIALIZED_VIEW;
  */
 public class Optimizer {
     private static final Logger LOG = LogManager.getLogger(Optimizer.class);
-    private OptimizerContext context;
-    private final OptimizerConfig optimizerConfig;
+    private final OptimizerContext context;
+    private OptimizerConfig optimizerConfig;
     private MvRewriteStrategy mvRewriteStrategy = new MvRewriteStrategy();
-    private TaskScheduler scheduler;
+    private final TaskScheduler scheduler = new TaskScheduler();
+    private Memo memo;
 
-    private long updateTableId = -1;
+    // collect all LogicalOlapScanOperators in the query before any optimization
+    private final List<LogicalOlapScanOperator> allLogicalOlapScanOperators = Lists.newArrayList();
 
-    private Set<OlapTable> queryTables;
-
-    public Optimizer() {
-        this(OptimizerConfig.defaultConfig());
-    }
-
-    public Optimizer(OptimizerConfig config) {
-        this.optimizerConfig = config;
-    }
-
-    @VisibleForTesting
-    public OptimizerConfig getOptimizerConfig() {
-        return optimizerConfig;
+    Optimizer(OptimizerContext context) {
+        this.context = context;
     }
 
     public OptimizerContext getContext() {
@@ -174,50 +161,48 @@ public class Optimizer {
         return mvRewriteStrategy;
     }
 
-    public OptExpression optimize(ConnectContext connectContext,
-                                  OptExpression logicOperatorTree,
-                                  PhysicalPropertySet requiredProperty,
-                                  ColumnRefSet requiredColumns,
-                                  ColumnRefFactory columnRefFactory) {
-        return optimize(connectContext, logicOperatorTree, null, null, requiredProperty,
-                requiredColumns, columnRefFactory);
+    private void prepare(OptExpression logicOperatorTree) {
+        optimizerConfig = context.getOptimizerConfig();
+
+        if (!optimizerConfig.isRuleBased()) {
+            memo = new Memo();
+            context.setMemo(memo);
+        }
+        context.setTaskScheduler(scheduler);
+
+        // collect all olap scan operator
+        Utils.extractOperator(logicOperatorTree, allLogicalOlapScanOperators,
+                op -> op instanceof LogicalOlapScanOperator);
     }
 
-    public OptExpression optimize(ConnectContext connectContext,
-                                  OptExpression logicOperatorTree,
-                                  MVTransformerContext mvTransformerContext,
-                                  StatementBase stmt,
-                                  PhysicalPropertySet requiredProperty,
-                                  ColumnRefSet requiredColumns,
-                                  ColumnRefFactory columnRefFactory) {
+    public OptExpression optimize(OptExpression logicOperatorTree, ColumnRefSet requiredColumns) {
+        return optimize(logicOperatorTree, new PhysicalPropertySet(), requiredColumns);
+    }
+
+    public OptExpression optimize(OptExpression logicOperatorTree, PhysicalPropertySet requiredProperty,
+                                  ColumnRefSet requiredColumns) {
         try {
             // prepare for optimizer
-            prepare(connectContext, columnRefFactory, logicOperatorTree);
+            prepare(logicOperatorTree);
 
             // prepare for mv rewrite
-            prepareMvRewrite(connectContext, logicOperatorTree, columnRefFactory, requiredColumns);
+            prepareMvRewrite(context.getConnectContext(), logicOperatorTree, context.getColumnRefFactory(),
+                    requiredColumns);
             try (Timer ignored = Tracers.watchScope("MVTextRewrite")) {
-                logicOperatorTree = new TextMatchBasedRewriteRule(connectContext, stmt, mvTransformerContext)
-                        .transform(logicOperatorTree, context).get(0);
+                logicOperatorTree = new TextMatchBasedRewriteRule(context.getConnectContext(), context.getStatement(),
+                        context.getMvTransformerContext()).transform(logicOperatorTree, context).get(0);
             }
 
             OptExpression result = optimizerConfig.isRuleBased() ?
                     optimizeByRule(logicOperatorTree, requiredProperty, requiredColumns) :
-                    optimizeByCost(connectContext, logicOperatorTree, requiredProperty, requiredColumns);
+                    optimizeByCost(context.getConnectContext(), logicOperatorTree, requiredProperty,
+                            requiredColumns);
             return result;
         } finally {
             // make sure clear caches in OptimizerContext
-            context.clear();
-            connectContext.setQueryMVContext(null);
+            context.getQueryMaterializationContext().clear();
+            context.getConnectContext().setQueryMVContext(null);
         }
-    }
-
-    public void setQueryTables(Set<OlapTable> queryTables) {
-        this.queryTables = queryTables;
-    }
-
-    public void setUpdateTableId(long updateTableId) {
-        this.updateTableId = updateTableId;
     }
 
     // Optimize by rule will return logical plan.
@@ -250,7 +235,6 @@ public class Optimizer {
         // Phase 1: none
         OptimizerTraceUtil.logOptExpression("origin logicOperatorTree:\n%s", logicOperatorTree);
         // Phase 2: rewrite based on memo and group
-        Memo memo = context.getMemo();
         TaskContext rootTaskContext =
                 new TaskContext(context, requiredProperty, requiredColumns.clone(), Double.MAX_VALUE);
 
@@ -262,6 +246,7 @@ public class Optimizer {
             return logicOperatorTree;
         }
 
+        Preconditions.checkNotNull(memo);
         memo.init(logicOperatorTree);
         if (context.getQueryMaterializationContext() != null) {
             // LogicalTreeWithView is logically equivalent to logicOperatorTree
@@ -310,20 +295,20 @@ public class Optimizer {
         }
 
         // collect all mv scan operator
-        collectAllPhysicalOlapScanOperators(result, rootTaskContext);
-        List<PhysicalOlapScanOperator> mvScan = rootTaskContext.getAllPhysicalOlapScanOperators().stream().
+        List<PhysicalOlapScanOperator> mvScan = collectAllPhysicalOlapScanOperators(result).stream().
                 filter(scan -> scan.getTable().isMaterializedView()).collect(Collectors.toList());
         // add mv db id to currentSqlDbIds, the resource group could use this to distinguish sql patterns
-        Set<Long> currentSqlDbIds = rootTaskContext.getOptimizerContext().getCurrentSqlDbIds();
+        Set<Long> currentSqlDbIds = context.getConnectContext().getCurrentSqlDbIds();
         mvScan.stream().map(scan -> ((MaterializedView) scan.getTable()).getDbId()).forEach(currentSqlDbIds::add);
 
         try (Timer ignored = Tracers.watchScope("PlanValidate")) {
             // valid the final plan
             PlanValidator.getInstance().validatePlan(finalPlan, rootTaskContext);
             // validate mv and log tracer if needed
-            MVRewriteValidator.getInstance().validateMV(connectContext, finalPlan, rootTaskContext);
+            MVRewriteValidator mvRewriteValidator = new MVRewriteValidator(allLogicalOlapScanOperators);
+            mvRewriteValidator.validateMV(connectContext, finalPlan, rootTaskContext);
             // audit mv
-            MVRewriteValidator.getInstance().auditMv(connectContext, finalPlan, rootTaskContext);
+            mvRewriteValidator.auditMv(connectContext, finalPlan, rootTaskContext);
             return finalPlan;
         }
     }
@@ -336,23 +321,7 @@ public class Optimizer {
         memo.copyIn(memo.getRootGroup(), logicalTreeWithView);
     }
 
-    private void prepare(ConnectContext connectContext,
-                         ColumnRefFactory columnRefFactory,
-                         OptExpression logicOperatorTree) {
-        Memo memo = null;
-        if (!optimizerConfig.isRuleBased()) {
-            memo = new Memo();
-        }
 
-        context = new OptimizerContext(memo, columnRefFactory, connectContext, optimizerConfig);
-        context.setQueryTables(queryTables);
-        context.setUpdateTableId(updateTableId);
-        this.scheduler = context.getTaskScheduler();
-
-        // collect all olap scan operator
-        collectAllLogicalOlapScanOperators(logicOperatorTree, context);
-
-    }
 
     private void prepareMvRewrite(ConnectContext connectContext, OptExpression logicOperatorTree,
                                   ColumnRefFactory columnRefFactory, ColumnRefSet requiredColumns) {
@@ -1025,16 +994,10 @@ public class Optimizer {
         return expression;
     }
 
-    private void collectAllLogicalOlapScanOperators(OptExpression tree, OptimizerContext optimizerContext) {
-        List<LogicalOlapScanOperator> list = Lists.newArrayList();
-        Utils.extractOperator(tree, list, op -> op instanceof LogicalOlapScanOperator);
-        optimizerContext.setAllLogicalOlapScanOperators(Collections.unmodifiableList(list));
-    }
-
-    private void collectAllPhysicalOlapScanOperators(OptExpression tree, TaskContext rootTaskContext) {
+    private List<PhysicalOlapScanOperator> collectAllPhysicalOlapScanOperators(OptExpression tree) {
         List<PhysicalOlapScanOperator> list = Lists.newArrayList();
         Utils.extractOperator(tree, list, op -> op instanceof PhysicalOlapScanOperator);
-        rootTaskContext.setAllPhysicalOlapScanOperators(Collections.unmodifiableList(list));
+        return list;
     }
 
     private void prepareMetaOnlyOnce(OptExpression tree, TaskContext rootTaskContext) {

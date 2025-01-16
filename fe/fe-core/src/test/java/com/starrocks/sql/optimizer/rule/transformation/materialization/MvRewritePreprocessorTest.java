@@ -26,12 +26,12 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.MaterializedViewOptimizer;
-import com.starrocks.sql.optimizer.Memo;
 import com.starrocks.sql.optimizer.MvRewritePreprocessor;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
 import com.starrocks.sql.optimizer.OptimizerConfig;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
@@ -92,21 +92,6 @@ public class MvRewritePreprocessorTest extends MVTestBase {
 
     @Test
     public void testOptimizer() throws Exception {
-        Optimizer optimizer = new Optimizer();
-        Assert.assertFalse(optimizer.getOptimizerConfig().isRuleBased());
-        Assert.assertFalse(optimizer.getOptimizerConfig().isRuleDisable(RuleType.TF_MERGE_TWO_PROJECT));
-        Assert.assertFalse(optimizer.getOptimizerConfig().isRuleDisable(RuleType.GP_AGGREGATE_REWRITE));
-
-        OptimizerConfig optimizerConfig = new OptimizerConfig(OptimizerConfig.OptimizerAlgorithm.RULE_BASED);
-        optimizerConfig.disableRule(RuleType.TF_MERGE_TWO_PROJECT);
-        optimizerConfig.disableRule(RuleType.GP_PUSH_DOWN_PREDICATE);
-        Optimizer optimizer1 = new Optimizer(optimizerConfig);
-        Assert.assertTrue(optimizer1.getOptimizerConfig().isRuleBased());
-        Assert.assertFalse(optimizer1.getOptimizerConfig().isRuleDisable(RuleType.TF_MERGE_TWO_AGG_RULE));
-        Assert.assertTrue(optimizer1.getOptimizerConfig().isRuleDisable(RuleType.TF_MERGE_TWO_PROJECT));
-        Assert.assertFalse(optimizer1.getOptimizerConfig().isRuleDisable(RuleType.GP_COLLECT_CTE));
-        Assert.assertTrue(optimizer1.getOptimizerConfig().isRuleDisable(RuleType.GP_PUSH_DOWN_PREDICATE));
-
         String sql = "select v1, sum(v3) from t0 where v1 < 10 group by v1";
         Pair<String, ExecPlan> result = UtFrameUtils.getPlanAndFragment(connectContext, sql);
         Assert.assertNotNull(result);
@@ -118,13 +103,33 @@ public class MvRewritePreprocessorTest extends MVTestBase {
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
         LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, connectContext)
                 .transformWithSelectLimit(query.getQueryRelation());
-        OptExpression expr = optimizer.optimize(connectContext, logicalPlan.getRoot(), new PhysicalPropertySet(),
-                new ColumnRefSet(logicalPlan.getOutputColumn()), columnRefFactory);
+
+        OptimizerContext optimizerContext = OptimizerFactory.mockContext(connectContext, columnRefFactory);
+        Optimizer optimizer = OptimizerFactory.create(optimizerContext);
+        Assert.assertFalse(optimizerContext.getOptimizerConfig().isRuleBased());
+        Assert.assertFalse(optimizerContext.getOptimizerConfig().isRuleDisable(RuleType.TF_MERGE_TWO_PROJECT));
+        Assert.assertFalse(optimizerContext.getOptimizerConfig().isRuleDisable(RuleType.GP_AGGREGATE_REWRITE));
+
+        OptExpression expr = optimizer.optimize(logicalPlan.getRoot(), new PhysicalPropertySet(),
+                new ColumnRefSet(logicalPlan.getOutputColumn()));
         Assert.assertTrue(expr.getInputs().get(0).getOp() instanceof PhysicalOlapScanOperator);
         Assert.assertNotNull(expr.getInputs().get(0).getOp().getPredicate());
 
-        OptExpression expr1 = optimizer1.optimize(connectContext, logicalPlan.getRoot(), new PhysicalPropertySet(),
-                new ColumnRefSet(logicalPlan.getOutputColumn()), columnRefFactory);
+
+        OptimizerConfig optimizerConfig = new OptimizerConfig(OptimizerConfig.OptimizerAlgorithm.RULE_BASED);
+        optimizerConfig.disableRule(RuleType.TF_MERGE_TWO_PROJECT);
+        optimizerConfig.disableRule(RuleType.GP_PUSH_DOWN_PREDICATE);
+        OptimizerContext optimizerContext1 = OptimizerFactory.mockContext(connectContext, columnRefFactory,
+                optimizerConfig);
+        Optimizer optimizer1 = OptimizerFactory.create(optimizerContext1);
+        Assert.assertTrue(optimizerContext1.getOptimizerConfig().isRuleBased());
+        Assert.assertFalse(optimizerContext1.getOptimizerConfig().isRuleDisable(RuleType.TF_MERGE_TWO_AGG_RULE));
+        Assert.assertTrue(optimizerContext1.getOptimizerConfig().isRuleDisable(RuleType.TF_MERGE_TWO_PROJECT));
+        Assert.assertFalse(optimizerContext1.getOptimizerConfig().isRuleDisable(RuleType.GP_COLLECT_CTE));
+        Assert.assertTrue(optimizerContext1.getOptimizerConfig().isRuleDisable(RuleType.GP_PUSH_DOWN_PREDICATE));
+
+        OptExpression expr1 = optimizer1.optimize(logicalPlan.getRoot(), new PhysicalPropertySet(),
+                new ColumnRefSet(logicalPlan.getOutputColumn()));
         Assert.assertTrue(expr1.getInputs().get(0).getOp() instanceof LogicalFilterOperator);
 
         // test timeout
@@ -163,9 +168,9 @@ public class MvRewritePreprocessorTest extends MVTestBase {
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
         LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, connectContext)
                 .transformWithSelectLimit(query.getQueryRelation());
-        Optimizer optimizer = new Optimizer();
-        OptExpression expr = optimizer.optimize(connectContext, logicalPlan.getRoot(), new PhysicalPropertySet(),
-                new ColumnRefSet(logicalPlan.getOutputColumn()), columnRefFactory);
+        Optimizer optimizer = OptimizerFactory.create(OptimizerFactory.mockContext(connectContext, columnRefFactory));
+        OptExpression expr = optimizer.optimize(logicalPlan.getRoot(), new PhysicalPropertySet(),
+                new ColumnRefSet(logicalPlan.getOutputColumn()));
         Assert.assertNotNull(expr);
         Assert.assertEquals(2, optimizer.getContext().getCandidateMvs().size());
 
@@ -208,9 +213,10 @@ public class MvRewritePreprocessorTest extends MVTestBase {
             ColumnRefFactory columnRefFactory = new ColumnRefFactory();
             LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, connectContext)
                     .transformWithSelectLimit(query.getQueryRelation());
-            Optimizer optimizer = new Optimizer();
-            OptExpression expr = optimizer.optimize(connectContext, logicalPlan.getRoot(), new PhysicalPropertySet(),
-                    new ColumnRefSet(logicalPlan.getOutputColumn()), columnRefFactory);
+            Optimizer optimizer = OptimizerFactory.create(OptimizerFactory.mockContext(connectContext,
+                    columnRefFactory));
+            OptExpression expr = optimizer.optimize(logicalPlan.getRoot(),
+                    new ColumnRefSet(logicalPlan.getOutputColumn()));
             Assert.assertNotNull(expr);
             Assert.assertEquals(1, optimizer.getContext().getCandidateMvs().size());
             MaterializationContext materializationContext = optimizer.getContext().getCandidateMvs().iterator().next();
@@ -222,9 +228,10 @@ public class MvRewritePreprocessorTest extends MVTestBase {
 
             refreshMaterializedView("test", "mv_4");
             executeInsertSql(connectContext, "insert into tbl_with_mv partition(p2) values(\"2020-02-20\", 20, 30)");
-            Optimizer optimizer2 = new Optimizer();
-            OptExpression expr2 = optimizer2.optimize(connectContext, logicalPlan.getRoot(), new PhysicalPropertySet(),
-                    new ColumnRefSet(logicalPlan.getOutputColumn()), columnRefFactory);
+            Optimizer optimizer2 = OptimizerFactory.create(OptimizerFactory.mockContext(connectContext,
+                    columnRefFactory));
+            OptExpression expr2 = optimizer2.optimize(logicalPlan.getRoot(), new PhysicalPropertySet(),
+                    new ColumnRefSet(logicalPlan.getOutputColumn()));
             Assert.assertNotNull(expr2);
             MaterializationContext materializationContext2 =
                     optimizer2.getContext().getCandidateMvs().iterator().next();
@@ -245,12 +252,13 @@ public class MvRewritePreprocessorTest extends MVTestBase {
             StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             QueryStatement query = (QueryStatement) stmt;
 
-            Optimizer optimizer3 = new Optimizer();
             ColumnRefFactory columnRefFactory = new ColumnRefFactory();
             LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, connectContext)
                     .transformWithSelectLimit(query.getQueryRelation());
-            OptExpression expr3 = optimizer3.optimize(connectContext, logicalPlan.getRoot(), new PhysicalPropertySet(),
-                    new ColumnRefSet(logicalPlan.getOutputColumn()), columnRefFactory);
+            Optimizer optimizer3 =
+                    OptimizerFactory.create(OptimizerFactory.mockContext(connectContext, columnRefFactory));
+            OptExpression expr3 = optimizer3.optimize(logicalPlan.getRoot(),
+                    new ColumnRefSet(logicalPlan.getOutputColumn()));
             Assert.assertNotNull(expr3);
             MaterializationContext materializationContext3 =
                     optimizer3.getContext().getCandidateMvs().iterator().next();
@@ -265,7 +273,7 @@ public class MvRewritePreprocessorTest extends MVTestBase {
     private Pair<MvRewritePreprocessor, OptExpression> buildMvProcessor(String query) {
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
         OptimizerConfig optimizerConfig = new OptimizerConfig();
-        OptimizerContext context = new OptimizerContext(new Memo(), columnRefFactory, connectContext, optimizerConfig);
+        OptimizerContext context = OptimizerFactory.mockContext(connectContext, columnRefFactory, optimizerConfig);
 
         try {
             StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(query, connectContext);

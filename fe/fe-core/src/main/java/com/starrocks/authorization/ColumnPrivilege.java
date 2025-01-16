@@ -38,6 +38,7 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.Optimizer;
 import com.starrocks.sql.optimizer.OptimizerConfig;
+import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
@@ -114,9 +115,10 @@ public class ColumnPrivilege {
             optimizerConfig.disableRule(RuleType.GP_SINGLE_TABLE_MV_REWRITE);
             optimizerConfig.disableRule(RuleType.GP_MULTI_TABLE_MV_REWRITE);
             optimizerConfig.disableRule(RuleType.GP_PRUNE_EMPTY_OPERATOR);
-            Optimizer optimizer = new Optimizer(optimizerConfig);
-            optimizedPlan = optimizer.optimize(context, logicalPlan.getRoot(),
-                    new PhysicalPropertySet(), new ColumnRefSet(logicalPlan.getOutputColumn()), columnRefFactory);
+            Optimizer optimizer =
+                    OptimizerFactory.create(OptimizerFactory.initContext(context, columnRefFactory, optimizerConfig));
+            optimizedPlan = optimizer.optimize(logicalPlan.getRoot(),
+                    new PhysicalPropertySet(), new ColumnRefSet(logicalPlan.getOutputColumn()));
 
             optimizedPlan.getOp().accept(new ScanColumnCollector(tableObjectToTableName, scanColumns), optimizedPlan, null);
         }

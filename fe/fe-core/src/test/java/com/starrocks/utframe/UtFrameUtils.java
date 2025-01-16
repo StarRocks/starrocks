@@ -120,6 +120,8 @@ import com.starrocks.sql.optimizer.LogicalPlanPrinter;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
 import com.starrocks.sql.optimizer.OptimizerConfig;
+import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -851,17 +853,15 @@ public class UtFrameUtils {
         OptExpression optimizedPlan;
         try (Timer t = Tracers.watchScope("Optimizer")) {
             Optimizer optimizer = null;
+            OptimizerContext context = OptimizerFactory.mockContext(connectContext, columnRefFactory);
             if (optimizerConfig != null) {
-                optimizer = new Optimizer(optimizerConfig);
-            } else {
-                optimizer = new Optimizer();
+                context.setOptimizerConfig(optimizerConfig);
             }
+            optimizer = OptimizerFactory.create(context);
             optimizedPlan = optimizer.optimize(
-                        connectContext,
                         logicalPlan.getRoot(),
                         new PhysicalPropertySet(),
-                        new ColumnRefSet(logicalPlan.getOutputColumn()),
-                        columnRefFactory);
+                    new ColumnRefSet(logicalPlan.getOutputColumn()));
         }
         return optimizedPlan;
     }
