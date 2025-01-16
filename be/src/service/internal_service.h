@@ -186,6 +186,10 @@ public:
     void stream_load(google::protobuf::RpcController* controller, const PStreamLoadRequest* request,
                      PStreamLoadResponse* response, google::protobuf::Closure* done) override;
 
+    void update_transaction_state(google::protobuf::RpcController* controller,
+                                  const PUpdateTransactionStateRequest* request,
+                                  PUpdateTransactionStateResponse* response, google::protobuf::Closure* done) override;
+
 private:
     void _transmit_chunk(::google::protobuf::RpcController* controller,
                          const ::starrocks::PTransmitChunkParams* request, ::starrocks::PTransmitChunkResult* response,
