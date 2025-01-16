@@ -40,6 +40,7 @@ import com.sleepycat.je.rep.MemberNotFoundException;
 import com.sleepycat.je.rep.ReplicaStateException;
 import com.sleepycat.je.rep.UnknownMasterException;
 import com.sleepycat.je.rep.util.ReplicationGroupAdmin;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
@@ -52,8 +53,11 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ImageFormatVersion;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.OperationType;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.ModifyFrontendAddressClause;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.system.Frontend;
+import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
@@ -309,5 +313,36 @@ public class GlobalStateMgrTest {
             Assert.assertTrue(suppressedExceptions[0] instanceof RuntimeException);
             Assert.assertEquals(removeFileErrorMessage, suppressedExceptions[0].getMessage());
         }
+    }
+
+    @Test
+    public void testReloadTables() throws Exception {
+        ConnectContext ctx = UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT);
+        UtFrameUtils.createMinStarRocksCluster();
+        UtFrameUtils.setUpForPersistTest();
+        GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
+        StarRocksAssert starRocksAssert = new StarRocksAssert();
+
+        currentState.getLocalMetastore().createDb("db1");
+        currentState.getLocalMetastore().createDb("db2");
+        {
+            String sql = "create table db1.t1(c1 int not null, c2 int) " +
+                    "properties('replication_num'='1', 'unique_constraints'='c1') ";
+            starRocksAssert.withTable(sql);
+        }
+        {
+            String sql = "create table db2.t1(c1 int, c2 int) properties('replication_num'='1'," +
+                    "'foreign_key_constraints'='(c1) REFERENCES db1.t1(c1)')";
+            starRocksAssert.withTable(sql);
+        }
+
+        currentState.dumpImage();
+
+        GlobalStateMgr newState = new MyGlobalStateMgr(false);
+        newState.loadImage(Config.meta_dir + GlobalStateMgr.IMAGE_DIR);
+        Table table = newState.getLocalMetastore().getTable("db1", "t1");
+        Assert.assertNotNull(table);
+        table = newState.getLocalMetastore().getTable("db2", "t1");
+        Assert.assertEquals(1, table.getForeignKeyConstraints().size());
     }
 }
