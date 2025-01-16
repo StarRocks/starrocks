@@ -77,7 +77,7 @@ drop materialized view test_mv1;
 CREATE MATERIALIZED VIEW IF NOT EXISTS test_mv1
 PARTITION BY `k1`
 DISTRIBUTED BY HASH(`k1`)
-REFRESH ASYNC
+REFRESH DEFERRED ASYNC
 as 
 select * from t1
 union all
@@ -89,7 +89,7 @@ drop materialized view test_mv1;
 CREATE MATERIALIZED VIEW IF NOT EXISTS test_mv1
 PARTITION BY `k1`
 DISTRIBUTED BY HASH(`k1`)
-REFRESH ASYNC
+REFRESH DEFERRED ASYNC
 as 
 select * from t1
 union all
@@ -101,7 +101,7 @@ drop materialized view test_mv1;
 CREATE MATERIALIZED VIEW IF NOT EXISTS test_mv1
 PARTITION BY `k1`
 DISTRIBUTED BY HASH(`k1`)
-REFRESH ASYNC
+REFRESH DEFERRED ASYNC
 as 
 select * from t1
 union all
@@ -178,7 +178,7 @@ drop materialized view test_mv1;
 CREATE MATERIALIZED VIEW IF NOT EXISTS test_mv1
 PARTITION BY date_trunc('day', `k1`)
 DISTRIBUTED BY HASH(`k1`)
-REFRESH ASYNC
+REFRESH DEFERRED ASYNC
 as 
 select * from t1
 union all
@@ -190,7 +190,7 @@ drop materialized view test_mv1;
 CREATE MATERIALIZED VIEW IF NOT EXISTS test_mv1
 PARTITION BY `k1`
 DISTRIBUTED BY HASH(`k1`)
-REFRESH ASYNC
+REFRESH DEFERRED ASYNC
 as 
 select * from t1
 union all
@@ -202,7 +202,7 @@ drop materialized view test_mv1;
 CREATE MATERIALIZED VIEW IF NOT EXISTS test_mv1
 PARTITION BY `k1`
 DISTRIBUTED BY HASH(`k1`)
-REFRESH ASYNC
+REFRESH DEFERRED ASYNC
 as 
 select * from t1
 union all

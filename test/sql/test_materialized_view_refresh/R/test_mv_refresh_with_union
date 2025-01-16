@@ -100,7 +100,7 @@ drop materialized view test_mv1;
 CREATE MATERIALIZED VIEW IF NOT EXISTS test_mv1
 PARTITION BY `k1`
 DISTRIBUTED BY HASH(`k1`)
-REFRESH ASYNC
+REFRESH DEFERRED ASYNC
 as 
 select * from t1
 union all
@@ -124,7 +124,7 @@ drop materialized view test_mv1;
 CREATE MATERIALIZED VIEW IF NOT EXISTS test_mv1
 PARTITION BY `k1`
 DISTRIBUTED BY HASH(`k1`)
-REFRESH ASYNC
+REFRESH DEFERRED ASYNC
 as 
 select * from t1
 union all
@@ -148,7 +148,7 @@ drop materialized view test_mv1;
 CREATE MATERIALIZED VIEW IF NOT EXISTS test_mv1
 PARTITION BY `k1`
 DISTRIBUTED BY HASH(`k1`)
-REFRESH ASYNC
+REFRESH DEFERRED ASYNC
 as 
 select * from t1
 union all
@@ -253,7 +253,7 @@ drop materialized view test_mv1;
 CREATE MATERIALIZED VIEW IF NOT EXISTS test_mv1
 PARTITION BY date_trunc('day', `k1`)
 DISTRIBUTED BY HASH(`k1`)
-REFRESH ASYNC
+REFRESH DEFERRED ASYNC
 as 
 select * from t1
 union all
@@ -277,7 +277,7 @@ drop materialized view test_mv1;
 CREATE MATERIALIZED VIEW IF NOT EXISTS test_mv1
 PARTITION BY `k1`
 DISTRIBUTED BY HASH(`k1`)
-REFRESH ASYNC
+REFRESH DEFERRED ASYNC
 as 
 select * from t1
 union all
@@ -301,7 +301,7 @@ drop materialized view test_mv1;
 CREATE MATERIALIZED VIEW IF NOT EXISTS test_mv1
 PARTITION BY `k1`
 DISTRIBUTED BY HASH(`k1`)
-REFRESH ASYNC
+REFRESH DEFERRED ASYNC
 as 
 select * from t1
 union all
@@ -330,7 +330,6 @@ as
 refresh materialized view  test_mv1 partition start('2020-10-21') end ('2020-10-23') force with sync mode;
 select k1, count(1) from test_mv1 group by k1 order by k1;
 -- result:
-2020-10-22	2
 -- !result
 drop materialized view test_mv1;
 -- result:
