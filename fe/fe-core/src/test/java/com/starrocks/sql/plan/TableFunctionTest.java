@@ -285,8 +285,9 @@ public class TableFunctionTest extends PlanTestBase {
                 "\t r3 as (select bitmap_and(t0.b2, t1.b2) as b2 from r1 t0 join r2 t1)\n" +
                 "select unnest as r1 from r3, unnest(bitmap_to_array(b2)) order by r1;";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
-        assertContains(plan, "tableFunctionName: unnest_bitmap");
-        assertNotContains(plan, "bitmap_to_array");
+        PlanTestBase.assertContains(plan, "5:Project\n" +
+                "  |  <slot 28> : bitmap_and(10: b1, 25: sub_bitmap)");
+        PlanTestBase.assertContains(plan, "tableFunctionName: unnest_bitmap");
+        PlanTestBase.assertNotContains(plan, "bitmap_to_array");
     }
 }
