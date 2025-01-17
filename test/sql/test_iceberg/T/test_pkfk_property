@@ -1,0 +1,45 @@
+-- name: test_pkfk_property
+
+create external catalog iceberg_sql_test_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}","enable_iceberg_metadata_cache"="true","aws.s3.access_key" = "${oss_ak}","aws.s3.secret_key" = "${oss_sk}","aws.s3.endpoint" = "${oss_endpoint}");
+
+create database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+use iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+
+create external table payment (id int, created_at date, status string);
+create external table txn (id int, created_at date, payment_id int);
+
+
+INSERT INTO payment (id, created_at, status) VALUES
+(1, '2025-01-01', 'COMPLETED'),
+(2, '2025-01-02', 'PENDING'),
+(3, '2025-01-03', 'FAILED'),
+(4, '2025-01-04', 'COMPLETED'),
+(5, '2025-01-05', 'REFUNDED');
+
+INSERT INTO txn (id, created_at, payment_id) VALUES
+(101, '2025-01-01', 1),
+(102, '2025-01-02', 2),
+(103, '2025-01-03', 3),
+(104, '2025-01-04', 4),
+(105, '2025-01-05', 5),
+(106, '2025-01-06', 1);
+
+SET enable_rbo_table_prune=true;
+SET enable_cbo_table_prune=true; 
+SET enable_table_prune_on_update = true;
+
+explain logical select txn.id, txn.created_at, txn.payment_id from  txn left join payment on payment.id = txn.payment_id;
+
+alter table payment set  ("unique_constraints" = "id");
+ALTER TABLE txn SET ("foreign_key_constraints" = "(payment_id) REFERENCES iceberg_sql_test_0b0212d10fe1436d8e346ee4e16c9877.iceberg_db_0b0212d10fe1436d8e346ee4e16c9877.payment(id)");
+
+explain logical select txn.id, txn.created_at, txn.payment_id from  txn left join payment on payment.id = txn.payment_id;
+
+
+-- drop table payment force;
+-- drop table txn force;
+
+-- drop database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+-- drop catalog iceberg_sql_test_${uuid0};
+
+set catalog default_catalog;

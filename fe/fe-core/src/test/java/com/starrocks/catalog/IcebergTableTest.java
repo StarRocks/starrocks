@@ -16,6 +16,7 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.iceberg.TableTestBase;
 import com.starrocks.server.IcebergTableFactory;
@@ -29,7 +30,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static com.starrocks.catalog.Type.ARRAY_BIGINT;
 import static com.starrocks.catalog.Type.INT;
+import static com.starrocks.catalog.Type.STRING;
 import static com.starrocks.server.ExternalTableFactory.RESOURCE;
 
 public class IcebergTableTest extends TableTestBase {
@@ -68,5 +71,36 @@ public class IcebergTableTest extends TableTestBase {
         IcebergTableFactory.copyFromCatalogTable(newBuilder, oTable, properties);
         IcebergTable table = newBuilder.build();
         Assert.assertEquals(table.getResourceName(), resourceName);
+    }
+
+    @Test
+    public void testIcebergTableRepresentativeColumn() {
+        List<Column> columns = Lists.newArrayList(
+                new Column("k1", INT),
+                new Column("k2", STRING),
+                new Column("k3", ARRAY_BIGINT));
+        IcebergTable.Builder tableBuilder = IcebergTable.builder()
+                .setId(1000)
+                .setSrTableName("supplier")
+                .setCatalogName("iceberg_catalog")
+                .setCatalogDBName("iceberg_oss_tpch_1g_parquet_gzip")
+                .setCatalogTableName("supplier")
+                .setFullSchema(columns)
+                .setNativeTable(null)
+                .setIcebergProperties(new HashMap<>());
+        // by default use k1 as column
+        IcebergTable table = tableBuilder.build();
+        {
+            Column c = table.getPresentivateColumn();
+            Assert.assertEquals(c.getName(), "k1");
+        }
+
+        // use k3 as unique column
+        List<ColumnId> uniqueColumns = Lists.newArrayList(columns.get(2).getColumnId());
+        table.setUniqueConstraints(Lists.newArrayList(new UniqueConstraint("cat", "db", "tbl", uniqueColumns)));
+        {
+            Column c = table.getPresentivateColumn();
+            Assert.assertEquals(c.getName(), "k3");
+        }
     }
 }
