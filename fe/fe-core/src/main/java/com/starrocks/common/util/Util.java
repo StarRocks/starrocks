@@ -357,7 +357,7 @@ public class Util {
     //      Base64.encodeBase64String("user:passwd".getBytes());
     // If no auth info, pass a null.
     public static String getResultForUrl(String urlStr, String encodedAuthInfo, int connectTimeoutMs,
-                                         int readTimeoutMs) {
+                                         int readTimeoutMs) throws Exception {
         StringBuilder sb = new StringBuilder();
         InputStream stream = null;
         String safeUrl = urlStr;
@@ -380,7 +380,7 @@ public class Util {
             }
         } catch (Exception e) {
             LOG.warn("failed to get result from url: {}. {}", safeUrl, e.getMessage());
-            return null;
+            throw e;
         } finally {
             if (stream != null) {
                 try {

@@ -557,7 +557,7 @@ public class RestoreJobTest {
                 minTimes = 0;
                 result = id.incrementAndGet();
 
-                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+                globalStateMgr.getNodeMgr().getClusterInfo();
                 minTimes = 0;
                 result = systemInfoService;
             }

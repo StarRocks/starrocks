@@ -129,7 +129,6 @@ import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.streamload.StreamLoadFunctionalExprProvider;
 import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.meta.BlackListSql;
-import com.starrocks.meta.SqlBlackList;
 import com.starrocks.proto.FailPointTriggerModeType;
 import com.starrocks.proto.PFailPointInfo;
 import com.starrocks.proto.PFailPointTriggerMode;
@@ -2234,10 +2233,10 @@ public class ShowExecutor {
         @Override
         public ShowResultSet visitShowSqlBlackListStatement(ShowSqlBlackListStmt statement, ConnectContext context) {
             List<List<String>> rows = new ArrayList<>();
-            for (Map.Entry<String, BlackListSql> entry : SqlBlackList.getInstance().sqlBlackListMap.entrySet()) {
+            for (BlackListSql entry : GlobalStateMgr.getCurrentState().getSqlBlackList().getBlackLists()) {
                 List<String> oneSql = new ArrayList<>();
-                oneSql.add(String.valueOf(entry.getValue().id));
-                oneSql.add(entry.getKey());
+                oneSql.add(String.valueOf(entry.id));
+                oneSql.add(entry.pattern.toString());
                 rows.add(oneSql);
             }
             return new ShowResultSet(statement.getMetaData(), rows);

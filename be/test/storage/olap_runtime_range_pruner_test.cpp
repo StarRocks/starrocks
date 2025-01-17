@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/olap_runtime_range_pruner.hpp"
-
 #include <gtest/gtest.h>
 
 #include "exprs/runtime_filter_bank.h"
@@ -22,6 +20,7 @@
 #include "runtime/runtime_state.h"
 #include "storage/column_predicate.h"
 #include "storage/predicate_parser.h"
+#include "storage/runtime_range_pruner.hpp"
 #include "testutil/exprs_test_helper.h"
 #include "testutil/schema_test_helper.h"
 
@@ -76,8 +75,8 @@ TEST_F(OlapRuntimeRangePrunerTest, min_max_parser) {
     rf.insert(20);
 
     detail::RuntimeColumnPredicateBuilder::MinMaxParser<Int32RuntimeFilter, Int32Decoder> parser(&rf, &decoder);
-    ColumnPtr min_column = parser.min_const_column<TYPE_INT>(TYPE_INT_DESC);
-    ColumnPtr max_column = parser.max_const_column<TYPE_INT>(TYPE_INT_DESC);
+    ColumnPtr min_column = parser.min_const_column<TYPE_INT>(TYPE_INT_DESC, &_pool);
+    ColumnPtr max_column = parser.max_const_column<TYPE_INT>(TYPE_INT_DESC, &_pool);
     ASSERT_EQ(min_column->debug_string(), "CONST: 10 Size : 1");
     ASSERT_EQ(max_column->debug_string(), "CONST: 20 Size : 1");
 }
@@ -90,8 +89,8 @@ TEST_F(OlapRuntimeRangePrunerTest, min_max_parser_for_decimal) {
     rf.insert(20);
 
     detail::RuntimeColumnPredicateBuilder::MinMaxParser<Decimal32RuntimeFilter, Int32Decoder> parser(&rf, &decoder);
-    ColumnPtr min_column = parser.min_const_column<TYPE_DECIMAL32>(TYPE_DECIMAL32_DESC);
-    ColumnPtr max_column = parser.max_const_column<TYPE_DECIMAL32>(TYPE_DECIMAL32_DESC);
+    ColumnPtr min_column = parser.min_const_column<TYPE_DECIMAL32>(TYPE_DECIMAL32_DESC, &_pool);
+    ColumnPtr max_column = parser.max_const_column<TYPE_DECIMAL32>(TYPE_DECIMAL32_DESC, &_pool);
     ASSERT_EQ(min_column->debug_string(), "CONST: 0.0010 Size : 1");
     ASSERT_EQ(max_column->debug_string(), "CONST: 0.0020 Size : 1");
 }
@@ -103,7 +102,7 @@ TEST_F(OlapRuntimeRangePrunerTest, update_1) {
 
     UnarrivedRuntimeFilterList unarrivedRuntimeFilterList;
     unarrivedRuntimeFilterList.add_unarrived_rf(runtime_filter_desc.get(), &slot, 1);
-    OlapRuntimeScanRangePruner pruner(_predicate_parser.get(), unarrivedRuntimeFilterList);
+    RuntimeScanRangePruner pruner(_predicate_parser.get(), unarrivedRuntimeFilterList);
 
     size_t pred_size = 0;
     std::string pred_1;
@@ -162,7 +161,7 @@ TEST_F(OlapRuntimeRangePrunerTest, update_has_null) {
 
     UnarrivedRuntimeFilterList unarrivedRuntimeFilterList;
     unarrivedRuntimeFilterList.add_unarrived_rf(runtime_filter_desc.get(), &slot, 1);
-    OlapRuntimeScanRangePruner pruner(_predicate_parser.get(), unarrivedRuntimeFilterList);
+    RuntimeScanRangePruner pruner(_predicate_parser.get(), unarrivedRuntimeFilterList);
 
     size_t pred_size = 0;
     std::string pred;

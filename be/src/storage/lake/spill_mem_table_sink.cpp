@@ -216,7 +216,11 @@ Status SpillMemTableSink::merge_blocks_to_segments() {
     size_t current_input_bytes = 0;
     auto merge_func = [&] {
         total_merges++;
-        auto merge_itr = new_heap_merge_iterator(merge_inputs);
+        // PK shouldn't do agg because pk support order key different from primary key,
+        // in that case, data is sorted by order key and cannot be aggregated by primary key
+        bool do_agg = _schema->keys_type() == KeysType::AGG_KEYS || _schema->keys_type() == KeysType::UNIQUE_KEYS;
+        auto tmp_itr = new_heap_merge_iterator(merge_inputs);
+        auto merge_itr = do_agg ? new_aggregate_iterator(tmp_itr) : tmp_itr;
         RETURN_IF_ERROR(merge_itr->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
         auto chunk_shared_ptr = ChunkHelper::new_chunk(*_schema, config::vector_chunk_size);
         auto chunk = chunk_shared_ptr.get();

@@ -140,8 +140,8 @@ public:
     template <LogicalType ltype>
     Expr* operator()() {
         auto* bloom_filter = (RuntimeBloomFilter<ltype>*)(_filter);
-        return _pool->add(new MinMaxPredicate<ltype>(_slot_id, bloom_filter->min_value(), bloom_filter->max_value(),
-                                                     bloom_filter->has_null()));
+        return _pool->add(new MinMaxPredicate<ltype>(_slot_id, bloom_filter->min_value(_pool),
+                                                     bloom_filter->max_value(_pool), bloom_filter->has_null()));
     }
 
 private:

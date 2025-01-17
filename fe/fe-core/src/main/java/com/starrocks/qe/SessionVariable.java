@@ -498,6 +498,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String GROUP_EXECUTION_MIN_SCAN_ROWS = "group_execution_min_scan_rows";
 
     public static final String ENABLE_PARALLEL_MERGE = "enable_parallel_merge";
+    public static final String PARALLEL_MERGE_LATE_MATERIALIZATION_MODE = "parallel_merge_late_materialization_mode";
     public static final String ENABLE_QUERY_QUEUE = "enable_query_queue";
 
     public static final String WINDOW_PARTITION_MODE = "window_partition_mode";
@@ -1588,6 +1589,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_PARALLEL_MERGE)
     private boolean enableParallelMerge = true;
 
+    // AUTO/ALWAYS/NEVER
+    @VarAttr(name = PARALLEL_MERGE_LATE_MATERIALIZATION_MODE)
+    private String parallelMergeLateMaterializationMode = SessionVariableConstants.AUTO;
+
     @VarAttr(name = ENABLE_QUERY_QUEUE, flag = VariableMgr.INVISIBLE)
     private boolean enableQueryQueue = true;
 
@@ -1779,6 +1784,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableParallelMerge() {
         return enableParallelMerge;
+    }
+
+    public String getParallelMergeLateMaterializationMode() {
+        return parallelMergeLateMaterializationMode;
     }
 
     public void setEnableParallelMerge(boolean enableParallelMerge) {

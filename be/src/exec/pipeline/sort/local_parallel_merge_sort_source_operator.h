@@ -94,11 +94,13 @@ public:
 
     void set_tuple_desc(const TupleDescriptor* tuple_desc) { _tuple_desc = tuple_desc; }
     void set_is_gathered(const bool is_gathered) { _is_gathered = is_gathered; }
+    void set_materialized_mode(TLateMaterializeMode::type mode) { _late_materialize_mode = mode; }
 
 private:
     const TupleDescriptor* _tuple_desc;
     bool _is_gathered = true;
     RuntimeState* _state;
+    TLateMaterializeMode::type _late_materialize_mode = TLateMaterializeMode::AUTO;
 
     // share data with multiple partition sort sink opeartor through _sort_context.
     std::shared_ptr<SortContextFactory> _sort_context_factory;

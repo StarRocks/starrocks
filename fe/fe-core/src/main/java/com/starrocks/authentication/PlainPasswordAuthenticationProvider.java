@@ -21,6 +21,7 @@ import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserAuthOption;
 import com.starrocks.sql.ast.UserIdentity;
+import org.apache.commons.lang3.StringUtils;
 
 import java.nio.charset.StandardCharsets;
 
@@ -111,7 +112,8 @@ public class PlainPasswordAuthenticationProvider implements AuthenticationProvid
         } else {
             // Plain remote password, scramble it first.
             byte[] scrambledRemotePass =
-                    MysqlPassword.makeScrambledPassword(new String(remotePassword, StandardCharsets.UTF_8));
+                    MysqlPassword.makeScrambledPassword((StringUtils.stripEnd(
+                            new String(remotePassword, StandardCharsets.UTF_8), "\0")));
             if (!MysqlPassword.checkScrambledPlainPass(authenticationInfo.getPassword(), scrambledRemotePass)) {
                 throw new AuthenticationException("password mismatch!");
             }

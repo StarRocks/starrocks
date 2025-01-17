@@ -23,11 +23,11 @@
 #include "runtime/global_dict/parser.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/lake/tablet.h"
-#include "storage/olap_runtime_range_pruner.hpp"
 #include "storage/predicate_parser.h"
 #include "storage/predicate_tree/predicate_tree.hpp"
 #include "storage/projection_iterator.h"
 #include "storage/rowset/short_key_range_option.h"
+#include "storage/runtime_range_pruner.hpp"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks::connector {
@@ -260,7 +260,7 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
             !config::disable_storage_page_cache && _scan_range.fill_data_cache && !_scan_range.skip_page_cache;
     _params.lake_io_opts.fill_data_cache = _scan_range.fill_data_cache;
     _params.lake_io_opts.skip_disk_cache = _scan_range.skip_disk_cache;
-    _params.runtime_range_pruner = OlapRuntimeScanRangePruner(parser, _conjuncts_manager->unarrived_runtime_filters());
+    _params.runtime_range_pruner = RuntimeScanRangePruner(parser, _conjuncts_manager->unarrived_runtime_filters());
     _params.splitted_scan_rows = _provider->get_splitted_scan_rows();
     _params.scan_dop = _provider->get_scan_dop();
 

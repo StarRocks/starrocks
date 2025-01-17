@@ -695,9 +695,7 @@ public class Optimizer {
         ruleBasedMaterializedViewRewrite(tree, rootTaskContext, requiredColumns);
 
         // this rewrite rule should be after mv.
-        scheduler.rewriteIterative(tree, rootTaskContext, RewriteSimpleAggToHDFSScanRule.HIVE_SCAN_NO_PROJECT);
-        scheduler.rewriteIterative(tree, rootTaskContext, RewriteSimpleAggToHDFSScanRule.ICEBERG_SCAN_NO_PROJECT);
-        scheduler.rewriteIterative(tree, rootTaskContext, RewriteSimpleAggToHDFSScanRule.FILE_SCAN_NO_PROJECT);
+        scheduler.rewriteOnce(tree, rootTaskContext, RewriteSimpleAggToHDFSScanRule.SCAN_NO_PROJECT);
 
         // NOTE: This rule should be after MV Rewrite because MV Rewrite cannot handle
         // select count(distinct c) from t group by a, b
@@ -842,16 +840,12 @@ public class Optimizer {
     }
 
     private void skewJoinOptimize(OptExpression tree, TaskContext rootTaskContext) {
-        SkewJoinOptimizeRule rule = new SkewJoinOptimizeRule();
         if (context.getSessionVariable().isEnableStatsToOptimizeSkewJoin()) {
             // merge projects before calculate statistics
             scheduler.rewriteOnce(tree, rootTaskContext, new MergeTwoProjectRule());
             Utils.calculateStatistics(tree, rootTaskContext.getOptimizerContext());
         }
-        if (scheduler.rewriteOnce(tree, rootTaskContext, rule)) {
-            // skew join generate new join and on predicate, need to push down join on expression to child project again
-            scheduler.rewriteOnce(tree, rootTaskContext, new PushDownJoinOnExpressionToChildProject());
-        }
+        scheduler.rewriteOnce(tree, rootTaskContext, new SkewJoinOptimizeRule());
     }
 
     private OptExpression pruneSubfield(OptExpression tree, TaskContext rootTaskContext, ColumnRefSet requiredColumns) {
