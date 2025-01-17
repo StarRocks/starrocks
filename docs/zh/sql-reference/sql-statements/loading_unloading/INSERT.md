@@ -42,7 +42,8 @@ displayed_sidebar: docs
 | PARTITION  | 导入的目标分区。此参数必须是目标表中存在的分区，多个分区名称用逗号（,）分隔。如果指定该参数，数据只会被导入相应分区内。如果未指定，则默认将数据导入至目标表的所有分区。 |
 | TEMPORARY PARTITION | 指定要把数据导入哪些[临时分区](../../../table_design/data_distribution/Temporary_partition.md)。|
 | label       | 导入作业的标识，数据库内唯一。如果未指定，StarRocks 会自动为作业生成一个 Label。建议您指定 Label。否则，如果当前导入作业因网络错误无法返回结果，您将无法得知该导入操作是否成功。如果指定了 Label，可以通过 SQL 命令 `SHOW LOAD WHERE label="label";` 查看任务结果。关于 Label 命名要求，参见[系统限制](../../System_limit.md)。 |
-| column_name | 导入的目标列，必须是目标表中存在的列。<ul><li>如果未设置属性 `match_column_by` 或设置为 `position` (默认值)，则目标列的对应关系与列名无关，但与其顺序一一对应。</li><li>如果将 `match_column_by` 设置为 `name`，则目标列的对应关系与顺序无关，系统将根据同名列匹配。</li><li>如果不指定目标列，默认为目标表中的所有列。</li><li>如果源表中的某个列在目标列不存在，则写入默认值。</li><li>如果当前列没有默认值，导入作业会失败。</li><li>如果查询语句的结果列类型与目标列的类型不一致，会进行隐式转化，如果不能进行转化，那么 INSERT INTO 语句会报语法解析错误。</li></ul>**说明**<br />自 v3.3.1 起，INSERT INTO 导入主键表时指定 Column List 会执行部分列更新（而在先前版本中，指定 Column List 仍然导致 Full Upsert）。如不指定 Column List，系统执行 Full Upsert。 |
+| column_name | 导入的目标列，必须是目标表中存在的列。**不可同时指定 `column_name` 和 `BY NAME`。**<ul><li>如果未指定 `BY NAME`，则目标列的对应关系与列名无关，但与其顺序一一对应。</li><li>如果指定了 `BY NAME`，则目标列的对应关系与顺序无关，系统将根据同名列匹配。</li><li>如果不指定目标列，默认为目标表中的所有列。</li><li>如果源表中的某个列在目标列不存在，则写入默认值。</li><li>如果当前列没有默认值，导入作业会失败。</li><li>如果查询语句的结果列类型与目标列的类型不一致，会进行隐式转化，如果不能进行转化，那么 INSERT INTO 语句会报语法解析错误。</li></ul>**说明**<br />自 v3.3.1 起，INSERT INTO 导入主键表时指定 Column List 会执行部分列更新（而在先前版本中，指定 Column List 仍然导致 Full Upsert）。如不指定 Column List，系统执行 Full Upsert。 |
+| BY NAME     | 系统根据列名匹配相同名称的列。**不可同时指定 `column_name` 和 `BY NAME`。**如果未指定 `BY NAME`，则目标列的对应关系与列名无关，但与其顺序一一对应。|
 | PROPERTIES  | INSERT 作业的属性Properties of the INSERT job. 每个属性必须为一对键值。关于支持的属性，参考 [PROPERTIES](#properties)。 |
 | expression  | 表达式，用以为对应列赋值。                                   |
 | DEFAULT     | 为对应列赋予默认值。                                         |
@@ -58,7 +59,6 @@ INSERT statements support configuring PROPERTIES from v3.4.0 onwards.
 | timeout          | INSERT 作业的超时时间。单位：秒。您也可以通过变量 `insert_timeout` 在当前 Session 中或全局设置 INSERT 的超时时间。 |
 | strict_mode      | 是否在使用 INSERT from FILES() 导入数据时启用严格模式。有效值：`true` 和 `false`（默认值）。启用严格模式时，系统仅导入合格的数据行，过滤掉不合格的行，并返回不合格行的详细信息。更多信息请参见 [严格模式](../../../loading/load_concept/strict_mode.md)。您也可以通过变量 `enable_insert_strict` 在当前 Session 中或全局启用 INSERT 的严格模式。 |
 | max_filter_ratio | INSERT from FILES() 导入作业的最大容忍率，即导入作业能够容忍的因数据质量不合格而过滤掉的数据行所占的最大比例。当不合格行数比例超过该限制时，导入作业失败。默认值：`0`。范围：[0, 1]。您也可以通过变量 `insert_max_filter_ratio` 在当前 Session 中或全局设置 INSERT 的最大错误容忍度。 |
-| match_column_by  | 系统匹配源表和目标表中的列的方式。有效值：<ul><li>`position`（默认值）：系统根据 Column 子句和 SELECT 语句中列的位置来匹配列。</li><li>`name`：系统根据列名匹配相同名称的列。</li></ul> |
 
 :::note
 
@@ -209,14 +209,7 @@ SELECT * FROM FILES(
 以下示例通过列名匹配源表和目标表中的列：
 
 ```SQL
-INSERT INTO insert_wiki_edit (
-    event_time,
-    channel,
-    user
-)
-PROPERTIES(
-    "match_column_by" = "name"
-)
+INSERT INTO insert_wiki_edit BY NAME
 SELECT event_time, user, channel FROM source_wiki_edit;
 ```
 
