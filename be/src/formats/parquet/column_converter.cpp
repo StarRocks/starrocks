@@ -660,7 +660,7 @@ Status Int96ToDateTimeConverter::convert(const ColumnPtr& src, Column* dst) {
         dst_null_data[i] = src_null_data[i];
         if (!src_null_data[i]) {
             Timestamp timestamp = (static_cast<uint64_t>(src_data[i].hi) << TIMESTAMP_BITS) | (src_data[i].lo / 1000);
-            dst_data[i].set_timestamp(_utc_to_local(timestamp));
+            dst_data[i].set_timestamp(timestamp);
         }
     }
     dst_nullable_column->set_has_null(src_nullable_column->has_null());
