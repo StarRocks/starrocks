@@ -590,8 +590,8 @@ void ChunkPredicateBuilder<E, Type>::normalized_rf_with_null(const JoinRuntimeFi
                                                                                                              &decoder);
     const TypeDescriptor& col_type = col_ref->type();
 
-    ColumnPtr const_min_col = parser.template min_const_column<SlotType>(col_type);
-    ColumnPtr const_max_col = parser.template max_const_column<SlotType>(col_type);
+    ColumnPtr const_min_col = parser.template min_const_column<SlotType>(col_type, pool);
+    ColumnPtr const_max_col = parser.template max_const_column<SlotType>(col_type, pool);
     VectorizedLiteral* min_literal = pool->add(new VectorizedLiteral(std::move(const_min_col), col_type));
     VectorizedLiteral* max_literal = pool->add(new VectorizedLiteral(std::move(const_max_col), col_type));
 
@@ -719,7 +719,7 @@ Status ChunkPredicateBuilder<E, Type>::normalize_join_runtime_filter(const SlotD
                 } else {
                     detail::RuntimeColumnPredicateBuilder::build_minmax_range<
                             RangeType, SlotType, LowCardDictType,
-                            detail::RuntimeColumnPredicateBuilder::GlobalDictCodeDecoder>(*range, rf,
+                            detail::RuntimeColumnPredicateBuilder::GlobalDictCodeDecoder>(*range, rf, _opts.obj_pool,
                                                                                           &iter->second.first);
                 }
             } else {
@@ -729,7 +729,7 @@ Status ChunkPredicateBuilder<E, Type>::normalize_join_runtime_filter(const SlotD
                 } else {
                     detail::RuntimeColumnPredicateBuilder::build_minmax_range<
                             RangeType, SlotType, SlotType, detail::RuntimeColumnPredicateBuilder::DummyDecoder>(
-                            *range, rf, nullptr);
+                            *range, rf, _opts.obj_pool, nullptr);
                 }
             }
         } else {
@@ -738,8 +738,8 @@ Status ChunkPredicateBuilder<E, Type>::normalize_join_runtime_filter(const SlotD
                         rf, desc->probe_expr_ctx()->root(), nullptr);
             } else {
                 detail::RuntimeColumnPredicateBuilder::build_minmax_range<
-                        RangeType, SlotType, SlotType, detail::RuntimeColumnPredicateBuilder::DummyDecoder>(*range, rf,
-                                                                                                            nullptr);
+                        RangeType, SlotType, SlotType, detail::RuntimeColumnPredicateBuilder::DummyDecoder>(
+                        *range, rf, _opts.obj_pool, nullptr);
             }
         }
     }
