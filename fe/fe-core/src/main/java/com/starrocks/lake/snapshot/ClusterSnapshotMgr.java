@@ -185,6 +185,7 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
 
         boolean valid = true;
         Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getRollupHandler().getAlterJobsV2();
+        alterJobs.putAll(GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2());
         for (Map.Entry<Long, AlterJobV2> entry : alterJobs.entrySet()) {
             AlterJobV2 alterJob = entry.getValue();
             if (alterJob.getTableId() == tableId) {
