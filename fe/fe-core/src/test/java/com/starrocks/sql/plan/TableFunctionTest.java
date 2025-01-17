@@ -280,4 +280,17 @@ public class TableFunctionTest extends PlanTestBase {
         assertContains(plan, "tableFunctionName: unnest_bitmap");
         assertNotContains(plan, "bitmap_to_array");
     }
+
+    @Test
+    public void testUnnesetBitmapToArrayToUnnestBitmapRewrite() throws Exception {
+        String sql = "with r1 as (select b1 as b2 from test_agg),\n" +
+                "\t r2 as (select sub_bitmap(b1, 0, 10) as b2 from test_agg),\n" +
+                "\t r3 as (select bitmap_and(t0.b2, t1.b2) as b2 from r1 t0 join r2 t1)\n" +
+                "select unnest as r1 from r3, unnest(bitmap_to_array(b2)) order by r1;";
+        String plan = getFragmentPlan(sql);
+        PlanTestBase.assertContains(plan, "5:Project\n" +
+                "  |  <slot 28> : bitmap_and(10: b1, 25: sub_bitmap)");
+        PlanTestBase.assertContains(plan, "tableFunctionName: unnest_bitmap");
+        PlanTestBase.assertNotContains(plan, "bitmap_to_array");
+    }
 }
