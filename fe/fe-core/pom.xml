@@ -40,8 +40,8 @@ under the License.
         <maven.compiler.release>17</maven.compiler.release>
         <starrocks.home>${basedir}/../../</starrocks.home>
         <fe_ut_parallel>${env.FE_UT_PARALLEL}</fe_ut_parallel>
-        <paimon.version>1.0-20241202-271de7-SNAPSHOT</paimon.version>
-        <dlf.sdk.version>2.3.0-20241203-e6d780-SNAPSHOT</dlf.sdk.version>
+        <paimon.version>1-ali-6.2</paimon.version>
+        <dlf.sdk.version>2.3.0-1-ali-6.2</dlf.sdk.version>
         <python>python</python>
     </properties>
 
@@ -517,16 +517,11 @@ under the License.
             <groupId>io.trino.hive</groupId>
             <artifactId>hive-apache</artifactId>
         </dependency>
-
-<<<<<<< HEAD
         <!-- https://mvnrepository.com/artifact/com.aliyun.datalake/metastore-client-hive3 -->
         <dependency>
             <groupId>com.aliyun.datalake</groupId>
             <artifactId>metastore-client-hive3</artifactId>
         </dependency>
-
-=======
->>>>>>> d3f8b0f518 ([EMR][Feature] Support DLF 2.0 Paimon catalog)
         <!-- https://mvnrepository.com/artifact/com.github.ben-manes.caffeine/caffeine -->
         <dependency>
             <groupId>com.github.ben-manes.caffeine</groupId>
@@ -678,7 +673,7 @@ under the License.
 
         <dependency>
             <groupId>com.aliyun.datalake</groupId>
-            <artifactId>dlf-sdk-assembly</artifactId>
+            <artifactId>dlf-sdk</artifactId>
             <version>${dlf.sdk.version}</version>
             <exclusions>
                 <exclusion>

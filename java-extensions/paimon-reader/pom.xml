@@ -13,8 +13,8 @@
 
     <properties>
         <java-extensions.home>${basedir}/../</java-extensions.home>
-        <paimon.version>1.0-20241202-271de7-SNAPSHOT</paimon.version>
-        <dlf.sdk.version>2.3.0-20241203-e6d780-SNAPSHOT</dlf.sdk.version>
+        <paimon.version>1-ali-6.2</paimon.version>
+        <dlf.sdk.version>2.3.0-1-ali-6.2</dlf.sdk.version>
     </properties>
 
     <dependencies>
@@ -84,7 +84,7 @@
 
         <dependency>
             <groupId>com.aliyun.datalake</groupId>
-            <artifactId>dlf-sdk-assembly</artifactId>
+            <artifactId>dlf-sdk</artifactId>
             <version>${dlf.sdk.version}</version>
             <exclusions>
                 <exclusion>
