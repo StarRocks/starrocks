@@ -300,10 +300,11 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
     }
 
     private synchronized boolean checkValidDeletionByClusterSnapshot(long id) {
-        if (!idToRecycleTime.containsKey(id)) {
+        Long originalRecycleTime = idToRecycleTime.get(id);
+        if (originalRecycleTime == null) {
             return true;
         }
-        return idToRecycleTime.get(id) < GlobalStateMgr.getCurrentState()
+        return originalRecycleTime < GlobalStateMgr.getCurrentState()
                               .getClusterSnapshotMgr().getValidDeletionTimeMsByAutomatedSnapshot();
     }
 

@@ -105,7 +105,7 @@ public class ClusterSnapshotJob implements Writable {
                state == ClusterSnapshotJobState.FINISHED;
     }
 
-    public boolean isSuccess() {
+    public boolean isFinished() {
         return state == ClusterSnapshotJobState.FINISHED;
     }
 
