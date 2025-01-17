@@ -22,7 +22,7 @@ import java.util.Map;
 import java.util.TreeSet;
 
 public final class ColumnDict {
-    private ImmutableMap<ByteBuffer, Integer> dict;
+    private final ImmutableMap<ByteBuffer, Integer> dict;
     // for olap table, version info is time
     // for table on lake, version info is version num
     private final long collectedVersion;
@@ -54,22 +54,5 @@ public final class ColumnDict {
 
     void updateVersion(long version) {
         this.version = version;
-    }
-
-    void merge(ColumnDict o) {
-        TreeSet<ByteBuffer> orderSet = new TreeSet<>();
-        for (Map.Entry<ByteBuffer, Integer> kv : dict.entrySet()) {
-            orderSet.add(kv.getKey());
-        }
-        for (Map.Entry<ByteBuffer, Integer> kv : o.getDict().entrySet()) {
-            orderSet.add(kv.getKey());
-        }
-        ImmutableMap.Builder<ByteBuffer, Integer> dicts = ImmutableMap.builder();
-        int index = 0;
-        for (ByteBuffer v : orderSet) {
-            dicts.put(v, index);
-            index++;
-        }
-        dict = dicts.build();
     }
 }

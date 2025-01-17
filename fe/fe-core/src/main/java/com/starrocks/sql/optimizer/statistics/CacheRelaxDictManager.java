@@ -37,6 +37,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executor;
@@ -76,20 +77,16 @@ public class CacheRelaxDictManager implements IRelaxDictManager, MemoryTrackable
                             } else {
                                 // check TStatisticData is not empty
                                 if (!result.first.isEmpty()) {
-                                    Optional<ColumnDict> newDict = deserializeColumnDict(result.first.get(0));
+                                    Optional<ColumnDict> newDict = deserializeColumnDict(result.first.get(0), oldValue);
                                     if (newDict.isEmpty()) {
                                         FORBIDDEN_DICT_TABLE_UUIDS.add(key.tableUUID);
                                         return Optional.empty();
                                     }
-                                    // merge old value
+                                    // if new value added in this update, reset version.
                                     if (oldValue.isPresent()) {
-                                        ColumnDict oldDict = oldValue.get();
-                                        int oldSize = oldDict.getDictSize();
-                                        oldDict.merge(newDict.get());
-                                        if (oldDict.getDictSize() > oldSize) {
-                                            oldDict.updateVersion(0);
+                                        if (newDict.get().getDictSize() > oldValue.get().getDictSize()) {
+                                            newDict.get().updateVersion(0);
                                         }
-                                        newDict = Optional.of(oldDict);
                                     }
                                     return checkDictSize(key, newDict);
                                 } else {
@@ -136,17 +133,35 @@ public class CacheRelaxDictManager implements IRelaxDictManager, MemoryTrackable
         return input;
     }
 
-    private Optional<ColumnDict> deserializeColumnDict(TStatisticData statisticData) {
+    private Optional<ColumnDict> deserializeColumnDict(TStatisticData statisticData, Optional<ColumnDict> oldValue) {
         if (statisticData.dict == null) {
             return Optional.empty();
         }
         TGlobalDict tGlobalDict = statisticData.dict;
+
         ImmutableMap.Builder<ByteBuffer, Integer> dicts = ImmutableMap.builder();
-        int dictSize = tGlobalDict.getIdsSize();
-        for (int i = 0; i < dictSize; ++i) {
-            dicts.put(tGlobalDict.strings.get(i), tGlobalDict.ids.get(i));
+        if (oldValue.isEmpty()) {
+            int dictSize = tGlobalDict.getIdsSize();
+            for (int i = 0; i < dictSize; ++i) {
+                dicts.put(tGlobalDict.strings.get(i), tGlobalDict.ids.get(i));
+            }
+            return Optional.of(new ColumnDict(dicts.build(), 0));
+        } else {
+            TreeSet<ByteBuffer> orderSet = new TreeSet<>(oldValue.get().getDict().keySet());
+            int dictSize = tGlobalDict.getIdsSize();
+            for (int i = 0; i < dictSize; ++i) {
+                orderSet.add(tGlobalDict.strings.get(i));
+            }
+            int index = 1;
+            for (ByteBuffer v : orderSet) {
+                dicts.put(v, index);
+                index++;
+            }
+
+            long oldVersion = oldValue.get().getVersion();
+            long version = orderSet.size() > oldValue.get().getDictSize() ? oldVersion + 1 : oldVersion;
+            return Optional.of(new ColumnDict(dicts.build(), version));
         }
-        return Optional.of(new ColumnDict(dicts.build(), 0));
     }
 
     @Override
@@ -188,19 +203,16 @@ public class CacheRelaxDictManager implements IRelaxDictManager, MemoryTrackable
             return;
         }
 
-        Optional<ColumnDict> columnDict = deserializeColumnDict(stat.get());
-        if (columnDict.isEmpty()) {
-            return;
-        }
-
         CompletableFuture<Optional<ColumnDict>> future = dictStatistics.getIfPresent(key);
         if (future != null && future.isDone()) {
             try {
                 Optional<ColumnDict> columnOptional = future.get();
                 if (columnOptional.isPresent()) {
-                    columnOptional.get().merge(columnDict.get());
-                    columnOptional.get().updateVersion(columnOptional.get().getVersion() + 1);
-                    dictStatistics.put(key, CompletableFuture.completedFuture(checkDictSize(key, columnOptional)));
+                    Optional<ColumnDict> columnDict = deserializeColumnDict(stat.get(), columnOptional);
+                    if (columnDict.isEmpty()) {
+                        return;
+                    }
+                    dictStatistics.put(key, CompletableFuture.completedFuture(checkDictSize(key, columnDict)));
                 }
             } catch (Exception e) {
                 LOG.warn(String.format("update dict cache for %s: %s failed", tableUUID, columnName), e);
