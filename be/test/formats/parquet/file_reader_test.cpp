@@ -765,9 +765,9 @@ StatusOr<HdfsScannerContext*> FileReaderTest::_create_context_for_filter_page_in
     ColumnPtr partition_col3 = ColumnHelper::create_const_column<TYPE_INT>(5, 1);
     ColumnPtr partition_col4 = ColumnHelper::create_const_column<TYPE_INT>(2, 1);
     ColumnPtr partition_col5 = ColumnHelper::create_const_null_column(1);
-    ctx->partition_columns.emplace_back(HdfsScannerContext::ColumnInfo{3, ctx->slot_descs[2], false});
-    ctx->partition_columns.emplace_back(HdfsScannerContext::ColumnInfo{4, ctx->slot_descs[3], false});
-    ctx->partition_columns.emplace_back(HdfsScannerContext::ColumnInfo{5, ctx->slot_descs[4], false});
+    ctx->partition_columns.emplace_back(HdfsScannerContext::ColumnInfo{3, ctx->tuple_desc->slots()[2], false});
+    ctx->partition_columns.emplace_back(HdfsScannerContext::ColumnInfo{4, ctx->tuple_desc->slots()[3], false});
+    ctx->partition_columns.emplace_back(HdfsScannerContext::ColumnInfo{5, ctx->tuple_desc->slots()[4], false});
     ctx->partition_values.emplace_back(partition_col3);
     ctx->partition_values.emplace_back(partition_col4);
     ctx->partition_values.emplace_back(partition_col5);
@@ -2943,10 +2943,6 @@ TEST_F(FileReaderTest, TestInFilterStatitics) {
     std::vector<TExpr> t_conjuncts;
     ParquetUTBase::create_in_predicate_int_conjunct_ctxs(TExprOpcode::FILTER_IN, 0, in_oprands, &t_conjuncts);
     ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &ctx->conjunct_ctxs_by_slot[0]);
-
-    // setup OlapScanConjunctsManager
-    TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
-    ParquetUTBase::setup_conjuncts_manager(ctx->conjunct_ctxs_by_slot[0], tuple_desc, _runtime_state, ctx);
 
     ASSERT_OK(file_reader->init(ctx));
     EXPECT_EQ(file_reader->row_group_size(), 2);
