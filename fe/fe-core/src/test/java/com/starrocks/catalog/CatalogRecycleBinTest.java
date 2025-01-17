@@ -21,6 +21,7 @@ import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.lake.snapshot.ClusterSnapshotMgr;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.PartitionValue;
@@ -186,15 +187,19 @@ public class CatalogRecycleBinTest {
     @Test
     public void testReplayEraseTableEx(@Mocked GlobalStateMgr globalStateMgr) {
 
+        ClusterSnapshotMgr clusterSnapshotMgr = new ClusterSnapshotMgr();
         new Expectations() {
             {
                 GlobalStateMgr.getCurrentState();
                 result = globalStateMgr;
 
-                globalStateMgr.getEditLog().logEraseMultiTables((List<Long>) any);
+                globalStateMgr.getCurrentState().getEditLog().logEraseMultiTables((List<Long>) any);
                 minTimes = 1;
                 maxTimes = 1;
                 result = null;
+
+                globalStateMgr.getCurrentState().getClusterSnapshotMgr();
+                result = clusterSnapshotMgr;
             }
         };
 
@@ -207,9 +212,9 @@ public class CatalogRecycleBinTest {
         bin.recycleTable(13, table3, true);
 
         bin.eraseTable(System.currentTimeMillis() + Config.catalog_trash_expire_second * 1000L + 10000);
-        waitPartitionClearFinished(bin, 11L, System.currentTimeMillis() + Config.catalog_trash_expire_second * 1000L + 10000);
-        waitPartitionClearFinished(bin, 12L, System.currentTimeMillis() + Config.catalog_trash_expire_second * 1000L + 10000);
-        waitPartitionClearFinished(bin, 13L, System.currentTimeMillis() + Config.catalog_trash_expire_second * 1000L + 10000);
+        waitTableClearFinished(bin, 1L, System.currentTimeMillis() + Config.catalog_trash_expire_second * 1000L + 10000);
+        waitTableClearFinished(bin, 2L, System.currentTimeMillis() + Config.catalog_trash_expire_second * 1000L + 10000);
+        waitTableClearFinished(bin, 3L, System.currentTimeMillis() + Config.catalog_trash_expire_second * 1000L + 10000);
 
         Assert.assertEquals(0, bin.getTables(11L).size());
         Assert.assertEquals(0, bin.getTables(12L).size());
@@ -357,6 +362,14 @@ public class CatalogRecycleBinTest {
 
     @Test
     public void testEnsureEraseLater() {
+        ClusterSnapshotMgr clusterSnapshotMgr = new ClusterSnapshotMgr();
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState().getClusterSnapshotMgr();
+                result = clusterSnapshotMgr;
+            }
+        };
+
         Config.catalog_trash_expire_second = 600; // set expire in 10 minutes
         CatalogRecycleBin recycleBin = new CatalogRecycleBin();
         Database db = new Database(111, "uno");
@@ -428,6 +441,13 @@ public class CatalogRecycleBinTest {
                 minTimes = 0;
             }
         };
+        ClusterSnapshotMgr clusterSnapshotMgr = new ClusterSnapshotMgr();
+        new Expectations() {
+            {
+                globalStateMgr.getCurrentState().getClusterSnapshotMgr();
+                result = clusterSnapshotMgr;
+            }
+        };
 
         recycleBin.eraseDatabase(now);
 
@@ -486,6 +506,13 @@ public class CatalogRecycleBinTest {
                 result = null;
             }
         };
+        ClusterSnapshotMgr clusterSnapshotMgr = new ClusterSnapshotMgr();
+        new Expectations() {
+            {
+                globalStateMgr.getCurrentState().getClusterSnapshotMgr();
+                result = clusterSnapshotMgr;
+            }
+        };
         CatalogRecycleBin recycleBin = new CatalogRecycleBin();
         for (int i = 0; i < CatalogRecycleBin.getMaxEraseOperationsPerCycle() + 1; i++) {
             Table t = new Table(i, String.format("t%d", i), Table.TableType.VIEW, null);
@@ -521,6 +548,13 @@ public class CatalogRecycleBinTest {
                 editLog.logEraseMultiTables((List<Long>) any);
                 minTimes = 0;
                 result = null;
+            }
+        };
+        ClusterSnapshotMgr clusterSnapshotMgr = new ClusterSnapshotMgr();
+        new Expectations() {
+            {
+                globalStateMgr.getCurrentState().getClusterSnapshotMgr();
+                result = clusterSnapshotMgr;
             }
         };
 
@@ -603,6 +637,13 @@ public class CatalogRecycleBinTest {
             {
                 editLog.logErasePartition(anyLong);
                 minTimes = 0;
+            }
+        };
+        ClusterSnapshotMgr clusterSnapshotMgr = new ClusterSnapshotMgr();
+        new Expectations() {
+            {
+                globalStateMgr.getCurrentState().getClusterSnapshotMgr();
+                result = clusterSnapshotMgr;
             }
         };
 
