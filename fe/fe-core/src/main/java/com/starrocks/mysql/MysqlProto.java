@@ -51,6 +51,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 import static com.starrocks.mysql.MysqlHandshakePacket.AUTHENTICATION_KERBEROS_CLIENT;
@@ -217,7 +218,9 @@ public class MysqlProto {
         serializer.setCapability(context.getCapability());
 
         // NOTE: when we behind proxy, we need random string sent by proxy.
-        byte[] randomString = handshakePacket.getAuthPluginData();
+        byte[] randomString =
+                Objects.equals(authPluginName, MysqlHandshakePacket.CLEAR_PASSWORD_PLUGIN_NAME) ?
+                        null : handshakePacket.getAuthPluginData();
         // check authenticate
         if (!authenticate(context, authPacket.getAuthResponse(), randomString, authPacket.getUser())) {
             sendResponsePacket(context);

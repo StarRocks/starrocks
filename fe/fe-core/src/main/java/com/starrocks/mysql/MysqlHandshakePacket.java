@@ -59,8 +59,8 @@ public class MysqlHandshakePacket extends MysqlPacket {
     private static final MysqlCapability CAPABILITY = MysqlCapability.DEFAULT_CAPABILITY;
     // status flags not supported in StarRocks
     private static final int STATUS_FLAGS = 0;
-    private static final String NATIVE_AUTH_PLUGIN_NAME = "mysql_native_password";
-    private static final String CLEAR_PASSWORD_PLUGIN_NAME = "mysql_clear_password";
+    public static final String NATIVE_AUTH_PLUGIN_NAME = "mysql_native_password";
+    public static final String CLEAR_PASSWORD_PLUGIN_NAME = "mysql_clear_password";
     public static final String AUTHENTICATION_KERBEROS_CLIENT = "authentication_kerberos_client";
 
     private static final ImmutableMap<String, Boolean> SUPPORTED_PLUGINS = new ImmutableMap.Builder<String, Boolean>()
