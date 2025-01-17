@@ -1,20 +1,18 @@
 # ds_hll_count_distinct
 
-Returns the approximate value of aggregate function similar to the result of COUNT(DISTINCT col). Like APPROX_COUNT_DISTINCT(expr).
+Returns the approximate value of aggregate function similar to the result of COUNT(DISTINCT col). APPROX_COUNT_DISTINCT(expr) is similar function.
 
-It is faster than the COUNT and DISTINCT combination and uses a fixed-size memory, so less memory is used for columns of high cardinality.
+ds_hll_count_distinct is faster than the COUNT and DISTINCT combination and uses a fixed-size memory, so less memory is required for columns of high cardinality.
 
-It is slower than APPROX_COUNT_DISTINCT(expr) but with higher precision. Which takes advantages of Apache Datasketches.
-
-You can see more details from https://datasketches.apache.org/docs/HLL/HllSketches.html.
+It is slower than APPROX_COUNT_DISTINCT(expr) but with higher precision because it adopts of Apache Datasketches. For more information, see [HyperLogLog Sketches](https://datasketches.apache.org/docs/HLL/HllSketches.html).
 
 ## Syntax
 
 ```Haskell
 ds_hll_count_distinct(expr, [log_k], [tgt_type])
 ```
-- `log_k` must be an integer and in the range [4, 21] which is 17 by default
-- `tgt_type` must be `HLL_4`, `HLL_6` and `HLL_8` which is `HLL_6` by default.
+- `log_k`: Integer. Range [4, 21]. Default: 17.
+- `tgt_type`: Valid values are `HLL_4`, `HLL_6` (default) and `HLL_8`.
 
 ## Examples
 
@@ -60,6 +58,6 @@ mysql> select ds_hll_count_distinct(id, 10, "HLL_8"), ds_hll_count_distinct(prov
 
 ```
 
-## keyword
+## Keywords
 
 DS_HLL_COUNT_DISTINCT,APPROX_COUNT_DISTINCT
