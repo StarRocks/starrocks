@@ -205,4 +205,14 @@ public abstract class MVTimelinessArbiter {
             }
         });
     }
+
+    /**
+     * TODO: Optimize performance in loos/force_mv mode
+     * TODO: in loose mode, ignore partition that both exists in baseTable and mv
+     */
+    protected void collectBaseTableUpdatePartitionNamesInLoose(MvUpdateInfo mvUpdateInfo) {
+        Map<Table, List<Column>> refBaseTableAndColumns = mv.getRefBaseTablePartitionColumns();
+        // collect & update mv's to refresh partitions based on base table's partition changes
+        collectBaseTableUpdatePartitionNames(refBaseTableAndColumns, mvUpdateInfo);
+    }
 }
