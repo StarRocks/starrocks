@@ -2907,8 +2907,13 @@ public class OlapTable extends Table {
         }
         if (keysType == KeysType.UNIQUE_KEYS || keysType == KeysType.PRIMARY_KEYS) {
             uniqueConstraints.add(
+<<<<<<< HEAD
                     new UniqueConstraint(null, null, null, getKeyColumns().stream().map(Column::getName).collect(
                             Collectors.toList())));
+=======
+                    new UniqueConstraint(null, null, getName(), getKeyColumns()
+                            .stream().map(Column::getColumnId).collect(Collectors.toList())));
+>>>>>>> 737c9ec919 ([BugFix] Fix foriegn key constraints for primary/unique tables (#55125))
         }
         if (tableProperty != null && tableProperty.getUniqueConstraints() != null) {
             uniqueConstraints.addAll(tableProperty.getUniqueConstraints());
