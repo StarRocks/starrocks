@@ -31,7 +31,7 @@ public class RestoreClusterSnapshotMgrTest {
     }
 
     @Test
-    public void testDownloadSnapshotFaied() throws Exception {
+    public void testDownloadSnapshotFailed() throws Exception {
         Assert.assertThrows(UserException.class, () -> {
             RestoreClusterSnapshotMgr.init("src/test/resources/conf/cluster_snapshot.yaml",
                     new String[] { "-cluster_snapshot" });
