@@ -37,6 +37,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static com.starrocks.sql.common.ListPartitionDiffer.computeListPartitionDiff;
+import static com.starrocks.sql.common.ListPartitionDiffer.syncBaseTablePartitionInfos;
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVPrepare;
 
 public final class MVTimelinessListPartitionArbiter extends MVTimelinessArbiter {
@@ -73,7 +75,7 @@ public final class MVTimelinessListPartitionArbiter extends MVTimelinessArbiter 
         Map<Table, List<Integer>> tableRefIdxes = Maps.newHashMap();
 
         // collect base table's partition infos
-        if (!ListPartitionDiffer.syncBaseTablePartitionInfos(mv, refBaseTablePartitionMap, allBasePartitionItems,
+        if (!syncBaseTablePartitionInfos(mv, refBaseTablePartitionMap, allBasePartitionItems,
                 tableRefIdxes)) {
             logMVPrepare(mv, "Sync base table partition infos failed");
             return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.FULL);
@@ -90,7 +92,7 @@ public final class MVTimelinessListPartitionArbiter extends MVTimelinessArbiter 
                     ((PListCell) e.getValue())));
         });
 
-        ListPartitionDiffResult result = ListPartitionDiffer.computeListPartitionDiff(mv, refBaseTablePartitionMap,
+        ListPartitionDiffResult result = computeListPartitionDiff(mv, refBaseTablePartitionMap,
                 allBasePartitionItems, tableRefIdxes, isQueryRewrite);
         if (result == null) {
             logMVPrepare(mv, "Partitioned mv compute list diff failed");
@@ -129,9 +131,19 @@ public final class MVTimelinessListPartitionArbiter extends MVTimelinessArbiter 
     public MvUpdateInfo getMVTimelinessUpdateInfoInLoose() {
         MvUpdateInfo mvUpdateInfo = new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.PARTIAL,
                 TableProperty.QueryRewriteConsistencyMode.LOOSE);
+        // table -> map<partition name -> partition cell>
+        Map<Table, Map<String, PListCell>> refBaseTablePartitionMap = Maps.newHashMap();
+        // merge all base table partition cells
+        Map<String, PListCell> allBasePartitionItems = Maps.newHashMap();
+        Map<Table, List<Integer>> tableRefIdxes = Maps.newHashMap();
+        if (!syncBaseTablePartitionInfos(mv, refBaseTablePartitionMap, allBasePartitionItems, tableRefIdxes)) {
+            logMVPrepare(mv, "Partitioned mv collect base table infos failed");
+            return null;
+        }
         ListPartitionDiff listPartitionDiff = null;
         try {
-            ListPartitionDiffResult result = ListPartitionDiffer.computeListPartitionDiff(mv, isQueryRewrite);
+            ListPartitionDiffResult result = computeListPartitionDiff(mv, refBaseTablePartitionMap,
+                    allBasePartitionItems, tableRefIdxes, isQueryRewrite);
             if (result == null) {
                 logMVPrepare(mv, "Partitioned mv compute list diff failed");
                 return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.FULL);
@@ -152,6 +164,24 @@ public final class MVTimelinessListPartitionArbiter extends MVTimelinessArbiter 
             mvUpdateInfo.getMvToRefreshPartitionNames().add(mvPartitionName);
         }
         addEmptyPartitionsToRefresh(mvUpdateInfo);
+        collectBaseTableUpdatePartitionNamesInLoose(mvUpdateInfo);
+        collectMVToBaseTablePartitionNames(refBaseTablePartitionMap, listPartitionDiff, tableRefIdxes, mvUpdateInfo);
         return mvUpdateInfo;
+    }
+
+    /**
+     * Collect mv to base table partition names mapping to be used in {@code MvUpdate#getBaseTableToRefreshPartitionNames}
+     * for union compensate rewrite.
+     */
+    protected void collectMVToBaseTablePartitionNames(Map<Table, Map<String, PListCell>> refBaseTablePartitionMap,
+                                                      ListPartitionDiff diff,
+                                                      Map<Table, List<Integer>> tableRefIdxes,
+                                                      MvUpdateInfo mvUpdateInfo) {
+        Map<String, PListCell> mvPartitionToCells = mv.getListPartitionItems();
+        diff.getDeletes().keySet().forEach(mvPartitionToCells::remove);
+        mvPartitionToCells.putAll(diff.getAdds());
+        Map<String, Map<Table, Set<String>>> mvToBaseNameRef = ListPartitionDiffer
+                .generateMvRefMap(mvPartitionToCells, tableRefIdxes, refBaseTablePartitionMap);
+        mvUpdateInfo.getMvPartToBasePartNames().putAll(mvToBaseNameRef);
     }
 }

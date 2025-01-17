@@ -29,6 +29,10 @@ public enum MVTransparentState {
     COMPENSATE,
     UNKNOWN;
 
+    public boolean isUnknown() {
+        return this == UNKNOWN;
+    }
+
     public boolean isNoRewrite() {
         return this == NO_REWRITE;
     }
