@@ -770,7 +770,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                 createReplicaLatch.countDownToZero(new Status(TStatusCode.OK, ""));
             }
             synchronized (this) {
-                return cancelInternal(errMsg)
+                return cancelInternal(errMsg);
             }
         } finally {
             isCancelling.set(false);
