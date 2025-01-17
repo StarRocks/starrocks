@@ -2379,7 +2379,14 @@ public class ShowExecutor {
         public ShowResultSet visitShowCatalogsStatement(ShowCatalogsStmt statement, ConnectContext context) {
             GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
             CatalogMgr catalogMgr = globalStateMgr.getCatalogMgr();
+            PatternMatcher matcher = null;
+            if (statement.getPattern() != null) {
+                matcher = PatternMatcher.createMysqlPattern(statement.getPattern(),
+                        CaseSensibility.CONFIG.getCaseSensibility());
+            }
+            PatternMatcher finalMatcher = matcher;
             List<List<String>> rowSet = catalogMgr.getCatalogsInfo().stream()
+                    .filter(rowMatch -> finalMatcher == null || finalMatcher.match(rowMatch.get(0)))
                     .filter(row -> {
                                 if (!InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME.equals(row.get(0))) {
 
@@ -2394,7 +2401,7 @@ public class ShowExecutor {
                                     return true;
                                 }
                                 return true;
-                            }
+                    }
                     )
                     .sorted(Comparator.comparing(o -> o.get(0))).collect(Collectors.toList());
             return new ShowResultSet(statement.getMetaData(), rowSet);
