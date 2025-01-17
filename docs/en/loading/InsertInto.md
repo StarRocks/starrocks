@@ -502,7 +502,7 @@ INSERT INTO insert_wiki_edit (
 SELECT event_time, channel, user FROM source_wiki_edit;
 ```
 
-The column mapping will change if you changed the order of `channel` and `user` in either the column clause or the SELECT statement.
+The column mapping will change if you changed the order of `channel` and `user` in either the column list or the SELECT statement.
 
 ```SQL
 INSERT INTO insert_wiki_edit (
@@ -515,23 +515,19 @@ SELECT event_time, user, channel FROM source_wiki_edit;
 
 Here, the ingested data are probably not what you want, because `channel` in the target table `insert_wiki_edit` will be filled with data from `user` in the source table `source_wiki_edit`.
 
-By setting the property `match_column_by` to `name` in the INSERT statement, the system will detect the column names in the source and the target tables, and match the columns with the same name.
+By adding `BY NAME` clause in the INSERT statement, the system will detect the column names in the source and the target tables, and match the columns with the same name.
 
-`match_column_by`: The mode how the system matches the columns in the source and target tables. Valid values:
-- `position` (Default): The system matches the columns by the position of the columns in the column clause and the SELECT statement.
-- `name`: The system matches the columns with the same name.
+:::note
+
+- You cannot specify the column list if `BY NAME` is specified.
+- If `BY NAME` is not specified, the system matches the columns by the position of the columns in the column list and the SELECT statement.
+
+:::
 
 The following example matches each column in the source and target tables by their names:
 
 ```SQL
-INSERT INTO insert_wiki_edit (
-    event_time,
-    channel,
-    user
-)
-PROPERTIES(
-    "match_column_by" = "name"
-)
+INSERT INTO insert_wiki_edit BY NAME
 SELECT event_time, user, channel FROM source_wiki_edit;
 ```
 
