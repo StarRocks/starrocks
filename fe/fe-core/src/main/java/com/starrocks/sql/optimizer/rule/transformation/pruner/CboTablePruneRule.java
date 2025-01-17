@@ -36,6 +36,7 @@ import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
+import com.starrocks.sql.optimizer.operator.pattern.MultiOpPattern;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -89,7 +90,7 @@ public class CboTablePruneRule extends TransformationRule {
         }
         for (int i = 0; i < input.getInputs().size(); i++) {
             LogicalOperator op = input.inputAt(i).getOp().cast();
-            if (!Pattern.isScanOperator(op.getOpType())) {
+            if (MultiOpPattern.ALL_SCAN_TYPES.contains(op.getOpType())) {
                 return false;
             }
         }
