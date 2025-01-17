@@ -63,6 +63,8 @@ public:
 
     size_t row_group_size() const { return _row_group_size; }
 
+    const std::vector<std::shared_ptr<GroupReader>>& group_readers() const { return _row_group_readers; }
+
 private:
     int _chunk_size;
 

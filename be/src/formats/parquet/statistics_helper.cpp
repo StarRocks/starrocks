@@ -21,6 +21,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
 #include "common/status.h"
+#include "exprs/min_max_predicate.h"
 #include "exprs/predicate.h"
 #include "formats/parquet/column_converter.h"
 #include "formats/parquet/encoding_plain.h"
@@ -156,6 +157,9 @@ bool StatisticsHelper::can_be_used_for_statistics_filter(ExprContext* ctx,
         } else {
             return false;
         }
+    } else if (root_expr->node_type() == TExprNodeType::RUNTIME_FILTER_MIN_MAX_EXPR) {
+        filter_type = StatisticsHelper::StatSupportedFilter::RF_MIN_MAX;
+        return true;
     } else {
         return false;
     }
@@ -189,6 +193,67 @@ void translate_to_string_value(ColumnPtr col, size_t i, std::string& value) {
                 },
                 variant);
     });
+}
+
+Status StatisticsHelper::min_max_filter_on_min_max_stat(const std::vector<std::string>& min_values,
+                                                        const std::vector<std::string>& max_values,
+                                                        const std::vector<int64_t>& null_counts, ExprContext* ctx,
+                                                        const ParquetField* field, const std::string& timezone,
+                                                        Filter& selected) {
+    const Expr* root_expr = ctx->root();
+    LogicalType ltype = root_expr->type().type;
+    switch (ltype) {
+#define M(NAME)                                                                                                     \
+    case LogicalType::NAME: {                                                                                       \
+        return min_max_filter_on_min_max_stat_t<LogicalType::NAME>(min_values, max_values, null_counts, ctx, field, \
+                                                                   timezone, selected);                             \
+    }
+        APPLY_FOR_ALL_SCALAR_TYPE(M);
+#undef M
+    default:
+        return Status::OK();
+    }
+}
+
+template <LogicalType LType>
+Status StatisticsHelper::min_max_filter_on_min_max_stat_t(const std::vector<std::string>& min_values,
+                                                          const std::vector<std::string>& max_values,
+                                                          const std::vector<int64_t>& null_counts, ExprContext* ctx,
+                                                          const ParquetField* field, const std::string& timezone,
+                                                          Filter& selected) {
+    const Expr* root_expr = ctx->root();
+    const auto* min_max_filter = dynamic_cast<const MinMaxPredicate<LType>*>(root_expr);
+    bool rf_has_null = min_max_filter->has_null();
+
+    ColumnPtr min_column = ColumnHelper::create_column(root_expr->type(), true);
+    ColumnPtr max_column = ColumnHelper::create_column(root_expr->type(), true);
+
+    auto rf_min_value = min_max_filter->get_min_value();
+    auto rf_max_value = min_max_filter->get_max_value();
+
+    RETURN_IF_ERROR(
+            StatisticsHelper::decode_value_into_column(min_column, min_values, root_expr->type(), field, timezone));
+    RETURN_IF_ERROR(
+            StatisticsHelper::decode_value_into_column(max_column, max_values, root_expr->type(), field, timezone));
+
+    for (size_t i = 0; i < min_values.size(); i++) {
+        if (!selected[i]) {
+            continue;
+        }
+        if (rf_has_null && null_counts[i] > 0) {
+            selected[i] = 1;
+            continue;
+        }
+
+        auto zonemap_min_v = ColumnHelper::get_data_column_by_type<LType>(min_column.get())->get_data()[i];
+        auto zonemap_max_v = ColumnHelper::get_data_column_by_type<LType>(max_column.get())->get_data()[i];
+        if (zonemap_min_v > rf_max_value || zonemap_max_v < rf_min_value) {
+            selected[i] = 0;
+            continue;
+        }
+    }
+
+    return Status::OK();
 }
 
 Status StatisticsHelper::in_filter_on_min_max_stat(const std::vector<std::string>& min_values,
