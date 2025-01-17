@@ -101,3 +101,35 @@ select c1,c0 from t5 where c1 < 10 order by c1,c0 asc limit 10;
 select c0,c1 from t5 order by c0 desc limit 10;
 select c1 from t5 order by c1 desc limit 10;
 select c1,c0 from t5 order by c1,c0 desc limit 10;
+
+-- test has null topn rf with lowcardinality 
+CREATE TABLE `tlow` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` varchar(20) NULL COMMENT "",
+  `c2` varchar(200) NULL COMMENT "",
+  `c3` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`, `c1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`, `c1`) BUCKETS 64
+PROPERTIES (
+"colocate_with" = "${uuid0}",
+"replication_num" = "1",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+
+set io_tasks_per_scan_operator=1;
+set group_execution_min_scan_rows=1;
+
+insert into tlow SELECT generate_series, if (generate_series<10, null, generate_series%10), generate_series, generate_series FROM TABLE(generate_series(1,  40960));
+analyze full table tl;
+select count(distinct c1) from tlow;
+function: wait_global_dict_ready('c1', 'tlow')
+
+select c1 from tlow group by c0, c1 order by c1 nulls first limit 10;
+
+
