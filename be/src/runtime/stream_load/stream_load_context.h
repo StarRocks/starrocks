@@ -246,8 +246,8 @@ public:
     int64_t total_received_data_cost_nanos = 0;
     int64_t received_data_cost_nanos = 0;
     int64_t write_data_cost_nanos = 0;
-    int64_t begin_txn_ts = 0;
-    int64_t last_active_ts = 0;
+    std::atomic<int64_t> begin_txn_ts = 0;
+    std::atomic<int64_t> last_active_ts = 0;
 
     std::string error_url;
     std::string rejected_record_path;
