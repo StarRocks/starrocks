@@ -34,7 +34,6 @@ import org.apache.logging.log4j.Logger;
 import java.io.File;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 
 public class RestoreClusterSnapshotMgr {
     private static final Logger LOG = LogManager.getLogger(RestoreClusterSnapshotMgr.class);
@@ -86,6 +85,7 @@ public class RestoreClusterSnapshotMgr {
         } finally {
             self.rollbackConfig();
             instance = null;
+            LOG.info("FE finished to restore from a cluster snapshot");
         }
     }
 
@@ -118,17 +118,13 @@ public class RestoreClusterSnapshotMgr {
             LOG.info("Deleted image dir {}", localImagePath);
         }
         if (FileUtils.deleteQuietly(new File(localBdbPath))) {
-            LOG.info("Deleted bdb {}", localBdbPath);
+            LOG.info("Deleted bdb dir {}", localBdbPath);
         }
 
-        ClusterSnapshotConfig.StorageVolume storageVolume = clusterSnapshot.getStorageVolume();
-        // TODO: use constant and support no snapshot name
-        String snapshotImagePath = String.join("/", storageVolume.getLocation(), clusterSnapshot.getClusterServiceId(),
-                "meta/image", clusterSnapshot.getClusterSnapshotName());
-        Map<String, String> properties = storageVolume.getProperties();
+        String snapshotImagePath = clusterSnapshot.getClusterSnapshotPath();
 
-        LOG.info("Copy snapshot image {} to local dir {}", snapshotImagePath, localImagePath);
-        HdfsUtil.copyToLocal(snapshotImagePath, localImagePath, properties);
+        LOG.info("Download cluster snapshot {} to local dir {}", snapshotImagePath, localImagePath);
+        HdfsUtil.copyToLocal(snapshotImagePath, localImagePath, clusterSnapshot.getStorageVolume().getProperties());
     }
 
     private void updateFrontends() throws UserException {
