@@ -419,6 +419,8 @@ CONF_Double(dictionary_encoding_ratio, "0.7");
 // performance degradation.
 CONF_Int32(dictionary_page_size, "1048576");
 
+CONF_Int32(small_dictionary_page_size, "4096");
+
 // Just like dictionary_encoding_ratio, dictionary_encoding_ratio_for_non_string_column is used for
 // no-string column.
 CONF_Double(dictionary_encoding_ratio_for_non_string_column, "0");
