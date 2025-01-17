@@ -41,8 +41,8 @@ import com.starrocks.common.util.Util;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.BufferedReader;
 import java.io.BufferedWriter;
-import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
@@ -52,6 +52,7 @@ import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -346,26 +347,52 @@ public class ConfigBase {
     }
 
     private static void appendPersistedProperties(String key, String value, String userIdentity) throws IOException {
-        String comment = String.format("# The user: %s manually modified the configuration on %s", userIdentity,
-                LocalDateTime.now().format(DateUtils.DATE_TIME_FORMATTER_UNIX));
-
         Properties props = new Properties();
-        File file = new File(configPath);
-        try (FileReader reader = new FileReader(file)) {
+        try (FileReader reader = new FileReader(configPath)) {
             props.load(reader);
         }
-        // Update or add the key-value pair
-        props.setProperty(key, value);
+        String oldValue = props.getProperty(key);
+        String comment = String.format("# The user %s changed %s to %s at %s", userIdentity, oldValue, value,
+                LocalDateTime.now().format(DateUtils.DATE_TIME_FORMATTER_UNIX));
 
+        List<String> lines = new ArrayList<>();
+        boolean keyExists = false;
+
+        try (BufferedReader reader = new BufferedReader(new FileReader(configPath))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                lines.add(line);
+            }
+        }
+
+        // Keep the original configuration file format
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(configPath))) {
-            for (String propKey : props.stringPropertyNames()) {
-                if (propKey.equals(key)) {
-                    // write target key-value pair
+            for (int i = 0; i < lines.size(); i++) {
+                String line = lines.get(i).trim();
+
+                // Compatible with key=value & key = value
+                if (line.matches("^" + key + "\\s*=\\s*.*$")) {
+                    keyExists = true;
                     writer.write(comment);
                     writer.newLine();
+                    writer.write(key + " = " + value);
+                    writer.newLine();
+
+                    while (i + 1 < lines.size() && !lines.get(i + 1).startsWith("#") && !lines.get(i + 1).contains("=")) {
+                        i++;
+                    }
+                    continue;
                 }
-                // write original key-value pair
-                writer.write(propKey + "=" + props.getProperty(propKey));
+
+                writer.write(lines.get(i));
+                writer.newLine();
+            }
+
+            if (!keyExists) {
+                writer.newLine();
+                writer.write(comment);
+                writer.newLine();
+                writer.write(key + " = " + value);
                 writer.newLine();
             }
         }
