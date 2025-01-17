@@ -256,9 +256,7 @@ Status BinaryDictPageDecoder<Type>::next_batch(const SparseRange<>& range, Colum
             slices[i] = element;
         }
     } else {
-        for (int i = 0; i < nread; ++i) {
-            slices[i] = _dict_decoder->string_at_index(codewords[i]);
-        }
+        _dict_decoder->batch_string_at_index(slices.data(), codewords, nread);
     }
 
     bool ok = dst->append_strings_overflow(slices, _max_value_legth);
