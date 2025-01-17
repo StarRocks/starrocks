@@ -75,8 +75,8 @@ TEST_F(OlapRuntimeRangePrunerTest, min_max_parser) {
     rf.insert(20);
 
     detail::RuntimeColumnPredicateBuilder::MinMaxParser<Int32RuntimeFilter, Int32Decoder> parser(&rf, &decoder);
-    ColumnPtr min_column = parser.min_const_column<TYPE_INT>(TYPE_INT_DESC);
-    ColumnPtr max_column = parser.max_const_column<TYPE_INT>(TYPE_INT_DESC);
+    ColumnPtr min_column = parser.min_const_column<TYPE_INT>(TYPE_INT_DESC, &_pool);
+    ColumnPtr max_column = parser.max_const_column<TYPE_INT>(TYPE_INT_DESC, &_pool);
     ASSERT_EQ(min_column->debug_string(), "CONST: 10 Size : 1");
     ASSERT_EQ(max_column->debug_string(), "CONST: 20 Size : 1");
 }
@@ -89,8 +89,8 @@ TEST_F(OlapRuntimeRangePrunerTest, min_max_parser_for_decimal) {
     rf.insert(20);
 
     detail::RuntimeColumnPredicateBuilder::MinMaxParser<Decimal32RuntimeFilter, Int32Decoder> parser(&rf, &decoder);
-    ColumnPtr min_column = parser.min_const_column<TYPE_DECIMAL32>(TYPE_DECIMAL32_DESC);
-    ColumnPtr max_column = parser.max_const_column<TYPE_DECIMAL32>(TYPE_DECIMAL32_DESC);
+    ColumnPtr min_column = parser.min_const_column<TYPE_DECIMAL32>(TYPE_DECIMAL32_DESC, &_pool);
+    ColumnPtr max_column = parser.max_const_column<TYPE_DECIMAL32>(TYPE_DECIMAL32_DESC, &_pool);
     ASSERT_EQ(min_column->debug_string(), "CONST: 0.0010 Size : 1");
     ASSERT_EQ(max_column->debug_string(), "CONST: 0.0020 Size : 1");
 }
