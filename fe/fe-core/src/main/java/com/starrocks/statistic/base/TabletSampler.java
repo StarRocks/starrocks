@@ -57,10 +57,6 @@ public class TabletSampler {
         return totalRows;
     }
 
-    public long getSampleRows() {
-        return (long) Math.min(sampleRowsLimit, Math.max(totalRows * tabletReadRatio, 1L));
-    }
-
     public long getTotalTablets() {
         return tablets.size();
     }
