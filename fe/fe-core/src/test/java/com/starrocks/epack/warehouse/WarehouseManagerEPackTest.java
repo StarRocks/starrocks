@@ -94,7 +94,8 @@ public class WarehouseManagerEPackTest {
     public void testAlterWarehouse() throws DdlException {
         new MockUp<StarOSAgentEpack>() {
             @Mock
-            public void updateWorkerGroup(long workerGroupId, int replicaNumber) throws DdlException {
+            public void updateWorkerGroup(long workerGroupId, int replicaNumber, String replicationTypeStr)
+                    throws DdlException {
             }
         };
         new MockUp<GlobalStateMgr>() {
