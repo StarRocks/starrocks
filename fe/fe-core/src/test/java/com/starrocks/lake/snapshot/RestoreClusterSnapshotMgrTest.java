@@ -31,13 +31,8 @@ public class RestoreClusterSnapshotMgrTest {
     }
 
     @Test
-<<<<<<< HEAD
-    public void testDownloadSnapshotFaied() throws Exception {
-        Assert.assertThrows(UserException.class, () -> {
-=======
     public void testDownloadSnapshotFailed() throws Exception {
-        Assert.assertThrows(StarRocksException.class, () -> {
->>>>>>> 6e86e4563 ([Enhancement] Use cluster_snapshot_path to specify the cluster snapshot to be restored (#55147))
+        Assert.assertThrows(UserException.class, () -> {
             RestoreClusterSnapshotMgr.init("src/test/resources/conf/cluster_snapshot.yaml",
                     new String[] { "-cluster_snapshot" });
         });
