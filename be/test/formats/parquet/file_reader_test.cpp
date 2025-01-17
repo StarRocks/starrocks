@@ -709,6 +709,26 @@ StatusOr<HdfsScannerContext*> FileReaderTest::_create_context_for_has_null_page_
     return scan_ctx;
 }
 
+<<<<<<< HEAD
+=======
+StatusOr<HdfsScannerContext*> FileReaderTest::_create_context_for_filter_row_group_update_rf(SlotId slot_id) {
+    Utils::SlotDesc slot_descs[] = {{"col1", TYPE_INT_DESC, 0}, {"col2", TYPE_INT_DESC, 1}, {""}};
+    auto ctx = _create_scan_context(slot_descs, _filter_row_group_path_3);
+    ASSIGN_OR_RETURN(auto* rf_desc, gen_runtime_filter_desc(slot_id));
+
+    _rf_probe_collector->add_descriptor(rf_desc);
+
+    auto* pred_parser = _pool.add(new ConnectorPredicateParser(&ctx->slot_descs));
+    auto* rf_list = _pool.add(new UnarrivedRuntimeFilterList());
+    rf_list->driver_sequence = 1;
+    rf_list->unarrived_runtime_filters.emplace_back(rf_desc);
+    rf_list->slot_descs.emplace_back(ctx->slot_descs[0]);
+    ctx->rf_scan_range_pruner = _pool.add(new RuntimeScanRangePruner(pred_parser, *rf_list));
+
+    return ctx;
+}
+
+>>>>>>> e3f5de009 ([Refactor] Rename OlapRuntimeScanRangePruner to RuntimeScanRangePruner (#55154))
 StatusOr<HdfsScannerContext*> FileReaderTest::_create_context_for_filter_row_group_1(SlotId slot_id, int32_t start,
                                                                                      int32_t end, bool has_null) {
     Utils::SlotDesc slot_descs[] = {{"col1", TYPE_INT_DESC, 1}, {"col2", TYPE_INT_DESC, 2}, {"col3", TYPE_INT_DESC, 3},
