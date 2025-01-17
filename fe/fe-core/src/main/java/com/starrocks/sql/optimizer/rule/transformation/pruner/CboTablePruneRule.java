@@ -34,9 +34,7 @@ import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
-import com.starrocks.sql.optimizer.operator.pattern.MultiOpPattern;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -59,7 +57,7 @@ import java.util.stream.Collectors;
 public class CboTablePruneRule extends TransformationRule {
     private CboTablePruneRule() {
         super(RuleType.TF_CBO_TABLE_PRUNE_RULE,
-                Pattern.create(OperatorType.LOGICAL_JOIN, OperatorType.LOGICAL, OperatorType.LOGICAL));
+                Pattern.create(OperatorType.LOGICAL_JOIN, OperatorType.PATTERN_SCAN, OperatorType.PATTERN_SCAN));
     }
 
     // the count of joins of these types exceeds certain threshold, this Rule would be time-consuming
@@ -84,15 +82,6 @@ public class CboTablePruneRule extends TransformationRule {
                 joinOp.getJoinType() == JoinOperator.RIGHT_OUTER_JOIN);
         if (!supportedJoinType) {
             return false;
-        }
-        if (input.getInputs().size() != 2) {
-            return false;
-        }
-        for (int i = 0; i < input.getInputs().size(); i++) {
-            LogicalOperator op = input.inputAt(i).getOp().cast();
-            if (MultiOpPattern.ALL_SCAN_TYPES.contains(op.getOpType())) {
-                return false;
-            }
         }
         return true;
     }
@@ -244,7 +233,7 @@ public class CboTablePruneRule extends TransformationRule {
         }
 
         // must be the same table
-        if (lhsScanOp.getTable().equals(rhsScanOp.getTable())) {
+        if (!lhsScanOp.getTable().equals(rhsScanOp.getTable())) {
             return Collections.emptyList();
         }
 
