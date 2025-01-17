@@ -254,9 +254,15 @@ void LoadChannel::add_chunks(const PTabletWriterAddChunksRequest& req, PTabletWr
 
         std::stringstream ss;
         _root_profile->pretty_print(&ss);
-        LOG_EVERY_N(WARNING, timeout_ms > config::load_rpc_slow_log_frequency_threshold_seconds ? 1 : 10)
-                << "tablet writer add chunk timeout. txn_id=" << _txn_id << ", cost=" << total_time_us / 1000
-                << "ms, timeout=" << timeout_ms << "ms, profile=" << ss.str();
+        if (timeout_ms > config::load_rpc_slow_log_frequency_threshold_seconds) {
+            LOG(WARNING) << "tablet writer add chunk timeout. txn_id=" << _txn_id << ", cost=" << total_time_us / 1000
+                         << "ms, timeout=" << timeout_ms << "ms, profile=" << ss.str();
+        } else {
+            // reduce slow log print frequency if the log job is small batch and high frequency
+            LOG_EVERY_N(WARNING, 10) << "tablet writer add chunk timeout. txn_id=" << _txn_id
+                                     << ", cost=" << total_time_us / 1000 << "ms, timeout=" << timeout_ms
+                                     << "ms, profile=" << ss.str();
+        }
     }
 }
 
