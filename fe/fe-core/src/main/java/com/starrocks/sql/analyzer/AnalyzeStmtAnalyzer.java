@@ -80,6 +80,11 @@ public class AnalyzeStmtAnalyzer {
             StatsConstants.STATISTIC_SAMPLE_COLLECT_ROWS,
             StatsConstants.STATISTIC_EXCLUDE_PATTERN,
 
+            StatsConstants.HIGH_WEIGHT_SAMPLE_RATIO,
+            StatsConstants.MEDIUM_HIGH_WEIGHT_SAMPLE_RATIO,
+            StatsConstants.MEDIUM_LOW_WEIGHT_SAMPLE_RATIO,
+            StatsConstants.LOW_WEIGHT_SAMPLE_RATIO,
+
             StatsConstants.HISTOGRAM_BUCKET_NUM,
             StatsConstants.HISTOGRAM_MCV_SIZE,
             StatsConstants.HISTOGRAM_SAMPLE_RATIO,

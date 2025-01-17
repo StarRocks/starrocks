@@ -491,4 +491,12 @@ public class AnalyzeStmtTest {
         stmt = (AnalyzeStmt) analyzeSuccess("analyze table db.tbl predicate columns");
         Assert.assertTrue(stmt.isUsePredicateColumns());
     }
+
+    @Test
+    public void testAnalyzeTableWithSampleRatio() {
+        analyzeSuccess("analyze sample table db.tbl properties(\"high_weight_sample_ratio\" = \"0.6\")");
+        analyzeSuccess("analyze sample table db.tbl properties(\"medium_high_weight_sample_ratio\" = \"0.6\")");
+        analyzeSuccess("analyze sample table db.tbl properties(\"medium_low_weight_sample_ratio\" = \"0.6\")");
+        analyzeSuccess("analyze sample table db.tbl properties(\"low_weight_sample_ratio\" = \"0.6\")");
+    }
 }
