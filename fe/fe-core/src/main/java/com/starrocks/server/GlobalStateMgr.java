@@ -101,6 +101,7 @@ import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.SmallFileMgr;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.Util;
 import com.starrocks.common.util.concurrent.QueryableReentrantLock;
 import com.starrocks.common.util.concurrent.lock.LockManager;
@@ -1641,7 +1642,34 @@ public class GlobalStateMgr {
     }
 
     private void postLoadImage() {
+        onReloadTables();
         processMvRelatedMeta();
+    }
+
+    /**
+     * Call Table::onReload after load all tables, some properties like FK may depend on other databases/catalogs
+     */
+    private void onReloadTables() {
+        TemporaryTableMgr temporaryTableMgr = GlobalStateMgr.getCurrentState().getTemporaryTableMgr();
+        List<String> dbNames = metadataMgr.listDbNames(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+        for (String dbName : dbNames) {
+            Database db = metadataMgr.getDb(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbName);
+            if (db == null) {
+                continue;
+            }
+            for (Table table : db.getTables()) {
+                try {
+                    table.onReload();
+
+                    if (table.isTemporaryTable()) {
+                        temporaryTableMgr.addTemporaryTable(UUIDUtil.genUUID(), db.getId(), table.getName(),
+                                table.getId());
+                    }
+                } catch (Throwable e) {
+                    LOG.error("reload table failed: {}", table, e);
+                }
+            }
+        }
     }
 
     private void processMvRelatedMeta() {
