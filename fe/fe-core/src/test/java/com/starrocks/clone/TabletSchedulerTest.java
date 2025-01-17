@@ -37,6 +37,7 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.concurrent.lock.LockManager;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.lake.snapshot.ClusterSnapshotMgr;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -138,6 +139,10 @@ public class TabletSchedulerTest {
                 globalStateMgr.getVariableMgr();
                 minTimes = 0;
                 result = variableMgr;
+
+                globalStateMgr.getClusterSnapshotMgr();
+                minTimes = 0;
+                result = new ClusterSnapshotMgr();
             }
         };
 

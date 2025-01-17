@@ -79,7 +79,9 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
             locker.lockDatabase(db.getId(), LockType.READ);
             try {
                 for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTablesIncludeRecycleBin(db)) {
-                    if (table.isCloudNativeTableOrMaterializedView()) {
+                    if (table.isCloudNativeTableOrMaterializedView() &&
+                            GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
+                                                            .checkValidDeletionForTableFromAlterJob(table.getId())) {
                         GlobalStateMgr.getCurrentState().getLocalMetastore()
                                 .getAllPartitionsIncludeRecycleBin((OlapTable) table)
                                 .stream()
