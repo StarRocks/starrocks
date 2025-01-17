@@ -23,8 +23,8 @@
 #include "runtime/global_dict/types.h"
 #include "storage/chunk_iterator.h"
 #include "storage/olap_common.h"
-#include "storage/olap_runtime_range_pruner.h"
 #include "storage/predicate_tree/predicate_tree.hpp"
+#include "storage/runtime_range_pruner.h"
 #include "storage/tuple.h"
 
 namespace starrocks {
@@ -86,7 +86,7 @@ struct TabletReaderParams {
     ShortKeyRangesOptionPtr short_key_ranges_option = nullptr;
 
     bool sorted_by_keys_per_tablet = false;
-    OlapRuntimeScanRangePruner runtime_range_pruner;
+    RuntimeScanRangePruner runtime_range_pruner;
 
     std::vector<ColumnAccessPathPtr>* column_access_paths = nullptr;
     bool use_pk_index = false;

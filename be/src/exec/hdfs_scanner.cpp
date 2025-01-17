@@ -23,8 +23,8 @@
 #include "io/compressed_input_stream.h"
 #include "io/shared_buffered_input_stream.h"
 #include "pipeline/fragment_context.h"
-#include "storage/olap_runtime_range_pruner.hpp"
 #include "storage/predicate_parser.h"
+#include "storage/runtime_range_pruner.hpp"
 #include "util/compression/compression_utils.h"
 #include "util/compression/stream_compression.h"
 
@@ -189,7 +189,7 @@ Status HdfsScanner::_build_scanner_context() {
         ASSIGN_OR_RETURN(ctx.predicate_tree,
                          ctx.conjuncts_manager->get_predicate_tree(predicate_parser, ctx.predicate_free_pool));
         ctx.rf_scan_range_pruner = opts.obj_pool->add(
-                new OlapRuntimeScanRangePruner(predicate_parser, ctx.conjuncts_manager->unarrived_runtime_filters()));
+                new RuntimeScanRangePruner(predicate_parser, ctx.conjuncts_manager->unarrived_runtime_filters()));
     }
     return Status::OK();
 }

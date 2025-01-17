@@ -30,7 +30,7 @@
 #include "gen_cpp/parquet_types.h"
 #include "io/shared_buffered_input_stream.h"
 #include "runtime/runtime_state.h"
-#include "storage/olap_runtime_range_pruner.hpp"
+#include "storage/runtime_range_pruner.hpp"
 
 namespace tparquet {
 class ColumnMetaData;
@@ -148,7 +148,7 @@ private:
     GroupReaderParam _group_reader_param;
     std::shared_ptr<MetaHelper> _meta_helper = nullptr;
     SkipRowsContextPtr _skip_rows_ctx = nullptr;
-    std::shared_ptr<OlapRuntimeScanRangePruner> _rf_scan_range_pruner;
+    std::shared_ptr<RuntimeScanRangePruner> _rf_scan_range_pruner;
 };
 
 } // namespace starrocks::parquet

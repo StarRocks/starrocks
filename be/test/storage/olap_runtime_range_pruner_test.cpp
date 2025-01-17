@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/olap_runtime_range_pruner.hpp"
-
 #include <gtest/gtest.h>
 
 #include "exprs/runtime_filter_bank.h"
@@ -22,6 +20,7 @@
 #include "runtime/runtime_state.h"
 #include "storage/column_predicate.h"
 #include "storage/predicate_parser.h"
+#include "storage/runtime_range_pruner.hpp"
 #include "testutil/exprs_test_helper.h"
 #include "testutil/schema_test_helper.h"
 
@@ -103,7 +102,7 @@ TEST_F(OlapRuntimeRangePrunerTest, update_1) {
 
     UnarrivedRuntimeFilterList unarrivedRuntimeFilterList;
     unarrivedRuntimeFilterList.add_unarrived_rf(runtime_filter_desc.get(), &slot, 1);
-    OlapRuntimeScanRangePruner pruner(_predicate_parser.get(), unarrivedRuntimeFilterList);
+    RuntimeScanRangePruner pruner(_predicate_parser.get(), unarrivedRuntimeFilterList);
 
     size_t pred_size = 0;
     std::string pred_1;
@@ -162,7 +161,7 @@ TEST_F(OlapRuntimeRangePrunerTest, update_has_null) {
 
     UnarrivedRuntimeFilterList unarrivedRuntimeFilterList;
     unarrivedRuntimeFilterList.add_unarrived_rf(runtime_filter_desc.get(), &slot, 1);
-    OlapRuntimeScanRangePruner pruner(_predicate_parser.get(), unarrivedRuntimeFilterList);
+    RuntimeScanRangePruner pruner(_predicate_parser.get(), unarrivedRuntimeFilterList);
 
     size_t pred_size = 0;
     std::string pred;

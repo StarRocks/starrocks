@@ -742,7 +742,7 @@ StatusOr<HdfsScannerContext*> FileReaderTest::_create_context_for_filter_row_gro
     rf_list->driver_sequence = 1;
     rf_list->unarrived_runtime_filters.emplace_back(rf_desc);
     rf_list->slot_descs.emplace_back(ctx->slot_descs[0]);
-    ctx->rf_scan_range_pruner = _pool.add(new OlapRuntimeScanRangePruner(pred_parser, *rf_list));
+    ctx->rf_scan_range_pruner = _pool.add(new RuntimeScanRangePruner(pred_parser, *rf_list));
 
     return ctx;
 }
