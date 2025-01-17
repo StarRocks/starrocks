@@ -116,13 +116,25 @@ public class PartitionSampler {
 
             long totalRows = high.getTotalRows() + mediumHigh.getTotalRows() + mediumLow.getTotalRows()
                     + low.getTotalRows();
-            long sampleRows = high.getSampleRows() + mediumHigh.getSampleRows() + mediumLow.getSampleRows()
-                    + low.getSampleRows();
 
             List<TabletStats> highSampleTablets = high.sample();
             List<TabletStats> mediumHighSampleTablets = mediumHigh.sample();
             List<TabletStats> mediumLowSampleTablets = mediumLow.sample();
             List<TabletStats> lowSampleTablets = low.sample();
+
+            long sampleRows = Math.min(sampleRowsLimit, highSampleTablets.stream()
+                    .mapToLong(e -> getReadRowCount(e.getRowCount(), highRatio))
+                    .sum());
+            sampleRows += Math.min(sampleRowsLimit, mediumHighSampleTablets.stream()
+                    .mapToLong(e -> getReadRowCount(e.getRowCount(), mediumHighRatio))
+                    .sum());
+            sampleRows += Math.min(sampleRowsLimit, mediumLowSampleTablets.stream()
+                    .mapToLong(e -> getReadRowCount(e.getRowCount(), mediumLowRatio))
+                    .sum());
+            sampleRows += Math.min(sampleRowsLimit, lowSampleTablets.stream()
+                    .mapToLong(e -> getReadRowCount(e.getRowCount(), lowRatio))
+                    .sum());
+            sampleRows = Math.max(1, sampleRows);
 
             long totalTablets = high.getTotalTablets() + mediumHigh.getTotalTablets() + mediumLow.getTotalTablets() +
                     low.getTotalTablets();
@@ -156,5 +168,9 @@ public class PartitionSampler {
                 maxSize, sampleRowLimit);
         sampler.classifyPartitions(table, partitions);
         return sampler;
+    }
+
+    private long getReadRowCount(long totalRowCount, double readRatio) {
+        return (long) Math.max(totalRowCount * readRatio, 1L);
     }
 }

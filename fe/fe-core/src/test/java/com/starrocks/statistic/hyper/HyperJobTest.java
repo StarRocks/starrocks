@@ -43,6 +43,8 @@ import com.starrocks.statistic.base.ColumnStats;
 import com.starrocks.statistic.base.PartitionSampler;
 import com.starrocks.statistic.base.PrimitiveTypeColumnStats;
 import com.starrocks.statistic.base.SubFieldColumnStats;
+import com.starrocks.statistic.base.TabletSampler;
+import com.starrocks.statistic.sample.TabletStats;
 import com.starrocks.utframe.StarRocksAssert;
 import mockit.Mock;
 import mockit.MockUp;
@@ -229,6 +231,19 @@ public class HyperJobTest extends DistributedEnvPlanTestBase {
         assertContains(sql.get(1), "hex(hll_serialize(IFNULL(hll_raw(`c6`.`c`.`b`), hll_empty()))), ");
         assertContains(sql.get(1), "cast((COUNT(*) - COUNT(`c6`.`c`.`b`)) * 0 / COUNT(*) as BIGINT), " +
                 "IFNULL(MAX(`c6`.`c`.`b`), ''), IFNULL(MIN(`c6`.`c`.`b`), ''), cast(-1.0 as BIGINT) FROM base_cte_table");
+    }
+
+    @Test
+    public void testSampleRows() {
+        new MockUp<TabletSampler>() {
+            @Mock
+            public List<TabletStats> sample() {
+                return List.of(new TabletStats(1, pid, 5000000));
+            }
+
+        };
+        PartitionSampler sampler = PartitionSampler.create(table, List.of(pid), Maps.newHashMap());
+        Assert.assertEquals(800000, sampler.getSampleInfo(pid).getSampleRowCount());
     }
 
     @AfterClass
