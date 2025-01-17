@@ -2891,8 +2891,11 @@ TEST_F(FileReaderTest, TestMapKeyIsStruct) {
     auto file = _create_file(filename);
     auto file_reader =
             std::make_shared<FileReader>(config::vector_chunk_size, file.get(), std::filesystem::file_size(filename));
+    Utils::SlotDesc slot_descs[] = {
+            {"c0", TYPE_INT_DESC}, {"c1", TYPE_INT_DESC}, {"c2", TYPE_VARCHAR_DESC}, {"c3", TYPE_INT_ARRAY_DESC}, {""},
+    };
 
-    auto ctx = _create_file_random_read_context(filename);
+    auto ctx = _create_file_random_read_context(filename, slot_descs);
     Status status = file_reader->init(ctx);
     ASSERT_FALSE(status.ok());
     ASSERT_EQ("Map keys must be primitive type.", status.message());
