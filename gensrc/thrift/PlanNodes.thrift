@@ -133,11 +133,11 @@ struct TInternalScanRange {
   12: optional bool fill_data_cache = true;
   // used for per-bucket compute optimize
   13: optional i32 bucket_sequence
-  14: optional i64 gtid
   // skip page cache when access page data
-  15: optional bool skip_page_cache = false;
+  14: optional bool skip_page_cache = false;
   // skip local disk data cache when access page data
-  16: optional bool skip_disk_cache = false;
+  15: optional bool skip_disk_cache = false;
+  16: optional i64 gtid
 }
 
 enum TFileFormatType {
