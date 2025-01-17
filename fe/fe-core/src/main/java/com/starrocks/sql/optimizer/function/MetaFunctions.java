@@ -32,6 +32,8 @@ import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Type;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -461,4 +463,20 @@ public class MetaFunctions {
         }
     }
 
+    /**
+     * Obtain the value of the latest partition that contains data.
+     */
+    @ConstantFunction(name = "max_partition", argTypes = {VARCHAR}, returnType = VARCHAR, isMetaFunction = true)
+    public static ConstantOperator max_partition(ConstantOperator name) throws DdlException {
+        TableName tableName = TableName.fromString(name.getVarchar());
+        Pair<Database, Table> dbTable = inspectTable(tableName);
+        Table table = dbTable.getRight();
+        if (!table.isOlapTable()) {
+            throw new SemanticException(tableName + " is not olap table");
+        }
+        OlapTable olapTable = (OlapTable) table;
+        String partitionValue = olapTable.getLatestHasDataPartitionValue();
+        return partitionValue == null ? ConstantOperator.createNull(Type.VARCHAR)
+                : ConstantOperator.createVarchar(partitionValue);
+    }
 }
