@@ -561,7 +561,7 @@ Status LowRowsColumnReader::read_range(const Range<uint64_t>& range, const Filte
     ColumnContentType content_type = ColumnContentType::VALUE;
 
     if (_tmp_column == nullptr) {
-        _tmp_column = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_VARCHAR), true);
+        _tmp_column = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
     }
     _ori_column = dst;
     dst = _tmp_column;
