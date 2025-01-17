@@ -5066,9 +5066,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         reader.readCollection(Database.class, db -> {
             reader.readCollection(Table.class, db::registerTableUnlocked);
 
-            idToDb.put(db.getId(), db);
-            fullNameToDb.put(db.getFullName(), db);
-            stateMgr.getGlobalTransactionMgr().addDatabaseTransactionMgr(db.getId());
+            unprotectCreateDb(db);
             db.getTables().stream().filter(tbl -> !tbl.isMaterializedView()).forEach(tbl -> {
                 try {
                     tbl.onReload();
