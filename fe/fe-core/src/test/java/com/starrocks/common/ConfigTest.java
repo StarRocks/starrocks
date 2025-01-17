@@ -90,17 +90,34 @@ public class ConfigTest {
         List<List<String>> configs = Config.getConfigInfo(matcher);
         Assert.assertEquals("99", configs.get(0).get(2));
 
+        PatternMatcher matcher2 = PatternMatcher.createMysqlPattern("agent_task_resend_wait_time_ms", false);
+        List<List<String>> configs2 = Config.getConfigInfo(matcher2);
+        Assert.assertEquals("998", configs2.get(0).get(2));
+
         Config.setMutableConfig("adaptive_choose_instances_threshold", "98", true, "root");
         configs = Config.getConfigInfo(matcher);
         Assert.assertEquals("98", configs.get(0).get(2));
         Assert.assertEquals(98, Config.adaptive_choose_instances_threshold);
 
+        Config.setMutableConfig("agent_task_resend_wait_time_ms", "999", true, "root");
+        configs2 = Config.getConfigInfo(matcher2);
+        Assert.assertEquals("999", configs2.get(0).get(2));
+        Assert.assertEquals(999, Config.agent_task_resend_wait_time_ms);
+        // Write config twice
+        Config.setMutableConfig("agent_task_resend_wait_time_ms", "1000", true, "root");
+        configs2 = Config.getConfigInfo(matcher2);
+        Assert.assertEquals("1000", configs2.get(0).get(2));
+        Assert.assertEquals(1000, Config.agent_task_resend_wait_time_ms);
+
         // Reload from file
         URL resource = getClass().getClassLoader().getResource("conf/config_test.properties");
         config.init(Paths.get(resource.toURI()).toFile().getAbsolutePath());
         configs = Config.getConfigInfo(matcher);
+        configs2 = Config.getConfigInfo(matcher2);
         Assert.assertEquals("98", configs.get(0).get(2));
+        Assert.assertEquals("1000", configs2.get(0).get(2));
         Assert.assertEquals(98, Config.adaptive_choose_instances_threshold);
+        Assert.assertEquals(1000, Config.agent_task_resend_wait_time_ms);
     }
 
     @Test
