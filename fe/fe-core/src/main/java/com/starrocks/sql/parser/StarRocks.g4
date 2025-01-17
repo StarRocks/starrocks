@@ -842,7 +842,7 @@ dropExternalCatalogStatement
     ;
 
 showCatalogsStatement
-    : SHOW CATALOGS
+    : SHOW CATALOGS (LIKE pattern=string)?
     ;
 
 alterCatalogStatement
