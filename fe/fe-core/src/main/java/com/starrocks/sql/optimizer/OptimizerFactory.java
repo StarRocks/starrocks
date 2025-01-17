@@ -21,39 +21,42 @@ import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 public class OptimizerFactory {
     @VisibleForTesting
     public static OptimizerContext mockContext(ConnectContext context, ColumnRefFactory columnRefFactory,
-                                               OptimizerConfig config) {
+                                               OptimizerOptions config) {
         OptimizerContext oc = new OptimizerContext(context);
         oc.setColumnRefFactory(columnRefFactory);
-        oc.setOptimizerConfig(config);
+        oc.setOptimizerOptions(config);
         return oc;
     }
 
     @VisibleForTesting
     public static OptimizerContext mockContext(ConnectContext context, ColumnRefFactory columnRefFactory) {
-        return mockContext(context, columnRefFactory, OptimizerConfig.defaultConfig());
+        return mockContext(context, columnRefFactory, OptimizerOptions.defaultOpt());
     }
 
     @VisibleForTesting
     public static OptimizerContext mockContext(ColumnRefFactory columnRefFactory) {
         OptimizerContext oc = new OptimizerContext(new ConnectContext());
         oc.setColumnRefFactory(columnRefFactory);
-        oc.setOptimizerConfig(OptimizerConfig.defaultConfig());
+        oc.setOptimizerOptions(OptimizerOptions.defaultOpt());
         return oc;
     }
 
     public static OptimizerContext initContext(ConnectContext context, ColumnRefFactory columnRefFactory,
-                                               OptimizerConfig config) {
+                                               OptimizerOptions config) {
         OptimizerContext oc = new OptimizerContext(context);
         oc.setColumnRefFactory(columnRefFactory);
-        oc.setOptimizerConfig(config);
+        oc.setOptimizerOptions(config);
         return oc;
     }
 
     public static OptimizerContext initContext(ConnectContext context, ColumnRefFactory columnRefFactory) {
-        return initContext(context, columnRefFactory, OptimizerConfig.defaultConfig());
+        return initContext(context, columnRefFactory, OptimizerOptions.defaultOpt());
     }
 
     public static Optimizer create(OptimizerContext context) {
+        if (context.getOptimizerOptions().isShortCircuit()) {
+            return new ShortCircuitOptimizer(context);
+        }
         return new QueryOptimizer(context);
     }
 }

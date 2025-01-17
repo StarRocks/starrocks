@@ -47,7 +47,7 @@ public class OptimizerContext {
     private Set<OlapTable> queryTables;
     private long updateTableId = -1;
 
-    private OptimizerConfig optimizerConfig;
+    private OptimizerOptions optimizerOptions;
 
     // ============================ Optimizer ============================
     private Memo memo;
@@ -73,7 +73,6 @@ public class OptimizerContext {
     // lifecycle instead of per materialized view.
 
     private boolean isObtainedFromInternalStatistics = false;
-    private boolean isShortCircuit = false;
     private boolean inMemoPhase = false;
 
     // Is not null predicate can be derived from inner join or semi join,
@@ -89,7 +88,7 @@ public class OptimizerContext {
         this.cteContext.setInlineCTERatio(getSessionVariable().getCboCTERuseRatio());
         this.cteContext.setMaxCTELimit(getSessionVariable().getCboCTEMaxLimit());
 
-        this.optimizerConfig = OptimizerConfig.defaultConfig();
+        this.optimizerOptions = OptimizerOptions.defaultOpt();
     }
 
     // ============================ Query ============================
@@ -145,12 +144,12 @@ public class OptimizerContext {
         return updateTableId;
     }
 
-    public OptimizerConfig getOptimizerConfig() {
-        return optimizerConfig;
+    public OptimizerOptions getOptimizerOptions() {
+        return optimizerOptions;
     }
 
-    public void setOptimizerConfig(OptimizerConfig optimizerConfig) {
-        this.optimizerConfig = optimizerConfig;
+    public void setOptimizerOptions(OptimizerOptions optimizerOptions) {
+        this.optimizerOptions = optimizerOptions;
     }
 
     // ============================ Optimizer ============================
@@ -209,14 +208,6 @@ public class OptimizerContext {
 
     public void setObtainedFromInternalStatistics(boolean obtainedFromInternalStatistics) {
         isObtainedFromInternalStatistics = obtainedFromInternalStatistics;
-    }
-
-    public boolean isShortCircuit() {
-        return isShortCircuit;
-    }
-
-    public void setShortCircuit(boolean shortCircuit) {
-        isShortCircuit = shortCircuit;
     }
 
     public void setInMemoPhase(boolean inMemoPhase) {

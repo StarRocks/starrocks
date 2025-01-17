@@ -18,28 +18,33 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.BitSet;
 
-public class OptimizerConfig {
-    public enum OptimizerAlgorithm {
+public class OptimizerOptions {
+    public enum OptimizerStrategy {
         RULE_BASED,
-        COST_BASED
+        COST_BASED,
+        SHORT_CIRCUIT,
     }
 
-    private final OptimizerAlgorithm optimizerAlgorithm;
+    private final OptimizerStrategy optimizerStrategy;
 
     private final BitSet ruleSwitches;
 
-    public OptimizerConfig() {
-        this(OptimizerAlgorithm.COST_BASED);
+    public OptimizerOptions() {
+        this(OptimizerStrategy.COST_BASED);
     }
-
-    public OptimizerConfig(OptimizerAlgorithm optimizerAlgorithm) {
-        this.optimizerAlgorithm = optimizerAlgorithm;
+    
+    public OptimizerOptions(OptimizerStrategy optimizerStrategy) {
+        this.optimizerStrategy = optimizerStrategy;
         this.ruleSwitches = new BitSet(RuleType.NUM_RULES.ordinal());
         this.ruleSwitches.flip(0, ruleSwitches.size());
     }
 
     public boolean isRuleBased() {
-        return optimizerAlgorithm.equals(OptimizerAlgorithm.RULE_BASED);
+        return optimizerStrategy.equals(OptimizerStrategy.RULE_BASED);
+    }
+
+    public boolean isShortCircuit() {
+        return optimizerStrategy.equals(OptimizerStrategy.SHORT_CIRCUIT);
     }
 
     public void disableRule(RuleType ruleType) {
@@ -50,9 +55,17 @@ public class OptimizerConfig {
         return !ruleSwitches.get(ruleType.ordinal());
     }
 
-    private static final OptimizerConfig DEFAULT_CONFIG = new OptimizerConfig();
+    private static final OptimizerOptions DEFAULT_OPTIONS = new OptimizerOptions(OptimizerStrategy.COST_BASED);
 
-    public static OptimizerConfig defaultConfig() {
-        return DEFAULT_CONFIG;
+    public static OptimizerOptions defaultOpt() {
+        return DEFAULT_OPTIONS;
+    }
+
+    public static OptimizerOptions newRuleBaseOpt() {
+        return new OptimizerOptions(OptimizerStrategy.RULE_BASED);
+    }
+
+    public static OptimizerOptions newShortCircuitOpt() {
+        return new OptimizerOptions(OptimizerStrategy.SHORT_CIRCUIT);
     }
 }

@@ -37,7 +37,6 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.rewrite.JoinPredicatePushdown;
 import com.starrocks.sql.optimizer.rule.RuleSet;
-import com.starrocks.sql.optimizer.rule.implementation.OlapScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.join.JoinReorderFactory;
 import com.starrocks.sql.optimizer.rule.join.ReorderJoinRule;
 import com.starrocks.sql.optimizer.rule.mv.MaterializedViewRule;
@@ -125,7 +124,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -139,7 +137,7 @@ import static com.starrocks.sql.optimizer.rule.RuleType.TF_MATERIALIZED_VIEW;
  */
 public class QueryOptimizer extends Optimizer {
     private static final Logger LOG = LogManager.getLogger(QueryOptimizer.class);
-    private OptimizerConfig optimizerConfig;
+    private OptimizerOptions optimizerOptions;
     private MvRewriteStrategy mvRewriteStrategy = new MvRewriteStrategy();
     private final TaskScheduler scheduler = new TaskScheduler();
     private Memo memo;
@@ -157,9 +155,9 @@ public class QueryOptimizer extends Optimizer {
     }
 
     private void prepare(OptExpression logicOperatorTree) {
-        optimizerConfig = context.getOptimizerConfig();
+        optimizerOptions = context.getOptimizerOptions();
 
-        if (!optimizerConfig.isRuleBased()) {
+        if (!optimizerOptions.isRuleBased()) {
             memo = new Memo();
             context.setMemo(memo);
         }
@@ -168,10 +166,6 @@ public class QueryOptimizer extends Optimizer {
         // collect all olap scan operator
         Utils.extractOperator(logicOperatorTree, allLogicalOlapScanOperators,
                 op -> op instanceof LogicalOlapScanOperator);
-    }
-
-    public OptExpression optimize(OptExpression logicOperatorTree, ColumnRefSet requiredColumns) {
-        return optimize(logicOperatorTree, new PhysicalPropertySet(), requiredColumns);
     }
 
     public OptExpression optimize(OptExpression logicOperatorTree, PhysicalPropertySet requiredProperty,
@@ -188,7 +182,7 @@ public class QueryOptimizer extends Optimizer {
                         context.getMvTransformerContext()).transform(logicOperatorTree, context).get(0);
             }
 
-            OptExpression result = optimizerConfig.isRuleBased() ?
+            OptExpression result = optimizerOptions.isRuleBased() ?
                     optimizeByRule(logicOperatorTree, requiredProperty, requiredColumns) :
                     optimizeByCost(context.getConnectContext(), logicOperatorTree, requiredProperty,
                             requiredColumns);
@@ -235,10 +229,6 @@ public class QueryOptimizer extends Optimizer {
 
         try (Timer ignored = Tracers.watchScope("RuleBaseOptimize")) {
             logicOperatorTree = rewriteAndValidatePlan(logicOperatorTree, rootTaskContext);
-        }
-
-        if (logicOperatorTree.getShortCircuit()) {
-            return logicOperatorTree;
         }
 
         Preconditions.checkNotNull(memo);
@@ -320,7 +310,7 @@ public class QueryOptimizer extends Optimizer {
                                   ColumnRefFactory columnRefFactory, ColumnRefSet requiredColumns) {
         SessionVariable sessionVariable = connectContext.getSessionVariable();
         // MV Rewrite will be used when cbo is enabled.
-        if (context.getOptimizerConfig().isRuleBased() || sessionVariable.isDisableMaterializedViewRewrite() ||
+        if (context.getOptimizerOptions().isRuleBased() || sessionVariable.isDisableMaterializedViewRewrite() ||
                 !sessionVariable.isEnableMaterializedViewRewrite()) {
             return;
         }
@@ -464,13 +454,7 @@ public class QueryOptimizer extends Optimizer {
     private OptExpression logicalRuleRewrite(
             OptExpression tree,
             TaskContext rootTaskContext) {
-        rootTaskContext.getOptimizerContext().setShortCircuit(tree.getShortCircuit());
-        tree = OptExpression.createForShortCircuit(new LogicalTreeAnchorOperator(), tree, tree.getShortCircuit());
-        // for short circuit
-        Optional<OptExpression> result = ruleRewriteForShortCircuit(tree, rootTaskContext);
-        if (result.isPresent()) {
-            return result.get();
-        }
+        tree = OptExpression.create(new LogicalTreeAnchorOperator(), tree);
 
         ColumnRefSet requiredColumns = rootTaskContext.getRequiredColumns().clone();
         deriveLogicalProperty(tree);
@@ -588,7 +572,7 @@ public class QueryOptimizer extends Optimizer {
         }
 
         // Add a config to decide whether to rewrite sync mv.
-        if (!optimizerConfig.isRuleDisable(TF_MATERIALIZED_VIEW)
+        if (!optimizerOptions.isRuleDisable(TF_MATERIALIZED_VIEW)
                 && sessionVariable.isEnableSyncMaterializedViewRewrite()) {
             // Split or predicates to union all so can be used by mv rewrite to choose the best sort key indexes.
             // TODO: support adaptive for or-predicates to union all.
@@ -685,20 +669,6 @@ public class QueryOptimizer extends Optimizer {
         }
     }
 
-    private Optional<OptExpression> ruleRewriteForShortCircuit(OptExpression tree, TaskContext rootTaskContext) {
-        Boolean isShortCircuit = tree.getShortCircuit();
-
-        if (isShortCircuit) {
-            deriveLogicalProperty(tree);
-            scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.SHORT_CIRCUIT_SET_RULES);
-            scheduler.rewriteOnce(tree, rootTaskContext, new MergeProjectWithChildRule());
-            OptExpression result = tree.getInputs().get(0);
-            result.setShortCircuit(true);
-            return Optional.of(result);
-        }
-        return Optional.empty();
-    }
-
     // for single scan node, to make sure we can rewrite
     private void viewBasedMvRuleRewrite(OptExpression tree, TaskContext rootTaskContext) {
         QueryMaterializationContext queryMaterializationContext = context.getQueryMaterializationContext();
@@ -744,11 +714,6 @@ public class QueryOptimizer extends Optimizer {
         OptExpression result = logicalRuleRewrite(tree, rootTaskContext);
         OptExpressionValidator validator = new OptExpressionValidator();
         validator.validate(result);
-        // skip memo
-        if (result.getShortCircuit()) {
-            result = new OlapScanImplementationRule().transform(result, null).get(0);
-            result.setShortCircuit(true);
-        }
         return result;
     }
 
@@ -821,16 +786,6 @@ public class QueryOptimizer extends Optimizer {
         scheduler.rewriteOnce(tree, rootTaskContext, new PruneSubfieldRule());
 
         return tree;
-    }
-
-    private void deriveLogicalProperty(OptExpression root) {
-        for (OptExpression child : root.getInputs()) {
-            deriveLogicalProperty(child);
-        }
-
-        ExpressionContext context = new ExpressionContext(root);
-        context.deriveLogicalProperty();
-        root.setLogicalProperty(context.getRootProperty());
     }
 
     void memoOptimize(ConnectContext connectContext, Memo memo, TaskContext rootTaskContext) {

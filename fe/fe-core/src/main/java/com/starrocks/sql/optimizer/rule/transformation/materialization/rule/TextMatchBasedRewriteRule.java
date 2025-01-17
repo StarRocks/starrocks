@@ -115,7 +115,7 @@ public class TextMatchBasedRewriteRule extends Rule {
     private OptExpression doTransform(OptimizerContext context,
                                       OptExpression input,
                                       ParseNode parseNode) {
-        if (context.getOptimizerConfig().isRuleDisable(RuleType.TF_MV_TEXT_MATCH_REWRITE_RULE)) {
+        if (context.getOptimizerOptions().isRuleDisable(RuleType.TF_MV_TEXT_MATCH_REWRITE_RULE)) {
             return null;
         }
         SessionVariable sessionVariable = connectContext.getSessionVariable();

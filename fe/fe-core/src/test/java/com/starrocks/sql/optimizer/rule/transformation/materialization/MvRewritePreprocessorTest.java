@@ -29,9 +29,9 @@ import com.starrocks.sql.optimizer.MaterializedViewOptimizer;
 import com.starrocks.sql.optimizer.MvRewritePreprocessor;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
-import com.starrocks.sql.optimizer.OptimizerConfig;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.OptimizerFactory;
+import com.starrocks.sql.optimizer.OptimizerOptions;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
@@ -106,27 +106,26 @@ public class MvRewritePreprocessorTest extends MVTestBase {
 
         OptimizerContext optimizerContext = OptimizerFactory.mockContext(connectContext, columnRefFactory);
         Optimizer optimizer = OptimizerFactory.create(optimizerContext);
-        Assert.assertFalse(optimizerContext.getOptimizerConfig().isRuleBased());
-        Assert.assertFalse(optimizerContext.getOptimizerConfig().isRuleDisable(RuleType.TF_MERGE_TWO_PROJECT));
-        Assert.assertFalse(optimizerContext.getOptimizerConfig().isRuleDisable(RuleType.GP_AGGREGATE_REWRITE));
+        Assert.assertFalse(optimizerContext.getOptimizerOptions().isRuleBased());
+        Assert.assertFalse(optimizerContext.getOptimizerOptions().isRuleDisable(RuleType.TF_MERGE_TWO_PROJECT));
+        Assert.assertFalse(optimizerContext.getOptimizerOptions().isRuleDisable(RuleType.GP_AGGREGATE_REWRITE));
 
         OptExpression expr = optimizer.optimize(logicalPlan.getRoot(), new PhysicalPropertySet(),
                 new ColumnRefSet(logicalPlan.getOutputColumn()));
         Assert.assertTrue(expr.getInputs().get(0).getOp() instanceof PhysicalOlapScanOperator);
         Assert.assertNotNull(expr.getInputs().get(0).getOp().getPredicate());
 
-
-        OptimizerConfig optimizerConfig = new OptimizerConfig(OptimizerConfig.OptimizerAlgorithm.RULE_BASED);
-        optimizerConfig.disableRule(RuleType.TF_MERGE_TWO_PROJECT);
-        optimizerConfig.disableRule(RuleType.GP_PUSH_DOWN_PREDICATE);
+        OptimizerOptions optimizerOptions = new OptimizerOptions(OptimizerOptions.OptimizerStrategy.RULE_BASED);
+        optimizerOptions.disableRule(RuleType.TF_MERGE_TWO_PROJECT);
+        optimizerOptions.disableRule(RuleType.GP_PUSH_DOWN_PREDICATE);
         OptimizerContext optimizerContext1 = OptimizerFactory.mockContext(connectContext, columnRefFactory,
-                optimizerConfig);
+                optimizerOptions);
         Optimizer optimizer1 = OptimizerFactory.create(optimizerContext1);
-        Assert.assertTrue(optimizerContext1.getOptimizerConfig().isRuleBased());
-        Assert.assertFalse(optimizerContext1.getOptimizerConfig().isRuleDisable(RuleType.TF_MERGE_TWO_AGG_RULE));
-        Assert.assertTrue(optimizerContext1.getOptimizerConfig().isRuleDisable(RuleType.TF_MERGE_TWO_PROJECT));
-        Assert.assertFalse(optimizerContext1.getOptimizerConfig().isRuleDisable(RuleType.GP_COLLECT_CTE));
-        Assert.assertTrue(optimizerContext1.getOptimizerConfig().isRuleDisable(RuleType.GP_PUSH_DOWN_PREDICATE));
+        Assert.assertTrue(optimizerContext1.getOptimizerOptions().isRuleBased());
+        Assert.assertFalse(optimizerContext1.getOptimizerOptions().isRuleDisable(RuleType.TF_MERGE_TWO_AGG_RULE));
+        Assert.assertTrue(optimizerContext1.getOptimizerOptions().isRuleDisable(RuleType.TF_MERGE_TWO_PROJECT));
+        Assert.assertFalse(optimizerContext1.getOptimizerOptions().isRuleDisable(RuleType.GP_COLLECT_CTE));
+        Assert.assertTrue(optimizerContext1.getOptimizerOptions().isRuleDisable(RuleType.GP_PUSH_DOWN_PREDICATE));
 
         OptExpression expr1 = optimizer1.optimize(logicalPlan.getRoot(), new PhysicalPropertySet(),
                 new ColumnRefSet(logicalPlan.getOutputColumn()));
@@ -272,8 +271,8 @@ public class MvRewritePreprocessorTest extends MVTestBase {
 
     private Pair<MvRewritePreprocessor, OptExpression> buildMvProcessor(String query) {
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-        OptimizerConfig optimizerConfig = new OptimizerConfig();
-        OptimizerContext context = OptimizerFactory.mockContext(connectContext, columnRefFactory, optimizerConfig);
+        OptimizerOptions optimizerOptions = new OptimizerOptions();
+        OptimizerContext context = OptimizerFactory.mockContext(connectContext, columnRefFactory, optimizerOptions);
 
         try {
             StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(query, connectContext);

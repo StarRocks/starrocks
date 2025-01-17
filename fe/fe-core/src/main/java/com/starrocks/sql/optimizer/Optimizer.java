@@ -27,8 +27,20 @@ public abstract class Optimizer {
         return context;
     }
 
-    public abstract OptExpression optimize(OptExpression logicOperatorTree, ColumnRefSet requiredColumns);
+    public OptExpression optimize(OptExpression tree, ColumnRefSet requiredColumns) {
+        return optimize(tree, new PhysicalPropertySet(), requiredColumns);
+    }
 
-    public abstract OptExpression optimize(OptExpression logicOperatorTree, PhysicalPropertySet requiredProperty,
+    public abstract OptExpression optimize(OptExpression tree, PhysicalPropertySet requiredProperty,
                                            ColumnRefSet requiredColumns);
+
+    protected void deriveLogicalProperty(OptExpression root) {
+        for (OptExpression child : root.getInputs()) {
+            deriveLogicalProperty(child);
+        }
+
+        ExpressionContext context = new ExpressionContext(root);
+        context.deriveLogicalProperty();
+        root.setLogicalProperty(context.getRootProperty());
+    }
 }

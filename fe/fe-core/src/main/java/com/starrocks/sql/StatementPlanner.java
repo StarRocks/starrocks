@@ -62,6 +62,7 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.OptimizerFactory;
+import com.starrocks.sql.optimizer.OptimizerOptions;
 import com.starrocks.sql.optimizer.OptimizerTraceUtil;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -249,17 +250,19 @@ public class StatementPlanner {
             logicalPlan = new RelationTransformer(transformerContext).transformWithSelectLimit(query);
         }
 
-        OptExpression root = ShortCircuitPlanner.checkSupportShortCircuitRead(logicalPlan.getRoot(), session);
-
+        boolean isShortCircuit = ShortCircuitPlanner.checkSupportShortCircuitRead(logicalPlan.getRoot(), session);
         OptExpression optimizedPlan;
         try (Timer ignored = Tracers.watchScope("Optimizer")) {
             // 2. Optimize logical plan and build physical plan
             OptimizerContext optimizerContext = OptimizerFactory.initContext(session, columnRefFactory);
             optimizerContext.setMvTransformerContext(mvTransformerContext);
             optimizerContext.setStatement(stmt);
+            if (isShortCircuit) {
+                optimizerContext.setOptimizerOptions(OptimizerOptions.newShortCircuitOpt());
+            }
 
             Optimizer optimizer = OptimizerFactory.create(optimizerContext);
-            optimizedPlan = optimizer.optimize(root,
+            optimizedPlan = optimizer.optimize(logicalPlan.getRoot(),
                     new PhysicalPropertySet(),
                     new ColumnRefSet(logicalPlan.getOutputColumn()));
         }
@@ -274,7 +277,7 @@ public class StatementPlanner {
             ExecPlan execPlan = PlanFragmentBuilder.createPhysicalPlan(
                     optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory, colNames,
                     resultSinkType,
-                    !session.getSessionVariable().isSingleNodeExecPlan());
+                    !session.getSessionVariable().isSingleNodeExecPlan(), isShortCircuit);
             execPlan.setLogicalPlan(logicalPlan);
             execPlan.setColumnRefFactory(columnRefFactory);
             return execPlan;
@@ -313,8 +316,7 @@ public class StatementPlanner {
                 logicalPlan = new RelationTransformer(transformerContext).transformWithSelectLimit(query);
             }
 
-            OptExpression root = ShortCircuitPlanner.checkSupportShortCircuitRead(logicalPlan.getRoot(), session);
-
+            boolean isShortCircuit = ShortCircuitPlanner.checkSupportShortCircuitRead(logicalPlan.getRoot(), session);
             OptExpression optimizedPlan;
             try (Timer ignored = Tracers.watchScope("Optimizer")) {
                 OptimizerContext optimizerContext = OptimizerFactory.initContext(session, columnRefFactory);
@@ -324,11 +326,15 @@ public class StatementPlanner {
                 if (Config.skip_whole_phase_lock_mv_limit >= 0) {
                     optimizerContext.setQueryTables(olapTables);
                 }
+
+                if (isShortCircuit) {
+                    optimizerContext.setOptimizerOptions(OptimizerOptions.newShortCircuitOpt());
+                }
                 optimizerContext.setMvTransformerContext(mvTransformerContext);
                 optimizerContext.setStatement(queryStmt);
 
                 Optimizer optimizer = OptimizerFactory.create(optimizerContext);
-                optimizedPlan = optimizer.optimize(root, new PhysicalPropertySet(),
+                optimizedPlan = optimizer.optimize(logicalPlan.getRoot(), new PhysicalPropertySet(),
                         new ColumnRefSet(logicalPlan.getOutputColumn()));
             }
 
@@ -340,7 +346,7 @@ public class StatementPlanner {
                 ExecPlan plan = PlanFragmentBuilder.createPhysicalPlan(
                         optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory, colNames,
                         resultSinkType,
-                        !session.getSessionVariable().isSingleNodeExecPlan());
+                        !session.getSessionVariable().isSingleNodeExecPlan(), isShortCircuit);
                 final long finalPlanStartTime = planStartTime;
                 isSchemaValid = olapTables.stream().allMatch(t -> OptimisticVersion.validateTableUpdate(t,
                         finalPlanStartTime));
