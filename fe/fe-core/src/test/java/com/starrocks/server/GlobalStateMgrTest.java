@@ -69,6 +69,8 @@ import org.junit.Test;
 import org.mockito.Mockito;
 
 import java.lang.reflect.Field;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -336,7 +338,15 @@ public class GlobalStateMgrTest {
             starRocksAssert.withTable(sql);
         }
 
-        currentState.dumpImage();
+        // move image file
+        String imagePath = currentState.dumpImage();
+        Path targetPath = Path.of(Config.meta_dir, GlobalStateMgr.IMAGE_DIR, "/v2",
+                Path.of(imagePath).getFileName().toString());
+        Files.move(Path.of(imagePath), targetPath);
+        // move checksum file
+        Path checksumPath = Path.of(Config.meta_dir, "checksum.0");
+        Path checksumTarget = Path.of(Config.meta_dir, GlobalStateMgr.IMAGE_DIR, "/v2", "checksum.0");
+        Files.move(checksumPath, checksumTarget);
 
         GlobalStateMgr newState = new MyGlobalStateMgr(false);
         newState.loadImage(Config.meta_dir + GlobalStateMgr.IMAGE_DIR);

@@ -252,7 +252,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -2546,12 +2545,11 @@ public class GlobalStateMgr {
             LOG.info("acquired all the dbs' read lock.");
 
             long journalId = getMaxJournalId();
-            String imageDir = Path.of(Config.meta_dir, IMAGE_DIR, "/v2").toString();
-            File dumpFile = new File(imageDir, "image." + journalId);
+            File dumpFile = new File(Config.meta_dir, "image." + journalId);
             dumpFilePath = dumpFile.getAbsolutePath();
             try {
                 LOG.info("begin to dump {}", dumpFilePath);
-                saveImage(new ImageWriter(imageDir, ImageFormatVersion.v2, journalId), dumpFile);
+                saveImage(new ImageWriter(Config.meta_dir, ImageFormatVersion.v2, journalId), dumpFile);
             } catch (IOException e) {
                 LOG.error("failed to dump image to {}", dumpFilePath, e);
             }
