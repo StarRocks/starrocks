@@ -31,10 +31,10 @@ public class ClusterSnapshot {
     private ClusterSnapshotType type;
     @SerializedName(value = "storageVolumeName")
     private String storageVolumeName;
-    @SerializedName(value = "createdTime")
-    private long createdTime;
-    @SerializedName(value = "finishedTime")
-    private long finishedTime;
+    @SerializedName(value = "createdTimeMs")
+    private long createdTimeMs;
+    @SerializedName(value = "finishedTimeMs")
+    private long finishedTimeMs;
     @SerializedName(value = "feJournalId")
     private long feJournalId;
     @SerializedName(value = "starMgrJournal")
@@ -42,14 +42,14 @@ public class ClusterSnapshot {
 
     public ClusterSnapshot() {}
 
-    public ClusterSnapshot(long id, String snapshotName, String storageVolumeName, long createdTime,
-                           long finishedTime, long feJournalId, long starMgrJournalId) {
+    public ClusterSnapshot(long id, String snapshotName, String storageVolumeName, long createdTimeMs,
+                           long finishedTimeMs, long feJournalId, long starMgrJournalId) {
         this.id = id;
         this.snapshotName = snapshotName;
         this.type = ClusterSnapshotType.AUTOMATED;
         this.storageVolumeName = storageVolumeName;
-        this.createdTime = createdTime;
-        this.finishedTime = finishedTime;
+        this.createdTimeMs = createdTimeMs;
+        this.finishedTimeMs = finishedTimeMs;
         this.feJournalId = feJournalId;
         this.starMgrJournalId = starMgrJournalId;
     }
@@ -59,8 +59,8 @@ public class ClusterSnapshot {
         this.starMgrJournalId = starMgrJournalId;
     }
 
-    public void setFinishedTime(long finishedTime) {
-        this.finishedTime = finishedTime;
+    public void setFinishedTimeMs(long finishedTimeMs) {
+        this.finishedTimeMs = finishedTimeMs;
     }
 
     public String getSnapshotName() {
@@ -71,12 +71,12 @@ public class ClusterSnapshot {
         return storageVolumeName;
     }
 
-    public long getCreatedTime() {
-        return createdTime;
+    public long getCreatedTimeMs() {
+        return createdTimeMs;
     }
 
-    public long getFinishedTime() {
-        return finishedTime;
+    public long getFinishedTimeMs() {
+        return finishedTimeMs;
     }
 
     public long getFeJournalId() {
@@ -95,8 +95,8 @@ public class ClusterSnapshot {
         TClusterSnapshotsItem item = new TClusterSnapshotsItem();
         item.setSnapshot_name(snapshotName);
         item.setSnapshot_type(type.name());
-        item.setCreated_time(createdTime / 1000);
-        item.setFinished_time(finishedTime / 1000);
+        item.setCreated_time(createdTimeMs / 1000);
+        item.setFinished_time(finishedTimeMs / 1000);
         item.setFe_jouranl_id(feJournalId);
         item.setStarmgr_jouranl_id(starMgrJournalId);
         item.setProperties("");
