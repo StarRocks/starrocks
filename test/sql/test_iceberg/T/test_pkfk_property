@@ -24,22 +24,52 @@ INSERT INTO txn (id, created_at, payment_id) VALUES
 (105, '2025-01-05', 5),
 (106, '2025-01-06', 1);
 
+-- add table properties
+alter table payment set  ("unique_constraints" = "id");
+ALTER TABLE txn SET ("foreign_key_constraints" = "(payment_id) REFERENCES payment(id)");
+
+-- because two groups of session variables can both work. here we can test one group of session variables.
+set enable_ukfk_opt = false;
 SET enable_rbo_table_prune=true;
 SET enable_cbo_table_prune=true; 
 SET enable_table_prune_on_update = true;
 
-explain logical select txn.id, txn.created_at, txn.payment_id from  txn left join payment on payment.id = txn.payment_id;
+-- payment can be elimiated
+function: assert_explain_not_contains("select txn.id, txn.created_at, txn.payment_id from  txn left join payment on payment.id = txn.payment_id", "TABLE: iceberg_db_${uuid0}.payment")
+function: assert_explain_contains("select txn.id, txn.created_at, txn.payment_id from  txn left join payment on payment.id = txn.payment_id", "TABLE: iceberg_db_${uuid0}.txn")
 
-alter table payment set  ("unique_constraints" = "id");
-ALTER TABLE txn SET ("foreign_key_constraints" = "(payment_id) REFERENCES iceberg_sql_test_0b0212d10fe1436d8e346ee4e16c9877.iceberg_db_0b0212d10fe1436d8e346ee4e16c9877.payment(id)");
+-- payment can not be elimiated because txn.id is nullable.
+function: assert_explain_contains("select txn.id, txn.created_at, txn.payment_id from  txn inner join payment on payment.id = txn.payment_id", "TABLE: iceberg_db_${uuid0}.payment")
+function: assert_explain_contains("select txn.id, txn.created_at, txn.payment_id from  txn inner join payment on payment.id = txn.payment_id", "TABLE: iceberg_db_${uuid0}.txn")
 
-explain logical select txn.id, txn.created_at, txn.payment_id from  txn left join payment on payment.id = txn.payment_id;
+
+-- switch to another group of session variables
+set enable_ukfk_opt = true;
+SET enable_rbo_table_prune=false;
+SET enable_cbo_table_prune=false; 
+SET enable_table_prune_on_update = false;
+
+-- payment can be elimiated
+function: assert_explain_not_contains("select txn.id, txn.created_at, txn.payment_id from  txn left join payment on payment.id = txn.payment_id", "TABLE: iceberg_db_${uuid0}.payment")
+function: assert_explain_contains("select txn.id, txn.created_at, txn.payment_id from  txn left join payment on payment.id = txn.payment_id", "TABLE: iceberg_db_${uuid0}.txn")
+
+-- payment can be elimiated with a extra predicate: payment_id is not null.
+function: assert_explain_not_contains("select txn.id, txn.created_at, txn.payment_id from  txn inner join payment on payment.id = txn.payment_id", "TABLE: iceberg_db_${uuid0}.payment")
+function: assert_explain_contains("select txn.id, txn.created_at, txn.payment_id from  txn inner join payment on payment.id = txn.payment_id", "TABLE: iceberg_db_${uuid0}.txn", "payment_id IS NOT NULL")
 
 
--- drop table payment force;
--- drop table txn force;
+-- test elimiate agg on primary key
+set enable_eliminate_agg = false;
+function: assert_explain_contains("select count(1) as cnt, payment.id from payment group by payment.id;", "AGGREGATE")
 
--- drop database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
--- drop catalog iceberg_sql_test_${uuid0};
+set enable_eliminate_agg = true;
+function: assert_explain_not_contains("select count(1) as cnt, payment.id from payment group by payment.id;", "AGGREGATE")
+
+
+drop table payment force;
+drop table txn force;
+
+drop database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+drop catalog iceberg_sql_test_${uuid0};
 
 set catalog default_catalog;

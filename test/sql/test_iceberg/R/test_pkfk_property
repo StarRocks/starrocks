@@ -31,6 +31,15 @@ INSERT INTO txn (id, created_at, payment_id) VALUES
 (106, '2025-01-06', 1);
 -- result:
 -- !result
+alter table payment set  ("unique_constraints" = "id");
+-- result:
+-- !result
+ALTER TABLE txn SET ("foreign_key_constraints" = "(payment_id) REFERENCES payment(id)");
+-- result:
+-- !result
+set enable_ukfk_opt = false;
+-- result:
+-- !result
 SET enable_rbo_table_prune=true;
 -- result:
 -- !result
@@ -38,14 +47,76 @@ SET enable_cbo_table_prune=true;
 SET enable_table_prune_on_update = true;
 -- result:
 -- !result
-explain logical select txn.id, txn.created_at, txn.payment_id from  txn left join payment on payment.id = txn.payment_id;
-alter table payment set  ("unique_constraints" = "id");
+function: assert_explain_not_contains("select txn.id, txn.created_at, txn.payment_id from  txn left join payment on payment.id = txn.payment_id", "TABLE: iceberg_db_${uuid0}.payment")
+-- result:
+None
+-- !result
+function: assert_explain_contains("select txn.id, txn.created_at, txn.payment_id from  txn left join payment on payment.id = txn.payment_id", "TABLE: iceberg_db_${uuid0}.txn")
+-- result:
+None
+-- !result
+function: assert_explain_contains("select txn.id, txn.created_at, txn.payment_id from  txn inner join payment on payment.id = txn.payment_id", "TABLE: iceberg_db_${uuid0}.payment")
+-- result:
+None
+-- !result
+function: assert_explain_contains("select txn.id, txn.created_at, txn.payment_id from  txn inner join payment on payment.id = txn.payment_id", "TABLE: iceberg_db_${uuid0}.txn")
+-- result:
+None
+-- !result
+set enable_ukfk_opt = true;
 -- result:
 -- !result
-ALTER TABLE txn SET ("foreign_key_constraints" = "(payment_id) REFERENCES payment(id)");
+SET enable_rbo_table_prune=false;
 -- result:
 -- !result
-explain logical select txn.id, txn.created_at, txn.payment_id from  txn left join payment on payment.id = txn.payment_id;
+SET enable_cbo_table_prune=false; 
+SET enable_table_prune_on_update = false;
+-- result:
+-- !result
+function: assert_explain_not_contains("select txn.id, txn.created_at, txn.payment_id from  txn left join payment on payment.id = txn.payment_id", "TABLE: iceberg_db_${uuid0}.payment")
+-- result:
+None
+-- !result
+function: assert_explain_contains("select txn.id, txn.created_at, txn.payment_id from  txn left join payment on payment.id = txn.payment_id", "TABLE: iceberg_db_${uuid0}.txn")
+-- result:
+None
+-- !result
+function: assert_explain_not_contains("select txn.id, txn.created_at, txn.payment_id from  txn inner join payment on payment.id = txn.payment_id", "TABLE: iceberg_db_${uuid0}.payment")
+-- result:
+None
+-- !result
+function: assert_explain_contains("select txn.id, txn.created_at, txn.payment_id from  txn inner join payment on payment.id = txn.payment_id", "TABLE: iceberg_db_${uuid0}.txn", "payment_id IS NOT NULL")
+-- result:
+None
+-- !result
+set enable_eliminate_agg = false;
+-- result:
+-- !result
+function: assert_explain_contains("select count(1) as cnt, payment.id from payment group by payment.id;", "AGGREGATE")
+-- result:
+None
+-- !result
+set enable_eliminate_agg = true;
+-- result:
+-- !result
+function: assert_explain_not_contains("select count(1) as cnt, payment.id from payment group by payment.id;", "AGGREGATE")
+-- result:
+None
+-- !result
+drop table payment force;
+-- result:
+-- !result
+drop table txn force;
+-- result:
+E: (5502, "Getting analyzing error. Detail message: Unknown table 'txn'.")
+-- !result
+drop database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+-- result:
+E: (1064, 'Database iceberg_db_ad6df88aa3e146628e93381f4a4a9c04 not empty')
+-- !result
+drop catalog iceberg_sql_test_${uuid0};
+-- result:
+-- !result
 set catalog default_catalog;
 -- result:
 -- !result
