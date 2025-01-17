@@ -16,6 +16,7 @@ package com.starrocks.planner;
 
 import com.google.common.collect.Lists;
 import com.starrocks.common.FeConstants;
+import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -797,6 +798,94 @@ public class TablePruningTest extends TablePruningTestBase {
         ctx.getSessionVariable().setEnableCboTablePrune(true);
         String plan = UtFrameUtils.explainLogicalPlan(ctx, sql);
         Assert.assertTrue(plan, plan.contains("CLONE"));
+        starRocksAssert.dropTable("AA");
+        starRocksAssert.dropTable("BB");
+    }
+
+    @Test
+    public void testPruneWithPKUKTable1() throws Exception {
+        ctx.getSessionVariable().setEnableCboTablePrune(true);
+
+        final String tabAA = "CREATE TABLE `AA` (\n" +
+                "    `id` int(11) NOT NULL,\n" +
+                "    `id2` int(11) NOT NULL,\n" +
+                "    `name` varchar(25) NOT NULL\n" +
+                "    ) ENGINE=OLAP\n" +
+                "PRIMARY KEY(`id`)\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 10 PROPERTIES (\"replication_num\" = \"1\");\n";
+        final String tabBB = "CREATE TABLE `BB` (\n" +
+                "      `id` int(11) NOT NULL,\n" +
+                "      `id2` int(11) NOT NULL,\n" +
+                "      `name` varchar(25) NOT NULL,\n" +
+                "      `age` varchar(25)\n" +
+                "      ) ENGINE=OLAP\n" +
+                "UNIQUE KEY(`id`)\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 10  PROPERTIES (\"replication_num\" = \"1\");";
+        starRocksAssert.withTable(tabAA);
+        starRocksAssert.withTable(tabBB);
+        starRocksAssert.alterTableProperties(
+                "alter table AA set(\"foreign_key_constraints\" = \"AA(id2) REFERENCES BB(id)\");");
+        final String sql = "select AA.id2, BB.id from AA inner join BB on AA.id2 = BB.id";
+        final String plan = UtFrameUtils.explainLogicalPlan(ctx, sql);
+
+        PlanTestBase.assertNotContains(plan, "BB");
+        PlanTestBase.assertContains(plan, "CLONE");
+        starRocksAssert.dropTable("AA");
+        starRocksAssert.dropTable("BB");
+    }
+
+    @Test
+    public void testPruneWithPKUKTable2() throws Exception {
+        ctx.getSessionVariable().setEnableCboTablePrune(true);
+
+        final String tabAA = "CREATE TABLE `AA` (\n" +
+                "    `id` int(11) NOT NULL,\n" +
+                "    `id2` int(11) NOT NULL,\n" +
+                "    `id3` int(11) NOT NULL,\n" +
+                "    `name` varchar(25) NOT NULL\n" +
+                "    ) ENGINE=OLAP\n" +
+                "PRIMARY KEY(`id`)\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 10 PROPERTIES (" +
+                "   \"replication_num\" = \"1\"," +
+                "   \"unique_constraints\" = \"id3\"" +
+                ");\n";
+        final String tabBB = "CREATE TABLE `BB` (\n" +
+                "      `id` int(11) NOT NULL,\n" +
+                "      `id2` int(11) NOT NULL,\n" +
+                "      `name` varchar(25) NOT NULL,\n" +
+                "      `age` varchar(25)\n" +
+                "      ) ENGINE=OLAP\n" +
+                "PRIMARY KEY(`id`)\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 10  PROPERTIES " +
+                "(" +
+                "   \"replication_num\" = \"1\"," +
+                "   \"unique_constraints\" = \"id2\"" +
+                ");";
+        starRocksAssert.withTable(tabAA);
+        starRocksAssert.withTable(tabBB);
+        // add non primary key foreign key constraints should be ok
+        starRocksAssert.alterTableProperties(
+                "alter table AA set(\"unique_constraints\" = \"name\");");
+        // add non primary key foreign key constraints should be ok
+        starRocksAssert.alterTableProperties(
+                "alter table AA set(\"foreign_key_constraints\" = \"AA(id2) REFERENCES BB(id2)\");");
+        // test table prune with non-primary keys
+        {
+            final String sql = "select AA.id2, BB.id2 from AA inner join BB on AA.id2 = BB.id2";
+            String plan = UtFrameUtils.explainLogicalPlan(ctx, sql);
+            PlanTestBase.assertNotContains(plan, "BB");
+            PlanTestBase.assertContains(plan, "CLONE");
+        }
+
+        // test not table prune with non-fks
+        {
+            String sql = "select AA.id, BB.id from AA inner join BB on AA.id = BB.id";
+            String plan = UtFrameUtils.explainLogicalPlan(ctx, sql);
+            PlanTestBase.assertContains(plan, "BB");
+            PlanTestBase.assertNotContains(plan, "CLONE");
+        }
+        starRocksAssert.dropTable("AA");
+        starRocksAssert.dropTable("BB");
     }
 
     @Test
