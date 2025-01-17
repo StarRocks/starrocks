@@ -24,12 +24,12 @@ namespace starrocks {
 
 class TxnLogTask : public Runnable {
 public:
-    TxnLogTask(const CombinedTxnLogPB logs, lake::TabletManager* tablet_mgr, std::promise<Status> promise)
+    TxnLogTask(const CombinedTxnLogPB* logs, lake::TabletManager* tablet_mgr, std::promise<Status> promise)
             : _logs(logs), _tablet_mgr(tablet_mgr), _promise(std::move(promise)) {}
 
     void run() override {
         try {
-            Status status = _tablet_mgr->put_combined_txn_log(_logs);
+            Status status = _tablet_mgr->put_combined_txn_log(*_logs);
             if (!status.ok()) {
                 throw std::runtime_error("Log write failed");
             }
@@ -40,7 +40,7 @@ public:
     }
 
 private:
-    CombinedTxnLogPB _logs;
+    const CombinedTxnLogPB* _logs;
     lake::TabletManager* _tablet_mgr;
     std::promise<Status> _promise;
 };
@@ -59,7 +59,7 @@ Status write_combined_txn_log(const std::map<int64_t, CombinedTxnLogPB>& txn_log
         std::promise<Status> promise;
         futures.push_back(promise.get_future());
         std::shared_ptr<Runnable> r(
-                std::make_shared<TxnLogTask>(logs, ExecEnv::GetInstance()->lake_tablet_manager(), std::move(promise)));
+                std::make_shared<TxnLogTask>(&logs, ExecEnv::GetInstance()->lake_tablet_manager(), std::move(promise)));
         tasks.emplace_back(std::move(r));
     }
 
@@ -67,14 +67,15 @@ Status write_combined_txn_log(const std::map<int64_t, CombinedTxnLogPB>& txn_log
         RETURN_IF_ERROR(ExecEnv::GetInstance()->put_combined_txn_log_thread_pool()->submit(task));
     }
 
+    Status st;
     for (auto& future : futures) {
         Status status = future.get();
-        if (!status.ok()) {
-            return status;
+        if (st.ok() && !status.ok()) {
+            st = status;
         }
     }
 
-    return Status::OK();
+    return st;
 }
 
 } // namespace starrocks
