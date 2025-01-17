@@ -42,14 +42,14 @@ struct UnarrivedRuntimeFilterList {
     }
 };
 
-class OlapRuntimeScanRangePruner {
+class RuntimeScanRangePruner {
 public:
     using PredicatesRawPtrs = std::vector<const ColumnPredicate*>;
     using RuntimeFilterArrivedCallBack = std::function<Status(int, const PredicatesRawPtrs&)>;
     static constexpr auto rf_update_threshold = 4096 * 10;
 
-    OlapRuntimeScanRangePruner() = default;
-    OlapRuntimeScanRangePruner(PredicateParser* parser, const UnarrivedRuntimeFilterList& params) {
+    RuntimeScanRangePruner() = default;
+    RuntimeScanRangePruner(PredicateParser* parser, const UnarrivedRuntimeFilterList& params) {
         _parser = parser;
         _init(params);
     }
