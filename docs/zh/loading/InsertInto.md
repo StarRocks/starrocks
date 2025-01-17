@@ -484,7 +484,7 @@ INSERT INTO insert_wiki_edit (
 SELECT event_time, channel, user FROM source_wiki_edit;
 ```
 
-如果您在 Column 子句或 SELECT 语句中改变了 `channel` 和 `user` 的顺序，列的映射关系将发生变化。
+如果您在 Column List 或 SELECT 语句中改变了 `channel` 和 `user` 的顺序，列的映射关系将发生变化。
 
 ```SQL
 INSERT INTO insert_wiki_edit (
@@ -497,23 +497,19 @@ SELECT event_time, user, channel FROM source_wiki_edit;
 
 此处，由于目标表 `insert_wiki_edit` 中的 `channel` 列被源表 `source_wiki_edit` 中的 `user` 的数据所填满，导入的数据可能并不是所需的结果。
 
-通过在 INSERT 语句中将属性 match_column_by 设置为 name，系统将根据源表和目标表中的列名进行匹配，匹配同名的列。
+通过在 INSERT 语句中添加 `BY NAME` 子句，系统将根据检查源表和目标表中的列名，匹配同名的列。
 
-`match_column_by`：系统匹配源表和目标表中的列的方式。有效值：
-- `position`（默认值）：系统根据 Column 子句和 SELECT 语句中列的位置来匹配列。
-- `name`：系统根据列名匹配相同名称的列。
+:::note
+
+- 如果指定了 `BY NAME`，则不能指定 Column List。
+- 如果未指定 `BY NAME`，系统将根据 Column List 和 SELECT 语句中列的位置来匹配列。
+
+:::
 
 以下示例通过列名匹配源表和目标表中的列：
 
 ```SQL
-INSERT INTO insert_wiki_edit (
-    event_time,
-    channel,
-    user
-)
-PROPERTIES(
-    "match_column_by" = "name"
-)
+INSERT INTO insert_wiki_edit BY NAME
 SELECT event_time, user, channel FROM source_wiki_edit;
 ```
 

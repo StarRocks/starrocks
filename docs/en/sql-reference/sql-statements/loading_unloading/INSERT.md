@@ -19,7 +19,7 @@ You can submit an asynchronous INSERT task using [SUBMIT TASK](ETL/SUBMIT_TASK.m
   [ PARTITION (<partition_name> [, ...] ) ]
   [ TEMPORARY PARTITION (<temporary_partition_name> [, ...] ) ]
   [ WITH LABEL <label>]
-  [ (<column_name>[, ...]) ]
+  [ (<column_name>[, ...]) | BY NAME ]
   [ PROPERTIES ("key"="value", ...) ]
   { VALUES ( { <expression> | DEFAULT } [, ...] ) | <query> }
   ```
@@ -42,7 +42,8 @@ You can submit an asynchronous INSERT task using [SUBMIT TASK](ETL/SUBMIT_TASK.m
 | PARTITION    |  The partitions into which you want to load the data. You can specify multiple partitions, which must be separated by commas (,). It must be set to partitions that exist in the destination table. If you specify this parameter, the data will be inserted only into the specified partitions. If you do not specify this parameter, the data will be inserted into all partitions. |
 | TEMPORARY PARTITION |The name of the [temporary partition](../../../table_design/data_distribution/Temporary_partition.md) into which you want to load data. You can specify multiple temporary partitions, which must be separated by commas (,).|
 | label         | The unique identification label for each data load transaction within the database. If it is not specified, the system automatically generates one for the transaction. We recommend you specify the label for the transaction. Otherwise, you cannot check the transaction status if a connection error occurs and no result is returned. You can check the transaction status via `SHOW LOAD WHERE label="label"` statement. For the naming conventions of labels, see [System Limits](../../System_limit.md). |
-| column_name   | The name of the destination column(s) to load data in. It must be set as columns that exist in the destination table. <ul><li>If the property `match_column_by` is not set or set to `position` (default), the destination columns you specify are mapped one on one in sequence to the columns of the source table, regardless of what the destination column names are. </li><li>If `match_column_by` is set to `name`, the destination columns are mapped to columns with the same names in the source table, regardless of the column orders in destination and source tables.</li><li>If no destination column is specified, the default value is all columns in the destination table.</li><li>If the specified column in the source table does not exist in the destination column, the default value will be written to this column. </li><li>If the specified column does not have a default value, the transaction will fail.</li><li>If the column type of the source table is inconsistent with that of the destination table, the system will perform an implicit conversion on the mismatched column.</li><li>If the conversion fails, a syntax parsing error will be returned.</li></ul>**NOTE**<br />From v3.3.1, specifying a column list in the INSERT INTO statement on a Primary Key table will perform Partial Updates (instead of Full Upsert in earlier versions). If the column list is not specified, the system will perform Full Upsert. |
+| column_name   | The name of the destination column(s) to load data in. It must be set as columns that exist in the destination table. **You cannot specify both `column_name` and `BY NAME`.**<ul><li>If `BY NAME` is not specified, the destination columns you specified are mapped one on one in sequence to the source columns, regardless of what the destination column names are. </li><li>If `BY NAME` is specified, the destination columns are mapped to the source columns with the same names, regardless of the column orders in destination and source tables.</li><li>If no destination column is specified, the default value is all columns in the destination table.</li><li>If the specified column in the source table does not exist in the destination column, the default value will be written to this column. </li><li>If the specified column does not have a default value, the transaction will fail.</li><li>If the column type of the source table is inconsistent with that of the destination table, the system will perform an implicit conversion on the mismatched column.</li><li>If the conversion fails, a syntax parsing error will be returned.</li></ul>**NOTE**<br />From v3.3.1, specifying a column list in the INSERT INTO statement on a Primary Key table will perform Partial Updates (instead of Full Upsert in earlier versions). If the column list is not specified, the system will perform Full Upsert. |
+| BY NAME       | To match the source and destination columns by their names. **You cannot specify both `column_name` and `BY NAME`.** If it is not specified, the destination columns are mapped one on one in sequence to the source columns, regardless of what the destination column names are.  |
 | PROPERTIES    | Properties of the INSERT job. Each property must be a key-value pair. For supported properties, see [PROPERTIES](#properties). |
 | expression    | Expression that assigns values to the column.                |
 | DEFAULT       | Assigns default value to the column.                         |
@@ -58,7 +59,6 @@ INSERT statements support configuring PROPERTIES from v3.4.0 onwards.
 | timeout          | The timeout duration of the INSERT job. Unit: Seconds. You can also set the timeout duration for INSERT within the session or globally using the variable `insert_timeout`. |
 | strict_mode      | Whether to enable strict mode while loading data using INSERT from FILES(). Valid values: `true` (Default) and `false`. When strict mode is enabled, the system loads only qualified rows. It filters out unqualified rows and returns details about the unqualified rows. For more information, see [Strict mode](../../../loading/load_concept/strict_mode.md). You can also enable strict mode for INSERT from FILES() within the session or globally using the variable `enable_insert_strict`. |
 | max_filter_ratio | The maximum error tolerance of INSERT from FILES(). It's the maximum ratio of data records that can be filtered out due to inadequate data quality. When the ratio of unqualified data records reaches this threshold, the job fails. Default value: `0`. Range: [0, 1]. You can also set the maximum error tolerance for INSERT from FILES() within the session or globally using the variable `insert_max_filter_ratio`. |
-| match_column_by  | The mode how the system matches the columns in the source and target tables. Valid values:<ul><li>`position` (Default): The system matches the columns by the position of the columns in the column clause and the SELECT statement.</li><li>`name`: The system matches the columns with the same name.</li></ul> |
 
 :::note
 
@@ -223,14 +223,7 @@ SELECT * FROM FILES(
 The following example matches each column in the source and target tables by their names:
 
 ```SQL
-INSERT INTO insert_wiki_edit (
-    event_time,
-    channel,
-    user
-)
-PROPERTIES(
-    "match_column_by" = "name"
-)
+INSERT INTO insert_wiki_edit BY NAME
 SELECT event_time, user, channel FROM source_wiki_edit;
 ```
 
