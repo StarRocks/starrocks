@@ -67,7 +67,7 @@ public class ShowCatalogsStmtTest {
 
     @Test
     public void testShowCatalogsNormal() throws AnalysisException, DdlException {
-        ShowCatalogsStmt stmt = new ShowCatalogsStmt();
+        ShowCatalogsStmt stmt = new ShowCatalogsStmt(null);
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
         ShowResultSetMetaData metaData = resultSet.getMetaData();
         Assert.assertEquals("Catalog", metaData.getColumn(0).getName());
