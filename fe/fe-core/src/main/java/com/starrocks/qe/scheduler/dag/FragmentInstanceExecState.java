@@ -175,7 +175,7 @@ public class FragmentInstanceExecState {
      * The state transitions to DEPLOYING.
      */
     public void deployAsync() {
-        transitionState(State.DEPLOYING);
+        transitionState(State.CREATED, State.DEPLOYING);
 
         TNetworkAddress brpcAddress = worker.getBrpcAddress();
         try {
