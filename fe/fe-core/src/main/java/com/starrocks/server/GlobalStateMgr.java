@@ -1794,7 +1794,30 @@ public class GlobalStateMgr {
     }
 
     private void postLoadImage() {
+        onReloadTables();
         processMvRelatedMeta();
+    }
+
+    /**
+     * Call Table::onReload after load all tables, some properties like FK may depend on other databases/catalogs
+     */
+    private void onReloadTables() {
+        List<String> dbNames = metadataMgr.listDbNames(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+        for (String dbName : dbNames) {
+            Database db = metadataMgr.getDb(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbName);
+            if (db == null) {
+                continue;
+            }
+            for (Table table : db.getTables()) {
+                try {
+                    if (!table.isMaterializedView()) {
+                        table.onReload();
+                    }
+                } catch (Throwable e) {
+                    LOG.error("reload table failed: {}", table, e);
+                }
+            }
+        }
     }
 
     private void processMvRelatedMeta() {
@@ -2944,7 +2967,8 @@ public class GlobalStateMgr {
 
                 // foreign key constraint
                 if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)
-                        && !Strings.isNullOrEmpty(properties.get(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT))) {
+                        && !Strings.isNullOrEmpty(properties.get(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT))
+                        && olapTable.hasForeignKeyConstraints()) {
                     sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)
                             .append("\" = \"");
                     sb.append(ForeignKeyConstraint.getShowCreateTableConstraintDesc(olapTable.getForeignKeyConstraints()))
