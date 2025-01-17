@@ -23,9 +23,9 @@
 #include "runtime/global_dict/types.h"
 #include "storage/del_vector.h"
 #include "storage/disjunctive_predicates.h"
-#include "storage/olap_runtime_range_pruner.h"
 #include "storage/options.h"
 #include "storage/predicate_tree/predicate_tree.hpp"
+#include "storage/runtime_range_pruner.h"
 #include "storage/seek_range.h"
 #include "storage/tablet_schema.h"
 
@@ -91,7 +91,7 @@ public:
     SparseRangePtr rowid_range_option = nullptr;
     std::vector<ShortKeyRangeOptionPtr> short_key_ranges;
 
-    OlapRuntimeScanRangePruner runtime_range_pruner;
+    RuntimeScanRangePruner runtime_range_pruner;
 
     const std::atomic<bool>* is_cancelled = nullptr;
 

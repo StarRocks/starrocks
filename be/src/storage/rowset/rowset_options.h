@@ -21,9 +21,9 @@
 #include "column/column_access_path.h"
 #include "runtime/global_dict/types.h"
 #include "storage/olap_common.h"
-#include "storage/olap_runtime_range_pruner.h"
 #include "storage/options.h"
 #include "storage/predicate_tree/predicate_tree.hpp"
+#include "storage/runtime_range_pruner.h"
 #include "storage/seek_range.h"
 #include "storage/tablet_schema.h"
 
@@ -81,7 +81,7 @@ public:
     RowidRangeOptionPtr rowid_range_option = nullptr;
     ShortKeyRangesOptionPtr short_key_ranges_option = nullptr;
 
-    OlapRuntimeScanRangePruner runtime_range_pruner;
+    RuntimeScanRangePruner runtime_range_pruner;
 
     std::vector<ColumnAccessPathPtr>* column_access_paths = nullptr;
 
