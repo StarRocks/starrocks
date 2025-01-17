@@ -42,16 +42,21 @@ public class ClusterSnapshotConfig {
     private static final Logger LOG = LogManager.getLogger(ClusterSnapshotConfig.class);
 
     public static class ClusterSnapshot {
+        @JsonProperty("cluster_snapshot_path")
+        private String clusterSnapshotPath;
+
         @JsonProperty("storage_volume_name")
         private String storageVolumeName;
 
         private StorageVolume storageVolume;
 
-        @JsonProperty("cluster_service_id")
-        private String clusterServiceId;
+        public String getClusterSnapshotPath() {
+            return clusterSnapshotPath;
+        }
 
-        @JsonProperty("cluster_snapshot_name")
-        private String clusterSnapshotName;
+        public void setClusterSnapshotPath(String clusterSnapshotPath) {
+            this.clusterSnapshotPath = clusterSnapshotPath;
+        }
 
         public String getStorageVolumeName() {
             return storageVolumeName;
@@ -67,22 +72,6 @@ public class ClusterSnapshotConfig {
 
         public void setStorageVolume(StorageVolume storageVolume) {
             this.storageVolume = storageVolume;
-        }
-
-        public String getClusterServiceId() {
-            return clusterServiceId;
-        }
-
-        public void setClusterServiceId(String clusterServiceId) {
-            this.clusterServiceId = clusterServiceId;
-        }
-
-        public String getClusterSnapshotName() {
-            return clusterSnapshotName;
-        }
-
-        public void setClusterSnapshotName(String clusterSnapshotName) {
-            this.clusterSnapshotName = clusterSnapshotName;
         }
     }
 
