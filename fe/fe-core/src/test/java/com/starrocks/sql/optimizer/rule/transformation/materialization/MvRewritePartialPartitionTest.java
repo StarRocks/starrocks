@@ -747,8 +747,10 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
             FeConstants.runningUnitTest = false;
             String plan = getFragmentPlan(query5);
             FeConstants.runningUnitTest = true;
-            PlanTestBase.assertContains(plan, "test_loose_mv", "partitions=3/4",
-                    "table_with_day_partition", "partitions=1/4", "UNION");
+            PlanTestBase.assertContains(plan, "test_loose_mv", "     TABLE: test_loose_mv\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     partitions=3/4");
+            PlanTestBase.assertNotContains(plan, "UNION");
             dropMv("test", "test_loose_mv");
         }
     }
