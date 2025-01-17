@@ -558,6 +558,7 @@ StatusOr<HdfsScannerContext*> FileReaderTest::_create_context_for_filter_row_gro
     rf_desc->set_runtime_filter(rf);
     rf_collector->add_descriptor(rf_desc);
     ctx->runtime_filter_collector = rf_collector;
+    ctx->tuple_desc = tuple_desc;
 
     ColumnPtr partition_col3 = ColumnHelper::create_const_column<TYPE_INT>(5, 1);
     ColumnPtr partition_col4 = ColumnHelper::create_const_column<TYPE_INT>(2, 1);
