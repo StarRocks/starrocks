@@ -29,18 +29,20 @@ public:
     enum StatSupportedFilter { FILTER_IN, IS_NULL, IS_NOT_NULL, RF_MIN_MAX };
 
     static Status decode_value_into_column(ColumnPtr column, const std::vector<std::string>& values,
-                                           const TypeDescriptor& type, const ParquetField* field,
-                                           const std::string& timezone);
+                                           const std::vector<bool>& null_pages, const TypeDescriptor& type,
+                                           const ParquetField* field, const std::string& timezone);
 
     static bool can_be_used_for_statistics_filter(ExprContext* ctx, StatSupportedFilter& filter_type);
 
     static Status in_filter_on_min_max_stat(const std::vector<std::string>& min_values,
                                             const std::vector<std::string>& max_values,
+                                            const std::vector<bool>& null_pages,
                                             const std::vector<int64_t>& null_counts, ExprContext* ctx,
                                             const ParquetField* field, const std::string& timezone, Filter& selected);
 
     static Status min_max_filter_on_min_max_stat(const std::vector<std::string>& min_values,
                                                  const std::vector<std::string>& max_values,
+                                                 const std::vector<bool>& null_pages,
                                                  const std::vector<int64_t>& null_counts, ExprContext* ctx,
                                                  const ParquetField* field, const std::string& timezone,
                                                  Filter& selected);
@@ -48,6 +50,7 @@ public:
     template <LogicalType LType>
     static Status min_max_filter_on_min_max_stat_t(const std::vector<std::string>& min_values,
                                                    const std::vector<std::string>& max_values,
+                                                   const std::vector<bool>& null_pages,
                                                    const std::vector<int64_t>& null_counts, ExprContext* ctx,
                                                    const ParquetField* field, const std::string& timezone,
                                                    Filter& selected);
