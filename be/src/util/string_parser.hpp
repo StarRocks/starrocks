@@ -522,6 +522,14 @@ inline T StringParser::string_to_float_internal(const char* s, int len, ParseRes
     auto res = fast_float::from_chars(s + i, s + j + 1, val);
 
     if (LIKELY(res.ec == std::errc())) {
+        // 'res.ptr' is set to point right after the parsed number.
+        // if there are some chars left, treate it as failure.
+        // for example,
+        // '10.11.12.13' is parsed as 10.11, res.ptr is '.12.13', so it is invalid.
+        if (res.ptr != s + j + 1) {
+            *result = PARSE_FAILURE;
+            return 0;
+        }
         if (UNLIKELY(val == std::numeric_limits<T>::infinity())) {
             *result = PARSE_OVERFLOW;
         } else {
