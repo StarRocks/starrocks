@@ -103,16 +103,14 @@ function: assert_explain_not_contains("select count(1) as cnt, payment.id from p
 -- result:
 None
 -- !result
+drop table txn force;
+-- result:
+-- !result
 drop table payment force;
 -- result:
 -- !result
-drop table txn force;
--- result:
-E: (5502, "Getting analyzing error. Detail message: Unknown table 'txn'.")
--- !result
 drop database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
 -- result:
-E: (1064, 'Database iceberg_db_ad6df88aa3e146628e93381f4a4a9c04 not empty')
 -- !result
 drop catalog iceberg_sql_test_${uuid0};
 -- result:

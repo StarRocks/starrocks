@@ -66,8 +66,9 @@ set enable_eliminate_agg = true;
 function: assert_explain_not_contains("select count(1) as cnt, payment.id from payment group by payment.id;", "AGGREGATE")
 
 
-drop table payment force;
+-- order matters. if drop table payment first, when drop table txn, it will fail because payment is not found.
 drop table txn force;
+drop table payment force;
 
 drop database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
 drop catalog iceberg_sql_test_${uuid0};
