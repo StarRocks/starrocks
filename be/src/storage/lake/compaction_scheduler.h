@@ -75,6 +75,11 @@ public:
         _last_check_time = now;
     }
 
+    int64_t TEST_get_last_check_time() const {
+        std::lock_guard l(_txn_valid_check_mutex);
+        return _last_check_time;
+    }
+
     // check if txn in FE still valid while compaction task (specified by `context`) is running
     Status is_txn_still_valid();
 
@@ -92,7 +97,7 @@ private:
     // used to help check whether it's valid periodically, task's in queue time is considered
     int64_t _last_check_time;
     // use lock to protect _last_check_time and prevent multiple rpc called
-    mutable StackTraceMutex<bthread::Mutex> _txn_valid_check_mutex;
+    mutable std::mutex _txn_valid_check_mutex;
     std::vector<std::unique_ptr<CompactionTaskContext>> _contexts;
 };
 

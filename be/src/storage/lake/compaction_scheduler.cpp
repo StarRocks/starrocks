@@ -148,9 +148,10 @@ Status CompactionTaskCallback::is_txn_still_valid() {
     if (!_txn_valid_check_mutex.try_lock()) {
         return Status::OK();
     }
+    DeferOp defer([&]() { _txn_valid_check_mutex.unlock(); });
     // check again after acquired lock
     auto now = time(nullptr);
-    if (now < _last_check_time || (now - _last_check_time) < check_interval_seconds) {
+    if (now <= _last_check_time || (now - _last_check_time) < check_interval_seconds) {
         return Status::OK();
     }
     // ask FE whether this compaction transaction is still valid
@@ -185,7 +186,6 @@ Status CompactionTaskCallback::is_txn_still_valid() {
     }
 #endif
     _last_check_time = time(nullptr);
-    _txn_valid_check_mutex.unlock();
     return Status::OK();
 }
 

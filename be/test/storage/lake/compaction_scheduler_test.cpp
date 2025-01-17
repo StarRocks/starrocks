@@ -116,21 +116,37 @@ TEST_F(LakeCompactionSchedulerTest, test_compaction_cancel) {
         EXPECT_FALSE(compaction_should_cancel(&ctx).ok());
     }
 
-    // not checker
+    // not valid time interval, should return early
     {
+        auto check_interval = config::lake_compaction_check_valid_interval_minutes;
+        config::lake_compaction_check_valid_interval_minutes = -1;
         auto cb = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, nullptr);
         CompactionTaskContext ctx(100 /* txn_id */, 101 /* tablet_id */, 1 /* version */,
                                   false /* force_base_compaction */, cb);
         EXPECT_TRUE(compaction_should_cancel(&ctx).ok());
+        config::lake_compaction_check_valid_interval_minutes = check_interval;
     }
 
-    // is checker
+    // try_lock succeed and check time not satisfied
     {
+        auto check_interval = config::lake_compaction_check_valid_interval_minutes;
+        config::lake_compaction_check_valid_interval_minutes = 24 * 60; // set to a big value
         auto cb = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, nullptr);
         CompactionTaskContext ctx(100 /* txn_id */, 101 /* tablet_id */, 1 /* version */,
                                   false /* force_base_compaction */, cb);
-        cb->set_last_check_time(0);
+
+        cb->set_last_check_time(time(nullptr));
         EXPECT_TRUE(compaction_should_cancel(&ctx).ok());
+        config::lake_compaction_check_valid_interval_minutes = check_interval;
+
+        // give another try, should acquire the lock successfully
+        // try_lock succeed and check time satisfied, should cancel succeed
+        check_interval = config::lake_compaction_check_valid_interval_minutes;
+        auto last_check_time_val = time(nullptr) - 60 * check_interval;
+        cb->set_last_check_time(last_check_time_val);
+        EXPECT_TRUE(compaction_should_cancel(&ctx).ok());
+        // make sure _last_check_time value is updated
+        EXPECT_TRUE(cb->TEST_get_last_check_time() > last_check_time_val);
     }
 }
 
