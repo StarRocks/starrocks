@@ -92,6 +92,7 @@ private:
     Status _init_conjunct_ctxs(RuntimeState* state);
     void _update_has_any_predicate();
     Status _decompose_conjunct_ctxs(RuntimeState* state);
+    Status _setup_all_conjunct_ctxs(RuntimeState* state);
     void _init_tuples_and_slots(RuntimeState* state);
     void _init_counter(RuntimeState* state);
     void _init_rf_counters();
@@ -119,6 +120,8 @@ private:
     // ============ conjuncts =================
     std::vector<ExprContext*> _min_max_conjunct_ctxs;
 
+    // contains whole conjuncts, used to generate PredicateTree
+    std::vector<ExprContext*> _all_conjunct_ctxs{};
     // complex conjuncts, such as contains multi slot, are evaled in scanner.
     std::vector<ExprContext*> _scanner_conjunct_ctxs;
     // conjuncts that contains only one slot.

@@ -19,11 +19,11 @@ import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-public class MvTimeSeriesRewriteWithHiveTest extends MvRewriteTestBase {
+public class MvTimeSeriesRewriteWithHiveTest extends MVTestBase {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        MvRewriteTestBase.beforeClass();
+        MVTestBase.beforeClass();
         ConnectorPlanTestBase.mockHiveCatalog(connectContext);
     }
 

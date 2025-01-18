@@ -117,7 +117,7 @@ StatusOr<ByteBufferPtr> StreamLoadPipe::read() {
 StatusOr<ByteBufferPtr> StreamLoadPipe::no_block_read() {
     std::unique_lock<std::mutex> l(_lock);
 
-    _get_cond.wait_for(l, std::chrono::milliseconds(_non_blocking_wait_ms),
+    _get_cond.wait_for(l, std::chrono::microseconds(_non_blocking_wait_us),
                        [&]() { return _cancelled || _finished || !_buf_queue.empty(); });
 
     // cancelled
@@ -184,7 +184,7 @@ Status StreamLoadPipe::no_block_read(uint8_t* data, size_t* data_size, bool* eof
         if (_read_buf == nullptr || !_read_buf->has_remaining()) {
             std::unique_lock<std::mutex> l(_lock);
 
-            _get_cond.wait_for(l, std::chrono::milliseconds(_non_blocking_wait_ms),
+            _get_cond.wait_for(l, std::chrono::microseconds(_non_blocking_wait_us),
                                [&]() { return _cancelled || _finished || !_buf_queue.empty(); });
 
             // cancelled

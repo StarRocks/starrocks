@@ -133,7 +133,10 @@ public:
         return Status(TStatusCode::DATA_QUALITY_ERROR, msg);
     }
 
+    // used for global dict collection
     static Status GlobalDictError(std::string_view msg) { return Status(TStatusCode::GLOBAL_DICT_ERROR, msg); }
+    // used for global dict match
+    static Status GlobalDictNotMatch(std::string_view msg) { return Status(TStatusCode::GLOBAL_DICT_NOT_MATCH, msg); }
 
     static Status TransactionInProcessing(std::string_view msg) { return Status(TStatusCode::TXN_IN_PROCESSING, msg); }
     static Status TransactionNotExists(std::string_view msg) { return Status(TStatusCode::TXN_NOT_EXISTS, msg); }
@@ -171,6 +174,8 @@ public:
     bool is_thrift_rpc_error() const { return code() == TStatusCode::THRIFT_RPC_ERROR; }
 
     bool is_end_of_file() const { return code() == TStatusCode::END_OF_FILE; }
+
+    bool is_internal_error() const { return code() == TStatusCode::INTERNAL_ERROR; }
 
     bool is_ok_or_eof() const { return ok() || is_end_of_file(); }
 

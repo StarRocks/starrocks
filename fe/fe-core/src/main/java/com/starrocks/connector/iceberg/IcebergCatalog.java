@@ -34,6 +34,7 @@ import org.apache.iceberg.StarRocksIcebergTableScan;
 import org.apache.iceberg.StructLike;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableScan;
+import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.exceptions.NoSuchTableException;
 import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.util.StructProjection;
@@ -130,11 +131,11 @@ public interface IcebergCatalog extends MemoryTrackable {
                 srScanContext);
     }
 
-    default String defaultTableLocation(String dbName, String tableName) {
+    default String defaultTableLocation(Namespace ns, String tableName) {
         return "";
     }
 
-    default Map<String, Object> loadNamespaceMetadata(String dbName) {
+    default Map<String, Object> loadNamespaceMetadata(Namespace ns) {
         return new HashMap<>();
     }
 

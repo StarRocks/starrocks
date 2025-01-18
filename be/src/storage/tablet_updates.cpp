@@ -861,16 +861,29 @@ void TabletUpdates::_ignore_rowset_commit(int64_t version, const RowsetSharedPtr
                               << " txn_id: " << rowset->txn_id() << " rowset: " << rowset->rowset_id().to_string();
 }
 
+// check error message to avoid error code conversion during execution
+bool TabletUpdates::_check_status_msg(std::string_view msg) {
+    std::string lower_msg;
+    lower_msg.reserve(msg.size());
+    for (char ch : msg) {
+        lower_msg.push_back(std::tolower(static_cast<unsigned char>(ch)));
+    }
+    bool has_memory = lower_msg.find("memory") != std::string::npos;
+    bool has_exceed_limit = lower_msg.find("exceed limit") != std::string::npos;
+    bool has_alloc_failed = lower_msg.find("alloc failed") != std::string::npos;
+    return has_memory && (has_exceed_limit || has_alloc_failed);
+}
+
 bool TabletUpdates::_is_tolerable(Status& status) {
     switch (status.code()) {
     case TStatusCode::OK:
     case TStatusCode::MEM_LIMIT_EXCEEDED:
     case TStatusCode::MEM_ALLOC_FAILED:
+    case TStatusCode::TIMEOUT:
         return true;
     default:
-        return false;
+        return _check_status_msg(status.message());
     }
-    return false;
 }
 
 class ApplyCommitTask : public Runnable {
@@ -930,6 +943,8 @@ DEFINE_FAIL_POINT(tablet_apply_cache_del_vec_failed);
 DEFINE_FAIL_POINT(tablet_apply_tablet_drop);
 DEFINE_FAIL_POINT(tablet_apply_load_compaction_state_failed);
 DEFINE_FAIL_POINT(tablet_apply_load_segments_failed);
+DEFINE_FAIL_POINT(tablet_delvec_inconsistent);
+DEFINE_FAIL_POINT(tablet_internal_error_code_but_memory_limit);
 
 void TabletUpdates::do_apply() {
     SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(true);
@@ -1006,12 +1021,16 @@ void TabletUpdates::do_apply() {
     _apply_stopped_cond.notify_all();
 }
 
-void TabletUpdates::_stop_and_wait_apply_done() {
-    _apply_stopped = true;
+void TabletUpdates::_wait_apply_done() {
     std::unique_lock<std::mutex> ul(_apply_running_lock);
     while (_apply_running) {
         _apply_stopped_cond.wait(ul);
     }
+}
+
+void TabletUpdates::_stop_and_wait_apply_done() {
+    _apply_stopped = true;
+    _wait_apply_done();
 }
 
 Status TabletUpdates::get_latest_applied_version(EditVersion* latest_applied_version) {
@@ -1301,6 +1320,8 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
         auto st = index.load(&_tablet);
         FAIL_POINT_TRIGGER_EXECUTE(tablet_apply_load_index_failed,
                                    { st = Status::InternalError("inject tablet_apply_load_index_failed"); });
+        FAIL_POINT_TRIGGER_EXECUTE(tablet_internal_error_code_but_memory_limit,
+                                   { st = Status::InternalError("load index faile because Memory exceed Limit"); });
         manager->index_cache().update_object_size(index_entry, index.memory_usage());
         if (!st.ok()) {
             std::string msg = strings::Substitute("_apply_rowset_commit error: load primary index failed: $0 $1",
@@ -1615,13 +1636,21 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
             size_t cur_old = old_del_vec->cardinality();
             size_t cur_add = new_delete.second.size();
             size_t cur_new = new_del_vecs[idx].second->cardinality();
+            FAIL_POINT_TRIGGER_EXECUTE(tablet_delvec_inconsistent, {
+                cur_old = 0;
+                cur_add = 1;
+                cur_new = 0;
+            });
             if (cur_old + cur_add != cur_new) {
                 // should not happen, data inconsistent
-                LOG(FATAL) << strings::Substitute(
+                string msg = strings::Substitute(
                         "delvec inconsistent tablet:$0 rssid:$1 #old:$2 #add:$3 #new:$4 old_v:$5 "
                         "v:$6",
                         _tablet.tablet_id(), rssid, cur_old, cur_add, cur_new, old_del_vec->version(),
                         version.major_number());
+                LOG(ERROR) << msg;
+                failure_handler(msg, TStatusCode::INTERNAL_ERROR, false);
+                return apply_st;
             }
             if (VLOG_IS_ON(1)) {
                 StringAppendF(&delvec_change_info, " %u:%zu(%ld)+%zu=%zu", rssid, cur_old, old_del_vec->version(),
@@ -1767,7 +1796,7 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
     std::string msg_part3 = strings::Substitute("duration:$0ms($1/$2/$3/$4)", t_write - t_start, t_apply - t_start,
                                                 t_index - t_apply, t_delvec - t_index, t_write - t_delvec);
 
-    bool is_slow = t_apply - t_start > config::apply_version_slow_log_sec * 1000;
+    bool is_slow = t_write - t_start > config::apply_version_slow_log_sec * 1000;
     if (is_slow) {
         LOG(INFO) << msg_part1 << msg_part2 << msg_part3;
     } else {
@@ -1934,7 +1963,6 @@ Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo) {
                 string msg = strings::Substitute("_do_compaction rowset $0 should exists $1", info->inputs[i],
                                                  _debug_string(false));
                 LOG(ERROR) << msg;
-                _set_error(msg);
                 return Status::InternalError(msg);
             } else {
                 input_rowsets[i] = itr->second;
@@ -2500,7 +2528,7 @@ Status TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_in
                 max_rowset_id, max_src_rssid, _debug_compaction_stats(info->inputs, rowset_id),
                 st.ok() ? "" : st.message());
         LOG(ERROR) << msg << debug_string();
-        _set_error(msg + _debug_version_info(true));
+        failure_handler(msg + _debug_version_info(true), TStatusCode::INTERNAL_ERROR);
         DCHECK(st.ok()) << msg;
     }
     return apply_st;
@@ -5255,7 +5283,6 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
                                                   rowset->rowset_meta()->get_rowset_seg_id(),
                                                   rowset->rowset_meta()->get_rowset_seg_id() + rowset->num_segments());
             LOG(ERROR) << msg;
-            _set_error(msg);
             return Status::InternalError(msg);
         }
         // REQUIRE: all rowsets in this tablet have the same path prefix, i.e, can share the same fs
@@ -5310,6 +5337,11 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
                 }
                 RETURN_IF_ERROR(col_iter->init(iter_opts));
                 RETURN_IF_ERROR(col_iter->fetch_values_by_rowid(rowids.data(), rowids.size(), (*columns)[i].get()));
+                // padding char columns
+                const auto& field = read_tablet_schema->schema()->field(column_ids[i]);
+                if (field->type()->type() == TYPE_CHAR) {
+                    ChunkHelper::padding_char_column(read_tablet_schema, *field, (*columns)[i].get());
+                }
             }
         }
     }
@@ -5351,6 +5383,11 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
             }
             RETURN_IF_ERROR(col_iter->init(iter_opts));
             RETURN_IF_ERROR(col_iter->fetch_values_by_rowid(rowids.data(), rowids.size(), (*columns)[i].get()));
+            // padding char columns
+            const auto& field = read_tablet_schema->schema()->field(column_ids[i]);
+            if (field->type()->type() == TYPE_CHAR) {
+                ChunkHelper::padding_char_column(read_tablet_schema, *field, (*columns)[i].get());
+            }
         }
     }
     return Status::OK();
@@ -5394,8 +5431,7 @@ Status TabletUpdates::get_rss_rowids_by_pk_unlock(Tablet* tablet, const Column& 
         std::string msg = strings::Substitute("get_rss_rowids_by_pk error: load primary index failed: $0 $1",
                                               st.message(), debug_string());
         LOG(ERROR) << msg;
-        _set_error(msg);
-        return Status::InternalError(msg);
+        return Status(st.code(), msg);
     }
 
     RETURN_IF_ERROR(index.get(keys, rss_rowids));

@@ -393,7 +393,7 @@ Status TabletReader::init_delete_predicates(const TabletReaderParams& params, De
     if (UNLIKELY(_tablet_schema == nullptr)) {
         return Status::InternalError("tablet schema is null. forget or fail to call prepare()");
     }
-    PredicateParser pred_parser(_tablet_schema);
+    OlapPredicateParser pred_parser(_tablet_schema);
 
     for (int index = 0, size = _tablet_metadata->rowsets_size(); index < size; ++index) {
         const auto& rowset_metadata = _tablet_metadata->rowsets(index);

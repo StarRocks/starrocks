@@ -179,6 +179,10 @@ public:
 
     void unload_and_remove_primary_index(int64_t tablet_id);
 
+    StatusOr<IndexEntry*> rebuild_primary_index(const TabletMetadataPtr& metadata, MetaFileBuilder* builder,
+                                                int64_t base_version, int64_t new_version,
+                                                std::unique_ptr<std::lock_guard<std::shared_timed_mutex>>& lock);
+
     DynamicCache<uint64_t, LakePrimaryIndex>& index_cache() { return _index_cache; }
 
     void lock_shard_pk_index_shard(int64_t tablet_id) { _get_pk_index_shard_lock(tablet_id).lock_shared(); }
@@ -202,8 +206,8 @@ public:
 private:
     // print memory tracker state
     void _print_memory_stats();
-    Status _do_update(uint32_t rowset_id, int32_t upsert_idx, const ColumnUniquePtr& upsert, PrimaryIndex& index,
-                      DeletesMap* new_deletes);
+    Status _do_update(uint32_t rowset_id, int32_t upsert_idx, const SegmentPKEncodeResultPtr& upsert,
+                      PrimaryIndex& index, DeletesMap* new_deletes);
 
     Status _do_update_with_condition(const RowsetUpdateStateParams& params, uint32_t rowset_id, int32_t upsert_idx,
                                      int32_t condition_column, const ColumnUniquePtr& upsert, PrimaryIndex& index,

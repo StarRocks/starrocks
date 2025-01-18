@@ -15,10 +15,10 @@
 
 package com.starrocks.authentication;
 
+import com.starrocks.authorization.AuthorizationMgr;
+import com.starrocks.authorization.PrivilegeException;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.common.Pair;
-import com.starrocks.privilege.AuthorizationMgr;
-import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;

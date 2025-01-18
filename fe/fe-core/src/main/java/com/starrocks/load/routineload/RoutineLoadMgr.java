@@ -825,4 +825,19 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
 
         return Lists.newArrayList(Pair.create(samples, (long) idToRoutineLoadJob.size()));
     }
+
+    public Map<Long, Long> getRunningRoutingLoadCount() {
+        Map<Long, Long> result = new HashMap<>();
+        readLock();
+        try {
+            for (RoutineLoadJob loadJob : idToRoutineLoadJob.values()) {
+                if (!loadJob.isFinal()) {
+                    result.compute(loadJob.getWarehouseId(), (key, value) -> value == null ? 1L : value + 1);
+                }
+            }
+        } finally {
+            readUnlock();
+        }
+        return result;
+    }
 }

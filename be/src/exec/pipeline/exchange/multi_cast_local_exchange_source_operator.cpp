@@ -19,10 +19,12 @@ namespace starrocks::pipeline {
 Status MultiCastLocalExchangeSourceOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(SourceOperator::prepare(state));
     _exchanger->open_source_operator(_mcast_consumer_index);
+    _exchanger->observable().attach_source_observer(state, observer());
     return Status::OK();
 }
 
 Status MultiCastLocalExchangeSourceOperator::set_finishing(RuntimeState* state) {
+    auto notify = _exchanger->observable().defer_notify_sink();
     if (!_is_finished) {
         _is_finished = true;
         _exchanger->close_source_operator(_mcast_consumer_index);
@@ -31,6 +33,7 @@ Status MultiCastLocalExchangeSourceOperator::set_finishing(RuntimeState* state) 
 }
 
 StatusOr<ChunkPtr> MultiCastLocalExchangeSourceOperator::pull_chunk(RuntimeState* state) {
+    auto notify = _exchanger->observable().defer_notify_sink();
     auto ret = _exchanger->pull_chunk(state, _mcast_consumer_index);
     if (ret.status().is_end_of_file()) {
         (void)set_finishing(state);

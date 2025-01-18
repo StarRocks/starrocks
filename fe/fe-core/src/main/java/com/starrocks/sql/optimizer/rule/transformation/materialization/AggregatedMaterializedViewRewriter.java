@@ -21,6 +21,8 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.RandomDistributionInfo;
+import com.starrocks.catalog.combinator.AggStateMergeCombinator;
+import com.starrocks.catalog.combinator.AggStateUnionCombinator;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.MvRewriteContext;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -101,7 +103,7 @@ public final class AggregatedMaterializedViewRewriter extends MaterializedViewRe
     //      query:
     //      select a+1, abs(a), sum(c) from t group by a
     @Override
-    protected OptExpression viewBasedRewrite(RewriteContext rewriteContext, OptExpression mvOptExpr) {
+    public OptExpression doViewBasedRewrite(RewriteContext rewriteContext, OptExpression mvOptExpr) {
         LogicalAggregationOperator mvAggOp = (LogicalAggregationOperator) rewriteContext.getMvExpression().getOp();
         LogicalAggregationOperator queryAggOp = (LogicalAggregationOperator) rewriteContext.getQueryExpression().getOp();
 
@@ -130,6 +132,17 @@ public final class AggregatedMaterializedViewRewriter extends MaterializedViewRe
                         "mv:{}, query:{}", mvAggOp.getAggregations().values(), queryAggOp.getAggregations().values());
                 return null;
             }
+        } else {
+            // agg_state combinator cannot be used for non-rollup rewrite(convert agg_state to final result),
+            // so change isRollup to true if mv has agg_state combinator.
+            boolean isContainAggStateCombinator = mvAggOp.getAggregations()
+                    .values()
+                    .stream()
+                    .anyMatch(callOp -> callOp.getFunction() instanceof AggStateUnionCombinator
+                            || callOp.getFunction() instanceof AggStateMergeCombinator);
+            if (isContainAggStateCombinator) {
+                isRollup = true;
+            }
         }
         rewriteContext.setRollup(isRollup);
 
@@ -140,8 +153,6 @@ public final class AggregatedMaterializedViewRewriter extends MaterializedViewRe
         EquationRewriter queryExprToMvExprRewriter =
                 buildEquationRewriter(mvProjection, rewriteContext, false);
 
-        // TODO:duplicate if mv has already outputted.
-        // mvOptExpr = duplicateMvOptExpression(rewriteContext, mvOptExpr, queryExprToMvExprRewriter);
         if (isRollup) {
             return rewriteForRollup(queryAggOp, queryGroupingKeys, columnRewriter, queryExprToMvExprRewriter,
                     rewriteContext, mvOptExpr);
@@ -374,7 +385,6 @@ public final class AggregatedMaterializedViewRewriter extends MaterializedViewRe
         return rewriteGroupingKeys;
     }
 
-
     private Map<ColumnRefOperator, CallOperator> rewriteAggregations(RewriteContext rewriteContext,
                                                                        ColumnRewriter columnRewriter,
                                                                        Map<ColumnRefOperator, CallOperator> aggregations,
@@ -443,9 +453,10 @@ public final class AggregatedMaterializedViewRewriter extends MaterializedViewRe
     }
 
     @Override
-    protected OptExpression queryBasedRewrite(RewriteContext rewriteContext, ScalarOperator compensationPredicates,
-                                              OptExpression queryExpression) {
-        OptExpression child = super.queryBasedRewrite(rewriteContext, compensationPredicates, queryExpression.inputAt(0));
+    public OptExpression doQueryBasedRewrite(RewriteContext rewriteContext,
+                                             ScalarOperator compensationPredicates,
+                                             OptExpression queryExpression) {
+        OptExpression child = super.doQueryBasedRewrite(rewriteContext, compensationPredicates, queryExpression.inputAt(0));
         if (child == null) {
             return null;
         }
@@ -453,7 +464,7 @@ public final class AggregatedMaterializedViewRewriter extends MaterializedViewRe
     }
 
     @Override
-    protected OptExpression createUnion(OptExpression queryInput,
+    public OptExpression doUnionRewrite(OptExpression queryInput,
                                         OptExpression viewInput,
                                         RewriteContext rewriteContext) {
         Map<ColumnRefOperator, ScalarOperator> queryColumnRefMap =
@@ -462,8 +473,8 @@ public final class AggregatedMaterializedViewRewriter extends MaterializedViewRe
         List<ColumnRefOperator> originalOutputColumns = new ArrayList<>(queryColumnRefMap.keySet());
         // rewrite query
         OptExpressionDuplicator duplicator = new OptExpressionDuplicator(materializationContext);
-        // reset original partition predicates to prune partitions/tablets again
-        OptExpression newQueryInput = duplicator.duplicate(queryInput, true);
+        // don't reset selected partition ids for query input, because query's partition ranges should not be extended.
+        OptExpression newQueryInput = duplicator.duplicate(queryInput, false);
         List<ColumnRefOperator> newQueryOutputColumns = duplicator.getMappedColumns(originalOutputColumns);
 
         Projection projection = getMvOptExprProjection(viewInput);
@@ -475,6 +486,7 @@ public final class AggregatedMaterializedViewRewriter extends MaterializedViewRe
             ColumnRefOperator newColumn = rewriteContext.getQueryRefFactory().create(
                     columnRef, columnRef.getType(), columnRef.isNullable());
             newViewOutputColumns.add(newColumn);
+            Preconditions.checkArgument(mvProjection.containsKey(columnRef));
             newColumnRefMap.put(newColumn, mvProjection.get(columnRef));
         }
         Projection newMvProjection = new Projection(newColumnRefMap);

@@ -57,6 +57,8 @@ public:
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
 
+    bool support_event_scheduler() const override { return false; }
+
 private:
     std::shared_ptr<spill::SpilledOptions> _spill_options;
     std::shared_ptr<spill::SpillerFactory> _spill_factory = std::make_shared<spill::SpillerFactory>();

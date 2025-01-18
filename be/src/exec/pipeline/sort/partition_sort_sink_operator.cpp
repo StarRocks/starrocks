@@ -43,6 +43,7 @@ Status PartitionSortSinkOperator::prepare(RuntimeState* state) {
     _sort_context->incr_sinker();
 
     _chunks_sorter->setup_runtime(state, _unique_metrics.get(), this->mem_tracker());
+    _sort_context->attach_sink_observer(state, observer());
 
     return Status::OK();
 }
@@ -90,6 +91,7 @@ Status PartitionSortSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr
 
 Status PartitionSortSinkOperator::set_finishing(RuntimeState* state) {
     ONCE_DETECT(_set_finishing_once);
+    auto notify = _sort_context->defer_notify_source();
     // skip sorting if cancelled
     if (state->is_cancelled()) {
         _is_finished = true;

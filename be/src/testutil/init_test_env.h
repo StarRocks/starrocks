@@ -25,6 +25,7 @@
 #include "runtime/memory/mem_chunk_allocator.h"
 #include "runtime/time_types.h"
 #include "runtime/user_function_cache.h"
+#include "storage/lake/tablet_manager.h"
 #include "storage/options.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
@@ -69,7 +70,9 @@ int init_test_env(int argc, char** argv) {
     CHECK(UserFunctionCache::instance()->init(config::user_function_dir).ok());
 
     date::init_date_cache();
-    TimezoneUtils::init_time_zones();
+    // Disable global cache of timezone info when running unit tests
+    // Save tons of time in parallel unit test mode
+    // TimezoneUtils::init_time_zones();
 
     std::vector<StorePath> paths;
     paths.emplace_back(config::storage_root_path);
@@ -116,6 +119,11 @@ int init_test_env(int argc, char** argv) {
     // destroy exec env
     tls_thread_status.set_mem_tracker(nullptr);
     exec_env->stop();
+#ifdef USE_STAROS
+    if (exec_env->lake_tablet_manager() != nullptr) {
+        exec_env->lake_tablet_manager()->stop();
+    }
+#endif
     exec_env->destroy();
     global_env->stop();
 

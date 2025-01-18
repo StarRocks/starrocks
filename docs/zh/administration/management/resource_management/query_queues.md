@@ -61,9 +61,9 @@ SET GLOBAL enable_group_level_query_queue = true;
 
 | **变量**                            | **默认值** | **描述**                                                     |
 | ----------------------------------- | ---------- | ------------------------------------------------------------ |
-| query_queue_concurrency_limit       | 0          | 单个 BE 节点中并发查询上限。仅在设置为大于 `0` 后生效。      |
-| query_queue_mem_used_pct_limit      | 0          | 单个 BE 节点中内存使用百分比上限。仅在设置为大于 `0` 后生效。取值范围：[0, 1] |
-| query_queue_cpu_used_permille_limit | 0          | 单个 BE 节点中 CPU 使用千分比上限（即 CPU 使用率 * 1000）。仅在设置为大于 `0` 后生效。取值范围：[0, 1000] |
+| query_queue_concurrency_limit       | 0          | 单个 BE 节点中并发查询上限。仅在设置为大于 `0` 后生效。设置为 `0` 表示没有限制。      |
+| query_queue_mem_used_pct_limit      | 0          | 单个 BE 节点中内存使用百分比上限。仅在设置为大于 `0` 后生效。设置为 `0` 表示没有限制。取值范围：[0, 1] |
+| query_queue_cpu_used_permille_limit | 0          | 单个 BE 节点中 CPU 使用千分比上限（即 CPU 使用率 * 1000）。仅在设置为大于 `0` 后生效。设置为 `0` 表示没有限制。取值范围：[0, 1000] |
 
 > **说明**
 >

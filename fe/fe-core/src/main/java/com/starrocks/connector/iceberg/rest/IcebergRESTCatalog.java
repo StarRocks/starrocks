@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.iceberg.rest;
 
 import com.google.common.base.Strings;
@@ -57,6 +56,7 @@ import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
+import static com.starrocks.connector.iceberg.IcebergApiConverter.convertDbNameToNamespace;
 import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ICEBERG_CUSTOM_PROPERTIES_PREFIX;
 import static com.starrocks.connector.iceberg.IcebergMetadata.COMMENT;
 import static com.starrocks.connector.iceberg.IcebergMetadata.LOCATION_PROPERTY;
@@ -65,14 +65,8 @@ public class IcebergRESTCatalog implements IcebergCatalog {
 
     private static final Logger LOG = LogManager.getLogger(IcebergRESTCatalog.class);
 
-    // Not all RestCatalog is tabular, here just used to handle tabular specifically
-    // If we are using tabular rest catalog, we must use S3FileIO
-    private static final String TABULAR_API = "https://api.tabular.io/ws";
-    // This parameter we don't expose to user, just some people are using docker hosted tabular, it's url may
-    // not the "https://api.tabular.io/ws"
-    public static final String KEY_DISABLE_TABULAR_SUPPORT = "disable_tabular_support";
     public static final String KEY_CREDENTIAL_WITH_PREFIX = ICEBERG_CUSTOM_PROPERTIES_PREFIX + "credential";
-    public static final String KEY_DISABLE_VENDED_CREDENTIAL = "disable_vended_credential";
+    public static final String KEY_VENDED_CREDENTIALS_ENABLED = "vended-credentials-enabled";
 
     private final Configuration conf;
     private final RESTCatalog delegate;
@@ -92,16 +86,18 @@ public class IcebergRESTCatalog implements IcebergCatalog {
         copiedProperties.put(CatalogProperties.FILE_IO_IMPL, IcebergCachingFileIO.class.getName());
         copiedProperties.put(CatalogProperties.METRICS_REPORTER_IMPL, IcebergMetricsReporter.class.getName());
 
-        if (!copiedProperties.containsKey(KEY_DISABLE_TABULAR_SUPPORT)) {
-            copiedProperties.put("header.x-tabular-s3-access", "vended_credentials");
-        }
-
-        boolean disableVendedCredential = copiedProperties
-                .getOrDefault(KEY_DISABLE_VENDED_CREDENTIAL, "false")
-                .equalsIgnoreCase("true");
-        if (disableVendedCredential) {
+        boolean enableVendedCredentials =
+                Boolean.parseBoolean(copiedProperties.getOrDefault(KEY_VENDED_CREDENTIALS_ENABLED, "true"));
+        if (enableVendedCredentials) {
+            copiedProperties.put("header.X-Iceberg-Access-Delegation", "vended-credentials");
+        } else {
             copiedProperties.put(AwsProperties.CLIENT_FACTORY, IcebergAwsClientFactory.class.getName());
         }
+
+        // setup oauth2
+        OAuth2SecurityConfig securityConfig = OAuth2SecurityConfigBuilder.build(copiedProperties);
+        OAuth2SecurityProperties securityProperties = new OAuth2SecurityProperties(securityConfig);
+        copiedProperties.putAll(securityProperties.get());
 
         delegate = (RESTCatalog) CatalogUtil.loadCatalog(RESTCatalog.class.getName(), name, copiedProperties, conf);
     }
@@ -119,12 +115,12 @@ public class IcebergRESTCatalog implements IcebergCatalog {
 
     @Override
     public Table getTable(String dbName, String tableName) throws StarRocksConnectorException {
-        return delegate.loadTable(TableIdentifier.of(dbName, tableName));
+        return delegate.loadTable(TableIdentifier.of(convertDbNameToNamespace(dbName), tableName));
     }
 
     @Override
     public boolean tableExists(String dbName, String tableName) throws StarRocksConnectorException {
-        return delegate.tableExists(TableIdentifier.of(dbName, tableName));
+        return delegate.tableExists(TableIdentifier.of(convertDbNameToNamespace(dbName), tableName));
     }
 
     @Override
@@ -153,8 +149,7 @@ public class IcebergRESTCatalog implements IcebergCatalog {
                 throw new IllegalArgumentException("Unrecognized property: " + key);
             }
         }
-        Namespace ns = Namespace.of(dbName);
-        delegate.createNamespace(ns, properties);
+        delegate.createNamespace(convertDbNameToNamespace(dbName), properties);
     }
 
     @Override
@@ -176,24 +171,25 @@ public class IcebergRESTCatalog implements IcebergCatalog {
             throw new MetaNotFoundException("Database location is empty");
         }
 
-        delegate.dropNamespace(Namespace.of(dbName));
+        delegate.dropNamespace(convertDbNameToNamespace(dbName));
     }
 
     @Override
     public Database getDB(String dbName) {
-        Map<String, String> dbMeta = delegate.loadNamespaceMetadata(Namespace.of(dbName));
+        Map<String, String> dbMeta = delegate.loadNamespaceMetadata(convertDbNameToNamespace(dbName));
         return new Database(CONNECTOR_ID_GENERATOR.getNextId().asInt(), dbName, dbMeta.get(LOCATION_PROPERTY));
     }
 
     @Override
     public List<String> listTables(String dbName) {
-        List<TableIdentifier> tableIdentifiers = delegate.listTables(Namespace.of(dbName));
+        Namespace ns = convertDbNameToNamespace(dbName);
+        List<TableIdentifier> tableIdentifiers = delegate.listTables(ns);
         List<TableIdentifier> viewIdentifiers = new ArrayList<>();
         try {
-            viewIdentifiers = delegate.listViews(Namespace.of(dbName));
+            viewIdentifiers = delegate.listViews(ns);
         } catch (BadRequestException e) {
-            LOG.warn("Failed to list views from {} database. Perhaps the server side does not implement the interface. " +
-                    "Ask the user to check it", dbName, e);
+            LOG.warn("Failed to list views from {} namespace. Perhaps the server side does not implement the interface. " +
+                    "Ask the user to check it", ns, e);
         }
         if (!viewIdentifiers.isEmpty()) {
             tableIdentifiers.addAll(viewIdentifiers);
@@ -209,7 +205,7 @@ public class IcebergRESTCatalog implements IcebergCatalog {
             PartitionSpec partitionSpec,
             String location,
             Map<String, String> properties) {
-        Table nativeTable = delegate.buildTable(TableIdentifier.of(dbName, tableName), schema)
+        Table nativeTable = delegate.buildTable(TableIdentifier.of(convertDbNameToNamespace(dbName), tableName), schema)
                 .withLocation(location)
                 .withPartitionSpec(partitionSpec)
                 .withProperties(properties)
@@ -220,24 +216,26 @@ public class IcebergRESTCatalog implements IcebergCatalog {
 
     @Override
     public boolean dropTable(String dbName, String tableName, boolean purge) {
-        return delegate.dropTable(TableIdentifier.of(dbName, tableName), purge);
+        return delegate.dropTable(TableIdentifier.of(convertDbNameToNamespace(dbName), tableName), purge);
     }
 
     @Override
     public void renameTable(String dbName, String tblName, String newTblName) throws StarRocksConnectorException {
-        delegate.renameTable(TableIdentifier.of(dbName, tblName), TableIdentifier.of(dbName, newTblName));
+        Namespace ns = convertDbNameToNamespace(dbName);
+        delegate.renameTable(TableIdentifier.of(ns, tblName), TableIdentifier.of(ns, newTblName));
     }
 
     @Override
     public boolean createView(ConnectorViewDefinition definition, boolean replace) {
         Schema schema = IcebergApiConverter.toIcebergApiSchema(definition.getColumns());
-        ViewBuilder viewBuilder = delegate.buildView(TableIdentifier.of(definition.getDatabaseName(), definition.getViewName()));
+        Namespace ns = convertDbNameToNamespace(definition.getDatabaseName());
+        ViewBuilder viewBuilder = delegate.buildView(TableIdentifier.of(ns, definition.getViewName()));
         viewBuilder = viewBuilder.withSchema(schema)
                 .withQuery("starrocks", definition.getInlineViewDef())
-                .withDefaultNamespace(Namespace.of(definition.getDatabaseName()))
+                .withDefaultNamespace(ns)
                 .withDefaultCatalog(definition.getCatalogName())
                 .withProperties(buildProperties(definition))
-                .withLocation(defaultTableLocation(definition.getDatabaseName(), definition.getViewName()));
+                .withLocation(defaultTableLocation(ns, definition.getViewName()));
 
         if (replace) {
             viewBuilder.createOrReplace();
@@ -248,13 +246,13 @@ public class IcebergRESTCatalog implements IcebergCatalog {
         return true;
     }
 
-    public boolean dropView(String dbName, String viewName) {
-        return delegate.dropView(TableIdentifier.of(dbName, viewName));
+    public boolean dropView(Namespace ns, String viewName) {
+        return delegate.dropView(TableIdentifier.of(ns, viewName));
     }
 
     @Override
     public View getView(String dbName, String viewName) {
-        return delegate.loadView(TableIdentifier.of(dbName, viewName));
+        return delegate.loadView(TableIdentifier.of(convertDbNameToNamespace(dbName), viewName));
     }
 
     @Override
@@ -280,10 +278,10 @@ public class IcebergRESTCatalog implements IcebergCatalog {
     }
 
     @Override
-    public String defaultTableLocation(String dbName, String tableName) {
-        Map<String, String> properties = delegate.loadNamespaceMetadata(Namespace.of(dbName));
+    public String defaultTableLocation(Namespace ns, String tableName) {
+        Map<String, String> properties = delegate.loadNamespaceMetadata(ns);
         String databaseLocation = properties.get(LOCATION_PROPERTY);
-        checkArgument(databaseLocation != null, "location must be set for %s.%s", dbName, tableName);
+        checkArgument(databaseLocation != null, "location must be set for %s.%s", ns, tableName);
 
         if (databaseLocation.endsWith("/")) {
             return databaseLocation + tableName;
@@ -293,8 +291,8 @@ public class IcebergRESTCatalog implements IcebergCatalog {
     }
 
     @Override
-    public Map<String, Object> loadNamespaceMetadata(String dbName) {
-        return ImmutableMap.copyOf(delegate.loadNamespaceMetadata(Namespace.of(dbName)));
+    public Map<String, Object> loadNamespaceMetadata(Namespace ns) {
+        return ImmutableMap.copyOf(delegate.loadNamespaceMetadata(ns));
     }
 
     private Map<String, String> buildProperties(ConnectorViewDefinition definition) {

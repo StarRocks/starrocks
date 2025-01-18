@@ -50,6 +50,7 @@ import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.operator.TopNType;
 import com.starrocks.thrift.TExchangeNode;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.TLateMaterializeMode;
 import com.starrocks.thrift.TNormalExchangeNode;
 import com.starrocks.thrift.TNormalPlanNode;
 import com.starrocks.thrift.TNormalSortInfo;
@@ -143,6 +144,13 @@ public class ExchangeNode extends PlanNode {
         return mergeInfo != null;
     }
 
+    public long getOffset() {
+        return offset;
+    }
+    public void setOffset(long offset) {
+        this.offset = offset;
+    }
+
     public void setReceiveColumns(List<Integer> receiveColumns) {
         this.receiveColumns = receiveColumns;
     }
@@ -191,8 +199,10 @@ public class ExchangeNode extends PlanNode {
         if (partitionType != null) {
             msg.exchange_node.setPartition_type(partitionType);
         }
-        SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
-        msg.exchange_node.setEnable_parallel_merge(sessionVariable.isEnableParallelMerge());
+        SessionVariable sv = ConnectContext.get().getSessionVariable();
+        msg.exchange_node.setEnable_parallel_merge(sv.isEnableParallelMerge());
+        TLateMaterializeMode mode = TLateMaterializeMode.valueOf(sv.getParallelMergeLateMaterializationMode().toUpperCase());
+        msg.exchange_node.setParallel_merge_late_materialize_mode(mode);
     }
 
     @Override

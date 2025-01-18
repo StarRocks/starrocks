@@ -524,7 +524,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         // sourceScope must be set null tableName for its Field in RelationFields
         // because we hope slotRef can not be resolved in sourceScope but can be
         // resolved in outputScope to force to replace the node using outputExprs.
-        SelectAnalyzer.RewriteAliasVisitor visitor = MVUtils.buildRewriteAliasVisitor(new ConnectContext(),
+        SelectAnalyzer.RewriteAliasVisitor visitor = MVUtils.buildRewriteAliasVisitor(ConnectContext.buildInner(),
                 tbl, tableName, outputExprs);
         for (Column column : rollupColumns) {
             if (column.getDefineExpr() == null) {
@@ -770,7 +770,9 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                 createReplicaLatch.countDownToZero(new Status(TStatusCode.OK, ""));
             }
             synchronized (this) {
-                return cancelImpl(errMsg);
+                boolean cancelled = cancelImpl(errMsg);
+                cancelHook(cancelled);
+                return cancelled;
             }
         } finally {
             isCancelling.set(false);

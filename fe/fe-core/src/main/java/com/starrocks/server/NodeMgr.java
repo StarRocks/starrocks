@@ -309,7 +309,7 @@ public class NodeMgr {
                 // For compatibility. Because this is the very first time to start, so we arbitrarily choose
                 // a new name for this node
                 role = FrontendNodeType.FOLLOWER;
-                nodeName = GlobalStateMgr.genFeNodeName(selfNode.first, selfNode.second, false /* new style */);
+                nodeName = genFeNodeName(selfNode.first, selfNode.second, false /* new style */);
                 storage.writeFrontendRoleAndNodeName(role, nodeName);
                 LOG.info("very first time to start this node. role: {}, node name: {}", role.name(), nodeName);
             } else {
@@ -320,9 +320,18 @@ public class NodeMgr {
                     // But we will get a empty nodeName after upgrading.
                     // So for forward compatibility, we use the "old-style" way of naming: "ip_port",
                     // and update the ROLE file.
-                    nodeName = GlobalStateMgr.genFeNodeName(selfNode.first, selfNode.second, true/* old style */);
+                    nodeName = genFeNodeName(selfNode.first, selfNode.second, true/* old style */);
                     storage.writeFrontendRoleAndNodeName(role, nodeName);
                     LOG.info("forward compatibility. role: {}, node name: {}", role.name(), nodeName);
+                } else if (Config.bdbje_reset_election_group
+                        && !isFeNodeNameValid(nodeName, selfNode.first, selfNode.second)) {
+                    // Invalid node name, usually happened when the image dir is copied from another node.
+                    // Correct the node name
+                    String oldNodeName = nodeName;
+                    nodeName = genFeNodeName(selfNode.first, selfNode.second, false /* new style */);
+                    storage.writeFrontendRoleAndNodeName(role, nodeName);
+                    LOG.info("correct the node name {} to new node name: {}, role: {}", oldNodeName, nodeName,
+                            role.name());
                 }
             }
             Preconditions.checkNotNull(role);
@@ -534,7 +543,7 @@ public class NodeMgr {
 
                 if (Strings.isNullOrEmpty(nodeName)) {
                     // For forward compatibility, we use old-style name: "ip_port"
-                    nodeName = GlobalStateMgr.genFeNodeName(selfNode.first, selfNode.second, true /* old style */);
+                    nodeName = genFeNodeName(selfNode.first, selfNode.second, true /* old style */);
                 }
             } catch (Exception e) {
                 LOG.warn("failed to get fe node type from helper node: {}.", helperNode, e);
@@ -750,7 +759,7 @@ public class NodeMgr {
                 throw new DdlException("unknown fqdn host: " + host);
             }
 
-            String nodeName = GlobalStateMgr.genFeNodeName(host, editLogPort, false /* new name style */);
+            String nodeName = genFeNodeName(host, editLogPort, false /* new name style */);
 
             if (removedFrontends.contains(nodeName)) {
                 throw new DdlException("frontend name already exists " + nodeName + ". Try again");
@@ -1199,6 +1208,9 @@ public class NodeMgr {
         frontends.clear();
         Frontend self = new Frontend(role, nodeName, selfNode.first, selfNode.second);
         frontends.put(self.getNodeName(), self);
+        // reset helper nodes
+        helperNodes.clear();
+        helperNodes.add(selfNode);
 
         GlobalStateMgr.getCurrentState().getEditLog().logResetFrontends(self);
     }
@@ -1206,6 +1218,9 @@ public class NodeMgr {
     public void replayResetFrontends(Frontend frontend) {
         frontends.clear();
         frontends.put(frontend.getNodeName(), frontend);
+        // reset helper nodes
+        helperNodes.clear();
+        helperNodes.add(Pair.create(frontend.getHost(), frontend.getEditLogPort()));
     }
 
     public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
@@ -1254,5 +1269,18 @@ public class NodeMgr {
 
     public void setImageDir(String imageDir) {
         this.imageDir = imageDir;
+    }
+
+    public static String genFeNodeName(String host, int port, boolean isOldStyle) {
+        String name = host + "_" + port;
+        if (isOldStyle) {
+            return name;
+        } else {
+            return name + "_" + System.currentTimeMillis();
+        }
+    }
+
+    public static boolean isFeNodeNameValid(String nodeName, String host, int port) {
+        return nodeName.startsWith(host + "_" + port);
     }
 }

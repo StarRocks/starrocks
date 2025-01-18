@@ -645,7 +645,8 @@ MergePathCascadeMerger::MergePathCascadeMerger(const size_t chunk_size, const in
                                                std::vector<ExprContext*> sort_exprs, const SortDescs& sort_descs,
                                                const TupleDescriptor* tuple_desc, const TTopNType::type topn_type,
                                                const int64_t offset, const int64_t limit,
-                                               std::vector<MergePathChunkProvider> chunk_providers)
+                                               std::vector<MergePathChunkProvider> chunk_providers,
+                                               TLateMaterializeMode::type mode)
         : _chunk_size(chunk_size > MAX_CHUNK_SIZE ? MAX_CHUNK_SIZE : chunk_size),
           _streaming_batch_size(4 * chunk_size * degree_of_parallelism),
           _degree_of_parallelism(degree_of_parallelism),
@@ -657,7 +658,8 @@ MergePathCascadeMerger::MergePathCascadeMerger(const size_t chunk_size, const in
           _limit(limit),
           _chunk_providers(std::move(chunk_providers)),
           _process_cnts(degree_of_parallelism),
-          _output_chunks(degree_of_parallelism) {
+          _output_chunks(degree_of_parallelism),
+          _late_materialization_mode(mode) {
     _working_nodes.resize(_degree_of_parallelism);
     _metrics.resize(_degree_of_parallelism);
 
@@ -846,6 +848,8 @@ bool MergePathCascadeMerger::_is_current_stage_done() {
 
 void MergePathCascadeMerger::_forward_stage(const detail::Stage& stage, int32_t worker_num,
                                             std::vector<size_t>* process_cnts) {
+    bool current_stage_finished = true;
+    auto notify = defer_notify_source([&]() { return current_stage_finished; });
     std::lock_guard<std::recursive_mutex> l(_status_m);
     _stage = stage;
     DCHECK_GT(worker_num, 0);
@@ -1131,8 +1135,14 @@ void MergePathCascadeMerger::_init_late_materialization() {
             metrics.profile->add_info_string("LateMaterialization", _late_materialization ? "True" : "False");
         });
     });
-
     if (_chunk_providers.size() <= 2) {
+        _late_materialization = false;
+        return;
+    }
+    if (_late_materialization_mode == TLateMaterializeMode::ALWAYS) {
+        _late_materialization = true;
+        return;
+    } else if (_late_materialization_mode == TLateMaterializeMode::NEVER) {
         _late_materialization = false;
         return;
     }

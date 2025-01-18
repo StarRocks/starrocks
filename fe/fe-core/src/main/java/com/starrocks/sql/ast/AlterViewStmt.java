@@ -20,11 +20,13 @@ import com.starrocks.sql.parser.NodePosition;
 // Alter view statement
 public class AlterViewStmt extends DdlStmt {
     private final TableName tableName;
+    private final boolean security;
     private final AlterClause alterClause;
 
-    public AlterViewStmt(TableName tableName, AlterClause alterClause, NodePosition pos) {
+    public AlterViewStmt(TableName tableName, boolean security, AlterClause alterClause, NodePosition pos) {
         super(pos);
         this.tableName = tableName;
+        this.security = security;
         this.alterClause = alterClause;
     }
 
@@ -34,11 +36,15 @@ public class AlterViewStmt extends DdlStmt {
         alterViewClause.setInlineViewDef(stmt.getInlineViewDef());
         alterViewClause.setColumns(stmt.getColumns());
         alterViewClause.setComment(stmt.getComment());
-        return new AlterViewStmt(stmt.getTableName(), alterViewClause, NodePosition.ZERO);
+        return new AlterViewStmt(stmt.getTableName(), stmt.isSecurity(), alterViewClause, NodePosition.ZERO);
     }
 
     public TableName getTableName() {
         return tableName;
+    }
+
+    public boolean isSecurity() {
+        return security;
     }
 
     public AlterClause getAlterClause() {

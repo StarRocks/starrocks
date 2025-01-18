@@ -87,23 +87,17 @@ int RuntimeFilterHelper::deserialize_runtime_filter(ObjectPool* pool, JoinRuntim
     uint8_t version = 0;
     memcpy(&version, data, sizeof(version));
     offset += sizeof(version);
-    if (version != RF_VERSION && version != RF_VERSION_V2) {
+    if (version != RF_VERSION_V2) {
         // version mismatch and skip this chunk.
         LOG(WARNING) << "unrecognized version:" << version;
         return 0;
     }
 
     // peek logical type.
-    LogicalType ltype = TYPE_UNKNOWN;
-    if (version == RF_VERSION) {
-        RuntimeFilterSerializeType::PrimitiveType type;
-        memcpy(&type, data + offset, sizeof(type));
-        ltype = RuntimeFilterSerializeType::from_serialize_type(type);
-    } else {
-        TPrimitiveType::type type;
-        memcpy(&type, data + offset, sizeof(type));
-        ltype = thrift_to_type(type);
-    }
+    TPrimitiveType::type type;
+    memcpy(&type, data + offset, sizeof(type));
+    LogicalType ltype = thrift_to_type(type);
+
     JoinRuntimeFilter* filter = create_join_runtime_filter(pool, ltype);
     DCHECK(filter != nullptr);
     if (filter != nullptr) {
@@ -764,6 +758,7 @@ void RuntimeFilterProbeCollector::wait(bool on_scan_node) {
 }
 
 void RuntimeFilterProbeDescriptor::set_runtime_filter(const JoinRuntimeFilter* rf) {
+    auto notify = DeferOp([this]() { _observable.notify_source_observers(); });
     const JoinRuntimeFilter* expected = nullptr;
     _runtime_filter.compare_exchange_strong(expected, rf, std::memory_order_seq_cst, std::memory_order_seq_cst);
     if (_ready_timestamp == 0 && rf != nullptr && _latency_timer != nullptr) {

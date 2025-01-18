@@ -215,6 +215,8 @@ set(STORAGE_FILES
     lake/cloud_native_index_compaction_task.cpp
     lake/metacache.cpp
     lake/lake_primary_key_recover.cpp
+    lake/load_spill_block_manager.cpp
+    lake/spill_mem_table_sink.cpp
     sstable/block_builder.cpp
     sstable/block.cpp
     sstable/coding.cpp

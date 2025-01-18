@@ -42,7 +42,7 @@ public class PushDownScanRuleTest {
 
     @Test
     public void transform(@Mocked OlapTable table) {
-        PushDownPredicateScanRule rule = PushDownPredicateScanRule.OLAP_SCAN;
+        PushDownPredicateScanRule rule = new PushDownPredicateScanRule();
 
         OptExpression optExpression = new OptExpression(new LogicalFilterOperator(
                 new BinaryPredicateOperator(BinaryType.EQ,

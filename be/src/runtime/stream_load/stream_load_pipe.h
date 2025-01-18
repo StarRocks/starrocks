@@ -58,10 +58,10 @@ public:
                    size_t min_chunk_size = DEFAULT_STREAM_LOAD_PIPE_CHUNK_SIZE)
             : StreamLoadPipe(false, -1, max_buffered_bytes, min_chunk_size) {}
 
-    StreamLoadPipe(bool non_blocking_read, int32_t non_blocking_wait_ms, size_t max_buffered_bytes,
+    StreamLoadPipe(bool non_blocking_read, int32_t non_blocking_wait_us, size_t max_buffered_bytes,
                    size_t min_chunk_size)
             : _non_blocking_read(non_blocking_read),
-              _non_blocking_wait_ms(non_blocking_wait_ms),
+              _non_blocking_wait_us(non_blocking_wait_us),
               _max_buffered_bytes(max_buffered_bytes),
               _min_chunk_size(min_chunk_size) {}
 
@@ -90,6 +90,11 @@ public:
     // called when producer finished
     Status finish() override;
 
+    bool finished() {
+        std::unique_lock<std::mutex> l(_lock);
+        return _finished;
+    }
+
     // called when producer/consumer failed
     void cancel(const Status& status) override;
 
@@ -115,7 +120,7 @@ private:
     std::mutex _lock;
     size_t _buffered_bytes{0};
     bool _non_blocking_read{false};
-    int32_t _non_blocking_wait_ms;
+    int32_t _non_blocking_wait_us;
     size_t _max_buffered_bytes;
     size_t _min_chunk_size;
     std::deque<ByteBufferPtr> _buf_queue;

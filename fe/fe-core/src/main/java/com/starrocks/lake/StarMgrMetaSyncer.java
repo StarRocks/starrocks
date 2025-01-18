@@ -19,6 +19,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.staros.proto.ShardGroupInfo;
+import com.staros.proto.ShardInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -43,6 +44,7 @@ import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.warehouse.Warehouse;
+import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -77,7 +79,9 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
             locker.lockDatabase(db.getId(), LockType.READ);
             try {
                 for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTablesIncludeRecycleBin(db)) {
-                    if (table.isCloudNativeTableOrMaterializedView()) {
+                    if (table.isCloudNativeTableOrMaterializedView() &&
+                            GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
+                                                            .checkValidDeletionForTableFromAlterJob(table.getId())) {
                         GlobalStateMgr.getCurrentState().getLocalMetastore()
                                 .getAllPartitionsIncludeRecycleBin((OlapTable) table)
                                 .stream()
@@ -123,7 +127,6 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
             DeleteTabletRequest request = new DeleteTabletRequest();
             request.tabletIds = Lists.newArrayList(shards);
 
-            boolean forceDelete = Config.meta_sync_force_delete_shard_meta;
             try {
                 LakeService lakeService = BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort());
                 DeleteTabletResponse response = lakeService.deleteTablet(request).get();
@@ -132,7 +135,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                     LOG.info("Fail to delete tablet. StatusCode: {}, failedTablets: {}", stCode, response.failedTablets);
 
                     // ignore INVALID_ARGUMENT error, treat it as success
-                    if (stCode != TStatusCode.INVALID_ARGUMENT && !forceDelete) {
+                    if (stCode != TStatusCode.INVALID_ARGUMENT) {
                         response.failedTablets.forEach(shards::remove);
                     }
                 }
@@ -140,9 +143,6 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                 LOG.error(e.getMessage(), e);
                 if (e instanceof InterruptedException) {
                     Thread.currentThread().interrupt();
-                }
-                if (!forceDelete) {
-                    continue;
                 }
             }
 
@@ -153,7 +153,6 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                 }
             } catch (DdlException e) {
                 LOG.warn("failed to delete shard from starMgr");
-                continue;
             }
         }
     }
@@ -198,22 +197,59 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
         List<Long> emptyShardGroup = new ArrayList<>();
         for (long groupId : diffList) {
             if (Config.shard_group_clean_threshold_sec * 1000L + Long.parseLong(groupToCreateTimeMap.get(groupId)) < nowMs) {
-                try {
-                    List<Long> shardIds = starOSAgent.listShard(groupId);
-                    if (shardIds.isEmpty()) {
-                        emptyShardGroup.add(groupId);
-                    } else {
-                        dropTabletAndDeleteShard(shardIds, starOSAgent);
-                    }
-                } catch (Exception e) {
-                    continue;
-                }
+                cleanOneGroup(groupId, starOSAgent, emptyShardGroup);
             }
         }
 
         LOG.debug("emptyShardGroup.size is {}", emptyShardGroup.size());
         if (!emptyShardGroup.isEmpty()) {
             starOSAgent.deleteShardGroup(emptyShardGroup);
+        }
+    }
+
+    private void cleanOneGroup(long groupId, StarOSAgent starOSAgent, List<Long> emptyShardGroup) {
+        try {
+            List<Long> shardIds = starOSAgent.listShard(groupId);
+            if (shardIds.isEmpty()) {
+                emptyShardGroup.add(groupId);
+                return;
+            }
+            // delete shard from star manager only, not considering tablet data on be/cn
+            if (Config.meta_sync_force_delete_shard_meta) {
+                forceDeleteShards(groupId, starOSAgent, shardIds);
+            } else {
+                // drop meta and data
+                long start = System.currentTimeMillis();
+                dropTabletAndDeleteShard(shardIds, starOSAgent);
+                LOG.debug("delete shards from starMgr and FE, shard group: {}, cost: {} ms",
+                        groupId, (System.currentTimeMillis() - start));
+            }
+        } catch (Exception e) {
+            LOG.warn("delete shards from starMgr and FE failed, shard group: {}, {}", groupId, e.getMessage());
+        }
+    }
+
+    private static void forceDeleteShards(long groupId, StarOSAgent starOSAgent, List<Long> shardIds)
+            throws DdlException {
+        LOG.debug("delete shards from starMgr only, shard group: {}", groupId);
+        // before deleting shardIds, let's record the root directory of this shard group first
+        // root directory has the format like `s3://bucket/xx/db15570/15648/15944`
+        String rootDirectory = null;
+        long shardId = shardIds.get(0);
+        try {
+            // all shards have the same root directory
+            ShardInfo shardInfo = starOSAgent.getShardInfo(shardId, StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+            if (shardInfo != null) {
+                rootDirectory = shardInfo.getFilePath().getFullPath();
+            }
+        } catch (Exception e) {
+            LOG.warn("failed to get shard root directory from starMgr, shard id: {}, group id: {}, {}", shardId,
+                    groupId, e.getMessage());
+        }
+        starOSAgent.deleteShards(new HashSet<>(shardIds));
+        if (StringUtils.isNotEmpty(rootDirectory)) {
+            LOG.info("shard group {} deleted from starMgr only, you may need to delete remote file path manually," +
+                    " file path is: {}", groupId, rootDirectory);
         }
     }
 

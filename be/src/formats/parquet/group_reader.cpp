@@ -30,7 +30,9 @@
 #include "formats/parquet/column_reader_factory.h"
 #include "formats/parquet/metadata.h"
 #include "formats/parquet/page_index_reader.h"
+#include "formats/parquet/scalar_column_reader.h"
 #include "formats/parquet/schema.h"
+#include "formats/parquet/zone_map_filter_evaluator.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/types.h"
 #include "simd/simd.h"
@@ -42,9 +44,9 @@
 
 namespace starrocks::parquet {
 
-GroupReader::GroupReader(GroupReaderParam& param, int row_group_number, const std::set<int64_t>* need_skip_rowids,
+GroupReader::GroupReader(GroupReaderParam& param, int row_group_number, SkipRowsContextPtr skip_rows_ctx,
                          int64_t row_group_first_row)
-        : _row_group_first_row(row_group_first_row), _need_skip_rowids(need_skip_rowids), _param(param) {
+        : _row_group_first_row(row_group_first_row), _skip_rows_ctx(std::move(skip_rows_ctx)), _param(param) {
     _row_group_metadata = &_param.file_metadata->t_metadata().row_groups[row_group_number];
 }
 
@@ -78,12 +80,29 @@ Status GroupReader::_deal_with_pageindex() {
     if (config::parquet_page_index_enable) {
         SCOPED_RAW_TIMER(&_param.stats->page_index_ns);
         _param.stats->rows_before_page_index += _row_group_metadata->num_rows;
-        auto page_index_reader =
-                std::make_unique<PageIndexReader>(this, _param.file, _column_readers, _row_group_metadata,
-                                                  _param.min_max_conjunct_ctxs, _param.conjunct_ctxs_by_slot);
-        ASSIGN_OR_RETURN(bool flag, page_index_reader->generate_read_range(_range));
-        if (flag && !_is_group_filtered) {
-            page_index_reader->select_column_offset_index();
+        if (config::parquet_advance_zonemap_filter) {
+            ASSIGN_OR_RETURN(auto sparse_range, _param.predicate_tree->visit(ZoneMapEvaluator<FilterLevel::PAGE_INDEX>{
+                                                        *_param.predicate_tree, this}));
+            if (sparse_range.has_value()) {
+                if (sparse_range.value().empty()) {
+                    // the whole row group has been filtered
+                    _is_group_filtered = true;
+                } else if (sparse_range->span_size() < _row_group_metadata->num_rows) {
+                    // some pages have been filtered
+                    _range = sparse_range.value();
+                    for (const auto& pair : _column_readers) {
+                        pair.second->select_offset_index(_range, _row_group_first_row);
+                    }
+                }
+            }
+        } else {
+            auto page_index_reader =
+                    std::make_unique<PageIndexReader>(this, _param.file, _column_readers, _row_group_metadata,
+                                                      _param.min_max_conjunct_ctxs, _param.conjunct_ctxs_by_slot);
+            ASSIGN_OR_RETURN(bool flag, page_index_reader->generate_read_range(_range));
+            if (flag && !_is_group_filtered) {
+                page_index_reader->select_column_offset_index();
+            }
         }
     }
 
@@ -133,6 +152,14 @@ const tparquet::ColumnChunk* GroupReader::get_chunk_metadata(SlotId slot_id) {
     return it->second->get_chunk_metadata();
 }
 
+ColumnReader* GroupReader::get_column_reader(SlotId slot_id) {
+    const auto& it = _column_readers.find(slot_id);
+    if (it == _column_readers.end()) {
+        return nullptr;
+    }
+    return it->second.get();
+}
+
 const ParquetField* GroupReader::get_column_parquet_field(SlotId slot_id) {
     const auto& it = _column_readers.find(slot_id);
     if (it == _column_readers.end()) {
@@ -173,16 +200,12 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
         Filter chunk_filter(count, 1);
 
         // row id filter
-        if ((nullptr != _need_skip_rowids) && !_need_skip_rowids->empty()) {
+        if (nullptr != _skip_rows_ctx && _skip_rows_ctx->has_skip_rows()) {
             {
-                SCOPED_RAW_TIMER(&_param.stats->iceberg_delete_file_build_filter_ns);
-                auto start_str = _need_skip_rowids->lower_bound(r.begin());
-                auto end_str = _need_skip_rowids->upper_bound(r.end() - 1);
+                SCOPED_RAW_TIMER(&_param.stats->build_rowid_filter_ns);
+                ASSIGN_OR_RETURN(has_filter,
+                                 _skip_rows_ctx->deletion_bitmap->fill_filter(r.begin(), r.end(), chunk_filter));
 
-                for (; start_str != end_str; start_str++) {
-                    chunk_filter[*start_str - r.begin()] = 0;
-                    has_filter = true;
-                }
                 if (SIMD::count_nonzero(chunk_filter.data(), count) == 0) {
                     continue;
                 }
@@ -304,6 +327,7 @@ Status GroupReader::_create_column_readers() {
     SCOPED_RAW_TIMER(&_param.stats->column_reader_init_ns);
     // ColumnReaderOptions is used by all column readers in one row group
     ColumnReaderOptions& opts = _column_reader_opts;
+    opts.file_meta_data = _param.file_metadata;
     opts.timezone = _param.timezone;
     opts.case_sensitive = _param.case_sensitive;
     opts.chunk_size = _param.chunk_size;
@@ -314,6 +338,24 @@ Status GroupReader::_create_column_readers() {
     for (const auto& column : _param.read_cols) {
         ASSIGN_OR_RETURN(ColumnReaderPtr column_reader, _create_column_reader(column));
         _column_readers[column.slot_id()] = std::move(column_reader);
+    }
+
+    // create for partition values
+    if (_param.partition_columns != nullptr && _param.partition_values != nullptr) {
+        for (size_t i = 0; i < _param.partition_columns->size(); i++) {
+            const auto& column = (*_param.partition_columns)[i];
+            const auto* slot_desc = column.slot_desc;
+            const auto value = (*_param.partition_values)[i];
+            _column_readers.emplace(slot_desc->id(), std::make_unique<FixedValueColumnReader>(value->get(0)));
+        }
+    }
+
+    // create for not existed column
+    if (_param.not_existed_slots != nullptr) {
+        for (size_t i = 0; i < _param.not_existed_slots->size(); i++) {
+            const auto* slot = (*_param.not_existed_slots)[i];
+            _column_readers.emplace(slot->id(), std::make_unique<FixedValueColumnReader>(kNullDatum));
+        }
     }
     return Status::OK();
 }
@@ -342,7 +384,8 @@ Status GroupReader::_prepare_column_readers() const {
     SCOPED_RAW_TIMER(&_param.stats->column_reader_init_ns);
     for (const auto& [slot_id, column_reader] : _column_readers) {
         RETURN_IF_ERROR(column_reader->prepare());
-        if (column_reader->get_column_parquet_field()->is_complex_type()) {
+        if (column_reader->get_column_parquet_field() != nullptr &&
+            column_reader->get_column_parquet_field()->is_complex_type()) {
             // For complex type columns, we need parse def & rep levels.
             // For OptionalColumnReader, by default, we will not parse it's def level for performance. But if
             // column is a complex type, we have to parse def level to calculate nullability.

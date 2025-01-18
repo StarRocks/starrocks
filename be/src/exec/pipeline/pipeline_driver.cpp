@@ -25,6 +25,7 @@
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/scan/olap_scan_operator.h"
 #include "exec/pipeline/scan/scan_operator.h"
+#include "exec/pipeline/schedule/timeout_tasks.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/query_cache/cache_operator.h"
 #include "exec/query_cache/lane_arbiter.h"
@@ -170,6 +171,9 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     size_t subscribe_filter_sequence = source_op->get_driver_sequence();
     _local_rf_holders =
             fragment_ctx()->runtime_filter_hub()->gather_holders(all_local_rf_set, subscribe_filter_sequence);
+    for (auto rf_holder : _local_rf_holders) {
+        rf_holder->add_observer(_runtime_state, &_observer);
+    }
     if (use_cache) {
         ssize_t cache_op_idx = -1;
         query_cache::CacheOperatorPtr cache_op = nullptr;
@@ -688,6 +692,10 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state, in
 
     _update_driver_level_timer();
 
+    if (_global_rf_timer != nullptr) {
+        _fragment_ctx->pipeline_timer()->unschedule(_global_rf_timer.get());
+    }
+
     // Acquire the pointer to avoid be released when removing query
     auto query_trace = _query_ctx->shared_query_trace();
     const std::string driver_name = _driver_name;
@@ -721,6 +729,18 @@ void PipelineDriver::_update_driver_level_timer() {
     } else {
         COUNTER_SET(_overhead_timer, overhead_time);
     }
+}
+
+void PipelineDriver::_update_global_rf_timer() {
+    if (!_runtime_state->enable_event_scheduler()) {
+        return;
+    }
+    auto timer = std::make_unique<RFScanWaitTimeout>(_fragment_ctx);
+    timer->add_observer(_runtime_state, &_observer);
+    _global_rf_timer = std::move(timer);
+    timespec abstime = butil::microseconds_to_timespec(butil::gettimeofday_us());
+    abstime.tv_nsec += _global_rf_wait_timeout_ns;
+    WARN_IF_ERROR(_fragment_ctx->pipeline_timer()->schedule(_global_rf_timer.get(), abstime), "schedule:");
 }
 
 std::string PipelineDriver::to_readable_string() const {
@@ -902,6 +922,12 @@ void PipelineDriver::_update_scan_statistics(RuntimeState* state) {
 
 void PipelineDriver::increment_schedule_times() {
     driver_acct().increment_schedule_times();
+}
+
+void PipelineDriver::assign_observer() {
+    for (const auto& op : _operators) {
+        op->set_observer(&_observer);
+    }
 }
 
 } // namespace starrocks::pipeline

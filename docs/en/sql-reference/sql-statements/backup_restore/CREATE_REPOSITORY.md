@@ -4,9 +4,11 @@ displayed_sidebar: docs
 
 # CREATE REPOSITORY
 
-## Description
-
 Creates a repository in a remote storage system that is used to store data snapshots for backing up and restoring data.
+
+:::tip
+For an overview of backup and restore please see the [backup and restore guide](../../../administration/management/Backup_and_restore.md).
+:::
 
 > **CAUTION**
 >
@@ -43,13 +45,12 @@ StarRocks supports creating repositories in HDFS, AWS S3, and Google GCS.
 - For AWS S3:
   - "aws.s3.use_instance_profile": Whether or not to allow instance profile and assumed role as credential methods for accessing AWS S3. Default: `false`.
 
-    - If you use IAM user-based credential (Access Key and Secret Key) to access AWS S3, you don't need to specify this parameter, and you need to specify "aws.s3.access_key", "aws.s3.secret_key", and "aws.s3.endpoint".
+    - If you use IAM user-based credential (Access Key and Secret Key) to access AWS S3, you don't need to specify this parameter, and you need to specify "aws.s3.access_key", "aws.s3.secret_key", and "aws.s3.region".
     - If you use Instance Profile to access AWS S3, you need to set this parameter to `true` and specify "aws.s3.region".
     - If you use Assumed Role to access AWS S3, you need to set this parameter to `true` and specify "aws.s3.iam_role_arn" and "aws.s3.region".
   
   - "aws.s3.access_key": The Access Key ID that you can use to access the Amazon S3 bucket.
   - "aws.s3.secret_key": The Secret Access Key that you can use to access the Amazon S3 bucket.
-  - "aws.s3.endpoint": The endpoint that you can use to access the Amazon S3 bucket.
   - "aws.s3.iam_role_arn": The ARN of the IAM role that has privileges on the AWS S3 bucket in which your data files are stored. If you want to use assumed role as the credential method for accessing AWS S3, you must specify this parameter. Then, StarRocks will assume this role when it analyzes your Hive data by using a Hive catalog.
   - "aws.s3.region": The region in which your AWS S3 bucket resides. Example: `us-west-1`.
 
@@ -65,6 +66,11 @@ StarRocks supports creating repositories in HDFS, AWS S3, and Google GCS.
 > **NOTE**
 >
 > StarRocks supports creating repositories in Google GCS only according to the S3A protocol. Therefore, when you create repositories in Google GCS, you must replace the prefix in the GCS URI you pass as a repository location in `ON LOCATION` with `s3a://`.
+
+- For MinIO:
+  - "aws.s3.access_key": The Access Key that you can use to access the MinIO bucket.
+  - "aws.s3.secret_key": The Secret Key that you can use to access the MinIO bucket.
+  - "aws.s3.endpoint": The endpoint that you can use to access the MinIO bucket.
 
 ## Examples
 
@@ -89,7 +95,7 @@ ON LOCATION "s3a://bucket_s3/backup"
 PROPERTIES(
     "aws.s3.access_key" = "XXXXXXXXXXXXXXXXX",
     "aws.s3.secret_key" = "yyyyyyyyyyyyyyyyy",
-    "aws.s3.endpoint" = "s3.us-east-1.amazonaws.com"
+    "aws.s3.region" = "us-east-1"
 );
 ```
 
@@ -103,5 +109,18 @@ PROPERTIES(
     "fs.s3a.access.key" = "xxxxxxxxxxxxxxxxxxxx",
     "fs.s3a.secret.key" = "yyyyyyyyyyyyyyyyyyyy",
     "fs.s3a.endpoint" = "storage.googleapis.com"
+);
+```
+
+Example 4: Create a repository named `minio_repo` in the MinIO bucket `bucket_minio`.
+
+```SQL
+CREATE REPOSITORY minio_repo
+WITH BROKER
+ON LOCATION "s3://bucket_minio/backup"
+PROPERTIES(
+    "aws.s3.access_key" = "XXXXXXXXXXXXXXXXX",
+    "aws.s3.secret_key" = "yyyyyyyyyyyyyyyyy",
+    "aws.s3.endpoint" = "http://minio:9000"
 );
 ```

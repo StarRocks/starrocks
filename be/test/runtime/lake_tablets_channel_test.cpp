@@ -831,15 +831,18 @@ TEST_F(LakeTabletsChannelTest, test_profile) {
     _tablets_channel->add_chunk(&chunk, add_chunk_request, &add_chunk_response, &close_channel);
     ASSERT_TRUE(add_chunk_response.status().status_code() == TStatusCode::OK);
     ASSERT_TRUE(close_channel);
+    _tablets_channel->update_profile();
 
     auto* profile = _root_profile->get_child(fmt::format("Index (id={})", kIndexId));
     ASSERT_NE(nullptr, profile);
-    ASSERT_EQ(4, profile->get_counter("TabletsNum")->value());
-    ASSERT_EQ(1, profile->get_counter("OpenCount")->value());
-    ASSERT_TRUE(profile->get_counter("OpenTime")->value() > 0);
-    ASSERT_EQ(1, profile->get_counter("AddChunkCount")->value());
-    ASSERT_TRUE(profile->get_counter("AddChunkTime")->value() > 0);
+    ASSERT_EQ(1, profile->get_counter("OpenRpcCount")->value());
+    ASSERT_TRUE(profile->get_counter("OpenRpcTime")->value() > 0);
+    ASSERT_EQ(1, profile->get_counter("AddChunkRpcCount")->value());
+    ASSERT_TRUE(profile->get_counter("AddChunkRpcTime")->value() > 0);
     ASSERT_EQ(chunk.num_rows(), profile->get_counter("AddRowNum")->value());
+    auto* replicas_profile = profile->get_child("PeerReplicas");
+    ASSERT_NE(nullptr, replicas_profile);
+    ASSERT_EQ(4, replicas_profile->get_counter("TabletsNum")->value());
 }
 
 struct Param {

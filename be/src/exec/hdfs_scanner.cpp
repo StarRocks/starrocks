@@ -16,11 +16,15 @@
 
 #include "block_cache/block_cache_hit_rate_counter.hpp"
 #include "column/column_helper.h"
+#include "connector/deletion_vector/deletion_vector.h"
 #include "exec/exec_node.h"
 #include "fs/hdfs/fs_hdfs.h"
 #include "io/cache_select_input_stream.hpp"
 #include "io/compressed_input_stream.h"
 #include "io/shared_buffered_input_stream.h"
+#include "pipeline/fragment_context.h"
+#include "storage/predicate_parser.h"
+#include "storage/runtime_range_pruner.hpp"
 #include "util/compression/compression_utils.h"
 #include "util/compression/stream_compression.h"
 
@@ -168,6 +172,25 @@ Status HdfsScanner::_build_scanner_context() {
     ctx.split_context = _scanner_params.split_context;
     ctx.enable_split_tasks = _scanner_params.enable_split_tasks;
     ctx.connector_max_split_size = _scanner_params.connector_max_split_size;
+
+    if (config::parquet_advance_zonemap_filter) {
+        ScanConjunctsManagerOptions opts;
+        opts.conjunct_ctxs_ptr = &_scanner_params.all_conjunct_ctxs;
+        opts.tuple_desc = _scanner_params.tuple_desc;
+        opts.obj_pool = _runtime_state->obj_pool();
+        opts.runtime_filters = _scanner_params.runtime_filter_collector;
+        opts.runtime_state = _runtime_state;
+        opts.enable_column_expr_predicate = true;
+        opts.is_olap_scan = false;
+        opts.pred_tree_params = _runtime_state->fragment_ctx()->pred_tree_params();
+        ctx.conjuncts_manager = std::make_unique<ScanConjunctsManager>(std::move(opts));
+        RETURN_IF_ERROR(ctx.conjuncts_manager->parse_conjuncts());
+        auto* predicate_parser = opts.obj_pool->add(new ConnectorPredicateParser(&ctx.slot_descs));
+        ASSIGN_OR_RETURN(ctx.predicate_tree,
+                         ctx.conjuncts_manager->get_predicate_tree(predicate_parser, ctx.predicate_free_pool));
+        ctx.rf_scan_range_pruner = opts.obj_pool->add(
+                new RuntimeScanRangePruner(predicate_parser, ctx.conjuncts_manager->unarrived_runtime_filters()));
+    }
     return Status::OK();
 }
 
@@ -224,7 +247,10 @@ StatusOr<std::unique_ptr<RandomAccessFile>> HdfsScanner::create_random_access_fi
         std::shared_ptr<io::SharedBufferedInputStream>& shared_buffered_input_stream,
         std::shared_ptr<io::CacheInputStream>& cache_input_stream, const OpenFileOptions& options) {
     ASSIGN_OR_RETURN(std::unique_ptr<RandomAccessFile> raw_file, options.fs->new_random_access_file(options.path))
-    const int64_t file_size = options.file_size;
+    int64_t file_size = options.file_size;
+    if (file_size < 0) {
+        ASSIGN_OR_RETURN(file_size, raw_file->stream()->get_size());
+    }
     raw_file->set_size(file_size);
     const std::string& filename = raw_file->filename();
 
@@ -305,8 +331,35 @@ void HdfsScanner::do_update_iceberg_v2_counter(RuntimeProfile* parent_profile, c
             ADD_CHILD_COUNTER(parent_profile, "DeleteFilesPerScan", TUnit::UNIT, ICEBERG_TIMER);
 
     COUNTER_UPDATE(delete_build_timer, _app_stats.iceberg_delete_file_build_ns);
-    COUNTER_UPDATE(delete_file_build_filter_timer, _app_stats.iceberg_delete_file_build_filter_ns);
+    COUNTER_UPDATE(delete_file_build_filter_timer, _app_stats.build_rowid_filter_ns);
     COUNTER_UPDATE(delete_file_per_scan_counter, _app_stats.iceberg_delete_files_per_scan);
+}
+
+void HdfsScanner::do_update_deletion_vector_build_counter(RuntimeProfile* parent_profile) {
+    if (_app_stats.deletion_vector_build_count == 0) {
+        return;
+    }
+    const std::string DV_TIMER = DeletionVector::DELETION_VECTOR;
+    ADD_COUNTER(parent_profile, DV_TIMER, TUnit::NONE);
+
+    RuntimeProfile::Counter* delete_build_timer =
+            ADD_CHILD_COUNTER(parent_profile, "DeletionVectorBuildTime", TUnit::TIME_NS, DV_TIMER);
+
+    RuntimeProfile::Counter* delete_file_per_scan_counter =
+            ADD_CHILD_COUNTER(parent_profile, "DeletionVectorBuildCount", TUnit::UNIT, DV_TIMER);
+
+    COUNTER_UPDATE(delete_build_timer, _app_stats.deletion_vector_build_ns);
+
+    COUNTER_UPDATE(delete_file_per_scan_counter, _app_stats.deletion_vector_build_count);
+}
+
+void HdfsScanner::do_update_deletion_vector_filter_counter(RuntimeProfile* parent_profile) {
+    const std::string DV_TIMER = DeletionVector::DELETION_VECTOR;
+    ADD_COUNTER(parent_profile, DV_TIMER, TUnit::NONE);
+
+    RuntimeProfile::Counter* delete_file_build_filter_timer =
+            ADD_CHILD_COUNTER(parent_profile, "DeletionVectorBuildRowIdFilterTime", TUnit::TIME_NS, DV_TIMER);
+    COUNTER_UPDATE(delete_file_build_filter_timer, _app_stats.build_rowid_filter_ns);
 }
 
 int64_t HdfsScanner::estimated_mem_usage() const {

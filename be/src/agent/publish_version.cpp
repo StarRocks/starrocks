@@ -109,7 +109,10 @@ void run_publish_version_task(ThreadPoolToken* token, const TPublishVersionReque
                 task.tablet_id = itr.first.tablet_id;
                 task.version = publish_version_req.partition_version_infos[i].version;
                 task.rowset = std::move(itr.second);
-                task.rowset->rowset_meta()->set_gtid(publish_version_req.gtid);
+                // rowset can be nullptr if it just prepared but not committed
+                if (task.rowset != nullptr) {
+                    task.rowset->rowset_meta()->set_gtid(publish_version_req.gtid);
+                }
                 task.is_double_write = publish_version_req.partition_version_infos[i].__isset.is_double_write &&
                                        publish_version_req.partition_version_infos[i].is_double_write;
             }
@@ -189,10 +192,14 @@ void run_publish_version_task(ThreadPoolToken* token, const TPublishVersionReque
                         std::string_view msg = task.st.message();
                         tablet_span->SetStatus(trace::StatusCode::kError, {msg.data(), msg.size()});
                     } else {
-                        VLOG(2) << "Publish txn success tablet:" << tablet->tablet_id() << " version:" << task.version
-                                << " tablet_max_version:" << tablet->max_continuous_version()
-                                << " partition:" << task.partition_id << " txn_id: " << task.txn_id
-                                << " rowset:" << task.rowset->rowset_id();
+                        if (task.is_double_write || VLOG_ROW_IS_ON) {
+                            LOG(INFO) << "Publish txn success tablet:" << tablet->tablet_id()
+                                      << " version:" << task.version
+                                      << " tablet_max_version:" << tablet->max_continuous_version()
+                                      << " is_double_write:" << task.is_double_write
+                                      << " partition:" << task.partition_id << " txn_id: " << task.txn_id
+                                      << " rowset:" << task.rowset->rowset_id();
+                        }
                     }
                 }
             });

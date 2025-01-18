@@ -65,7 +65,7 @@ refresh materialized view  test_mv0 with sync mode;
 select * from test_mv0 order by 1, 2, 3, 4, 5, 6;
 
 ---- test_mv1 refresh should reuse the materialized view test_mv0
-function: print_hit_materialized_view('select a.k1 as ak1, b.k1 as bk1, a.k3 as ak3, b.k3 as bk3, sum(a.k6) as sum_k6, sum(b.k7) as sum_k7, sum(a.k8) as sum_k8, sum(b.k9) as sum_k9 from t1 a join t2 b on a.k1=b.k1 group by a.k1, b.k1, a.k3, b.k3;', 'test_mv0')
+-- function: print_hit_materialized_view('select a.k1 as ak1, b.k1 as bk1, a.k3 as ak3, b.k3 as bk3, sum(a.k6) as sum_k6, sum(b.k7) as sum_k7, sum(a.k8) as sum_k8, sum(b.k9) as sum_k9 from t1 a join t2 b on a.k1=b.k1 group by a.k1, b.k1, a.k3, b.k3;', 'test_mv0')
 select a.k1 as ak1, b.k1 as bk1, a.k3 as ak3, b.k3 as bk3, sum(a.k6) as sum_k6, sum(b.k7) as sum_k7, sum(a.k8) as sum_k8, sum(b.k9) as sum_k9 from t1 a join t2 b on a.k1=b.k1 group by a.k1, b.k1, a.k3, b.k3 order by 1, 2, 3, 4, 5, 6;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS test_mv1
@@ -79,11 +79,11 @@ from t1 a join t2 b on a.k1=b.k1 group by a.k1, b.k1, a.k3, b.k3;
 refresh materialized view test_mv1 with sync mode;
 [UC] analyze table test_mv1 with sync mode;
 select * from test_mv1 order by 1, 2, 3, 4;
-function: print_hit_materialized_view('select a.k1 as ak1, b.k1 as bk1, a.k3 as ak3, b.k3 as bk3, sum(a.k6) as sum_k6, sum(b.k7) as sum_k7, sum(a.k8) as sum_k8, sum(b.k9) as sum_k9 from t1 a join t2 b on a.k1=b.k1 group by a.k1, b.k1, a.k3, b.k3;', 'test_mv1')
+-- function: print_hit_materialized_view('select a.k1 as ak1, b.k1 as bk1, a.k3 as ak3, b.k3 as bk3, sum(a.k6) as sum_k6, sum(b.k7) as sum_k7, sum(a.k8) as sum_k8, sum(b.k9) as sum_k9 from t1 a join t2 b on a.k1=b.k1 group by a.k1, b.k1, a.k3, b.k3;', 'test_mv1')
 select a.k1 as ak1, b.k1 as bk1, a.k3 as ak3, b.k3 as bk3, sum(a.k6) as sum_k6, sum(b.k7) as sum_k7, sum(a.k8) as sum_k8, sum(b.k9) as sum_k9 from t1 a join t2 b on a.k1=b.k1 group by a.k1, b.k1, a.k3, b.k3 order by 1, 2, 3, 4;
 
 -- test_mv2 refresh should reuse the materialized view test_mv1
-function: print_hit_materialized_view('select a.k1 as ak1, a.k3 as ak3, sum(a.k6) as sum_k6, sum(b.k7) as sum_k7, sum(a.k8) as sum_k8 from t1 a join t2 b on a.k1=b.k1 group by a.k1, a.k3;', 'test_mv1')
+-- function: print_hit_materialized_view('select a.k1 as ak1, a.k3 as ak3, sum(a.k6) as sum_k6, sum(b.k7) as sum_k7, sum(a.k8) as sum_k8 from t1 a join t2 b on a.k1=b.k1 group by a.k1, a.k3;', 'test_mv1')
 select a.k1 as ak1, a.k3 as ak3, sum(a.k6) as sum_k6, sum(b.k7) as sum_k7, sum(a.k8) as sum_k8 from t1 a join t2 b on a.k1=b.k1 group by a.k1, a.k3 order by 1, 2, 3, 4; 
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS test_mv2
@@ -97,11 +97,11 @@ from t1 a join t2 b on a.k1=b.k1 group by a.k1, a.k3;
 refresh materialized view test_mv2 with sync mode;
 [UC] analyze table test_mv2 with sync mode;
 select * from test_mv2 order by 1, 2, 3, 4;
-function: print_hit_materialized_view('select a.k1 as ak1, a.k3 as ak3, sum(a.k6) as sum_k6, sum(b.k7) as sum_k7, sum(a.k8) as sum_k8 from t1 a join t2 b on a.k1=b.k1 group by a.k1, a.k3;', 'test_mv2')
+-- function: print_hit_materialized_view('select a.k1 as ak1, a.k3 as ak3, sum(a.k6) as sum_k6, sum(b.k7) as sum_k7, sum(a.k8) as sum_k8 from t1 a join t2 b on a.k1=b.k1 group by a.k1, a.k3;', 'test_mv2')
 select a.k1 as ak1, a.k3 as ak3, sum(a.k6) as sum_k6, sum(b.k7) as sum_k7, sum(a.k8) as sum_k8 from t1 a join t2 b on a.k1=b.k1 group by a.k1, a.k3 order by 1, 2, 3, 4;
 
 -- test_mv3 refresh should reuse the materialized view test_mv2
-function: print_hit_materialized_view('select a.k1 as ak1, sum(a.k6) as sum_k6, sum(b.k7) as sum_k7 from t1 a join t2 b on a.k1=b.k1 group by a.k1;', 'test_mv2')
+-- function: print_hit_materialized_view('select a.k1 as ak1, sum(a.k6) as sum_k6, sum(b.k7) as sum_k7 from t1 a join t2 b on a.k1=b.k1 group by a.k1;', 'test_mv2')
 select a.k1 as ak1, sum(a.k6) as sum_k6, sum(b.k7) as sum_k7 from t1 a join t2 b on a.k1=b.k1 group by a.k1 order by 1, 2;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS test_mv3
@@ -114,7 +114,7 @@ select a.k1 as ak1, sum(a.k6) as sum_k6, sum(b.k7) as sum_k7 from t1 a join t2 b
 refresh materialized view test_mv3 with sync mode;
 [UC] analyze table test_mv3 with sync mode;
 select * from test_mv3 order by 1;
-function: print_hit_materialized_view('select a.k1 as ak1, sum(a.k6) as sum_k6, sum(b.k7) as sum_k7 from t1 a join t2 b on a.k1=b.k1 group by a.k1;', 'test_mv3')
+-- function: print_hit_materialized_view('select a.k1 as ak1, sum(a.k6) as sum_k6, sum(b.k7) as sum_k7 from t1 a join t2 b on a.k1=b.k1 group by a.k1;', 'test_mv3')
 select a.k1 as ak1, sum(a.k6) as sum_k6, sum(b.k7) as sum_k7 from t1 a join t2 b on a.k1=b.k1 group by a.k1 order by 1, 2;
 
 drop table t1;

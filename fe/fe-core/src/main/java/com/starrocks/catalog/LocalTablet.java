@@ -291,7 +291,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
                                      long visibleVersion, long localBeId, int schemaHash) {
         try (CloseableLock ignored = CloseableLock.lock(this.rwLock.readLock())) {
             for (Replica replica : replicas) {
-                if (replica.isBad()) {
+                if (replica.isBad() || replica.isErrorState()) {
                     continue;
                 }
 
@@ -326,7 +326,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         int size = 0;
         try (CloseableLock ignored = CloseableLock.lock(this.rwLock.readLock())) {
             for (Replica replica : replicas) {
-                if (replica.isBad()) {
+                if (replica.isBad() || replica.isErrorState()) {
                     continue;
                 }
 

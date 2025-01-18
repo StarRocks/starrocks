@@ -31,11 +31,11 @@ import static com.starrocks.sql.optimizer.rule.transformation.materialization.co
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.common.AggregateFunctionRollupUtils.SAFE_REWRITE_ROLLUP_FUNCTION_MAP;
 
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
-public class MvTimeSeriesRewriteWithOlapTest extends MvRewriteTestBase {
+public class MvTimeSeriesRewriteWithOlapTest extends MVTestBase {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        MvRewriteTestBase.beforeClass();
+        MVTestBase.beforeClass();
         starRocksAssert.withTable("CREATE TABLE t0(\n" +
                 " k1 datetime,\n" +
                 " v1 INT,\n" +
@@ -373,8 +373,6 @@ public class MvTimeSeriesRewriteWithOlapTest extends MvRewriteTestBase {
 
     @Test
     public void testAggTimeSeriesWithMultiRepeatedRollupFunctions() throws Exception {
-        UtFrameUtils.mockTimelinessForAsyncMVTest(connectContext);
-        UtFrameUtils.mockLogicalScanIsEmptyOutputRows(false);
         // one query contains multi same agg functions, all can be rewritten.
         String aggArg = "v1";
         List<String> aggFuncs = Lists.newArrayList();
@@ -399,6 +397,8 @@ public class MvTimeSeriesRewriteWithOlapTest extends MvRewriteTestBase {
                     "DISTRIBUTED BY RANDOM\n" +
                     "as select date_trunc('day', k1) as dt, %s " +
                     "from t0 group by date_trunc('day', k1);", agg));
+            UtFrameUtils.mockTimelinessForAsyncMVTest(connectContext);
+            UtFrameUtils.mockLogicalScanIsEmptyOutputRows(false);
             {
                 String query = String.format("select %s from t0 where k1 >= '2024-01-01 01:00:00'", agg);
                 String plan = getFragmentPlan(query);

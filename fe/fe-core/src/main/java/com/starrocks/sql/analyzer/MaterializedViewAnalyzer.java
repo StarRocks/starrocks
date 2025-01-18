@@ -16,6 +16,7 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
@@ -25,6 +26,7 @@ import com.google.common.collect.Sets;
 import com.google.common.collect.Streams;
 import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.ExprSubstitutionMap;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.SlotDescriptor;
@@ -68,6 +70,7 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.iceberg.IcebergPartitionTransform;
 import com.starrocks.mv.analyzer.MVPartitionSlotRefResolver;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
@@ -97,11 +100,15 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
+import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.OptExprBuilder;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
+import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.parser.ParsingException;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
 import org.apache.commons.collections.map.CaseInsensitiveMap;
@@ -111,7 +118,6 @@ import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.logging.log4j.util.Strings;
 import org.jetbrains.annotations.NotNull;
 
 import java.time.LocalDateTime;
@@ -132,6 +138,7 @@ import java.util.stream.IntStream;
 
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
 import static com.starrocks.server.CatalogMgr.isInternalCatalog;
+import static com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter.DEFAULT_TYPE_CAST_RULE;
 
 public class MaterializedViewAnalyzer {
     private static final Logger LOG = LogManager.getLogger(MaterializedViewAnalyzer.class);
@@ -208,7 +215,7 @@ public class MaterializedViewAnalyzer {
             return false;
         }
         String catalog = table.getCatalogName();
-        return Strings.isBlank(catalog) || isResourceMappingCatalog(catalog);
+        return Strings.isNullOrEmpty(catalog) || isResourceMappingCatalog(catalog);
     }
 
     private static void processViews(QueryStatement queryStatement, Set<BaseTableInfo> baseTableInfos,
@@ -262,18 +269,18 @@ public class MaterializedViewAnalyzer {
              * Materialized view name is a little bit different from a normal table
              * 1. Use default catalog if not specified, actually it only support default catalog until now
              */
-            if (com.google.common.base.Strings.isNullOrEmpty(tableNameObject.getCatalog())) {
+            if (Strings.isNullOrEmpty(tableNameObject.getCatalog())) {
                 tableNameObject.setCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
             }
-            if (com.google.common.base.Strings.isNullOrEmpty(tableNameObject.getDb())) {
-                if (com.google.common.base.Strings.isNullOrEmpty(context.getDatabase())) {
+            if (Strings.isNullOrEmpty(tableNameObject.getDb())) {
+                if (Strings.isNullOrEmpty(context.getDatabase())) {
                     throw new SemanticException("No database selected. " +
                             "You could set the database name through `<database>.<table>` or `use <database>` statement");
                 }
                 tableNameObject.setDb(context.getDatabase());
             }
 
-            if (com.google.common.base.Strings.isNullOrEmpty(tableNameObject.getTbl())) {
+            if (Strings.isNullOrEmpty(tableNameObject.getTbl())) {
                 throw new SemanticException("Table name cannot be empty");
             }
 
@@ -316,8 +323,9 @@ public class MaterializedViewAnalyzer {
             }
             Database db = context.getGlobalStateMgr().getLocalMetastore().getDb(statement.getTableName().getDb());
             if (db == null) {
-                throw new SemanticException("Can not find database:" + statement.getTableName().getDb(),
-                        statement.getTableName().getPos());
+                String catalog = statement.getTableName().getCatalog();
+                String errMsg = String.format("Can not find database:%s in %s", statement.getTableName().getDb(), catalog);
+                throw new SemanticException(errMsg, statement.getTableName().getPos());
             }
             Set<BaseTableInfo> baseTableInfos = getBaseTableInfos(queryStatement, true);
             // now do not support empty base tables
@@ -357,18 +365,21 @@ public class MaterializedViewAnalyzer {
                 // check partition expression all in column list and
                 // write the expr into partitionExpDesc if partition expression exists
                 checkExpInColumn(statement);
+                // replace partition by expr with resolved partition by expr
+                Map<Integer, Expr> changedPartitionByExprs = getBaseTableExprToGeneratedColumnMap(context,
+                        aliasTableMap, statement.getPartitionByExprs(), statement.getQueryStatement());
                 // check partition expression is supported
-                checkPartitionColumnExprs(statement, columnExprMap, context);
+                checkPartitionColumnExprs(statement, columnExprMap, changedPartitionByExprs, aliasTableMap, context);
                 // check whether partition expression functions are allowed if it exists
                 checkPartitionExpPatterns(statement);
                 // check partition column must be base table's partition column
-                checkPartitionColumnWithBaseTable(statement, aliasTableMap);
+                checkPartitionColumnWithBaseTable(statement, changedPartitionByExprs, aliasTableMap);
                 // check window function can be used in partitioned mv
                 checkWindowFunctions(statement, columnExprMap);
                 // determine mv partition 's type: list or range
                 checkMVPartitionInfoType(statement, aliasTableMap);
                 // deduce generate partition infos for list partition expressions
-                checkMVGeneratedPartitionColumns(statement, aliasTableMap);
+                checkMVGeneratedPartitionColumns(statement, changedPartitionByExprs, aliasTableMap);
             }
             // check and analyze distribution
             checkDistribution(statement, aliasTableMap);
@@ -576,7 +587,7 @@ public class MaterializedViewAnalyzer {
             for (int i = 0; i < mvColumns.size(); i++) {
                 Column col = mvColumns.get(i);
                 if (columnMap.putIfAbsent(col.getName(), Pair.create(col, i)) != null) {
-                    throw new SemanticException("Duplicate column name " + Strings.quote(col.getName()));
+                    throw new SemanticException("Duplicate column name '" + col.getName() + "'");
                 }
             }
 
@@ -687,6 +698,8 @@ public class MaterializedViewAnalyzer {
 
         private void checkPartitionColumnExprs(CreateMaterializedViewStatement statement,
                                                Map<Column, Expr> columnExprMap,
+                                               Map<Integer, Expr> changedPartitionByExprs,
+                                               Map<TableName, Table> aliasTableMap,
                                                ConnectContext connectContext) throws SemanticException {
             List<Expr> partitionByExprs = statement.getPartitionByExprs();
             if (CollectionUtils.isEmpty(partitionByExprs)) {
@@ -700,15 +713,22 @@ public class MaterializedViewAnalyzer {
 
             // partition column expr from input query
             List<Expr> refTablePartitionExprs = new ArrayList<>();
+            List<Expr> newPartitionByExprs = new ArrayList<>();
             for (int i = 0; i < partitionByExprs.size(); i++) {
-                Column partitionColumn = partitionColumns.get(i);
                 // mv's defined partition by expr
                 Expr mvPartitionByExpr = partitionByExprs.get(i);
+                // for generated column partition expression, use generated column instead
+                if (changedPartitionByExprs.containsKey(i)) {
+                    newPartitionByExprs.add(changedPartitionByExprs.get(i));
+                } else {
+                    newPartitionByExprs.add(mvPartitionByExpr);
+                }
+                Column partitionColumn = partitionColumns.get(i);
                 // mv's resolved partition by expr which can be used to check
                 Expr partitionColumnExpr = columnExprMap.get(partitionColumn);
                 try {
                     partitionColumnExpr = resolvePartitionExpr(partitionColumnExpr, connectContext,
-                            statement.getQueryStatement());
+                            statement.getQueryStatement(), aliasTableMap);
                 } catch (Exception e) {
                     LOG.warn("resolve partition column failed", e);
                     throw new SemanticException("Resolve partition column failed:" + e.getMessage(),
@@ -751,6 +771,32 @@ public class MaterializedViewAnalyzer {
                 }
             }
             statement.setPartitionRefTableExpr(refTablePartitionExprs);
+            statement.setPartitionByExprs(newPartitionByExprs);
+        }
+
+        private Expr getResolvedPartitionByExpr(Expr partitionColumnExpr,
+                                                QueryStatement queryStatement) {
+            Expr expr = MVPartitionSlotRefResolver.resolveExpr(partitionColumnExpr, queryStatement);
+            if (expr == null) {
+                throw new SemanticException("Cannot resolve materialized view's partition expression:%s",
+                        partitionColumnExpr.toSql());
+            }
+            return expr;
+        }
+
+        private Table getPartitionByExprRefBaseTable(ConnectContext connectContext,
+                                                     Map<TableName, Table> aliasTableMap,
+                                                     SlotRef slot) {
+            TableName tableName = slot.getTblNameWithoutAnalyzed();
+            tableName.normalization(connectContext);
+            Table table = aliasTableMap.get(tableName);
+            if (table == null) {
+                String catalog = tableName.getCatalog() == null ?
+                        InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME : tableName.getCatalog();
+                table = connectContext.getGlobalStateMgr()
+                        .getMetadataMgr().getTable(catalog, tableName.getDb(), tableName.getTbl());
+            }
+            return table;
         }
 
         /**
@@ -763,36 +809,23 @@ public class MaterializedViewAnalyzer {
          */
         private Expr resolvePartitionExpr(Expr partitionColumnExpr,
                                           ConnectContext connectContext,
-                                          QueryStatement queryStatement) {
-            Expr expr = MVPartitionSlotRefResolver.resolveExpr(partitionColumnExpr, queryStatement);
-            if (expr == null) {
-                throw new SemanticException("Cannot resolve materialized view's partition expression:%s",
+                                          QueryStatement queryStatement,
+                                          Map<TableName, Table> aliasTableMap) {
+            Expr expr = getResolvedPartitionByExpr(partitionColumnExpr, queryStatement);
+            List<SlotRef> slotRefs = expr.collectAllSlotRefs();
+            if (slotRefs.size() != 1) {
+                throw new SemanticException("Materialized view partition expression %s must ref to one column",
                         partitionColumnExpr.toSql());
             }
-            SlotRef slot;
-            if (expr instanceof SlotRef) {
-                slot = (SlotRef) expr;
-            } else {
-                slot = getSlotRef(expr);
-            }
-            Map<TableName, Table> aliasTableMap = getNormalizedBaseTables(queryStatement, connectContext);
-            TableName tableName = slot.getTblNameWithoutAnalyzed();
-            tableName.normalization(connectContext);
-
-            Table table = aliasTableMap.get(tableName);
+            SlotRef slotRef = slotRefs.get(0);
+            Table table = getPartitionByExprRefBaseTable(connectContext, aliasTableMap, slotRef);
             if (table == null) {
-                String catalog = tableName.getCatalog() == null ?
-                        InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME : tableName.getCatalog();
-                table = connectContext.getGlobalStateMgr()
-                        .getMetadataMgr().getTable(catalog, tableName.getDb(), tableName.getTbl());
-                if (table == null) {
-                    throw new SemanticException("Materialized view partition expression %s could only ref to base table",
-                            slot.toSql());
-                }
+                throw new SemanticException("Materialized view partition expression %s could only ref to base table",
+                        slotRef.toSql());
             }
             // TableName's catalog may be null, so normalization it
-            slot.getTblNameWithoutAnalyzed().normalization(connectContext);
-            slot.setType(table.getColumn(slot.getColumnName()).getType());
+            slotRef.getTblNameWithoutAnalyzed().normalization(connectContext);
+            slotRef.setType(table.getColumn(slotRef.getColumnName()).getType());
             return expr;
         }
 
@@ -816,18 +849,95 @@ public class MaterializedViewAnalyzer {
             }
         }
 
+        private Map<Integer, Expr> getBaseTableExprToGeneratedColumnMap(ConnectContext session,
+                                                                        Map<TableName, Table> tableNameTableMap,
+                                                                        List<Expr> partitionByExprs,
+                                                                        QueryStatement queryStatement) {
+            Map<Integer, Expr> changedPartitionByExprs = new HashMap<>();
+            if (CollectionUtils.isEmpty(partitionByExprs)) {
+                return changedPartitionByExprs;
+            }
+            Expr partitionByExpr = partitionByExprs.get(0);
+            Expr resolvedPartitionByExpr = getResolvedPartitionByExpr(partitionByExpr, queryStatement);
+            List<SlotRef> slotRefs = resolvedPartitionByExpr.collectAllSlotRefs();
+            if (slotRefs.size() != 1) {
+                throw new SemanticException("Materialized view partition expression %s must ref to one column",
+                        partitionByExpr.toSql());
+            }
+            SlotRef slotRef = slotRefs.get(0);
+            Table table = getPartitionByExprRefBaseTable(session, tableNameTableMap, slotRef);
+            if (table == null) {
+                throw new SemanticException("Materialized view partition expression %s could only ref to base table",
+                        slotRef.toSql());
+            }
+            if (!table.isNativeTableOrMaterializedView()) {
+                return changedPartitionByExprs;
+            }
+            // if expr is generated column expression, replace with generated column
+            OlapTable olapTable = (OlapTable) table;
+            if (!olapTable.getPartitionInfo().isListPartition() || !olapTable.hasGeneratedColumn()) {
+                return changedPartitionByExprs;
+            }
+            TableName tableName = slotRef.getTblNameWithoutAnalyzed();
+            Scope scope = new Scope(RelationId.anonymous(), new RelationFields(
+                    olapTable.getBaseSchema().stream()
+                            .map(col -> new Field(col.getName(), col.getType(), tableName, null))
+                            .collect(Collectors.toList())));
+            Map<Expr, Expr> generatedExprToColumnRef = new HashMap<>();
+            for (Column column : olapTable.getBaseSchema()) {
+                Expr generatedColumnExpression = column.getGeneratedColumnExpr(olapTable.getIdToColumn());
+                if (generatedColumnExpression != null) {
+                    SlotRef gcSlotRef = new SlotRef(null, column.getName());
+                    ExpressionAnalyzer.analyzeExpression(generatedColumnExpression, new AnalyzeState(),
+                            scope, session);
+                    ExpressionAnalyzer.analyzeExpression(slotRef, new AnalyzeState(), scope, session);
+                    generatedExprToColumnRef.put(generatedColumnExpression, gcSlotRef);
+                }
+            }
+            for (int i = 0; i < partitionByExprs.size(); i++) {
+                Expr expr = partitionByExprs.get(i);
+                Expr newExpr = substituteExprByGeneratedColumn(session, scope, expr, generatedExprToColumnRef);
+                // record the ith partition expr and its resolved expr
+                if (!expr.equals(newExpr)) {
+                    changedPartitionByExprs.put(i, newExpr);
+                }
+            }
+            return changedPartitionByExprs;
+        }
+
+        private Expr substituteExprByGeneratedColumn(ConnectContext session,
+                                                     Scope scope,
+                                                     Expr expr,
+                                                     Map<Expr, Expr> generatedExprToColumnRef) {
+            ExpressionAnalyzer.analyzeExpression(expr, new AnalyzeState(), scope, session);
+            return adjustWhereExprIfNeeded(generatedExprToColumnRef, expr, scope, session);
+        }
+
         private void checkPartitionColumnWithBaseTable(CreateMaterializedViewStatement statement,
+                                                       Map<Integer, Expr> changedPartitionByExprs,
                                                        Map<TableName, Table> tableNameTableMap) {
             List<Expr> partitionRefTableExprs = statement.getPartitionRefTableExpr();
-            for (Expr expr : partitionRefTableExprs) {
+            for (int i = 0; i < partitionRefTableExprs.size(); i++) {
+                Expr expr = partitionRefTableExprs.get(i);
                 SlotRef slotRef = getSlotRef(expr);
-                Table table = tableNameTableMap.get(slotRef.getTblNameWithoutAnalyzed());
-
+                TableName tableName = slotRef.getTblNameWithoutAnalyzed();
+                Table table = tableNameTableMap.get(tableName);
                 if (table == null) {
                     throw new SemanticException("Materialized view partition expression %s could only ref to base table",
                             slotRef.toSql());
-                } else if (table.isNativeTableOrMaterializedView()) {
-                    checkPartitionColumnWithBaseOlapTable(slotRef, (OlapTable) table);
+                }
+                if (table.isNativeTableOrMaterializedView()) {
+                    OlapTable olapTable = (OlapTable) table;
+                    if (changedPartitionByExprs.containsKey(i)) {
+                        // if generated column has changed partition by expr, use the new partition by expr
+                        Expr newPartitionByExpr = changedPartitionByExprs.get(i);
+                        if (!(newPartitionByExpr instanceof SlotRef)) {
+                            throw new SemanticException("Materialized view partition expression %s could only ref base table's " +
+                                    "partition expression without any change", slotRef.toSql());
+                        }
+                        slotRef = (SlotRef) newPartitionByExpr;
+                    }
+                    checkPartitionColumnWithBaseOlapTable(slotRef, olapTable);
                 } else if (table.isHiveTable() || table.isHudiTable() || table.isOdpsTable()) {
                     checkPartitionColumnWithBaseHMSTable(slotRef, table);
                 } else if (table.isIcebergTable()) {
@@ -931,6 +1041,7 @@ public class MaterializedViewAnalyzer {
         }
 
         private void checkMVGeneratedPartitionColumns(CreateMaterializedViewStatement statement,
+                                                      Map<Integer, Expr> changedPartitionByExprs,
                                                       Map<TableName, Table> tableNameTableMap) {
             PartitionType partitionType = statement.getPartitionType();
             if (partitionType != PartitionType.LIST) {
@@ -942,19 +1053,26 @@ public class MaterializedViewAnalyzer {
             TableName mvTableName = statement.getTableName();
             List<Column> mvColumns = statement.getMvColumnItems();
             List<Expr> partitionRefTableExprs = statement.getPartitionRefTableExpr();
+            Map<Expr, Expr> partitionByExprToAdjustExprMap = statement.getPartitionByExprToAdjustExprMap();
             for (int i = 0; i < partitionRefTableExprs.size(); i++) {
                 Expr expr = partitionRefTableExprs.get(i);
-                if (expr instanceof SlotRef) {
+                if (!(expr instanceof FunctionCallExpr)) {
                     continue;
                 }
                 FunctionCallExpr partitionByExpr = (FunctionCallExpr) expr;
                 FunctionCallExpr cloned = (FunctionCallExpr) partitionByExpr.clone();
-                Column generatedCol = getGeneratedPartitionColumn(mvColumns, mvTableName,
-                        cloned, tableNameTableMap, placeholder);
+                Expr adjustedPartitionByExpr = getMVAdjustedPartitionByExpr(i, cloned, mvColumns,
+                        mvTableName, tableNameTableMap, changedPartitionByExprs, partitionByExprToAdjustExprMap);
+                // if partition by expr is not changed, skip
+                if (adjustedPartitionByExpr == null || adjustedPartitionByExpr.equals(expr)) {
+                    continue;
+                }
+                Column generatedCol = getGeneratedPartitionColumn(adjustedPartitionByExpr, placeholder);
                 if (generatedCol == null) {
                     throw new SemanticException("Create generated partition expression column failed:",
                             partitionByExpr.toSql());
                 }
+                placeholder += 1;
                 generatedPartitionColumns.put(i, generatedCol);
             }
         }
@@ -989,7 +1107,7 @@ public class MaterializedViewAnalyzer {
                 Set<String> partitionColumns = listPartitionInfo.getPartitionColumns(table.getIdToColumn()).stream()
                         .map(col -> col.getName())
                         .collect(Collectors.toSet());
-                // mv's partition columns should be subset of the base table's partition columns
+                // mv's partition columns should be a subset of the base table's partition columns
                 if (!partitionColumns.contains(slotRef.getColumnName())) {
                     throw new SemanticException("Materialized view partition column in partition exp " +
                             "must be base table partition column");
@@ -1431,45 +1549,9 @@ public class MaterializedViewAnalyzer {
      * - Iceberg table's timestamp-with-zone's default timezone is UTC
      * - Starrocks table's timestamp type is no timezone and its time is converted to local timezone.
      */
-    private static Column getGeneratedPartitionColumn(List<Column> mvColumns,
-                                                      TableName mvTableName,
-                                                      FunctionCallExpr partitionByExpr,
-                                                      Map<TableName, Table> tableNameTableMap,
+    private static Column getGeneratedPartitionColumn(Expr adjustedPartitionByExpr,
                                                       int placeHolderSlotId) {
-        List<SlotRef> slotRefs = partitionByExpr.collectAllSlotRefs();
-        if (slotRefs.size() != 1) {
-            throw new SemanticException("Partition expr only can ref one slot refs:",
-                    partitionByExpr.toSql());
-        }
-        SlotRef slotRef = slotRefs.get(0);
-        TableName refTableName = slotRef.getTblNameWithoutAnalyzed();
-        Table refBaseTable = tableNameTableMap.get(refTableName);
-        if (refBaseTable == null) {
-            throw new SemanticException("Materialized view partition expression %s could only ref to base table",
-                    slotRef.toSql());
-        }
-        if (!(refBaseTable instanceof IcebergTable)) {
-            throw new SemanticException("Partition expression with function is not supported yet:"
-                    + partitionByExpr.toSqlImpl());
-        }
 
-        // why resolve slot ref to mv columns?
-        // generated column should refer mv's defined column, but partitionByExpr is ref to base table's column,
-        // so resolve slot ref to mv columns.
-        resolveRefToMVColumns(mvColumns, slotRef, mvTableName);
-
-        // change timezone, date_trunc('day', dt) -> date_trunc('day', date_sub(dt, interval 8 hour))
-        IcebergTable icebergTable = (IcebergTable) refBaseTable;
-        int zoneHourOffset = getIcebergPartitionColumnTimeZoneOffset(icebergTable, slotRef);
-        Expr adjustedPartitionByExpr = partitionByExpr;
-        if (MvUtils.isFuncCallExpr(partitionByExpr, FunctionSet.DATE_TRUNC)) {
-            adjustedPartitionByExpr = getAdjustPartitionExpr(partitionByExpr, slotRef, zoneHourOffset);
-        }
-        ExpressionAnalyzer.analyzeExpression(adjustedPartitionByExpr, new AnalyzeState(), new Scope(RelationId.anonymous(),
-                        new RelationFields(mvColumns.stream().map(col -> new Field(col.getName(),
-                                col.getType(), mvTableName, null)).collect(Collectors.toList()))),
-                new ConnectContext());
-        String columnName = FeConstants.GENERATED_PARTITION_COLUMN_PREFIX + placeHolderSlotId;
         Type type = adjustedPartitionByExpr.getType();
         if (type.isScalarType()) {
             ScalarType scalarType = (ScalarType) type;
@@ -1479,6 +1561,7 @@ public class MaterializedViewAnalyzer {
                 type = ScalarType.createVarcharType(ScalarType.getOlapMaxVarcharLength());
             }
         }
+        String columnName = FeConstants.GENERATED_PARTITION_COLUMN_PREFIX + placeHolderSlotId;
         TypeDef typeDef = new TypeDef(type);
         try {
             typeDef.analyze();
@@ -1492,8 +1575,177 @@ public class MaterializedViewAnalyzer {
         return generatedPartitionColumn.toColumn(null);
     }
 
-    private static int getIcebergPartitionColumnTimeZoneOffset(IcebergTable icebergTable,
-                                                               SlotRef slotRef) {
+    /**
+     * Support to adjust partition-by-expression if ref-base-table is an Iceberg Table or OlapTable
+     * - Adjust partition expr timezone for iceberg table with timestamp-with-zone type.
+     * - Adjust partition expr if olap table's with common partition expression.
+     */
+    public static Expr getMVAdjustedPartitionByExpr(Integer i,
+                                                    Expr partitionByExpr,
+                                                    List<Column> mvColumns,
+                                                    TableName mvTableName,
+                                                    Map<TableName, Table> refTableNameTableMap,
+                                                    Map<Integer, Expr> changedPartitionByExprs,
+                                                    Map<Expr, Expr> partitionByExprToAdjustExprMap) {
+        List<SlotRef> slotRefs = partitionByExpr.collectAllSlotRefs();
+        if (slotRefs.size() != 1) {
+            throw new SemanticException("Partition expr only can ref one slot refs:",
+                    partitionByExpr.toSql());
+        }
+        SlotRef slotRef = slotRefs.get(0);
+        TableName refTableName = slotRef.getTblNameWithoutAnalyzed();
+        Table refBaseTable = refTableNameTableMap.get(refTableName);
+        if (refBaseTable == null) {
+            throw new SemanticException("Materialized view partition expression %s could only ref to base table",
+                    slotRef.toSql());
+        }
+        return getMVAdjustedPartitionByExpr(i, partitionByExpr, mvColumns, mvTableName, slotRef, refBaseTable,
+                changedPartitionByExprs, partitionByExprToAdjustExprMap);
+    }
+
+    /**
+     * Why need to maintain partitionByExprToAdjustExprMap?
+     * If a mv has `partition_retention_condition` property, since the partition expr is changed, we need to
+     * adjust the partition expr in `partition_retention_condition` to the new partition expr.
+     */
+    public static Expr getMVAdjustedPartitionByExpr(Integer i,
+                                                    Expr partitionByExpr,
+                                                    List<Column> mvColumns,
+                                                    TableName mvTableName,
+                                                    SlotRef slotRef,
+                                                    Table refBaseTable,
+                                                    Map<Integer, Expr> changedPartitionByExprs,
+                                                    Map<Expr, Expr> partitionByExprToAdjustExprMap) {
+        Expr originalPartitionByExpr = partitionByExpr.clone();
+        // change timezone, date_trunc('day', dt) -> date_trunc('day', date_sub(dt, interval 8 hour))
+        Expr adjustedPartitionByExpr;
+        if (refBaseTable instanceof IcebergTable) {
+            IcebergTable icebergTable = (IcebergTable) refBaseTable;
+            adjustedPartitionByExpr = getAdjustedIcebergPartitionExpr(mvColumns, mvTableName, slotRef, icebergTable,
+                    partitionByExpr);
+        } else if (refBaseTable instanceof OlapTable) {
+            adjustedPartitionByExpr = getAdjustedOlapTablePartitionExpr(changedPartitionByExprs, i, mvColumns, mvTableName,
+                    slotRef, partitionByExpr);
+        } else {
+            return partitionByExpr;
+        }
+        if (adjustedPartitionByExpr.equals(partitionByExpr)) {
+            return adjustedPartitionByExpr;
+        }
+        ExpressionAnalyzer.analyzeExpression(adjustedPartitionByExpr, new AnalyzeState(), new Scope(RelationId.anonymous(),
+                        new RelationFields(mvColumns.stream().map(col -> new Field(col.getName(),
+                                col.getType(), mvTableName, null)).collect(Collectors.toList()))),
+                ConnectContext.buildInner());
+        // update partitionByExprToAdjustExprMap
+        recordPartitionByExprToAdjustExprMap(mvColumns, mvTableName, originalPartitionByExpr, adjustedPartitionByExpr,
+                partitionByExprToAdjustExprMap);
+        return adjustedPartitionByExpr;
+    }
+
+    /**
+     * Use mv's partition column to adjust original partition expr to new partition expr which is used for
+     * `partition_retention_condition` property that partition expression refs to mv's partition column.
+     */
+    private static void recordPartitionByExprToAdjustExprMap(List<Column> mvColumns,
+                                                             TableName mvTableName,
+                                                             Expr originalPartitionByExpr,
+                                                             Expr adjustedPartitionByExpr,
+                                                             Map<Expr, Expr> partitionByExprToAdjustExprMap) {
+        List<SlotRef> slotRefs = originalPartitionByExpr.collectAllSlotRefs();
+        if (slotRefs.size() != 1) {
+            throw new SemanticException("Partition expr only can ref one slot refs:",
+                    originalPartitionByExpr.toSql());
+        }
+        SlotRef slotRef = slotRefs.get(0);
+        resolveRefToMVColumns(mvColumns, slotRef, mvTableName);
+        partitionByExprToAdjustExprMap.put(originalPartitionByExpr, adjustedPartitionByExpr);
+    }
+
+    /**
+     * For generated column, change its referred slot ref from original ref-base-table's output columns to
+     * MV's output columns.
+     */
+    public static void resolveRefToMVColumns(List<Column> columns, SlotRef slotRef, TableName mvTableName) {
+        Column mvPartitionColumn = null;
+        int columnId = 0;
+        for (Column column : columns) {
+            if (slotRef.getColumnName().equalsIgnoreCase(column.getName())) {
+                mvPartitionColumn = column;
+                break;
+            }
+            columnId++;
+        }
+        if (mvPartitionColumn == null) {
+            throw new SemanticException("Materialized view partition exp column:"
+                    + slotRef.getColumnName() + " is not found in query statement");
+        }
+        SlotDescriptor slotDescriptor = new SlotDescriptor(new SlotId(columnId), slotRef.getColumnName(),
+                mvPartitionColumn.getType(), mvPartitionColumn.isAllowNull());
+        slotRef.setDesc(slotDescriptor);
+        slotRef.setType(mvPartitionColumn.getType());
+        slotRef.setNullable(mvPartitionColumn.isAllowNull());
+        slotRef.setType(mvPartitionColumn.getType());
+        slotRef.setColumnName(mvPartitionColumn.getName());
+        slotRef.setTblName(mvTableName);
+    }
+
+    public static Map<Expr, Expr> getMVPartitionByExprToAdjustMap(TableName mvTableName,
+                                                                  MaterializedView mv) {
+        PartitionInfo partitionInfo = mv.getPartitionInfo();
+        if (!partitionInfo.isListPartition()) {
+            return null;
+        }
+
+        Map<Table, List<Expr>> refBaseTablePartitionExprMap = mv.getRefBaseTablePartitionExprs();
+        if (refBaseTablePartitionExprMap.size() != 1) {
+            return null;
+        }
+        Map.Entry<Table, List<Expr>> entry = refBaseTablePartitionExprMap.entrySet().iterator().next();
+        Table refBaseTable = entry.getKey();
+        List<Expr> refBaseTablePartitionExprs = entry.getValue();
+        Map<Expr, Expr> mvPartitionByExprToAdjustMap = Maps.newHashMap();
+        for (int i = 0; i < refBaseTablePartitionExprs.size(); i++) {
+            Expr expr = refBaseTablePartitionExprs.get(i);
+            Expr cloned = expr.clone();
+            List<SlotRef> slotRefs = cloned.collectAllSlotRefs();
+            if (slotRefs.size() != 1) {
+                continue;
+            }
+            SlotRef slotRef = slotRefs.get(0);
+            MaterializedViewAnalyzer.getMVAdjustedPartitionByExpr(i, cloned, mv.getColumns(),
+                    mvTableName, slotRef, refBaseTable, Maps.newHashMap(), mvPartitionByExprToAdjustMap);
+        }
+
+        return mvPartitionByExprToAdjustMap;
+    }
+
+    /**
+     * If partition by expression has changed (eg. timezone offset changed), adjust where expr to new partition expr.
+     */
+    public static Expr adjustWhereExprIfNeeded(Map<Expr, Expr> partitionByExprMap,
+                                               Expr expr,
+                                               Scope scope,
+                                               ConnectContext context) {
+        if (CollectionUtils.sizeIsEmpty(partitionByExprMap)) {
+            return expr;
+        }
+        ExprSubstitutionMap exprSubstitutionMap = new ExprSubstitutionMap(false);
+        partitionByExprMap.entrySet().forEach(e -> {
+            Expr lExpr = e.getKey();
+            Expr rExpr = e.getValue();
+            ExpressionAnalyzer.analyzeExpression(lExpr, new AnalyzeState(), scope, context);
+            ExpressionAnalyzer.analyzeExpression(rExpr, new AnalyzeState(), scope, context);
+            exprSubstitutionMap.put(lExpr, rExpr);
+        });
+        return expr.substitute(exprSubstitutionMap);
+    }
+
+    /**
+     * IcebergTable partition column is timestamp with UTC time zone, adjust partition-by-expression's timezone to local timezone,
+     * otherwise MV refresh cannot match target partition by referring specific Iceberg input partition.
+     */
+    public static int getIcebergPartitionColumnTimeZoneOffset(IcebergTable icebergTable,
+                                                              SlotRef slotRef) {
         List<Column> refPartitionCols = icebergTable.getPartitionColumns();
         Optional<Column> refPartitionColOpt = refPartitionCols.stream()
                 .filter(col -> col.getName().equals(slotRef.getColumnName()))
@@ -1507,7 +1759,7 @@ public class MaterializedViewAnalyzer {
             org.apache.iceberg.Schema icebegSchema = icebergTable.getNativeTable().schema();
             if (icebegSchema.findType(partitionField.sourceId()).equals(Types.TimestampType.withZone())) {
                 ZoneId zoneId = TimeUtils.getTimeZone().toZoneId();
-                return getZoneHourOffset(ZoneOffset.UTC, zoneId);
+                return getZoneHourOffset(java.time.ZoneOffset.UTC, zoneId);
             } else {
                 return 0;
             }
@@ -1527,9 +1779,9 @@ public class MaterializedViewAnalyzer {
      * For mv's partition function experssion with timezone, adjust timezone to local timezone; otherwise MV refresh
      * cannot match target partition by referring specific Iceberg input partition.
      */
-    private static Expr getAdjustPartitionExpr(Expr partitionByExpr,
-                                               SlotRef slotRef,
-                                               int zoneHourOffset) {
+    public static Expr getIcebergAdjustPartitionExpr(Expr partitionByExpr,
+                                                     SlotRef slotRef,
+                                                     int zoneHourOffset) {
         if (zoneHourOffset == 0) {
             return partitionByExpr;
         }
@@ -1564,30 +1816,95 @@ public class MaterializedViewAnalyzer {
     }
 
     /**
-     * For generated column, change its referred slot ref from original ref-base-table's output columns to
-     * MV's output columns.
+     * If iceberg table partition column is timestamp with time zone, adjust timezone to local timezone.
      */
-    private static void resolveRefToMVColumns(List<Column> columns, SlotRef slotRef, TableName mvTableName) {
-        Column mvPartitionColumn = null;
-        int columnId = 0;
-        for (Column column : columns) {
-            if (slotRef.getColumnName().equalsIgnoreCase(column.getName())) {
-                mvPartitionColumn = column;
-                break;
-            }
-            columnId++;
+    public static Expr getAdjustedIcebergPartitionExpr(List<Column> mvColumns, TableName mvTableName,
+                                                       SlotRef slotRef, IcebergTable icebergTable,
+                                                       Expr partitionByExpr) {
+        if (!MvUtils.isFuncCallExpr(partitionByExpr, FunctionSet.DATE_TRUNC)) {
+            return partitionByExpr;
         }
-        if (mvPartitionColumn == null) {
-            throw new SemanticException("Materialized view partition exp column:"
-                    + slotRef.getColumnName() + " is not found in query statement");
+        // why resolve slot ref to mv columns?
+        // generated column should refer mv's defined column, but partitionByExpr is ref to base table's column,
+        // so resolve slot ref to mv columns.
+        resolveRefToMVColumns(mvColumns, slotRef, mvTableName);
+        int zoneHourOffset = getIcebergPartitionColumnTimeZoneOffset(icebergTable, slotRef);
+        return getIcebergAdjustPartitionExpr(partitionByExpr, slotRef, zoneHourOffset);
+    }
+
+    /**
+     * For MV with olap tables that contain common partition expressions which uses a generated column inner,
+     * we need to adjust the partition expression to the associated generated column.
+     */
+    public static Expr getAdjustedOlapTablePartitionExpr(Map<Integer, Expr> changedPartitionByExprs,
+                                                         Integer i,
+                                                         List<Column> mvColumns, TableName mvTableName,
+                                                         SlotRef slotRef,
+                                                         Expr partitionByExpr) {
+        if (changedPartitionByExprs.containsKey(i)) {
+            // why resolve slot ref to mv columns?
+            // generated column should refer mv's defined column, but partitionByExpr is ref to base table's column,
+            // so resolve slot ref to mv columns.
+            resolveRefToMVColumns(mvColumns, slotRef, mvTableName);
+            return partitionByExpr;
         }
-        SlotDescriptor slotDescriptor = new SlotDescriptor(new SlotId(columnId), slotRef.getColumnName(),
-                mvPartitionColumn.getType(), mvPartitionColumn.isAllowNull());
-        slotRef.setDesc(slotDescriptor);
-        slotRef.setType(mvPartitionColumn.getType());
-        slotRef.setNullable(mvPartitionColumn.isAllowNull());
-        slotRef.setType(mvPartitionColumn.getType());
-        slotRef.setColumnName(mvPartitionColumn.getName());
-        slotRef.setTblName(mvTableName);
+        return partitionByExpr;
+    }
+
+    public static Optional<Expr> analyzeMVRetentionCondition(ConnectContext connectContext,
+                                                             MaterializedView mv,
+                                                             Table refBaseTable,
+                                                             String retentionCondition) {
+        Expr retentionCondtiionExpr = null;
+        try {
+            retentionCondtiionExpr = SqlParser.parseSqlToExpr(retentionCondition, SqlModeHelper.MODE_DEFAULT);
+        } catch (Exception e) {
+            throw new SemanticException("Failed to parse retention condition: " + retentionCondition);
+        }
+        if (retentionCondtiionExpr == null) {
+            return Optional.empty();
+        }
+        Scope scope = new Scope(RelationId.anonymous(), new RelationFields(
+                refBaseTable.getBaseSchema().stream()
+                        .map(col -> new Field(col.getName(), col.getType(), null, null))
+                        .collect(Collectors.toList())));
+        ExpressionAnalyzer.analyzeExpression(retentionCondtiionExpr, new AnalyzeState(), scope, connectContext);
+        Map<Expr, Expr> partitionByExprMap = getMVPartitionByExprToAdjustMap(null, mv);
+        retentionCondtiionExpr = MaterializedViewAnalyzer.adjustWhereExprIfNeeded(partitionByExprMap, retentionCondtiionExpr,
+                scope, connectContext);
+        return Optional.of(retentionCondtiionExpr);
+    }
+
+    public static Optional<ScalarOperator> analyzeMVRetentionConditionOperator(ConnectContext connectContext,
+                                                                               MaterializedView mv,
+                                                                               Table refBaseTable,
+                                                                               Optional<Expr> exprOpt) {
+        if (exprOpt.isEmpty()) {
+            return Optional.empty();
+        }
+        Expr retentionCondtiionExpr = exprOpt.get();
+        ColumnRefFactory columnRefFactory = new ColumnRefFactory();
+        List<ColumnRefOperator> columnRefOperators = refBaseTable.getBaseSchema()
+                .stream()
+                .map(col -> columnRefFactory.create(col.getName(), col.getType(), col.isAllowNull()))
+                .collect(Collectors.toList());
+        TableName tableName = new TableName(null, refBaseTable.getName());
+        Scope scope = new Scope(RelationId.anonymous(), new RelationFields(
+                columnRefOperators.stream()
+                        .map(col -> new Field(col.getName(), col.getType(), tableName, null))
+                        .collect(Collectors.toList())));
+        ExpressionMapping expressionMapping = new ExpressionMapping(scope, columnRefOperators);
+        // substitute generated column expr if whereExpr is a mv which contains iceberg transform expr.
+        // translate whereExpr to scalarOperator and replace whereExpr's generatedColumnExpr to partition slotRef.
+        ScalarOperator scalarOperator =
+                SqlToScalarOperatorTranslator.translate(retentionCondtiionExpr, expressionMapping, Lists.newArrayList(),
+                        columnRefFactory, connectContext, null,
+                        null, null, false);
+        if (scalarOperator == null) {
+            return Optional.empty();
+        }
+        ScalarOperatorRewriter scalarOpRewriter = new ScalarOperatorRewriter();
+        scalarOperator = scalarOpRewriter.rewrite(scalarOperator, DEFAULT_TYPE_CAST_RULE);
+        return Optional.of(scalarOperator);
     }
 }

@@ -201,6 +201,17 @@ public:
                 static_cast<uint32_t>(_data.get_size()) - (_num_elems + 1) * static_cast<uint32_t>(sizeof(uint32_t));
         _offsets_ptr = reinterpret_cast<uint32_t*>(_data.data + _offsets_pos);
 
+        if (_data.size < config::small_dictionary_page_size) {
+            _parsed_datas = std::vector<Slice>();
+            _parsed_datas->reserve(_num_elems);
+            for (uint32_t i = 0; i < _num_elems; i++) {
+                const uint32_t off1 = offset_uncheck(i);
+                const uint32_t off2 = offset(i + 1);
+                Slice s(&_data[off1], off2 - off1);
+                _parsed_datas->emplace_back(s);
+            }
+        }
+
         _parsed = true;
 
         return Status::OK();
@@ -235,6 +246,8 @@ public:
         uint32_t len = offset(static_cast<int>(idx) + 1) - start_offset;
         return {&_data[start_offset], len};
     }
+
+    void batch_string_at_index(Slice* dst, const int32_t* idx, size_t size) const;
 
     int find(const Slice& word) const {
         DCHECK(_parsed);
@@ -285,6 +298,8 @@ private:
 
     // Index of the currently seeked element in the page.
     uint32_t _cur_idx;
+
+    std::optional<std::vector<Slice>> _parsed_datas;
 };
 
 } // namespace starrocks

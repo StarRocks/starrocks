@@ -124,6 +124,20 @@ public class ConnectorAnalyzeTaskTest {
     }
 
     @Test
+    public void testTaskRunWithStructSubfield() {
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable("hive0",
+                "subfield_db", "subfield");
+        String tableUUID = table.getUUID();
+        Triple<String, Database, Table> tableTriple = StatisticsUtils.getTableTripleByUUID(tableUUID);
+        ConnectorAnalyzeTask task = new ConnectorAnalyzeTask(tableTriple, Sets.newHashSet("col_int", "col_struct.c0"));
+        Optional<AnalyzeStatus> result = task.run();
+        Assert.assertTrue(result.isPresent());
+        Assert.assertTrue(result.get() instanceof ExternalAnalyzeStatus);
+        ExternalAnalyzeStatus externalAnalyzeStatusResult = (ExternalAnalyzeStatus) result.get();
+        Assert.assertEquals(List.of("col_int", "col_struct.c0"), externalAnalyzeStatusResult.getColumns());
+    }
+
+    @Test
     public void testTaskRunWithTableUpdate() {
         Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable("hive0",
                 "partitioned_db", "orders");

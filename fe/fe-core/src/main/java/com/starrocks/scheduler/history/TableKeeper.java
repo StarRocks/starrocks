@@ -18,11 +18,12 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.common.Config;
-import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.load.loadv2.LoadsHistorySyncer;
 import com.starrocks.load.pipe.filelist.RepoExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.statistic.columns.PredicateColumnsStorage;
+import jdk.jshell.spi.ExecutionControl;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -44,10 +45,8 @@ public class TableKeeper {
     private final String tableName;
     private final String createTableSql;
 
-    private boolean databaseExisted = false;
-    private boolean tableExisted = false;
-    private boolean tableCorrected = false;
-    private Supplier<Integer> ttlSupplier;
+    private final boolean tableCorrected = false;
+    private final Supplier<Integer> ttlSupplier;
 
     public TableKeeper(String database,
                        String table,
@@ -61,20 +60,16 @@ public class TableKeeper {
 
     public synchronized void run() {
         try {
-            if (!databaseExisted) {
-                databaseExisted = checkDatabaseExists();
-                if (!databaseExisted) {
-                    LOG.warn("database not exists: {}", databaseName);
-                    return;
-                }
+            if (!checkDatabaseExists()) {
+                LOG.warn("database not exists: {}", databaseName);
+                return;
             }
-            if (!tableExisted) {
+            if (!checkTableExists()) {
                 createTable();
                 LOG.info("table created: {}", tableName);
-                tableExisted = true;
             }
-            correctTable();
-            if (tableExisted) {
+            if (checkTableExists()) {
+                correctTable();
                 changeTTL();
             }
         } catch (Exception e) {
@@ -86,14 +81,18 @@ public class TableKeeper {
      * Is the table ready for insert
      */
     public synchronized boolean isReady() {
-        return databaseExisted && tableExisted;
+        return checkDatabaseExists() && checkTableExists();
     }
 
     public boolean checkDatabaseExists() {
         return GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(databaseName) != null;
     }
 
-    public void createTable() throws StarRocksException {
+    public boolean checkTableExists() {
+        return GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetTable(databaseName, tableName).isPresent();
+    }
+
+    public void createTable() throws ExecutionControl.UserException {
         RepoExecutor.getInstance().executeDDL(createTableSql);
     }
 
@@ -116,6 +115,9 @@ public class TableKeeper {
     }
 
     public void changeTTL() {
+        if (ttlSupplier == null) {
+            return;
+        }
         Optional<OlapTable> table = mayGetTable();
         if (table.isEmpty()) {
             return;
@@ -176,20 +178,8 @@ public class TableKeeper {
         return createTableSql;
     }
 
-    public boolean isDatabaseExisted() {
-        return databaseExisted;
-    }
-
-    public boolean isTableExisted() {
-        return tableExisted;
-    }
-
     public boolean isTableCorrected() {
         return tableCorrected;
-    }
-
-    public void setDatabaseExisted(boolean databaseExisted) {
-        this.databaseExisted = databaseExisted;
     }
 
     public static TableKeeperDaemon startDaemon() {
@@ -211,6 +201,7 @@ public class TableKeeper {
 
             keeperList.add(TaskRunHistoryTable.createKeeper());
             keeperList.add(LoadsHistorySyncer.createKeeper());
+            keeperList.add(PredicateColumnsStorage.createKeeper());
             // TODO: add FileListPipeRepo
             // TODO: add statistic table
         }

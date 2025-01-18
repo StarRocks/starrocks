@@ -32,12 +32,12 @@ protected:
     int64_t _offset = 1;
     int64_t _length = 22;
 
-    std::set<int64_t> _need_skip_rowids;
+    SkipRowsContextPtr _skip_rows_ctx = std::make_shared<SkipRowsContext>();
 };
 
 TEST_F(PaimonDeleteFileBuilderTest, TestParquetBuilder) {
     std::unique_ptr<PaimonDeleteFileBuilder> builder(
-            new PaimonDeleteFileBuilder(FileSystem::Default(), &_need_skip_rowids));
+            new PaimonDeleteFileBuilder(FileSystem::Default(), _skip_rows_ctx));
     TPaimonDeletionFile paimonDeletionFile;
     paimonDeletionFile.__set_path(_path);
     paimonDeletionFile.__set_offset(_offset);
@@ -45,7 +45,7 @@ TEST_F(PaimonDeleteFileBuilderTest, TestParquetBuilder) {
     std::shared_ptr<TPaimonDeletionFile> paimon_deletion_file =
             std::make_shared<TPaimonDeletionFile>(paimonDeletionFile);
     ASSERT_OK(builder->build(paimon_deletion_file.get()));
-    ASSERT_EQ(1, _need_skip_rowids.size());
+    ASSERT_EQ(1, _skip_rows_ctx->deletion_bitmap->get_cardinality());
 }
 
 } // namespace starrocks

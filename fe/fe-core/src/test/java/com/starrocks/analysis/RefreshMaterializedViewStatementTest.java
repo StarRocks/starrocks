@@ -21,6 +21,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.AfterClass;
@@ -73,13 +74,30 @@ public class RefreshMaterializedViewStatementTest {
     }
 
     @Test
-    public void testRereshNotMaterializedView() {
+    public void testRefreshNotMaterializedView() {
         String sql = "REFRESH MATERIALIZED VIEW table_name_tmp_1;";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
             Assert.assertEquals("Getting analyzing error at line 1, column 26. Detail message: " +
                     "Can not refresh non materialized view:table_name_tmp_1.", e.getMessage());
+        }
+    }
+
+    @Test
+    public void testRefreshMaterializedViewWithPriority() throws Exception {
+        {
+            String sql = "refresh materialized view mv1 with sync mode";
+            RefreshMaterializedViewStatement stmt =
+                    (RefreshMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            Assert.assertTrue(stmt.isSync());
+            Assert.assertNull(stmt.getPriority());
+        }
+        {
+            String sql = "refresh materialized view mv1 with priority 70";
+            RefreshMaterializedViewStatement stmt =
+                    (RefreshMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            Assert.assertEquals(70, stmt.getPriority().intValue());
         }
     }
 

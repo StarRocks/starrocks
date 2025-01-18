@@ -781,6 +781,16 @@ bool operator!=(const TabletSchema& a, const TabletSchema& b) {
     return !(a == b);
 }
 
+bool TabletSchema::has_separate_sort_key() const {
+    RETURN_IF(_sort_key_idxes.size() != _num_key_columns, true);
+    for (size_t i = 0; i < _sort_key_idxes.size(); ++i) {
+        if (_sort_key_idxes[i] != i) {
+            return true;
+        }
+    }
+    return false;
+}
+
 std::string TabletSchema::debug_string() const {
     std::stringstream ss;
     ss << "column=[";

@@ -571,11 +571,8 @@ StatusOr<std::unique_ptr<WritableFile>> HdfsFileSystem::new_writable_file(const 
     std::shared_ptr<HdfsFsClient> hdfs_client;
     RETURN_IF_ERROR(HdfsFsCache::instance()->get_connection(namenode, hdfs_client, _options));
     int flags = O_WRONLY;
-    if (opts.mode == FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE) {
-        if (auto st = _path_exists(hdfs_client->hdfs_fs, path); st.ok()) {
-            return Status::NotSupported(fmt::format("Cannot truncate a file by hdfs writer, path={}", path));
-        }
-    } else if (opts.mode == MUST_CREATE) {
+    // O_WRONLY means create or overwrite for hdfsOpenFile, which is exactly CREATE_OR_OPEN_WITH_TRUNCATE
+    if (opts.mode == MUST_CREATE) {
         if (auto st = _path_exists(hdfs_client->hdfs_fs, path); st.ok()) {
             return Status::AlreadyExist(path);
         }
@@ -583,12 +580,10 @@ StatusOr<std::unique_ptr<WritableFile>> HdfsFileSystem::new_writable_file(const 
         return Status::NotSupported("Open with MUST_EXIST not supported by hdfs writer");
     } else if (opts.mode == CREATE_OR_OPEN) {
         return Status::NotSupported("Open with CREATE_OR_OPEN not supported by hdfs writer");
-    } else {
+    } else if (opts.mode != CREATE_OR_OPEN_WITH_TRUNCATE) {
         auto msg = strings::Substitute("Unsupported open mode $0", opts.mode);
         return Status::NotSupported(msg);
     }
-
-    flags |= O_CREAT;
 
     // `io.file.buffer.size` of https://apache.github.io/hadoop/hadoop-project-dist/hadoop-common/core-default.xml
     int hdfs_write_buffer_size = 0;

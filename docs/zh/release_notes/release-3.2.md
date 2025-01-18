@@ -4,6 +4,49 @@ displayed_sidebar: docs
 
 # StarRocks version 3.2
 
+## 3.2.14
+
+发布日期：2025 年 1 月 8 日
+
+### 功能优化
+
+- 支持收集 Paimon 表的统计信息。[#52858](https://github.com/StarRocks/starrocks/pull/52858)
+- JSON 指标中添加节点信息和直方图指标。[#53735](https://github.com/StarRocks/starrocks/pull/53735)
+
+### 问题修复
+
+修复了如下问题：
+
+- 主键表索引的 Score 没有在 Commit 阶段进行更新。[#41737](https://github.com/StarRocks/starrocks/pull/41737)
+- 在启用低基数优化时，`max(count(distinct))` 执行计划错误。[#53403](https://github.com/StarRocks/starrocks/pull/53403)
+- 当 List 分区列含有 NULL 值时，查询分区列的 Min/Max 值会导致分区裁剪错误。[#53235](https://github.com/StarRocks/starrocks/pull/53235)
+- 使用 HDFS 备份数据时上传重试失败。[#53679](https://github.com/StarRocks/starrocks/pull/53679)
+
+## 3.2.13
+
+发布日期：2024 年 12 月 13 日
+
+### 功能优化
+
+- 支持对单个表设置禁止进行 Base Compaction 的时间范围。[#50120](https://github.com/StarRocks/starrocks/pull/50120)
+
+### 问题修复
+
+修复了如下问题：
+
+- 执行 SHOW ROUTINE LOAD 后 `loadRowsRate` 字段返回为 `0`。[#52151](https://github.com/StarRocks/starrocks/pull/52151)
+- 函数 `F``iles()` 读取文件时读取未被查询的列。 [#52210](https://github.com/StarRocks/starrocks/pull/52210)
+- Prometheus 不能解析含有特殊符号名称的物化视图相关指标（当前物化视图统计指标支持 Tag）。[#52782](https://github.com/StarRocks/starrocks/pull/52782)
+- 函数 `array_map` 导致 BE Crash。[#52909](https://github.com/StarRocks/starrocks/pull/52909)
+- Metadata Cache 导致 BE Crash 问题。[#52968](https://github.com/StarRocks/starrocks/pull/52968)
+- Routine Load 因事务过期而导致任务取消（当前仅有数据库或表不存在任务才会被取消）。[#50334](https://github.com/StarRocks/starrocks/pull/50334)
+- 通过 HTTP 1.0 提交的 Stream Load 失败。[#53010](https://github.com/StarRocks/starrocks/pull/53010) [#53008](https://github.com/StarRocks/starrocks/pull/53008)
+- 一些和 Glue、S3 集成相关的问题：[#48433](https://github.com/StarRocks/starrocks/pull/48433)
+  - 部分报错信息未能展示根源报错原因。
+  - 使用 Glue 作为元数据服务时，写入分区列为 SRTING 类型的 Hive 分区表的报错。
+  - 删除 Hive 表时，用户权限不足但系统并未报错。
+- 物化视图属性 `storage_cooldown_time` 设置为 `maximum` 不生效。[#52079](https://github.com/StarRocks/starrocks/pull/52079)
+
 ## 3.2.12
 
 发布日期：2024 年 10 月 23 日
@@ -11,7 +54,7 @@ displayed_sidebar: docs
 ### 功能优化
 
 - 优化在部分复杂查询场景下 BE 内存分配和统计，避免 OOM。[#51382](https://github.com/StarRocks/starrocks/pull/51382)
-- 优化在 Schema Change 场景下 FE 的内存使用。[#48569](https://github.com/StarRocks/starrocks/pull/48569)
+- 优化在 Schema Change 场景下 FE 的内存使用。[#50855](https://github.com/StarRocks/starrocks/pull/50855)
 - 优化从 Follower FE 节点查询系统定义视图 `information_schema.routine_load_jobs` 时 Job 状态的展示。[#51763](https://github.com/StarRocks/starrocks/pull/51763)
 - 支持备份还原 List 分区表。[#51993](https://github.com/StarRocks/starrocks/pull/51993)
 

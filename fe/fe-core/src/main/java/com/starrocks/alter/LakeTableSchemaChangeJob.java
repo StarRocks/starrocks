@@ -23,6 +23,12 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.common.collect.Table;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.analysis.DescriptorTable;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.SlotDescriptor;
+import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.TableName;
+import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
@@ -57,7 +63,15 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.proto.TxnTypePB;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AnalyzeState;
+import com.starrocks.sql.analyzer.ExpressionAnalyzer;
+import com.starrocks.sql.analyzer.Field;
+import com.starrocks.sql.analyzer.RelationFields;
+import com.starrocks.sql.analyzer.RelationId;
+import com.starrocks.sql.analyzer.Scope;
+import com.starrocks.sql.analyzer.SelectAnalyzer.RewriteAliasVisitor;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.task.AgentBatchTask;
@@ -66,6 +80,10 @@ import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.AlterReplicaTask;
 import com.starrocks.task.CreateReplicaTask;
+import com.starrocks.thrift.TAlterTabletMaterializedColumnReq;
+import com.starrocks.thrift.TExpr;
+import com.starrocks.thrift.TQueryGlobals;
+import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
@@ -79,7 +97,9 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.DataOutput;
 import java.io.IOException;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -291,6 +311,10 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         return GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator().peekNextTransactionId();
     }
 
+    public static long getNextGtid() {
+        return GlobalStateMgr.getCurrentState().getGtidGenerator().nextGtid();
+    }
+
     @VisibleForTesting
     public void setIsCancelling(boolean isCancelling) {
         this.isCancelling.set(isCancelling);
@@ -320,7 +344,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
             OlapTable table = getTableOrThrow(db, tableId);
             Preconditions.checkState(table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE);
-            MaterializedIndexMeta indexMeta = table.getIndexMetaByIndexId(table.getBaseIndexId());
+
             if (enableTabletCreationOptimization) {
                 numTablets = physicalPartitionIndexMap.size();
             } else {
@@ -330,6 +354,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             countDownLatch = new MarkedCountDownLatch<>((int) numTablets);
             createReplicaLatch = countDownLatch;
             long baseIndexId = table.getBaseIndexId();
+            long gtid = getNextGtid();
             for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
                 PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
                 Preconditions.checkState(physicalPartition != null);
@@ -389,6 +414,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                                 .setCreateSchemaFile(createSchemaFile)
                                 .setTabletSchema(tabletSchema)
                                 .setEnableTabletCreationOptimization(enableTabletCreationOptimization)
+                                .setGtid(gtid)
                                 .build();
                         // For each partition, the schema file is created only when the first Tablet is created
                         createSchemaFile = false;
@@ -412,6 +438,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             OlapTable table = getTableOrThrow(db, tableId);
             Preconditions.checkState(table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE);
             watershedTxnId = getNextTransactionId();
+            watershedGtid = getNextGtid();
             addShadowIndexToCatalog(table, watershedTxnId);
         }
 
@@ -470,6 +497,128 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                 for (Map.Entry<Long, MaterializedIndex> entry : shadowIndexMap.entrySet()) {
                     long shadowIdxId = entry.getKey();
                     MaterializedIndex shadowIdx = entry.getValue();
+                    long originIndexId = indexIdMap.get(shadowIdxId);
+
+                    boolean hasNewGeneratedColumn = false;
+                    List<Column> diffGeneratedColumnSchema = Lists.newArrayList();
+                    if (originIndexId == table.getBaseIndexId()) {
+                        List<String> originSchema = table.getSchemaByIndexId(originIndexId).stream().map(col ->
+                                new String(col.getName())).collect(Collectors.toList());
+                        List<String> newSchema = table.getSchemaByIndexId(shadowIdxId).stream().map(col ->
+                                new String(col.getName())).collect(Collectors.toList());
+
+                        if (originSchema.size() != 0 && newSchema.size() != 0) {
+                            for (String colNameInNewSchema : newSchema) {
+                                if (!originSchema.contains(colNameInNewSchema) &&
+                                        table.getColumn(colNameInNewSchema).isGeneratedColumn()) {
+                                    diffGeneratedColumnSchema.add(table.getColumn(colNameInNewSchema));
+                                }
+                            }
+                        }
+
+                        if (diffGeneratedColumnSchema.size() != 0) {
+                            hasNewGeneratedColumn = true;
+                        }
+                    }
+                    Map<Integer, TExpr> mcExprs = new HashMap<>();
+                    TAlterTabletMaterializedColumnReq generatedColumnReq = null;
+                    if (hasNewGeneratedColumn) {
+                        DescriptorTable descTbl = new DescriptorTable();
+                        TupleDescriptor tupleDesc = descTbl.createTupleDescriptor();
+                        Map<String, SlotDescriptor> slotDescByName = new HashMap<>();
+
+                        /*
+                         * The expression substitution is needed here, because all slotRefs in
+                         * GeneratedColumnExpr are still is unAnalyzed. slotRefs get isAnalyzed == true
+                         * if it is init by SlotDescriptor. The slot information will be used by be to indentify
+                         * the column location in a chunk.
+                         */
+                        for (Column col : table.getFullSchema()) {
+                            SlotDescriptor slotDesc = descTbl.addSlotDescriptor(tupleDesc);
+                            slotDesc.setType(col.getType());
+                            slotDesc.setColumn(new Column(col));
+                            slotDesc.setIsMaterialized(true);
+                            slotDesc.setIsNullable(col.isAllowNull());
+
+                            slotDescByName.put(col.getName(), slotDesc);
+                        }
+
+                        for (Column generatedColumn : diffGeneratedColumnSchema) {
+                            Expr expr = generatedColumn.getGeneratedColumnExpr(table.getIdToColumn());
+                            List<Expr> outputExprs = Lists.newArrayList();
+
+                            for (Column col : table.getBaseSchema()) {
+                                SlotDescriptor slotDesc = slotDescByName.get(col.getName());
+
+                                if (slotDesc == null) {
+                                    throw new AlterCancelException("Expression for generated column can not find " +
+                                            "the ref column");
+                                }
+
+                                SlotRef slotRef = new SlotRef(slotDesc);
+                                slotRef.setColumnName(col.getName());
+                                outputExprs.add(slotRef);
+                            }
+
+                            TableName tableName = new TableName(db.getFullName(), table.getName());
+
+                            // sourceScope must be set null tableName for its Field in RelationFields
+                            // because we hope slotRef can not be resolved in sourceScope but can be
+                            // resolved in outputScope to force to replace the node using outputExprs.
+                            Scope sourceScope = new Scope(RelationId.anonymous(),
+                                    new RelationFields(table.getBaseSchema().stream().map(col ->
+                                                    new Field(col.getName(), col.getType(), null, null))
+                                            .collect(Collectors.toList())));
+
+                            Scope outputScope = new Scope(RelationId.anonymous(),
+                                    new RelationFields(table.getBaseSchema().stream().map(col ->
+                                                    new Field(col.getName(), col.getType(), tableName, null))
+                                            .collect(Collectors.toList())));
+
+                            if (ConnectContext.get() == null) {
+                                LOG.warn("Connect Context is null when add/modify generated column");
+                            } else {
+                                ConnectContext.get().setDatabase(db.getFullName());
+                            }
+
+                            RewriteAliasVisitor visitor =
+                                    new RewriteAliasVisitor(sourceScope, outputScope,
+                                            outputExprs, ConnectContext.get());
+
+                            ExpressionAnalyzer.analyzeExpression(expr, new AnalyzeState(), new Scope(RelationId.anonymous(),
+                                            new RelationFields(table.getBaseSchema().stream().map(col -> new Field(col.getName(),
+                                                    col.getType(), tableName, null)).collect(Collectors.toList()))),
+                                    ConnectContext.get());
+
+                            Expr generatedColumnExpr = expr.accept(visitor, null);
+
+                            generatedColumnExpr = Expr.analyzeAndCastFold(generatedColumnExpr);
+
+                            int columnIndex = -1;
+                            if (generatedColumn.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PREFIX)) {
+                                String originName = Column.removeNamePrefix(generatedColumn.getName());
+                                columnIndex = table.getFullSchema().indexOf(table.getColumn(originName));
+                            } else {
+                                columnIndex = table.getFullSchema().indexOf(generatedColumn);
+                            }
+
+                            mcExprs.put(columnIndex, generatedColumnExpr.treeToThrift());
+                        }
+                        // we need this thing, otherwise some expr evalution will fail in BE
+                        TQueryGlobals queryGlobals = new TQueryGlobals();
+                        SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
+                        queryGlobals.setNow_string(dateFormat.format(new Date()));
+                        queryGlobals.setTimestamp_ms(new Date().getTime());
+                        queryGlobals.setTime_zone(TimeUtils.DEFAULT_TIME_ZONE);
+
+                        TQueryOptions queryOptions = new TQueryOptions();
+
+                        generatedColumnReq = new TAlterTabletMaterializedColumnReq();
+                        generatedColumnReq.setQuery_globals(queryGlobals);
+                        generatedColumnReq.setQuery_options(queryOptions);
+                        generatedColumnReq.setMc_exprs(mcExprs);
+                    }
+
                     for (Tablet shadowTablet : shadowIdx.getTablets()) {
                         ComputeNode computeNode = GlobalStateMgr.getCurrentState().getWarehouseMgr()
                                 .getComputeNodeAssignedToTablet(warehouseId, (LakeTablet) shadowTablet);
@@ -483,7 +632,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                         AlterReplicaTask alterTask =
                                 AlterReplicaTask.alterLakeTablet(computeNode.getId(), dbId, tableId, partitionId,
                                         shadowIdxId, shadowTabletId, originTabletId, visibleVersion, jobId,
-                                        watershedTxnId);
+                                        watershedTxnId, generatedColumnReq);
                         getOrCreateSchemaChangeBatchTask().addTask(alterTask);
                     }
                 }
@@ -651,6 +800,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             txnInfo.combinedTxnLog = false;
             txnInfo.txnType = TxnTypePB.TXN_NORMAL;
             txnInfo.commitTime = finishedTimeMs / 1000;
+            txnInfo.gtid = watershedGtid;
             for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
                 long commitVersion = commitVersionMap.get(partitionId);
                 Map<Long, MaterializedIndex> shadowIndexMap = physicalPartitionIndexMap.row(partitionId);
@@ -753,6 +903,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             this.indexChange = other.indexChange;
             this.indexes = other.indexes;
             this.watershedTxnId = other.watershedTxnId;
+            this.watershedGtid = other.watershedGtid;
             this.startTime = other.startTime;
             this.commitVersionMap = other.commitVersionMap;
             // this.schemaChangeBatchTask = other.schemaChangeBatchTask;
@@ -929,7 +1080,9 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                 createReplicaLatch.countDownToZero(new Status(TStatusCode.OK, ""));
             }
             synchronized (this) {
-                return cancelImpl(errMsg);
+                boolean cancelled = cancelImpl(errMsg);
+                cancelHook(cancelled);
+                return cancelled;
             }
         } finally {
             isCancelling.set(false);

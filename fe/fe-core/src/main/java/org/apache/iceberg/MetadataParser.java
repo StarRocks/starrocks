@@ -26,7 +26,6 @@ import com.starrocks.rpc.ConfigurableSerDesFactory;
 import com.starrocks.thrift.TIcebergMetadata;
 import com.starrocks.thrift.TMetadataEntry;
 import com.starrocks.thrift.TResultBatch;
-import de.javakaffee.kryoserializers.UnmodifiableCollectionsSerializer;
 import org.apache.iceberg.expressions.ResidualEvaluator;
 import org.apache.iceberg.metrics.ScanMetrics;
 import org.apache.iceberg.metrics.ScanMetricsUtil;

@@ -13,6 +13,7 @@
 // limitations under the License.
 package com.starrocks.sql.optimizer.rule.transformation;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Function;
@@ -85,14 +86,22 @@ public class RewriteUnnestBitmapRule extends TransformationRule {
             return false;
         }).map(entry -> new Pair<>(entry.getKey(), entry.getValue())).findFirst().get();
 
-        // if bitmap_to_array's output will be used by upper nodes, it's not safe to rewrite
+        // if bitmap_to_array's output are used by upper nodes, it's not safe to rewrite
         if (originalTableFunctionOperator.getOuterColRefs().contains(bitmapToArray.first)) {
             return Lists.newArrayList();
         }
 
-        ColumnRefOperator bitmapColumn = bitmapToArray.second.getColumnRefs().get(0);
-        columnRefMap.remove(bitmapToArray.first);
-        columnRefMap.putIfAbsent(bitmapColumn, bitmapColumn);
+        Preconditions.checkArgument(bitmapToArray.second.getChildren().size() == 1);
+        // use bitmapToArrayArg to replace bitmapColumn
+        // eg:
+        //  with r1 as (select b1 as b2 from test_agg),
+        //       r2 as (select sub_bitmap(b1, 0, 10) as b2 from test_agg),
+        //       r3 as (select bitmap_and(t0.b2, t1.b2) as b2 from r1 t0 join r2 t1)
+        //  select unnest as r1 from test_agg, unnest(bitmap_to_array(b2)) order by r1;
+        //  use bitmap_and(t0.b2, t1.b2) as b2 to replace bitmap_to_array(b2)
+        final ScalarOperator bitmapToArrayArg = bitmapToArray.second.getChild(0);
+        final ColumnRefOperator bitmapColumn = bitmapToArray.first;
+        columnRefMap.put(bitmapColumn, bitmapToArrayArg);
 
         TableFunction unnestBitmapFn =
                 (TableFunction) Expr.getBuiltinFunction(FunctionSet.UNNEST_BITMAP, new Type[] {Type.BITMAP},
@@ -107,6 +116,3 @@ public class RewriteUnnestBitmapRule extends TransformationRule {
         return Lists.newArrayList(OptExpression.create(newTableFunctionOperator, input.inputAt(0)));
     }
 }
-
-
-

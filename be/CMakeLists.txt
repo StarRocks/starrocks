@@ -477,7 +477,9 @@ if ("${USE_STAROS}" STREQUAL "ON")
     find_package(azure-storage-common-cpp CONFIG REQUIRED)
     set(azure-storage-blobs-cpp_DIR "${STARLET_INSTALL_DIR}/third_party/share/azure-storage-blobs-cpp" CACHE PATH "azure storage blobs search path")
     find_package(azure-storage-blobs-cpp CONFIG REQUIRED)
-    set(AZURE_SDK_LIB Azure::azure-identity Azure::azure-storage-blobs Azure::azure-core Azure::azure-storage-common)
+    set(azure-storage-files-datalake-cpp_DIR "${STARLET_INSTALL_DIR}/third_party/share/azure-storage-files-datalake-cpp" CACHE PATH "azure storage file datalake search path")
+    find_package(azure-storage-files-datalake-cpp CONFIG REQUIRED)
+    set(AZURE_SDK_LIB Azure::azure-identity Azure::azure-storage-blobs Azure::azure-storage-files-datalake Azure::azure-core Azure::azure-storage-common)
 
     set(starlet_DIR "${STARLET_INSTALL_DIR}/starlet_install/lib/cmake" CACHE PATH "starlet search path")
     find_package(starlet CONFIG REQUIRED)
@@ -859,7 +861,7 @@ set(STARROCKS_DEPENDENCIES ${STARROCKS_DEPENDENCIES}
 set_target_properties(aws-cpp-sdk-core PROPERTIES INTERFACE_LINK_LIBRARIES AWS::aws-crt-cpp)
 
 if (STARROCKS_JIT_ENABLE)
-    set(STARROCKS_DEPENDENCIES 
+    set(STARROCKS_DEPENDENCIES
         ${STARROCKS_DEPENDENCIES}
         ${WL_START_GROUP}
         ${LLVM_LIBRARIES}
@@ -969,7 +971,6 @@ endif()
 # Add all external dependencies. They should come after the starrocks libs.
 
 set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS}
-    ${STARROCKS_LINK_LIBS}
     ${STARROCKS_DEPENDENCIES}
     hdfs
     jvm
@@ -979,31 +980,26 @@ set(BUILD_FOR_SANITIZE "OFF")
 # Add sanitize static link flags or jemalloc
 if ("${CMAKE_BUILD_TYPE}" STREQUAL "DEBUG" OR "${CMAKE_BUILD_TYPE}" STREQUAL "RELEASE")
     message("use jemalloc")
-    set(STARROCKS_MEMORY_DEPENDENCIES_LIBS jemalloc)
+    set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} jemalloc)
 elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "ASAN")
     if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-        set(STARROCKS_MEMORY_DEPENDENCIES_LIBS -static-libsan)
+        set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libsan)
     else()
-        set(STARROCKS_MEMORY_DEPENDENCIES_LIBS -static-libasan)
+        set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libasan)
     endif()
     set(BUILD_FOR_SANITIZE "ON")
 elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "LSAN")
-    set(STARROCKS_MEMORY_DEPENDENCIES_LIBS -static-liblsan)
-     set(BUILD_FOR_SANITIZE "ON")
+    set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-liblsan)
+    set(BUILD_FOR_SANITIZE "ON")
 elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "UBSAN")
     message("use jemalloc")
-    set(STARROCKS_MEMORY_DEPENDENCIES_LIBS -static-libubsan jemalloc)
+    set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libubsan jemalloc)
     set(BUILD_FOR_SANITIZE "ON")
 elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "TSAN")
-    set(STARROCKS_MEMORY_DEPENDENCIES_LIBS -static-libtsan)
+    set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libtsan)
     set(BUILD_FOR_SANITIZE "ON")
 else()
     message(FATAL_ERROR "Unknown build type: ${CMAKE_BUILD_TYPE}")
-endif()
-
-if (NOT BUILD_FORMAT_LIB)
-    # skip the STARROCKS_MEMORY_DEPENDENCIES_LIBS only when BUILD_FORMAT_LIB=ON
-    set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} ${STARROCKS_MEMORY_DEPENDENCIES_LIBS})
 endif()
 
 if (NOT ("${MAKE_TEST}" STREQUAL "ON" AND "${BUILD_FOR_SANITIZE}" STREQUAL "ON"))

@@ -39,6 +39,7 @@
 #include "io/throttled_seekable_input_stream.h"
 #include "service/staros_worker.h"
 #include "storage/olap_common.h"
+#include "util/defer_op.h"
 #include "util/stopwatch.hpp"
 #include "util/string_parser.hpp"
 
@@ -249,6 +250,9 @@ public:
     }
 
     Status close() override {
+        MonotonicStopWatch watch;
+        watch.start();
+        DeferOp defer([&]() { IOProfiler::add_sync(watch.elapsed_time()); });
         auto stream_st = _file_ptr->stream();
         if (!stream_st.ok()) {
             return to_status(stream_st.status());
@@ -291,6 +295,7 @@ public:
         auto opt = ReadOptions();
         opt.skip_fill_local_cache = opts.skip_fill_local_cache;
         opt.buffer_size = opts.buffer_size;
+        opt.skip_read_local_cache = opts.skip_disk_cache;
         if (info.size.has_value()) {
             opt.file_size = info.size.value();
         }

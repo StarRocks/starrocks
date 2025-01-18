@@ -36,6 +36,7 @@ package com.starrocks.mysql;
 
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectScheduler;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
@@ -43,7 +44,6 @@ import org.junit.Test;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.net.ServerSocket;
 import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -91,21 +91,17 @@ public class MysqlServerTest {
 
     @Test
     public void testInvalidParam() throws IOException {
-        ServerSocket socket = new ServerSocket(0);
-        int port = socket.getLocalPort();
-        socket.close();
-        MysqlServer server = new MysqlServer(port, null, null);
+        int port = UtFrameUtils.findValidPort();
+        MysqlServer server = new MysqlServer(port, null);
         Assert.assertFalse(server.start());
     }
 
     @Test
     public void testBindFail() throws IOException {
-        ServerSocket socket = new ServerSocket(0);
-        int port = socket.getLocalPort();
-        socket.close();
-        MysqlServer server = new MysqlServer(port, scheduler, null);
+        int port = UtFrameUtils.findValidPort();
+        MysqlServer server = new MysqlServer(port, scheduler);
         Assert.assertTrue(server.start());
-        MysqlServer server1 = new MysqlServer(port, scheduler, null);
+        MysqlServer server1 = new MysqlServer(port, scheduler);
         Assert.assertFalse(server1.start());
 
         server.stop();
@@ -114,10 +110,8 @@ public class MysqlServerTest {
 
     @Test
     public void testSubFail() throws IOException, InterruptedException {
-        ServerSocket socket = new ServerSocket(0);
-        int port = socket.getLocalPort();
-        socket.close();
-        MysqlServer server = new MysqlServer(port, badScheduler, null);
+        int port = UtFrameUtils.findValidPort();
+        MysqlServer server = new MysqlServer(port, badScheduler);
         Assert.assertTrue(server.start());
 
         // submit
