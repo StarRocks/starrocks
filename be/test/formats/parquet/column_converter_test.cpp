@@ -462,7 +462,7 @@ TEST_F(ColumnConverterTest, Int96Test) {
         const std::string col_name = "timestamp_int96";
         {
             const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DATETIME);
-            check(file_path, col_type, col_name, "[2023-04-28 16:40:22.618760]", expected_rows);
+            check(file_path, col_type, col_name, "[2023-04-29 00:40:22.618760]", expected_rows);
         }
     }
 }
@@ -476,21 +476,21 @@ TEST_F(ColumnConverterTest, Int96TimeZoneTest) {
         const std::string col_name = "time_with_new_york";
         {
             const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DATETIME);
-            check(file_path, col_type, col_name, "[2019-04-16 20:00:00]", expected_rows);
+            check(file_path, col_type, col_name, "[2019-04-17 04:00:00]", expected_rows);
         }
     }
     {
         const std::string col_name = "time_with_shanghai";
         {
             const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DATETIME);
-            check(file_path, col_type, col_name, "[2019-04-16 20:00:00]", expected_rows);
+            check(file_path, col_type, col_name, "[2019-04-17 04:00:00]", expected_rows);
         }
     }
     {
         const std::string col_name = "time_without_timezone";
         {
             const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DATETIME);
-            check(file_path, col_type, col_name, "[2019-04-16 20:00:00]", expected_rows);
+            check(file_path, col_type, col_name, "[2019-04-17 04:00:00]", expected_rows);
         }
     }
 }
