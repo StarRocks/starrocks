@@ -62,6 +62,7 @@ import com.starrocks.thrift.TGetTablesResult;
 import com.starrocks.thrift.TImmutablePartitionRequest;
 import com.starrocks.thrift.TImmutablePartitionResult;
 import com.starrocks.thrift.TListMaterializedViewStatusResult;
+import com.starrocks.thrift.TListRecycleBinCatalogsInfo;
 import com.starrocks.thrift.TListRecycleBinCatalogsParams;
 import com.starrocks.thrift.TListRecycleBinCatalogsResult;
 import com.starrocks.thrift.TListTableStatusResult;
@@ -1334,8 +1335,32 @@ public class FrontendServiceImplTest {
     }
 
     @Test
-    public void testlistRecycleBinCatalogs() throws TException {
+    public void testlistRecycleBinCatalogs() throws Exception {
         FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+
+        starRocksAssert.withDatabase("test").useDatabase("test")
+                    .withTable("CREATE TABLE tblRecycleBinCatalogs (\n" +
+                                "    event_day DATETIME NOT NULL,\n" +
+                                "    site_id INT DEFAULT '10',\n" +
+                                "    city_code VARCHAR(100),\n" +
+                                "    user_name VARCHAR(32) DEFAULT '',\n" +
+                                "    pv BIGINT DEFAULT '0'\n" +
+                                ")\n" +
+                                "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                                "DISTRIBUTED BY RANDOM\n" +
+                                "PROPERTIES(\n" +
+                                "    \"replication_num\" = \"1\"\n" +
+                                ");");
+
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String dropSQL = "drop table if exists tblRecycleBinCatalogs";
+        try {
+            DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
+        } catch (Exception ex) {
+
+        }
+
         TListRecycleBinCatalogsParams request = new TListRecycleBinCatalogsParams();
         TUserIdentity userIdentity = new TUserIdentity();
         userIdentity.setUsername("test4");
@@ -1344,5 +1369,14 @@ public class FrontendServiceImplTest {
         request.setUser_ident(userIdentity);
 
         TListRecycleBinCatalogsResult result = impl.listRecycleBinCatalogs(request);
+        List<TListRecycleBinCatalogsInfo> tCatalogInfo = result.recyclebin_catalogs;
+        boolean matched = false;
+        for (int i = 0; i < tCatalogInfo.size(); ++i) {
+            TListRecycleBinCatalogsInfo item = tCatalogInfo.get(i);
+            if (item.getName().equals("tblRecycleBinCatalogs")) {
+                matched = true;
+            }
+        }
+        Assert.assertEquals(true, matched);
     }
 }

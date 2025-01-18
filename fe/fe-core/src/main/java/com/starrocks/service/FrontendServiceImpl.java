@@ -3015,6 +3015,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         LOG.info("listRecycleBinCatalogs params={}", params);
         UserIdentity userIdentity = UserIdentity.fromThrift(params.getUser_ident());
+        if (!userIdentity.equals(UserIdentity.ROOT)) {
+            throw new TException("operation can be executed only by root user");
+        }
         TListRecycleBinCatalogsResult result = new TListRecycleBinCatalogsResult();
         List<List<String>> rowSet = GlobalStateMgr.getCurrentState().getRecycleBin().getCatalogRecycleBinInfo();
 
@@ -3022,9 +3025,15 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             TListRecycleBinCatalogsInfo info = new TListRecycleBinCatalogsInfo();
             info.setType(record.get(0));
             info.setName(record.get(1));
-            info.setDbid(Long.parseLong(record.get(2).isEmpty() ? "-1" : record.get(2)));
-            info.setTableid(Long.parseLong(record.get(3).isEmpty() ? "-1" : record.get(3)));
-            info.setPartitionid(Long.parseLong(record.get(4).isEmpty() ? "-1" : record.get(4)));
+            if (!record.get(2).isEmpty()) {
+                info.setDbid(Long.parseLong(record.get(2)));
+            }
+            if (!record.get(3).isEmpty()) {
+                info.setTableid(Long.parseLong(record.get(3)));
+            }
+            if (!record.get(4).isEmpty()) {
+                info.setPartitionid(Long.parseLong(record.get(4)));
+            }
             info.setDroptime(record.get(5));
 
             result.addToRecyclebin_catalogs(info);
