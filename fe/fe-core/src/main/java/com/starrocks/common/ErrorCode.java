@@ -269,7 +269,7 @@ public enum ErrorCode {
     ERR_ACCESS_DENIED_FOR_EXTERNAL_ACCESS_CONTROLLER(5204, new byte[] {'4', '2', '0', '0', '0'},
             "Access denied; you need (at least one of) the %s privilege(s) on %s%s for this operation."),
     ERR_FAILED_ATTEMPT(5204, new byte[] {'H', 'Y', '0', '0', '0'},
-            "Access denied for user '%s'@'%s'. " + "Account is blocked for %d seconds due to %d consecutive failed logins."),
+            "Access denied for user '%s'@'%s'. " + "Account is temporarily locked due to %d consecutive failed logins."),
 
     /**
      * 5300 - 5399: Lock and Transaction

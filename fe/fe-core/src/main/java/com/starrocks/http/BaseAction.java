@@ -323,8 +323,8 @@ public abstract class BaseAction implements IAction {
         if (currentUser == null) {
             String userAndHost = authInfo.fullUserName.concat("@").concat(authInfo.remoteIp);
             if (globalStateMgr.getAuthenticationMgr().isUserLocked(userAndHost)) {
-                throw new AccessDeniedException("Access denied for " + userAndHost + ". Locked for " +
-                    globalStateMgr.getAuthenticationMgr().getRemainingLockedTime(userAndHost) + " seconds.");
+                throw new AccessDeniedException("Access denied for " + userAndHost +
+                    ". Account is temporarily locked due to multiple failed logins.");
             }
             throw new AccessDeniedException("Access denied for "
                     + userAndHost);

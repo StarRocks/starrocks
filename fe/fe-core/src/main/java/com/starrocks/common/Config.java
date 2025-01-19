@@ -2706,12 +2706,6 @@ public class Config extends ConfigBase {
     public static long password_lock_interval_seconds = 600L;
 
     /**
-     * Duration after which user failed login attempts is reset.
-     */
-    @ConfField(mutable = true)
-    public static long password_lock_reset_interval_seconds = 86400L;
-
-    /**
      * If set to false, when the load is empty, success is returned.
      * Otherwise, `No partitions have data available for loading` is returned.
      */

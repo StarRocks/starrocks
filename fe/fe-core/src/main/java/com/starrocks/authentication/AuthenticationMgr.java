@@ -23,6 +23,7 @@ import com.starrocks.authorization.UserPrivilegeCollectionV2;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
+import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.MapEntryConsumer;
@@ -49,8 +50,11 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TimerTask;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class AuthenticationMgr {
@@ -66,6 +70,8 @@ public class AuthenticationMgr {
     private static final Map<String, Long> FAIL_TIME = new ConcurrentHashMap<>();
     private static final Map<String, Integer> FAIL_COUNT = new ConcurrentHashMap<>();
     private static final Map<String, Long> LOCKED_TIMES = new ConcurrentHashMap<>();
+
+    private final ScheduledThreadPoolExecutor timer;
 
     private static class UserAuthInfoTreeMap extends TreeMap<UserIdentity, UserAuthenticationInfo> {
         public UserAuthInfoTreeMap() {
@@ -118,6 +124,9 @@ public class AuthenticationMgr {
     // set by load() to distinguish brand-new environment with upgraded environment
     private boolean isLoaded = false;
 
+    // Timestamp to track last invocation
+    private long lastFailedAttemptsCheckTime = 0;
+
     public AuthenticationMgr() {
         // default plugin
         AuthenticationProviderFactory.installPlugin(
@@ -139,6 +148,8 @@ public class AuthenticationMgr {
         info.setPassword(MysqlPassword.EMPTY_PASSWORD);
         userToAuthenticationInfo.put(UserIdentity.ROOT, info);
         userNameToProperty.put(UserIdentity.ROOT.getUser(), new UserProperty());
+        timer = ThreadPoolManager.newDaemonScheduledThreadPool(1, "AuthenticationMgr-LoginAttempt-Cleaner", true);
+        timer.scheduleAtFixedRate(new AuthenticationMgr.LoginAttemptCleaner(), 1L, 1L, TimeUnit.DAYS);
     }
 
     private void readLock() {
@@ -163,6 +174,17 @@ public class AuthenticationMgr {
             return userToAuthenticationInfo.containsKey(userIdentity);
         } finally {
             readUnlock();
+        }
+    }
+
+    private class LoginAttemptCleaner extends TimerTask {
+        @Override
+        public void run() {
+            synchronized (AuthenticationMgr.this) {
+                for (Map.Entry<String, Long> entry : FAIL_TIME.entrySet()) {
+                    clearFailedAttemptRecords(entry.getKey());
+                }
+            }
         }
     }
 
@@ -252,9 +274,12 @@ public class AuthenticationMgr {
         return null;
     }
 
-    public UserIdentity checkPassword(String remoteUser, String remoteHost, byte[] remotePasswd, byte[] randomString) {
-        UserIdentity authenticatedUser = null;
-        String userAndHost = remoteUser.concat("@").concat(remoteHost);
+    private void processFailedLoginAttempts() {
+        if (System.currentTimeMillis() - lastFailedAttemptsCheckTime < 30000) {
+            return;
+        }
+        lastFailedAttemptsCheckTime = System.currentTimeMillis();
+
         for (Map.Entry<String, Long> attempt : FAIL_TIME.entrySet()) {
             if (((System.currentTimeMillis() - attempt.getValue()) / 1000) > Config.password_lock_interval_seconds) {
                 if (!isUserLocked(attempt.getKey())) {
@@ -266,6 +291,12 @@ public class AuthenticationMgr {
                 }
             }
         }
+    }
+
+    public UserIdentity checkPassword(String remoteUser, String remoteHost, byte[] remotePasswd, byte[] randomString) {
+        UserIdentity authenticatedUser = null;
+        String userAndHost = remoteUser.concat("@").concat(remoteHost);
+        processFailedLoginAttempts();
         if (!allowLoginAttempt(userAndHost)) {
             return null;
         }
@@ -277,7 +308,6 @@ public class AuthenticationMgr {
                 clearFailedAttemptRecords(userAndHost);
             }
         }
-        resetFailedAttemptRecords();
         return authenticatedUser;
     }
 
@@ -309,14 +339,6 @@ public class AuthenticationMgr {
             FAIL_TIME.remove(userAndHost);
             FAIL_COUNT.remove(userAndHost);
             LOCKED_TIMES.remove(userAndHost);
-        }
-    }
-
-    private void resetFailedAttemptRecords() {
-        for (Map.Entry<String, Long> entry : FAIL_TIME.entrySet()) {
-            if (((System.currentTimeMillis() - entry.getValue()) / 1000) > Config.password_lock_reset_interval_seconds) {
-                clearFailedAttemptRecords(entry.getKey());
-            }
         }
     }
 

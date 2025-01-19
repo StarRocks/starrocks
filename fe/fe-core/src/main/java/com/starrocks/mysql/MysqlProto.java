@@ -81,7 +81,6 @@ public class MysqlProto {
                 String userAndHost = user.concat("@").concat(remoteIp);
                 if (authenticationManager.isUserLocked(userAndHost)) {
                     ErrorReport.report(ErrorCode.ERR_FAILED_ATTEMPT, user, remoteIp,
-                            authenticationManager.getRemainingLockedTime(userAndHost),
                             Config.max_failed_login_attempts);
                 } else {
                     ErrorReport.report(ErrorCode.ERR_AUTHENTICATION_FAIL, user, usePasswd);
