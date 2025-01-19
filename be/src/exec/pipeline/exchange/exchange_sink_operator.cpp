@@ -31,6 +31,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/local_pass_through_buffer.h"
 #include "runtime/runtime_state.h"
+#include "serde/compress_strategy.h"
 #include "serde/protobuf_serde.h"
 #include "service/brpc.h"
 #include "util/compression/block_compression.h"
@@ -397,7 +398,13 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
     }
     // Set compression type according to query options
     if (state->query_options().__isset.transmission_compression_type) {
-        _compress_type = CompressionUtils::to_compression_pb(state->query_options().transmission_compression_type);
+        TCompressionType::type type = state->query_options().transmission_compression_type;
+        if (type == TCompressionType::AUTO) {
+            _compress_type = CompressionTypePB::LZ4;
+            _compress_strategy = std::make_shared<serde::CompressStrategy>();
+        } else {
+            _compress_type = CompressionUtils::to_compression_pb(state->query_options().transmission_compression_type);
+        }
     } else if (config::compress_rowbatches) {
         // If transmission_compression_type is not set, use compress_rowbatches to check if
         // compress transmitted data.
@@ -436,7 +443,7 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
     std::shuffle(_channel_indices.begin(), _channel_indices.end(), std::mt19937(std::random_device()()));
 
     _bytes_pass_through_counter = ADD_COUNTER(_unique_metrics, "BytesPassThrough", TUnit::BYTES);
-    _sender_input_bytes_counter = ADD_COUNTER(_unique_metrics, "SenderInputBytes", TUnit::BYTES);
+    _raw_input_bytes_counter = ADD_COUNTER(_unique_metrics, "RawInputBytes", TUnit::BYTES);
     _serialized_bytes_counter = ADD_COUNTER(_unique_metrics, "SerializedBytes", TUnit::BYTES);
     _compressed_bytes_counter = ADD_COUNTER(_unique_metrics, "CompressedBytes", TUnit::BYTES);
 
@@ -455,7 +462,7 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
 
     _shuffle_channel_ids.resize(state->chunk_size());
     _row_indexes.resize(state->chunk_size());
-
+    _buffer->attach_observer(state, observer());
     return Status::OK();
 }
 
@@ -666,10 +673,11 @@ void ExchangeSinkOperator::close(RuntimeState* state) {
 
 Status ExchangeSinkOperator::serialize_chunk(const Chunk* src, ChunkPB* dst, bool* is_first_chunk, int num_receivers) {
     VLOG_ROW << "[ExchangeSinkOperator] serializing " << src->num_rows() << " rows";
-    auto send_input_bytes = serde::ProtobufChunkSerde::max_serialized_size(*src, nullptr);
-    COUNTER_UPDATE(_sender_input_bytes_counter, send_input_bytes * num_receivers);
+    auto unserialized_bytes = src->bytes_usage();
+    COUNTER_UPDATE(_raw_input_bytes_counter, unserialized_bytes * num_receivers);
+    int64_t serialization_time_ns = 0;
     {
-        SCOPED_TIMER(_serialize_chunk_timer);
+        ScopedTimer<MonotonicStopWatch> _timer(_serialize_chunk_timer);
         // We only serialize chunk meta for first chunk
         if (*is_first_chunk) {
             _encode_context = serde::EncodeContext::get_encode_context_shared_ptr(src->columns().size(), _encode_level);
@@ -684,6 +692,7 @@ Status ExchangeSinkOperator::serialize_chunk(const Chunk* src, ChunkPB* dst, boo
             RETURN_IF_ERROR(res);
             res->Swap(dst);
         }
+        serialization_time_ns = _timer.elapsed_time();
     }
     if (_encode_context) {
         _encode_context->set_encode_levels_in_pb(dst);
@@ -699,8 +708,12 @@ Status ExchangeSinkOperator::serialize_chunk(const Chunk* src, ChunkPB* dst, boo
     }
 
     // try compress the ChunkPB data
-    if (_compress_codec != nullptr && serialized_size > 0) {
-        SCOPED_TIMER(_compress_timer);
+    bool use_compression = true;
+    if (_compress_strategy) {
+        use_compression = _compress_strategy->decide();
+    }
+    if (_compress_codec != nullptr && serialized_size > 0 && use_compression) {
+        ScopedTimer<MonotonicStopWatch> _timer(_compress_timer);
 
         if (use_compression_pool(_compress_codec->type())) {
             Slice compressed_slice;
@@ -720,14 +733,20 @@ Status ExchangeSinkOperator::serialize_chunk(const Chunk* src, ChunkPB* dst, boo
             RETURN_IF_ERROR(_compress_codec->compress(input, &compressed_slice));
             _compression_scratch.resize(compressed_slice.size);
         }
+        if (_compress_strategy) {
+            int64_t compression_time_ns = _timer.elapsed_time();
+            _compress_strategy->feedback(serialized_size, _compression_scratch.size(), serialization_time_ns,
+                                         compression_time_ns);
+        }
 
         COUNTER_UPDATE(_compressed_bytes_counter, _compression_scratch.size() * num_receivers);
         double compress_ratio = (static_cast<double>(serialized_size)) / _compression_scratch.size();
+        VLOG_ROW << "chunk compression: uncompressed size: " << serialized_size
+                 << ", compressed size: " << _compression_scratch.size();
         if (LIKELY(compress_ratio > config::rpc_compress_ratio_threshold)) {
             dst->mutable_data()->swap(reinterpret_cast<std::string&>(_compression_scratch));
             dst->set_compress_type(_compress_type);
         }
-        VLOG_ROW << "uncompressed size: " << serialized_size << ", compressed size: " << _compression_scratch.size();
     }
     return Status::OK();
 }

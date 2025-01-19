@@ -47,6 +47,17 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.UserAuthenticationInfo;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.ActionSet;
+import com.starrocks.authorization.AuthorizationMgr;
+import com.starrocks.authorization.CatalogPEntryObject;
+import com.starrocks.authorization.DbPEntryObject;
+import com.starrocks.authorization.ObjectType;
+import com.starrocks.authorization.PrivilegeBuiltinConstants;
+import com.starrocks.authorization.PrivilegeEntry;
+import com.starrocks.authorization.PrivilegeException;
+import com.starrocks.authorization.PrivilegeType;
+import com.starrocks.authorization.TablePEntryObject;
 import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.BackupJob;
 import com.starrocks.backup.Repository;
@@ -118,18 +129,6 @@ import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.streamload.StreamLoadFunctionalExprProvider;
 import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.meta.BlackListSql;
-import com.starrocks.meta.SqlBlackList;
-import com.starrocks.privilege.AccessDeniedException;
-import com.starrocks.privilege.ActionSet;
-import com.starrocks.privilege.AuthorizationMgr;
-import com.starrocks.privilege.CatalogPEntryObject;
-import com.starrocks.privilege.DbPEntryObject;
-import com.starrocks.privilege.ObjectType;
-import com.starrocks.privilege.PrivilegeBuiltinConstants;
-import com.starrocks.privilege.PrivilegeEntry;
-import com.starrocks.privilege.PrivilegeException;
-import com.starrocks.privilege.PrivilegeType;
-import com.starrocks.privilege.TablePEntryObject;
 import com.starrocks.proto.FailPointTriggerModeType;
 import com.starrocks.proto.PFailPointInfo;
 import com.starrocks.proto.PFailPointTriggerMode;
@@ -360,7 +359,7 @@ public class ShowExecutor {
                         }
 
                         materializedViews.add(mvTable);
-                    } else if (Table.TableType.OLAP == table.getType()) {
+                    } else if (table.isOlapOrCloudNativeTable()) {
                         OlapTable olapTable = (OlapTable) table;
                         List<MaterializedIndexMeta> visibleMaterializedViews = olapTable.getVisibleIndexMetas();
                         long baseIdx = olapTable.getBaseIndexId();
@@ -576,7 +575,7 @@ public class ShowExecutor {
         @Override
         public ShowResultSet visitShowTableStatusStatement(ShowTableStatusStmt statement, ConnectContext context) {
             List<List<String>> rows = Lists.newArrayList();
-            Database db = context.getGlobalStateMgr().getLocalMetastore().getDb(statement.getDb());
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(statement.getDb());
             ZoneId currentTimeZoneId = TimeUtils.getTimeZone().toZoneId();
             if (db != null) {
                 Locker locker = new Locker();
@@ -593,8 +592,8 @@ public class ShowExecutor {
                         }
 
                         try {
-                            Authorizer.checkAnyActionOnTable(context.getCurrentUserIdentity(),
-                                    context.getCurrentRoleIds(), new TableName(db.getFullName(), table.getName()));
+                            Authorizer.checkAnyActionOnTableLikeObject(context.getCurrentUserIdentity(),
+                                    context.getCurrentRoleIds(), db.getFullName(), table);
                         } catch (AccessDeniedException e) {
                             continue;
                         }
@@ -1853,10 +1852,10 @@ public class ShowExecutor {
 
             // restore info for external catalog
             AbstractJob jobI = GlobalStateMgr.getCurrentState().getBackupHandler().getJob(-1L);
-            if (jobI != null && jobI instanceof RestoreJob) {  
+            if (jobI != null && jobI instanceof RestoreJob) {
                 RestoreJob restoreJob = (RestoreJob) jobI;
                 List<String> info = restoreJob.getInfo();
-                infos.add(info); 
+                infos.add(info);
             }
 
             return new ShowResultSet(statement.getMetaData(), infos);
@@ -2234,10 +2233,10 @@ public class ShowExecutor {
         @Override
         public ShowResultSet visitShowSqlBlackListStatement(ShowSqlBlackListStmt statement, ConnectContext context) {
             List<List<String>> rows = new ArrayList<>();
-            for (Map.Entry<String, BlackListSql> entry : SqlBlackList.getInstance().sqlBlackListMap.entrySet()) {
+            for (BlackListSql entry : GlobalStateMgr.getCurrentState().getSqlBlackList().getBlackLists()) {
                 List<String> oneSql = new ArrayList<>();
-                oneSql.add(String.valueOf(entry.getValue().id));
-                oneSql.add(entry.getKey());
+                oneSql.add(String.valueOf(entry.id));
+                oneSql.add(entry.pattern.toString());
                 rows.add(oneSql);
             }
             return new ShowResultSet(statement.getMetaData(), rows);
@@ -2380,7 +2379,14 @@ public class ShowExecutor {
         public ShowResultSet visitShowCatalogsStatement(ShowCatalogsStmt statement, ConnectContext context) {
             GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
             CatalogMgr catalogMgr = globalStateMgr.getCatalogMgr();
+            PatternMatcher matcher = null;
+            if (statement.getPattern() != null) {
+                matcher = PatternMatcher.createMysqlPattern(statement.getPattern(),
+                        CaseSensibility.CONFIG.getCaseSensibility());
+            }
+            PatternMatcher finalMatcher = matcher;
             List<List<String>> rowSet = catalogMgr.getCatalogsInfo().stream()
+                    .filter(rowMatch -> finalMatcher == null || finalMatcher.match(rowMatch.get(0)))
                     .filter(row -> {
                                 if (!InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME.equals(row.get(0))) {
 
@@ -2395,7 +2401,7 @@ public class ShowExecutor {
                                     return true;
                                 }
                                 return true;
-                            }
+                    }
                     )
                     .sorted(Comparator.comparing(o -> o.get(0))).collect(Collectors.toList());
             return new ShowResultSet(statement.getMetaData(), rowSet);

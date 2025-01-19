@@ -49,8 +49,9 @@ void QuerySharedDriverQueue::put_back(const DriverRawPtr driver) {
     driver->set_driver_queue_level(level);
     {
         std::lock_guard<std::mutex> lock(_global_mutex);
+        DCHECK(!driver->is_in_ready());
         _queues[level].put(driver);
-        driver->set_in_ready_queue(true);
+        driver->set_in_ready(true);
         driver->set_in_queue(this);
         driver->update_peak_driver_queue_size_counter(_num_drivers);
         _cv.notify_one();
@@ -67,7 +68,7 @@ void QuerySharedDriverQueue::put_back(const std::vector<DriverRawPtr>& drivers) 
     std::lock_guard<std::mutex> lock(_global_mutex);
     for (int i = 0; i < drivers.size(); i++) {
         _queues[levels[i]].put(drivers[i]);
-        drivers[i]->set_in_ready_queue(true);
+        drivers[i]->set_in_ready(true);
         drivers[i]->set_in_queue(this);
         drivers[i]->update_peak_driver_queue_size_counter(_num_drivers);
         _cv.notify_one();
@@ -117,7 +118,7 @@ StatusOr<DriverRawPtr> QuerySharedDriverQueue::take(const bool block) {
         if (queue_idx >= 0) {
             // record queue's index to accumulate time for it.
             driver_ptr = _queues[queue_idx].take(false);
-            driver_ptr->set_in_ready_queue(false);
+            driver_ptr->set_in_ready(false);
 
             --_num_drivers;
         }
@@ -132,7 +133,7 @@ void QuerySharedDriverQueue::cancel(DriverRawPtr driver) {
     if (_is_closed) {
         return;
     }
-    if (!driver->is_in_ready_queue()) {
+    if (!driver->is_in_ready()) {
         return;
     }
     int level = driver->get_driver_queue_level();
@@ -174,7 +175,7 @@ void SubQuerySharedDriverQueue::put(const DriverRawPtr driver) {
 
 void SubQuerySharedDriverQueue::cancel(const DriverRawPtr driver) {
     if (cancelled_set.count(driver) == 0) {
-        DCHECK(driver->is_in_ready_queue());
+        DCHECK(driver->is_in_ready());
         pending_cancel_queue.emplace(driver);
     }
 }
@@ -291,7 +292,7 @@ void WorkGroupDriverQueue::cancel(DriverRawPtr driver) {
     if (_is_closed) {
         return;
     }
-    if (!driver->is_in_ready_queue()) {
+    if (!driver->is_in_ready()) {
         return;
     }
     auto* wg_entity = driver->workgroup()->driver_sched_entity();

@@ -254,6 +254,7 @@ fi
 if [ ! -f $PATCHED_MARK ] && [ $GLOG_SOURCE == "glog-0.7.1" ]; then
     patch -p1 < $TP_PATCH_DIR/glog-0.7.1.patch
     patch -p1 < $TP_PATCH_DIR/glog-0.7.1-add-handler-after-output-log.patch
+    patch -p1 < $TP_PATCH_DIR/glog-0.7.1-lwp.patch
     touch $PATCHED_MARK
 fi
 cd -
@@ -542,6 +543,17 @@ if [[ -d $TP_SOURCE_DIR/$BITSHUFFLE_SOURCE ]] ; then
     fi
     cd -
     echo "Finished patching $BITSHUFFLE_SOURCE"
+fi
+
+# patch flatbuffers
+if [[ -d $TP_SOURCE_DIR/$FLATBUFFERS_SOURCE ]] ; then
+    cd $TP_SOURCE_DIR/$FLATBUFFERS_SOURCE
+    if [ ! -f "$PATCHED_MARK" ] && [[ $FLATBUFFERS_SOURCE == "flatbuffers-1.10.0" ]] ; then
+        patch -p1 < "$TP_PATCH_DIR/flat-buffers-1.10.0-no-stringop-overread.patch"
+        touch "$PATCHED_MARK"
+    fi
+    cd -
+    echo "Finished patching $FLATBUFFERS_SOURCE"
 fi
 
 #patch clucene

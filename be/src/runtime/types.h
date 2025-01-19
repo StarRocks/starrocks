@@ -351,6 +351,7 @@ struct TypeDescriptor {
     size_t get_array_depth_limit() const;
 
     static TypeDescriptor promote_types(const TypeDescriptor& type1, const TypeDescriptor& type2);
+    static TypeDescriptor promote_decimal_type(int precision, int scale);
 
 private:
     /// Used to create a possibly nested type from the flattened Thrift representation.
@@ -362,6 +363,21 @@ private:
     TypeDescriptor(const google::protobuf::RepeatedPtrField<PTypeNode>& types, int* idx);
     void to_protobuf(PTypeDesc* proto_type) const;
 };
+
+static const TypeDescriptor TYPE_UNKNOWN_DESC = TypeDescriptor(LogicalType::TYPE_UNKNOWN);
+static const TypeDescriptor TYPE_BOOLEAN_DESC = TypeDescriptor{LogicalType::TYPE_BOOLEAN};
+static const TypeDescriptor TYPE_SMALLINT_DESC = TypeDescriptor{LogicalType::TYPE_SMALLINT};
+static const TypeDescriptor TYPE_INT_DESC = TypeDescriptor(LogicalType::TYPE_INT);
+static const TypeDescriptor TYPE_BIGINT_DESC = TypeDescriptor(LogicalType::TYPE_BIGINT);
+static const TypeDescriptor TYPE_TIME_DESC = TypeDescriptor(LogicalType::TYPE_TIME);
+static const TypeDescriptor TYPE_DATE_DESC = TypeDescriptor(LogicalType::TYPE_DATE);
+static const TypeDescriptor TYPE_DATETIME_DESC = TypeDescriptor(LogicalType::TYPE_DATETIME);
+static const TypeDescriptor TYPE_CHAR_DESC = TypeDescriptor::create_char_type(TypeDescriptor::MAX_CHAR_LENGTH);
+static const TypeDescriptor TYPE_VARCHAR_DESC = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+static const TypeDescriptor TYPE_VARBINARY_DESC =
+        TypeDescriptor::create_varbinary_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+
+static const TypeDescriptor TYPE_INT_ARRAY_DESC = TypeDescriptor::create_array_type(TYPE_INT_DESC);
 
 inline std::ostream& operator<<(std::ostream& os, const TypeDescriptor& type) {
     os << type.debug_string();

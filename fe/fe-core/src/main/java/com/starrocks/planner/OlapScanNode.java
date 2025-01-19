@@ -542,6 +542,8 @@ public class OlapScanNode extends ScanNode {
                                       long localBeId) throws StarRocksException {
         boolean enableQueryTabletAffinity =
                 ConnectContext.get() != null && ConnectContext.get().getSessionVariable().isEnableQueryTabletAffinity();
+        boolean skipDiskCache = ConnectContext.get() != null && ConnectContext.get().getSessionVariable().isSkipLocalDiskCache();
+        boolean skipPageCache = ConnectContext.get() != null && ConnectContext.get().getSessionVariable().isSkipPageCache();
         int logNum = 0;
         int schemaHash = olapTable.getSchemaHashByIndexId(index.getId());
         String schemaHashStr = String.valueOf(schemaHash);
@@ -649,6 +651,8 @@ public class OlapScanNode extends ScanNode {
                 scanRangeLocations.addToLocations(scanRangeLocation);
                 internalRange.addToHosts(new TNetworkAddress(ip, port));
                 internalRange.setFill_data_cache(fillDataCache);
+                internalRange.setSkip_page_cache(skipPageCache);
+                internalRange.setSkip_disk_cache(skipDiskCache);
                 tabletIsNull = false;
 
                 // for CBO
@@ -1333,6 +1337,8 @@ public class OlapScanNode extends ScanNode {
     @Override
     public void normalizeConjuncts(FragmentNormalizer normalizer, TNormalPlanNode planNode, List<Expr> conjuncts) {
         if (!normalizer.isProcessingLeftNode()) {
+            // take column names of HashJoin RHS into cache digest computation
+            associateSlotIdsWithColumns(normalizer, planNode, Optional.empty());
             normalizeConjunctsNonLeft(normalizer, planNode);
             return;
         }

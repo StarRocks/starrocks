@@ -18,7 +18,9 @@
 
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/Types_types.h"
+#include "storage/predicate_parser.h"
 #include "testutil/assert.h"
+#include "testutil/exprs_test_helper.h"
 #include "types/logical_type.h"
 
 namespace starrocks::parquet {
@@ -30,84 +32,88 @@ void ParquetUTBase::create_conjunct_ctxs(ObjectPool* pool, RuntimeState* runtime
     ASSERT_OK(Expr::open(*conjunct_ctxs, runtime_state));
 }
 
-void ParquetUTBase::append_int_conjunct(TExprOpcode::type opcode, SlotId slot_id, int value,
-                                        std::vector<TExpr>* tExprs) {
-    std::vector<TExprNode> nodes;
-
-    TExprNode node0;
-    node0.node_type = TExprNodeType::BINARY_PRED;
-    node0.opcode = opcode;
-    node0.child_type = TPrimitiveType::INT;
-    node0.num_children = 2;
-    node0.__isset.opcode = true;
-    node0.__isset.child_type = true;
-    node0.type = gen_type_desc(TPrimitiveType::BOOLEAN);
-    nodes.emplace_back(node0);
-
-    TExprNode node1;
-    node1.node_type = TExprNodeType::SLOT_REF;
-    node1.type = gen_type_desc(TPrimitiveType::INT);
-    node1.num_children = 0;
-    TSlotRef t_slot_ref = TSlotRef();
-    t_slot_ref.slot_id = slot_id;
-    t_slot_ref.tuple_id = 0;
-    node1.__set_slot_ref(t_slot_ref);
-    node1.is_nullable = true;
-    nodes.emplace_back(node1);
-
-    TExprNode node2;
-    node2.node_type = TExprNodeType::INT_LITERAL;
-    node2.type = gen_type_desc(TPrimitiveType::INT);
-    node2.num_children = 0;
-    TIntLiteral int_literal;
-    int_literal.value = value;
-    node2.__set_int_literal(int_literal);
-    node2.is_nullable = false;
-    nodes.emplace_back(node2);
+void ParquetUTBase::append_decimal_conjunct(TExprOpcode::type opcode, SlotId slot_id, const std::string& value,
+                                            std::vector<TExpr>* tExprs) {
+    TExprNode binary_pred = ExprsTestHelper::create_binary_pred_node(TPrimitiveType::DECIMAL128, opcode);
+    TExprNode decimal_col_ref = ExprsTestHelper::create_slot_expr_node_t<TYPE_DECIMAL128>(0, slot_id, true);
+    TExprNode decimal_literal = ExprsTestHelper::create_literal<TYPE_DECIMAL128, std::string>(value, false);
 
     TExpr t_expr;
-    t_expr.nodes = nodes;
+    t_expr.nodes.emplace_back(binary_pred);
+    t_expr.nodes.emplace_back(decimal_col_ref);
+    t_expr.nodes.emplace_back(decimal_literal);
+
+    tExprs->emplace_back(t_expr);
+}
+
+void ParquetUTBase::append_smallint_conjunct(TExprOpcode::type opcode, SlotId slot_id, int value,
+                                             std::vector<TExpr>* tExprs) {
+    TExprNode pred_node = ExprsTestHelper::create_binary_pred_node(TPrimitiveType::SMALLINT, opcode);
+    TExprNode smallint_col_ref = ExprsTestHelper::create_slot_expr_node_t<TYPE_SMALLINT>(0, slot_id, true);
+    TExprNode smallint_literal = ExprsTestHelper::create_literal<TYPE_SMALLINT, int32_t>(value, false);
+
+    TExpr t_expr;
+    t_expr.nodes.emplace_back(pred_node);
+    t_expr.nodes.emplace_back(smallint_col_ref);
+    t_expr.nodes.emplace_back(smallint_literal);
+
+    tExprs->emplace_back(t_expr);
+}
+
+void ParquetUTBase::append_int_conjunct(TExprOpcode::type opcode, SlotId slot_id, int value,
+                                        std::vector<TExpr>* tExprs) {
+    TExprNode pred_node = ExprsTestHelper::create_binary_pred_node(TPrimitiveType::INT, opcode);
+    TExprNode int_col_ref = ExprsTestHelper::create_slot_expr_node_t<TYPE_INT>(0, slot_id, true);
+    TExprNode int_literal = ExprsTestHelper::create_literal<TYPE_INT, int32_t>(value, false);
+
+    TExpr t_expr;
+    t_expr.nodes.emplace_back(pred_node);
+    t_expr.nodes.emplace_back(int_col_ref);
+    t_expr.nodes.emplace_back(int_literal);
+
+    tExprs->emplace_back(t_expr);
+}
+
+void ParquetUTBase::append_bigint_conjunct(TExprOpcode::type opcode, SlotId slot_id, int64_t value,
+                                           std::vector<TExpr>* tExprs) {
+    TExprNode pred_node = ExprsTestHelper::create_binary_pred_node(TPrimitiveType::BIGINT, opcode);
+    TExprNode int_col_ref = ExprsTestHelper::create_slot_expr_node_t<TYPE_BIGINT>(0, slot_id, true);
+    TExprNode int_literal = ExprsTestHelper::create_literal<TYPE_BIGINT, int64_t>(value, false);
+
+    TExpr t_expr;
+    t_expr.nodes.emplace_back(pred_node);
+    t_expr.nodes.emplace_back(int_col_ref);
+    t_expr.nodes.emplace_back(int_literal);
+
+    tExprs->emplace_back(t_expr);
+}
+
+void ParquetUTBase::append_datetime_conjunct(TExprOpcode::type opcode, SlotId slot_id, const std::string& value,
+                                             std::vector<TExpr>* tExprs) {
+    TExprNode pred_node = ExprsTestHelper::create_binary_pred_node(TPrimitiveType::DATETIME, opcode);
+    TExprNode datetime_col_ref = ExprsTestHelper::create_slot_expr_node_t<TYPE_DATETIME>(0, slot_id, true);
+    TExprNode datetime_literal = ExprsTestHelper::create_literal<TYPE_DATETIME>(value, false);
+
+    TExpr t_expr;
+    t_expr.nodes.emplace_back(pred_node);
+    t_expr.nodes.emplace_back(datetime_col_ref);
+    t_expr.nodes.emplace_back(datetime_literal);
 
     tExprs->emplace_back(t_expr);
 }
 
 void ParquetUTBase::append_string_conjunct(TExprOpcode::type opcode, starrocks::SlotId slot_id, std::string value,
                                            std::vector<TExpr>* tExprs) {
-    std::vector<TExprNode> nodes;
+    TTypeDesc varchar_type = ExprsTestHelper::create_varchar_type_desc(10);
 
-    TExprNode node0;
-    node0.node_type = TExprNodeType::BINARY_PRED;
-    node0.opcode = opcode;
-    node0.child_type = TPrimitiveType::VARCHAR;
-    node0.num_children = 2;
-    node0.__isset.opcode = true;
-    node0.__isset.child_type = true;
-    node0.type = gen_type_desc(TPrimitiveType::BOOLEAN);
-    nodes.emplace_back(node0);
-
-    TExprNode node1;
-    node1.node_type = TExprNodeType::SLOT_REF;
-    node1.type = gen_type_desc(TPrimitiveType::VARCHAR);
-    node1.num_children = 0;
-    TSlotRef t_slot_ref = TSlotRef();
-    t_slot_ref.slot_id = slot_id;
-    t_slot_ref.tuple_id = 0;
-    node1.__set_slot_ref(t_slot_ref);
-    node1.is_nullable = true;
-    nodes.emplace_back(node1);
-
-    TExprNode node2;
-    node2.node_type = TExprNodeType::STRING_LITERAL;
-    node2.type = gen_type_desc(TPrimitiveType::VARCHAR);
-    node2.num_children = 0;
-    TStringLiteral string_literal;
-    string_literal.value = value;
-    node2.__set_string_literal(string_literal);
-    node2.is_nullable = false;
-    nodes.emplace_back(node2);
+    TExprNode pre_node = ExprsTestHelper::create_binary_pred_node(TPrimitiveType::VARCHAR, opcode);
+    TExprNode varchar_col_ref = ExprsTestHelper::create_slot_expr_node_t<TYPE_VARCHAR>(0, slot_id, true);
+    TExprNode varchar_literal = ExprsTestHelper::create_literal<TYPE_VARCHAR, std::string>(value, false);
 
     TExpr t_expr;
-    t_expr.nodes = nodes;
+    t_expr.nodes.emplace_back(pre_node);
+    t_expr.nodes.emplace_back(varchar_col_ref);
+    t_expr.nodes.emplace_back(varchar_literal);
 
     tExprs->emplace_back(t_expr);
 }
@@ -144,37 +150,11 @@ void ParquetUTBase::create_in_predicate_int_conjunct_ctxs(TExprOpcode::type opco
                                                           std::set<int32_t>& values, std::vector<TExpr>* tExprs) {
     std::vector<TExprNode> nodes;
 
-    TExprNode node0;
-    node0.node_type = TExprNodeType::IN_PRED;
-    node0.opcode = opcode;
-    node0.child_type = TPrimitiveType::INT;
-    node0.num_children = values.size() + 1;
-    node0.__isset.opcode = true;
-    node0.__isset.child_type = true;
-    node0.type = gen_type_desc(TPrimitiveType::BOOLEAN);
-    nodes.emplace_back(node0);
-
-    TExprNode node1;
-    node1.node_type = TExprNodeType::SLOT_REF;
-    node1.type = gen_type_desc(TPrimitiveType::INT);
-    node1.num_children = 0;
-    TSlotRef t_slot_ref = TSlotRef();
-    t_slot_ref.slot_id = slot_id;
-    t_slot_ref.tuple_id = 0;
-    node1.__set_slot_ref(t_slot_ref);
-    node1.is_nullable = true;
-    nodes.emplace_back(node1);
+    nodes.emplace_back(ExprsTestHelper::create_in_pred_node<TYPE_INT>(values.size() + 1));
+    nodes.emplace_back(ExprsTestHelper::create_slot_expr_node_t<TYPE_INT>(0, slot_id, true));
 
     for (int32_t value : values) {
-        TExprNode node;
-        node.node_type = TExprNodeType::INT_LITERAL;
-        node.type = gen_type_desc(TPrimitiveType::INT);
-        node.num_children = 0;
-        TIntLiteral int_literal;
-        int_literal.value = value;
-        node.__set_int_literal(int_literal);
-        node.is_nullable = false;
-        nodes.emplace_back(node);
+        nodes.emplace_back(ExprsTestHelper::create_literal<TYPE_INT, int32_t>(value, false));
     }
 
     TExpr t_expr;
@@ -269,6 +249,25 @@ void ParquetUTBase::create_in_predicate_date_conjunct_ctxs(TExprOpcode::type opc
     t_expr.nodes = nodes;
 
     tExprs->emplace_back(t_expr);
+}
+
+void ParquetUTBase::setup_conjuncts_manager(std::vector<ExprContext*>& conjuncts, TupleDescriptor* tuple_desc,
+                                            RuntimeState* runtime_state, HdfsScannerContext* params) {
+    ScanConjunctsManagerOptions opts;
+    opts.conjunct_ctxs_ptr = &conjuncts;
+    opts.tuple_desc = tuple_desc;
+    opts.obj_pool = runtime_state->obj_pool();
+    opts.runtime_filters = runtime_state->obj_pool()->add(new RuntimeFilterProbeCollector());
+    opts.runtime_state = runtime_state;
+    opts.enable_column_expr_predicate = true;
+    opts.is_olap_scan = false;
+    opts.pred_tree_params = {true, true};
+    params->conjuncts_manager = std::make_unique<ScanConjunctsManager>(std::move(opts));
+    ASSERT_TRUE(params->conjuncts_manager->parse_conjuncts().ok());
+    ConnectorPredicateParser predicate_parser{&params->slot_descs};
+    auto st = params->conjuncts_manager->get_predicate_tree(&predicate_parser, params->predicate_free_pool);
+    ASSERT_TRUE(st.ok());
+    params->predicate_tree = st.value();
 }
 
 } // namespace starrocks::parquet

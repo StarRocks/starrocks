@@ -170,14 +170,15 @@ StarRocks 访问 Iceberg 集群元数据服务的相关参数配置。
 
 有关如何选择用于访问 AWS Glue 的鉴权方式、以及如何在 AWS IAM 控制台配置访问控制策略，参见[访问 AWS Glue 的认证参数](../../integrations/authenticate_to_aws_resources.md#访问-aws-glue-的认证参数)。
 
-##### Tabular
+##### REST
 
-如果您使用 Tabular 作为元数据服务，则必须设置元数据服务的类型为 REST (`"iceberg.catalog.type" = "rest"`)，请按如下配置 `MetastoreParams`：
+如果您使用 REST 作为元数据服务，则必须设置元数据服务的类型为 REST (`"iceberg.catalog.type" = "rest"`)，请按如下配置 `MetastoreParams`：
 
 ```SQL
 "iceberg.catalog.type" = "rest",
 "iceberg.catalog.uri" = "<rest_server_api_endpoint>",
-"iceberg.catalog.credential" = "<credential>",
+"iceberg.catalog.security" = "oauth2",
+"iceberg.catalog.oauth2.credential" = "<credential>",
 "iceberg.catalog.warehouse" = "<identifier_or_path_to_warehouse>"
 ```
 
@@ -186,8 +187,13 @@ StarRocks 访问 Iceberg 集群元数据服务的相关参数配置。
 | 参数                       | 是否必须 | 说明                                                         |
 | -------------------------- | ------ | ------------------------------------------------------------ |
 | iceberg.catalog.type       | 是      | Iceberg 集群所使用的元数据服务的类型。设置为 `rest`。           |
-| iceberg.catalog.uri        | 是      | Tabular 服务 Endpoint 的 URI，如 `https://api.tabular.io/ws`。      |
-| iceberg.catalog.credential | 是      | Tabular 服务的认证信息。                                        |
+| iceberg.catalog.uri        | 是      | REST 服务 Endpoint 的 URI，如 `https://api.tabular.io/ws`。      |
+| iceberg.catalog.security   | 否      | 要使用的授权协议类型。默认值：`NONE`。有效值：`OAUTH2`。使用 `OAUTH2` 需要指定 `token` 或 `credential`。 |
+| iceberg.catalog.oauth2.token | 否    | 用于与服务器交互的 Bearer Token。使用 `OAUTH2` 需要指定 `token` 或 `credential`。示例：`AbCdEf123456`。 |
+| iceberg.catalog.oauth2.credential | 否  | 用于与服务器的 OAuth2 客户端 Credentials Flow 交换 Token 的 Credential。使用 `OAUTH2` 需要指定 `token` 或 `credential`。示例：`AbCdEf123456`。 |
+| iceberg.catalog.oauth2.scope | 否  | 与 REST Catalog 通信时使用的范围。仅在使用 `credential` 时适用。 |
+| iceberg.catalog.oauth2.server-uri | 否  | 从 OAuth2 服务器获取 Token 的端点。 |
+| iceberg.catalog.vended-credentials-enabled | 否  | 是否支持查询嵌套 namespace 下的对象。默认：`true`。|
 | iceberg.catalog.warehouse  | 否      | Catalog 的仓库位置或标志符，如 `s3://my_bucket/warehouse_location` 或 `sandbox`。 |
 
 例如，创建一个名为 `tabular` 的 Iceberg Catalog，使用 Tabular 作为元数据服务：
@@ -202,6 +208,34 @@ PROPERTIES
     "iceberg.catalog.credential" = "t-5Ii8e3FIbT9m0:aaaa-3bbbbbbbbbbbbbbbbbbb",
     "iceberg.catalog.warehouse" = "sandbox"
 );
+```
+
+以下示例创建了一个名为 `smith_polaris` 的 Iceberg Catalog，使用 Polaris 作为元数据服务：
+
+```sql
+CREATE EXTERNAL CATALOG smith_polaris 
+PROPERTIES (   
+    "iceberg.catalog.uri"  = "http://xxx.xx.xx.xxx:8181/api/catalog", 
+    "type"  =  "iceberg",   
+    "iceberg.catalog.type"  =  "rest",   
+    "iceberg.catalog.warehouse" = "starrocks_catalog",
+    "iceberg.catalog.security" = "oauth2",
+    "iceberg.catalog.oauth2.credential" = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "iceberg.catalog.oauth2.scope"='PRINCIPAL_ROLE:ALL'
+ );
+
+# `ns1.ns2.tpch_namespace` 为嵌套 namespace
+create table smith_polaris.`ns1.ns2.tpch_namespace`.tbl (c1 string);
+
+mysql> select * from smith_polaris.`ns1.ns2.tpch_namespace`.tbl;
++------+
+| c1   |
++------+
+| 1    |
+| 2    |
+| 3    |
++------+
+3 rows in set (0.34 sec)
 ```
 
 #### StorageCredentialParams

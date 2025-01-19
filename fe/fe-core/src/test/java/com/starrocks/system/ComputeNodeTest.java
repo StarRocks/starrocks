@@ -23,6 +23,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.HeartbeatResponse.HbStatus;
 import com.starrocks.thrift.TStatusCode;
 import mockit.Expectations;
+import org.json.JSONObject;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -517,5 +518,96 @@ public class ComputeNodeTest {
         Assert.assertEquals(rebootTimeB * 1000, node.getLastStartTime());
 
         Config.heartbeat_retry_times = previousRetryTimes;
+    }
+
+    String removeJsonKeyFromJsonString(String jsonString, String key) {
+        JSONObject jsonObject = new JSONObject(jsonString);
+        jsonObject.remove(key);
+        return jsonObject.toString();
+    }
+
+    @Test
+    public void testComputeNodeStatusUpgradeCompatibility() {
+        long nodeId = 1000;
+        ComputeNode node = new ComputeNode(nodeId, "127.0.0.1", 9050);
+        long rebootTime = System.currentTimeMillis() / 1000 - 60;
+        BackendHbResponse hbResponse = generateHbResponse(node, TStatusCode.OK, rebootTime);
+        Assert.assertTrue(node.handleHbResponse(hbResponse, false));
+        Assert.assertEquals(ComputeNode.Status.OK, node.getStatus());
+        Assert.assertTrue(node.isAlive());
+        Assert.assertTrue(node.isAvailable());
+
+        {
+            String jsonString = GsonUtils.GSON.toJson(node);
+            {
+                // Replay the node from the jsonString, validate the gsonPostProcess doesn't have side effect
+                ComputeNode reloadNode = GsonUtils.GSON.fromJson(jsonString, ComputeNode.class);
+                Assert.assertEquals(ComputeNode.Status.OK, reloadNode.getStatus());
+                Assert.assertTrue(reloadNode.isAlive());
+                Assert.assertTrue(reloadNode.isAvailable());
+                // Receive CN heartbeat, can correctly handle it.
+                hbResponse = generateHbResponse(node, TStatusCode.OK, rebootTime);
+                reloadNode.handleHbResponse(hbResponse, false);
+                Assert.assertEquals(ComputeNode.Status.OK, reloadNode.getStatus());
+                Assert.assertTrue(reloadNode.isAlive());
+                Assert.assertTrue(reloadNode.isAvailable());
+            }
+            // Remove the "status" serialization from the jsonString to simulate the scenario where the node was
+            // upgraded from an old version where there is no "status" field.
+            String reducedJsonString = removeJsonKeyFromJsonString(jsonString, "status");
+            {
+                // Replay the node from the reducedJsonString
+                ComputeNode reloadNode = GsonUtils.GSON.fromJson(reducedJsonString, ComputeNode.class);
+                Assert.assertEquals(ComputeNode.Status.OK, reloadNode.getStatus());
+                Assert.assertTrue(reloadNode.isAlive());
+                Assert.assertTrue(reloadNode.isAvailable());
+                // Receive CN heartbeat, can correctly handle it.
+                hbResponse = generateHbResponse(node, TStatusCode.OK, rebootTime);
+                reloadNode.handleHbResponse(hbResponse, false);
+                Assert.assertEquals(ComputeNode.Status.OK, reloadNode.getStatus());
+                Assert.assertTrue(reloadNode.isAlive());
+                Assert.assertTrue(reloadNode.isAvailable());
+            }
+        }
+
+        // Simulate a dead node and upgrade
+        node.setAlive(false);
+        Assert.assertEquals(ComputeNode.Status.DISCONNECTED, node.getStatus());
+        Assert.assertFalse(node.isAlive());
+        Assert.assertFalse(node.isAvailable());
+
+        {
+            String jsonString = GsonUtils.GSON.toJson(node);
+            {
+                // Replay the node from the jsonString, validate the gsonPostProcess doesn't have side effect
+                ComputeNode reloadNode = GsonUtils.GSON.fromJson(jsonString, ComputeNode.class);
+                Assert.assertEquals(ComputeNode.Status.DISCONNECTED, reloadNode.getStatus());
+                Assert.assertFalse(reloadNode.isAlive());
+                Assert.assertFalse(reloadNode.isAvailable());
+                // Receive CN heartbeat, can correctly handle it.
+                hbResponse = generateHbResponse(node, TStatusCode.OK, rebootTime);
+                reloadNode.handleHbResponse(hbResponse, false);
+                Assert.assertEquals(ComputeNode.Status.OK, reloadNode.getStatus());
+                Assert.assertTrue(reloadNode.isAlive());
+                Assert.assertTrue(reloadNode.isAvailable());
+            }
+            // Remove the "status" serialization from the jsonString to simulate the scenario where the node was
+            // upgraded from an old version where there is no "status" field.
+            String reducedJsonString = removeJsonKeyFromJsonString(jsonString, "status");
+            {
+                // Replay the node from the reducedJsonString
+                ComputeNode reloadNode = GsonUtils.GSON.fromJson(reducedJsonString, ComputeNode.class);
+                // changed to CONNECTING, but it's fine
+                Assert.assertEquals(ComputeNode.Status.CONNECTING, reloadNode.getStatus());
+                Assert.assertFalse(reloadNode.isAlive());
+                Assert.assertFalse(reloadNode.isAvailable());
+                // Receive CN heartbeat, can correctly handle it.
+                hbResponse = generateHbResponse(node, TStatusCode.OK, rebootTime);
+                reloadNode.handleHbResponse(hbResponse, false);
+                Assert.assertEquals(ComputeNode.Status.OK, reloadNode.getStatus());
+                Assert.assertTrue(reloadNode.isAlive());
+                Assert.assertTrue(reloadNode.isAvailable());
+            }
+        }
     }
 }

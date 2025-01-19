@@ -81,4 +81,14 @@ select col_struct from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type whe
 -- test multi-partitions
 select task_id, request_id, parent_request_id from delta_test_${uuid0}.delta_oss_db.sample_multi_partitions where task_id = 'UW-33393' limit 1;
 
+-- test shallow clone table
+select col_tinyint,col_array,col_map,col_struct from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type_shallow_clone where col_tinyint < 6 order by col_tinyint;
+
+-- test struct subfield is null
+select c_int,c_date from delta_test_${uuid0}.delta_oss_db.column_mapping_test where c_nest.c_struct_new.c_int is not null order by c_int nulls last, c_date nulls first;
+select a.c_int, b.c_map, b.c_nest.c_struct, a.c_nest.c_array[6] from delta_test_${uuid0}.delta_oss_db.column_mapping_test a join delta_test_${uuid0}.delta_oss_db.column_mapping_test b on a.c_int = b.c_nest.c_struct_new.c_int order by 1;
+
+-- test table join self
+select a.c_int, b.c_map, b.c_nest.c_struct_new, a.c_nest.c_array[6] from delta_test_${uuid0}.delta_oss_db.delta_nested_type_par a join delta_test_${uuid0}.delta_oss_db.delta_nested_type_par b on a.c_int = b.c_nest.c_struct_new.c_int order by 1;
+
 drop catalog delta_test_${uuid0}

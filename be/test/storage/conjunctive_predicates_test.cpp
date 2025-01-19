@@ -359,7 +359,7 @@ TEST_P(ConjunctiveTestFixture, test_parse_conjuncts) {
     ASSERT_OK(Expr::open(conjunct_ctxs, &_runtime_state));
     auto tablet_schema = TabletSchema::create(create_tablet_schema(ltype));
 
-    OlapScanConjunctsManagerOptions opts;
+    ScanConjunctsManagerOptions opts;
     opts.conjunct_ctxs_ptr = &conjunct_ctxs;
     opts.tuple_desc = tuple_desc;
     opts.obj_pool = &_pool;
@@ -370,10 +370,10 @@ TEST_P(ConjunctiveTestFixture, test_parse_conjuncts) {
     opts.max_scan_key_num = 1;
     opts.enable_column_expr_predicate = false;
 
-    OlapScanConjunctsManager cm(std::move(opts));
+    ScanConjunctsManager cm(std::move(opts));
     ASSERT_OK(cm.parse_conjuncts());
 
-    PredicateParser parser(tablet_schema);
+    OlapPredicateParser parser(tablet_schema);
     ColumnPredicatePtrs col_preds_owner;
     auto status_or_pred_tree = cm.get_predicate_tree(&parser, col_preds_owner);
     ASSERT_OK(status_or_pred_tree);
@@ -399,6 +399,23 @@ TEST_P(ConjunctiveTestFixture, test_parse_conjuncts) {
     } else {
         ASSERT_EQ(op, convert_predicate_type_to_thrift(predicate->type()));
     }
+}
+
+TEST_F(ConjunctiveTestFixture, test_connector_parse_conjuncts) {
+    std::vector<SlotDescriptor*> slot_descriptors;
+    SlotDescriptor slot{1, "name", TYPE_INT_DESC};
+    slot_descriptors.emplace_back(&slot);
+
+    ConnectorPredicateParser parser{&slot_descriptors};
+    ColumnPredicate* predicate = nullptr;
+    ASSERT_TRUE(parser.can_pushdown(predicate));
+    SlotDescriptor* slot_desc = nullptr;
+    ASSERT_TRUE(parser.can_pushdown(slot_desc));
+
+    PredicateAndNode and_node{};
+    ConstPredicateNodePtr node{&and_node};
+    ASSERT_TRUE(parser.can_pushdown(node));
+    ASSERT_EQ(parser.column_id(slot), 1);
 }
 
 INSTANTIATE_TEST_SUITE_P(ConjunctiveTest, ConjunctiveTestFixture,

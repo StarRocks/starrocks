@@ -20,8 +20,6 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.LabelName;
 import com.starrocks.analysis.TableRef;
-import com.starrocks.sql.ast.CatalogRef;
-import com.starrocks.sql.ast.FunctionRef;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;

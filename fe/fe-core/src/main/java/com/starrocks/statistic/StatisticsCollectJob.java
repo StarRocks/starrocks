@@ -153,7 +153,7 @@ public abstract class StatisticsCollectJob {
                 LOG.info("Begin to execute sql, type: Statistics collect，query id:{}, sql:{}", context.getQueryId(), sql);
             }
             StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
-            StmtExecutor executor = new StmtExecutor(context, parsedStmt);
+            StmtExecutor executor = StmtExecutor.newInternalExecutor(context, parsedStmt);
 
             // set default session variables for stats context
             setDefaultSessionVariable(context);

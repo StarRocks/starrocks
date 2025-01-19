@@ -23,9 +23,9 @@
 #include "runtime/global_dict/types.h"
 #include "storage/del_vector.h"
 #include "storage/disjunctive_predicates.h"
-#include "storage/olap_runtime_range_pruner.h"
 #include "storage/options.h"
 #include "storage/predicate_tree/predicate_tree.hpp"
+#include "storage/runtime_range_pruner.h"
 #include "storage/seek_range.h"
 #include "storage/tablet_schema.h"
 
@@ -78,7 +78,7 @@ public:
     bool use_page_cache = false;
     // temporary data does not allow caching
     bool temporary_data = false;
-    LakeIOOptions lake_io_opts{.fill_data_cache = true};
+    LakeIOOptions lake_io_opts{.fill_data_cache = true, .skip_disk_cache = false};
 
     ReaderType reader_type = READER_QUERY;
     int chunk_size = DEFAULT_CHUNK_SIZE;
@@ -92,7 +92,7 @@ public:
     SparseRangePtr rowid_range_option = nullptr;
     std::vector<ShortKeyRangeOptionPtr> short_key_ranges;
 
-    OlapRuntimeScanRangePruner runtime_range_pruner;
+    RuntimeScanRangePruner runtime_range_pruner;
 
     const std::atomic<bool>* is_cancelled = nullptr;
 

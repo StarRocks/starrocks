@@ -21,6 +21,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -48,6 +49,10 @@ import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.StatsConstants;
+import com.starrocks.statistic.columns.ColumnUsage;
+import com.starrocks.statistic.columns.PredicateColumnsMgr;
+import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.lang3.NotImplementedException;
 import org.apache.commons.lang3.math.NumberUtils;
 
@@ -74,6 +79,11 @@ public class AnalyzeStmtAnalyzer {
             StatsConstants.STATISTIC_AUTO_COLLECT_INTERVAL,
             StatsConstants.STATISTIC_SAMPLE_COLLECT_ROWS,
             StatsConstants.STATISTIC_EXCLUDE_PATTERN,
+
+            StatsConstants.HIGH_WEIGHT_SAMPLE_RATIO,
+            StatsConstants.MEDIUM_HIGH_WEIGHT_SAMPLE_RATIO,
+            StatsConstants.MEDIUM_LOW_WEIGHT_SAMPLE_RATIO,
+            StatsConstants.LOW_WEIGHT_SAMPLE_RATIO,
 
             StatsConstants.HISTOGRAM_BUCKET_NUM,
             StatsConstants.HISTOGRAM_MCV_SIZE,
@@ -110,12 +120,12 @@ public class AnalyzeStmtAnalyzer {
                 throw new SemanticException("Forbidden collect database: %s", statement.getTableName().getDb());
             }
 
-            // Analyze columns mentioned in the statement.
-            Set<String> mentionedColumns = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+            // ANALYZE TABLE xxx (col1, col2, ...)
             List<Expr> columns = statement.getColumns();
-            // The actual column name, avoiding case sensitivity issues
-            List<String> realColumnNames = Lists.newArrayList();
-            if (columns != null && !columns.isEmpty()) {
+            if (CollectionUtils.isNotEmpty(columns)) {
+                Set<String> mentionedColumns = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+                // The actual column name, avoiding case sensitivity issues
+                List<String> realColumnNames = Lists.newArrayList();
                 for (Expr column : columns) {
                     ExpressionAnalyzer.analyzeExpression(column, new AnalyzeState(), new Scope(RelationId.anonymous(),
                             new RelationFields(analyzeTable.getBaseSchema().stream().map(col -> new Field(col.getName(),
@@ -145,13 +155,41 @@ public class AnalyzeStmtAnalyzer {
                 statement.setPartitionIds(pidList);
             }
 
+            // ANALYZE TABLE xxx
+            // ANALYZE TABLE xxx ALL COLUMNS
+            if (statement.isAllColumns() && CollectionUtils.isEmpty(columns)) {
+                List<String> collectibleColumns = StatisticUtils.getCollectibleColumns(analyzeTable);
+                statement.setColumnNames(collectibleColumns);
+            }
+
+            // ANALYZE TABLE xxx PREDICATE COLUMNS
+            if (statement.isUsePredicateColumns()) {
+                // check if the table type is supported
+                if (!analyzeTable.isNativeTableOrMaterializedView()) {
+                    throw new SemanticException("Only OLAP table can support ANALYZE PREDICATE COLUMNS");
+                }
+
+                List<String> targetColumns = Lists.newArrayList();
+
+                List<ColumnUsage> predicateColumns =
+                        PredicateColumnsMgr.getInstance().queryPredicateColumns(statement.getTableName());
+                for (ColumnUsage col : ListUtils.emptyIfNull(predicateColumns)) {
+                    Column realColumn = analyzeTable.getColumnByUniqueId(col.getColumnFullId().getColumnUniqueId());
+                    if (realColumn != null) {
+                        targetColumns.add(realColumn.getName());
+                    }
+                }
+
+                statement.setColumnNames(targetColumns);
+            }
+
             analyzeProperties(statement.getProperties());
             analyzeAnalyzeTypeDesc(session, statement, statement.getAnalyzeTypeDesc());
 
             if (CatalogMgr.isExternalCatalog(statement.getTableName().getCatalog())) {
                 if (!analyzeTable.isAnalyzableExternalTable()) {
                     throw new SemanticException(
-                            "Analyze external table only support hive, iceberg, deltalake and odps table",
+                            "Analyze external table only support hive, iceberg, deltalake, paimon and odps table",
                             statement.getTableName().toString());
                 }
                 statement.setExternal(true);
@@ -182,8 +220,8 @@ public class AnalyzeStmtAnalyzer {
                     tbl.setDb(dbName);
                     Table analyzeTable = MetaUtils.getSessionAwareTable(session, null, statement.getTableName());
                     if (!analyzeTable.isAnalyzableExternalTable()) {
-                        throw new SemanticException("Analyze external table only support hive, iceberg, deltalake and odps table",
-                                statement.getTableName().toString());
+                        throw new SemanticException("Analyze external table only support hive, iceberg, deltalake, " +
+                                "paimon and odps table", statement.getTableName().toString());
                     }
                 }
 

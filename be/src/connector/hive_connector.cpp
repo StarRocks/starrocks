@@ -218,6 +218,7 @@ Status HiveDataSource::_init_conjunct_ctxs(RuntimeState* state) {
     _update_has_any_predicate();
 
     RETURN_IF_ERROR(_decompose_conjunct_ctxs(state));
+    RETURN_IF_ERROR(_setup_all_conjunct_ctxs(state));
     return Status::OK();
 }
 
@@ -446,6 +447,23 @@ Status HiveDataSource::_decompose_conjunct_ctxs(RuntimeState* state) {
     return Status::OK();
 }
 
+Status HiveDataSource::_setup_all_conjunct_ctxs(RuntimeState* state) {
+    // clone conjunct from _min_max_conjunct_ctxs & _conjunct_ctxs
+    // then we will generate PredicateTree based on _all_conjunct_ctxs
+    std::vector<ExprContext*> cloned_conjunct_ctxs;
+    RETURN_IF_ERROR(Expr::clone_if_not_exists(state, &_pool, _min_max_conjunct_ctxs, &cloned_conjunct_ctxs));
+    for (auto* ctx : cloned_conjunct_ctxs) {
+        _all_conjunct_ctxs.emplace_back(ctx);
+    }
+
+    cloned_conjunct_ctxs.clear();
+    RETURN_IF_ERROR(Expr::clone_if_not_exists(state, &_pool, _conjunct_ctxs, &cloned_conjunct_ctxs));
+    for (auto* ctx : cloned_conjunct_ctxs) {
+        _all_conjunct_ctxs.emplace_back(ctx);
+    }
+    return Status::OK();
+}
+
 void HiveDataSource::_init_counter(RuntimeState* state) {
     const auto& hdfs_scan_node = _provider->_hdfs_scan_node;
 
@@ -579,7 +597,9 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         native_file_path = file_path.native();
     }
     if (native_file_path.empty()) {
-        native_file_path = _hive_table->get_base_path() + scan_range.relative_path;
+        bool start_with_slash = !scan_range.relative_path.empty() && scan_range.relative_path.at(0) == '/';
+        native_file_path = _hive_table->get_base_path() +
+                           (start_with_slash ? scan_range.relative_path : "/" + scan_range.relative_path);
     }
 
     const auto& hdfs_scan_node = _provider->_hdfs_scan_node;
@@ -594,6 +614,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.fs = _pool.add(fs.release());
     scanner_params.path = native_file_path;
     scanner_params.file_size = _scan_range.file_length;
+    scanner_params.table_location = _hive_table->get_base_path();
     scanner_params.tuple_desc = _tuple_desc;
     scanner_params.materialize_slots = _materialize_slots;
     scanner_params.materialize_index_in_chunk = _materialize_index_in_chunk;
@@ -627,6 +648,11 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         scanner_params.deletes.emplace_back(&delete_file);
     }
 
+    if (scan_range.__isset.deletion_vector_descriptor) {
+        scanner_params.deletion_vector_descriptor =
+                std::make_shared<TDeletionVectorDescriptor>(scan_range.deletion_vector_descriptor);
+    }
+
     if (scan_range.__isset.paimon_deletion_file && !scan_range.paimon_deletion_file.path.empty()) {
         scanner_params.paimon_deletion_file = std::make_shared<TPaimonDeletionFile>(scan_range.paimon_deletion_file);
     }
@@ -637,6 +663,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
 
     scanner_params.can_use_any_column = _can_use_any_column;
     scanner_params.can_use_min_max_count_opt = _can_use_min_max_count_opt;
+    scanner_params.all_conjunct_ctxs = _all_conjunct_ctxs;
 
     HdfsScanner* scanner = nullptr;
     auto format = scan_range.file_format;

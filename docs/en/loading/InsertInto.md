@@ -20,6 +20,8 @@ StarRocks v2.4 further supports overwriting data into a table by using INSERT OV
 >
 > If you need to verify the data before overwriting it, instead of using INSERT OVERWRITE, you can follow the above procedures to overwrite your data and verify it before swapping the partitions.
 
+From v3.4.0 onwards, StarRocks supports a new semantic - Dynamic Overwrite for INSERT OVERWRITE with partitioned tables. For more information, see [Dynamic Overwrite](#dynamic-overwrite).
+
 ## Precautions
 
 - You can cancel a synchronous INSERT transaction only by pressing the **Ctrl** and **C** keys from your MySQL client.
@@ -356,6 +358,38 @@ WITH LABEL insert_load_wikipedia_ow_3
 SELECT event_time, channel FROM source_wiki_edit;
 ```
 
+### Dynamic Overwrite
+
+From v3.4.0 onwards, StarRocks supports a new semantic - Dynamic Overwrite for INSERT OVERWRITE with partitioned tables.
+
+Currently, the default behavior of INSERT OVERWRITE is as follows:
+
+- When overwriting a partitioned table as a whole (that is, without specifying the PARTITION clause), new data records will replace the data in their corresponding partitions. If there are partitions that are not involved, they will be truncated while the others are overwritten.
+- When overwriting an empty partitioned table (that is, with no partitions in it) and specifying the PARTITION clause, the system returns an error `ERROR 1064 (HY000): Getting analyzing error. Detail message: Unknown partition 'xxx' in table 'yyy'`.
+- When overwriting a partitioned table and specifying a non-existent partition in the PARTITION clause, the system returns an error `ERROR 1064 (HY000): Getting analyzing error. Detail message: Unknown partition 'xxx' in table 'yyy'`.
+- When overwriting a partitioned table with data records that do not match any of the specified partitions in the PARTITION clause, the system either returns an error `ERROR 1064 (HY000): Insert has filtered data in strict mode` (if the strict mode is enabled) or filters the unqualified data records (if the strict mode is disabled).
+
+The behavior of the new Dynamic Overwrite semantic is much different:
+
+When overwriting a partitioned table as a whole, new data records will replace the data in their corresponding partitions. If there are partitions that are not involved, they will be left alone, instead of being truncated or deleted. And if there are new data records correspond to a non-existent partition, the system will create the partition.
+
+The Dynamic Overwrite semantic is disabled by default. To enable it, you need to set the system variable `dynamic_overwrite` to `true`.
+
+Enable Dynamic Overwrite in the current session:
+
+```SQL
+SET dynamic_overwrite = true;
+```
+
+You can also set it in the hint of the INSERT OVERWRITE statement to allow it take effect for the statement only:.
+
+Example:
+
+```SQL
+INSERT OVERWRITE /*+set_var(set dynamic_overwrite = false)*/ insert_wiki_edit
+SELECT * FROM source_wiki_edit;
+```
+
 ## Insert data into a table with generated columns
 
 A generated column is a special column whose value is derived from a pre-defined expression or evaluation based on other columns. Generated columns are especially useful when your query requests involve evaluations of expensive expressions, for example, querying a certain field from a JSON value, or calculating ARRAY data. StarRocks evaluates the expression and stores the results in the generated columns while data is being loaded into the table, thereby avoiding the expression evaluation during queries and improving the query performance.
@@ -396,6 +430,108 @@ mysql> SELECT * FROM insert_generated_columns;
 +------+------------+------------------+-----------+------------+
 1 row in set (0.02 sec)
 ```
+
+## INSERT data with PROPERTIES
+
+From v3.4.0 onwards, INSERT statements support configuring PROPERTIES, which can serve a wide variety of purposes. PROPERTIES overrides their corresponding variables.
+
+### Enable strict mode
+
+From v3.4.0 onwards, you can enable strict mode and set `max_filter_ratio` for INSERT from FILES(). Strict mode for INSERT from FILES() has the same behavior as that of other loading methods.
+
+If you want to load a dataset with some unqualified rows, you either filter these unqualified rows or load them and assign NULL values to the unqualified columns. You can achieve them by using the properties `strict_mode` and `max_filter_ratio`.
+
+- To filter the unqualified rows: set `strict_mode` to `true`, and `max_filter_ratio` to a desired value.
+- To load all unqualified rows with NULL values: set `strict_mode` to `false`.
+
+The following example inserts data rows from the Parquet file **parquet/insert_wiki_edit_append.parquet** within the AWS S3 bucket `inserttest` into the table `insert_wiki_edit`, enables strict mode to filter the unqualified data records, and tolerates at most 10% of error data:
+
+```SQL
+INSERT INTO insert_wiki_edit
+PROPERTIES(
+    "strict_mode" = "true",
+    "max_filter_ratio" = "0.1"
+)
+SELECT * FROM FILES(
+    "path" = "s3://inserttest/parquet/insert_wiki_edit_append.parquet",
+    "format" = "parquet",
+    "aws.s3.access_key" = "XXXXXXXXXX",
+    "aws.s3.secret_key" = "YYYYYYYYYY",
+    "aws.s3.region" = "us-west-2"
+);
+```
+
+:::note
+
+`strict_mode` and `max_filter_ratio` are supported only for INSERT from FILES(). INSERT from tables does not support these properties.
+
+:::
+
+### Set timeout duration
+
+From v3.4.0 onwards, you can set the timeout duration for INSERT statements. In versions earlier than v3.4.0, the timeout duration for INSERT statements is controlled by the system variable `query_timeout`.
+
+The following example inserts the data from the source table `source_wiki_edit` to the target table `insert_wiki_edit` with the timeout duration set to `2` seconds.
+
+```SQL
+INSERT INTO insert_wiki_edit
+PROPERTIES(
+    "timeout" = "2"
+)
+SELECT * FROM source_wiki_edit;
+```
+
+:::note
+
+From v3.4.0 onwards, the system variable `insert_timeout` applies to operations involved INSERT (for example, UPDATE, DELETE, CTAS, materialized view refresh, statistics collection, and PIPE), replacing `query_timeout`.
+
+:::
+
+### Match column by name
+
+By default, INSERT matches the columns in the source and the target tables by their positions, that is, the mapping of the columns in the statement.
+
+The following example explicitly matches each column in the source and target tables by their positions:
+
+```SQL
+INSERT INTO insert_wiki_edit (
+    event_time,
+    channel,
+    user
+)
+SELECT event_time, channel, user FROM source_wiki_edit;
+```
+
+The column mapping will change if you changed the order of `channel` and `user` in either the column list or the SELECT statement.
+
+```SQL
+INSERT INTO insert_wiki_edit (
+    event_time,
+    channel,
+    user
+)
+SELECT event_time, user, channel FROM source_wiki_edit;
+```
+
+Here, the ingested data are probably not what you want, because `channel` in the target table `insert_wiki_edit` will be filled with data from `user` in the source table `source_wiki_edit`.
+
+By adding `BY NAME` clause in the INSERT statement, the system will detect the column names in the source and the target tables, and match the columns with the same name.
+
+:::note
+
+- You cannot specify the column list if `BY NAME` is specified.
+- If `BY NAME` is not specified, the system matches the columns by the position of the columns in the column list and the SELECT statement.
+
+:::
+
+The following example matches each column in the source and target tables by their names:
+
+```SQL
+INSERT INTO insert_wiki_edit BY NAME
+SELECT event_time, user, channel FROM source_wiki_edit;
+```
+
+In this case, changing the order of `channel` and `user` will not change the column mapping.
 
 ## Load data asynchronously using INSERT
 

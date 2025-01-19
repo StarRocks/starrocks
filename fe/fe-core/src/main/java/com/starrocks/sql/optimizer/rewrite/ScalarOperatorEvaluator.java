@@ -201,7 +201,9 @@ public enum ScalarOperatorEvaluator {
             }
             return operator;
         } catch (Exception e) {
-            LOG.debug("failed to invoke", e);
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("failed to invoke", e);
+            }
             if (invoker.isMetaFunction) {
                 throw new StarRocksPlannerException(ErrorType.USER_ERROR, ExceptionUtils.getRootCauseMessage(e));
             }
@@ -223,6 +225,21 @@ public enum ScalarOperatorEvaluator {
         FunctionInvoker invoker = functions.get(signature);
 
         return invoker != null && isMonotonicFunc(invoker, call);
+    }
+
+    public boolean isFEConstantFunction(CallOperator call) {
+        FunctionSignature signature;
+        if (call.getFunction() != null) {
+            Function fn = call.getFunction();
+            List<Type> argTypes = Arrays.asList(fn.getArgs());
+            signature = new FunctionSignature(fn.functionName().toUpperCase(), argTypes, fn.getReturnType());
+        } else {
+            List<Type> argTypes = call.getArguments().stream().map(ScalarOperator::getType).collect(Collectors.toList());
+            signature = new FunctionSignature(call.getFnName().toUpperCase(), argTypes, call.getType());
+        }
+
+        FunctionInvoker invoker = functions.get(signature);
+        return invoker != null;
     }
 
     private boolean isMonotonicFunc(FunctionInvoker invoker, CallOperator operator) {

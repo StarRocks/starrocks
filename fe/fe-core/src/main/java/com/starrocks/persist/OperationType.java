@@ -576,6 +576,10 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_DELETE_REPLICATION_JOB = 13501;
 
+    // has delete
+    @IgnorableOnReplayFailed
+    public static final short OP_SET_HAS_DELETE = 13506;
+
     @IgnorableOnReplayFailed
     public static final short OP_DISABLE_TABLE_RECOVERY = 13510;
     @IgnorableOnReplayFailed
@@ -583,6 +587,14 @@ public class OperationType {
 
     @IgnorableOnReplayFailed
     public static final short OP_ADD_KEY = 13512;
+
+    @IgnorableOnReplayFailed
+    public static final short OP_CLUSTER_SNAPSHOT_LOG = 13513;
+
+    @IgnorableOnReplayFailed
+    public static final short OP_ADD_SQL_QUERY_BLACK_LIST = 13520;
+    @IgnorableOnReplayFailed
+    public static final short OP_DELETE_SQL_QUERY_BLACK_LIST = 13521;
 
     /**
      * NOTICE: OperationType cannot use a value exceeding 20000, please follow the above sequence number

@@ -14,7 +14,9 @@
 
 #include "formats/parquet/group_reader.h"
 
+#include <formats/parquet/scalar_column_reader.h>
 #include <gtest/gtest.h>
+#include <testutil/assert.h>
 
 #include <memory>
 
@@ -369,8 +371,8 @@ TEST_F(GroupReaderTest, TestInit) {
     param->chunk_size = config::vector_chunk_size;
     param->file = file;
     param->file_metadata = file_meta;
-    std::set<int64_t> need_skip_rowids;
-    auto* group_reader = _pool.add(new GroupReader(*param, 0, &need_skip_rowids, 0));
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
 
     // init row group reader
     status = group_reader->init();
@@ -412,8 +414,8 @@ TEST_F(GroupReaderTest, TestGetNext) {
     param->chunk_size = config::vector_chunk_size;
     param->file = file;
     param->file_metadata = file_meta;
-    std::set<int64_t> need_skip_rowids;
-    auto* group_reader = _pool.add(new GroupReader(*param, 0, &need_skip_rowids, 0));
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
 
     // init row group reader
     status = group_reader->init();
@@ -457,6 +459,30 @@ TEST_F(GroupReaderTest, ColumnReaderCreateTypeMismatch) {
     auto st = ColumnReaderFactory::create(options, &field, col_type, nullptr);
     ASSERT_FALSE(st.ok()) << st;
     std::cout << st.status().message() << "\n";
+}
+
+TEST_F(GroupReaderTest, FixedValueColumnReaderTest) {
+    auto col1 = std::make_unique<FixedValueColumnReader>(kNullDatum);
+    ASSERT_OK(col1->prepare());
+    col1->get_levels(nullptr, nullptr, nullptr);
+    col1->set_need_parse_levels(false);
+    col1->collect_column_io_range(nullptr, nullptr, ColumnIOType::PAGES, true);
+    SparseRange<uint64_t> sparse_range;
+    col1->select_offset_index(sparse_range, 100);
+    ColumnPtr column = ColumnHelper::create_column(TypeDescriptor::create_varchar_type(100), true);
+    Range<uint64_t> range(0, 100);
+    ASSERT_FALSE(col1->read_range(range, nullptr, column).ok());
+
+    TypeInfoPtr type_info = get_type_info(LogicalType::TYPE_INT);
+    ColumnPredicate* is_null_predicate = _pool.add(new_column_null_predicate(type_info, 1, true));
+    ColumnPredicate* is_not_null_predicate = _pool.add(new_column_null_predicate(type_info, 1, false));
+
+    std::vector<const ColumnPredicate*> predicates;
+    predicates.push_back(is_null_predicate);
+    predicates.push_back(is_not_null_predicate);
+
+    ASSERT_FALSE(col1->row_group_zone_map_filter(predicates, CompoundNodeType::AND, 1, 100).value());
+    ASSERT_TRUE(col1->row_group_zone_map_filter(predicates, CompoundNodeType::OR, 1, 100).value());
 }
 
 } // namespace starrocks::parquet

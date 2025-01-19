@@ -71,6 +71,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.LoadStmt;
@@ -264,6 +265,10 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         this.id = id;
     }
 
+    protected void setLabel(String label) {
+        this.label = label;
+    }
+
     public Database getDb() throws MetaNotFoundException {
         // get db
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
@@ -283,6 +288,10 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
 
     public JobState getState() {
         return state;
+    }
+
+    protected void setState(JobState state) {
+        this.state = state;
     }
 
     public JobState getAcutalState() {
@@ -456,13 +465,15 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
                 logRejectedRecordNum = Long.parseLong(properties.get(LoadStmt.LOG_REJECTED_RECORD_NUM));
             }
 
-            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
-                String warehouseName = properties.get(PropertyAnalyzer.PROPERTIES_WAREHOUSE);
-                Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName);
-                if (warehouse == null) {
-                    throw new DdlException("Warehouse " + warehouseName + " not exists.");
+            if (RunMode.isSharedDataMode()) {
+                if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
+                    String warehouseName = properties.get(PropertyAnalyzer.PROPERTIES_WAREHOUSE);
+                    Warehouse warehouse =
+                            GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName);
+                    warehouseId = warehouse.getId();
+                } else {
+                    warehouseId = ConnectContext.get().getCurrentWarehouseId();
                 }
-                warehouseId = warehouse.getId();
             }
 
             if (properties.containsKey(LoadStmt.STRIP_OUTER_ARRAY)) {
@@ -475,6 +486,11 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
 
             if (properties.containsKey(LoadStmt.JSONROOT)) {
                 jsonOptions.jsonRoot = properties.get(LoadStmt.JSONROOT);
+            }
+        } else {
+            if (RunMode.isSharedDataMode()) {
+                // if no properties set, we should still set warehouse here
+                warehouseId = ConnectContext.get().getCurrentWarehouseId();
             }
         }
     }
@@ -887,8 +903,8 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             }
             jobInfo.add(loadingStatus.getLoadStatistic().toShowInfoStr());
             // warehouse
-            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
-            if (warehouse != null) {
+            if (RunMode.isSharedDataMode()) {
+                Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
                 jobInfo.add(warehouse.getName());
             } else {
                 jobInfo.add("");
@@ -1041,6 +1057,13 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             info.setNum_scan_rows(loadingStatus.getLoadStatistic().totalSourceLoadRows());
             info.setNum_sink_rows(loadingStatus.getLoadStatistic().totalSinkLoadRows());
             info.setNum_scan_bytes(loadingStatus.getLoadStatistic().sourceScanBytes());
+            // warehouse
+            if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+                Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
+                info.setWarehouse(warehouse.getName());
+            } else {
+                info.setWarehouse("");
+            }
             return info;
         } finally {
             readUnlock();
@@ -1234,11 +1257,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
                 && this.jobType.equals(other.jobType);
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        String json = GsonUtils.GSON.toJson(this);
-        Text.writeString(out, json);
-    }
+
 
     public void replayUpdateStateInfo(LoadJobStateUpdateInfo info) {
         state = info.getState();

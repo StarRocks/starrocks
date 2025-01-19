@@ -18,6 +18,7 @@
 package com.starrocks.qe;
 
 import com.google.common.base.Preconditions;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanFragment;
@@ -95,7 +96,7 @@ public class ShortCircuitExecutor {
         return null;
     }
 
-    public void exec() throws Exception {
+    public void exec() throws StarRocksException, StarRocksPlannerException {
         throw new StarRocksPlannerException("Not implement ShortCircuit Executor class", ErrorType.INTERNAL_ERROR);
     }
 

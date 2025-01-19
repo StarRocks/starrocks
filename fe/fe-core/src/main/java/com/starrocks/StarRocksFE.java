@@ -48,6 +48,7 @@ import com.starrocks.journal.bdbje.BDBEnvironment;
 import com.starrocks.journal.bdbje.BDBJEJournal;
 import com.starrocks.journal.bdbje.BDBTool;
 import com.starrocks.journal.bdbje.BDBToolOptions;
+import com.starrocks.lake.snapshot.RestoreClusterSnapshotMgr;
 import com.starrocks.leader.MetaHelper;
 import com.starrocks.qe.CoordinatorMonitor;
 import com.starrocks.qe.QeService;
@@ -117,6 +118,8 @@ public class StarRocksFE {
             // set dns cache ttl
             java.security.Security.setProperty("networkaddress.cache.ttl", "60");
 
+            RestoreClusterSnapshotMgr.init(starRocksDir + "/conf/cluster_snapshot.yaml", args);
+
             // check meta dir
             MetaHelper.checkMetaDir();
 
@@ -177,6 +180,8 @@ public class StarRocksFE {
 
             addShutdownHook();
 
+            RestoreClusterSnapshotMgr.finishRestoring();
+
             LOG.info("FE started successfully");
 
             while (!stopped) {
@@ -219,6 +224,7 @@ public class StarRocksFE {
         CommandLineParser commandLineParser = new BasicParser();
         Options options = new Options();
         options.addOption("ht", "host_type", false, "Specify fe start use ip or fqdn");
+        options.addOption("rs", "cluster_snapshot", false, "Specify fe start to restore from a cluster snapshot");
         options.addOption("v", "version", false, "Print the version of StarRocks Frontend");
         options.addOption("h", "helper", true, "Specify the helper node when joining a bdb je replication group");
         options.addOption("b", "bdb", false, "Run bdbje debug tools");

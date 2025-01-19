@@ -323,7 +323,7 @@ Status HdfsOrcScanner::build_iceberg_delete_builder() {
     if (_scanner_params.deletes.empty()) return Status::OK();
     SCOPED_RAW_TIMER(&_app_stats.iceberg_delete_file_build_ns);
     const auto iceberg_delete_builder =
-            std::make_unique<IcebergDeleteBuilder>(&_need_skip_rowids, _runtime_state, _scanner_params);
+            std::make_unique<IcebergDeleteBuilder>(_skip_rows_ctx, _runtime_state, _scanner_params);
 
     for (const auto& delete_file : _scanner_params.deletes) {
         if (delete_file->file_content == TIcebergFileContent::POSITION_DELETES) {
@@ -345,7 +345,7 @@ Status HdfsOrcScanner::build_paimon_delete_file_builder() {
         return Status::OK();
     }
     std::unique_ptr<PaimonDeleteFileBuilder> paimon_delete_file_builder(
-            new PaimonDeleteFileBuilder(_scanner_params.fs, &_need_skip_rowids));
+            new PaimonDeleteFileBuilder(_scanner_params.fs, _skip_rows_ctx));
     RETURN_IF_ERROR(paimon_delete_file_builder->build(_scanner_params.paimon_deletion_file.get()));
     return Status::OK();
 }
@@ -595,8 +595,8 @@ StatusOr<size_t> HdfsOrcScanner::_do_get_next_count(ChunkPtr* chunk) {
             }
         }
         read_num_values += _orc_reader->get_cvb_size();
-        if (!_need_skip_rowids.empty()) {
-            read_num_values -= _orc_reader->get_row_delete_number(_need_skip_rowids);
+        if (_skip_rows_ctx != nullptr && _skip_rows_ctx->has_skip_rows()) {
+            read_num_values -= _orc_reader->get_row_delete_number(_skip_rows_ctx);
         }
     }
 
@@ -618,8 +618,8 @@ StatusOr<size_t> HdfsOrcScanner::_do_get_next(ChunkPtr* chunk) {
             SCOPED_RAW_TIMER(&_app_stats.column_read_ns);
             RETURN_IF_ERROR(_orc_reader->read_next(&position));
             {
-                SCOPED_RAW_TIMER(&_app_stats.iceberg_delete_file_build_filter_ns);
-                row_delete_filter = _orc_reader->get_row_delete_filter(_need_skip_rowids);
+                SCOPED_RAW_TIMER(&_app_stats.build_rowid_filter_ns);
+                ASSIGN_OR_RETURN(row_delete_filter, _orc_reader->get_row_delete_filter(_skip_rows_ctx));
             }
             // read num values is how many rows actually read before doing dict filtering.
             read_num_values = position.num_values;

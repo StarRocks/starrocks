@@ -54,6 +54,7 @@ public class HyperStatisticSQLs {
     //| max            | varchar(1048576) | NO   | false | <null>  |       |
     //| min            | varchar(1048576) | NO   | false | <null>  |       |
     //| update_time    | datetime         | NO   | false | <null>  |       |
+    //| collection_size| bigint           | NO   | false | <null>  |       |
     public static final String BATCH_FULL_STATISTIC_TEMPLATE = "SELECT cast($version as INT)" +
             ", cast($partitionId as BIGINT)" + // BIGINT
             ", '$columnNameStr'" + // VARCHAR
@@ -62,7 +63,8 @@ public class HyperStatisticSQLs {
             ", $hllFunction" + // VARBINARY
             ", cast($countNullFunction as BIGINT)" + // BIGINT
             ", $maxFunction" + // VARCHAR
-            ", $minFunction " + // VARCHAR
+            ", $minFunction" + // VARCHAR
+            ", cast($collectionSizeFunction as BIGINT)" + // BIGINT
             " FROM `$dbName`.`$tableName` partition `$partitionName`";
 
     public static final String BATCH_META_STATISTIC_TEMPLATE = "SELECT cast($version as INT)" +
@@ -74,6 +76,7 @@ public class HyperStatisticSQLs {
             ", cast(0 as BIGINT)" + // BIGINT, null_count
             ", $maxFunction" + // VARCHAR, max
             ", $minFunction " + // VARCHAR, min
+            ", cast(-1 as BIGINT) " + // BIGINT, collection_size
             " FROM `$dbName`.`$tableName` partitions(`$partitionName`) [_META_]";
 
     public static final String BATCH_DATA_STATISTIC_SELECT_TEMPLATE = "SELECT cast($version as INT)" +
@@ -84,7 +87,8 @@ public class HyperStatisticSQLs {
             ", $hllFunction" + // VARBINARY, ndv
             ", cast($countNullFunction as BIGINT)" + // BIGINT, null_count
             ", ''" + // VARCHAR, max
-            ", '' " + // VARCHAR, min
+            ", ''" + // VARCHAR, min
+            ", cast($collectionSizeFunction as BIGINT)" + // BIGINT, collection_size
             " FROM base_cte_table ";
 
     public static final String BATCH_SAMPLE_STATISTIC_SELECT_TEMPLATE = "SELECT cast($version as INT)" +
@@ -95,7 +99,8 @@ public class HyperStatisticSQLs {
             ", $hllFunction" + // VARBINARY
             ", cast($countNullFunction as BIGINT)" + // BIGINT
             ", $maxFunction" + // VARCHAR
-            ", $minFunction " + // VARCHAR
+            ", $minFunction" + // VARCHAR
+            ", cast($collectionSizeFunction as BIGINT)" + // BIGINT, collection_size
             " FROM base_cte_table ";
 
     public static String build(VelocityContext context, String template) {
@@ -108,7 +113,7 @@ public class HyperStatisticSQLs {
         VelocityContext context = new VelocityContext();
         String columnNameStr = stats.getColumnNameStr();
         String quoteColumnName = stats.getQuotedColumnName();
-        context.put("version", StatsConstants.STATISTIC_BATCH_VERSION);
+        context.put("version", StatsConstants.STATISTIC_BATCH_VERSION_V5);
         context.put("partitionId", p.getId());
         context.put("columnNameStr", columnNameStr);
         context.put("partitionName", p.getName());
@@ -150,6 +155,7 @@ public class HyperStatisticSQLs {
             context.put("countNullFunction", stat.getSampleNullCount(info));
             context.put("maxFunction", stat.getMax());
             context.put("minFunction", stat.getMin());
+            context.put("collectionSizeFunction", stat.getCollectionSize());
             groupSQLs.add(HyperStatisticSQLs.build(context, template));
         }
         sqlBuilder.append(String.join(" UNION ALL ", groupSQLs));
@@ -161,12 +167,21 @@ public class HyperStatisticSQLs {
         if (tablets.isEmpty()) {
             return null;
         }
-        return String.format(" SELECT * FROM (SELECT * " +
-                        " FROM %s tablet(%s) " +
-                        " WHERE rand() <= %f " +
-                        " LIMIT %d) %s",
-                table,
-                tablets.stream().map(t -> String.valueOf(t.getTabletId())).collect(Collectors.joining(", ")),
-                ratio, limit, alias);
+
+        String tabletHint =
+                tablets.stream().map(t -> String.valueOf(t.getTabletId())).collect(Collectors.joining(", "));
+        if (!Config.enable_use_table_sample_collect_statistics) {
+            return String.format(" SELECT * FROM (SELECT * " +
+                            " FROM %s tablet(%s) " +
+                            " WHERE rand() <= %f " +
+                            " LIMIT %d) %s",
+                    table, tabletHint, ratio, limit, alias);
+        } else {
+            int percent = (int) (ratio * 100);
+            return String.format(" SELECT * FROM (SELECT * " +
+                            " FROM %s TABLET(%s) SAMPLE('percent'='%d') " +
+                            " LIMIT %d) %s",
+                    table, tabletHint, percent, limit, alias);
+        }
     }
 }

@@ -23,11 +23,11 @@
 #include "runtime/global_dict/parser.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/lake/tablet.h"
-#include "storage/olap_runtime_range_pruner.hpp"
 #include "storage/predicate_parser.h"
 #include "storage/predicate_tree/predicate_tree.hpp"
 #include "storage/projection_iterator.h"
 #include "storage/rowset/short_key_range_option.h"
+#include "storage/runtime_range_pruner.hpp"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks::connector {
@@ -75,7 +75,7 @@ Status LakeDataSource::open(RuntimeState* state) {
     }
 
     // eval const conjuncts
-    RETURN_IF_ERROR(OlapScanConjunctsManager::eval_const_conjuncts(_conjunct_ctxs, &_status));
+    RETURN_IF_ERROR(ScanConjunctsManager::eval_const_conjuncts(_conjunct_ctxs, &_status));
     DictOptimizeParser::rewrite_descriptor(state, _conjunct_ctxs, thrift_lake_scan_node.dict_string_id_to_int_ids,
                                            &(tuple_desc->decoded_slots()));
 
@@ -92,7 +92,7 @@ Status LakeDataSource::open(RuntimeState* state) {
         enable_column_expr_predicate = thrift_lake_scan_node.enable_column_expr_predicate;
     }
 
-    OlapScanConjunctsManagerOptions opts;
+    ScanConjunctsManagerOptions opts;
     opts.conjunct_ctxs_ptr = &_conjunct_ctxs;
     opts.tuple_desc = tuple_desc;
     opts.obj_pool = &_obj_pool;
@@ -105,8 +105,8 @@ Status LakeDataSource::open(RuntimeState* state) {
     opts.pred_tree_params = state->fragment_ctx()->pred_tree_params();
     opts.driver_sequence = runtime_bloom_filter_eval_context.driver_sequence;
 
-    _conjuncts_manager = std::make_unique<OlapScanConjunctsManager>(std::move(opts));
-    OlapScanConjunctsManager& cm = *_conjuncts_manager;
+    _conjuncts_manager = std::make_unique<ScanConjunctsManager>(std::move(opts));
+    ScanConjunctsManager& cm = *_conjuncts_manager;
 
     // Parse conjuncts via _conjuncts_manager.
     RETURN_IF_ERROR(cm.parse_conjuncts());
@@ -250,15 +250,17 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
                                           std::vector<uint32_t>& reader_columns) {
     const TLakeScanNode& thrift_lake_scan_node = _provider->_t_lake_scan_node;
     bool skip_aggregation = thrift_lake_scan_node.is_preaggregation;
-    auto parser = _obj_pool.add(new PredicateParser(_tablet_schema));
+    auto parser = _obj_pool.add(new OlapPredicateParser(_tablet_schema));
     _params.is_pipeline = true;
     _params.reader_type = READER_QUERY;
     _params.skip_aggregation = skip_aggregation;
     _params.profile = _runtime_profile;
     _params.runtime_state = _runtime_state;
-    _params.use_page_cache = !config::disable_storage_page_cache && _scan_range.fill_data_cache;
+    _params.use_page_cache =
+            !config::disable_storage_page_cache && _scan_range.fill_data_cache && !_scan_range.skip_page_cache;
     _params.lake_io_opts.fill_data_cache = _scan_range.fill_data_cache;
-    _params.runtime_range_pruner = OlapRuntimeScanRangePruner(parser, _conjuncts_manager->unarrived_runtime_filters());
+    _params.lake_io_opts.skip_disk_cache = _scan_range.skip_disk_cache;
+    _params.runtime_range_pruner = RuntimeScanRangePruner(parser, _conjuncts_manager->unarrived_runtime_filters());
     _params.splitted_scan_rows = _provider->get_splitted_scan_rows();
     _params.scan_dop = _provider->get_scan_dop();
 

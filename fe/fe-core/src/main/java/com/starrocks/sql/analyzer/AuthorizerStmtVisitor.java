@@ -20,8 +20,16 @@ import com.starrocks.analysis.HintNode;
 import com.starrocks.analysis.SetVarHint;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.AuthorizationMgr;
+import com.starrocks.authorization.ColumnPrivilege;
+import com.starrocks.authorization.ObjectType;
+import com.starrocks.authorization.PrivilegeBuiltinConstants;
+import com.starrocks.authorization.PrivilegeException;
+import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.BackupJob;
+import com.starrocks.catalog.BasicTable;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSearchDesc;
@@ -39,13 +47,6 @@ import com.starrocks.load.ExportJob;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.loadv2.SparkLoadJob;
 import com.starrocks.load.routineload.RoutineLoadJob;
-import com.starrocks.privilege.AccessDeniedException;
-import com.starrocks.privilege.AuthorizationMgr;
-import com.starrocks.privilege.ColumnPrivilege;
-import com.starrocks.privilege.ObjectType;
-import com.starrocks.privilege.PrivilegeBuiltinConstants;
-import com.starrocks.privilege.PrivilegeException;
-import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.CatalogMgr;
@@ -1631,7 +1632,7 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(statement.getDbName());
             if (db != null) {
                 Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
-                            .getTable(db.getFullName(), statement.getTableName());
+                        .getTable(db.getFullName(), statement.getTableName());
                 if (table == null || !table.isMaterializedView()) {
                     // ignore privilege check for old mv
                     return null;
@@ -1682,7 +1683,10 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
     @Override
     public Void visitShowCreateTableStatement(ShowCreateTableStmt statement, ConnectContext context) {
         try {
-            Authorizer.checkAnyActionOnTable(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), statement.getTbl());
+            BasicTable basicTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getBasicTable(
+                    statement.getTbl().getCatalog(), statement.getTbl().getDb(), statement.getTbl().getTbl());
+            Authorizer.checkAnyActionOnTableLikeObject(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    statement.getDb(), basicTable);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(
                     statement.getTbl().getCatalog(),
@@ -2154,7 +2158,7 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
             externalCatalogs.forEach(externalCatalog -> {
                 try {
                     Authorizer.checkCatalogAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                                externalCatalog.getCatalogName(), PrivilegeType.USAGE);
+                            externalCatalog.getCatalogName(), PrivilegeType.USAGE);
                 } catch (AccessDeniedException e) {
                     AccessDeniedException.reportAccessDenied(
                             externalCatalog.getCatalogName(),
@@ -2196,7 +2200,8 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
         }
         AbstractJob job = null;
         try {
-            job = GlobalStateMgr.getCurrentState().getBackupHandler().getAbstractJobByDbName(statement.getDbName());
+            job = GlobalStateMgr.getCurrentState().getBackupHandler().getAbstractJob(statement.isExternalCatalog(),
+                                                                                     statement.getDbName());
         } catch (DdlException e) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, statement.getDbName());
         }
@@ -2280,7 +2285,7 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
                     // check insert on specified table
                     for (TableRef tableRef : tableRefs) {
                         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
-                                    .getTable(db.getFullName(), tableRef.getName().getTbl());
+                                .getTable(db.getFullName(), tableRef.getName().getTbl());
                         if (table != null) {
                             try {
                                 Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),

@@ -117,9 +117,9 @@ SELECT * FROM t1 where dt > '2020-07-01' and num > 4 order by 1, 2 limit 3;
 -- !result
 SELECT * FROM t1 where dt > '2020-06-20'  order by 1, 2 limit 3;
 -- result:
-1	2020-06-15
 1	2020-07-02
 1	2020-07-16
+2	2020-07-02
 -- !result
 SELECT * FROM t1 where dt > '2020-06-20' and num > 4 order by 1, 2 limit 3;
 -- result:
@@ -187,9 +187,9 @@ SELECT * FROM t1 where dt > '2020-07-01' and num > 4 order by 1, 2 limit 3;
 -- !result
 SELECT * FROM t1 where dt > '2020-06-20'  order by 1, 2 limit 3;
 -- result:
-1	2020-06-15
-1	2020-06-15
 1	2020-07-02
+1	2020-07-16
+2	2020-07-02
 -- !result
 SELECT * FROM t1 where dt > '2020-06-20' and num > 4 order by 1, 2 limit 3;
 -- result:
@@ -263,9 +263,9 @@ SELECT dt, sum(num) as num FROM t1 where dt >'2020-07-01' GROUP BY dt having sum
 -- !result
 SELECT dt, sum(num) as num FROM t1 where dt > '2020-06-20'  GROUP BY dt order by 1, 2 limit 3;
 -- result:
-2020-06-15	4
-2020-06-18	5
 2020-06-21	7
+2020-06-24	9
+2020-07-02	3
 -- !result
 SELECT dt, sum(num) as num FROM t1 where dt >'2020-06-20' GROUP BY dt having sum(num) > 10 order by 1, 2 limit 3;
 -- result:
@@ -328,9 +328,9 @@ SELECT dt, sum(num) as num FROM t1 where dt >'2020-07-01' GROUP BY dt having sum
 -- !result
 SELECT dt, sum(num) as num FROM t1 where dt > '2020-06-20'  GROUP BY dt order by 1, 2 limit 3;
 -- result:
-2020-06-15	5
-2020-06-18	5
 2020-06-21	7
+2020-06-24	9
+2020-07-02	3
 -- !result
 SELECT dt, sum(num) as num FROM t1 where dt >'2020-06-20' GROUP BY dt having sum(num) > 10 order by 1, 2 limit 3;
 -- result:
@@ -400,15 +400,15 @@ SELECT t2.dt, sum(t2.num) as num FROM t1 join t2 on t1.dt = t2.dt where t2.dt > 
 -- !result
 SELECT t2.dt, sum(t2.num) as num FROM t1 join t2 on t1.dt = t2.dt where t2.dt > '2020-06-20' GROUP BY t2.dt order by 1, 2 limit 3;
 -- result:
-2020-06-15	12
-2020-06-18	10
 2020-06-21	14
+2020-06-24	18
+2020-07-02	6
 -- !result
 SELECT t2.dt, sum(t2.num) as num FROM t1 join t2 on t1.dt = t2.dt where t2.dt > '2020-06-20' GROUP BY t2.dt having sum(t2.num) > 10 order by 1, 2 limit 3;
 -- result:
-2020-06-15	12
 2020-06-21	14
 2020-06-24	18
+2020-07-08	14
 -- !result
 SELECT t2.dt, sum(t2.num) as num FROM t1 join t2 on t1.dt = t2.dt GROUP BY t2.dt having sum(t2.num) > 10 order by 1, 2 limit 3;
 -- result:
@@ -460,15 +460,15 @@ SELECT t2.dt, sum(t2.num) as num FROM t1 join t2 on t1.dt = t2.dt where t2.dt > 
 -- !result
 SELECT t2.dt, sum(t2.num) as num FROM t1 join t2 on t1.dt = t2.dt where t2.dt > '2020-06-20' GROUP BY t2.dt order by 1, 2 limit 3;
 -- result:
-2020-06-15	12
-2020-06-18	10
 2020-06-21	14
+2020-06-24	18
+2020-07-02	6
 -- !result
 SELECT t2.dt, sum(t2.num) as num FROM t1 join t2 on t1.dt = t2.dt where t2.dt > '2020-06-20' GROUP BY t2.dt having sum(t2.num) > 10 order by 1, 2 limit 3;
 -- result:
-2020-06-15	12
 2020-06-21	14
 2020-06-24	18
+2020-07-08	14
 -- !result
 SELECT t2.dt, sum(t2.num) as num FROM t1 join t2 on t1.dt = t2.dt GROUP BY t2.dt having sum(t2.num) > 10 order by 1, 2 limit 3;
 -- result:

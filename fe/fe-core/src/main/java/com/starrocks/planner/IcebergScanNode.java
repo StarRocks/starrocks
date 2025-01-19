@@ -144,11 +144,11 @@ public class IcebergScanNode extends ScanNode {
 
         // Hard coding here
         // Try to get tabular signed temporary credential
-        CloudConfiguration tabularTempCloudConfiguration = CloudConfigurationFactory.
-                buildCloudConfigurationForTabular(icebergTable.getNativeTable().io().properties());
-        if (tabularTempCloudConfiguration.getCloudType() != CloudType.DEFAULT) {
+        CloudConfiguration vendedCredentialsCloudConfiguration = CloudConfigurationFactory.
+                buildCloudConfigurationForVendedCredentials(icebergTable.getNativeTable().io().properties());
+        if (vendedCredentialsCloudConfiguration.getCloudType() != CloudType.DEFAULT) {
             // If we get CloudConfiguration succeed from iceberg FileIO's properties, we just using it.
-            cloudConfiguration = tabularTempCloudConfiguration;
+            cloudConfiguration = vendedCredentialsCloudConfiguration;
         } else {
             CatalogConnector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
             Preconditions.checkState(connector != null,
@@ -309,6 +309,6 @@ public class IcebergScanNode extends ScanNode {
 
     @Override
     protected boolean supportTopNRuntimeFilter() {
-        return !icebergTable.isV2Format();
+        return true;
     }
 }

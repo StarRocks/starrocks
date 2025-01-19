@@ -54,6 +54,7 @@ import java.text.ParsePosition;
 import java.text.SimpleDateFormat;
 import java.time.Clock;
 import java.time.DateTimeException;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeParseException;
 import java.util.Date;
@@ -161,6 +162,11 @@ public class TimeUtils {
         return TimeZone.getTimeZone(ZoneId.of(ZoneId.systemDefault().getId(), TIME_ZONE_ALIAS_MAP));
     }
 
+    // Return now with system timezone
+    public static LocalDateTime getSystemNow() {
+        return LocalDateTime.now(getSystemTimeZone().toZoneId());
+    }
+
     // get time zone of given zone name, or return system time zone if name is null.
     public static TimeZone getOrSystemTimeZone(String timeZone) {
         if (timeZone == null) {
@@ -174,6 +180,10 @@ public class TimeUtils {
      */
     public static long getEpochSeconds() {
         return Clock.systemDefaultZone().instant().getEpochSecond();
+    }
+
+    public static long toEpochSeconds(LocalDateTime time) {
+        return time.atZone(getSystemTimeZone().toZoneId()).toInstant().getEpochSecond();
     }
 
     public static String longToTimeString(long timeStamp, SimpleDateFormat dateFormat) {

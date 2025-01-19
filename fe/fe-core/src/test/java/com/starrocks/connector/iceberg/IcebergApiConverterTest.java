@@ -31,6 +31,7 @@ import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.types.Types;
 import org.junit.Assert;
 import org.junit.Test;
@@ -73,6 +74,13 @@ public class IcebergApiConverterTest {
         org.apache.iceberg.types.Type icebergType = Types.StringType.get();
         Type resType = fromIcebergType(icebergType);
         Assert.assertEquals(resType, stringType);
+    }
+
+    @Test
+    public void testUUID() {
+        org.apache.iceberg.types.Type icebergType = Types.UUIDType.get();
+        Type resType = fromIcebergType(icebergType);
+        Assert.assertTrue(resType.isBinaryType());
     }
 
     @Test
@@ -240,5 +248,12 @@ public class IcebergApiConverterTest {
         org.apache.iceberg.types.Type icebergType = Types.TimeType.get();
         Type resType = fromIcebergType(icebergType);
         Assert.assertEquals(resType, timeType);
+    }
+
+    @Test
+    public void testConvertDbNameToNamespace() {
+        Assert.assertEquals(Namespace.of(""), IcebergApiConverter.convertDbNameToNamespace(""));
+        Assert.assertEquals(Namespace.of("a"), IcebergApiConverter.convertDbNameToNamespace("a"));
+        Assert.assertEquals(Namespace.of("a", "b", "c"), IcebergApiConverter.convertDbNameToNamespace("a.b.c"));
     }
 }

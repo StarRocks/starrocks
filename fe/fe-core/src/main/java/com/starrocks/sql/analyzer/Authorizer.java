@@ -18,6 +18,12 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TableName;
+import com.starrocks.authorization.AccessControlProvider;
+import com.starrocks.authorization.AccessController;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.ObjectType;
+import com.starrocks.authorization.PEntryObject;
+import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.BasicTable;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -25,12 +31,6 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
-import com.starrocks.privilege.AccessControlProvider;
-import com.starrocks.privilege.AccessController;
-import com.starrocks.privilege.AccessDeniedException;
-import com.starrocks.privilege.ObjectType;
-import com.starrocks.privilege.PEntryObject;
-import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -185,6 +185,10 @@ public class Authorizer {
 
     private static void doCheckTableLikeObject(UserIdentity currentUser, Set<Long> roleIds, String dbName,
                                                BasicTable tbl, PrivilegeType privilegeType) throws AccessDeniedException {
+        if (tbl == null) {
+            return;
+        }
+
         Table.TableType type = tbl.getType();
         switch (type) {
             case OLAP:

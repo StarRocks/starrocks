@@ -15,6 +15,7 @@
 
 package com.starrocks.authentication;
 
+import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.persist.AlterUserInfo;
@@ -22,7 +23,6 @@ import com.starrocks.persist.CreateUserInfo;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
-import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.SetDefaultRoleExecutor;

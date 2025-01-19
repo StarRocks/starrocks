@@ -22,47 +22,55 @@
 
 namespace starrocks::parquet {
 
-class ScalarColumnReader final : public ColumnReader {
+class FixedValueColumnReader final : public ColumnReader {
 public:
-    explicit ScalarColumnReader(const ParquetField* parquet_field, const tparquet::ColumnChunk* column_chunk_metadata,
-                                const TypeDescriptor* col_type, const ColumnReaderOptions& opts)
-            : ColumnReader(parquet_field), _opts(opts), _col_type(col_type), _chunk_metadata(column_chunk_metadata) {}
-    ~ScalarColumnReader() override = default;
+    explicit FixedValueColumnReader(Datum fixed_value) : ColumnReader(nullptr), _fixed_value(std::move(fixed_value)) {}
 
-    Status prepare() override {
-        RETURN_IF_ERROR(ColumnConverterFactory::create_converter(*get_column_parquet_field(), *_col_type,
-                                                                 _opts.timezone, &_converter));
-        return StoredColumnReader::create(_opts, get_column_parquet_field(), get_chunk_metadata(), &_reader);
+    ~FixedValueColumnReader() override = default;
+
+    Status prepare() override { return Status::OK(); }
+
+    void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) override {}
+
+    void set_need_parse_levels(bool need_parse_levels) override {}
+
+    void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
+                                 ColumnIOType type, bool active) override {}
+
+    void select_offset_index(const SparseRange<uint64_t>& range, const uint64_t rg_first_row) override {}
+
+    Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) override {
+        return Status::NotSupported("Not implemented");
     }
 
-    Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) override;
+    StatusOr<bool> row_group_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                             CompoundNodeType pred_relation, const uint64_t rg_first_row,
+                                             const uint64_t rg_num_rows) const override;
+
+    StatusOr<bool> page_index_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                              SparseRange<uint64_t>* row_ranges, CompoundNodeType pred_relation,
+                                              const uint64_t rg_first_row, const uint64_t rg_num_rows) override;
+
+private:
+    const Datum _fixed_value;
+};
+
+class RawColumnReader : public ColumnReader {
+public:
+    explicit RawColumnReader(const ParquetField* parquet_field, const tparquet::ColumnChunk* column_chunk_metadata,
+                             const ColumnReaderOptions& opts)
+            : ColumnReader(parquet_field), _opts(opts), _chunk_metadata(column_chunk_metadata) {}
+    ~RawColumnReader() override = default;
+
+    Status prepare() override {
+        return StoredColumnReader::create(_opts, get_column_parquet_field(), get_chunk_metadata(), &_reader);
+    }
 
     void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) override {
         _reader->get_levels(def_levels, rep_levels, num_levels);
     }
 
     void set_need_parse_levels(bool need_parse_levels) override { _reader->set_need_parse_levels(need_parse_levels); }
-
-    bool try_to_use_dict_filter(ExprContext* ctx, bool is_decode_needed, const SlotId slotId,
-                                const std::vector<std::string>& sub_field_path, const size_t& layer) override;
-
-    Status rewrite_conjunct_ctxs_to_predicate(bool* is_group_filtered, const std::vector<std::string>& sub_field_path,
-                                              const size_t& layer) override {
-        DCHECK_EQ(sub_field_path.size(), layer);
-        return _dict_filter_ctx->rewrite_conjunct_ctxs_to_predicate(_reader.get(), is_group_filtered);
-    }
-
-    void set_can_lazy_decode(bool can_lazy_decode) override {
-        _can_lazy_decode = can_lazy_decode && _col_type->is_string_type() && _column_all_pages_dict_encoded();
-    }
-
-    Status filter_dict_column(const ColumnPtr& column, Filter* filter, const std::vector<std::string>& sub_field_path,
-                              const size_t& layer) override {
-        DCHECK_EQ(sub_field_path.size(), layer);
-        return _dict_filter_ctx->predicate->evaluate_and(column.get(), filter->data());
-    }
-
-    Status fill_dst_column(ColumnPtr& dst, ColumnPtr& src) override;
 
     void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
                                  ColumnIOType type, bool active) override;
@@ -88,20 +96,81 @@ public:
 
     void select_offset_index(const SparseRange<uint64_t>& range, const uint64_t rg_first_row) override;
 
-private:
     // Returns true if all of the data pages in the column chunk are dict encoded
-    bool _column_all_pages_dict_encoded();
+    bool column_all_pages_dict_encoded() const;
+
+protected:
+    StatusOr<bool> _row_group_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                              CompoundNodeType pred_relation, const TypeDescriptor& col_type,
+                                              uint64_t rg_first_row, uint64_t rg_num_rows) const;
+
+    StatusOr<bool> _page_index_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                               SparseRange<uint64_t>* row_ranges, CompoundNodeType pred_relation,
+                                               const TypeDescriptor& col_type, const uint64_t rg_first_row,
+                                               const uint64_t rg_num_rows);
 
     const ColumnReaderOptions& _opts;
 
     std::unique_ptr<StoredColumnReader> _reader;
 
+    const tparquet::ColumnChunk* _chunk_metadata = nullptr;
+    std::unique_ptr<ColumnOffsetIndexCtx> _offset_index_ctx;
+};
+
+class ScalarColumnReader final : public RawColumnReader {
+public:
+    explicit ScalarColumnReader(const ParquetField* parquet_field, const tparquet::ColumnChunk* column_chunk_metadata,
+                                const TypeDescriptor* col_type, const ColumnReaderOptions& opts)
+            : RawColumnReader(parquet_field, column_chunk_metadata, opts), _col_type(col_type) {}
+    ~ScalarColumnReader() override = default;
+
+    Status prepare() override {
+        RETURN_IF_ERROR(ColumnConverterFactory::create_converter(*get_column_parquet_field(), *_col_type,
+                                                                 _opts.timezone, &_converter));
+        return RawColumnReader::prepare();
+    }
+
+    Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) override;
+
+    bool try_to_use_dict_filter(ExprContext* ctx, bool is_decode_needed, const SlotId slotId,
+                                const std::vector<std::string>& sub_field_path, const size_t& layer) override;
+
+    Status rewrite_conjunct_ctxs_to_predicate(bool* is_group_filtered, const std::vector<std::string>& sub_field_path,
+                                              const size_t& layer) override {
+        DCHECK_EQ(sub_field_path.size(), layer);
+        return _dict_filter_ctx->rewrite_conjunct_ctxs_to_predicate(_reader.get(), is_group_filtered);
+    }
+
+    void set_can_lazy_decode(bool can_lazy_decode) override {
+        _can_lazy_decode = can_lazy_decode && _col_type->is_string_type() && column_all_pages_dict_encoded();
+    }
+
+    Status filter_dict_column(const ColumnPtr& column, Filter* filter, const std::vector<std::string>& sub_field_path,
+                              const size_t& layer) override {
+        DCHECK_EQ(sub_field_path.size(), layer);
+        return _dict_filter_ctx->predicate->evaluate_and(column.get(), filter->data());
+    }
+
+    Status fill_dst_column(ColumnPtr& dst, ColumnPtr& src) override;
+
+    StatusOr<bool> row_group_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                             CompoundNodeType pred_relation, const uint64_t rg_first_row,
+                                             const uint64_t rg_num_rows) const override {
+        return _row_group_zone_map_filter(predicates, pred_relation, *_col_type, rg_first_row, rg_num_rows);
+    }
+
+    StatusOr<bool> page_index_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                              SparseRange<uint64_t>* row_ranges, CompoundNodeType pred_relation,
+                                              const uint64_t rg_first_row, const uint64_t rg_num_rows) override {
+        return _page_index_zone_map_filter(predicates, row_ranges, pred_relation, *_col_type, rg_first_row,
+                                           rg_num_rows);
+    }
+
+private:
     std::unique_ptr<ColumnConverter> _converter;
 
     std::unique_ptr<ColumnDictFilterContext> _dict_filter_ctx;
     const TypeDescriptor* _col_type = nullptr;
-    const tparquet::ColumnChunk* _chunk_metadata = nullptr;
-    std::unique_ptr<ColumnOffsetIndexCtx> _offset_index_ctx;
 
     // _can_lazy_decode means string type and all page dict code
     bool _can_lazy_decode = false;

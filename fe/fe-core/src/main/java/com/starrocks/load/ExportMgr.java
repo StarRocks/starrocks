@@ -39,6 +39,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.Gson;
 import com.starrocks.analysis.TableName;
+import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.common.AnalysisException;
@@ -56,7 +57,6 @@ import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
-import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
@@ -129,7 +129,7 @@ public class ExportMgr implements MemoryTrackable {
     }
 
     private ExportJob createJob(long jobId, UUID queryId, ExportStmt stmt) throws Exception {
-        ExportJob job = new ExportJob(jobId, queryId);
+        ExportJob job = new ExportJob(jobId, queryId, ConnectContext.get().getCurrentWarehouseId());
         job.setJob(stmt);
         return job;
     }

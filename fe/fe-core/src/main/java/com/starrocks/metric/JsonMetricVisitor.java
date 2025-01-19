@@ -35,14 +35,32 @@
 package com.starrocks.metric;
 
 import com.codahale.metrics.Histogram;
+import com.codahale.metrics.Snapshot;
 import com.starrocks.monitor.jvm.GcNames;
 import com.starrocks.monitor.jvm.JvmStats;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.NodeMgr;
+import com.starrocks.system.SystemInfoService;
+import org.apache.commons.collections.ListUtils;
 
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 public class JsonMetricVisitor extends MetricVisitor {
     private boolean isFirstElement;
     private final StringBuilder sb;
+
+    private static final String MILLISECONDS = "milliseconds";
+    private static final String QUANTILE = "quantile";
+    private static final String NOUNIT = "nounit";
+    private static final String TYPE = "type";
+    private static final String STATUS = "status";
+    private static final String TOTAL = "total";
+    private static final String FE_NODE_NUM = "fe_node_num";
+    private static final String BE_NODE_NUM = "be_node_num";
+    private static final String CN_NODE_NUM = "cn_node_num";
+    private static final String BROKER_NODE_NUM = "broker_node_num";
 
     public JsonMetricVisitor(String prefix) {
         super(prefix);
@@ -134,15 +152,84 @@ public class JsonMetricVisitor extends MetricVisitor {
 
     @Override
     public void visitHistogram(HistogramMetric histogram) {
+        final String fullName = prefix + "_" + histogram.getName().replace("\\.", "_");
+        Snapshot snapshot = histogram.getSnapshot();
+        List<MetricLabel> labels = histogram.getLabels();
+        buildMetric(fullName, MILLISECONDS, String.valueOf(snapshot.get75thPercentile()),
+                ListUtils.union(labels, Collections.singletonList(new MetricLabel(QUANTILE, "0.75"))));
+        buildMetric(fullName, MILLISECONDS, String.valueOf(snapshot.get95thPercentile()),
+                ListUtils.union(labels, Collections.singletonList(new MetricLabel(QUANTILE, "0.95"))));
+        buildMetric(fullName, MILLISECONDS, String.valueOf(snapshot.get98thPercentile()),
+                ListUtils.union(labels, Collections.singletonList(new MetricLabel(QUANTILE, "0.98"))));
+        buildMetric(fullName, MILLISECONDS, String.valueOf(snapshot.get99thPercentile()),
+                ListUtils.union(labels, Collections.singletonList(new MetricLabel(QUANTILE, "0.99"))));
+        buildMetric(fullName, MILLISECONDS, String.valueOf(snapshot.get999thPercentile()),
+                ListUtils.union(labels, Collections.singletonList(new MetricLabel(QUANTILE, "0.999"))));
 
+        buildMetric(fullName + "_sum", MILLISECONDS,
+                String.valueOf(histogram.getCount() * snapshot.getMean()), labels);
+        buildMetric(fullName + "_count", NOUNIT,
+                String.valueOf(histogram.getCount()), labels);
     }
 
     @Override
     public void visitHistogram(String name, Histogram histogram) {
+        // skip HistogramMetric since it needs extra processing
+        if (histogram instanceof HistogramMetric) {
+            visitHistogram((HistogramMetric) histogram);
+            return;
+        }
+        final String fullName = prefix + "_" + name.replace("\\.", "_");
+        Snapshot snapshot = histogram.getSnapshot();
+
+        buildMetric(fullName, MILLISECONDS, String.valueOf(snapshot.get75thPercentile()),
+                Collections.singletonList(new MetricLabel(QUANTILE, "0.75")));
+        buildMetric(fullName, MILLISECONDS, String.valueOf(snapshot.get95thPercentile()),
+                Collections.singletonList(new MetricLabel(QUANTILE, "0.95")));
+        buildMetric(fullName, MILLISECONDS, String.valueOf(snapshot.get98thPercentile()),
+                Collections.singletonList(new MetricLabel(QUANTILE, "0.98")));
+        buildMetric(fullName, MILLISECONDS, String.valueOf(snapshot.get99thPercentile()),
+                Collections.singletonList(new MetricLabel(QUANTILE, "0.99")));
+        buildMetric(fullName, MILLISECONDS, String.valueOf(snapshot.get999thPercentile()),
+                Collections.singletonList(new MetricLabel(QUANTILE, "0.999")));
+
+        buildMetric(fullName + "_sum", MILLISECONDS, String.valueOf(histogram.getCount() * snapshot.getMean()),
+                null);
+        buildMetric(fullName + "_count", NOUNIT, String.valueOf(histogram.getCount()), null);
     }
 
     @Override
     public void getNodeInfo() {
+        final String NODE_INFO = "node_info";
+        final NodeMgr nodeMgr = GlobalStateMgr.getCurrentState().getNodeMgr();
+        final SystemInfoService systemInfoService = nodeMgr.getClusterInfo();
+
+        buildMetric(NODE_INFO, NOUNIT, String.valueOf(nodeMgr.getFrontends(null).size()),
+                Arrays.asList(new MetricLabel(TYPE, FE_NODE_NUM), new MetricLabel(STATUS, TOTAL)));
+        buildMetric(NODE_INFO, NOUNIT, String.valueOf(systemInfoService.getTotalBackendNumber()),
+                Arrays.asList(new MetricLabel(TYPE, BE_NODE_NUM), new MetricLabel(STATUS, TOTAL)));
+        buildMetric(NODE_INFO, NOUNIT, String.valueOf(systemInfoService.getAliveBackendNumber()),
+                Arrays.asList(new MetricLabel(TYPE, BE_NODE_NUM), new MetricLabel(STATUS, "alive")));
+        buildMetric(NODE_INFO, NOUNIT,
+                String.valueOf(systemInfoService.getDecommissionedBackendIds().size()),
+                Arrays.asList(new MetricLabel(TYPE, BE_NODE_NUM), new MetricLabel(STATUS, "decommissioned")));
+        buildMetric(NODE_INFO, NOUNIT, String.valueOf(
+                        GlobalStateMgr.getCurrentState().getBrokerMgr().getAllBrokers().stream().filter(b -> !b.isAlive)
+                                .count()),
+                Arrays.asList(new MetricLabel(TYPE, BROKER_NODE_NUM), new MetricLabel(STATUS, "dead")));
+
+        buildMetric(NODE_INFO, NOUNIT,
+                String.valueOf(systemInfoService.getTotalComputeNodeNumber()),
+                Arrays.asList(new MetricLabel(TYPE, CN_NODE_NUM), new MetricLabel(STATUS, TOTAL)));
+        buildMetric(NODE_INFO, NOUNIT,
+                String.valueOf(systemInfoService.getAliveComputeNodeNumber()),
+                Arrays.asList(new MetricLabel(TYPE, CN_NODE_NUM), new MetricLabel(STATUS, "alive")));
+
+        // only master FE has this metrics, to help the Grafana knows who is the leader
+        if (GlobalStateMgr.getCurrentState().isLeader()) {
+            buildMetric(NODE_INFO, NOUNIT, String.valueOf(1),
+                    Collections.singletonList(new MetricLabel(TYPE, "is_master")));
+        }
     }
 
     @Override

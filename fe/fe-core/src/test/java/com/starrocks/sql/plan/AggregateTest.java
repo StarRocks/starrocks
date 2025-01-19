@@ -1658,11 +1658,11 @@ public class AggregateTest extends PlanTestBase {
                 "sum(arrays_overlap(v3, [1])) as q2, " +
                 "sum(arrays_overlap(v3, [1])) as q3 FROM tarray;");
         assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
-                "  |  output: sum(arrays_overlap(3: v3, CAST([1] AS ARRAY<BIGINT>)))\n" +
+                "  |  output: sum(4: arrays_overlap)\n" +
                 "  |  group by: \n" +
                 "  |  \n" +
                 "  1:Project\n" +
-                "  |  <slot 3> : 3: v3\n" +
+                "  |  <slot 4> : arrays_overlap(3: v3, CAST([1] AS ARRAY<BIGINT>))\n" +
                 "  |  \n" +
                 "  0:OlapScanNode");
     }

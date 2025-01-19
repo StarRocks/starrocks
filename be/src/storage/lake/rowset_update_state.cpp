@@ -34,6 +34,73 @@
 
 namespace starrocks::lake {
 
+Status SegmentPKEncodeResult::_load() {
+    pk_column->reset_column();
+    ChunkUniquePtr chunk_shared_ptr;
+    TRY_CATCH_BAD_ALLOC(chunk_shared_ptr = ChunkHelper::new_chunk(_pkey_schema, 4096));
+    auto chunk = chunk_shared_ptr.get();
+    if (_iter != nullptr) {
+        while (true) {
+            chunk->reset();
+            auto st = _iter->get_next(chunk);
+            if (st.is_end_of_file()) {
+                break;
+            } else if (!st.ok()) {
+                return st;
+            } else {
+                TRY_CATCH_BAD_ALLOC(
+                        PrimaryKeyEncoder::encode(_pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get()));
+                if (_lazy_load && pk_column->memory_usage() >= config::pk_column_lazy_load_threshold_bytes) {
+                    break;
+                }
+            }
+        }
+    }
+    if (pk_column->empty()) {
+        return Status::OK();
+    }
+    _current_rows += pk_column->size();
+    _begin_rowid_offsets.push_back(_current_rows);
+    return Status::OK();
+}
+
+Status SegmentPKEncodeResult::init(const ChunkIteratorPtr& iter, const Schema& pkey_schema, bool lazy_load) {
+    _iter = iter;
+    _pkey_schema = pkey_schema;
+    _lazy_load = lazy_load;
+    _begin_rowid_offsets.push_back(0);
+    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(_pkey_schema, &pk_column));
+    _status = _load();
+    if (_status.ok()) {
+        TRY_CATCH_BAD_ALLOC(pk_column->raw_data());
+        _memory_usage = pk_column->memory_usage();
+    }
+    return _status;
+}
+
+bool SegmentPKEncodeResult::done() {
+    return pk_column->empty() || !_status.ok();
+}
+
+Status SegmentPKEncodeResult::status() {
+    return _status;
+}
+
+void SegmentPKEncodeResult::next() {
+    _status = _load();
+    if (_status.ok()) {
+        _current_pk_column_idx++;
+    }
+}
+
+std::pair<Column*, size_t> SegmentPKEncodeResult::current() {
+    return std::make_pair(pk_column.get(), _begin_rowid_offsets[_current_pk_column_idx]);
+}
+
+void SegmentPKEncodeResult::close() {
+    _iter->close();
+}
+
 RowsetUpdateState::RowsetUpdateState() = default;
 
 RowsetUpdateState::~RowsetUpdateState() = default;
@@ -201,38 +268,17 @@ Status RowsetUpdateState::_do_load_upserts(uint32_t segment_id, const RowsetUpda
         pk_columns.push_back((uint32_t)i);
     }
     Schema pkey_schema = ChunkHelper::convert_schema(params.tablet_schema, pk_columns);
-    std::unique_ptr<Column> pk_column;
-    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
 
     if (_segment_iters.empty()) {
         ASSIGN_OR_RETURN(_segment_iters, _rowset_ptr->get_each_segment_iterator(pkey_schema, false, &_stats));
     }
     RETURN_ERROR_IF_FALSE(_segment_iters.size() == _rowset_ptr->num_segments());
-    // only hold pkey, so can use larger chunk size
-    ChunkUniquePtr chunk_shared_ptr;
-    TRY_CATCH_BAD_ALLOC(chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, 4096));
-    auto chunk = chunk_shared_ptr.get();
-
-    auto itr = _segment_iters[segment_id].get();
-    auto& dest = _upserts[segment_id];
-    auto col = pk_column->clone();
-    if (itr != nullptr) {
-        while (true) {
-            chunk->reset();
-            auto st = itr->get_next(chunk);
-            if (st.is_end_of_file()) {
-                break;
-            } else if (!st.ok()) {
-                return st;
-            } else {
-                TRY_CATCH_BAD_ALLOC(PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), col.get()));
-            }
-        }
-        itr->close();
-    }
-    dest = std::move(col);
-    TRY_CATCH_BAD_ALLOC(dest->raw_data());
-    _memory_usage += dest->memory_usage();
+    auto& iter = _segment_iters[segment_id];
+    SegmentPKEncodeResultPtr result = std::make_unique<SegmentPKEncodeResult>();
+    // If this txn contains partial update or auto increment partial update, can't support lazy load now.
+    RETURN_IF_ERROR(result->init(iter, pkey_schema, !params.op_write.has_txn_meta()));
+    _upserts[segment_id] = std::move(result);
+    _memory_usage += _upserts[segment_id]->memory_usage();
 
     return Status::OK();
 }
@@ -288,14 +334,14 @@ Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(uint32_t
 
     _auto_increment_partial_update_states[segment_id].init(
             modified_columns_schema, txn_meta.auto_increment_partial_update_column_id(), segment_id);
-    _auto_increment_partial_update_states[segment_id].src_rss_rowids.resize(_upserts[segment_id]->size());
+    _auto_increment_partial_update_states[segment_id].src_rss_rowids.resize(_upserts[segment_id]->pk_column->size());
     read_column.resize(1);
     read_column[0] = column->clone_empty();
     _auto_increment_partial_update_states[segment_id].write_column = column->clone_empty();
 
     // use upserts to get rowids in this segment
     RETURN_IF_ERROR(params.tablet->update_mgr()->get_rowids_from_pkindex(
-            params.tablet->id(), _base_versions[segment_id], _upserts[segment_id],
+            params.tablet->id(), _base_versions[segment_id], _upserts[segment_id]->pk_column,
             &(_auto_increment_partial_update_states[segment_id].src_rss_rowids), need_lock));
 
     std::vector<uint32_t> rowids;
@@ -351,7 +397,7 @@ Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(uint32_t
         *    different segment file.
         */
     _auto_increment_delete_pks[segment_id].reset();
-    _auto_increment_delete_pks[segment_id] = _upserts[segment_id]->clone_empty();
+    _auto_increment_delete_pks[segment_id] = _upserts[segment_id]->pk_column->clone_empty();
     std::vector<uint32_t> delete_idxes;
     const int64* data = nullptr;
     TRY_CATCH_BAD_ALLOC(data = reinterpret_cast<const int64*>(
@@ -367,7 +413,7 @@ Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(uint32_t
 
     if (delete_idxes.size() != 0) {
         TRY_CATCH_BAD_ALLOC(_auto_increment_delete_pks[segment_id]->append_selective(
-                *_upserts[segment_id], delete_idxes.data(), 0, delete_idxes.size()));
+                *(_upserts[segment_id]->pk_column), delete_idxes.data(), 0, delete_idxes.size()));
         _memory_usage += _auto_increment_delete_pks[segment_id]->memory_usage();
     }
     return Status::OK();
@@ -387,7 +433,7 @@ Status RowsetUpdateState::_prepare_partial_update_states(uint32_t segment_id, co
     std::vector<std::unique_ptr<Column>> read_columns;
     read_columns.resize(read_column_ids.size());
     _partial_update_states[segment_id].write_columns.resize(read_columns.size());
-    _partial_update_states[segment_id].src_rss_rowids.resize(_upserts[segment_id]->size());
+    _partial_update_states[segment_id].src_rss_rowids.resize(_upserts[segment_id]->pk_column->size());
     for (uint32_t j = 0; j < read_columns.size(); ++j) {
         auto column = ChunkHelper::column_from_field(*read_column_schema.field(j).get());
         read_columns[j] = column->clone_empty();
@@ -396,7 +442,7 @@ Status RowsetUpdateState::_prepare_partial_update_states(uint32_t segment_id, co
 
     // use upsert to get rowids for this segment
     RETURN_IF_ERROR(params.tablet->update_mgr()->get_rowids_from_pkindex(
-            params.tablet->id(), _base_versions[segment_id], _upserts[segment_id],
+            params.tablet->id(), _base_versions[segment_id], _upserts[segment_id]->pk_column,
             &(_partial_update_states[segment_id].src_rss_rowids), need_lock));
 
     size_t num_default = 0;
@@ -430,7 +476,7 @@ StatusOr<bool> RowsetUpdateState::file_exist(const std::string& full_path) {
     }
 }
 
-Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, const RowsetUpdateStateParams& params,
+Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, const RowsetUpdateStateParams& params,
                                           std::map<int, FileInfo>* replace_segments,
                                           std::vector<std::string>* orphan_files) {
     CHECK_MEM_LIMIT("RowsetUpdateState::rewrite_segment");
@@ -468,10 +514,10 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, const RowsetUpdat
 
     bool need_rename = true;
     const auto& src_path = rowset_meta.segments(segment_id);
-    const auto& dest_path = params.op_write.rewrite_segments(segment_id);
+    const auto& dest_path = gen_segment_filename(txn_id);
     DCHECK(src_path != dest_path);
 
-    FileInfo src{.path = params.tablet->segment_location(src_path)};
+    FileInfo src{.path = params.tablet->segment_location(src_path), .size = rowset_meta.segment_size(segment_id)};
     auto segment_encryption_metas_size = params.op_write.rowset().segment_encryption_metas_size();
     if (segment_encryption_metas_size > 0) {
         if (segment_id >= segment_encryption_metas_size) {
@@ -484,35 +530,23 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, const RowsetUpdat
         src.encryption_meta = params.op_write.rowset().segment_encryption_metas(segment_id);
     }
 
-    bool skip_because_file_exist = false;
     int64_t t_rewrite_start = MonotonicMillis();
     if (has_auto_increment_partial_update_state(params) &&
         !_auto_increment_partial_update_states[segment_id].skip_rewrite) {
         FileInfo file_info{.path = params.tablet->segment_location(dest_path)};
-        ASSIGN_OR_RETURN(bool skip_rewrite, file_exist(file_info.path));
-        if (!skip_rewrite) {
-            RETURN_IF_ERROR(SegmentRewriter::rewrite_auto_increment_lake(
-                    src, &file_info, params.tablet_schema, _auto_increment_partial_update_states[segment_id],
-                    unmodified_column_ids,
-                    has_partial_update_state(params) ? &_partial_update_states[segment_id].write_columns : nullptr,
-                    params.tablet));
-        } else {
-            skip_because_file_exist = true;
-        }
+        RETURN_IF_ERROR(SegmentRewriter::rewrite_auto_increment_lake(
+                src, &file_info, params.tablet_schema, _auto_increment_partial_update_states[segment_id],
+                unmodified_column_ids,
+                has_partial_update_state(params) ? &_partial_update_states[segment_id].write_columns : nullptr,
+                params.tablet));
         file_info.path = dest_path;
         (*replace_segments)[segment_id] = file_info;
     } else if (has_partial_update_state(params)) {
         const FooterPointerPB& partial_rowset_footer = txn_meta.partial_rowset_footers(segment_id);
         FileInfo file_info{.path = params.tablet->segment_location(dest_path)};
-        // if rewrite fail, let segment gc to clean dest segment file
-        ASSIGN_OR_RETURN(bool skip_rewrite, file_exist(file_info.path));
-        if (!skip_rewrite) {
-            RETURN_IF_ERROR(SegmentRewriter::rewrite_partial_update(
-                    src, &file_info, params.tablet_schema, unmodified_column_ids,
-                    _partial_update_states[segment_id].write_columns, segment_id, partial_rowset_footer));
-        } else {
-            skip_because_file_exist = true;
-        }
+        RETURN_IF_ERROR(SegmentRewriter::rewrite_partial_update(
+                src, &file_info, params.tablet_schema, unmodified_column_ids,
+                _partial_update_states[segment_id].write_columns, segment_id, partial_rowset_footer));
         file_info.path = dest_path;
         (*replace_segments)[segment_id] = file_info;
     } else {
@@ -520,10 +554,9 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, const RowsetUpdat
     }
     int64_t t_rewrite_end = MonotonicMillis();
     LOG(INFO) << strings::Substitute(
-            "lake apply partial segment tablet:$0 rowset:$1 seg:$2 #column:$3 #rewrite:$4ms [$5 -> $6] "
-            "skip_because_file_exist:$7",
+            "lake apply partial segment tablet:$0 rowset:$1 seg:$2 #column:$3 #rewrite:$4ms [$5 -> $6]",
             params.tablet->id(), rowset_meta.id(), segment_id, unmodified_column_ids.size(),
-            t_rewrite_end - t_rewrite_start, src_path, dest_path, skip_because_file_exist);
+            t_rewrite_end - t_rewrite_start, src_path, dest_path);
 
     // rename segment file
     if (need_rename) {
@@ -552,9 +585,9 @@ Status RowsetUpdateState::_resolve_conflict(uint32_t segment_id, const RowsetUpd
     }
 
     // use upserts to get rowids in this segment
-    std::vector<uint64_t> new_rss_rowids(_upserts[segment_id]->size());
+    std::vector<uint64_t> new_rss_rowids(_upserts[segment_id]->pk_column->size());
     RETURN_IF_ERROR(params.tablet->update_mgr()->get_rowids_from_pkindex(
-            params.tablet->id(), _base_versions[segment_id], _upserts[segment_id], &new_rss_rowids, false));
+            params.tablet->id(), _base_versions[segment_id], _upserts[segment_id]->pk_column, &new_rss_rowids, false));
 
     size_t total_conflicts = 0;
     std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(params.metadata->schema());
@@ -704,7 +737,7 @@ Status RowsetUpdateState::_resolve_conflict_auto_increment(const RowsetUpdateSta
 
         // reslove delete-partial update conflict base on latest column values
         _auto_increment_delete_pks[segment_id].reset();
-        _auto_increment_delete_pks[segment_id] = _upserts[segment_id]->clone_empty();
+        _auto_increment_delete_pks[segment_id] = _upserts[segment_id]->pk_column->clone_empty();
         std::vector<uint32_t> delete_idxes;
         const int64* data = nullptr;
         TRY_CATCH_BAD_ALLOC(data = reinterpret_cast<const int64*>(
@@ -720,7 +753,7 @@ Status RowsetUpdateState::_resolve_conflict_auto_increment(const RowsetUpdateSta
 
         if (delete_idxes.size() != 0) {
             TRY_CATCH_BAD_ALLOC(_auto_increment_delete_pks[segment_id]->append_selective(
-                    *_upserts[segment_id], delete_idxes.data(), 0, delete_idxes.size()));
+                    *(_upserts[segment_id]->pk_column), delete_idxes.data(), 0, delete_idxes.size()));
         }
     }
     return Status::OK();

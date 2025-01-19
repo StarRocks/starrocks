@@ -21,10 +21,13 @@ import com.staros.proto.FilePathInfo;
 import com.starrocks.alter.AlterJobV2Builder;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.io.DeepCopy;
@@ -59,6 +62,14 @@ public class LakeMaterializedView extends MaterializedView {
                                 PartitionInfo partitionInfo, DistributionInfo defaultDistributionInfo,
                                 MvRefreshScheme refreshScheme) {
         super(id, dbId, mvName, baseSchema, keysType, partitionInfo, defaultDistributionInfo, refreshScheme);
+        this.type = TableType.CLOUD_NATIVE_MATERIALIZED_VIEW;
+    }
+
+    public LakeMaterializedView(Database db, String mvName,
+                            MaterializedIndexMeta indexMeta, OlapTable baseTable,
+                            PartitionInfo partitionInfo, DistributionInfo distributionInfo,
+                            MvRefreshScheme refreshScheme) {
+        super(db, mvName, indexMeta, baseTable, partitionInfo, distributionInfo, refreshScheme);
         this.type = TableType.CLOUD_NATIVE_MATERIALIZED_VIEW;
     }
 

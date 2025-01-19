@@ -65,6 +65,10 @@ import com.starrocks.sql.ast.pipe.DescPipeStmt;
 import com.starrocks.sql.ast.pipe.DropPipeStmt;
 import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.sql.ast.pipe.ShowPipeStmt;
+import com.starrocks.sql.ast.translate.TranslateStmt;
+import com.starrocks.sql.ast.txn.BeginStmt;
+import com.starrocks.sql.ast.txn.CommitStmt;
+import com.starrocks.sql.ast.txn.RollbackStmt;
 import com.starrocks.sql.ast.warehouse.AlterWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.CreateWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.DropWarehouseStmt;
@@ -420,6 +424,14 @@ public interface AstVisitor<R, C> {
 
     default R visitSyncStatement(SyncStmt statement, C context) {
         return visitDDLStatement(statement, context);
+    }
+
+    default R visitAdminSetAutomatedSnapshotOnStatement(AdminSetAutomatedSnapshotOnStmt clause, C context) {
+        return visitDDLStatement(clause, context);
+    }
+
+    default R visitAdminSetAutomatedSnapshotOffStatement(AdminSetAutomatedSnapshotOffStmt clause, C context) {
+        return visitDDLStatement(clause, context);
     }
 
     // ---------------------------------------- Cluster Management Statement -------------------------------------------
@@ -1117,6 +1129,10 @@ public interface AstVisitor<R, C> {
         return visitNode(clause, context);
     }
 
+    default R visitDropPersistentIndexClause(DropPersistentIndexClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
     default R visitTableRenameClause(TableRenameClause clause, C context) {
         return visitNode(clause, context);
     }
@@ -1485,6 +1501,25 @@ public interface AstVisitor<R, C> {
     }
 
     default R visitShowPlanAdvisorStatement(ShowPlanAdvisorStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    // ---------------------------------------- Transaction Statement --------------------------------------------------
+
+    default R visitBeginStatement(BeginStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    default R visitCommitStatement(CommitStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    default R visitRollbackStatement(RollbackStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    // ---------------------------------------- Translate Statement --------------------------------------------------
+    default R visitTranslateStatement(TranslateStmt statement, C context) {
         return visitStatement(statement, context);
     }
 

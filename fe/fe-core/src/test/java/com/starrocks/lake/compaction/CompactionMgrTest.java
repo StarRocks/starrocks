@@ -182,6 +182,20 @@ public class CompactionMgrTest {
                 }
                 return true;
             }
+
+            @Mock
+            public boolean isPhysicalPartitionExist(GlobalStateMgr stateMgr, long dbId, long tableId, long partitionId) {
+                if (partitionId == 3) {
+                    return true;
+                }
+                if (partitionId == 4) {
+                    return false;
+                }
+                if (partitionId == 5) {
+                    return false;
+                }
+                return true;
+            }
         };
 
         UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();

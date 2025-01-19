@@ -73,7 +73,7 @@ from t1 a join t2 b on a.k1=b.k1 group by a.k1, b.k1, a.k3, b.k3, a.k4, b.k4;
 refresh materialized view  test_mv0 with sync mode;
 [UC] analyze table test_mv0 with sync mode;
 -- result:
-db_f94db20dc0b44906a3118fe96410cca0.test_mv0	analyze	status	OK
+db_a9b5f84a8d2d47419ff72c406d3ca28d.test_mv0	analyze	status	OK
 -- !result
 select * from test_mv0 order by 1, 2, 3, 4, 5, 6;
 -- result:
@@ -81,10 +81,6 @@ select * from test_mv0 order by 1, 2, 3, 4, 5, 6;
 2020-10-12	2020-10-12	k3	k3	k4	k4	1	2	3	4
 2020-10-21	2020-10-21	k3	k3	k4	k4	0	2	3	4
 2020-10-22	2020-10-22	k3	k3	k4	k4	1	2	3	4
--- !result
-function: print_hit_materialized_view('select a.k1 as ak1, b.k1 as bk1, a.k3 as ak3, b.k3 as bk3, sum(a.k6) as sum_k6, sum(b.k7) as sum_k7, sum(a.k8) as sum_k8, sum(b.k9) as sum_k9 from t1 a join t2 b on a.k1=b.k1 group by a.k1, b.k1, a.k3, b.k3;', 'test_mv0')
--- result:
-True
 -- !result
 select a.k1 as ak1, b.k1 as bk1, a.k3 as ak3, b.k3 as bk3, sum(a.k6) as sum_k6, sum(b.k7) as sum_k7, sum(a.k8) as sum_k8, sum(b.k9) as sum_k9 from t1 a join t2 b on a.k1=b.k1 group by a.k1, b.k1, a.k3, b.k3 order by 1, 2, 3, 4, 5, 6;
 -- result:
@@ -106,7 +102,7 @@ refresh materialized view test_mv1 with sync mode;
 -- !result
 [UC] analyze table test_mv1 with sync mode;
 -- result:
-db_f94db20dc0b44906a3118fe96410cca0.test_mv1	analyze	status	OK
+db_a9b5f84a8d2d47419ff72c406d3ca28d.test_mv1	analyze	status	OK
 -- !result
 select * from test_mv1 order by 1, 2, 3, 4;
 -- result:
@@ -115,20 +111,12 @@ select * from test_mv1 order by 1, 2, 3, 4;
 2020-10-21	2020-10-21	k3	k3	0	2	3	4
 2020-10-22	2020-10-22	k3	k3	1	2	3	4
 -- !result
-function: print_hit_materialized_view('select a.k1 as ak1, b.k1 as bk1, a.k3 as ak3, b.k3 as bk3, sum(a.k6) as sum_k6, sum(b.k7) as sum_k7, sum(a.k8) as sum_k8, sum(b.k9) as sum_k9 from t1 a join t2 b on a.k1=b.k1 group by a.k1, b.k1, a.k3, b.k3;', 'test_mv1')
--- result:
-True
--- !result
 select a.k1 as ak1, b.k1 as bk1, a.k3 as ak3, b.k3 as bk3, sum(a.k6) as sum_k6, sum(b.k7) as sum_k7, sum(a.k8) as sum_k8, sum(b.k9) as sum_k9 from t1 a join t2 b on a.k1=b.k1 group by a.k1, b.k1, a.k3, b.k3 order by 1, 2, 3, 4;
 -- result:
 2020-10-11	2020-10-11	k3	k3	0	2	3	4
 2020-10-12	2020-10-12	k3	k3	1	2	3	4
 2020-10-21	2020-10-21	k3	k3	0	2	3	4
 2020-10-22	2020-10-22	k3	k3	1	2	3	4
--- !result
-function: print_hit_materialized_view('select a.k1 as ak1, a.k3 as ak3, sum(a.k6) as sum_k6, sum(b.k7) as sum_k7, sum(a.k8) as sum_k8 from t1 a join t2 b on a.k1=b.k1 group by a.k1, a.k3;', 'test_mv1')
--- result:
-True
 -- !result
 select a.k1 as ak1, a.k3 as ak3, sum(a.k6) as sum_k6, sum(b.k7) as sum_k7, sum(a.k8) as sum_k8 from t1 a join t2 b on a.k1=b.k1 group by a.k1, a.k3 order by 1, 2, 3, 4; 
 
@@ -149,7 +137,7 @@ refresh materialized view test_mv2 with sync mode;
 -- !result
 [UC] analyze table test_mv2 with sync mode;
 -- result:
-db_f94db20dc0b44906a3118fe96410cca0.test_mv2	analyze	status	OK
+db_a9b5f84a8d2d47419ff72c406d3ca28d.test_mv2	analyze	status	OK
 -- !result
 select * from test_mv2 order by 1, 2, 3, 4;
 -- result:
@@ -158,20 +146,12 @@ select * from test_mv2 order by 1, 2, 3, 4;
 2020-10-21	k3	0	2	3
 2020-10-22	k3	1	2	3
 -- !result
-function: print_hit_materialized_view('select a.k1 as ak1, a.k3 as ak3, sum(a.k6) as sum_k6, sum(b.k7) as sum_k7, sum(a.k8) as sum_k8 from t1 a join t2 b on a.k1=b.k1 group by a.k1, a.k3;', 'test_mv2')
--- result:
-True
--- !result
 select a.k1 as ak1, a.k3 as ak3, sum(a.k6) as sum_k6, sum(b.k7) as sum_k7, sum(a.k8) as sum_k8 from t1 a join t2 b on a.k1=b.k1 group by a.k1, a.k3 order by 1, 2, 3, 4;
 -- result:
 2020-10-11	k3	0	2	3
 2020-10-12	k3	1	2	3
 2020-10-21	k3	0	2	3
 2020-10-22	k3	1	2	3
--- !result
-function: print_hit_materialized_view('select a.k1 as ak1, sum(a.k6) as sum_k6, sum(b.k7) as sum_k7 from t1 a join t2 b on a.k1=b.k1 group by a.k1;', 'test_mv2')
--- result:
-True
 -- !result
 select a.k1 as ak1, sum(a.k6) as sum_k6, sum(b.k7) as sum_k7 from t1 a join t2 b on a.k1=b.k1 group by a.k1 order by 1, 2;
 -- result:
@@ -191,7 +171,7 @@ select a.k1 as ak1, sum(a.k6) as sum_k6, sum(b.k7) as sum_k7 from t1 a join t2 b
 refresh materialized view test_mv3 with sync mode;
 [UC] analyze table test_mv3 with sync mode;
 -- result:
-db_f94db20dc0b44906a3118fe96410cca0.test_mv3	analyze	status	OK
+db_a9b5f84a8d2d47419ff72c406d3ca28d.test_mv3	analyze	status	OK
 -- !result
 select * from test_mv3 order by 1;
 -- result:
@@ -199,10 +179,6 @@ select * from test_mv3 order by 1;
 2020-10-12	1	2
 2020-10-21	0	2
 2020-10-22	1	2
--- !result
-function: print_hit_materialized_view('select a.k1 as ak1, sum(a.k6) as sum_k6, sum(b.k7) as sum_k7 from t1 a join t2 b on a.k1=b.k1 group by a.k1;', 'test_mv3')
--- result:
-True
 -- !result
 select a.k1 as ak1, sum(a.k6) as sum_k6, sum(b.k7) as sum_k7 from t1 a join t2 b on a.k1=b.k1 group by a.k1 order by 1, 2;
 -- result:

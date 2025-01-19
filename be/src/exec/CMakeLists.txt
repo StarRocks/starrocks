@@ -116,11 +116,13 @@ set(EXEC_FILES
     iceberg/iceberg_delete_builder.cpp
     iceberg/iceberg_delete_file_iterator.cpp
     paimon/paimon_delete_file_builder.cpp
+    schema_scanner/schema_analyze_status.cpp
     schema_scanner/schema_tables_scanner.cpp
     schema_scanner/schema_dummy_scanner.cpp
     schema_scanner/schema_schemata_scanner.cpp
     schema_scanner/schema_variables_scanner.cpp
     schema_scanner/schema_columns_scanner.cpp
+    schema_scanner/schema_column_stats_usage_scanner.cpp
     schema_scanner/schema_charsets_scanner.cpp
     schema_scanner/schema_collations_scanner.cpp
     schema_scanner/schema_statistics_scanner.cpp
@@ -160,6 +162,8 @@ set(EXEC_FILES
     schema_scanner/sys_fe_locks.cpp
     schema_scanner/sys_fe_memory_usage.cpp
     schema_scanner/schema_temp_tables_scanner.cpp
+    schema_scanner/schema_cluster_snapshots_scanner.cpp
+    schema_scanner/schema_cluster_snapshot_jobs_scanner.cpp
     jdbc_scanner.cpp
     sorting/compare_column.cpp
     sorting/merge_column.cpp
@@ -284,6 +288,11 @@ set(EXEC_FILES
     pipeline/group_execution/execution_group.cpp
     pipeline/group_execution/execution_group_builder.cpp
     pipeline/group_execution/group_operator.cpp
+    pipeline/schedule/timeout_tasks.cpp
+    pipeline/schedule/event_scheduler.cpp
+    pipeline/schedule/observer.cpp
+    pipeline/schedule/pipeline_timer.cpp
+    pipeline/wait_operator.cpp
     workgroup/pipeline_executor_set.cpp
     workgroup/pipeline_executor_set_manager.cpp
     workgroup/work_group.cpp

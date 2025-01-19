@@ -1,0 +1,511 @@
+-- name: test_mv_refresh_list_partitions_with_common_partition_expressions
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t1(
+    dt1 datetime, 
+    dt2 datetime, 
+    v int) 
+partition by date_trunc('day', dt1), date_trunc('month', dt2);
+-- result:
+-- !result
+insert into t1 values
+    ('2024-01-01','2024-01-02', 1),
+    ('2024-02-01','2024-02-02', 2),
+    ('2024-03-01','2024-03-02', 3)
+;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv1 
+PARTITION BY (__generated_partition_column_0, __generated_partition_column_1)
+REFRESH DEFERRED MANUAL 
+PROPERTIES (
+    "replication_num" = "1"
+)
+AS 
+    SELECT dt1, dt2, v, __generated_partition_column_0, __generated_partition_column_1 FROM t1;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
+select * from mv1 order by 1, 2;
+-- result:
+2024-01-01 00:00:00	2024-01-02 00:00:00	1
+2024-02-01 00:00:00	2024-02-02 00:00:00	2
+2024-03-01 00:00:00	2024-03-02 00:00:00	3
+-- !result
+function: print_hit_materialized_view("select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2)", "mv1")
+-- result:
+True
+-- !result
+select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2) order by 1;
+-- result:
+2024-01-01 00:00:00	1
+2024-02-01 00:00:00	1
+2024-03-01 00:00:00	1
+-- !result
+INSERT INTO t1 VALUES 
+    ('2024-04-01','2024-04-02', 4),
+    ('2024-05-01','2024-05-02', 2),
+    ('2024-06-01','2024-06-02', 3);
+-- result:
+-- !result
+select * from mv1 order by 1, 2;
+-- result:
+2024-01-01 00:00:00	2024-01-02 00:00:00	1
+2024-02-01 00:00:00	2024-02-02 00:00:00	2
+2024-03-01 00:00:00	2024-03-02 00:00:00	3
+-- !result
+function: print_hit_materialized_view("select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2)", "mv1")
+-- result:
+True
+-- !result
+select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2) order by 1;
+-- result:
+2024-01-01 00:00:00	1
+2024-02-01 00:00:00	1
+2024-03-01 00:00:00	1
+2024-04-01 00:00:00	1
+2024-05-01 00:00:00	1
+2024-06-01 00:00:00	1
+-- !result
+REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
+select * from mv1 order by 1, 2;
+-- result:
+2024-01-01 00:00:00	2024-01-02 00:00:00	1
+2024-02-01 00:00:00	2024-02-02 00:00:00	2
+2024-03-01 00:00:00	2024-03-02 00:00:00	3
+2024-04-01 00:00:00	2024-04-02 00:00:00	4
+2024-05-01 00:00:00	2024-05-02 00:00:00	2
+2024-06-01 00:00:00	2024-06-02 00:00:00	3
+-- !result
+function: print_hit_materialized_view("select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2)", "mv1")
+-- result:
+True
+-- !result
+select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2) order by 1;
+-- result:
+2024-01-01 00:00:00	1
+2024-02-01 00:00:00	1
+2024-03-01 00:00:00	1
+2024-04-01 00:00:00	1
+2024-05-01 00:00:00	1
+2024-06-01 00:00:00	1
+-- !result
+drop materialized view mv1;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv1 
+PARTITION BY (date_trunc('day', dt1), date_trunc('month', dt2))
+REFRESH DEFERRED MANUAL 
+PROPERTIES (
+    "replication_num" = "1"
+)
+AS 
+    SELECT * FROM t1;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
+select * from mv1 order by 1, 2;
+-- result:
+2024-01-01 00:00:00	2024-01-02 00:00:00	1
+2024-02-01 00:00:00	2024-02-02 00:00:00	2
+2024-03-01 00:00:00	2024-03-02 00:00:00	3
+2024-04-01 00:00:00	2024-04-02 00:00:00	4
+2024-05-01 00:00:00	2024-05-02 00:00:00	2
+2024-06-01 00:00:00	2024-06-02 00:00:00	3
+-- !result
+function: print_hit_materialized_view("select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2)", "mv1")
+-- result:
+False
+-- !result
+select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2) order by 1;
+-- result:
+2024-01-01 00:00:00	1
+2024-02-01 00:00:00	1
+2024-03-01 00:00:00	1
+2024-04-01 00:00:00	1
+2024-05-01 00:00:00	1
+2024-06-01 00:00:00	1
+-- !result
+INSERT INTO t1 VALUES 
+    ('2024-04-01','2024-04-02', 4),
+    ('2024-05-01','2024-05-02', 2),
+    ('2024-06-01','2024-06-02', 3);
+-- result:
+-- !result
+select * from mv1 order by 1, 2;
+-- result:
+2024-01-01 00:00:00	2024-01-02 00:00:00	1
+2024-02-01 00:00:00	2024-02-02 00:00:00	2
+2024-03-01 00:00:00	2024-03-02 00:00:00	3
+2024-04-01 00:00:00	2024-04-02 00:00:00	4
+2024-05-01 00:00:00	2024-05-02 00:00:00	2
+2024-06-01 00:00:00	2024-06-02 00:00:00	3
+-- !result
+function: print_hit_materialized_view("select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2)", "mv1")
+-- result:
+False
+-- !result
+select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2) order by 1;
+-- result:
+2024-01-01 00:00:00	1
+2024-02-01 00:00:00	1
+2024-03-01 00:00:00	1
+2024-04-01 00:00:00	2
+2024-05-01 00:00:00	2
+2024-06-01 00:00:00	2
+-- !result
+REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
+select * from mv1 order by 1, 2;
+-- result:
+2024-01-01 00:00:00	2024-01-02 00:00:00	1
+2024-02-01 00:00:00	2024-02-02 00:00:00	2
+2024-03-01 00:00:00	2024-03-02 00:00:00	3
+2024-04-01 00:00:00	2024-04-02 00:00:00	4
+2024-04-01 00:00:00	2024-04-02 00:00:00	4
+2024-05-01 00:00:00	2024-05-02 00:00:00	2
+2024-05-01 00:00:00	2024-05-02 00:00:00	2
+2024-06-01 00:00:00	2024-06-02 00:00:00	3
+2024-06-01 00:00:00	2024-06-02 00:00:00	3
+-- !result
+function: print_hit_materialized_view("select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2)", "mv1")
+-- result:
+False
+-- !result
+select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2) order by 1;
+-- result:
+2024-01-01 00:00:00	1
+2024-02-01 00:00:00	1
+2024-03-01 00:00:00	1
+2024-04-01 00:00:00	2
+2024-05-01 00:00:00	2
+2024-06-01 00:00:00	2
+-- !result
+drop materialized view mv1;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv1 
+PARTITION BY (date_trunc('month', dt2))
+REFRESH DEFERRED MANUAL 
+PROPERTIES (
+    "replication_num" = "1"
+)
+AS 
+    SELECT * FROM t1;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
+select * from mv1 order by 1, 2;
+-- result:
+2024-01-01 00:00:00	2024-01-02 00:00:00	1
+2024-02-01 00:00:00	2024-02-02 00:00:00	2
+2024-03-01 00:00:00	2024-03-02 00:00:00	3
+2024-04-01 00:00:00	2024-04-02 00:00:00	4
+2024-04-01 00:00:00	2024-04-02 00:00:00	4
+2024-05-01 00:00:00	2024-05-02 00:00:00	2
+2024-05-01 00:00:00	2024-05-02 00:00:00	2
+2024-06-01 00:00:00	2024-06-02 00:00:00	3
+2024-06-01 00:00:00	2024-06-02 00:00:00	3
+-- !result
+function: print_hit_materialized_view("select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2)", "mv1")
+-- result:
+False
+-- !result
+select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2) order by 1;
+-- result:
+2024-01-01 00:00:00	1
+2024-02-01 00:00:00	1
+2024-03-01 00:00:00	1
+2024-04-01 00:00:00	2
+2024-05-01 00:00:00	2
+2024-06-01 00:00:00	2
+-- !result
+INSERT INTO t1 VALUES 
+    ('2024-04-01','2024-04-02', 4),
+    ('2024-05-01','2024-05-02', 2),
+    ('2024-06-01','2024-06-02', 3);
+-- result:
+-- !result
+select * from mv1 order by 1, 2;
+-- result:
+2024-01-01 00:00:00	2024-01-02 00:00:00	1
+2024-02-01 00:00:00	2024-02-02 00:00:00	2
+2024-03-01 00:00:00	2024-03-02 00:00:00	3
+2024-04-01 00:00:00	2024-04-02 00:00:00	4
+2024-04-01 00:00:00	2024-04-02 00:00:00	4
+2024-05-01 00:00:00	2024-05-02 00:00:00	2
+2024-05-01 00:00:00	2024-05-02 00:00:00	2
+2024-06-01 00:00:00	2024-06-02 00:00:00	3
+2024-06-01 00:00:00	2024-06-02 00:00:00	3
+-- !result
+function: print_hit_materialized_view("select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2)", "mv1")
+-- result:
+False
+-- !result
+select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2) order by 1;
+-- result:
+2024-01-01 00:00:00	1
+2024-02-01 00:00:00	1
+2024-03-01 00:00:00	1
+2024-04-01 00:00:00	3
+2024-05-01 00:00:00	3
+2024-06-01 00:00:00	3
+-- !result
+REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
+select * from mv1 order by 1, 2;
+-- result:
+2024-01-01 00:00:00	2024-01-02 00:00:00	1
+2024-02-01 00:00:00	2024-02-02 00:00:00	2
+2024-03-01 00:00:00	2024-03-02 00:00:00	3
+2024-04-01 00:00:00	2024-04-02 00:00:00	4
+2024-04-01 00:00:00	2024-04-02 00:00:00	4
+2024-04-01 00:00:00	2024-04-02 00:00:00	4
+2024-05-01 00:00:00	2024-05-02 00:00:00	2
+2024-05-01 00:00:00	2024-05-02 00:00:00	2
+2024-05-01 00:00:00	2024-05-02 00:00:00	2
+2024-06-01 00:00:00	2024-06-02 00:00:00	3
+2024-06-01 00:00:00	2024-06-02 00:00:00	3
+2024-06-01 00:00:00	2024-06-02 00:00:00	3
+-- !result
+function: print_hit_materialized_view("select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2)", "mv1")
+-- result:
+False
+-- !result
+select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2) order by 1;
+-- result:
+2024-01-01 00:00:00	1
+2024-02-01 00:00:00	1
+2024-03-01 00:00:00	1
+2024-04-01 00:00:00	3
+2024-05-01 00:00:00	3
+2024-06-01 00:00:00	3
+-- !result
+drop materialized view mv1;
+-- result:
+-- !result
+SET disable_generated_column_rewrite=TRUE;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv1 
+PARTITION BY  (date_trunc('day', dt1), date_trunc('month', dt2))
+REFRESH DEFERRED MANUAL 
+PROPERTIES (
+    "replication_num" = "1",
+    "partition_retention_condition" = "date_trunc('day', dt1) >= '2024-02-01'"
+)
+AS 
+    SELECT * FROM t1;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
+select * from mv1 order by 1, 2;
+-- result:
+2024-02-01 00:00:00	2024-02-02 00:00:00	2
+2024-03-01 00:00:00	2024-03-02 00:00:00	3
+2024-04-01 00:00:00	2024-04-02 00:00:00	4
+2024-04-01 00:00:00	2024-04-02 00:00:00	4
+2024-04-01 00:00:00	2024-04-02 00:00:00	4
+2024-05-01 00:00:00	2024-05-02 00:00:00	2
+2024-05-01 00:00:00	2024-05-02 00:00:00	2
+2024-05-01 00:00:00	2024-05-02 00:00:00	2
+2024-06-01 00:00:00	2024-06-02 00:00:00	3
+2024-06-01 00:00:00	2024-06-02 00:00:00	3
+2024-06-01 00:00:00	2024-06-02 00:00:00	3
+-- !result
+function: print_hit_materialized_view("select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2)", "mv1")
+-- result:
+True
+-- !result
+select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2) order by 1;
+-- result:
+2024-01-01 00:00:00	1
+2024-02-01 00:00:00	1
+2024-03-01 00:00:00	1
+2024-04-01 00:00:00	3
+2024-05-01 00:00:00	3
+2024-06-01 00:00:00	3
+-- !result
+INSERT INTO t1 VALUES 
+    ('2024-04-01','2024-04-02', 4),
+    ('2024-05-01','2024-05-02', 2),
+    ('2024-06-01','2024-06-02', 3);
+-- result:
+-- !result
+select * from mv1 order by 1, 2;
+-- result:
+2024-02-01 00:00:00	2024-02-02 00:00:00	2
+2024-03-01 00:00:00	2024-03-02 00:00:00	3
+2024-04-01 00:00:00	2024-04-02 00:00:00	4
+2024-04-01 00:00:00	2024-04-02 00:00:00	4
+2024-04-01 00:00:00	2024-04-02 00:00:00	4
+2024-05-01 00:00:00	2024-05-02 00:00:00	2
+2024-05-01 00:00:00	2024-05-02 00:00:00	2
+2024-05-01 00:00:00	2024-05-02 00:00:00	2
+2024-06-01 00:00:00	2024-06-02 00:00:00	3
+2024-06-01 00:00:00	2024-06-02 00:00:00	3
+2024-06-01 00:00:00	2024-06-02 00:00:00	3
+-- !result
+function: print_hit_materialized_view("select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2)", "mv1")
+-- result:
+True
+-- !result
+select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2) order by 1;
+-- result:
+2024-01-01 00:00:00	1
+2024-02-01 00:00:00	1
+2024-03-01 00:00:00	1
+2024-04-01 00:00:00	4
+2024-05-01 00:00:00	4
+2024-06-01 00:00:00	4
+-- !result
+REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
+select * from mv1 order by 1, 2;
+-- result:
+2024-02-01 00:00:00	2024-02-02 00:00:00	2
+2024-03-01 00:00:00	2024-03-02 00:00:00	3
+2024-04-01 00:00:00	2024-04-02 00:00:00	4
+2024-04-01 00:00:00	2024-04-02 00:00:00	4
+2024-04-01 00:00:00	2024-04-02 00:00:00	4
+2024-04-01 00:00:00	2024-04-02 00:00:00	4
+2024-05-01 00:00:00	2024-05-02 00:00:00	2
+2024-05-01 00:00:00	2024-05-02 00:00:00	2
+2024-05-01 00:00:00	2024-05-02 00:00:00	2
+2024-05-01 00:00:00	2024-05-02 00:00:00	2
+2024-06-01 00:00:00	2024-06-02 00:00:00	3
+2024-06-01 00:00:00	2024-06-02 00:00:00	3
+2024-06-01 00:00:00	2024-06-02 00:00:00	3
+2024-06-01 00:00:00	2024-06-02 00:00:00	3
+-- !result
+select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2) order by 1;
+-- result:
+2024-01-01 00:00:00	1
+2024-02-01 00:00:00	1
+2024-03-01 00:00:00	1
+2024-04-01 00:00:00	4
+2024-05-01 00:00:00	4
+2024-06-01 00:00:00	4
+-- !result
+drop materialized view mv1;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv1 
+PARTITION BY  (date_trunc('month', dt2))
+REFRESH DEFERRED MANUAL 
+PROPERTIES (
+    "replication_num" = "1",
+    "partition_retention_condition" = "date_trunc('month', dt2) >= '2024-02-01'"
+)
+AS 
+    SELECT * FROM t1;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
+select * from mv1 order by 1, 2;
+-- result:
+2024-02-01 00:00:00	2024-02-02 00:00:00	2
+2024-03-01 00:00:00	2024-03-02 00:00:00	3
+2024-04-01 00:00:00	2024-04-02 00:00:00	4
+2024-04-01 00:00:00	2024-04-02 00:00:00	4
+2024-04-01 00:00:00	2024-04-02 00:00:00	4
+2024-04-01 00:00:00	2024-04-02 00:00:00	4
+2024-05-01 00:00:00	2024-05-02 00:00:00	2
+2024-05-01 00:00:00	2024-05-02 00:00:00	2
+2024-05-01 00:00:00	2024-05-02 00:00:00	2
+2024-05-01 00:00:00	2024-05-02 00:00:00	2
+2024-06-01 00:00:00	2024-06-02 00:00:00	3
+2024-06-01 00:00:00	2024-06-02 00:00:00	3
+2024-06-01 00:00:00	2024-06-02 00:00:00	3
+2024-06-01 00:00:00	2024-06-02 00:00:00	3
+-- !result
+function: print_hit_materialized_view("select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2)", "mv1")
+-- result:
+True
+-- !result
+select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2) order by 1;
+-- result:
+2024-01-01 00:00:00	1
+2024-02-01 00:00:00	1
+2024-03-01 00:00:00	1
+2024-04-01 00:00:00	4
+2024-05-01 00:00:00	4
+2024-06-01 00:00:00	4
+-- !result
+INSERT INTO t1 VALUES 
+    ('2024-04-01','2024-04-02', 4),
+    ('2024-05-01','2024-05-02', 2),
+    ('2024-06-01','2024-06-02', 3);
+-- result:
+-- !result
+select * from mv1 order by 1, 2;
+-- result:
+2024-02-01 00:00:00	2024-02-02 00:00:00	2
+2024-03-01 00:00:00	2024-03-02 00:00:00	3
+2024-04-01 00:00:00	2024-04-02 00:00:00	4
+2024-04-01 00:00:00	2024-04-02 00:00:00	4
+2024-04-01 00:00:00	2024-04-02 00:00:00	4
+2024-04-01 00:00:00	2024-04-02 00:00:00	4
+2024-05-01 00:00:00	2024-05-02 00:00:00	2
+2024-05-01 00:00:00	2024-05-02 00:00:00	2
+2024-05-01 00:00:00	2024-05-02 00:00:00	2
+2024-05-01 00:00:00	2024-05-02 00:00:00	2
+2024-06-01 00:00:00	2024-06-02 00:00:00	3
+2024-06-01 00:00:00	2024-06-02 00:00:00	3
+2024-06-01 00:00:00	2024-06-02 00:00:00	3
+2024-06-01 00:00:00	2024-06-02 00:00:00	3
+-- !result
+function: print_hit_materialized_view("select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2)", "mv1")
+-- result:
+True
+-- !result
+select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2) order by 1;
+-- result:
+2024-01-01 00:00:00	1
+2024-02-01 00:00:00	1
+2024-03-01 00:00:00	1
+2024-04-01 00:00:00	5
+2024-05-01 00:00:00	5
+2024-06-01 00:00:00	5
+-- !result
+REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
+select * from mv1 order by 1, 2;
+-- result:
+2024-02-01 00:00:00	2024-02-02 00:00:00	2
+2024-03-01 00:00:00	2024-03-02 00:00:00	3
+2024-04-01 00:00:00	2024-04-02 00:00:00	4
+2024-04-01 00:00:00	2024-04-02 00:00:00	4
+2024-04-01 00:00:00	2024-04-02 00:00:00	4
+2024-04-01 00:00:00	2024-04-02 00:00:00	4
+2024-04-01 00:00:00	2024-04-02 00:00:00	4
+2024-05-01 00:00:00	2024-05-02 00:00:00	2
+2024-05-01 00:00:00	2024-05-02 00:00:00	2
+2024-05-01 00:00:00	2024-05-02 00:00:00	2
+2024-05-01 00:00:00	2024-05-02 00:00:00	2
+2024-05-01 00:00:00	2024-05-02 00:00:00	2
+2024-06-01 00:00:00	2024-06-02 00:00:00	3
+2024-06-01 00:00:00	2024-06-02 00:00:00	3
+2024-06-01 00:00:00	2024-06-02 00:00:00	3
+2024-06-01 00:00:00	2024-06-02 00:00:00	3
+2024-06-01 00:00:00	2024-06-02 00:00:00	3
+-- !result
+function: print_hit_materialized_view("select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2)", "mv1")
+-- result:
+True
+-- !result
+select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2) order by 1;
+-- result:
+2024-01-01 00:00:00	1
+2024-02-01 00:00:00	1
+2024-03-01 00:00:00	1
+2024-04-01 00:00:00	5
+2024-05-01 00:00:00	5
+2024-06-01 00:00:00	5
+-- !result
+drop table t1;
+-- result:
+-- !result
+drop database db_${uuid0} force;
+-- result:
+-- !result

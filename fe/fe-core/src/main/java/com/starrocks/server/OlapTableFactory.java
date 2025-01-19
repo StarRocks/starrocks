@@ -588,6 +588,7 @@ public class OlapTableFactory implements AbstractTableFactory {
             } catch (AnalysisException e) {
                 throw new DdlException(e.getMessage());
             }
+            Util.checkColumnSupported(baseSchema);
             int schemaHash = Util.schemaHash(schemaVersion, baseSchema, bfColumns, bfFpp);
 
             if (stmt.getSortKeys() != null) {
@@ -671,7 +672,8 @@ public class OlapTableFactory implements AbstractTableFactory {
 
             // analyze partition retention condition
             if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION)) {
-                String ttlCondition = PropertyAnalyzer.analyzePartitionRetentionCondition(db, table, properties, true);
+                String ttlCondition = PropertyAnalyzer.analyzePartitionRetentionCondition(db, table, properties,
+                        true, null);
                 if (ttlCondition == null) {
                     throw new DdlException("Invalid partition retention condition");
                 }

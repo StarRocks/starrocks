@@ -213,6 +213,33 @@ Status SchemaHelper::get_partitions_meta(const SchemaScannerState& state, const 
     });
 }
 
+Status SchemaHelper::get_column_stats_usage(const SchemaScannerState& state, const TColumnStatsUsageReq& var_params,
+                                            TColumnStatsUsageRes* var_result) {
+    return _call_rpc(state, [&var_params, &var_result](FrontendServiceConnection& client) {
+        client->getColumnStatsUsage(*var_result, var_params);
+    });
+}
+
+Status SchemaHelper::get_analyze_status(const SchemaScannerState& state, const TAnalyzeStatusReq& var_params,
+                                        TAnalyzeStatusRes* var_result) {
+    return _call_rpc(state, [&var_params, &var_result](FrontendServiceConnection& client) {
+        client->getAnalyzeStatus(*var_result, var_params);
+    });
+}
+
+Status SchemaHelper::get_cluster_snapshots_info(const SchemaScannerState& state, const TClusterSnapshotsRequest& req,
+                                                TClusterSnapshotsResponse* res) {
+    return _call_rpc(state,
+                     [&req, &res](FrontendServiceConnection& client) { client->getClusterSnapshotsInfo(*res, req); });
+}
+
+Status SchemaHelper::get_cluster_snapshot_jobs_info(const SchemaScannerState& state,
+                                                    const TClusterSnapshotJobsRequest& req,
+                                                    TClusterSnapshotJobsResponse* res) {
+    return _call_rpc(
+            state, [&req, &res](FrontendServiceConnection& client) { client->getClusterSnapshotJobsInfo(*res, req); });
+}
+
 void fill_data_column_with_null(Column* data_column) {
     auto* nullable_column = down_cast<NullableColumn*>(data_column);
     nullable_column->append_nulls(1);

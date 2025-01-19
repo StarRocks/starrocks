@@ -22,6 +22,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.thrift.TStatisticData;
 import org.apache.velocity.VelocityContext;
 
@@ -29,6 +30,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import static com.starrocks.statistic.StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME;
 
@@ -126,7 +128,12 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
     private String buildCollectHistogram(Database database, Table table, double sampleRatio,
                                          Long bucketNum, Map<String, String> mostCommonValues, String columnName,
                                          Type columnType) {
-        StringBuilder builder = new StringBuilder("INSERT INTO ").append(HISTOGRAM_STATISTICS_TABLE_NAME).append(" ");
+        List<String> targetColumnNames = StatisticUtils.buildStatsColumnDef(HISTOGRAM_STATISTICS_TABLE_NAME).stream()
+                .map(ColumnDef::getName)
+                .collect(Collectors.toList());
+        String columnNames = "(" + String.join(", ", targetColumnNames) + ")";
+        StringBuilder builder = new StringBuilder("INSERT INTO ").append(HISTOGRAM_STATISTICS_TABLE_NAME)
+                .append(columnNames).append(" ");
         String quoteColumName = StatisticUtils.quoting(table, columnName);
 
         VelocityContext context = new VelocityContext();
@@ -142,7 +149,7 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
         context.put("totalRows", Config.histogram_max_sample_row_count);
 
         // TODO: use it by default and remove this switch
-        if (Config.histogram_enable_table_sample && sampleRatio > 0.0 && sampleRatio < 1.0) {
+        if (Config.enable_use_table_sample_collect_statistics && sampleRatio > 0.0 && sampleRatio < 1.0) {
             String sampleClause = String.format("SAMPLE('percent'='%d')", (int) (sampleRatio * 100));
             context.put("sampleClause", sampleClause);
             context.put("randFilter", "TRUE");

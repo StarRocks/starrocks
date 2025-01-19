@@ -37,7 +37,6 @@ package com.starrocks.planner;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.sql.plan.PlanTestBase;
-
 import org.junit.BeforeClass;
 import org.junit.Test;
 

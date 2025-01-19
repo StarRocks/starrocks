@@ -229,6 +229,9 @@ Status ORCScanner::_open_next_orc_reader() {
         if (st.is_end_of_file()) {
             LOG(WARNING) << "Failed to init orc reader. filename: " << file_name << ", status: " << st.to_string();
             continue;
+        } else if (st.is_not_found() &&
+                   (_file_scan_type == TFileScanType::FILES_INSERT || _file_scan_type == TFileScanType::FILES_QUERY)) {
+            st = st.clone_and_append("Consider setting 'fill_mismatch_column_with' = 'null' property");
         }
         return st;
     }

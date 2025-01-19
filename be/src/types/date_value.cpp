@@ -14,6 +14,7 @@
 
 #include "types/date_value.hpp"
 
+#include "date_value.h"
 #include "gutil/strings/substitute.h"
 #include "types/timestamp_value.h"
 
@@ -39,6 +40,14 @@ int32_t DateValue::to_date_literal() const {
     int year, month, day;
     to_date(&year, &month, &day);
     return year * 10000 + month * 100 + day;
+}
+
+// return milliseconds since UNIX epoch.
+int64_t DateValue::to_unixtime() const {
+    int64_t result = (int64_t)_julian * SECS_PER_DAY;
+    result -= timestamp::UNIX_EPOCH_SECONDS;
+    result *= 1000L;
+    return result;
 }
 
 void DateValue::from_date_literal(int64_t date_literal) {

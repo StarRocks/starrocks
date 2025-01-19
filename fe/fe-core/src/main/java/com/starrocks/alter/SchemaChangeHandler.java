@@ -70,6 +70,8 @@ import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.TabletInvertedIndex;
+import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Type;
 import com.starrocks.catalog.constraint.ForeignKeyConstraint;
 import com.starrocks.catalog.constraint.UniqueConstraint;
@@ -89,6 +91,7 @@ import com.starrocks.common.util.WriteQuorum;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.lake.LakeTablet;
 import com.starrocks.persist.TableAddOrDropColumnsInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
@@ -107,6 +110,7 @@ import com.starrocks.sql.ast.CreateIndexClause;
 import com.starrocks.sql.ast.DropColumnClause;
 import com.starrocks.sql.ast.DropFieldClause;
 import com.starrocks.sql.ast.DropIndexClause;
+import com.starrocks.sql.ast.DropPersistentIndexClause;
 import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.ast.IndexDef.IndexType;
 import com.starrocks.sql.ast.ModifyColumnClause;
@@ -143,8 +147,6 @@ import java.util.function.IntSupplier;
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
-
-import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.inactiveRelatedMaterializedViews;
 
 public class SchemaChangeHandler extends AlterHandler {
 
@@ -889,7 +891,8 @@ public class SchemaChangeHandler extends AlterHandler {
         if (modColumn.isKey() || !modColumn.getType().isScalarType()
                 || oriColumn.isKey()
                 || !oriColumn.getType().isScalarType()
-                || oriColumn.getType().isDecimalOfAnyVersion()) {
+                || oriColumn.getType().isDecimalOfAnyVersion()
+                || oriColumn.isGeneratedColumn()) {
             fastSchemaEvolution = false;
         }
         return fastSchemaEvolution;
@@ -1893,7 +1896,9 @@ public class SchemaChangeHandler extends AlterHandler {
                 fastSchemaEvolution &= processModifyColumn(modifyColumnClause, olapTable, indexSchemaMap);
             } else if (alterClause instanceof AddFieldClause) {
                 if (RunMode.isSharedDataMode() && !Config.enable_alter_struct_column) {
-                    throw new DdlException("Add field for struct column not support shared-data mode so far");
+                    throw new DdlException("Add field for struct column is disable in shared-data mode, " +
+                            "please check `enable_alter_struct_column` in FE configure and `lake_enable_alter_struct` " +
+                            "in all BE/CN configure");
                 }
                 if (!fastSchemaEvolution) {
                     throw new DdlException("Add field for struct column require table enable fast schema evolution");
@@ -1905,7 +1910,9 @@ public class SchemaChangeHandler extends AlterHandler {
                 processAddField((AddFieldClause) alterClause, olapTable, indexSchemaMap, id, newIndexes);
             } else if (alterClause instanceof DropFieldClause) {
                 if (RunMode.isSharedDataMode() && !Config.enable_alter_struct_column) {
-                    throw new DdlException("Drop field for struct column not support shared-data mode so far");
+                    throw new DdlException("Drop field for struct column is disable in shared-data mode, " +
+                            "please check `enable_alter_struct_column` in FE configure and `lake_enable_alter_struct` " +
+                            "in all BE/CN configure");
                 }
                 if (!fastSchemaEvolution) {
                     throw new DdlException("Drop field for struct column require table enable fast schema evolution");
@@ -2129,6 +2136,38 @@ public class SchemaChangeHandler extends AlterHandler {
         LOG.info("finished to create alter meta job {} of cloud table: {}", alterMetaJob.getJobId(),
                 olapTable.getName());
         return null;
+    }
+
+    public void processLakeTableDropPersistentIndex(AlterClause alterClause, Database db, OlapTable olapTable)
+            throws StarRocksException {
+        if (!olapTable.enablePersistentIndex() || 
+                olapTable.getPersistentIndexType() != TPersistentIndexType.CLOUD_NATIVE) {
+            LOG.warn(String.format("drop persistent index on table %s failed, it must be" +
+                        " cloud_native persistent index", olapTable.getName()));
+            throw new DdlException("drop persistent index only support cloud native index");
+        }
+        Set<Long> dropPindexTablets = ((DropPersistentIndexClause) alterClause).getTabletIds();
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+
+        for (Long tabletId : dropPindexTablets) {
+            try {
+                TabletMeta tabletMeta = invertedIndex.getTabletMeta(tabletId);
+                if (tabletMeta == null) {
+                    throw new DdlException(String.format("tablet %d is not exist", tabletId));
+                }
+                long partitionId = tabletMeta.getPhysicalPartitionId();
+                PhysicalPartition partition = olapTable.getPhysicalPartition(partitionId);
+                MaterializedIndex index = partition.getIndex(tabletMeta.getIndexId());
+                Tablet tablet = index.getTablet(tabletId);
+                LakeTablet lakeTablet = (LakeTablet) tablet;
+                lakeTablet.setRebuildPindexVersion(partition.getVisibleVersion());
+            } catch (Exception e) {
+                LOG.warn(String.format("drop persistent index on tablet %d failed, error: %s",
+                        tabletId, e.getMessage()));
+                throw new DdlException(String.format("drop persistent index on tablet %d failed, error: %s",
+                    tabletId, e.getMessage()));
+            }
+        }
     }
 
     public void updateTableMeta(Database db, String tableName, Map<String, String> properties,
@@ -2828,7 +2867,7 @@ public class SchemaChangeHandler extends AlterHandler {
             olapTable.rebuildFullSchema();
 
             // If modified columns are already done, inactive related mv
-            inactiveRelatedMaterializedViews(db, olapTable, modifiedColumns);
+            AlterMVJobExecutor.inactiveRelatedMaterializedViews(db, olapTable, modifiedColumns);
 
             if (!isReplay) {
                 TableAddOrDropColumnsInfo info = new TableAddOrDropColumnsInfo(db.getId(), olapTable.getId(),

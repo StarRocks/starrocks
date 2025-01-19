@@ -23,13 +23,11 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.StarRocksException;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.persist.DropWarehouseLog;
 import com.starrocks.persist.ImageWriter;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
@@ -46,7 +44,6 @@ import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -75,7 +72,7 @@ public class WarehouseManager implements Writable {
 
     public void initDefaultWarehouse() {
         // gen a default warehouse
-        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+        try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
             Warehouse wh = new DefaultWarehouse(DEFAULT_WAREHOUSE_ID, DEFAULT_WAREHOUSE_NAME);
             nameToWh.put(wh.getName(), wh);
             idToWh.put(wh.getId(), wh);
@@ -83,7 +80,15 @@ public class WarehouseManager implements Writable {
     }
 
     public List<Warehouse> getAllWarehouses() {
-        return new ArrayList<>(nameToWh.values());
+        try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
+            return new ArrayList<>(nameToWh.values());
+        }
+    }
+
+    public List<Long> getAllWarehouseIds() {
+        try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
+            return new ArrayList<>(idToWh.keySet());
+        }
     }
 
     public Warehouse getWarehouse(String warehouseName) {
@@ -131,10 +136,7 @@ public class WarehouseManager implements Writable {
     }
 
     public List<Long> getAllComputeNodeIds(String warehouseName) {
-        Warehouse warehouse = nameToWh.get(warehouseName);
-        if (warehouse == null) {
-            throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("name: %s", warehouseName));
-        }
+        Warehouse warehouse = getWarehouse(warehouseName);
 
         return getAllComputeNodeIds(warehouse.getId());
     }
@@ -146,10 +148,7 @@ public class WarehouseManager implements Writable {
     }
 
     private List<Long> getAllComputeNodeIds(long warehouseId, long workerGroupId) {
-        Warehouse warehouse = idToWh.get(warehouseId);
-        if (warehouse == null) {
-            throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("name: %s", warehouse.getName()));
-        }
+        Warehouse warehouse = getWarehouse(warehouseId);
 
         try {
             return GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkersByWorkerGroup(workerGroupId);
@@ -177,11 +176,6 @@ public class WarehouseManager implements Writable {
     }
 
     public Long getComputeNodeId(Long warehouseId, LakeTablet tablet) {
-        Warehouse warehouse = idToWh.get(warehouseId);
-        if (warehouse == null) {
-            throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("id: %d", warehouseId));
-        }
-
         try {
             long workerGroupId = selectWorkerGroupInternal(warehouseId)
                     .orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
@@ -203,10 +197,7 @@ public class WarehouseManager implements Writable {
     }
 
     public Long getComputeNodeId(String warehouseName, LakeTablet tablet) {
-        Warehouse warehouse = nameToWh.get(warehouseName);
-        if (warehouse == null) {
-            throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("name: %s", warehouseName));
-        }
+        Warehouse warehouse = getWarehouse(warehouseName);
 
         try {
             long workerGroupId = selectWorkerGroupInternal(warehouse.getId()).orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
@@ -262,11 +253,7 @@ public class WarehouseManager implements Writable {
         return nextComputeNodeIndex;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        String json = GsonUtils.GSON.toJson(this);
-        Text.writeString(out, json);
-    }
+
 
     public Warehouse getCompactionWarehouse() {
         return getWarehouse(DEFAULT_WAREHOUSE_ID);
@@ -349,5 +336,12 @@ public class WarehouseManager implements Writable {
 
     public void load(SRMetaBlockReader reader)
             throws SRMetaBlockEOFException, IOException, SRMetaBlockException {
+    }
+
+    public void addWarehouse(Warehouse warehouse) {
+        try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
+            nameToWh.put(warehouse.getName(), warehouse);
+            idToWh.put(warehouse.getId(), warehouse);
+        }
     }
 }

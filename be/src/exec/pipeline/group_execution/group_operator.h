@@ -64,6 +64,7 @@ public:
               _exchanger(std::move(exchanger)) {}
 
     ~GroupedExecutionSinkFactory() override = default;
+    bool support_event_scheduler() const override { return true; }
 
     Status prepare(RuntimeState* state) override;
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;

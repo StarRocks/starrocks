@@ -44,6 +44,9 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TableName;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.ObjectType;
+import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
@@ -75,9 +78,6 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.privilege.AccessDeniedException;
-import com.starrocks.privilege.ObjectType;
-import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -114,6 +114,7 @@ import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
@@ -122,6 +123,8 @@ import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.statistic.StatsConstants;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -138,12 +141,14 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Queue;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 import static com.starrocks.statistic.StatsConstants.STATISTICS_DB_NAME;
 
 public class AnalyzerUtils {
+    private static final Logger LOG = LogManager.getLogger(AnalyzerUtils.class);
 
     // The partition format supported by date_trunc
     public static final Set<String> DATE_TRUNC_SUPPORTED_PARTITION_FORMAT =
@@ -1392,6 +1397,9 @@ public class AnalyzerUtils {
             Map<String, String> partitionProperties =
                     ImmutableMap.of("replication_num", String.valueOf(replicationNum));
 
+            // table partitions for check
+            TreeMap<String, PListCell> tablePartitions = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+            tablePartitions.putAll(olapTable.getListPartitionItems());
             List<String> partitionColNames = Lists.newArrayList();
             List<PartitionDesc> partitionDescs = Lists.newArrayList();
             for (List<String> partitionValue : partitionValues) {
@@ -1400,6 +1408,7 @@ public class AnalyzerUtils {
                     String formatValue = getFormatPartitionValue(value);
                     formattedPartitionValue.add(formatValue);
                 }
+
                 String partitionName = DEFAULT_PARTITION_NAME_PREFIX + Joiner.on("_").join(formattedPartitionValue);
                 if (partitionName.length() > FeConstants.MAX_LIST_PARTITION_NAME_LENGTH) {
                     partitionName = partitionName.substring(0, FeConstants.MAX_LIST_PARTITION_NAME_LENGTH)
@@ -1412,11 +1421,24 @@ public class AnalyzerUtils {
                     partitionName = partitionNamePrefix + PARTITION_NAME_PREFIX_SPLIT + partitionName;
                 }
                 if (!partitionColNames.contains(partitionName)) {
+                    List<List<String>> partitionItems = Collections.singletonList(partitionValue);
+                    PListCell cell = new PListCell(partitionItems);
+                    // If the partition name already exists and their partition values are different, change the partition name.
+                    if (tablePartitions.containsKey(partitionName) && !tablePartitions.get(partitionName).equals(cell)) {
+                        partitionName = calculateUniquePartitionName(partitionName, tablePartitions);
+                        if (tablePartitions.containsKey(partitionName)) {
+                            throw new AnalysisException(String.format("partition name %s already exists in table " +
+                                    "%s.", partitionName, olapTable.getName()));
+                        }
+                    }
                     MultiItemListPartitionDesc multiItemListPartitionDesc = new MultiItemListPartitionDesc(true,
-                            partitionName, Collections.singletonList(partitionValue), partitionProperties);
+                            partitionName, partitionItems, partitionProperties);
                     multiItemListPartitionDesc.setSystem(true);
                     partitionDescs.add(multiItemListPartitionDesc);
                     partitionColNames.add(partitionName);
+
+                    // update table partition
+                    tablePartitions.put(partitionName, cell);
                 }
             }
             ListPartitionDesc listPartitionDesc = new ListPartitionDesc(partitionColNames, partitionDescs);
@@ -1426,6 +1448,24 @@ public class AnalyzerUtils {
         } else {
             throw new AnalysisException("automatic partition only support partition by value.");
         }
+    }
+
+    /**
+     * Calculate the unique partition name for list partition.
+     */
+    private static String calculateUniquePartitionName(String partitionName,
+                                                       Map<String, PListCell> tablePartitions) {
+        // ensure partition name is unique with case-insensitive
+        int diff = partitionName.hashCode();
+        String newPartitionName = partitionName + "_" + Integer.toHexString(diff);
+        if (tablePartitions.containsKey(newPartitionName)) {
+            int i = 0;
+            do {
+                diff += 1;
+                newPartitionName = partitionName + "_" + Integer.toHexString(diff);
+            } while (i++ < 100 && tablePartitions.containsKey(newPartitionName));
+        }
+        return newPartitionName;
     }
 
     @VisibleForTesting
@@ -1461,9 +1501,6 @@ public class AnalyzerUtils {
         long interval = measure.getInterval();
         Type firstPartitionColumnType = expressionRangePartitionInfo.getPartitionColumns(olapTable.getIdToColumn())
                 .get(0).getType();
-        if (partitionPrefix == null) {
-            partitionPrefix = DEFAULT_PARTITION_NAME_PREFIX;
-        }
         Short replicationNum = olapTable.getTableProperty().getReplicationNum();
         DistributionDesc distributionDesc = olapTable.getDefaultDistributionInfo()
                 .toDistributionDesc(olapTable.getIdToColumn());
@@ -1491,27 +1528,27 @@ public class AnalyzerUtils {
                 switch (granularity.toLowerCase()) {
                     case "minute":
                         beginTime = beginTime.withSecond(0).withNano(0);
-                        partitionName = partitionPrefix + beginTime.format(DateUtils.MINUTE_FORMATTER_UNIX);
+                        partitionName = DEFAULT_PARTITION_NAME_PREFIX + beginTime.format(DateUtils.MINUTE_FORMATTER_UNIX);
                         endTime = beginTime.plusMinutes(interval);
                         break;
                     case "hour":
                         beginTime = beginTime.withMinute(0).withSecond(0).withNano(0);
-                        partitionName = partitionPrefix + beginTime.format(DateUtils.HOUR_FORMATTER_UNIX);
+                        partitionName = DEFAULT_PARTITION_NAME_PREFIX + beginTime.format(DateUtils.HOUR_FORMATTER_UNIX);
                         endTime = beginTime.plusHours(interval);
                         break;
                     case "day":
                         beginTime = beginTime.withHour(0).withMinute(0).withSecond(0).withNano(0);
-                        partitionName = partitionPrefix + beginTime.format(DateUtils.DATEKEY_FORMATTER_UNIX);
+                        partitionName = DEFAULT_PARTITION_NAME_PREFIX + beginTime.format(DateUtils.DATEKEY_FORMATTER_UNIX);
                         endTime = beginTime.plusDays(interval);
                         break;
                     case "month":
                         beginTime = beginTime.withDayOfMonth(1);
-                        partitionName = partitionPrefix + beginTime.format(DateUtils.MONTH_FORMATTER_UNIX);
+                        partitionName = DEFAULT_PARTITION_NAME_PREFIX + beginTime.format(DateUtils.MONTH_FORMATTER_UNIX);
                         endTime = beginTime.plusMonths(interval);
                         break;
                     case "year":
                         beginTime = beginTime.withDayOfYear(1);
-                        partitionName = partitionPrefix + beginTime.format(DateUtils.YEAR_FORMATTER_UNIX);
+                        partitionName = DEFAULT_PARTITION_NAME_PREFIX + beginTime.format(DateUtils.YEAR_FORMATTER_UNIX);
                         endTime = beginTime.plusYears(interval);
                         break;
                     default:
@@ -1519,6 +1556,13 @@ public class AnalyzerUtils {
                 }
                 PartitionKeyDesc partitionKeyDesc =
                         createPartitionKeyDesc(firstPartitionColumnType, beginTime, endTime);
+
+                if (partitionPrefix != null) {
+                    if (partitionPrefix.contains(PARTITION_NAME_PREFIX_SPLIT)) {
+                        throw new AnalysisException("partition name prefix can not contain " + PARTITION_NAME_PREFIX_SPLIT);
+                    }
+                    partitionName = partitionPrefix + PARTITION_NAME_PREFIX_SPLIT + partitionName;
+                }
 
                 if (!partitionColNames.contains(partitionName)) {
                     SingleRangePartitionDesc singleRangePartitionDesc =

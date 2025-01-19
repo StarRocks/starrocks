@@ -103,6 +103,7 @@ public abstract class BatchWriteTestBase {
     }
 
     protected TransactionStatus getTxnStatus(String label) {
-        return GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getLabelStatus(DATABASE_1.getId(), label);
+        return GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                .getLabelStatus(DATABASE_1.getId(), label).getStatus();
     }
 }

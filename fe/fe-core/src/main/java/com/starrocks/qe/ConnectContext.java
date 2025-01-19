@@ -34,6 +34,7 @@
 
 package com.starrocks.qe;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -41,10 +42,15 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.VariableExpr;
 import com.starrocks.authentication.UserProperty;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.ObjectType;
+import com.starrocks.authorization.PrivilegeException;
+import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.util.SqlUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.http.HttpConnectContext;
@@ -53,12 +59,9 @@ import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.mysql.ssl.SSLChannel;
-import com.starrocks.mysql.ssl.SSLChannelImpClassLoader;
+import com.starrocks.mysql.ssl.SSLChannelImp;
+import com.starrocks.mysql.ssl.SSLContextLoader;
 import com.starrocks.plugin.AuditEvent.AuditEventBuilder;
-import com.starrocks.privilege.AccessDeniedException;
-import com.starrocks.privilege.ObjectType;
-import com.starrocks.privilege.PrivilegeException;
-import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
@@ -101,7 +104,6 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
-import javax.net.ssl.SSLContext;
 
 // When one client connect in, we create a connection context for it.
 // We store session information here. Meanwhile, ConnectScheduler all
@@ -230,8 +232,6 @@ public class ConnectContext {
     protected volatile boolean isPending = false;
     protected volatile boolean isForward = false;
 
-    protected SSLContext sslContext;
-
     private ConnectContext parent;
 
     private boolean relationAliasCaseInsensitive = false;
@@ -287,14 +287,10 @@ public class ConnectContext {
     }
 
     public ConnectContext() {
-        this(null, null);
+        this(null);
     }
 
     public ConnectContext(SocketChannel channel) {
-        this(channel, null);
-    }
-
-    public ConnectContext(SocketChannel channel, SSLContext sslContext) {
         closed = false;
         state = new QueryState();
         returnRows = 0;
@@ -311,12 +307,27 @@ public class ConnectContext {
             remoteIP = mysqlChannel.getRemoteIp();
         }
 
-        this.sslContext = sslContext;
-
         if (shouldDumpQuery()) {
             this.dumpInfo = new QueryDumpInfo(this);
         }
         this.sessionId = UUIDUtil.genUUID();
+    }
+
+    /**
+     * Build a ConnectContext for normal query.
+     */
+    public static ConnectContext build() {
+        return new ConnectContext();
+    }
+
+    /**
+     * Build a ConnectContext for inner query which is used for StarRocks internal query.
+     */
+    public static ConnectContext buildInner() {
+        ConnectContext connectContext = new ConnectContext();
+        // disable materialized view rewrite for inner query
+        connectContext.getSessionVariable().setEnableMaterializedViewRewrite(false);
+        return connectContext;
     }
 
     public void putPreparedStmt(String stmtName, PrepareStmtContext ctx) {
@@ -586,6 +597,12 @@ public class ConnectContext {
 
     public void setStartTime() {
         startTime = Instant.now();
+        returnRows = 0;
+    }
+
+    @VisibleForTesting
+    public void setStartTime(Instant start) {
+        startTime = start;
         returnRows = 0;
     }
 
@@ -955,7 +972,7 @@ public class ConnectContext {
                     Thread.sleep(10);
                     times++;
                     if (times > 100) {
-                        LOG.warn("wait for close fail, break.");
+                        LOG.warn("kill queryId={} connectId={} wait for close fail, break.", queryId, connectionId);
                         break;
                     }
                 } catch (InterruptedException e) {
@@ -999,7 +1016,7 @@ public class ConnectContext {
             if (delta > waitTimeout * 1000L) {
                 // Need kill this connection.
                 LOG.warn("kill wait timeout connection, remote: {}, wait timeout: {}, query id: {}, sql: {}",
-                        getMysqlChannel().getRemoteHostPortString(), waitTimeout, queryId, sql);
+                        getMysqlChannel().getRemoteHostPortString(), waitTimeout, queryId, SqlUtils.sqlPrefix(sql));
 
                 killFlag = true;
                 killConnection = true;
@@ -1011,7 +1028,7 @@ public class ConnectContext {
             if (delta > timeoutSecond * 1000L) {
                 LOG.warn("kill timeout {}, remote: {}, execute timeout: {}, query id: {}, sql: {}",
                         getExecType().toLowerCase(), getMysqlChannel().getRemoteHostPortString(), timeoutSecond,
-                        queryId, sql);
+                        queryId, SqlUtils.sqlPrefix(sql));
 
                 // Only kill
                 killFlag = true;
@@ -1066,36 +1083,20 @@ public class ConnectContext {
         return isForward;
     }
 
-    public boolean supportSSL() {
-        return sslContext != null;
-    }
-
     public boolean enableSSL() throws IOException {
-        Class<? extends SSLChannel> clazz = SSLChannelImpClassLoader.loadSSLChannelImpClazz();
-        if (clazz == null) {
-            LOG.warn("load SSLChannelImp class failed");
-            throw new IOException("load SSLChannelImp class failed");
-        }
-
-        try {
-            SSLChannel sslChannel = (SSLChannel) clazz.getConstructors()[0]
-                    .newInstance(sslContext.createSSLEngine(), mysqlChannel);
-            if (!sslChannel.init()) {
-                return false;
-            } else {
-                mysqlChannel.setSSLChannel(sslChannel);
-                return true;
-            }
-        } catch (Exception e) {
-            LOG.warn("construct SSLChannelImp class failed");
-            throw new IOException("construct SSLChannelImp class failed");
+        SSLChannel sslChannel = new SSLChannelImp(SSLContextLoader.getSslContext().createSSLEngine(), mysqlChannel);
+        if (!sslChannel.init()) {
+            return false;
+        } else {
+            mysqlChannel.setSSLChannel(sslChannel);
+            return true;
         }
     }
 
     public StmtExecutor executeSql(String sql) throws Exception {
         StatementBase sqlStmt = SqlParser.parse(sql, getSessionVariable()).get(0);
         sqlStmt.setOrigStmt(new OriginStatement(sql, 0));
-        StmtExecutor executor = new StmtExecutor(this, sqlStmt);
+        StmtExecutor executor = StmtExecutor.newInternalExecutor(this, sqlStmt);
         setExecutor(executor);
         setThreadLocalInfo();
         executor.execute();
@@ -1194,7 +1195,7 @@ public class ConnectContext {
             CleanTemporaryTableStmt cleanTemporaryTableStmt = new CleanTemporaryTableStmt(sessionId);
             cleanTemporaryTableStmt.setOrigStmt(
                     new OriginStatement("clean temporary table on session '" + sessionId.toString() + "'"));
-            executor = new StmtExecutor(this, cleanTemporaryTableStmt);
+            executor = StmtExecutor.newInternalExecutor(this, cleanTemporaryTableStmt);
             executor.execute();
         } catch (Throwable e) {
             LOG.warn("Failed to clean temporary table on session {}, {}", sessionId, e);

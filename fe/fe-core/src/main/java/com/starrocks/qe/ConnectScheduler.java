@@ -37,6 +37,8 @@ package com.starrocks.qe;
 import com.google.common.base.Predicate;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.ThreadPoolManager;
@@ -45,8 +47,6 @@ import com.starrocks.http.HttpConnectContext;
 import com.starrocks.mysql.MysqlProto;
 import com.starrocks.mysql.NegotiateState;
 import com.starrocks.mysql.nio.NConnectContext;
-import com.starrocks.privilege.AccessDeniedException;
-import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlConnectContext;
 import com.starrocks.sql.analyzer.Authorizer;
 import org.apache.logging.log4j.LogManager;
@@ -105,7 +105,9 @@ public class ConnectScheduler {
                     ArrayList<Long> connectionIds = new ArrayList<>(connectionMap.keySet());
                     for (Long connectId : connectionIds) {
                         ConnectContext connectContext = connectionMap.get(connectId);
-                        connectContext.checkTimeout(now);
+                        try (var guard = connectContext.bindScope()) {
+                            connectContext.checkTimeout(now);
+                        }
                     }
 
                     // remove arrow flight sql timeout connect
@@ -113,12 +115,14 @@ public class ConnectScheduler {
                             new ArrayList<>(arrowFlightSqlConnectContextMap.keySet());
                     for (String token : arrowFlightSqlConnections) {
                         ConnectContext connectContext = arrowFlightSqlConnectContextMap.get(token);
-                        connectContext.checkTimeout(now);
+                        try (var guard = connectContext.bindScope()) {
+                            connectContext.checkTimeout(now);
+                        }
                     }
                 }
             } catch (Throwable e) {
-                //Catch Exception to avoid thread exit
-                LOG.warn("Timeout checker exception, Internal error : " + e.getMessage());
+                // Catch Exception to avoid thread exit
+                LOG.warn("Timeout checker exception, Internal error:", e);
             }
         }
     }

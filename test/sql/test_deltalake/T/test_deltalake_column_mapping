@@ -69,5 +69,11 @@ select * from delta_test_${uuid0}.delta_oss_db.delta_lake_nested_struct_column_m
 --test nested struct with mapping mode = id
 select * from delta_test_${uuid0}.delta_oss_db.delta_lake_nested_struct_column_mapping_id order by col_tinyint;
 
+-- test nested struct with mapping mode = name
+select * from delta_test_${uuid0}.delta_oss_db.column_mapping_test order by c_int nulls last,c_date nulls last;
+
+-- test column mapping with partitioned table
+select `key`, name from delta_test_${uuid0}.delta_oss_db.column_mapping_test_id_par order by `key`;
+
 -- drop catalog
 drop catalog delta_test_${uuid0}

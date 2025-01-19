@@ -49,3 +49,27 @@ select * from t1;
 set dynamic_overwrite=true;
 insert overwrite t1 values(0);
 select * from t1;
+
+-- name: test_overwrite_range_table
+create table fv(k datetime, v int) partition by date_trunc('day', k);
+set dynamic_overwrite=false;
+insert overwrite fv values('2020-01-01', 4),('2020-01-02', 2);
+select * from fv;
+insert overwrite fv values('2020-01-03', 4),('2020-01-02', 2);
+select * from fv;
+set dynamic_overwrite=true;
+insert overwrite fv values('2020-01-04', 3),('2020-01-02', 3);
+select * from fv;
+set dynamic_overwrite=false;
+
+-- name: test_overwrite_gc
+create table t(k int, v int) partition by (k);
+set dynamic_overwrite=true;
+insert overwrite t select 1,a from table(generate_series(1, 3)) as t1(a);
+select * from t;
+set query_timeout=1;
+set insert_timeout=1;
+insert overwrite t select 2,a from table(generate_series(1, 100000000)) as t1(a);
+set query_timeout=3600;
+select count(*) from t;
+show temporary partitions from t;

@@ -326,6 +326,20 @@ public:
 
     const TJoinOp::type& join_type() const { return _join_type; }
 
+    void attach_probe_observer(RuntimeState* state, pipeline::PipelineObserver* observer) {
+        _builder_observable.add_observer(state, observer);
+    }
+    void attach_build_observer(RuntimeState* state, pipeline::PipelineObserver* observer) {
+        _probe_observable.add_observer(state, observer);
+    }
+
+    auto defer_notify_probe() {
+        return DeferOp([this]() { _builder_observable.notify_source_observers(); });
+    }
+    auto defer_notify_build() {
+        return DeferOp([this]() { _probe_observable.notify_source_observers(); });
+    }
+
 private:
     static bool _has_null(const ColumnPtr& column);
 
@@ -463,6 +477,10 @@ private:
     size_t _hash_table_build_rows{};
     bool _mor_reader_mode = false;
     bool _enable_late_materialization = false;
+
+    // probe side notify build observe
+    pipeline::Observable _builder_observable;
+    pipeline::Observable _probe_observable;
 };
 
 } // namespace starrocks

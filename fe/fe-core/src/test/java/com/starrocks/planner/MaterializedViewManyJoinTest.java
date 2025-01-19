@@ -14,7 +14,12 @@
 
 package com.starrocks.planner;
 
+import com.google.api.client.util.Lists;
+import com.google.common.base.Preconditions;
 import com.google.common.base.Stopwatch;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Maps;
+import com.starrocks.sql.plan.PlanTestBase;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.BeforeAll;
@@ -24,7 +29,10 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
 import java.text.MessageFormat;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Stream;
 
 /**
@@ -33,6 +41,13 @@ import java.util.stream.Stream;
  * the query/mv is very complex
  */
 public class MaterializedViewManyJoinTest extends MaterializedViewTestBase {
+
+    private static final AtomicLong MV_ID = new AtomicLong(0);
+    private static final AtomicLong NESTED_MV_ID = new AtomicLong(0);
+    private static final AtomicLong NESTED_NESTED_MV_ID = new AtomicLong(0);
+    private static final AtomicLong NESTED_NESTED_NESTED_MV_ID = new AtomicLong(0);
+    private static final Map<String, String> MV_TO_DEFINED_QUERY = Maps.newHashMap();
+    private static final List<Arguments> ARGUMENTS = Lists.newArrayList();
 
     @BeforeAll
     public static void beforeClass() throws Exception {
@@ -77,39 +92,77 @@ public class MaterializedViewManyJoinTest extends MaterializedViewTestBase {
                                     "\"compression\"=\"LZ4\"\n" +
                                     ")", i));
         }
+        connectContext.getSessionVariable().setEnableMaterializedViewTextMatchRewrite(false);
+        connectContext.getSessionVariable().setCboMaterializedViewRewriteCandidateLimit(3);
+        connectContext.getSessionVariable().setCboMaterializedViewRewriteRuleOutputLimit(3);
+        List<Arguments> arguments = generateManyJoinArguments();
+        for (Arguments argument : arguments) {
+            String name = (String) argument.get()[0];
+            String mvQuery = (String) argument.get()[1];
+            String testQuery = (String) argument.get()[2];
+            boolean expectHitMv = (boolean) argument.get()[3];
+            long mvId = MV_ID.getAndAdd(1);
+            String mvName = String.format("mv_manyjoin_%s", mvId);
+            String createMv = "CREATE MATERIALIZED VIEW " + mvName + "\n" +
+                    "REFRESH  DEFERRED MANUAL \n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\"=\"1\"\n" +
+                    ")\n" +
+                    "AS " + mvQuery;
+            starRocksAssert.withMaterializedView(createMv);
+            MV_TO_DEFINED_QUERY.put(mvName, mvQuery);
+
+            ARGUMENTS.add(Arguments.of(name, testQuery, false));
+            if (mvId > 1) {
+                long nestedMVId = NESTED_MV_ID.getAndAdd(1);
+                String sql = generateNestedMV("mv_manyjoin", "nested_mv", nestedMVId, mvId);
+                ARGUMENTS.add(Arguments.of(name, sql, expectHitMv));
+                if (nestedMVId > 1) {
+                    long nestedNestedMVId = NESTED_NESTED_MV_ID.getAndAdd(1);
+                    sql = generateNestedMV("nested_mv", "nested_nested_mv", nestedNestedMVId, nestedMVId);
+                    ARGUMENTS.add(Arguments.of(name, sql, expectHitMv));
+                    if (nestedNestedMVId > 1) {
+                        long nestedNestedNestedMVId = NESTED_NESTED_NESTED_MV_ID.getAndAdd(1);
+                        sql = generateNestedMV("nested_nested_mv", "nested_nested_nested_mv", nestedNestedNestedMVId,
+                                nestedNestedMVId);
+                        ARGUMENTS.add(Arguments.of(name, sql, expectHitMv));
+                    }
+                }
+            }
+        }
     }
 
     @ParameterizedTest(name = "{index}-{0}")
-    @MethodSource("generateManyJoinArguments")
+    @MethodSource("generateArguments")
     @Timeout(30)
-    public void testManyJoins(String name, String mvQuery, String query, boolean expectHitMv) throws Exception {
-        LOG.info("create mv {}", mvQuery);
-        String mvName = "mv_manyjoin";
-        String createMv = "CREATE MATERIALIZED VIEW " + mvName + "\n" +
-                "REFRESH  DEFERRED MANUAL \n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\"=\"1\"\n" +
-                ")\n" +
-                "AS " + mvQuery;
-        starRocksAssert.withMaterializedView(createMv);
-
+    public void testManyJoins(String name, String query, boolean expectHitMv) throws Exception {
         Stopwatch watch = Stopwatch.createStarted();
         // Make sure it's not empty
-        starRocksAssert.query(query).explainContains("OlapScanNode");
+        String plan = getFragmentPlan(query);
+        PlanTestBase.assertContains(plan, "OlapScanNode");
+        if (expectHitMv) {
+            PlanTestBase.assertContains(plan, "MaterializedView: true");
+        }
         LOG.info("query takes {}ms: {}", watch.elapsed(TimeUnit.MILLISECONDS), query);
-
-        starRocksAssert.dropMaterializedView(mvName);
     }
 
-    private static Stream<Arguments> generateManyJoinArguments() {
+    private static Stream<Arguments> generateArguments() {
+        return ARGUMENTS.stream();
+    }
+
+    private static List<Arguments> generateManyJoinArguments() {
         final String smallQuery = generateJoinQuery(3);
         final String bigQuery = generateJoinQuery(20);
-        return Stream.of(
+        return ImmutableList.of(
                 // join query
                 Arguments.of("small_query-small_mv", smallQuery, smallQuery, true),
-                Arguments.of("small_query-big_mv", smallQuery, bigQuery, false),
-                Arguments.of("big_query-small_mv", bigQuery, smallQuery, false),
+                Arguments.of("small_query-big_mv", smallQuery, bigQuery, true),
+                Arguments.of("big_query-small_mv", bigQuery, smallQuery, true),
                 Arguments.of("big_query-big_mv", bigQuery, bigQuery, true),
+                Arguments.of("multi join mv(10-10)", generateJoinQuery(10),
+                        generateJoinQuery(10), true),
+                Arguments.of("multi join mv(5-5)", generateJoinQuery(5),
+                        generateJoinQuery(5), true),
 
                 // union&join query
                 Arguments.of("union small-query and small mv",
@@ -126,20 +179,65 @@ public class MaterializedViewManyJoinTest extends MaterializedViewTestBase {
                         generateUnionAndJoinQuery(20), generateUnionQuery(20), false),
 
                 // query with predicate
-                Arguments.of("query with predicates ",
+                Arguments.of("query with predicates(10-5) ",
                         generateJoinWithManyPredicates(10),
                         generateJoinWithManyPredicates(5), false),
-                Arguments.of("query with predicates ",
+                Arguments.of("query with predicates(5-10) ",
                         generateJoinWithManyPredicates(5),
                         generateJoinWithManyPredicates(10), false),
-                Arguments.of("query with predicates ",
+                Arguments.of("query with predicates(10-10) ",
                         generateJoinWithManyPredicates(10),
-                        generateJoinWithManyPredicates(10), false),
-                Arguments.of("query with predicates ",
+                        generateJoinWithManyPredicates(10), true),
+                Arguments.of("query with predicates(1-50) ",
                         generateJoinWithManyPredicates(1),
-                        generateJoinWithManyPredicates(50), false)
-
+                        generateJoinWithManyPredicates(50), true),
+                Arguments.of("query with predicates(5-50) ",
+                        generateJoinWithManyPredicates(5),
+                        generateJoinWithManyPredicates(50), true)
         );
+    }
+
+    @NotNull
+    private static String generateNestedMV(String tablePrefix, String nestMVPrefix,
+                                           long nestedMVId, long numTables) throws Exception {
+        String nestedMVName = String.format("%s_%s", nestMVPrefix, nestedMVId);
+        String nestedMVQuery = generateNestedMVJoinQuery(tablePrefix, numTables);
+        String nestedMv = "CREATE MATERIALIZED VIEW " + nestedMVName + "\n" +
+                "REFRESH  DEFERRED MANUAL \n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\"=\"1\"\n" +
+                ")\n" +
+                "AS " + nestedMVQuery;
+        MV_TO_DEFINED_QUERY.put(nestedMVName, nestedMVQuery);
+        starRocksAssert.withMaterializedView(nestedMv);
+        // generate unwrapped mv defined query
+        return generateUnNestedMVJoinQuery(tablePrefix, numTables);
+    }
+
+    private static String generateUnNestedMVJoinQuery(String tablePrefix, long numTables) {
+        String sourceTableName = String.format("%s_%d", tablePrefix, 0);
+        Preconditions.checkArgument(MV_TO_DEFINED_QUERY.containsKey(sourceTableName));
+        String mvDefinedQuery = MV_TO_DEFINED_QUERY.get(sourceTableName);
+        StringBuilder query = new StringBuilder(String.format("SELECT p0.dt FROM (%s) AS p0 ", mvDefinedQuery));
+        for (int i = 1; i < numTables; i++) {
+            String alias = "p" + i;
+            sourceTableName = String.format("%s_%d", tablePrefix, i);
+            Preconditions.checkArgument(MV_TO_DEFINED_QUERY.containsKey(sourceTableName));
+            mvDefinedQuery = MV_TO_DEFINED_QUERY.get(sourceTableName);
+            query.append(String.format("LEFT OUTER JOIN (%s) AS %s ON %s.dt=p1.dt\n", mvDefinedQuery, alias, alias));
+        }
+        return query.toString();
+    }
+
+    @NotNull
+    private static String generateNestedMVJoinQuery(String tablePrefix, long numTables) {
+        StringBuilder query = new StringBuilder(String.format("SELECT p0.dt FROM %s AS p0 ", tablePrefix + "_0"));
+        for (int i = 1; i < numTables; i++) {
+            String alias = "p" + i;
+            String sourceTableName = String.format("%s_%d", tablePrefix, i);
+            query.append(String.format("LEFT OUTER JOIN %s AS %s ON %s.dt=p1.dt\n", sourceTableName, alias, alias));
+        }
+        return query.toString();
     }
 
     @NotNull

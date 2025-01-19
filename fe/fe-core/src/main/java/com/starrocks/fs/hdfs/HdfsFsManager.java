@@ -39,6 +39,7 @@ import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.FileUtil;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.security.UserGroupInformation;
@@ -47,6 +48,7 @@ import org.apache.logging.log4j.Logger;
 import software.amazon.awssdk.awscore.util.AwsHostNameUtils;
 import software.amazon.awssdk.regions.Region;
 
+import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InterruptedIOException;
@@ -1197,13 +1199,44 @@ public class HdfsFsManager {
         getFileSystem(path, loadProperties, tProperties);
     }
 
+    public void copyToLocal(String srcPath, String destPath, Map<String, String> properties) throws StarRocksException {
+        HdfsFs fileSystem = getFileSystem(srcPath, properties, null);
+        try {
+            fileSystem.getDFSFileSystem().copyToLocalFile(false, new Path(new WildcardURI(srcPath).getPath()),
+                    new Path(destPath), true);
+        } catch (InterruptedIOException e) {
+            Thread.interrupted(); // clear interrupted flag
+            LOG.error("Interrupted while copy {} to local {} ", srcPath, destPath, e);
+            throw new StarRocksException("Failed to copy " + srcPath + "to local " + destPath, e);
+        } catch (Exception e) {
+            LOG.error("Exception while copy {} to local {} ", srcPath, destPath, e);
+            throw new StarRocksException("Failed to copy " + srcPath + "to local " + destPath, e);
+        }
+    }
+
+    public void copyFromLocal(String srcPath, String destPath, Map<String, String> properties) throws StarRocksException {
+        HdfsFs fileSystem = getFileSystem(destPath, properties, null);
+        try {
+            WildcardURI destPathUri = new WildcardURI(destPath);
+            File srcFile = new File(srcPath);
+            FileUtil.copy(srcFile, fileSystem.getDFSFileSystem(), new Path(destPathUri.getPath()), false, new Configuration());
+        } catch (InterruptedIOException e) {
+            Thread.interrupted(); // clear interrupted flag
+            LOG.error("Interrupted while copy local {} to {} ", srcPath, destPath, e);
+            throw new StarRocksException("Failed to copy local " + srcPath + " to " + destPath, e);
+        } catch (Exception e) {
+            LOG.error("Exception while copy local {} to {} ", srcPath, destPath, e);
+            throw new StarRocksException("Failed to copy local " + srcPath  + " to " + destPath, e);
+        }
+    }
+
     public List<FileStatus> listFileMeta(String path, Map<String, String> properties) throws StarRocksException {
         WildcardURI pathUri = new WildcardURI(path);
         HdfsFs fileSystem = getFileSystem(path, properties, null);
         Path pathPattern = new Path(pathUri.getPath());
         try {
             FileStatus[] files = fileSystem.getDFSFileSystem().globStatus(pathPattern);
-            return Lists.newArrayList(files);
+            return files != null ? Lists.newArrayList(files) : Lists.newArrayList();
         } catch (FileNotFoundException e) {
             LOG.info("file not found: " + path, e);
             throw new StarRocksException("file not found: " + path, e);

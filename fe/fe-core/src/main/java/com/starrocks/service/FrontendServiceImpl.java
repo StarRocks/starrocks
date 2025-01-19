@@ -48,6 +48,9 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.analysis.TupleId;
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.PrivilegeBuiltinConstants;
+import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -66,7 +69,11 @@ import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.TabletInvertedIndex;
+import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.View;
+import com.starrocks.catalog.system.information.AnalyzeStatusSystemTable;
+import com.starrocks.catalog.system.information.ColumnStatsUsageSystemTable;
 import com.starrocks.catalog.system.information.TaskRunsSystemTable;
 import com.starrocks.catalog.system.information.TasksSystemTable;
 import com.starrocks.catalog.system.sys.GrantsTo;
@@ -93,6 +100,7 @@ import com.starrocks.common.ThriftServerEventProcessor;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ProfileManager;
+import com.starrocks.common.util.Util;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -131,9 +139,6 @@ import com.starrocks.metric.TableMetricsRegistry;
 import com.starrocks.persist.AutoIncrementInfo;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.StreamLoadPlanner;
-import com.starrocks.privilege.AccessDeniedException;
-import com.starrocks.privilege.PrivilegeBuiltinConstants;
-import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
 import com.starrocks.qe.DefaultCoordinator;
@@ -146,6 +151,7 @@ import com.starrocks.qe.ShowMaterializedViewStatus;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.TemporaryTableMgr;
 import com.starrocks.server.WarehouseManager;
@@ -173,13 +179,21 @@ import com.starrocks.thrift.TAbortRemoteTxnRequest;
 import com.starrocks.thrift.TAbortRemoteTxnResponse;
 import com.starrocks.thrift.TAllocateAutoIncrementIdParam;
 import com.starrocks.thrift.TAllocateAutoIncrementIdResult;
+import com.starrocks.thrift.TAnalyzeStatusReq;
+import com.starrocks.thrift.TAnalyzeStatusRes;
 import com.starrocks.thrift.TAuthenticateParams;
 import com.starrocks.thrift.TBatchReportExecStatusParams;
 import com.starrocks.thrift.TBatchReportExecStatusResult;
 import com.starrocks.thrift.TBeginRemoteTxnRequest;
 import com.starrocks.thrift.TBeginRemoteTxnResponse;
+import com.starrocks.thrift.TClusterSnapshotJobsRequest;
+import com.starrocks.thrift.TClusterSnapshotJobsResponse;
+import com.starrocks.thrift.TClusterSnapshotsRequest;
+import com.starrocks.thrift.TClusterSnapshotsResponse;
 import com.starrocks.thrift.TColumnDef;
 import com.starrocks.thrift.TColumnDesc;
+import com.starrocks.thrift.TColumnStatsUsageReq;
+import com.starrocks.thrift.TColumnStatsUsageRes;
 import com.starrocks.thrift.TCommitRemoteTxnRequest;
 import com.starrocks.thrift.TCommitRemoteTxnResponse;
 import com.starrocks.thrift.TCreatePartitionRequest;
@@ -283,6 +297,9 @@ import com.starrocks.thrift.TObjectDependencyRes;
 import com.starrocks.thrift.TOlapTableIndexTablets;
 import com.starrocks.thrift.TOlapTablePartition;
 import com.starrocks.thrift.TOlapTablePartitionParam;
+import com.starrocks.thrift.TPartitionMeta;
+import com.starrocks.thrift.TPartitionMetaRequest;
+import com.starrocks.thrift.TPartitionMetaResponse;
 import com.starrocks.thrift.TQueryStatisticsInfo;
 import com.starrocks.thrift.TRefreshTableRequest;
 import com.starrocks.thrift.TRefreshTableResponse;
@@ -333,6 +350,7 @@ import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionNotFoundException;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TransactionStateSnapshot;
 import com.starrocks.transaction.TxnCommitAttachment;
 import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.WarehouseInfo;
@@ -345,8 +363,10 @@ import org.jetbrains.annotations.NotNull;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -546,7 +566,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         View view = (View) table;
                         String ddlSql = view.getInlineViewDef();
 
-                        ConnectContext connectContext = new ConnectContext();
+                        ConnectContext connectContext = ConnectContext.buildInner();
                         connectContext.setQualifiedUser(AuthenticationMgr.ROOT_USER);
                         connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
                         connectContext.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
@@ -705,6 +725,41 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TFeMemoryRes listFeMemoryUsage(TFeMemoryReq request) throws TException {
         return SysFeMemoryUsage.listFeMemoryUsage(request);
+    }
+
+    @Override
+    public TColumnStatsUsageRes getColumnStatsUsage(TColumnStatsUsageReq request) throws TException {
+        UserIdentity currentUser = UserIdentity.fromThrift(request.getAuth_info().getCurrent_user_ident());
+
+        TColumnStatsUsageRes result = ColumnStatsUsageSystemTable.query(request);
+        result.getItems().removeIf(item -> {
+            try {
+                Authorizer.checkTableAction(currentUser, null, item.getTable_database(), item.getTable_name(),
+                        PrivilegeType.SELECT);
+                return false;
+            } catch (AccessDeniedException e) {
+                return true;
+            }
+        });
+
+        return result;
+    }
+
+    @Override
+    public TAnalyzeStatusRes getAnalyzeStatus(TAnalyzeStatusReq request) throws TException {
+        TAnalyzeStatusRes res = AnalyzeStatusSystemTable.query(request);
+        UserIdentity currentUser = UserIdentity.fromThrift(request.getAuth_info().getCurrent_user_ident());
+        res.getItems().removeIf(item -> {
+            try {
+                Authorizer.checkTableAction(currentUser, null, item.getDatabase_name(), item.getTable_name(),
+                        PrivilegeType.SELECT);
+                return false;
+            } catch (AccessDeniedException e) {
+                return true;
+            }
+        });
+
+        return res;
     }
 
     // list MaterializedView table match pattern
@@ -1276,8 +1331,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         TransactionResult resp = new TransactionResult();
         StreamLoadMgr streamLoadManager = GlobalStateMgr.getCurrentState().getStreamLoadMgr();
-        streamLoadManager.beginLoadTask(dbName, table.getName(), request.getLabel(), request.getUser(), request.getUser_ip(),
-                timeoutSecond * 1000, resp, false, warehouseId);
+        streamLoadManager.beginLoadTaskFromBackend(dbName, table.getName(), request.getLabel(), request.getRequest_id(),
+                request.getUser(), request.getUser_ip(), timeoutSecond * 1000, resp, false, warehouseId);
         if (!resp.stateOK()) {
             LOG.warn(resp.msg);
             throw new StarRocksException(resp.msg);
@@ -1450,10 +1505,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
 
         try {
-            TTransactionStatus status =
-                    GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTxnStatus(db, request.getTxnId());
-            LOG.debug("txn {} status is {}", request.getTxnId(), status);
-            result.setStatus(status);
+            TransactionStateSnapshot transactionStateSnapshot =
+                    GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTxnState(db, request.getTxnId());
+            LOG.debug("txn {} status is {}", request.getTxnId(), transactionStateSnapshot);
+            result.setStatus(transactionStateSnapshot.getStatus().toThrift());
+            result.setReason(transactionStateSnapshot.getReason());
         } catch (Throwable e) {
             result.setStatus(TTransactionStatus.UNKNOWN);
             LOG.warn("catch unknown result.", e);
@@ -1722,6 +1778,15 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     public TMergeCommitResult requestMergeCommit(TMergeCommitRequest request) throws TException {
         TMergeCommitResult result = new TMergeCommitResult();
         try {
+            GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+            Database db = globalStateMgr.getLocalMetastore().getDb(request.getDb());
+            if (db == null) {
+                throw new StarRocksException(String.format("unknown database [%s]", request.getDb()));
+            }
+            Table table = db.getTable(request.getTbl());
+            if (table == null) {
+                throw new StarRocksException(String.format("unknown table [%s.%s]", request.getDb(), request.getTbl()));
+            }
             checkPasswordAndLoadPriv(request.getUser(), request.getPasswd(), request.getDb(),
                     request.getTbl(), request.getUser_ip());
             TableId tableId = new TableId(request.getDb(), request.getTbl());
@@ -2326,7 +2391,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
 
             // If a create partition request is from BE or CN, the warehouse information may be lost, we can get it from txn state.
-            ConnectContext ctx = com.starrocks.common.util.Util.getOrCreateConnectContext();
+            ConnectContext ctx = Util.getOrCreateInnerContext();
             if (txnState.getWarehouseId() != WarehouseManager.DEFAULT_WAREHOUSE_ID) {
                 ctx.setCurrentWarehouseId(txnState.getWarehouseId());
             }
@@ -2337,7 +2402,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
             state.getLocalMetastore().addPartitions(ctx, db, olapTable.getName(), addPartitionClause);
         } catch (Exception e) {
-            LOG.warn("failed to cancel alter operation", e);
+            LOG.warn("failed to add partitions", e);
             errorStatus.setError_msgs(Lists.newArrayList(
                     String.format("automatic create partition failed. error:%s", e.getMessage())));
             result.setStatus(errorStatus);
@@ -3010,5 +3075,119 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             response.setStatus(status);
             return response;
         }
+    }
+
+    @Override
+    public TPartitionMetaResponse getPartitionMeta(TPartitionMetaRequest request) throws TException {
+        TPartitionMetaResponse response = new TPartitionMetaResponse();
+        if (!request.isSetTablet_ids() || request.getTablet_ids().isEmpty()) {
+            String errMsg = "Invalid parameter from getPartitionMeta request, tablet_ids is required";
+            LOG.info(errMsg);
+            TStatus status = new TStatus(TStatusCode.INVALID_ARGUMENT);
+            status.addToError_msgs(errMsg);
+            response.setStatus(status);
+            return response;
+        }
+
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        TabletInvertedIndex invertedIndex = globalStateMgr.getTabletInvertedIndex();
+
+        Map<Long, TabletMeta> tabletMetas = new HashMap<>();
+        List<Long> tabletIds = request.getTablet_ids();
+        tabletIds.forEach(id -> tabletMetas.put(id, invertedIndex.getTabletMeta(id)));
+        // build a list of the partitionMeta from the tabletMetaList
+        List<TPartitionMeta> partitionMetaList = getPartitionMetaImpl(tabletMetas.values());
+        if (partitionMetaList.isEmpty()) {
+            TStatus status = new TStatus(TStatusCode.NOT_FOUND);
+            response.setStatus(status);
+            return response;
+        }
+
+        // build the index for partitionId -> offset of partitionMeta array
+        Map<Long, Integer> partitionId2ArrayIndex = new HashMap<>();
+        for (int i = 0; i < partitionMetaList.size(); ++i) {
+            partitionId2ArrayIndex.put(partitionMetaList.get(i).getPartition_id(), i);
+        }
+        // build tabletId -> offset of partitionMeta array
+        Map<Long, Integer> tabletIdMetaIndex = new HashMap<>();
+        tabletMetas.forEach((key, value) -> {
+            if (value != null) {
+                long phyPartitionId = value.getPhysicalPartitionId();
+                if (partitionId2ArrayIndex.containsKey(phyPartitionId)) {
+                    tabletIdMetaIndex.put(key, partitionId2ArrayIndex.get(phyPartitionId));
+                }
+            }
+        });
+        response.setTablet_id_partition_meta_index(tabletIdMetaIndex);
+        response.setPartition_metas(partitionMetaList);
+        response.setStatus(new TStatus(OK));
+        return response;
+    }
+
+    static List<TPartitionMeta> getPartitionMetaImpl(Collection<TabletMeta> tabletMetas) {
+        List<TPartitionMeta> result = new ArrayList<>();
+        Set<Long> donePartitionIds = new HashSet<>();
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        for (TabletMeta tabletMeta : tabletMetas) {
+            if (tabletMeta == null) {
+                continue;
+            }
+            long partitionId = tabletMeta.getPhysicalPartitionId();
+            if (donePartitionIds.contains(partitionId)) {
+                continue;
+            }
+            long dbId = tabletMeta.getDbId();
+            long tableId = tabletMeta.getTableId();
+
+            Locker locker = new Locker();
+            locker.lockTableWithIntensiveDbLock(dbId, tableId, LockType.READ);
+            try {
+                Database db = metastore.getDb(dbId);
+                if (db == null) {
+                    donePartitionIds.add(partitionId);
+                    continue;
+                }
+                Table table = db.getTable(tableId);
+                if (table == null) {
+                    donePartitionIds.add(partitionId);
+                    continue;
+                }
+                OlapTable olapTable = (OlapTable) table;
+                PhysicalPartition physicalPartition = olapTable.getPhysicalPartition(partitionId);
+                if (physicalPartition == null) {
+                    donePartitionIds.add(partitionId);
+                    continue;
+                }
+                long parentPartitionId = physicalPartition.getParentId();
+                Partition partition = olapTable.getPartition(parentPartitionId);
+                if (partition == null) {
+                    donePartitionIds.add(partitionId);
+                    continue;
+                }
+                TPartitionMeta partitionMeta = new TPartitionMeta();
+                partitionMeta.setPartition_id(partitionId);
+                partitionMeta.setPartition_name(physicalPartition.getName());
+                partitionMeta.setState(partition.getState().name());
+                partitionMeta.setVisible_version(physicalPartition.getVisibleVersion());
+                partitionMeta.setVisible_time(physicalPartition.getVisibleVersionTime());
+                partitionMeta.setNext_version(physicalPartition.getNextVersion());
+                partitionMeta.setIs_temp(olapTable.isTempPartition(parentPartitionId));
+                result.add(partitionMeta);
+                donePartitionIds.add(partitionId);
+            } finally {
+                locker.unLockTableWithIntensiveDbLock(dbId, tableId, LockType.READ);
+            }
+        }
+        return result;
+    }
+
+    @Override
+    public TClusterSnapshotsResponse getClusterSnapshotsInfo(TClusterSnapshotsRequest params) {
+        return GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAllInfo();
+    }
+
+    @Override
+    public TClusterSnapshotJobsResponse getClusterSnapshotJobsInfo(TClusterSnapshotJobsRequest params) {
+        return GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAllJobsInfo();
     }
 }
