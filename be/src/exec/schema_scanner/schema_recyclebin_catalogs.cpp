@@ -68,6 +68,7 @@ Status SchemaRecycleBinCatalogs::_fill_chunk(ChunkPtr* chunk) {
     auto& slot_id_map = (*chunk)->get_slot_id_to_index_map();
     auto& info = _recyclebin_catalogs_result.recyclebin_catalogs.at(_cur_row++);
     for (const auto& [slot_id, index] : slot_id_map) {
+        LOG(ERROR) << "xxx1:" << slot_id;
         switch (slot_id) {
         case 1: {
             // type
@@ -94,9 +95,9 @@ Status SchemaRecycleBinCatalogs::_fill_chunk(ChunkPtr* chunk) {
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(3);
                 if (info.__isset.dbid) {
-                    fill_data_column_with_null(column.get());
-                } else {
                     fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.dbid);
+                } else {
+                    fill_data_column_with_null(column.get());
                 }
             }
             break;
@@ -106,9 +107,9 @@ Status SchemaRecycleBinCatalogs::_fill_chunk(ChunkPtr* chunk) {
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(4);
                 if (info.__isset.tableid) {
-                    fill_data_column_with_null(column.get());
-                } else {
                     fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.tableid);
+                } else {
+                    fill_data_column_with_null(column.get());
                 }
             }
             break;
@@ -118,9 +119,9 @@ Status SchemaRecycleBinCatalogs::_fill_chunk(ChunkPtr* chunk) {
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(5);
                 if (info.__isset.partitionid) {
-                    fill_data_column_with_null(column.get());
-                } else {
                     fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.partitionid);
+                } else {
+                    fill_data_column_with_null(column.get());
                 }
             }
             break;
