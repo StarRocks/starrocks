@@ -26,9 +26,9 @@ namespace starrocks {
 SchemaScanner::ColumnDesc SchemaRecycleBinCatalogs::_s_columns[] = {
         {"TYPE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
         {"NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"DBID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
-        {"TABLEID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
-        {"PARTID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"DBID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
+        {"TABLEID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
+        {"PARTID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
         {"DROPTIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), false},
 };
 
@@ -64,20 +64,80 @@ Status SchemaRecycleBinCatalogs::get_next(ChunkPtr* chunk, bool* eos) {
     return _fill_chunk(chunk);
 }
 
-DatumArray SchemaRecycleBinCatalogs::_build_row() {
-    auto& info = _recyclebin_catalogs_result.recyclebin_catalogs.at(_cur_row++);
-    return {
-            Slice(info.type), Slice(info.name), info.dbid, info.tableid, info.partitionid,
-			TimestampValue::create_from_unixtime(info.droptime, _runtime_state->timezone_obj()),
-    };
-}
-
 Status SchemaRecycleBinCatalogs::_fill_chunk(ChunkPtr* chunk) {
     auto& slot_id_map = (*chunk)->get_slot_id_to_index_map();
-    auto datum_array = _build_row();
+    auto& info = _recyclebin_catalogs_result.recyclebin_catalogs.at(_cur_row++);
     for (const auto& [slot_id, index] : slot_id_map) {
-        Column* column = (*chunk)->get_column_by_slot_id(slot_id).get();
-        column->append_datum(datum_array[slot_id - 1]);
+        switch (slot_id) {
+        case 1: {
+            // type
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(1);
+                const std::string* str = &info.type;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 2: {
+            // name
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(2);
+                const std::string* str = &info.name;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 3: {
+            // dbid
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(3);
+                if (info.__isset.dbid) {
+                    fill_data_column_with_null(column.get());
+                } else {
+                    fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.dbid);
+                }
+            }
+            break;
+        }
+        case 4: {
+            // tableid
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(4);
+                if (info.__isset.tableid) {
+                    fill_data_column_with_null(column.get());
+                } else {
+                    fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.tableid);
+                }
+            }
+            break;
+        }
+        case 5: {
+            // partitionid
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(5);
+                if (info.__isset.partitionid) {
+                    fill_data_column_with_null(column.get());
+                } else {
+                    fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.partitionid);
+                }
+            }
+            break;
+        }
+        case 6: {
+            // droptime
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(6);
+                DateTimeValue t;
+                t.from_unixtime(info.droptime, _runtime_state->timezone_obj());
+                fill_column_with_slot<TYPE_DATETIME>(column.get(), (void*)&t);
+            }
+            break;
+        }
+        default:
+            break;
+        }
     }
     return {};
 }
