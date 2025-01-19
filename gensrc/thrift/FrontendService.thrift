@@ -1946,7 +1946,7 @@ struct TListRecycleBinCatalogsInfo {
     3: optional i64 dbid
     4: optional i64 tableid
     5: optional i64 partitionid
-    6: optional string droptime
+    6: optional i64 droptime
 }
 
 struct TListRecycleBinCatalogsResult {

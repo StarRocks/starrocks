@@ -3100,7 +3100,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             if (!record.get(4).isEmpty()) {
                 info.setPartitionid(Long.parseLong(record.get(4)));
             }
-            info.setDroptime(record.get(5));
+            info.setDroptime(Long.parseLong(record.get(5)));
 
             result.addToRecyclebin_catalogs(info);
         }

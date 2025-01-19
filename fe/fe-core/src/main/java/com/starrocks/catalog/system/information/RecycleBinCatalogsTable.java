@@ -15,7 +15,6 @@
 
 package com.starrocks.catalog.system.information;
 
-import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
@@ -33,7 +32,7 @@ public class RecycleBinCatalogsTable {
                         .column("DBID", ScalarType.BIGINT)
                         .column("TABLEID", ScalarType.BIGINT)
                         .column("PARTID", ScalarType.BIGINT)
-                        .column("DROPTIME", ScalarType.createType(PrimitiveType.DATETIME))
+                        .column("DROPTIME", ScalarType.DATETIME)
                         .build(),
                 TSchemaTableType.SCH_RECYCLEBIN_CATALOGS);
     }

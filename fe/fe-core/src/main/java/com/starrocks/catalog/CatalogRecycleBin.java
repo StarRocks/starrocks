@@ -52,7 +52,6 @@ import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.FrontendDaemon;
-import com.starrocks.common.util.TimeUtils;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.RecoverInfo;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
@@ -1026,7 +1025,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
                 info.add(String.valueOf(tableInfo.getDbId()));
                 info.add(String.valueOf(entry.getKey()));
                 info.add("");
-                info.add(TimeUtils.longToTimeString(idToRecycleTime.get(entry.getKey())));
+                info.add(Long.toString((idToRecycleTime.get(entry.getKey())) / 1000L));
                 tableInfos.add(info);
             }
         }
@@ -1050,7 +1049,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
             info.add(String.valueOf(partitionInfo.getDbId()));
             info.add(String.valueOf(partitionInfo.getTableId()));
             info.add(String.valueOf(entry.getKey()));
-            info.add(TimeUtils.longToTimeString(idToRecycleTime.get(entry.getKey())));
+            info.add(Long.toString((idToRecycleTime.get(entry.getKey())) / 1000L));
             partitionInfos.add(info);
         }
         // sort by Name, DropTime
@@ -1073,7 +1072,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
             info.add(String.valueOf(entry.getKey()));
             info.add("");
             info.add("");
-            info.add(TimeUtils.longToTimeString(idToRecycleTime.get(entry.getKey())));
+            info.add(Long.toString((idToRecycleTime.get(entry.getKey())) / 1000L));
             dbInfos.add(info);
         }
         // sort by Name, DropTime

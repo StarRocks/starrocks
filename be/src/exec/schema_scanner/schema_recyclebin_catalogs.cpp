@@ -29,7 +29,7 @@ SchemaScanner::ColumnDesc SchemaRecycleBinCatalogs::_s_columns[] = {
         {"DBID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
         {"TABLEID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
         {"PARTID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
-        {"DROPTIME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"DROPTIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), false},
 };
 
 SchemaRecycleBinCatalogs::SchemaRecycleBinCatalogs()
@@ -67,7 +67,8 @@ Status SchemaRecycleBinCatalogs::get_next(ChunkPtr* chunk, bool* eos) {
 DatumArray SchemaRecycleBinCatalogs::_build_row() {
     auto& info = _recyclebin_catalogs_result.recyclebin_catalogs.at(_cur_row++);
     return {
-            Slice(info.type), Slice(info.name), info.dbid, info.tableid, info.partitionid, Slice(info.droptime),
+            Slice(info.type), Slice(info.name), info.dbid, info.tableid, info.partitionid,
+			TimestampValue::create_from_unixtime(info.droptime, _runtime_state->timezone_obj()),
     };
 }
 
