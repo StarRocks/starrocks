@@ -284,6 +284,12 @@ public:
         update_has_null();
     }
 
+    void swap_null_column(Column& rhs) {
+        auto& r = down_cast<NullableColumn&>(rhs);
+        _null_column->swap_column(*r._null_column);
+        std::swap(_has_null, r._has_null);
+    }
+
     void reset_column() override {
         Column::reset_column();
         _data_column->reset_column();

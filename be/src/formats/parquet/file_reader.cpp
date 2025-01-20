@@ -384,7 +384,7 @@ StatusOr<bool> FileReader::_update_rf_and_filter_group(const GroupReaderPtr& gro
     bool filter = false;
     if (config::parquet_advance_zonemap_filter && _rf_scan_range_pruner != nullptr) {
         RETURN_IF_ERROR(_rf_scan_range_pruner->update_range_if_arrived(
-                &EMPTY_GLOBAL_DICTMAPS,
+                _scanner_ctx->global_dictmaps,
                 [&filter, &group_reader](auto cid, const PredicateList& predicates) {
                     PredicateCompoundNode<CompoundNodeType::AND> pred_tree;
                     for (const auto& pred : predicates) {
@@ -550,6 +550,7 @@ Status FileReader::_init_group_readers() {
     // for pageIndex
     _group_reader_param.min_max_conjunct_ctxs = fd_scanner_ctx.min_max_conjunct_ctxs;
     _group_reader_param.predicate_tree = &fd_scanner_ctx.predicate_tree;
+    _group_reader_param.global_dictmaps = fd_scanner_ctx.global_dictmaps;
 
     int64_t row_group_first_row = 0;
     // select and create row group readers.
@@ -658,7 +659,7 @@ Status FileReader::get_next(ChunkPtr* chunk) {
             auto s = strings::Substitute("FileReader::get_next failed. reason = $0, file = $1", status.to_string(),
                                          _file->filename());
             LOG(WARNING) << s;
-            return Status::InternalError(s);
+            return status;
         }
 
         return status;

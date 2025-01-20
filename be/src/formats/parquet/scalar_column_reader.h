@@ -60,6 +60,10 @@ public:
     explicit RawColumnReader(const ParquetField* parquet_field, const tparquet::ColumnChunk* column_chunk_metadata,
                              const ColumnReaderOptions& opts)
             : ColumnReader(parquet_field), _opts(opts), _chunk_metadata(column_chunk_metadata) {}
+    explicit RawColumnReader(const RawColumnReader& reader)
+            : ColumnReader(reader.get_column_parquet_field()),
+              _opts(reader._opts),
+              _chunk_metadata(reader._chunk_metadata) {}
     ~RawColumnReader() override = default;
 
     Status prepare() override {
@@ -179,6 +183,89 @@ private:
     bool _need_lazy_decode = false;
     // dict code
     ColumnPtr _dict_code = nullptr;
+    ColumnPtr _ori_column = nullptr;
+};
+
+class LowCardColumnReader final : public RawColumnReader {
+public:
+    explicit LowCardColumnReader(const RawColumnReader& reader, const GlobalDictMap* dict, SlotId slot_id)
+            : RawColumnReader(reader), _dict(dict), _slot_id(slot_id) {}
+
+    Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) override;
+
+    bool try_to_use_dict_filter(ExprContext* ctx, bool is_decode_needed, const SlotId slotId,
+                                const std::vector<std::string>& sub_field_path, const size_t& layer) override;
+
+    Status rewrite_conjunct_ctxs_to_predicate(bool* is_group_filtered, const std::vector<std::string>& sub_field_path,
+                                              const size_t& layer) override {
+        DCHECK_EQ(sub_field_path.size(), layer);
+        return _dict_filter_ctx->rewrite_conjunct_ctxs_to_predicate(_reader.get(), is_group_filtered);
+    }
+
+    Status filter_dict_column(const ColumnPtr& column, Filter* filter, const std::vector<std::string>& sub_field_path,
+                              const size_t& layer) override {
+        DCHECK_EQ(sub_field_path.size(), layer);
+        return _dict_filter_ctx->predicate->evaluate_and(column.get(), filter->data());
+    }
+
+    Status fill_dst_column(ColumnPtr& dst, ColumnPtr& src) override;
+
+    StatusOr<bool> row_group_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                             CompoundNodeType pred_relation, const uint64_t rg_first_row,
+                                             const uint64_t rg_num_rows) const override {
+        return _row_group_zone_map_filter(predicates, pred_relation, TypeDescriptor(LogicalType::TYPE_VARCHAR),
+                                          rg_first_row, rg_num_rows);
+    }
+
+    StatusOr<bool> page_index_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                              SparseRange<uint64_t>* row_ranges, CompoundNodeType pred_relation,
+                                              const uint64_t rg_first_row, const uint64_t rg_num_rows) override {
+        return _page_index_zone_map_filter(predicates, row_ranges, pred_relation,
+                                           TypeDescriptor(LogicalType::TYPE_VARCHAR), rg_first_row, rg_num_rows);
+    }
+
+private:
+    Status _check_current_dict();
+
+    std::unique_ptr<ColumnDictFilterContext> _dict_filter_ctx;
+
+    const GlobalDictMap* _dict = nullptr;
+    const SlotId _slot_id;
+
+    std::optional<std::vector<int16_t>> _code_convert_map;
+
+    ColumnPtr _dict_code = nullptr;
+    ColumnPtr _ori_column = nullptr;
+};
+
+class LowRowsColumnReader final : public RawColumnReader {
+public:
+    explicit LowRowsColumnReader(const RawColumnReader& reader, const GlobalDictMap* dict, SlotId slot_id)
+            : RawColumnReader(reader), _dict(dict), _slot_id(slot_id) {}
+
+    Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) override;
+
+    Status fill_dst_column(ColumnPtr& dst, ColumnPtr& src) override;
+
+    StatusOr<bool> row_group_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                             CompoundNodeType pred_relation, const uint64_t rg_first_row,
+                                             const uint64_t rg_num_rows) const override {
+        return _row_group_zone_map_filter(predicates, pred_relation, TypeDescriptor(LogicalType::TYPE_VARCHAR),
+                                          rg_first_row, rg_num_rows);
+    }
+
+    StatusOr<bool> page_index_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                              SparseRange<uint64_t>* row_ranges, CompoundNodeType pred_relation,
+                                              const uint64_t rg_first_row, const uint64_t rg_num_rows) override {
+        return _page_index_zone_map_filter(predicates, row_ranges, pred_relation,
+                                           TypeDescriptor(LogicalType::TYPE_VARCHAR), rg_first_row, rg_num_rows);
+    }
+
+private:
+    const GlobalDictMap* _dict = nullptr;
+    const SlotId _slot_id;
+
+    ColumnPtr _tmp_column = nullptr;
     ColumnPtr _ori_column = nullptr;
 };
 

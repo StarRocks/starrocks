@@ -102,6 +102,8 @@ struct GroupReaderParam {
     const std::vector<ColumnPtr>* partition_values = nullptr;
     // not existed column
     const std::vector<SlotDescriptor*>* not_existed_slots = nullptr;
+    // used for global low cardinality optimization
+    ColumnIdToGlobalDictMap* global_dictmaps = &EMPTY_GLOBAL_DICTMAPS;
 };
 
 class PageIndexReader;

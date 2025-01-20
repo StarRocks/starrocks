@@ -99,6 +99,7 @@ private:
 
     Status _init_partition_values();
     Status _init_extended_values();
+    Status _init_global_dicts(HdfsScannerParams* params);
     Status _init_scanner(RuntimeState* state);
     HdfsScanner* _create_hudi_jni_scanner(const FSOptions& options);
     HdfsScanner* _create_paimon_jni_scanner(const FSOptions& options);

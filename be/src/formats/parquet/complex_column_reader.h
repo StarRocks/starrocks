@@ -28,6 +28,8 @@ public:
 
     Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) override;
 
+    Status fill_dst_column(ColumnPtr& dst, ColumnPtr& src) override;
+
     void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) override {
         _element_reader->get_levels(def_levels, rep_levels, num_levels);
     }
@@ -44,6 +46,8 @@ public:
     void select_offset_index(const SparseRange<uint64_t>& range, const uint64_t rg_first_row) override {
         _element_reader->select_offset_index(range, rg_first_row);
     }
+
+    ColumnReaderPtr& get_element_reader() { return _element_reader; }
 
 private:
     std::unique_ptr<ColumnReader> _element_reader;

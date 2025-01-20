@@ -58,6 +58,9 @@ public:
 
     static void setup_conjuncts_manager(std::vector<ExprContext*>& conjuncts, TupleDescriptor* tuple_desc,
                                         RuntimeState* runtime_state, HdfsScannerContext* params);
+
+    static void create_dictmapping_string_conjunct(TExprOpcode::type opcode, SlotId slot_id, const std::string& value,
+                                                   std::vector<TExpr>* tExprs);
 };
 
 } // namespace starrocks::parquet
