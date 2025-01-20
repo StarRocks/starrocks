@@ -147,4 +147,28 @@ public class OneOneMVGeneratorTest {
                     "  (`tpcds`.`store_returns`.sr_store_sk IS NOT NULL)"));
         });
     }
+
+    @Test
+    public void testShowSingleRecommendations2() {
+        List<Pair<String, String>> queryList = TestUtil.getTPCDSQueryList()
+                .stream()
+                .filter(p -> p.first.compareTo("query01") >= 0 && p.first.compareTo("query30") < 0)
+                .collect(Collectors.toList());
+        for (int i = 0; i < 1; ++i) {
+            testHelper(queryList, results -> {
+                List<String> mvs = results.stream()
+                        .filter(r -> r.get(2).contains("FROM\n" +
+                                "  `tpcds`.`item`"))
+                        .map(r -> r.get(2))
+                        .collect(Collectors.toList());
+
+                Assert.assertEquals(1, mvs.size());
+                String mv = mvs.get(0);
+                Assert.assertTrue(mv, mv.contains("INDEX i_category_bitmap_index (i_category) USING BITMAP"));
+                Assert.assertTrue(mv, mv.contains(", INDEX i_color_bitmap_index (i_color) USING BITMAP"));
+                Assert.assertTrue(mv, mv.contains("ORDER BY (i_current_price, i_manufact_id, i_manager_id)"));
+                Assert.assertTrue(mv, mv.contains("colocate_with"));
+            });
+        }
+    }
 }

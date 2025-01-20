@@ -58,7 +58,7 @@ public class PartitionedIcebergTest extends MVTestBase {
         String mv = mvs.get(0);
         Assert.assertTrue(mv, mv.contains("COMMENT \"11-MV recommended by AutoMV\"\n" +
                 "PARTITION BY date_trunc(\"year\", ts)\n" +
-                "DISTRIBUTED BY HASH (id, data, ts) BUCKETS 64\n" +
+                "DISTRIBUTED BY RANDOM\n" +
                 "ORDER BY (id, data, ts)"));
     }
 
@@ -70,7 +70,7 @@ public class PartitionedIcebergTest extends MVTestBase {
         String mv = mvs.get(0);
         Assert.assertTrue(mv, mv.contains("COMMENT \"11-MV recommended by AutoMV\"\n" +
                 "PARTITION BY (id,data,date_trunc(\"hour\", ts))\n" +
-                "DISTRIBUTED BY HASH (id, data, ts) BUCKETS 64\n" +
+                "DISTRIBUTED BY RANDOM\n" +
                 "ORDER BY (id, data, ts)"));
     }
 
@@ -82,7 +82,7 @@ public class PartitionedIcebergTest extends MVTestBase {
         String mv = mvs.get(0);
         Assert.assertTrue(mv, mv.contains("COMMENT \"11-MV recommended by AutoMV\"\n" +
                 "PARTITION BY (id,data,date_trunc(\"hour\", ts))\n" +
-                "DISTRIBUTED BY HASH (id, data, ts) BUCKETS 64\n" +
+                "DISTRIBUTED BY RANDOM\n" +
                 "ORDER BY (id, data, ts)"));
     }
 }

@@ -105,6 +105,8 @@ public final class GlobalVariable {
 
     public static final String AUTOMV_STRING_TIME_FORMATS = "automv_string_time_formats";
 
+    public static final String AUTOMV_ENABLE_11MV_SELECTIVITY_EVALUATION = "automv_enable_11mv_selectivity_evaluation";
+
     @VariableMgr.VarAttr(name = VERSION_COMMENT, flag = VariableMgr.READ_ONLY)
     public static String versionComment = Version.STARROCKS_VERSION + "-" + Version.STARROCKS_COMMIT_HASH;
 
@@ -249,6 +251,9 @@ public final class GlobalVariable {
 
     @VariableMgr.VarAttr(name = AUTOMV_STRING_TIME_FORMATS)
     private static String autoMVStringTimeFormats = "%Y%m%d,%Y-%m-%d";
+
+    @VariableMgr.VarAttr(name = AUTOMV_ENABLE_11MV_SELECTIVITY_EVALUATION)
+    private static boolean autoMVEnable11mvSelectivityEvaluation = false;
     public static boolean isEnableQueryQueueSelect() {
         return enableQueryQueueSelect;
     }
@@ -533,6 +538,15 @@ public final class GlobalVariable {
         return autoMVStringTimeFormats;
     }
     // Don't allow create instance.
+
+    public static void setAutoMVEnable11mvSelectivityEvaluation(boolean flag) {
+        autoMVEnable11mvSelectivityEvaluation = flag;
+    }
+
+    public static boolean isAutoMVEnable11mvSelectivityEvaluation() {
+        return autoMVEnable11mvSelectivityEvaluation;
+    }
+
     private GlobalVariable() {
 
     }

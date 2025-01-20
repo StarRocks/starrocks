@@ -215,6 +215,10 @@ public class Util {
                 optExpression.getInputs().stream().flatMap(Util::getStream));
     }
 
+    public static Stream<OptExpression> getOptExprStream(OptExpression optExpression) {
+        return Stream.concat(Stream.of(optExpression), optExpression.getInputs().stream());
+    }
+
     public static boolean isSPJG(OptExpression root) {
         boolean rootIsAgg = root.getOp().getOpType().equals(OperatorType.LOGICAL_AGGR);
         if (!rootIsAgg) {

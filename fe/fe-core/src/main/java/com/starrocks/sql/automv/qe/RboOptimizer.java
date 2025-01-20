@@ -84,10 +84,10 @@ import java.util.stream.Collectors;
 //    damage performance of multi-column cardinality estimation.
 // 4. {Project,Filter}Operator must be fold into its' child operator.
 public class RboOptimizer {
-    OptimizerConfig optimizerConfig;
-    OptimizerContext optimizerContext;
-    TaskContext taskContext;
-    OptExpression tree;
+    private final OptimizerConfig optimizerConfig;
+    private final OptimizerContext optimizerContext;
+    private final TaskContext taskContext;
+    private OptExpression tree;
 
     public RboOptimizer(LogicalPlan logicalPlan, ColumnRefFactory columnRefFactory, ConnectContext connectContext) {
         optimizerConfig = new OptimizerConfig(OptimizerConfig.OptimizerAlgorithm.RULE_BASED);
@@ -114,13 +114,23 @@ public class RboOptimizer {
         root.setLogicalProperty(context.getRootProperty());
     }
 
-    public static OptExpression getLogicalPlan(QueryStatement queryStmt, ConnectContext connectContext) {
+    private static RboOptimizer getOptimizer(QueryStatement stmt, ConnectContext connectContext) {
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-        QueryRelation query = queryStmt.getQueryRelation();
+        QueryRelation query = stmt.getQueryRelation();
         LogicalPlan logicalPlan =
                 new RelationTransformer(columnRefFactory, connectContext).transformWithSelectLimit(query);
         RboOptimizer optimizer = new RboOptimizer(logicalPlan, columnRefFactory, connectContext);
-        return optimizer.optimize();
+        optimizer.optimize();
+        return optimizer;
+    }
+
+    public static RboOptimizer getOptimizer(String sql, ConnectContext connectContext) {
+        QueryStatementPlus stmtPlus = RboOptimizer.getQueryStatement(connectContext, sql);
+        return getOptimizer(stmtPlus.getQueryStatement(), connectContext);
+    }
+
+    public static OptExpression getLogicalPlan(QueryStatement queryStmt, ConnectContext connectContext) {
+        return getOptimizer(queryStmt, connectContext).getPlan();
     }
 
     public static String getLogicalPlan(String query, ConnectContext ctx) {
@@ -258,6 +268,18 @@ public class RboOptimizer {
         QueryStatementPlus queryStmt = getQueryStatement(connectContext, query);
         List<OptExpression> subPlans = getSubPlans(queryStmt.getQueryStatement(), connectContext, pattern);
         return Pair.create(queryStmt.getFqTableMap(), subPlans);
+    }
+
+    public OptimizerConfig getOptimizerConfig() {
+        return optimizerConfig;
+    }
+
+    public OptimizerContext getOptimizerContext() {
+        return optimizerContext;
+    }
+
+    public TaskContext getTaskContext() {
+        return taskContext;
     }
 
     public RboOptimizer applyRules(RuleSetType ruleSet) {

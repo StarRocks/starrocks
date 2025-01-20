@@ -54,6 +54,9 @@ public class TableUsage {
 
     private transient TieredList<Op> whereConjuncts;
     private transient Map<Integer, Map<StrictOp, Long>> conjunctFreq;
+    private Map<Integer, Double> columnIdToSelectivity = Collections.emptyMap();
+    private Map<Integer, Double> columnIdToNdvRatio = Collections.emptyMap();
+    private Double rowCount = -1.0;
 
     public TableUsage(PlanPiece piece, TablePiece tablePiece, ColumnRefSet usedColumns,
                       Map<Integer, TieredList<Op>> pushDownConjuncts, List<ColumnRefSet> joinKeys,
@@ -227,6 +230,30 @@ public class TableUsage {
                         Collectors.mapping(p -> p.second,
                                 Collectors.groupingBy(pp -> pp.first,
                                         Collectors.mapping(pp -> pp.second, TieredList.<Op>toList())))));
+    }
+
+    public Map<Integer, Double> getColumnIdToNdvRatio() {
+        return columnIdToNdvRatio;
+    }
+
+    public void setColumnIdToNdvRatio(Map<Integer, Double> columnIdToNdvRatio) {
+        this.columnIdToNdvRatio = columnIdToNdvRatio;
+    }
+
+    public Double getRowCount() {
+        return rowCount;
+    }
+
+    public void setRowCount(Double rowCount) {
+        this.rowCount = rowCount;
+    }
+
+    public Map<Integer, Double> getColumnIdToSelectivity() {
+        return Objects.requireNonNull(columnIdToSelectivity);
+    }
+
+    public void setColumnIdToSelectivity(Map<Integer, Double> columnIdToSelectivity) {
+        this.columnIdToSelectivity = columnIdToSelectivity;
     }
 
     private void analyzeUsageOfPushDownPredicates() {

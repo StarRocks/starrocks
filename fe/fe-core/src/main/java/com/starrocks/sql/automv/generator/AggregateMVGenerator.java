@@ -76,7 +76,8 @@ public class AggregateMVGenerator {
                 .map(p -> columnAliases.get(p.first))
                 .map(ColumnAlias::getName).collect(Collectors.toList());
 
-        mvSchema.addSuperStep(DistributionPolicy.getDistribution(aggPiece, mvDimensionColumns));
+        Pair<Boolean, PrettyPrinter> dist = DistributionPolicy.getDistribution(aggPiece, mvDimensionColumns);
+        mvSchema.addSuperStep(dist.second);
         List<Pair<Integer, GenericColumn>> candidateOrderByColumns = Lists.newArrayList();
 
         final int maxOrderByColumns = context.getOptions().getMaxOrderByColumns();
@@ -100,7 +101,7 @@ public class AggregateMVGenerator {
         mvSchema.add("REFRESH ASYNC START(\"2023-12-01 10:00:00\") EVERY(INTERVAL 1 DAY)").newLine();
         Optional<String> optCollocateGroup = optCollocateBucketKey.map(ignored -> mvName);
         mvSchema.addSuperStep(PropertiesPolicy.getProperties(aggPiece, columnAliases, optPartitionExpr.isPresent(),
-                optCollocateGroup));
+                optCollocateGroup, dist.first));
         mvSchema.add("AS").newLine();
         mvSchema.addSuperStep(result.getSubquery());
         QueryGenerateResult mvResult = result.updateSubquery(mvSchema)

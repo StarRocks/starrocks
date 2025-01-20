@@ -16,10 +16,12 @@ package com.starrocks.sql.automv.lattice;
 
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.GlobalVariable;
 import com.starrocks.sql.automv.column.ColumnRefToIdConverter;
 import com.starrocks.sql.automv.generator.MVGenerateContext;
 import com.starrocks.sql.automv.generator.MVName;
 import com.starrocks.sql.automv.generator.OneOneMVGenerator;
+import com.starrocks.sql.automv.generator.TableUsageStatisticsCalculator;
 import com.starrocks.sql.automv.options.AutoMVOptions;
 import com.starrocks.sql.automv.pieces.PlanPiece;
 import com.starrocks.sql.automv.pieces.TableUsage;
@@ -49,6 +51,9 @@ public class OneOneMVRecommender implements MVRecommender {
                 .setOptions(options)
                 .build();
 
+        if (GlobalVariable.isAutoMVEnable11mvSelectivityEvaluation()) {
+            TableUsageStatisticsCalculator.calculate(tableUsage, ctx);
+        }
         return OneOneMVGenerator.generate(tableUsage, mvGenerateContext)
                 .map(MVRecommendation::new);
     }

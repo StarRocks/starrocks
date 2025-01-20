@@ -154,7 +154,8 @@ public class QueryGenerator {
                             TieredList.<Pair<Integer, GenericColumn>>toList()));
 
             Function<Pair<Integer, GenericColumn>, Double> weightCalculator =
-                    ConjunctWeightCalculator.getColumnWeightCalculatorFor11MV(usage.getConjunctFreq());
+                    ConjunctWeightCalculator.getColumnWeightCalculatorFor11MV(
+                            usage.getConjunctFreq(), usage.getColumnIdToSelectivity());
 
             TieredList<Pair<Integer, GenericColumn>> orderedDimensions = columnGroups.get(true)
                     .stream()

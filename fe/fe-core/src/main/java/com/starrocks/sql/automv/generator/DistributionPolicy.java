@@ -15,6 +15,7 @@
 package com.starrocks.sql.automv.generator;
 
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.common.Pair;
 import com.starrocks.sql.automv.pieces.AggregatePiece;
 import com.starrocks.sql.automv.pieces.PlanPiece;
 import com.starrocks.sql.automv.pieces.TablePiece;
@@ -28,7 +29,7 @@ import java.util.List;
 // 2. MV of group-by agg, we use the harmony mean of bucket numbers of base tables as MV's bucket number.
 //    MV, and MV's bucket number at least is 64.
 public class DistributionPolicy {
-    public static PrettyPrinter getDistribution(PlanPiece piece, List<String> bucketColumns) {
+    public static Pair<Boolean, PrettyPrinter> getDistribution(PlanPiece piece, List<String> bucketColumns) {
         PrettyPrinter printer = new PrettyPrinter();
         List<TablePiece> tablePieces = PlanPiece.collect(piece, TablePiece.class);
         double harmonyDivider = tablePieces.stream().map(tablePiece ->
@@ -42,15 +43,18 @@ public class DistributionPolicy {
         if (piece.cast(AggregatePiece.class).map(aggPiece -> aggPiece.getDimensions().isEmpty()).orElse(false)) {
             bucketNum = 1;
         }
+        boolean isHashDistribution;
         if (!bucketColumns.isEmpty()) {
             bucketColumns = bucketColumns.subList(0, Math.min(6, bucketColumns.size()));
             printer.add("DISTRIBUTED BY HASH").spaces(1).add("(")
                     .addItems(", ", bucketColumns).add(")")
                     .add(" BUCKETS ").add(bucketNum)
                     .newLine();
+            isHashDistribution = true;
         } else {
-            printer.add("DISTRIBUTED BY RANDOM BUCKETS 1").newLine();
+            printer.add("DISTRIBUTED BY RANDOM").newLine();
+            isHashDistribution = false;
         }
-        return printer;
+        return Pair.create(isHashDistribution, printer);
     }
 }

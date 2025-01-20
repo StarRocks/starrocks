@@ -16,6 +16,7 @@ package com.starrocks.sql.automv.generator;
 
 import com.google.api.client.util.Lists;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Predicates;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.automv.column.ColumnAlias;
 import com.starrocks.sql.automv.column.GenericColumn;
@@ -26,34 +27,36 @@ import com.starrocks.sql.automv.pieces.TableUsage;
 import com.starrocks.sql.automv.qe.PartitionExtractor;
 import com.starrocks.sql.automv.qe.PartitionPlus;
 import com.starrocks.sql.automv.util.PrettyPrinter;
+import com.starrocks.sql.automv.util.TieredList;
 import com.starrocks.sql.automv.util.TieredMap;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 public class OneOneMVGenerator {
 
-    private static Optional<Set<Integer>> inferBucketKey(TableUsage tableUsage) {
-        Map<Integer, Long> keyColumnReps =
-                Stream.concat(tableUsage.getGroupByKeys().stream(), tableUsage.getJoinKeys().stream())
-                        .filter(key -> key.size() >= 2)
-                        .flatMap(ColumnRefSet::getStream)
-                        .collect(Collectors.groupingBy(Function.identity(), Collectors.counting()));
+    private static Optional<ColumnRefSet> tryToInferBucketKey(
+            Map<Integer, Long> keyColumnReps, int nColumn,
+            Function<ColumnRefSet, Long> hitCount,
+            Predicate<ColumnRefSet> isGoodKey) {
 
-        if (keyColumnReps.size() < 2) {
+        if (keyColumnReps.size() < nColumn) {
             return Optional.empty();
         }
-        if (keyColumnReps.size() == 2) {
-            return Optional.of(keyColumnReps.keySet());
+        if (keyColumnReps.size() == nColumn) {
+            ColumnRefSet key = ColumnRefSet.createByIds(keyColumnReps.keySet());
+            if (isGoodKey.test(key)) {
+                return Optional.of(key);
+            } else {
+                return Optional.empty();
+            }
         }
 
         List<Integer> keyColumnsDescending = keyColumnReps.entrySet().stream()
@@ -61,20 +64,44 @@ public class OneOneMVGenerator {
                 .sorted(Collections.reverseOrder(Pair.comparingBySecond()))
                 .map(p -> p.first)
                 .collect(Collectors.toList())
-                .subList(0, Math.min(3, keyColumnReps.size()));
+                .subList(0, Math.min(nColumn + 1, keyColumnReps.size()));
+
+        ColumnRefSet candidateSuperKey = ColumnRefSet.createByIds(keyColumnsDescending);
+        return keyColumnsDescending.stream()
+                .map(id -> {
+                    ColumnRefSet key = candidateSuperKey.clone();
+                    key.except(ColumnRefSet.createByIds(Collections.singletonList(id)));
+                    return key;
+                })
+                .filter(isGoodKey)
+                .map(key -> Pair.create(key, hitCount.apply(key)))
+                .sorted(Collections.reverseOrder(Pair.comparingBySecond()))
+                .map(p -> p.first)
+                .findFirst();
+    }
+
+    private static Optional<ColumnRefSet> inferBucketKey(TableUsage tableUsage) {
+        Map<Integer, Long> keyColumnReps =
+                Stream.concat(tableUsage.getGroupByKeys().stream(), tableUsage.getJoinKeys().stream())
+                        .filter(key -> key.size() >= 2)
+                        .flatMap(ColumnRefSet::getStream)
+                        .collect(Collectors.groupingBy(Function.identity(), Collectors.counting()));
 
         Function<ColumnRefSet, Long> hitCount = key ->
                 tableUsage.getJoinKeys().stream().filter(joinKey -> joinKey.containsAll(key)).count() +
                         tableUsage.getGroupByKeys().stream().filter(groupByKey -> groupByKey.containsAll(key)).count();
 
-        return IntStream.range(0, keyColumnsDescending.size()).boxed()
-                .flatMap(i -> IntStream.range(i + 1, keyColumnsDescending.size()).boxed().map(j -> Arrays.asList(i, j)))
-                .map(ColumnRefSet::createByIds)
-                .map(key -> Pair.create(key, hitCount.apply(key)))
-                .sorted(Collections.reverseOrder(Pair.comparingBySecond()))
-                .map(p -> p.first)
-                .map(key -> key.getStream().collect(Collectors.toSet()))
-                .findFirst();
+        Predicate<ColumnRefSet> isHighNdvKey =
+                key -> tableUsage.getRowCount() > 1000000.0 && key.getStream().anyMatch(id ->
+                        tableUsage.getColumnIdToNdvRatio().getOrDefault(id, 0.0) > 0.5);
+
+        for (int i = 1; i < 4; ++i) {
+            Optional<ColumnRefSet> optKey = tryToInferBucketKey(keyColumnReps, i, hitCount, isHighNdvKey);
+            if (optKey.isPresent()) {
+                return optKey;
+            }
+        }
+        return tryToInferBucketKey(keyColumnReps, 4, hitCount, Predicates.alwaysTrue());
     }
 
     public static TablePiece addPartitionColumns(TablePiece tablePiece, PartitionExtractor extractor) {
@@ -97,7 +124,6 @@ public class OneOneMVGenerator {
     }
 
     public static Optional<QueryGenerateResult> generate(TableUsage tableUsage, MVGenerateContext context) {
-        PrettyPrinter mvSchema = new PrettyPrinter();
         QueryGenerateContext queryGenerateContext = QueryGenerateContext.of11MV(tableUsage);
         PartitionExtractor partitionExtractor = context.getOptions().getPartitionExtractor();
         PlanPiece tablePiece =
@@ -108,13 +134,69 @@ public class OneOneMVGenerator {
 
         TieredMap<Integer, ColumnAlias> columnAliases = result.getColumnAliases();
 
-        List<String> mvColumns = result.getOrderedColumns().stream()
-                .map(p -> columnAliases.get(p.first))
-                .map(ColumnAlias::getName).collect(Collectors.toList());
+        Optional<ColumnRefSet> optCollocateBucketKey = inferBucketKey(tableUsage);
 
+        List<Pair<Integer, GenericColumn>> candidateOrderKey = result.getOrderedDimensions()
+                .stream()
+                .filter(p -> p.second.getType().canDistributedBy())
+                .collect(Collectors.toList());
+
+        List<Pair<Integer, GenericColumn>> orderByColumns = Lists.newArrayList();
+
+        final int maxOrderByColumns = context.getOptions().getMaxOrderByColumns();
+        for (Pair<Integer, GenericColumn> columnPair : candidateOrderKey) {
+            if (orderByColumns.size() >= maxOrderByColumns) {
+                break;
+            }
+            orderByColumns.add(columnPair);
+        }
+
+        // if order key's column quota is not used up, we add some join key column into it
+        // since runtime filter can get benefit from this.
+        if (orderByColumns.size() < maxOrderByColumns) {
+            ColumnRefSet joinColumnIds = ColumnRefSet.of();
+            tableUsage.getJoinKeys().forEach(joinColumnIds::union);
+            ColumnRefSet orderByColumnIds = ColumnRefSet.of();
+            orderByColumns.forEach(p -> orderByColumnIds.union(p.first));
+            ColumnRefSet remainJoinColumnIds = joinColumnIds.clone();
+            remainJoinColumnIds.except(orderByColumnIds);
+            for (Pair<Integer, GenericColumn> columnPair : candidateOrderKey) {
+                if (orderByColumns.size() >= maxOrderByColumns) {
+                    break;
+                }
+                if (remainJoinColumnIds.contains(columnPair.first)) {
+                    orderByColumns.add(columnPair);
+                }
+            }
+        }
+
+        if (orderByColumns.isEmpty()) {
+            return Optional.empty();
+        }
+
+        ColumnRefSet remainPredicateColumnIds = ColumnRefSet.createByIds(tableUsage.getConjunctFreq().keySet());
+        ColumnRefSet orderByColumnIds =
+                ColumnRefSet.createByIds(orderByColumns.stream().map(p -> p.first).collect(Collectors.toList()));
+        remainPredicateColumnIds.except(orderByColumnIds);
+
+        TieredList<PrettyPrinter> mvIndexes = result.getOrderedDimensions()
+                .stream()
+                .filter(p -> remainPredicateColumnIds.contains(p.first))
+                .filter(p -> p.second.getType().isStringType())
+                .map(p -> columnAliases.get(p.first).getName())
+                .map(alias -> new PrettyPrinter()
+                        .add("INDEX ")
+                        .add(alias).add("_bitmap_index (").add(alias).add(") USING BITMAP"))
+                .collect(TieredList.<PrettyPrinter>toList());
+
+        PrettyPrinter mvSchema = new PrettyPrinter();
+        TieredList<PrettyPrinter> mvColumns = result.getOrderedColumns().stream()
+                .map(p -> new PrettyPrinter().add(columnAliases.get(p.first).getName()))
+                .collect(TieredList.<PrettyPrinter>toList());
+        TieredList<PrettyPrinter> mvFields = mvColumns.concat(mvIndexes);
         String mvName = context.getMvNameGenerator().apply(result.getSubquery().getResult());
         mvSchema.add("CREATE MATERIALIZED VIEW").spaces(1).add(mvName).spaces(1).add("(").newLine();
-        mvSchema.indentEnclose(() -> mvSchema.addItemsWithNlDel(", ", mvColumns));
+        mvSchema.indentEnclose(() -> mvSchema.addSuperStepsWithNlDel(", ", mvFields));
         mvSchema.newLine().add(")").newLine();
         mvSchema.add("COMMENT").spaces(1).addDoubleQuoted("11-MV recommended by AutoMV").newLine();
         PartitionExtractor extractor = context.getOptions().getPartitionExtractor();
@@ -122,39 +204,18 @@ public class OneOneMVGenerator {
         Optional<PrettyPrinter> optPartitionExpr =
                 PartitionPolicy.getPartitionClauseFor11MV(tablePiece, extractor, columnAliases);
         optPartitionExpr.ifPresent(mvSchema::addSuperStep);
+        TieredMap<Integer, GenericColumn> columns = tablePiece.getColumns();
 
-        Optional<Set<Integer>> optCollocateBucketKey = inferBucketKey(tableUsage);
+        List<String> bucketKey = optCollocateBucketKey.map(collocateBucketKey -> columns.keySet()
+                .stream()
+                .filter(collocateBucketKey::contains)
+                .map(column -> columnAliases.get(column).getName())
+                .collect(Collectors.toList())).orElseGet(Collections::emptyList);
 
-        List<Pair<Integer, GenericColumn>> bucketKey = result.getOrderedDimensions();
-        if (optCollocateBucketKey.isPresent()) {
-            Set<Integer> collocateBucketKey = optCollocateBucketKey.get();
-            bucketKey = result.getOrderedDimensions().stream()
-                    .filter(p -> collocateBucketKey.contains(p.first))
-                    .collect(Collectors.toList());
-        }
-        bucketKey = bucketKey.stream()
-                .filter(p -> p.second.getType().canDistributedBy())
-                .collect(Collectors.toList());
+        Pair<Boolean, PrettyPrinter> dist = DistributionPolicy.getDistribution(tablePiece, bucketKey);
+        mvSchema.addSuperStep(dist.second);
 
-        List<String> mvDimensionColumns = bucketKey.stream()
-                .map(p -> columnAliases.get(p.first))
-                .map(ColumnAlias::getName).collect(Collectors.toList());
-
-        mvSchema.addSuperStep(DistributionPolicy.getDistribution(tablePiece, mvDimensionColumns));
-        List<Pair<Integer, GenericColumn>> candidateOrderByColumns = Lists.newArrayList();
-
-        final int maxOrderByColumns = context.getOptions().getMaxOrderByColumns();
-        for (Pair<Integer, GenericColumn> columnPair : bucketKey) {
-            if (candidateOrderByColumns.size() >= maxOrderByColumns) {
-                break;
-            }
-            candidateOrderByColumns.add(columnPair);
-        }
-        if (candidateOrderByColumns.isEmpty()) {
-            return Optional.empty();
-        }
-
-        List<String> orderByItems = candidateOrderByColumns.stream()
+        List<String> orderByItems = orderByColumns.stream()
                 .map(p -> columnAliases.get(p.first))
                 .map(ColumnAlias::getName).collect(Collectors.toList());
         mvSchema.add("ORDER BY (").addItems(", ", orderByItems).add(")").newLine();
@@ -164,7 +225,7 @@ public class OneOneMVGenerator {
         mvSchema.add("REFRESH ASYNC START(\"2023-12-01 10:00:00\") EVERY(INTERVAL 1 DAY)").newLine();
         Optional<String> optCollocateGroup = optCollocateBucketKey.map(ignored -> mvName);
         mvSchema.addSuperStep(PropertiesPolicy.getProperties(tablePiece, columnAliases, optPartitionExpr.isPresent(),
-                optCollocateGroup));
+                optCollocateGroup, dist.first));
         mvSchema.add("AS").newLine();
         mvSchema.addSuperStep(result.getSubquery());
         QueryGenerateResult mvResult = result.updateSubquery(mvSchema)

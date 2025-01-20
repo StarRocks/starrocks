@@ -82,8 +82,7 @@ public class ConjunctWeightCalculator {
     }
 
     public static Function<Pair<Integer, GenericColumn>, Double> getColumnWeightCalculatorFor11MV(
-            Map<Integer, Map<StrictOp, Long>> conjunctFreq) {
-
+            Map<Integer, Map<StrictOp, Long>> conjunctFreq, Map<Integer, Double> columnIdToSelectivity) {
         ConjunctWeightCalculator weightCalculator = new ConjunctWeightCalculator();
         Map<Integer, Double> weights = weightCalculator.calculate(conjunctFreq);
         ColumnRefSet ids = ColumnRefSet.createByIds(weights.keySet());
@@ -91,7 +90,7 @@ public class ConjunctWeightCalculator {
             double g = ids.contains(p.first) && p.second.getType().canDistributedBy() ? 1 : 0;
             double h = weights.getOrDefault(p.first, 0.0);
             int w = p.second.getType().getPrimitiveType().isVariableLengthType() ? 1 : 10;
-            return -g * (h + 10 * w);
+            return -g * (h + 10 * w) * columnIdToSelectivity.getOrDefault(p.first, 1.0);
         };
     }
 

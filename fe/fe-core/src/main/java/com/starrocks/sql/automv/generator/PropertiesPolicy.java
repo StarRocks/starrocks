@@ -50,7 +50,8 @@ public class PropertiesPolicy {
     }
 
     public static PrettyPrinter getProperties(PlanPiece piece, Map<Integer, ColumnAlias> columAliases,
-                                              boolean isPartitioned, Optional<String> optCollocateGroup) {
+                                              boolean isPartitioned, Optional<String> optCollocateGroup,
+                                              boolean isHashDistribution) {
         List<TablePiece> tablePieces = PlanPiece.collect(piece, TablePiece.class);
         List<Table> cloudTables = tablePieces.stream()
                 .map(tablePiece -> tablePiece.getTable().getTable())
@@ -83,8 +84,12 @@ public class PropertiesPolicy {
         if (hasExternalTables) {
             propItems.put(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE, "CHECKED");
         }
-        optCollocateGroup.ifPresent(
-                collocateGroup -> propItems.put(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH, collocateGroup));
+        if (optCollocateGroup.isPresent()) {
+            propItems.put(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH, optCollocateGroup.get());
+        }
+        if (!isHashDistribution) {
+            propItems.put(PropertyAnalyzer.PROPERTIES_BUCKET_SIZE, "1073741824");
+        }
         propItems.put("session.enable_spill", "true");
         if (isPartitioned) {
             propItems.put("partition_refresh_number", "1");
