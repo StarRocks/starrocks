@@ -834,6 +834,7 @@ public class GlobalStateMgr {
 
     public static void destroyCheckpoint() {
         if (CHECKPOINT != null) {
+            CHECKPOINT.shutdown();
             CHECKPOINT = null;
         }
     }
@@ -2707,5 +2708,10 @@ public class GlobalStateMgr {
 
     public WarehouseIdleChecker getWarehouseIdleChecker() {
         return warehouseIdleChecker;
+    }
+
+    public void shutdown() {
+        // in a single thread.
+        connectorMgr.shutdown();
     }
 }
