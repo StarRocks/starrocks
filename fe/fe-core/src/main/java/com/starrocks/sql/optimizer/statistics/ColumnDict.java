@@ -53,6 +53,10 @@ public final class ColumnDict {
         return collectedVersion;
     }
 
+    public int getDictSize() {
+        return dict.size();
+    }
+
     void updateVersion(long version) {
         this.version = version;
     }
