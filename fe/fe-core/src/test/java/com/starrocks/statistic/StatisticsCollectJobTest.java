@@ -394,6 +394,23 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         StatsConstants.ScheduleStatus.PENDING,
                         LocalDateTime.MIN));
         Assert.assertEquals(1, jobs2.size());
+
+        BasicStatsMeta basicStatsMeta3 = new BasicStatsMeta(db.getId(), olapTable.getId(), null,
+                StatsConstants.AnalyzeType.SAMPLE,
+                LocalDateTime.of(2021, 1, 1, 1, 1, 1), Maps.newHashMap());
+        basicStatsMeta3.increaseDeltaRows(10000000L);
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(basicStatsMeta3);
+
+        List<StatisticsCollectJob> job3 = StatisticsCollectJobFactory.buildStatisticsCollectJob(
+                new NativeAnalyzeJob(db.getId(), olapTable.getId(), Lists.newArrayList("v2"),
+                        Lists.newArrayList(Type.BIGINT),
+                        StatsConstants.AnalyzeType.SAMPLE, StatsConstants.ScheduleType.SCHEDULE,
+                        Maps.newHashMap(),
+                        StatsConstants.ScheduleStatus.PENDING,
+                        LocalDateTime.MIN));
+        Assert.assertEquals(1, job3.size());
+        Assert.assertTrue(job3.get(0) instanceof HyperStatisticsCollectJob);
+        Assert.assertTrue(job3.get(0).toString().contains("partitionIdList=[10010]"));
     }
 
     @Test
