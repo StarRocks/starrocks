@@ -112,14 +112,10 @@ Status ListColumnReader::fill_dst_column(ColumnPtr& dst, ColumnPtr& src) {
         NullableColumn* nullable_column_src = down_cast<NullableColumn*>(src.get());
         DCHECK(nullable_column_src->mutable_data_column()->is_array());
         array_column_src = down_cast<ArrayColumn*>(nullable_column_src->mutable_data_column());
-        NullColumn* null_column_src = nullable_column_src->mutable_null_column();
         NullableColumn* nullable_column_dst = down_cast<NullableColumn*>(dst.get());
         DCHECK(nullable_column_dst->mutable_data_column()->is_array());
         array_column_dst = down_cast<ArrayColumn*>(nullable_column_dst->mutable_data_column());
-        NullColumn* null_column_dst = nullable_column_dst->mutable_null_column();
-        null_column_dst->swap_column(*null_column_src);
-        nullable_column_src->update_has_null();
-        nullable_column_dst->update_has_null();
+        nullable_column_dst->swap_null_column(*nullable_column_src);
     } else {
         DCHECK(src->is_array());
         DCHECK(dst->is_array());
@@ -301,14 +297,10 @@ Status StructColumnReader::fill_dst_column(ColumnPtr& dst, ColumnPtr& src) {
         NullableColumn* nullable_column_src = down_cast<NullableColumn*>(src.get());
         DCHECK(nullable_column_src->mutable_data_column()->is_struct());
         struct_column_src = down_cast<StructColumn*>(nullable_column_src->mutable_data_column());
-        NullColumn* null_column_src = nullable_column_src->mutable_null_column();
         NullableColumn* nullable_column_dst = down_cast<NullableColumn*>(dst.get());
         DCHECK(nullable_column_dst->mutable_data_column()->is_struct());
         struct_column_dst = down_cast<StructColumn*>(nullable_column_dst->mutable_data_column());
-        NullColumn* null_column_dst = nullable_column_dst->mutable_null_column();
-        null_column_dst->swap_column(*null_column_src);
-        nullable_column_src->update_has_null();
-        nullable_column_dst->update_has_null();
+        nullable_column_dst->swap_null_column(*nullable_column_src);
     } else {
         DCHECK(src->is_struct());
         DCHECK(dst->is_struct());

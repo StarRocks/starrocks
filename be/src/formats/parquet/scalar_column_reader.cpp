@@ -415,10 +415,8 @@ Status ScalarColumnReader::fill_dst_column(ColumnPtr& dst, ColumnPtr& src) {
                     _reader->get_dict_values(codes_column->get_data(), *codes_nullable_column, dict_values.get()));
             DCHECK_EQ(dict_codes->size(), dict_values->size());
             if (dict_values->is_nullable()) {
-                auto* nullable_codes = down_cast<NullableColumn*>(dict_codes.get());
                 auto* nullable_values = down_cast<NullableColumn*>(dict_values.get());
-                nullable_values->null_column_data().swap(nullable_codes->null_column_data());
-                nullable_values->set_has_null(nullable_codes->has_null());
+                nullable_values->swap_null_column(*codes_nullable_column);
             }
         } else {
             dst->append_default(src->size());
@@ -498,10 +496,8 @@ Status LowCardColumnReader::fill_dst_column(ColumnPtr& dst, ColumnPtr& src) {
                        DICT_DECODE_MAX_SIZE, src->size());
 
     if (dst->is_nullable()) {
-        auto* nullable_codes = down_cast<NullableColumn*>(dict_codes.get());
         auto* nullable_dst = down_cast<NullableColumn*>(dst.get());
-        nullable_dst->null_column_data().swap(nullable_codes->null_column_data());
-        nullable_dst->set_has_null(nullable_codes->has_null());
+        nullable_dst->swap_null_column(*codes_nullable_column);
     }
 
     src->reset_column();
@@ -597,8 +593,7 @@ Status LowRowsColumnReader::fill_dst_column(ColumnPtr& dst, ColumnPtr& src) {
 
     if (dst->is_nullable()) {
         auto* nullable_dst = down_cast<NullableColumn*>(dst.get());
-        nullable_dst->null_column_data().swap(nullable_string_column->null_column_data());
-        nullable_dst->set_has_null(nullable_string_column->has_null());
+        nullable_dst->swap_null_column(*nullable_string_column);
     }
 
     src->reset_column();
