@@ -15,14 +15,13 @@
 package com.starrocks.sql.optimizer.rule.transformation.pruner;
 
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Table;
 import com.starrocks.catalog.constraint.ForeignKeyConstraint;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -30,7 +29,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 // Cardinality-preserving bi-relation, two scan operator form a CPBiRel instance
-// when their underlying OlapTable has {foreign,primary,unique} key constraints and
+// when their underlying Table has {foreign,primary,unique} key constraints and
 // the join equality predicates can match these constraints.
 public class CPBiRel {
     // CPBiRel is a bi-relation consisting OptExpression
@@ -85,10 +84,10 @@ public class CPBiRel {
 
     // check if referencing table's foreign key constraint aims at referenced Table
     public static boolean isForeignKeyConstraintReferenceToUniqueKey(
-            OlapTable baseTable,
+            Table baseTable,
             ForeignKeyConstraint foreignKeyConstraint,
-            OlapTable referencedTable) {
-        if (foreignKeyConstraint.getParentTableInfo().getTableId() != referencedTable.getId()) {
+            Table referencedTable) {
+        if (!foreignKeyConstraint.getParentTableInfo().matchTable(referencedTable)) {
             return false;
         }
         Set<String> referencedColumnNames =
@@ -101,11 +100,8 @@ public class CPBiRel {
                                                 boolean leftToRight) {
         LogicalScanOperator lhsScanOp = lhs.getOp().cast();
         LogicalScanOperator rhsScanOp = rhs.getOp().cast();
-        if (!(lhsScanOp.getTable() instanceof OlapTable) || !(rhsScanOp.getTable() instanceof OlapTable)) {
-            return Collections.emptyList();
-        }
-        OlapTable lhsTable = (OlapTable) lhsScanOp.getTable();
-        OlapTable rhsTable = (OlapTable) rhsScanOp.getTable();
+        Table lhsTable = lhsScanOp.getTable();
+        Table rhsTable = rhsScanOp.getTable();
         Map<String, ColumnRefOperator> lhsColumnName2ColRef =
                 lhsScanOp.getColumnMetaToColRefMap().entrySet().stream()
                         .collect(Collectors.toMap(e -> e.getKey().getName(), Map.Entry::getValue));
