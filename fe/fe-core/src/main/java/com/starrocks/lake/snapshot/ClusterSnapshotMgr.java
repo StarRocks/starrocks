@@ -84,7 +84,7 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
         log.setDropSnapshot(AUTOMATED_NAME_PREFIX);
         GlobalStateMgr.getCurrentState().getEditLog().logClusterSnapshotLog(log);
 
-        clearFinishedClusterSnapshot(null);
+        clearFinishedAutomatedClusterSnapshot(null);
 
         setAutomatedSnapshotOff();
     }
@@ -94,10 +94,10 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
         automatedSnapshotSvName = "";
     }
 
-    protected void clearFinishedClusterSnapshot(String snapshotName) {
+    protected void clearFinishedAutomatedClusterSnapshot(String snapshotName) {
         for (Map.Entry<Long, ClusterSnapshotJob> entry : historyAutomatedSnapshotJobs.entrySet()) {
             ClusterSnapshotJob job = entry.getValue();
-            if (!job.isFinished()) {
+            if (!job.isFinished() && !job.isExpired() && !job.isError()) {
                 continue;
             }
 
@@ -145,7 +145,7 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
         return GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolumeByName(automatedSnapshotSvName);
     }
 
-    public ClusterSnapshotJob getLatestFinishedClusterSnapshotJob() {
+    public ClusterSnapshotJob getLatestAutomatedFinishedClusterSnapshotJob() {
         for (Map.Entry<Long, ClusterSnapshotJob> entry : historyAutomatedSnapshotJobs.descendingMap().entrySet()) {
             ClusterSnapshotJob job = entry.getValue();
             if (job.isFinished()) {
@@ -156,7 +156,7 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
     }
 
     public ClusterSnapshot getAutomatedSnapshot() {
-        ClusterSnapshotJob job = getLatestFinishedClusterSnapshotJob();
+        ClusterSnapshotJob job = getLatestAutomatedFinishedClusterSnapshotJob();
         if (job == null) {
             return null;
         }
@@ -167,7 +167,7 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
     public synchronized void addJob(ClusterSnapshotJob job) {
         int maxSize = Math.max(Config.max_historical_automated_cluster_snapshot_jobs, 2);
         if (historyAutomatedSnapshotJobs.size() == maxSize) {
-            removeLastestFinalizeJob();
+            removeLastestAutomatedFinalizeJob();
         }
         historyAutomatedSnapshotJobs.put(job.getId(), job);
     }
@@ -216,12 +216,12 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
         return historyAutomatedSnapshotJobs;
     }
 
-    public void resetJobsStateForTheFirstRun() {
-        resetAllFinishedJobsIntoExpiredExceptLastest();
+    public void resetAutomatedJobsStateForTheFirstRun() {
+        resetAllAutomatedFinishedJobsIntoExpiredExceptLastest();
         resetLastUnFinishedAutomatedSnapshotJob();
     }
 
-    public void resetAllFinishedJobsIntoExpiredExceptLastest() {
+    public void resetAllAutomatedFinishedJobsIntoExpiredExceptLastest() {
         boolean meetFirstFinished = false;
         for (Map.Entry<Long, ClusterSnapshotJob> entry : historyAutomatedSnapshotJobs.descendingMap().entrySet()) {
             ClusterSnapshotJob job = entry.getValue();
@@ -246,7 +246,7 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
         }
     }
 
-    public void removeLastestFinalizeJob() {
+    public void removeLastestAutomatedFinalizeJob() {
         long removeId = -1;
         for (Map.Entry<Long, ClusterSnapshotJob> entry : historyAutomatedSnapshotJobs.descendingMap().entrySet()) {
             long id = entry.getKey();
@@ -281,7 +281,7 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
     public TClusterSnapshotsResponse getAllInfo() {
         TClusterSnapshotsResponse response = new TClusterSnapshotsResponse();
         ClusterSnapshot automatedSnapshot = getAutomatedSnapshot();
-        if (automatedSnapshot != null) {
+        if (isAutomatedSnapshotOn() && automatedSnapshot != null) {
             response.addToItems(automatedSnapshot.getInfo());
         }
         return response;
@@ -317,7 +317,9 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
                     case SNAPSHOTING:
                     case UPLOADING:
                     case FINISHED:
-                    case ERROR: {
+                    case ERROR:
+                    case EXPIRED:
+                    case DELETED: {
                         if (historyAutomatedSnapshotJobs.containsKey(job.getId())) {
                             historyAutomatedSnapshotJobs.remove(job.getId());
                             historyAutomatedSnapshotJobs.put(job.getId(), job);

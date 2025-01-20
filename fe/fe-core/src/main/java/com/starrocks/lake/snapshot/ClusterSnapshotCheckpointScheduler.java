@@ -51,7 +51,7 @@ public class ClusterSnapshotCheckpointScheduler extends FrontendDaemon {
 
         // skip first run when the scheduler start
         if (firstRun) {
-            GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().resetJobsStateForTheFirstRun();
+            GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().resetAutomatedJobsStateForTheFirstRun();
             firstRun = false;
             return;
         }
@@ -126,6 +126,10 @@ public class ClusterSnapshotCheckpointScheduler extends FrontendDaemon {
             LOG.info("Finish upload image for Cluster Snapshot, FE checkpoint journal Id: {}, StarMgr checkpoint journal Id: {}",
                      job.getFeJournalId(), job.getStarMgrJournalId());
         } while (false);
+
+        if (!GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().isAutomatedSnapshotOn()) {
+            errMsg = "Job: " + job.getSnapshotName() + " has been cancelled because automated cluster snapshot has been turn off";
+        }
 
         if (!errMsg.isEmpty()) {
             job.setErrMsg(errMsg);
