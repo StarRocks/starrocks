@@ -1706,7 +1706,7 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
         // filter redundant predicates since they are not used for rewrite.
         Set<ColumnRefOperator> mvPredicateUsedColRefs = mvPredicateSplit.getPredicates()
                 .stream()
-                .filter(pred -> !pred.isRedundant())
+                .filter(pred -> pred != null && !pred.isRedundant())
                 .map(pred -> pred.getColumnRefs()
                         .stream()
                         .map(colRef -> (ColumnRefOperator) columnRewriter.rewriteViewToQuery(colRef))
@@ -1717,11 +1717,11 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
         List<ScalarOperator> queryPredicates = Lists.newArrayList();
         Utils.extractConjuncts(queryPredicateSplit.getRangePredicates())
                 .stream()
-                .filter(pred -> !pred.isRedundant())
+                .filter(pred -> pred != null && !pred.isRedundant())
                 .forEach(queryPredicates::add);
         Utils.extractConjuncts(queryPredicateSplit.getResidualPredicates())
                 .stream()
-                .filter(pred -> !pred.isRedundant())
+                .filter(pred -> pred != null && !pred.isRedundant())
                 .forEach(queryPredicates::add);
         
         // if query and mv contains the same column, we can rewrite query by mv.
