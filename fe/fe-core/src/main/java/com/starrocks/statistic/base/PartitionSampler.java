@@ -27,10 +27,10 @@ import java.util.List;
 import java.util.Map;
 
 public class PartitionSampler {
-    private static final double HIGH_WEIGHT_READ_RATIO = 0.001;
-    private static final double MEDIUM_HIGH_WEIGHT_READ_RATIO = 0.01;
-    private static final double MEDIUM_LOW_WEIGHT_READ_RATIO = 0.1;
-    private static final double LOW_WEIGHT_READ_RATIO = 0.8;
+    public static final double HIGH_WEIGHT_READ_RATIO = 0.001;
+    public static final double MEDIUM_HIGH_WEIGHT_READ_RATIO = 0.01;
+    public static final double MEDIUM_LOW_WEIGHT_READ_RATIO = 0.1;
+    public static final double LOW_WEIGHT_READ_RATIO = 0.8;
     private static final long HIGH_WEIGHT_ROWS_THRESHOLD = 10000000L;
     private static final long MEDIUM_HIGH_WEIGHT_ROWS_THRESHOLD = 1000000L;
     private static final long MEDIUM_LOW_WEIGHT_ROWS_THRESHOLD = 100000L;
@@ -54,26 +54,6 @@ public class PartitionSampler {
         this.maxSize = maxSize;
 
         this.sampleRowsLimit = sampleRowLimit;
-    }
-
-    public double getHighRatio() {
-        return highRatio;
-    }
-
-    public double getMediumHighRatio() {
-        return mediumHighRatio;
-    }
-
-    public double getMediumLowRatio() {
-        return mediumLowRatio;
-    }
-
-    public double getLowRatio() {
-        return lowRatio;
-    }
-
-    public int getMaxSize() {
-        return maxSize;
     }
 
     public long getSampleRowsLimit() {
