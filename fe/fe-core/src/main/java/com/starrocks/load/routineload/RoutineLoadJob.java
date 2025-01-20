@@ -894,7 +894,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             planParams.query_options.setLoad_job_type(TLoadJobType.ROUTINE_LOAD);
             StreamLoadMgr streamLoadManager = GlobalStateMgr.getCurrentState().getStreamLoadMgr();
 
-            StreamLoadTask streamLoadTask = streamLoadManager.createLoadTaskWithoutLock(db, table.getName(), label, "", "",
+            StreamLoadTask streamLoadTask = streamLoadManager.createLoadTaskWithoutLock(db, table, label, "", "",
                     taskTimeoutSecond * 1000, true, warehouseId);
             streamLoadTask.setTxnId(txnId);
             streamLoadTask.setLabel(label);
