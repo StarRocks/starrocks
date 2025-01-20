@@ -35,6 +35,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
@@ -533,7 +534,26 @@ public class StatisticsCollectJobFactory {
     private static void createSampleStatsJob(List<StatisticsCollectJob> allTableJobMap, NativeAnalyzeJob job,
                                              Database db, Table table, List<String> columnNames,
                                              List<Type> columnTypes) {
-        StatisticsCollectJob sample = buildStatisticsCollectJob(db, table, null, columnNames, columnTypes,
+        Collection<Partition> partitions = table.getPartitions();
+        BasicStatsMeta basicStatsMeta = GlobalStateMgr.getCurrentState().getAnalyzeMgr()
+                .getTableBasicStatsMeta(table.getId());
+        List<Long> partitionIdList;
+        if (basicStatsMeta != null) {
+            partitionIdList = partitions.stream()
+                    .filter(partition -> {
+                        LocalDateTime partitionUpdateTime = StatisticUtils.getPartitionLastUpdateTime(partition);
+                        return basicStatsMeta.getUpdateTime().isBefore(partitionUpdateTime) && partition.hasData();
+                    })
+                    .map(Partition::getId)
+                    .collect(Collectors.toList());
+        } else {
+            partitionIdList = partitions.stream()
+                    .filter(Partition::hasData)
+                    .map(Partition::getId)
+                    .collect(Collectors.toList());
+        }
+
+        StatisticsCollectJob sample = buildStatisticsCollectJob(db, table, partitionIdList, columnNames, columnTypes,
                 StatsConstants.AnalyzeType.SAMPLE, job.getScheduleType(), job.getProperties());
         allTableJobMap.add(sample);
     }
