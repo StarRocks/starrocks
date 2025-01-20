@@ -23,6 +23,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
+import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.connector.statistics.ConnectorTableColumnKey;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.thrift.TGlobalDict;
@@ -50,7 +51,6 @@ public class CacheRelaxDictManager implements IRelaxDictManager, MemoryTrackable
     private static final Set<ConnectorTableColumnKey> NO_DICT_STRING_COLUMNS = Sets.newConcurrentHashSet();
     private static final Set<ConnectorTableColumnKey> TEMP_NOT_MATCHED_KEY = Sets.newConcurrentHashSet();
     private static final Set<String> FORBIDDEN_DICT_TABLE_UUIDS = Sets.newConcurrentHashSet();
-    public static final Integer LOW_CARDINALITY_THRESHOLD = 255;
     private static final long DICT_EXPIRATION_SECONDS = 7 * 24 * 3600;
     private static final long DICT_REFRESH_INTERVAL_SECONDS = 7 * 24 * 3600;
     public static final long HISTORICAL_VERSION_THRESHOLD = 30;
@@ -58,7 +58,7 @@ public class CacheRelaxDictManager implements IRelaxDictManager, MemoryTrackable
     private static final CacheRelaxDictManager INSTANCE = new CacheRelaxDictManager();
 
     private static Optional<ColumnDict> checkDictSize(ConnectorTableColumnKey key, Optional<ColumnDict> input) {
-        if (input.isPresent() && input.get().getDictSize() > LOW_CARDINALITY_THRESHOLD) {
+        if (input.isPresent() && input.get().getDictSize() > CacheDictManager.LOW_CARDINALITY_THRESHOLD) {
             NO_DICT_STRING_COLUMNS.add(key);
             return Optional.empty();
         }
@@ -155,6 +155,7 @@ public class CacheRelaxDictManager implements IRelaxDictManager, MemoryTrackable
             .maximumSize(Config.statistic_dict_columns)
             .expireAfterAccess(DICT_EXPIRATION_SECONDS, TimeUnit.SECONDS)
             .refreshAfterWrite(DICT_REFRESH_INTERVAL_SECONDS, TimeUnit.SECONDS)
+            .executor(ThreadPoolManager.getDictCacheThreadPoolForLake())
             .buildAsync(new DictLoader());
 
     private CacheRelaxDictManager() {

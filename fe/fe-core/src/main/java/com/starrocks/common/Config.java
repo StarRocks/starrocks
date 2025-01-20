@@ -2056,6 +2056,9 @@ public class Config extends ConfigBase {
     @ConfField
     public static int dict_collect_thread_pool_size = 16;
 
+    @ConfField
+    public static int dict_collect_thread_pool_for_lake_size = 4;
+
     /**
      * The column statistic cache update interval
      */

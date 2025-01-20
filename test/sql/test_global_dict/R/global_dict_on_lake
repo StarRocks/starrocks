@@ -1,0 +1,80 @@
+-- name: test_global_dict_on_lake
+create external catalog hive_sql_test_${uuid0} PROPERTIES ("type"="hive", "hive.metastore.uris"="${hive_metastore_uris}");
+-- result:
+-- !result
+use hive_sql_test_${uuid0}.hive_oss_db;
+-- result:
+-- !result
+create table low_card_test (
+c1 int,
+c2 string
+);
+-- result:
+-- !result
+insert into low_card_test values (1, '1');
+-- result:
+-- !result
+insert into low_card_test values (2, '2');
+-- result:
+-- !result
+insert into low_card_test values (3, '3');
+-- result:
+-- !result
+insert into low_card_test values (4, '4');
+-- result:
+-- !result
+insert into low_card_test values (5, '5');
+-- result:
+-- !result
+insert into low_card_test values (6, '6');
+-- result:
+-- !result
+select count(c2) from low_card_test;
+-- result:
+6
+-- !result
+function: wait_global_dict_ready('c2', 'low_card_test')
+-- result:
+
+-- !result
+select count(c2) from low_card_test;
+-- result:
+6
+-- !result
+function: wait_global_dict_ready('c2', 'low_card_test')
+-- result:
+
+-- !result
+select count(c2) from low_card_test;
+-- result:
+6
+-- !result
+insert into low_card_test values (7, '7');
+-- result:
+-- !result
+select count(c2) from low_card_test;
+-- result:
+7
+-- !result
+function: wait_global_dict_ready('c2', 'low_card_test')
+-- result:
+
+-- !result
+select count(c2) from low_card_test;
+-- result:
+7
+-- !result
+select count(c2) from low_card_test where c2 = '7';
+-- result:
+1
+-- !result
+select count(c1) from low_card_test where c2 = '1';
+-- result:
+1
+-- !result
+drop table low_card_test force;
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
