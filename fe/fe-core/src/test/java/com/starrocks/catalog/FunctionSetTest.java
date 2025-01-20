@@ -30,6 +30,7 @@ public class FunctionSetTest {
     private static final Type DOUBLE_ARRAY = new ArrayType(Type.DOUBLE);
     private static final Type INT_ARRAY_ARRAY = new ArrayType(INT_ARRAY);
     private static final Type TINYINT_ARRAY_ARRAY = new ArrayType(TINYINT_ARRAY);
+    private static final Type VARCHAR_ARRAY_ARRAY = new ArrayType(VARCHAR_ARRAY);
 
     @Before
     public void setUp() {
@@ -267,6 +268,30 @@ public class FunctionSetTest {
         fn = functionSet.getFunction(desc, Function.CompareMode.IS_SUPERTYPE_OF);
         Assert.assertNotNull(fn);
         Assert.assertEquals(fn.functionId, 150216L);
+
+        // array_flatten(ARRAY<ARRAY<TINYINT>>)
+        argTypes = new Type[] {TINYINT_ARRAY_ARRAY};
+        desc = new Function(new FunctionName("array_flatten"), argTypes, Type.INVALID, false);
+        fn = functionSet.getFunction(desc, Function.CompareMode.IS_SUPERTYPE_OF);
+        Assert.assertNotNull(fn);
+        Assert.assertEquals(TINYINT_ARRAY, fn.getReturnType());
+        Assert.assertEquals(TINYINT_ARRAY_ARRAY, fn.getArgs()[0]);
+
+        // array_flatten(ARRAY<ARRAY<INT>>)
+        argTypes = new Type[] {INT_ARRAY_ARRAY};
+        desc = new Function(new FunctionName("array_flatten"), argTypes, Type.INVALID, false);
+        fn = functionSet.getFunction(desc, Function.CompareMode.IS_SUPERTYPE_OF);
+        Assert.assertNotNull(fn);
+        Assert.assertEquals(INT_ARRAY, fn.getReturnType());
+        Assert.assertEquals(INT_ARRAY_ARRAY, fn.getArgs()[0]);
+
+        // array_flatten(ARRAY<ARRAY<INT>>)
+        argTypes = new Type[] {VARCHAR_ARRAY_ARRAY};
+        desc = new Function(new FunctionName("array_flatten"), argTypes, Type.INVALID, false);
+        fn = functionSet.getFunction(desc, Function.CompareMode.IS_SUPERTYPE_OF);
+        Assert.assertNotNull(fn);
+        Assert.assertEquals(VARCHAR_ARRAY, fn.getReturnType());
+        Assert.assertEquals(VARCHAR_ARRAY_ARRAY, fn.getArgs()[0]);
     }
 
     @Test
