@@ -58,14 +58,12 @@ public class TransactionWithChannelHandler implements TransactionOperationHandle
                     throw new DdlException(String.format(
                             "Channel ID should be between [0, %d].", (channel.getNum() - 1)));
                 }
-                Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                        .getWarehouse(txnOperationParams.getWarehouseName());
-                if (warehouse == null) {
-                    throw new StarRocksException("Warehouse " + txnOperationParams.getWarehouseName() + " not exist");
-                }
+                String warehouseName = txnOperationParams.getWarehouseName();
+                Warehouse warehouse =
+                        GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName);
                 GlobalStateMgr.getCurrentState().getStreamLoadMgr().beginLoadTaskFromFrontend(
-                        dbName, tableName, label, "", "", timeoutMillis, channel.getNum(),
-                        channel.getId(), result, warehouse.getId());
+                        dbName, tableName, label, "", "", timeoutMillis, channel.getNum(), channel.getId(), result,
+                        warehouse.getId());
                 return new ResultWrapper(result);
             case TXN_PREPARE:
                 GlobalStateMgr.getCurrentState().getStreamLoadMgr().prepareLoadTask(
