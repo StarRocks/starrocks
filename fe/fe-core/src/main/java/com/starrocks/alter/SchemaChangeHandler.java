@@ -2131,41 +2131,6 @@ public class SchemaChangeHandler extends AlterHandler {
         return null;
     }
 
-<<<<<<< HEAD
-=======
-    public void processLakeTableDropPersistentIndex(AlterClause alterClause, Database db, OlapTable olapTable)
-            throws StarRocksException {
-        if (!olapTable.enablePersistentIndex() ||
-                olapTable.getPersistentIndexType() != TPersistentIndexType.CLOUD_NATIVE) {
-            LOG.warn(String.format("drop persistent index on table %s failed, it must be" +
-                    " cloud_native persistent index", olapTable.getName()));
-            throw new DdlException("drop persistent index only support cloud native index");
-        }
-        Set<Long> dropPindexTablets = ((DropPersistentIndexClause) alterClause).getTabletIds();
-        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
-
-        for (Long tabletId : dropPindexTablets) {
-            try {
-                TabletMeta tabletMeta = invertedIndex.getTabletMeta(tabletId);
-                if (tabletMeta == null) {
-                    throw new DdlException(String.format("tablet %d is not exist", tabletId));
-                }
-                long partitionId = tabletMeta.getPhysicalPartitionId();
-                PhysicalPartition partition = olapTable.getPhysicalPartition(partitionId);
-                MaterializedIndex index = partition.getIndex(tabletMeta.getIndexId());
-                Tablet tablet = index.getTablet(tabletId);
-                LakeTablet lakeTablet = (LakeTablet) tablet;
-                lakeTablet.setRebuildPindexVersion(partition.getVisibleVersion());
-            } catch (Exception e) {
-                LOG.warn(String.format("drop persistent index on tablet %d failed, error: %s",
-                        tabletId, e.getMessage()));
-                throw new DdlException(String.format("drop persistent index on tablet %d failed, error: %s",
-                        tabletId, e.getMessage()));
-            }
-        }
-    }
-
->>>>>>> 1e977bc24 ([BugFix] Fix bugs of vector index (#55123))
     public void updateTableMeta(Database db, String tableName, Map<String, String> properties,
                                 TTabletMetaType metaType)
             throws DdlException {

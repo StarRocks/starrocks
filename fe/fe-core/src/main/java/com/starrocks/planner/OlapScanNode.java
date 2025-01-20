@@ -101,11 +101,6 @@ import com.starrocks.thrift.TPrimitiveType;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
-<<<<<<< HEAD
-import com.starrocks.thrift.TVectorSearchOptions;
-=======
-import com.starrocks.thrift.TTableSampleOptions;
->>>>>>> 1e977bc24 ([BugFix] Fix bugs of vector index (#55123))
 import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
