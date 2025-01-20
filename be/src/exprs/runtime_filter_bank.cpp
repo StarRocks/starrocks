@@ -778,6 +778,7 @@ void RuntimeFilterHelper::create_min_max_value_predicate(ObjectPool* pool, SlotI
                                                          const JoinRuntimeFilter* filter, Expr** min_max_predicate) {
     *min_max_predicate = nullptr;
     if (filter == nullptr) return;
+    // TODO, if you want to enable it for string, pls adapt for low-cardinality string
     if (slot_type == TYPE_CHAR || slot_type == TYPE_VARCHAR) return;
     auto res = type_dispatch_filter(slot_type, (Expr*)nullptr, MinMaxPredicateBuilder(pool, slot_id, filter));
     *min_max_predicate = res;

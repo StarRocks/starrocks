@@ -244,6 +244,8 @@ struct HdfsScannerParams {
     bool orc_use_column_names = false;
 
     int64_t connector_max_split_size = 0;
+
+    ColumnIdToGlobalDictMap* global_dictmaps = &EMPTY_GLOBAL_DICTMAPS;
 };
 
 struct HdfsScannerContext {
@@ -365,6 +367,8 @@ struct HdfsScannerContext {
     std::unique_ptr<ScanConjunctsManager> conjuncts_manager = nullptr;
     std::vector<std::unique_ptr<ColumnPredicate>> predicate_free_pool;
     PredicateTree predicate_tree;
+
+    ColumnIdToGlobalDictMap* global_dictmaps = &EMPTY_GLOBAL_DICTMAPS;
 };
 
 struct OpenFileOptions {

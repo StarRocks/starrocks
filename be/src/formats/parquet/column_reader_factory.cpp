@@ -156,6 +156,30 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(const ColumnReaderOptions&
     }
 }
 
+StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(ColumnReaderPtr ori_reader, const GlobalDictMap* dict,
+                                                      SlotId slot_id, int64_t num_rows) {
+    if (ori_reader->get_column_parquet_field()->type == ColumnType::ARRAY) {
+        ASSIGN_OR_RETURN(ColumnReaderPtr child_reader,
+                         ColumnReaderFactory::create(
+                                 std::move((down_cast<ListColumnReader*>(ori_reader.get()))->get_element_reader()),
+                                 dict, slot_id, num_rows));
+        return std::make_unique<ListColumnReader>(ori_reader->get_column_parquet_field(), std::move(child_reader));
+    } else {
+        RawColumnReader* raw_reader = dynamic_cast<RawColumnReader*>(ori_reader.get());
+        if (raw_reader == nullptr) {
+            return Status::InternalError("Error on reader transform for low cardinality reader");
+        }
+        if (raw_reader->column_all_pages_dict_encoded()) {
+            return std::make_unique<LowCardColumnReader>(*raw_reader, dict, slot_id);
+        } else if (num_rows <= DICT_DECODE_MAX_SIZE) {
+            return std::make_unique<LowRowsColumnReader>(*raw_reader, dict, slot_id);
+        } else {
+            return Status::GlobalDictNotMatch(
+                    fmt::format("SlotId: {}, Not dict encoded and not low rows on global dict column. ", slot_id));
+        }
+    }
+}
+
 void ColumnReaderFactory::get_subfield_pos_with_pruned_type(const ParquetField& field, const TypeDescriptor& col_type,
                                                             bool case_sensitive, std::vector<int32_t>& pos) {
     DCHECK(field.type == ColumnType::STRUCT);
