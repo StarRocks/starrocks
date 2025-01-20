@@ -15,6 +15,7 @@
 package com.starrocks.lake.snapshot;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.alter.AlterJobV2;
 import com.starrocks.common.Config;
 import com.starrocks.common.UserException;
 import com.starrocks.lake.snapshot.ClusterSnapshotJob.ClusterSnapshotJobState;
@@ -117,11 +118,11 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
     }
 
     public ClusterSnapshotJob createAutomatedSnapshotJob() {
-        long createTime = System.currentTimeMillis();
+        long createTimeMs = System.currentTimeMillis();
         long id = GlobalStateMgr.getCurrentState().getNextId();
-        String snapshotName = AUTOMATED_NAME_PREFIX + '_' + String.valueOf(createTime);
+        String snapshotName = AUTOMATED_NAME_PREFIX + '_' + String.valueOf(createTimeMs);
         String storageVolumeName = automatedSnapshotSvName;
-        ClusterSnapshotJob job = new ClusterSnapshotJob(id, snapshotName, storageVolumeName, createTime);
+        ClusterSnapshotJob job = new ClusterSnapshotJob(id, snapshotName, storageVolumeName, createTimeMs);
         job.logJob();
 
         addJob(job);
@@ -148,11 +149,51 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
     }
 
     public synchronized void addJob(ClusterSnapshotJob job) {
-        if (Config.max_historical_automated_cluster_snapshot_jobs >= 1 &&
-                historyAutomatedSnapshotJobs.size() == Config.max_historical_automated_cluster_snapshot_jobs) {
+        int maxSize = Math.max(Config.max_historical_automated_cluster_snapshot_jobs, 2);
+        if (historyAutomatedSnapshotJobs.size() == maxSize) {
             historyAutomatedSnapshotJobs.pollFirstEntry();
         }
         historyAutomatedSnapshotJobs.put(job.getId(), job);
+    }
+
+    public synchronized long getValidDeletionTimeMsByAutomatedSnapshot() {
+        if (!isAutomatedSnapshotOn()) {
+            return Long.MAX_VALUE;
+        }
+
+        boolean findLastSuccess = false;
+        long previousAutomatedSnapshotCreatedTimsMs = 0;
+        for (Map.Entry<Long, ClusterSnapshotJob> entry : historyAutomatedSnapshotJobs.descendingMap().entrySet()) {
+            ClusterSnapshotJob job = entry.getValue();
+            if (job.isFinished()) {
+                if (findLastSuccess) {
+                    previousAutomatedSnapshotCreatedTimsMs = job.getCreatedTimeMs();
+                    break;
+                }
+
+                findLastSuccess = true;
+            }
+        }
+
+        return previousAutomatedSnapshotCreatedTimsMs;
+    }
+
+    public synchronized boolean checkValidDeletionForTableFromAlterJob(long tableId) {
+        if (!isAutomatedSnapshotOn()) {
+            return true;
+        }
+
+        boolean valid = true;
+        Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getRollupHandler().getAlterJobsV2();
+        alterJobs.putAll(GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2());
+        for (Map.Entry<Long, AlterJobV2> entry : alterJobs.entrySet()) {
+            AlterJobV2 alterJob = entry.getValue();
+            if (alterJob.getTableId() == tableId) {
+                valid = (alterJob.getFinishedTimeMs() < getValidDeletionTimeMsByAutomatedSnapshot());
+                break;
+            }
+        }
+        return valid;
     }
 
     public TClusterSnapshotJobsResponse getAllJobsInfo() {

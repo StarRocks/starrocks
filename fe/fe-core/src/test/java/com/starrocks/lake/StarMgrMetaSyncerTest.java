@@ -43,6 +43,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.concurrent.lock.LockManager;
+import com.starrocks.lake.snapshot.ClusterSnapshotMgr;
 import com.starrocks.proto.DeleteTabletRequest;
 import com.starrocks.proto.DeleteTabletResponse;
 import com.starrocks.proto.StatusPB;
@@ -148,6 +149,10 @@ public class StarMgrMetaSyncerTest {
                 globalStateMgr.getGtidGenerator();
                 minTimes = 0;
                 result = new GtidGenerator();
+
+                globalStateMgr.getClusterSnapshotMgr();
+                minTimes = 0;
+                result = new ClusterSnapshotMgr();
             }
         };
 
