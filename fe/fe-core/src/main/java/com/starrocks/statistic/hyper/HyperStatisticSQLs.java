@@ -32,6 +32,11 @@ import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
+import static com.starrocks.statistic.base.PartitionSampler.HIGH_WEIGHT_READ_RATIO;
+import static com.starrocks.statistic.base.PartitionSampler.LOW_WEIGHT_READ_RATIO;
+import static com.starrocks.statistic.base.PartitionSampler.MEDIUM_HIGH_WEIGHT_READ_RATIO;
+import static com.starrocks.statistic.base.PartitionSampler.MEDIUM_LOW_WEIGHT_READ_RATIO;
+
 public class HyperStatisticSQLs {
     private static final VelocityEngine DEFAULT_VELOCITY_ENGINE;
 
@@ -131,13 +136,13 @@ public class HyperStatisticSQLs {
         List<String> groupSQLs = Lists.newArrayList();
         StringBuilder sqlBuilder = new StringBuilder();
         groupSQLs.add(generateRatioTable(tableName, sampler.getSampleRowsLimit(), info.getHighWeightTablets(),
-                sampler.getHighRatio(), "t_high"));
+                HIGH_WEIGHT_READ_RATIO, "t_high"));
         groupSQLs.add(generateRatioTable(tableName, sampler.getSampleRowsLimit(), info.getMediumHighWeightTablets(),
-                sampler.getMediumHighRatio(), "t_medium_high"));
+                MEDIUM_HIGH_WEIGHT_READ_RATIO, "t_medium_high"));
         groupSQLs.add(generateRatioTable(tableName, sampler.getSampleRowsLimit(), info.getMediumLowWeightTablets(),
-                sampler.getMediumLowRatio(), "t_medium_low"));
+                MEDIUM_LOW_WEIGHT_READ_RATIO, "t_medium_low"));
         groupSQLs.add(generateRatioTable(tableName, sampler.getSampleRowsLimit(), info.getLowWeightTablets(),
-                sampler.getLowRatio(), "t_low"));
+                LOW_WEIGHT_READ_RATIO, "t_low"));
         if (groupSQLs.stream().allMatch(Objects::isNull)) {
             groupSQLs.add("SELECT * FROM " + tableName + " LIMIT " + Config.statistic_sample_collect_rows);
         }
