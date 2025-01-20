@@ -510,9 +510,7 @@ public class MvRewritePartialPartitionTest extends MVTestBase {
         query = "SELECT `o_orderkey`, `o_orderstatus`, `o_orderdate`  FROM `hive0`.`partitioned_db`.`orders` ";
         plan = getFragmentPlan(query);
         PlanTestBase.assertContains(plan, "hive_parttbl_mv_5", "orders",
-                "PARTITION PREDICATES: (((15: o_orderdate < '1991-01-01') OR (15: o_orderdate >= '1991-02-01'))" +
-                        " AND ((15: o_orderdate < '1991-03-01') OR (15: o_orderdate >= '1993-12-31')))" +
-                        " OR (15: o_orderdate IS NULL)");
+                "     partitions=28/1095");
 
         // updated partitions are not in the query's partition range
         query = "SELECT `o_orderkey`, `o_orderstatus`, `o_orderdate`  FROM `hive0`.`partitioned_db`.`orders` " +
@@ -733,8 +731,10 @@ public class MvRewritePartialPartitionTest extends MVTestBase {
             FeConstants.runningUnitTest = false;
             String plan = getFragmentPlan(query5);
             FeConstants.runningUnitTest = true;
-            PlanTestBase.assertContains(plan, "test_loose_mv", "partitions=3/4",
-                    "table_with_day_partition", "partitions=1/4", "UNION");
+            PlanTestBase.assertContains(plan, "test_loose_mv", "     TABLE: test_loose_mv\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     partitions=3/4");
+            PlanTestBase.assertNotContains(plan, "UNION");
             dropMv("test", "test_loose_mv");
         }
     }
@@ -861,7 +861,7 @@ public class MvRewritePartialPartitionTest extends MVTestBase {
         {
             String query = "select date_trunc('minute', `k1`) AS ds, sum(v1) " +
                     " FROM base_tbl1 where date_trunc('minute', `k1`)  = '2020-02-11' group by ds";
-            String plan = getFragmentPlan(query, "MV");
+            String plan = getFragmentPlan(query);
             PlanTestBase.assertContains(plan, "test_mv1", "ds = '2020-02-11 00:00:00'");
         }
 
@@ -1189,6 +1189,7 @@ public class MvRewritePartialPartitionTest extends MVTestBase {
 
         String query = "select col1, col2, 'server' source_meta_type, count(1) " +
                 "from test_base_table1 where col2 between '2022-04-01' and '2022-04-05'  group by col1, col2;\n";
+        connectContext.getSessionVariable().setMaterializedViewUnionRewriteMode(1);
         {
             String plan = getFragmentPlan(query);
             PlanTestBase.assertContains(plan, "UNION");
@@ -1197,8 +1198,7 @@ public class MvRewritePartialPartitionTest extends MVTestBase {
             // input query's partition range is [2022-04-01, 2022-04-05] and should not be changed.
             PlanTestBase.assertContains(plan, "     TABLE: test_base_table1\n" +
                     "     PREAGGREGATION: ON\n" +
-                    "     PREDICATES: ((13: col0 != 123456789) OR (14: col2 < '2022-04-01')) " +
-                    "OR ((14: col2 >= '2022-04-04') OR (15: col3 != 'Guangdong'))\n" +
+                    "     PREDICATES: (23: col0 != 123456789) OR (25: col3 != 'Guangdong')\n" +
                     "     partitions=5/9");
         }
 
@@ -1209,10 +1209,10 @@ public class MvRewritePartialPartitionTest extends MVTestBase {
             // input query's partition range is [2022-04-01, 2022-04-05] and should not be changed.
             PlanTestBase.assertContains(plan, "     TABLE: test_base_table1\n" +
                     "     PREAGGREGATION: ON\n" +
-                    "     PREDICATES: ((13: col0 != 123456789) OR (14: col2 < '2022-04-01')) " +
-                    "OR ((14: col2 >= '2022-04-04') OR (15: col3 != 'Guangdong'))\n" +
+                    "     PREDICATES: (23: col0 != 123456789) OR (25: col3 != 'Guangdong')\n" +
                     "     partitions=5/9");
         }
+        connectContext.getSessionVariable().setMaterializedViewUnionRewriteMode(0);
         connectContext.getSessionVariable().setEnableMaterializedViewTransparentUnionRewrite(true);
         starRocksAssert.dropTable("test_base_table1");
         starRocksAssert.dropMaterializedView("test_mv1");

@@ -37,7 +37,6 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvPartitionCompensator;
@@ -157,7 +156,7 @@ public class MaterializedViewTransparentRewriteRule extends TransformationRule {
         logMVRewrite(context, this, "MV to refresh partition info: {}", mvUpdateInfo);
 
         MaterializationContext mvContext = MvRewritePreprocessor.buildMaterializationContext(context,
-                mv, mvPlanContext, ConstantOperator.TRUE, mvUpdateInfo, queryTables);
+                mv, mvPlanContext, mvUpdateInfo, queryTables);
 
         Map<Column, ColumnRefOperator> columnToColumnRefMap = olapScanOperator.getColumnMetaToColRefMap();
         List<Column> mvColumns = mv.getBaseSchema();
@@ -204,7 +203,7 @@ public class MaterializedViewTransparentRewriteRule extends TransformationRule {
         mvUpdateInfo.addMvToRefreshPartitionNames(mv.getPartitionNames());
 
         MaterializationContext mvContext = MvRewritePreprocessor.buildMaterializationContext(context,
-                mv, mvPlanContext, ConstantOperator.TRUE, mvUpdateInfo, queryTables);
+                mv, mvPlanContext, mvUpdateInfo, queryTables);
         logMVRewrite(mvContext, "Get mv transparent plan failed, and redirect to mv's defined query");
         Map<Column, ColumnRefOperator> columnToColumnRefMap = olapScanOperator.getColumnMetaToColRefMap();
         List<Column> mvColumns = mv.getBaseSchema();

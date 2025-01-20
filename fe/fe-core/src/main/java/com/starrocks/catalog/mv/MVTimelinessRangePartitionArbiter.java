@@ -43,6 +43,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static com.starrocks.sql.common.RangePartitionDiffer.syncBaseTablePartitionInfos;
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVPrepare;
 
 /**
@@ -154,16 +155,18 @@ public final class MVTimelinessRangePartitionArbiter extends MVTimelinessArbiter
 
     @Override
     protected MvUpdateInfo getMVTimelinessUpdateInfoInLoose() {
-        MvUpdateInfo mvUpdateInfo = new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.PARTIAL,
+        final MvUpdateInfo mvUpdateInfo = new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.PARTIAL,
                 TableProperty.QueryRewriteConsistencyMode.LOOSE);
+        final Map<Table, Map<String, Range<PartitionKey>>> rBTPartitionMap = syncBaseTablePartitionInfos(mv);
         RangePartitionDiff rangePartitionDiff = null;
+        RangePartitionDiffResult diff = null;
         try {
             // There may be a performance issue here, because it will fetch all partitions of base tables and mv partitions.
-            RangePartitionDiffResult differ = RangePartitionDiffer.computeRangePartitionDiff(mv, null, true);
-            if (differ == null) {
+            diff = RangePartitionDiffer.computeRangePartitionDiff(mv, null, rBTPartitionMap, isQueryRewrite);
+            if (diff == null) {
                 return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.UNKNOWN);
             }
-            rangePartitionDiff = differ.rangePartitionDiff;
+            rangePartitionDiff = diff.rangePartitionDiff;
         } catch (Exception e) {
             LOG.warn("Materialized view compute partition difference with base table failed.", e);
             return null;
@@ -180,6 +183,24 @@ public final class MVTimelinessRangePartitionArbiter extends MVTimelinessArbiter
             mvUpdateInfo.addMvToRefreshPartitionNames(mvPartitionName);
         }
         addEmptyPartitionsToRefresh(mvUpdateInfo);
+        collectBaseTableUpdatePartitionNamesInLoose(mvUpdateInfo);
+        collectMVToBaseTablePartitionNames(rBTPartitionMap, rangePartitionDiff, mvUpdateInfo);
         return mvUpdateInfo;
+    }
+
+    /**
+     * Collect mv to base table partition names mapping to be used in {@code MvUpdate#getBaseTableToRefreshPartitionNames}
+     * for union compensate rewrite.
+     */
+    protected void collectMVToBaseTablePartitionNames(Map<Table, Map<String, Range<PartitionKey>>> refBaseTablePartitionMap,
+                                                      RangePartitionDiff diff,
+                                                      MvUpdateInfo mvUpdateInfo) {
+        Map<String, Range<PartitionKey>> mvPartitionToCells = mv.getRangePartitionMap();
+        diff.getDeletes().keySet().forEach(mvPartitionToCells::remove);
+        mvPartitionToCells.putAll(diff.getAdds());
+        final Map<Table, List<Expr>> tableToExprMap = mv.getRefBaseTablePartitionExprs();
+        Map<String, Map<Table, Set<String>>> mvToBaseNameRef = RangePartitionDiffer
+                .generateMvRefMap(mvPartitionToCells, tableToExprMap, refBaseTablePartitionMap);
+        mvUpdateInfo.getMvPartToBasePartNames().putAll(mvToBaseNameRef);
     }
 }
