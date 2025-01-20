@@ -187,13 +187,7 @@ Status HdfsScanner::_build_scanner_context() {
         RETURN_IF_ERROR(ctx.conjuncts_manager->parse_conjuncts());
         ConnectorPredicateParser predicate_parser{&ctx.slot_descs};
         ASSIGN_OR_RETURN(ctx.predicate_tree,
-<<<<<<< HEAD
                          ctx.conjuncts_manager->get_predicate_tree(&predicate_parser, ctx.predicate_free_pool));
-=======
-                         ctx.conjuncts_manager->get_predicate_tree(predicate_parser, ctx.predicate_free_pool));
-        ctx.rf_scan_range_pruner = opts.obj_pool->add(
-                new RuntimeScanRangePruner(predicate_parser, ctx.conjuncts_manager->unarrived_runtime_filters()));
->>>>>>> e3f5de009 ([Refactor] Rename OlapRuntimeScanRangePruner to RuntimeScanRangePruner (#55154))
     }
     return Status::OK();
 }

@@ -358,12 +358,6 @@ bool FileReader::_filter_group_with_more_filter(const GroupReaderPtr& group_read
 // status and lead to the query failed.
 bool FileReader::_filter_group(const GroupReaderPtr& group_reader) {
     if (config::parquet_advance_zonemap_filter) {
-<<<<<<< HEAD
-=======
-        if (_scanner_ctx->rf_scan_range_pruner != nullptr) {
-            _rf_scan_range_pruner = std::make_shared<RuntimeScanRangePruner>(*_scanner_ctx->rf_scan_range_pruner);
-        }
->>>>>>> e3f5de009 ([Refactor] Rename OlapRuntimeScanRangePruner to RuntimeScanRangePruner (#55154))
         auto res = _scanner_ctx->predicate_tree.visit(
                 ZoneMapEvaluator<FilterLevel::ROW_GROUP>{_scanner_ctx->predicate_tree, group_reader.get()});
         if (!res.ok()) {

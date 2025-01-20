@@ -30,10 +30,6 @@
 #include "gen_cpp/parquet_types.h"
 #include "io/shared_buffered_input_stream.h"
 #include "runtime/runtime_state.h"
-<<<<<<< HEAD
-=======
-#include "storage/runtime_range_pruner.hpp"
->>>>>>> e3f5de009 ([Refactor] Rename OlapRuntimeScanRangePruner to RuntimeScanRangePruner (#55154))
 
 namespace tparquet {
 class ColumnMetaData;
@@ -150,10 +146,6 @@ private:
     GroupReaderParam _group_reader_param;
     std::shared_ptr<MetaHelper> _meta_helper = nullptr;
     SkipRowsContextPtr _skip_rows_ctx = nullptr;
-<<<<<<< HEAD
-=======
-    std::shared_ptr<RuntimeScanRangePruner> _rf_scan_range_pruner;
->>>>>>> e3f5de009 ([Refactor] Rename OlapRuntimeScanRangePruner to RuntimeScanRangePruner (#55154))
 };
 
 } // namespace starrocks::parquet

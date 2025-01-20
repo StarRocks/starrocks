@@ -324,11 +324,6 @@ struct HdfsScannerContext {
 
     int64_t connector_max_split_size = 0;
 
-<<<<<<< HEAD
-=======
-    RuntimeScanRangePruner* rf_scan_range_pruner = nullptr;
-
->>>>>>> e3f5de009 ([Refactor] Rename OlapRuntimeScanRangePruner to RuntimeScanRangePruner (#55154))
     // update none_existed_slot
     // update conjunct
     void update_with_none_existed_slot(SlotDescriptor* slot);

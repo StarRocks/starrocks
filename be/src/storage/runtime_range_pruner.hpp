@@ -222,14 +222,8 @@ struct RuntimeColumnPredicateBuilder {
 };
 } // namespace detail
 
-<<<<<<< HEAD:be/src/storage/olap_runtime_range_pruner.hpp
-inline Status OlapRuntimeScanRangePruner::_update(const ColumnIdToGlobalDictMap* global_dictmaps,
-                                                  RuntimeFilterArrivedCallBack&& updater, size_t raw_read_rows) {
-=======
 inline Status RuntimeScanRangePruner::_update(const ColumnIdToGlobalDictMap* global_dictmaps,
-                                              RuntimeFilterArrivedCallBack&& updater, bool force,
-                                              size_t raw_read_rows) {
->>>>>>> e3f5de009 ([Refactor] Rename OlapRuntimeScanRangePruner to RuntimeScanRangePruner (#55154)):be/src/storage/runtime_range_pruner.hpp
+                                              RuntimeFilterArrivedCallBack&& updater, size_t raw_read_rows) {
     if (_arrived_runtime_filters_masks.empty()) {
         return Status::OK();
     }
