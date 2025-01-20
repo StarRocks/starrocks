@@ -932,6 +932,27 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
     }
 
     @Override
+<<<<<<< HEAD
+=======
+    public final boolean cancel(String errMsg) {
+        isCancelling.set(true);
+        try {
+            // If waitingCreatingReplica == false, we will assume that
+            // cancel thread will get the object lock very quickly.
+            if (waitingCreatingReplica.get()) {
+                Preconditions.checkState(createReplicaLatch != null);
+                createReplicaLatch.countDownToZero(new Status(TStatusCode.OK, ""));
+            }
+            synchronized (this) {
+                return cancelInternal(errMsg);
+            }
+        } finally {
+            isCancelling.set(false);
+        }
+    }
+
+    @Override
+>>>>>>> 834532c76b ([BugFix] fix ingestion hang because of alter job timeout (#55207))
     protected boolean cancelImpl(String errMsg) {
         if (jobState == JobState.CANCELLED || jobState == JobState.FINISHED) {
             return false;
