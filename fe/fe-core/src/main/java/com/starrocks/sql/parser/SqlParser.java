@@ -98,8 +98,6 @@ public class SqlParser {
             }
             statements.add(statement);
         }
-        String sqlTrans = AstToSQLBuilder.toSQL(statements.get(0));
-        System.out.println("sqlTrans: " + sqlTrans);
         return statements;
     }
 
