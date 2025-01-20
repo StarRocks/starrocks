@@ -1080,9 +1080,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                 createReplicaLatch.countDownToZero(new Status(TStatusCode.OK, ""));
             }
             synchronized (this) {
-                boolean cancelled = cancelImpl(errMsg);
-                cancelHook(cancelled);
-                return cancelled;
+                return cancelInternal(errMsg);
             }
         } finally {
             isCancelling.set(false);
