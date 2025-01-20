@@ -149,6 +149,12 @@ public class CompactionMgrTest {
         // both partition10 and partition11 are filtered because table1 has active txn
         Assert.assertEquals(1, compactionList.size());
         Assert.assertSame(partition20, compactionList.get(0).getPartition());
+
+        Set<Long> excludeTables = new HashSet<>();
+        excludeTables.add(tableId2);
+        compactionList = compactionManager.choosePartitionsToCompact(new HashSet<>(), excludeTables);
+        // tableId2 is filtered by excludeTables
+        Assert.assertEquals(0, compactionList.size());
     }
 
     @Test
@@ -292,12 +298,10 @@ public class CompactionMgrTest {
 
         CompactionMgr compactionMgr = new CompactionMgr();
         compactionMgr.rebuildActiveCompactionTransactionMapOnRestart();
-        ConcurrentHashMap<Long, Long> activeCompactionTransactionMap = compactionMgr.getActiveCompactionTransactionMap();
+        ConcurrentHashMap<Long, Long> activeCompactionTransactionMap =
+                compactionMgr.getRemainedActiveCompactionTxnWhenStart();
         Assert.assertEquals(1, activeCompactionTransactionMap.size());
         Assert.assertTrue(activeCompactionTransactionMap.containsValue(tableId));
-
-        // should skip table
-        Assert.assertTrue(compactionMgr.shouldSkipChoseTable(tableId));
 
         // test for removeFromStartupActiveCompactionTransactionMap
         long nonExistedTxnId = 10003L;
