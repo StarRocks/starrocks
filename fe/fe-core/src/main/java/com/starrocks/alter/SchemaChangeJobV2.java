@@ -946,9 +946,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                 createReplicaLatch.countDownToZero(new Status(TStatusCode.OK, ""));
             }
             synchronized (this) {
-                boolean cancelled = cancelImpl(errMsg);
-                cancelHook(cancelled);
-                return cancelled;
+                return cancelInternal(errMsg);
             }
         } finally {
             isCancelling.set(false);
