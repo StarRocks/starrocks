@@ -470,11 +470,11 @@ Status ChunksSorterTopn::_hybrid_sort_common(RuntimeState* state, std::pair<Perm
     // case2: rows_to_keep > 0, which means `SMALLER_THAN_MIN_OF_SEGMENT` part itself not suffice, we need to get more elements
     // from both `INCLUDE_IN_SEGMENT` part and _merged_segment. And notice that `INCLUDE_IN_SEGMENT` part may be empty
     if (rows_to_keep > 0) {
+        const size_t sorted_size = _merged_segment.chunk->num_rows();
+        rows_to_keep = std::min(rows_to_keep, sorted_size + second_size);
         if (big_chunk == nullptr) {
             big_chunk.reset(segments[new_permutation.second[0].chunk_index].chunk->clone_empty(rows_to_keep).release());
         }
-        const size_t sorted_size = _merged_segment.chunk->num_rows();
-        rows_to_keep = std::min(rows_to_keep, sorted_size + second_size);
         if (_topn_type == TTopNType::RANK && sorted_size + second_size > rows_to_keep) {
             // For rank type, there may exist a wide equal range, so we need to keep all elements of part2 and part3
             rows_to_keep = sorted_size + second_size;
