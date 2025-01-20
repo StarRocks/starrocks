@@ -507,14 +507,11 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         return null;
     }
 
-<<<<<<< HEAD
     @Override
     public void write(DataOutput out) throws IOException {
         Text.writeString(out, GsonUtils.GSON.toJson(this));
     }
 
-=======
->>>>>>> ecfeb0e3b ([Enhancement] support all tables using pk/fk optimization (#55220))
     @Override
     public void gsonPostProcess() throws IOException {
         updateSchemaIndex();
