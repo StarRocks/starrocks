@@ -1,4 +1,25 @@
+-- name: test_try_datatype
+set sql_dialect='trino';
+SET SESSION sql_mode ='ALLOW_THROW_EXCEPTION';
+
+select try(1);
+select try(null);
+select try(true);
+select try(1.0);
+select try('s');
+
+-- name: test_try_normal_expr
+set sql_dialect='trino';
+SET SESSION sql_mode ='ALLOW_THROW_EXCEPTION';
+
+select try(1);
+select try(-1);
+select try(1 + 1);
+select try(cast('1' as int));
+select try(array[1, 2, 3][3]);
+
 -- name: test_try_index_out_of_bound
 set sql_dialect='trino';
+SET SESSION sql_mode ='ALLOW_THROW_EXCEPTION';
 
 select try(array[1, 2, 3][4]);

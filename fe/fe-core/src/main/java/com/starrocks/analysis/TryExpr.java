@@ -43,10 +43,6 @@ public class TryExpr extends Expr {
     }
 
     @Override
-    protected void analyzeImpl(Analyzer analyzer) throws AnalysisException {
-    }
-
-    @Override
     public Type getType() {
         return getChild(0).getType();
     }
