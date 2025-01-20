@@ -248,11 +248,11 @@ private:
         _tablet.update_mgr()->lock_shard_pk_index_shard(_tablet.id());
         DeferOp defer([&]() { _tablet.update_mgr()->unlock_shard_pk_index_shard(_tablet.id()); });
 
-        RETURN_IF_ERROR(prepare_primary_index());
         if (op_write.dels_size() == 0 && op_write.rowset().num_rows() == 0 &&
             !op_write.rowset().has_delete_predicate()) {
             return Status::OK();
         }
+        RETURN_IF_ERROR(prepare_primary_index());
         if (is_column_mode_partial_update(op_write)) {
             return _tablet.update_mgr()->publish_column_mode_partial_update(op_write, txn_id, _metadata, &_tablet,
                                                                             &_builder, _base_version);
