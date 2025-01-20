@@ -721,27 +721,6 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         tbl.lastSchemaUpdateTime.set(System.nanoTime());
     }
 
-<<<<<<< HEAD
-=======
-    @Override
-    public final boolean cancel(String errMsg) {
-        isCancelling.set(true);
-        try {
-            // If waitingCreatingReplica == false, we will assume that
-            // cancel thread will get the object lock very quickly.
-            if (waitingCreatingReplica.get()) {
-                Preconditions.checkState(createReplicaLatch != null);
-                createReplicaLatch.countDownToZero(new Status(TStatusCode.OK, ""));
-            }
-            synchronized (this) {
-                return cancelInternal(errMsg);
-            }
-        } finally {
-            isCancelling.set(false);
-        }
-    }
-
->>>>>>> 834532c76b ([BugFix] fix ingestion hang because of alter job timeout (#55207))
     /**
      * cancelImpl() can be called any time any place.
      * We need to clean any possible residual of this job.

@@ -202,15 +202,10 @@ public abstract class AlterJobV2 implements Writable {
      */
     public synchronized void run() {
         if (isTimeout()) {
-<<<<<<< HEAD
-            cancelImpl("Timeout");
-            return;
-=======
-            if (cancelInternal("Timeout")) {
+            if (cancelImpl("Timeout")) {
                 // If this job can't be cancelled, we should execute it.
                 return;
             }
->>>>>>> 834532c76b ([BugFix] fix ingestion hang because of alter job timeout (#55207))
         }
 
         // create connectcontext
@@ -240,7 +235,6 @@ public abstract class AlterJobV2 implements Writable {
                 } // else: handle the new state
             }
         } catch (AlterCancelException e) {
-<<<<<<< HEAD
             cancelImpl(e.getMessage());
         }
     }
@@ -248,21 +242,6 @@ public abstract class AlterJobV2 implements Writable {
     public final boolean cancel(String errMsg) {
         synchronized (this) {
             return cancelImpl(errMsg);
-=======
-            cancelInternal(e.getMessage());
-        }
-    }
-
-    protected boolean cancelInternal(String errMsg) {
-        boolean cancelled = cancelImpl(errMsg);
-        cancelHook(cancelled);
-        return cancelled;
-    }
-
-    public boolean cancel(String errMsg) {
-        synchronized (this) {
-            return cancelInternal(errMsg);
->>>>>>> 834532c76b ([BugFix] fix ingestion hang because of alter job timeout (#55207))
         }
     }
 

@@ -2001,13 +2001,8 @@ public class SchemaChangeHandler extends AlterHandler {
             long timeoutSecond = PropertyAnalyzer.analyzeTimeout(properties, Config.alter_table_timeout_second);
             alterMetaJob = new LakeTableAlterMetaJob(GlobalStateMgr.getCurrentState().getNextId(),
                     db.getId(),
-<<<<<<< HEAD
-                    olapTable.getId(), olapTable.getName(), timeoutSecond,
-                    TTabletMetaType.ENABLE_PERSISTENT_INDEX, enablePersistentIndex);
-=======
                     olapTable.getId(), olapTable.getName(), timeoutSecond * 1000 /* should be ms*/,
-                    TTabletMetaType.ENABLE_PERSISTENT_INDEX, enablePersistentIndex, persistentIndexType);
->>>>>>> 834532c76b ([BugFix] fix ingestion hang because of alter job timeout (#55207))
+                    TTabletMetaType.ENABLE_PERSISTENT_INDEX, enablePersistentIndex);
         } else {
             // shouldn't happen
             throw new DdlException("only support alter enable_persistent_index in shared_data mode");
