@@ -570,6 +570,7 @@ struct TVectorSearchOptions {
   8: optional bool use_ivfpq;
   9: optional double pq_refine_factor;
   10: optional double k_factor;
+  11: optional i32 vector_slot_id;
 }
 
 // If you find yourself changing this struct, see also TLakeScanNode
