@@ -19,7 +19,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.BinaryType;
-import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -283,16 +283,13 @@ public class JoinReorderCardinalityPreserving extends JoinOrder {
             return;
         }
         // We only try to reorder atoms which are LogicalScanOperator, since at present,
-        // we can extract cardinality-preserving relation from a pair of OlapTable.
+        // we can extract cardinality-preserving relation from a pair of table.
         List<OptExpression> scanOps = atomOptExprs.stream().filter(opt -> {
             if (!(opt.getOp() instanceof LogicalScanOperator)) {
                 return false;
             }
             LogicalScanOperator scanOp = opt.getOp().cast();
-            if (!(scanOp.getTable() instanceof OlapTable)) {
-                return false;
-            }
-            OlapTable table = ((OlapTable) scanOp.getTable());
+            Table table = scanOp.getTable();
             return table.hasUniqueConstraints() || table.hasForeignKeyConstraints();
         }).collect(Collectors.toList());
 
@@ -302,7 +299,7 @@ public class JoinReorderCardinalityPreserving extends JoinOrder {
 
         // Construct a mapping from ColumnRefOperator to OptExpression, later we
         // only try matches equality predicate that references ColumnRefOperators backed
-        // by real columns of OlapTables to pairs of ColumnRefOperator of cardinality-preserving
+        // by real columns of tables to pairs of ColumnRefOperator of cardinality-preserving
         // relation of two OptExpression.
         Map<ColumnRefOperator, OptExpression> colRefToScanNodes = Maps.newHashMap();
         for (OptExpression scanOp : scanOps) {
