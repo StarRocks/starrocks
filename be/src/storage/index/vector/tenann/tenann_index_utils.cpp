@@ -80,17 +80,16 @@ StatusOr<tenann::IndexMeta> get_vector_meta(const std::shared_ptr<TabletIndex>& 
     if (meta.index_type() == tenann::IndexType::kFaissIvfPq) {
         meta.index_params()[starrocks::index::vector::NLIST] = int(4 * sqrt(starrocks::index::vector::nb_));
 
-        CRITICAL_CHECK_AND_GET(tablet_index, index_properties, M, param_value)
-        meta.index_params()[starrocks::index::vector::M] = std::atoi(param_value.c_str());
-
         CRITICAL_CHECK_AND_GET(tablet_index, index_properties, nbits, param_value)
         meta.index_params()[starrocks::index::vector::NBITS] = std::atoi(param_value.c_str());
 
+        CRITICAL_CHECK_AND_GET(tablet_index, index_properties, m_ivfpq, param_value)
+        meta.index_params()[starrocks::index::vector::M] = std::atoi(param_value.c_str());
     } else if (meta.index_type() == tenann::IndexType::kFaissHnsw) {
         CRITICAL_CHECK_AND_GET(tablet_index, index_properties, efconstruction, param_value)
         meta.index_params()[starrocks::index::vector::EF_CONSTRUCTION] = std::atoi(param_value.c_str());
 
-        CRITICAL_CHECK_AND_GET(tablet_index, index_properties, M, param_value)
+        CRITICAL_CHECK_AND_GET(tablet_index, index_properties, m, param_value)
         meta.index_params()[starrocks::index::vector::M] = std::atoi(param_value.c_str());
 
         GET_OR_DEFAULT(tablet_index, search_properties, efsearch, param_value, "40")

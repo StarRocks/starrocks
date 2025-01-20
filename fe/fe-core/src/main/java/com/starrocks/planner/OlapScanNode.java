@@ -103,7 +103,6 @@ import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TTableSampleOptions;
-import com.starrocks.thrift.TVectorSearchOptions;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
@@ -818,19 +817,20 @@ public class OlapScanNode extends ScanNode {
             output.append(prefix).append("SORT COLUMN: ").append(sortColumn).append("\n");
         }
 
+        if (Config.enable_experimental_vector) {
+            if (vectorSearchOptions != null && vectorSearchOptions.isEnableUseANN()) {
+                output.append(vectorSearchOptions.getExplainString(prefix));
+            } else {
+                output.append(prefix).append("VECTORINDEX: OFF").append("\n");
+            }
+        }
+
         if (detailLevel != TExplainLevel.VERBOSE) {
             if (isPreAggregation) {
                 output.append(prefix).append("PREAGGREGATION: ON").append("\n");
             } else {
                 output.append(prefix).append("PREAGGREGATION: OFF. Reason: ").append(reasonOfPreAggregation)
                         .append("\n");
-            }
-            if (ConnectContext.get() != null && Config.enable_experimental_vector == true) {
-                if (vectorSearchOptions != null && vectorSearchOptions.isEnableUseANN()) {
-                    output.append(prefix).append("VECTORINDEX: ON").append("\n");
-                } else {
-                    output.append(prefix).append("VECTORINDEX: OFF").append("\n");
-                }
             }
             if (!conjuncts.isEmpty()) {
                 output.append(prefix).append("PREDICATES: ").append(
@@ -1103,15 +1103,7 @@ public class OlapScanNode extends ScanNode {
             }
 
             if (vectorSearchOptions != null && vectorSearchOptions.isEnableUseANN()) {
-                TVectorSearchOptions tVectorSearchOptions = new TVectorSearchOptions();
-                tVectorSearchOptions.setEnable_use_ann(true);
-                tVectorSearchOptions.setVector_limit_k(vectorSearchOptions.getVectorLimitK());
-                tVectorSearchOptions.setVector_distance_column_name(vectorSearchOptions.getVectorDistanceColumnName());
-                tVectorSearchOptions.setQuery_vector(vectorSearchOptions.getQueryVector());
-                tVectorSearchOptions.setVector_range(vectorSearchOptions.getVectorRange());
-                tVectorSearchOptions.setResult_order(vectorSearchOptions.getResultOrder());
-                tVectorSearchOptions.setUse_ivfpq(vectorSearchOptions.isUseIVFPQ());
-                msg.olap_scan_node.setVector_search_options(tVectorSearchOptions);
+                msg.olap_scan_node.setVector_search_options(vectorSearchOptions.toThrift());
             }
 
             msg.olap_scan_node.setUse_pk_index(usePkIndex);

@@ -28,7 +28,7 @@ class VectorIndexBuilderFactory {
 public:
     static StatusOr<std::unique_ptr<VectorIndexBuilder>> create_index_builder(
             const std::shared_ptr<TabletIndex>& tablet_index, const std::string& segment_index_path,
-            const IndexBuilderType index_builder_type, const bool src_is_nullable);
+            const IndexBuilderType index_builder_type, const bool is_element_nullable);
 
     static StatusOr<IndexBuilderType> get_index_builder_type_from_config(std::shared_ptr<TabletIndex> _tablet_index) {
         return IndexBuilderType::TEN_ANN;
