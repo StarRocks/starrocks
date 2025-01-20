@@ -212,7 +212,7 @@ public class OptimizeProcDirTest {
         ArrayList<OrderByPair> orderByPairs = Lists.newArrayList();
         orderByPairs.add(new OrderByPair(0));
 
-        LimitElement limitElement = new LimitElement(1);
+        LimitElement limitElement = new LimitElement(0, 1);
 
         BaseProcResult result = (BaseProcResult) optimizeProcDir.fetchResultByFilter(
                 filter, orderByPairs, limitElement);
