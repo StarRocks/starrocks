@@ -25,6 +25,7 @@ import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
+import com.starrocks.connector.parser.BaseComplexFunctionCallTransformer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.IntervalLiteral;
 import com.starrocks.sql.ast.UnitIdentifier;
@@ -36,8 +37,10 @@ import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-public class ComplexFunctionCallTransformer {
-    public static Expr transform(String functionName, Expr... args) {
+public class ComplexFunctionCallTransformer extends BaseComplexFunctionCallTransformer {
+
+    @Override
+    public Expr transform(String functionName, Expr... args) {
         if (functionName.equalsIgnoreCase("datetimeconvert")) {
             List<Expr> argumentsList = Arrays.asList(args);
             if (argumentsList.size() < 4 || argumentsList.size() > 5) {
@@ -101,10 +104,13 @@ public class ComplexFunctionCallTransformer {
             if (args.length < 2 || args.length > 5) {
                 throw new SemanticException("The datetrunc function must include between 2 and 5 parameters, inclusive.");
             }
-            // DATETRUNC(unit, timeValue)  or DATETRUNC(unit, timeValue, inputTimeUnitStr) output is milliseconds -->  unix_timestamp(date_trunc('day',event_timestamp)) * 1000
-            // DATETRUNC(unit, timeValue, inputTimeUnitStr, timeZone) output is milliseconds   -->  unix_timestamp(convertz_tz(date_trunc('day', event_timestamp), "UTC", timeZone)) * 1000
-            // DATETRUNC(unit, timeValue, inputTimeUnitStr, timeZone, outputTimeUnitStr)  -→ unix_timestamp(convertz_tz(date_trunc('day', event_timestamp), "UTC", timeZone)),
-            // output can be NANOSECONDS, MICROSECONDS, MILLISECONDS, SECONDS, MINUTES, HOURS, DAYS
+            // DATETRUNC(unit, timeValue)  or DATETRUNC(unit, timeValue, inputTimeUnitStr) output is milliseconds
+            // Transform to unix_timestamp(date_trunc('day',event_timestamp)) * 1000
+            // DATETRUNC(unit, timeValue, inputTimeUnitStr, timeZone) output is milliseconds
+            // Transform to unix_timestamp(convertz_tz(date_trunc('day', event_timestamp), "UTC", timeZone)) * 1000
+            // DATETRUNC(unit, timeValue, inputTimeUnitStr, timeZone, outputTimeUnitStr)
+            // Transform to unix_timestamp(convertz_tz(date_trunc('day', event_timestamp), "UTC", timeZone)),
+            // Output can be NANOSECONDS, MICROSECONDS, MILLISECONDS, SECONDS, MINUTES, HOURS, DAYS
             if (args.length < 4) {
                 FunctionCallExpr dateTrunc = new FunctionCallExpr(FunctionSet.DATE_TRUNC,
                         new FunctionParams(ImmutableList.of(args[0], args[1])));

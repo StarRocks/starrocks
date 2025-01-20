@@ -63,7 +63,8 @@ public class AstBuilder extends com.starrocks.sql.parser.AstBuilder {
         FunctionName fnName = FunctionName.createFnName(fullFunctionName);
         String functionName = fnName.getFunction();
 
-        Expr convertedFunctionCall = Pinot2SRFunctionCallTransformer.convert(functionName, arguments);
+        Pinot2SRFunctionCallTransformer transformer = new Pinot2SRFunctionCallTransformer();
+        Expr convertedFunctionCall = transformer.convert(functionName, arguments);
 
         if (convertedFunctionCall != null) {
             if (functionName.equalsIgnoreCase("fromdatetime")) {

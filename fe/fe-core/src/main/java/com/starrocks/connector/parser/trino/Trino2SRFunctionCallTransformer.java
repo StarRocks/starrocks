@@ -14,9 +14,6 @@
 
 package com.starrocks.connector.parser.trino;
 
-import com.google.common.base.Preconditions;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import com.starrocks.analysis.CaseExpr;
 import com.starrocks.analysis.CaseWhenClause;
 import com.starrocks.analysis.Expr;
@@ -24,9 +21,11 @@ import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.VariableExpr;
+import com.starrocks.connector.parser.BaseFunctionCallTransformer;
+import com.starrocks.connector.parser.FunctionCallTransformer;
+import com.starrocks.connector.parser.PlaceholderExpr;
 
 import java.util.List;
-import java.util.Map;
 
 /**
  * This Class is the entry to to convert a Trino function to StarRocks built-in function, we use
@@ -35,41 +34,22 @@ import java.util.Map;
  * FunctionCallTransformer, all stored in TRANSFORMER_MAP.
  */
 
-public class Trino2SRFunctionCallTransformer {
-    // function name -> list of function transformer
-    public static Map<String, List<FunctionCallTransformer>> TRANSFORMER_MAP = Maps.newHashMap();
+public class Trino2SRFunctionCallTransformer extends BaseFunctionCallTransformer {
 
-    static {
-        registerAllFunctionTransformer();
-    }
+    public Trino2SRFunctionCallTransformer() { super(); }
 
-    public static Expr convert(String fnName, List<Expr> children) {
+    @Override
+    public Expr convert(String fnName, List<Expr> children) {
         Expr result = convertRegisterFn(fnName, children);
         if (result == null) {
-            result = ComplexFunctionCallTransformer.transform(fnName, children.toArray(new Expr[0]));
+            ComplexFunctionCallTransformer complexFunctionCallTransformer = new ComplexFunctionCallTransformer();
+            result = complexFunctionCallTransformer.transform(fnName, children.toArray(new Expr[0]));
         }
         return result;
     }
 
-    public static Expr convertRegisterFn(String fnName, List<Expr> children) {
-        List<FunctionCallTransformer> transformers = TRANSFORMER_MAP.get(fnName);
-        if (transformers == null) {
-            return null;
-        }
-
-        FunctionCallTransformer matcher = null;
-        for (FunctionCallTransformer transformer : transformers) {
-            if (transformer.match(children)) {
-                matcher = transformer;
-            }
-        }
-        if (matcher == null) {
-            return null;
-        }
-        return matcher.transform(children);
-    }
-
-    private static void registerAllFunctionTransformer() {
+    @Override
+    protected void registerAllFunctionTransformer() {
         registerAggregateFunctionTransformer();
         registerArrayFunctionTransformer();
         registerDateFunctionTransformer();
@@ -389,50 +369,5 @@ public class Trino2SRFunctionCallTransformer {
         registerFunctionTransformer("truncate", 1, new FunctionCallExpr("truncate",
                 List.of(new PlaceholderExpr(1, Expr.class), new IntLiteral(0))));
 
-    }
-
-    private static void registerFunctionTransformer(String trinoFnName, int trinoFnArgNums, String starRocksFnName,
-                                                    List<Class<? extends Expr>> starRocksArgumentsClass) {
-        FunctionCallExpr starRocksFunctionCall = buildStarRocksFunctionCall(starRocksFnName, starRocksArgumentsClass);
-        registerFunctionTransformer(trinoFnName, trinoFnArgNums, starRocksFunctionCall);
-    }
-
-    private static void registerFunctionTransformer(String trinoFnName, String starRocksFnName) {
-        FunctionCallExpr starRocksFunctionCall = buildStarRocksFunctionCall(starRocksFnName, Lists.newArrayList());
-        registerFunctionTransformer(trinoFnName, 0, starRocksFunctionCall);
-    }
-
-    private static void registerFunctionTransformerWithVarArgs(String trinoFnName, String starRocksFnName,
-                                                               List<Class<? extends Expr>> starRocksArgumentsClass) {
-        Preconditions.checkState(starRocksArgumentsClass.size() == 1);
-        FunctionCallExpr starRocksFunctionCall = buildStarRocksFunctionCall(starRocksFnName, starRocksArgumentsClass);
-        registerFunctionTransformerWithVarArgs(trinoFnName, starRocksFunctionCall);
-    }
-
-    private static void registerFunctionTransformer(String trinoFnName, int trinoFnArgNums,
-                                                    FunctionCallExpr starRocksFunctionCall) {
-        FunctionCallTransformer transformer = new FunctionCallTransformer(starRocksFunctionCall, trinoFnArgNums);
-
-        List<FunctionCallTransformer> transformerList = TRANSFORMER_MAP.computeIfAbsent(trinoFnName,
-                k -> Lists.newArrayList());
-        transformerList.add(transformer);
-    }
-
-    private static void registerFunctionTransformerWithVarArgs(String trinoFnName, FunctionCallExpr starRocksFunctionCall) {
-        FunctionCallTransformer transformer = new FunctionCallTransformer(starRocksFunctionCall, true);
-
-        List<FunctionCallTransformer> transformerList = TRANSFORMER_MAP.computeIfAbsent(trinoFnName,
-                k -> Lists.newArrayList());
-        transformerList.add(transformer);
-    }
-
-    private static FunctionCallExpr buildStarRocksFunctionCall(String starRocksFnName,
-                                                               List<Class<? extends Expr>> starRocksArgumentsClass) {
-        List<Expr> arguments = Lists.newArrayList();
-        for (int index = 0; index < starRocksArgumentsClass.size(); ++index) {
-            // For a FunctionCallExpr, do not know the actual arguments here, so we use a PlaceholderExpr to replace it.
-            arguments.add(new PlaceholderExpr(index + 1, starRocksArgumentsClass.get(index)));
-        }
-        return new FunctionCallExpr(starRocksFnName, arguments);
     }
 }
