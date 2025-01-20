@@ -18,6 +18,7 @@ import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.catalog.ResourceGroupMgr;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SetExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SetPassVar;
@@ -27,6 +28,7 @@ import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.thrift.TWorkGroup;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import com.uber.m3.util.ImmutableMap;
 import mockit.Expectations;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -35,9 +37,12 @@ import org.junit.Test;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSetUserVariableFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.connectContext;
+import static org.assertj.core.api.Assertions.assertThat;
 
 public class AnalyzeSetVariableTest {
     private static StarRocksAssert starRocksAssert;
+
     @BeforeClass
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
@@ -212,6 +217,7 @@ public class AnalyzeSetVariableTest {
                 mgr.chooseResourceGroupByName(rg1Name);
                 result = rg1;
             }
+
             {
                 mgr.chooseResourceGroupByName(anyString);
                 result = null;
@@ -241,6 +247,7 @@ public class AnalyzeSetVariableTest {
                 mgr.chooseResourceGroupByID(rg1ID);
                 result = rg1;
             }
+
             {
                 mgr.chooseResourceGroupByID(anyLong);
                 result = null;
@@ -309,5 +316,42 @@ public class AnalyzeSetVariableTest {
 
         sql = "SET computation_fragment_scheduling_policy = compute_nodes";
         analyzeFail(sql);
+    }
+
+    @Test
+    public void testSetAnnParams() {
+        SessionVariable sv = connectContext.getSessionVariable();
+        String sql;
+
+        sql = "set ann_params='invalid-format'";
+        analyzeFail(sql,
+                "Unsupported ann_params: invalid-format, " +
+                        "It should be a Dict JSON string, each key and value of which is string");
+
+        sql = "set ann_params='{\"Efsearch\": [1,2,3]}'";
+        analyzeFail(sql,
+                "Unsupported ann_params: {\"Efsearch\": [1,2,3]}, " +
+                        "It should be a Dict JSON string, each key and value of which is string");
+
+        sql = "set ann_params='{\"invalid-key\":\"abc\"}'";
+        analyzeFail(sql, "Unknown index param: `INVALID-KEY");
+
+        sql = "set ann_params='{\"Efsearch\": 0}'";
+        analyzeFail(sql, "Value of `EFSEARCH` must be >= 1");
+
+        sql = "set ann_params='{}'";
+        analyzeSuccess(sql);
+        sv.setAnnParams("{}");
+        assertThat(connectContext.getSessionVariable().getAnnParams()).isEmpty();
+
+        sql = "set ann_params=''";
+        analyzeSuccess(sql);
+        sv.setAnnParams("");
+        assertThat(connectContext.getSessionVariable().getAnnParams()).isEmpty();
+
+        sql = "set ann_params='{\"Efsearch\": 1}'";
+        analyzeSuccess(sql);
+        sv.setAnnParams("{\"Efsearch\": 1}");
+        assertThat(connectContext.getSessionVariable().getAnnParams()).containsExactlyEntriesOf(ImmutableMap.of("Efsearch", "1"));
     }
 }
