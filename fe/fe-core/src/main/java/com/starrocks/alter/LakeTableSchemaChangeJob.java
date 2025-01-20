@@ -57,7 +57,6 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.lake.LakeTablet;
-import com.starrocks.lake.StarMgrMetaSyncer;
 import com.starrocks.lake.Utils;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.gson.GsonUtils;
@@ -743,13 +742,6 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         }
 
         EditLog.waitInfinity(editLogFuture);
-
-        // Delete tablet and shards
-        for (MaterializedIndex droppedIndex : droppedIndexes) {
-            List<Long> shards = droppedIndex.getTablets().stream().map(Tablet::getId).collect(Collectors.toList());
-            // TODO: what if unusedShards deletion is partially successful?
-            StarMgrMetaSyncer.dropTabletAndDeleteShard(shards, GlobalStateMgr.getCurrentState().getStarOSAgent());
-        }
 
         // since we use same shard group to do schema change, must clear old shard before
         // updating colocation info. it's possible that after edit log above is written, fe crashes,

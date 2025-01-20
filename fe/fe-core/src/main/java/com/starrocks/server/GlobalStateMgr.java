@@ -1430,8 +1430,10 @@ public class GlobalStateMgr {
 
         connectorTableTriggerAnalyzeMgr.start();
 
-        clusterSnapshotMgr.startCheckpointScheduler(checkpointController,
-                                                    StarMgrServer.getCurrentState().getCheckpointController());
+        if (RunMode.isSharedDataMode()) {
+            clusterSnapshotMgr.startCheckpointScheduler(checkpointController,
+                                                        StarMgrServer.getCurrentState().getCheckpointController());
+        }
     }
 
     // start threads that should run on all FE

@@ -51,13 +51,18 @@ Status SchemaClusterSnapshotJobsScanner::start(RuntimeState* state) {
 Status SchemaClusterSnapshotJobsScanner::_fill_chunk(ChunkPtr* chunk) {
     auto& slot_id_map = (*chunk)->get_slot_id_to_index_map();
     const TClusterSnapshotJobsItem& info = _result.items[_index];
+    Datum d_created_time(info.finished_time);
+    if (info.finished_time == -1) {
+        d_created_time.set_null();
+    }
+
     DatumArray datum_array{
             Slice(info.snapshot_name),
             info.job_id,
 
             TimestampValue::create_from_unixtime(info.created_time, _runtime_state->timezone_obj()),
 
-            TimestampValue::create_from_unixtime(info.finished_time, _runtime_state->timezone_obj()),
+            d_created_time,
 
             Slice(info.state),
             Slice(info.detail_info),
