@@ -358,8 +358,9 @@ Status LevelBuilder::_write_datetime_column_chunk(const LevelBuilderContext& ctx
     DeferOp defer([&] { delete[] values; });
 
     for (size_t i = 0; i < col->size(); i++) {
-        // normalize to utc
-        auto timestamp = timestamp::sub<TimeUnit::SECOND>(data_col[i]._timestamp, _offset);
+        auto timestamp = use_int96_timestamp_encoding
+                                 ? timestamp::sub<TimeUnit::SECOND>(data_col[i]._timestamp, _offset)
+                                 : data_col[i]._timestamp;
         if constexpr (use_int96_timestamp_encoding) {
             auto date = reinterpret_cast<int32_t*>(values[i].value + 2);
             auto nanosecond = reinterpret_cast<int64_t*>(values[i].value);

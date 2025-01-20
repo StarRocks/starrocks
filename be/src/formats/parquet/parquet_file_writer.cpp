@@ -336,7 +336,7 @@ arrow::Result<::parquet::schema::NodePtr> ParquetFileWriter::_make_schema_node(c
         } else {
             return ::parquet::schema::PrimitiveNode::Make(
                     name, rep_type,
-                    ::parquet::LogicalType::Timestamp(true, ::parquet::LogicalType::TimeUnit::unit::MICROS),
+                    ::parquet::LogicalType::Timestamp(false, ::parquet::LogicalType::TimeUnit::unit::MICROS),
                     ::parquet::Type::INT64, -1, file_column_id.field_id);
         }
     }
