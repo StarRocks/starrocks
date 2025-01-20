@@ -269,8 +269,8 @@ public class ClusterSnapshotTest {
     public void testCheckpointScheduler() {
         new MockUp<CheckpointController>() {
             @Mock
-            public Pair<Long, Long> getCheckpointJournalIds() {
-                return Pair.create(1L, 2L);
+            public long getImageJournalId() {
+                return 1L;
             }
 
             @Mock
