@@ -38,6 +38,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.Util;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -51,8 +52,8 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -348,27 +349,27 @@ public class ConfigBase {
 
     private static void appendPersistedProperties(String key, String value, String userIdentity) throws IOException {
         Properties props = new Properties();
-        try (FileReader reader = new FileReader(configPath)) {
+        Path path = Paths.get(configPath);
+        List<String> lines = Files.readAllLines(path);
+        try (BufferedReader reader = new BufferedReader(new FileReader(configPath))) {
             props.load(reader);
         }
+
         String oldValue = props.getProperty(key);
-        String comment = String.format("# The user %s changed %s to %s at %s", userIdentity, oldValue, value,
-                LocalDateTime.now().format(DateUtils.DATE_TIME_FORMATTER_UNIX));
-
-        List<String> lines = new ArrayList<>();
-        boolean keyExists = false;
-
-        try (BufferedReader reader = new BufferedReader(new FileReader(configPath))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                lines.add(line);
-            }
+        String comment;
+        if (StringUtils.isEmpty(oldValue)) {
+            comment = String.format("# The user %s added %s=%s at %s", userIdentity, key, value,
+                    LocalDateTime.now().format(DateUtils.DATE_TIME_FORMATTER_UNIX));
+        } else {
+            comment = String.format("# The user %s changed %s to %s at %s", userIdentity, oldValue, value,
+                    LocalDateTime.now().format(DateUtils.DATE_TIME_FORMATTER_UNIX));
         }
 
+        boolean keyExists = false;
         // Keep the original configuration file format
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(configPath))) {
-            for (int i = 0; i < lines.size(); i++) {
-                String line = lines.get(i).trim();
+            for (String s : lines) {
+                String line = s.trim();
 
                 // Compatible with key=value & key = value
                 if (line.matches("^" + key + "\\s*=\\s*.*$")) {
@@ -377,14 +378,10 @@ public class ConfigBase {
                     writer.newLine();
                     writer.write(key + " = " + value);
                     writer.newLine();
-
-                    while (i + 1 < lines.size() && !lines.get(i + 1).startsWith("#") && !lines.get(i + 1).contains("=")) {
-                        i++;
-                    }
                     continue;
                 }
 
-                writer.write(lines.get(i));
+                writer.write(s);
                 writer.newLine();
             }
 
