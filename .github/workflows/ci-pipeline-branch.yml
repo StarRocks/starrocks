@@ -519,6 +519,7 @@ jobs:
           name: head_sha
           path: ./head_sha.txt
           retention-days: 3
+          overwrite: true
 
       - name: Clean
         run: |
