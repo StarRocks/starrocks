@@ -362,6 +362,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         return isOlapMaterializedView() || isCloudNativeMaterializedView();
     }
 
+    public boolean isMySQLTable() {
+        return type == TableType.MYSQL;
+    }
+
     public boolean isNativeTableOrMaterializedView() {
         return isOlapTableOrMaterializedView() || isCloudNativeTableOrMaterializedView();
     }

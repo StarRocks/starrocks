@@ -159,6 +159,7 @@ import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.DescStorageVolumeStmt;
+import com.starrocks.sql.ast.DescribeOutputStmt;
 import com.starrocks.sql.ast.DescribeStmt;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.GrantRevokeClause;
@@ -660,6 +661,11 @@ public class ShowExecutor {
             } catch (AnalysisException e) {
                 throw new SemanticException(e.getMessage());
             }
+        }
+
+        @Override
+        public ShowResultSet visitDescOutputStmt(DescribeOutputStmt statement, ConnectContext context) {
+            return new ShowResultSet(statement.getMetaData(), statement.getTotalRows());
         }
 
         @Override

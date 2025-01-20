@@ -1,0 +1,63 @@
+-- name: test_describe_output_table
+set sql_dialect='trino';
+
+CREATE TABLE t0(c0 INT) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 PROPERTIES('replication_num'='1');
+
+PREPARE test_table_select1 FROM SELECT * FROM t0;
+PREPARE test_table_select2 FROM SELECT c0, 1 FROM t0;
+
+DESCRIBE OUTPUT test_table_select1;
+DESCRIBE OUTPUT test_table_select2;
+
+-- name: test_describe_output_expr
+set sql_dialect='trino';
+
+PREPARE test_table_expr1 FROM SELECT 1;
+PREPARE test_table_expr2 FROM SELECT null;
+PREPARE test_table_expr3 FROM SELECT -1;
+PREPARE test_table_expr4 FROM SELECT 1 + 1;
+PREPARE test_table_expr5 FROM SELECT cast('1' as int);
+
+DESCRIBE OUTPUT test_table_expr1;
+DESCRIBE OUTPUT test_table_expr2;
+DESCRIBE OUTPUT test_table_expr3;
+DESCRIBE OUTPUT test_table_expr4;
+DESCRIBE OUTPUT test_table_expr5;
+
+-- name: test_describe_output_mysql
+set sql_dialect='trino';
+create database db_${uuid0};
+use db_${uuid0};
+
+CREATE TABLE `t00` (
+  `id` int,
+  `s` string
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+
+CREATE EXTERNAL TABLE mysql_ext
+(
+  `id` int,
+  `s` string
+)
+ENGINE=mysql
+PROPERTIES
+(
+    "host" = "${mysql_host}",
+    "port" = "${mysql_port}",
+    "user" = "${mysql_user}",
+    "password" = "${mysql_password}",
+    "database" = "db_${uuid0}",
+    "table" = "t00"
+);
+
+PREPARE test_table_select_mysql FROM SELECT * FROM mysql_ext;
+DESCRIBE OUTPUT test_table_select_mysql;

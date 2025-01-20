@@ -1,0 +1,111 @@
+-- name: test_describe_output_table
+set sql_dialect='trino';
+-- result:
+-- !result
+CREATE TABLE t0(c0 INT) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 PROPERTIES('replication_num'='1');
+-- result:
+-- !result
+PREPARE test_table_select1 FROM SELECT * FROM t0;
+-- result:
+-- !result
+PREPARE test_table_select2 FROM SELECT c0, 1 FROM t0;
+-- result:
+-- !result
+DESCRIBE OUTPUT test_table_select1;
+-- result:
+c0	default_catalog			INT	4	false
+-- !result
+DESCRIBE OUTPUT test_table_select2;
+-- result:
+c0	default_catalog			INT	4	false
+expr				TINYINT	1	false
+-- !result
+-- name: test_describe_output_expr
+set sql_dialect='trino';
+-- result:
+-- !result
+PREPARE test_table_expr1 FROM SELECT 1;
+-- result:
+-- !result
+PREPARE test_table_expr2 FROM SELECT null;
+-- result:
+-- !result
+PREPARE test_table_expr3 FROM SELECT -1;
+-- result:
+-- !result
+PREPARE test_table_expr4 FROM SELECT 1 + 1;
+-- result:
+-- !result
+PREPARE test_table_expr5 FROM SELECT cast('1' as int);
+-- result:
+-- !result
+DESCRIBE OUTPUT test_table_expr1;
+-- result:
+expr				TINYINT	1	false
+-- !result
+DESCRIBE OUTPUT test_table_expr2;
+-- result:
+expr				NULL_TYPE	1	false
+-- !result
+DESCRIBE OUTPUT test_table_expr3;
+-- result:
+expr				TINYINT	1	false
+-- !result
+DESCRIBE OUTPUT test_table_expr4;
+-- result:
+expr				SMALLINT	2	false
+-- !result
+DESCRIBE OUTPUT test_table_expr5;
+-- result:
+cast				INT	4	false
+-- !result
+-- name: test_describe_output_mysql
+set sql_dialect='trino';
+-- result:
+-- !result
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE `t00` (
+  `id` int,
+  `s` string
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+CREATE EXTERNAL TABLE mysql_ext
+(
+  `id` int,
+  `s` string
+)
+ENGINE=mysql
+PROPERTIES
+(
+    "host" = "${mysql_host}",
+    "port" = "${mysql_port}",
+    "user" = "${mysql_user}",
+    "password" = "${mysql_password}",
+    "database" = "db_${uuid0}",
+    "table" = "t00"
+);
+-- result:
+-- !result
+PREPARE test_table_select_mysql FROM SELECT * FROM mysql_ext;
+-- result:
+-- !result
+DESCRIBE OUTPUT test_table_select_mysql;
+-- result:
+id	default_catalog	db_b3bdee94bccb4e079e51a7afb573c8cb	t00	INT	4	false
+s	default_catalog	db_b3bdee94bccb4e079e51a7afb573c8cb	t00	VARCHAR(65533)	16	false
+-- !result

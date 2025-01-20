@@ -50,10 +50,13 @@ import com.starrocks.common.util.OrderByPair;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.PrepareStmtContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ShowTemporaryTableStmt;
+import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.DescribeOutputStmt;
 import com.starrocks.sql.ast.DescribeStmt;
 import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.ShowColumnStmt;
@@ -80,6 +83,9 @@ import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.ShowTabletStmt;
 import com.starrocks.sql.ast.ShowTransactionStmt;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.plan.ExecPlan;
 import org.apache.commons.lang.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -518,6 +524,44 @@ public class ShowStmtAnalyzer {
             } catch (AnalysisException e) {
                 throw new SemanticException(String.format("Unknown proc node path: %s. msg: %s", procString, e.getMessage()));
             }
+        }
+
+        @Override
+        public Void visitDescOutputStmt(DescribeOutputStmt statement, ConnectContext context) {
+            PrepareStmtContext preparedStmt = context.getPreparedStmt(statement.getName());
+            ExecPlan execPlan = StatementPlanner.plan(preparedStmt.getStmt().getInnerStmt(), context);
+            ColumnRefFactory columnRefFactory = execPlan.getColumnRefFactory();
+
+            for (ColumnRefOperator column : execPlan.getOutputColumns()) {
+                Table table = columnRefFactory.getTableForColumn(column.getId());
+                List<String> row = Lists.newArrayListWithCapacity(7);
+
+                row.add(column.getName());
+                if (table != null) {
+                    row.add(table.getCatalogName());
+
+                    if (table.isDeltalakeTable() || table.isHudiTable() || table.isHiveTable() || table.isIcebergTable() ||
+                            table.isJDBCTable() || table.isKuduTable() || table.isMySQLTable() || table.isOdpsTable() ||
+                            table.isPaimonTable()) {
+                        row.add(table.getCatalogDBName());
+                        row.add(table.getCatalogTableName());
+                    } else {
+                        row.add("");
+                        row.add("");
+                    }
+                } else {
+                    row.add("");
+                    row.add("");
+                    row.add("");
+                }
+                row.add(column.getType().toString());
+                row.add(String.valueOf(column.getType().getTypeSize()));
+                // TODO
+                row.add("false");
+
+                statement.getTotalRows().add(row);
+            }
+            return null;
         }
 
         @Override
