@@ -14,39 +14,26 @@
 
 package com.starrocks.common;
 
-import com.google.gson.annotations.SerializedName;
-import com.google.gson.reflect.TypeToken;
-import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.thrift.TVectorSearchOptions;
 
-import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 public class VectorSearchOptions {
+    private static final int RESULT_ORDER_ASC = 0;
+    private static final int RESULT_ORDER_DESC = 1;
 
-    public VectorSearchOptions() {}
-
-    @SerializedName(value = "enableUseANN")
     private boolean enableUseANN = false;
-
-    @SerializedName(value = "useIVFPQ")
     private boolean useIVFPQ = false;
 
-    @SerializedName(value = "vectorDistanceColumnName")
-    private String vectorDistanceColumnName = "vector_distance";
+    private String distanceColumnName = "";
+    private int distanceSlotId = 0;
 
-    @SerializedName(value = "vectorLimitK")
-    private long vectorLimitK;
-
-    @SerializedName(value = "queryVector")
-    private List<String> queryVector = new ArrayList<>();
-
-    @SerializedName(value = "vectorRange")
-    private double vectorRange = -1;
-
-    @SerializedName(value = "resultOrder")
+    private long limitK = 0;
     private int resultOrder = 0;
+
+    private double predicateRange = -1;
+    private List<String> queryVector = new ArrayList<>();
 
     public boolean isEnableUseANN() {
         return enableUseANN;
@@ -64,57 +51,56 @@ public class VectorSearchOptions {
         this.useIVFPQ = useIVFPQ;
     }
 
-    public String getVectorDistanceColumnName() {
-        return vectorDistanceColumnName;
+    public String getDistanceColumnName() {
+        return distanceColumnName;
     }
 
-    public void setVectorDistanceColumnName(String vectorDistanceColumnName) {
-        this.vectorDistanceColumnName = vectorDistanceColumnName;
+    public void setDistanceColumnName(String distanceColumnName) {
+        this.distanceColumnName = distanceColumnName;
     }
 
-    public long getVectorLimitK() {
-        return vectorLimitK;
+    public void setDistanceSlotId(int distanceSlotId) {
+        this.distanceSlotId = distanceSlotId;
     }
 
-    public void setVectorLimitK(long vectorLimitK) {
-        this.vectorLimitK = vectorLimitK;
-    }
-
-    public List<String> getQueryVector() {
-        return queryVector;
+    public void setLimitK(long limitK) {
+        this.limitK = limitK;
     }
 
     public void setQueryVector(List<String> queryVector) {
         this.queryVector = queryVector;
     }
 
-    public double getVectorRange() {
-        return vectorRange;
+    public void setPredicateRange(double predicateRange) {
+        this.predicateRange = predicateRange;
     }
 
-    public void setVectorRange(double vectorRange) {
-        this.vectorRange = vectorRange;
+    public void setResultOrder(boolean isAsc) {
+        this.resultOrder = isAsc ? RESULT_ORDER_ASC : RESULT_ORDER_DESC;
     }
 
-    public int getResultOrder() {
-        return resultOrder;
+    public TVectorSearchOptions toThrift() {
+        TVectorSearchOptions opts = new TVectorSearchOptions();
+        opts.setEnable_use_ann(true);
+        opts.setVector_limit_k(limitK);
+        opts.setVector_distance_column_name(distanceColumnName);
+        opts.setVector_slot_id(distanceSlotId);
+        opts.setQuery_vector(queryVector);
+        opts.setVector_range(predicateRange);
+        opts.setResult_order(resultOrder);
+        opts.setUse_ivfpq(useIVFPQ);
+        return opts;
     }
 
-    public void setResultOrder(int resultOrder) {
-        this.resultOrder = resultOrder;
-    }
-
-    public static VectorSearchOptions read(String json) {
-        return GsonUtils.GSON.fromJson(json, VectorSearchOptions.class);
-    }
-
-    public static Map<String, String> readAnnParams(String json) {
-        Type type = new TypeToken<Map<String, String>>() {}.getType();
-        return GsonUtils.GSON.fromJson(json, type);
-    }
-
-    @Override
-    public String toString() {
-        return GsonUtils.GSON.toJson(this);
+    public String getExplainString(String prefix) {
+        return prefix + "VECTORINDEX: ON" + "\n" +
+                prefix + prefix +
+                "IVFPQ: " + (useIVFPQ ? "ON" : "OFF") + ", " +
+                "Distance Column: <" + distanceSlotId + ":" + distanceColumnName + ">, " +
+                "LimitK: " + limitK + ", " +
+                "Order: " + (resultOrder == RESULT_ORDER_ASC ? "ASC" : "DESC") + ", " +
+                "Query Vector: " + queryVector + ", " +
+                "Predicate Range: " + predicateRange +
+                "\n";
     }
 }

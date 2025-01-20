@@ -1,0 +1,271 @@
+-- name: test_vector_index_ivfpq @sequential
+
+ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "true");
+
+
+
+CREATE TABLE __row_util_base (
+  k1 bigint NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 32
+PROPERTIES (
+    "replication_num" = "1"
+);
+insert into __row_util_base select generate_series from TABLE(generate_series(0, 10000 - 1));
+insert into __row_util_base select * from __row_util_base; -- 20000
+insert into __row_util_base select * from __row_util_base; -- 40000
+insert into __row_util_base select * from __row_util_base; -- 80000
+insert into __row_util_base select * from __row_util_base; -- 160000
+insert into __row_util_base select * from __row_util_base; -- 320000
+insert into __row_util_base select * from __row_util_base; -- 640000
+
+CREATE TABLE __row_util (
+  idx bigint NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`idx`)
+DISTRIBUTED BY HASH(`idx`) BUCKETS 32
+PROPERTIES (
+    "replication_num" = "1"
+);
+
+insert into __row_util 
+select 
+    row_number() over() as idx
+from __row_util_base;
+
+
+CREATE TABLE t1 (
+    id bigint(20) NOT NULL,
+    v1 ARRAY<FLOAT> NOT NULL,
+    v2 ARRAY<FLOAT> NOT NULL,
+    i1 bigint(20) NOT NULL,
+    INDEX index_vector (v1) USING VECTOR (
+        "index_type" = "IVFPQ", 
+        "dim"="4", 
+        "metric_type" = "l2_distance", 
+        "is_vector_normed" = "false", 
+        "nbits" = "8", 
+        "nlist" = "40",
+        "M_IVFPQ" = "2")
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 64
+PROPERTIES (
+    "replication_num" = "1"
+);
+
+
+CREATE TABLE t1 (
+    id bigint(20) NOT NULL,
+    v1 ARRAY<FLOAT> NOT NULL,
+    v2 ARRAY<FLOAT> NOT NULL,
+    i1 bigint(20) NOT NULL,
+    INDEX index_vector (v1) USING VECTOR (
+        "index_type" = "ivfpq", 
+        "dim"="4", 
+        "metric_type" = "l2_distance", 
+        "is_vector_normed" = "false", 
+        "nbits" = "8", 
+        "nlist" = "16",
+        "M_IVFPQ" = "2")
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 64
+PROPERTIES (
+    "replication_num" = "1"
+);
+
+
+insert into t1 
+select 
+    idx,
+    array_generate(10000, 10003),
+    array_generate(10000, 10003),
+    idx
+from __row_util
+order by idx 
+limit 20;
+
+with w1 as (
+    select *, approx_l2_distance(v1, [10000, 10001, 10002, 10003]) as dis from t1
+), w2 as (
+    select * from w1
+    order by dis limit 21
+) select * from w2 order by dis, id;
+
+-- cannot use vector index
+with w1 as (
+    select *, approx_l2_distance(v1, [1, 1, 1, 1]) as dis from t1
+)
+select * from w1 
+order by dis;
+
+insert into t1 
+select 
+    idx + 20,
+    array_repeat(idx, 4),
+    array_repeat(idx, 4),
+    idx + 20
+from __row_util;
+
+-- basic queries.
+
+with w1 as (
+    select *, approx_l2_distance(v1, [1, 1, 1, 1]) as dis from t1
+)
+select id, v1, dis from w1 order by dis limit 10;
+
+
+with w1 as (
+    select *, approx_l2_distance(v1, [640064, 640064, 640064, 640064]) as dis from t1
+)
+select * from w1
+order by dis limit 10;
+
+
+with w1 as (
+    select *, approx_l2_distance(v1, [1, 2, 3, 4]) as dis from t1
+)
+select * from w1
+order by dis limit 10;
+
+
+with w1 as (
+    select *, approx_l2_distance(v1, [10000, 10001, 10002, 10003]) as dis from t1
+), w2 as (
+    select * from w1
+    order by dis limit 20
+) select * from w2 order by dis, id;
+
+-- queries predicates
+
+with w1 as (
+    select *, approx_l2_distance(v1, [1, 1, 1, 1]) as dis from t1
+)
+select v1, dis from w1 
+where dis <= 0
+order by dis limit 10;
+
+
+with w1 as (
+    select *, approx_l2_distance(v1, [1, 1, 1, 1]) as dis from t1
+)
+select v1, dis from w1 
+where dis <= 100
+order by dis limit 10;
+
+
+with w1 as (
+    select *, approx_l2_distance(v1, [640064, 640064, 640064, 640064]) as dis from t1
+)
+select v1, dis from w1
+where dis <= 100 and dis <= 1000
+order by dis limit 10;
+
+
+with w1 as (
+    select *, approx_l2_distance(v1, [1, 2, 3, 4]) as dis from t1
+)
+select v1, dis from w1
+where dis <= 100 and dis <= 1000
+order by dis limit 10;
+
+
+with w1 as (
+    select *, approx_l2_distance(v1, [10000, 10001, 10002, 10003]) as dis from t1
+), w2 as (
+    select * from w1
+    where dis <= 100 and dis <= 1000
+    order by dis limit 20
+) select v1, dis from w2 order by dis, id;
+
+
+-- cannot use vector index
+with w1 as (
+    select *, approx_l2_distance(v1, [1, 1, 1, 1]) as dis from t1
+)
+select * from w1 
+where dis >= 100 and dis <= 1000
+order by dis limit 10;
+
+with w1 as (
+    select *, approx_l2_distance(v1, [1, 1, 1, 1]) as dis from t1
+)
+select * from w1 
+where dis <= 100 and id >= 0
+order by dis limit 10;
+
+with w1 as (
+    select *, approx_l2_distance(v1, [1, 1, 1, 1]) as dis from t1
+)
+select * from w1 
+order by dis, id limit 10;
+
+ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "false");
+
+-- basic queries.
+
+with w1 as (
+    select *, approx_l2_distance(v1, [1, 1, 1, 1]) as dis from t1
+)
+select * from w1 order by dis limit 10;
+
+
+with w1 as (
+    select *, approx_l2_distance(v1, [640064, 640064, 640064, 640064]) as dis from t1
+)
+select * from w1
+order by dis limit 10;
+
+
+with w1 as (
+    select *, approx_l2_distance(v1, [1, 2, 3, 4]) as dis from t1
+)
+select * from w1
+order by dis limit 10;
+
+
+with w1 as (
+    select *, approx_l2_distance(v1, [10000, 10001, 10002, 10003]) as dis from t1
+), w2 as (
+    select * from w1
+    order by dis limit 20
+) select * from w2 order by dis, id;
+
+-- queries predicates
+
+with w1 as (
+    select *, approx_l2_distance(v1, [1, 1, 1, 1]) as dis from t1
+)
+select * from w1 
+where dis <= 100 and dis <= 1000
+order by dis limit 10;
+
+
+with w1 as (
+    select *, approx_l2_distance(v1, [640064, 640064, 640064, 640064]) as dis from t1
+)
+select * from w1
+where dis <= 100 and dis <= 1000
+order by dis limit 10;
+
+
+with w1 as (
+    select *, approx_l2_distance(v1, [1, 2, 3, 4]) as dis from t1
+)
+select * from w1
+where dis <= 100 and dis <= 1000
+order by dis limit 10;
+
+
+with w1 as (
+    select *, approx_l2_distance(v1, [10000, 10001, 10002, 10003]) as dis from t1
+), w2 as (
+    select * from w1
+    where dis <= 100 and dis <= 1000
+    order by dis limit 20
+) select * from w2 order by dis, id;
+
+
+ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "false");

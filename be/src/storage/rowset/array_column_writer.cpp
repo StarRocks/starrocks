@@ -133,7 +133,8 @@ ArrayColumnWriter::ArrayColumnWriter(const ColumnWriterOptions& opts, TypeInfoPt
         DCHECK(_opts.tablet_index.count(IndexType::VECTOR) > 0);
         auto tablet_index = std::make_shared<TabletIndex>(_opts.tablet_index.at(IndexType::VECTOR));
         std::string index_path = _opts.standalone_index_file_paths.at(IndexType::VECTOR);
-        VectorIndexWriter::create(tablet_index, index_path, is_nullable(), &_vector_index_writer);
+        // Element column of array column MUST BE nullable.
+        VectorIndexWriter::create(tablet_index, index_path, true, &_vector_index_writer);
     }
 }
 
@@ -174,6 +175,8 @@ Status ArrayColumnWriter::append(const Column& column) {
 
     // 4. write vector index
     if (_vector_index_writer.get()) {
+        // Vector index only support non-nullable array column.
+        DCHECK(!is_nullable());
         RETURN_IF_ERROR(_vector_index_writer->append(*array_column));
     }
 

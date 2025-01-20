@@ -21,9 +21,9 @@
 namespace starrocks {
 
 void VectorIndexWriter::create(const std::shared_ptr<TabletIndex>& tablet_index,
-                               const std::string& vector_index_file_path, bool is_nullable,
+                               const std::string& vector_index_file_path, bool is_element_nullable,
                                std::unique_ptr<VectorIndexWriter>* res) {
-    (*res) = std::make_unique<VectorIndexWriter>(tablet_index, vector_index_file_path, is_nullable);
+    *res = std::make_unique<VectorIndexWriter>(tablet_index, vector_index_file_path, is_element_nullable);
 }
 
 Status VectorIndexWriter::init() {
@@ -44,29 +44,24 @@ Status VectorIndexWriter::append(const Column& src) {
     int64_t duration = 0;
     {
         SCOPED_RAW_TIMER(&duration);
-        if (_index_builder.get() == nullptr) {
+
+        if (_index_builder == nullptr) {
             if (_row_size + src.size() >= _start_vector_index_build_threshold) {
                 RETURN_IF_ERROR(_prepare_index_builder());
             } else {
-                if (!_buffer_column.get()) {
-                    if (is_nullable()) {
-                        if (src.is_nullable()) {
-                            _buffer_column = std::make_unique<NullableColumn>(down_cast<const NullableColumn&>(src));
-                        } else {
-                            _buffer_column = NullableColumn::wrap_if_necessary(src.clone_shared());
-                        }
-                    } else {
-                        _buffer_column = std::make_unique<ArrayColumn>(down_cast<const ArrayColumn&>(src));
-                    }
+                if (_buffer_column == nullptr) {
+                    _buffer_column = src.clone_shared();
                 } else {
                     _buffer_column->append(src, 0, src.size());
                 }
             }
         }
-        if (_index_builder.get() != nullptr) {
+
+        if (_index_builder != nullptr) {
             RETURN_IF_ERROR(_append_data(src, _next_row_id));
         }
     }
+
     _next_row_id += src.size();
     _buffer_size += src.byte_size();
     _row_size += src.size();
@@ -111,11 +106,12 @@ uint64_t VectorIndexWriter::estimate_buffer_size() const {
 Status VectorIndexWriter::_prepare_index_builder() {
     ASSIGN_OR_RETURN(auto index_builder_type,
                      VectorIndexBuilderFactory::get_index_builder_type_from_config(_tablet_index))
-    ASSIGN_OR_RETURN(_index_builder, VectorIndexBuilderFactory::create_index_builder(
-                                             _tablet_index, _vector_index_file_path, index_builder_type, _is_nullable))
+    ASSIGN_OR_RETURN(_index_builder,
+                     VectorIndexBuilderFactory::create_index_builder(_tablet_index, _vector_index_file_path,
+                                                                     index_builder_type, _is_element_nullable));
     RETURN_IF_ERROR(_index_builder->init());
 
-    if (_buffer_column.get()) {
+    if (_buffer_column != nullptr) {
         RETURN_IF_ERROR(_append_data(*_buffer_column, 0));
         _buffer_column.reset();
     }
@@ -123,19 +119,8 @@ Status VectorIndexWriter::_prepare_index_builder() {
 }
 
 Status VectorIndexWriter::_append_data(const Column& src, size_t offset) {
-    if (is_nullable()) {
-        if (src.is_nullable()) {
-            auto nullable_column = down_cast<const NullableColumn&>(src);
-            const auto& data_column_ref = nullable_column.data_column_ref();
-            const auto& null_column_ref = nullable_column.null_column_ref();
-            RETURN_IF_ERROR(_index_builder->add(data_column_ref, null_column_ref, offset));
-        } else {
-            auto empty_null_ptr = NullColumn::create(src.size(), 0);
-            RETURN_IF_ERROR(_index_builder->add(src, *empty_null_ptr, offset));
-        }
-    } else {
-        RETURN_IF_ERROR(_index_builder->add(src));
-    }
+    DCHECK(src.is_array());
+    RETURN_IF_ERROR(_index_builder->add(src, offset));
     return Status::OK();
 }
 

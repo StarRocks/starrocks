@@ -106,10 +106,9 @@ private:
     std::vector<ColumnAccessPathPtr> _column_access_paths;
 
     bool _use_vector_index = false;
-
     bool _use_ivfpq = false;
-
     std::string _vector_distance_column_name;
+    SlotId _vector_slot_id;
 
     // The following are profile meatures
     int64_t _num_rows_read = 0;
