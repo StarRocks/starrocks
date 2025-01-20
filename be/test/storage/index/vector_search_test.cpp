@@ -65,7 +65,7 @@ protected:
         DeferOp op([&] { ASSERT_TRUE(fs::path_exist(path)); });
 
         std::unique_ptr<VectorIndexWriter> vector_index_writer;
-        VectorIndexWriter::create(tablet_index, path, false, &vector_index_writer);
+        VectorIndexWriter::create(tablet_index, path, true, &vector_index_writer);
         CHECK_OK(vector_index_writer->init());
 
         // construct columns
