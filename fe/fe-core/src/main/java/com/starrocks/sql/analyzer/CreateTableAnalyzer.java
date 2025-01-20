@@ -737,7 +737,7 @@ public class CreateTableAnalyzer {
             List<String> vectorIndexNames = indexDefs.stream()
                     .filter(indexDef -> indexDef.getIndexType() == IndexDef.IndexType.VECTOR)
                     .map(IndexDef::getIndexName)
-                    .toList();
+                    .collect(Collectors.toList());
             if (vectorIndexNames.size() > 1) {
                 throw new SemanticException(
                         String.format("At most one vector index is allowed for a table, but %d were found: %s",
