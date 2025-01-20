@@ -1667,7 +1667,7 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
             return true;
         }
         // if mv predicates are empty, try to union rewrite.
-        if (mvPredicateUsedColRefs == null || mvPredicateUsedColRefs.isEmpty()) {
+        if (CollectionUtils.isEmpty(mvPredicateUsedColRefs)) {
             return true;
         }
         // if query predicates and mv predicates have the same column, try to union rewrite.
@@ -1702,14 +1702,27 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
         // try to pull up query's predicates to make possible for rewrite from mv to query.
         PredicateSplit mvPredicateSplit = rewriteContext.getMvPredicateSplit();
         PredicateSplit queryPredicateSplit = rewriteContext.getQueryPredicateSplit();
-        Set<ColumnRefOperator> mvPredicateUsedColRefs = Utils.compoundAnd(mvPredicateSplit.getPredicates())
-                .getColumnRefs().stream()
-                .map(colRef -> (ColumnRefOperator) columnRewriter.rewriteViewToQuery(colRef))
+
+        // filter redundant predicates since they are not used for rewrite.
+        Set<ColumnRefOperator> mvPredicateUsedColRefs = mvPredicateSplit.getPredicates()
+                .stream()
+                .filter(pred -> !pred.isRedundant())
+                .map(pred -> pred.getColumnRefs()
+                        .stream()
+                        .map(colRef -> (ColumnRefOperator) columnRewriter.rewriteViewToQuery(colRef))
+                        .collect(Collectors.toSet()))
+                .flatMap(Set::stream)
                 .collect(Collectors.toSet());
 
         List<ScalarOperator> queryPredicates = Lists.newArrayList();
-        queryPredicates.addAll(Utils.extractConjuncts(queryPredicateSplit.getRangePredicates()));
-        queryPredicates.addAll(Utils.extractConjuncts(queryPredicateSplit.getResidualPredicates()));
+        Utils.extractConjuncts(queryPredicateSplit.getRangePredicates())
+                .stream()
+                .filter(pred -> !pred.isRedundant())
+                .forEach(queryPredicates::add);
+        Utils.extractConjuncts(queryPredicateSplit.getResidualPredicates())
+                .stream()
+                .filter(pred -> !pred.isRedundant())
+                .forEach(queryPredicates::add);
         
         // if query and mv contains the same column, we can rewrite query by mv.
         if (!isPullPredicateRewrite(queryPredicates, mvPredicateUsedColRefs, unionRewriteMode)) {
