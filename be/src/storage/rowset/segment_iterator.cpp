@@ -59,12 +59,7 @@
 #include "storage/rowset/rowid_column_iterator.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/short_key_range_option.h"
-<<<<<<< HEAD
 #include "storage/storage_engine.h"
-=======
-#include "storage/runtime_range_pruner.h"
-#include "storage/runtime_range_pruner.hpp"
->>>>>>> e3f5de009 ([Refactor] Rename OlapRuntimeScanRangePruner to RuntimeScanRangePruner (#55154))
 #include "storage/types.h"
 #include "storage/update_manager.h"
 #include "types/array_type_info.h"
