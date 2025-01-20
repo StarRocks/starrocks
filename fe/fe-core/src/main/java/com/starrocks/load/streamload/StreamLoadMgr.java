@@ -145,7 +145,7 @@ public class StreamLoadMgr implements MemoryTrackable {
                 task.beginTxnFromFrontend(channelId, channelNum, resp);
                 return;
             }
-            task = createLoadTask(db, table, label, user, clientIp, timeoutMillis, channelNum, channelId, warehouseId);
+            task = createLoadTaskWithoutLock(db, table, label, user, clientIp, timeoutMillis, channelNum, channelId, warehouseId);
             LOG.info(new LogBuilder(LogKey.STREAM_LOAD_TASK, task.getId())
                     .add("msg", "create load task").build());
             addLoadTask(task);
@@ -192,9 +192,9 @@ public class StreamLoadMgr implements MemoryTrackable {
         return streamLoadTask;
     }
 
-    private StreamLoadTask createLoadTask(Database db, Table table, String label, String user, String clientIp,
-                                         long timeoutMillis, int channelNum,
-                                         int channelId, long warehouseId) {
+    private StreamLoadTask createLoadTaskWithoutLock(Database db, Table table, String label, String user,
+                                                     String clientIp, long timeoutMillis, int channelNum,
+                                                     int channelId, long warehouseId) {
         // init stream load task
         long id = GlobalStateMgr.getCurrentState().getNextId();
         StreamLoadTask streamLoadTask = new StreamLoadTask(id, db, (OlapTable) table,
