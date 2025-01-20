@@ -51,7 +51,7 @@ public class AdminSetConfigStmt extends DdlStmt {
 
     @Override
     public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.NO_FORWARD;
+        return RedirectStatus.FORWARD_NO_SYNC;
     }
 
     @Override

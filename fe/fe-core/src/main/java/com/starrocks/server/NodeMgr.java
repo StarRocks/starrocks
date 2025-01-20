@@ -1153,30 +1153,19 @@ public class NodeMgr {
     }
 
     public void setConfig(AdminSetConfigStmt stmt) throws DdlException {
-        if (GlobalStateMgr.getCurrentState().isLeader()) {
-            String user = ConnectContext.get().getCurrentUserIdentity().getUser();
-            setFrontendConfig(stmt.getConfig().getMap(), stmt.isPersistent(), user);
-            List<Frontend> allFrontends = getFrontends(null);
-            int timeout = ConnectContext.get().getExecTimeout() * 1000 + Config.thrift_rpc_timeout_ms;
-            StringBuilder errMsg = new StringBuilder();
-            for (Frontend fe : allFrontends) {
-                if (fe.getHost().equals(getSelfNode().first)) {
-                    continue;
-                }
-                errMsg.append(callFrontNodeSetConfig(stmt, fe, timeout, errMsg));
+        String user = ConnectContext.get().getCurrentUserIdentity().getUser();
+        setFrontendConfig(stmt.getConfig().getMap(), stmt.isPersistent(), user);
+        List<Frontend> allFrontends = getFrontends(null);
+        int timeout = ConnectContext.get().getExecTimeout() * 1000 + Config.thrift_rpc_timeout_ms;
+        StringBuilder errMsg = new StringBuilder();
+        for (Frontend fe : allFrontends) {
+            if (fe.getHost().equals(getSelfNode().first)) {
+                continue;
             }
-            if (errMsg.length() > 0) {
-                ErrorReport.reportDdlException(ErrorCode.ERROR_SET_CONFIG_FAILED, errMsg.toString());
-            }
-        } else {
-            Pair<String, Integer> leaderIpAndRpcPort = getLeaderIpAndRpcPort();
-            Frontend fe = new Frontend(FrontendNodeType.LEADER, "leader", leaderIpAndRpcPort.first,
-                    leaderIpAndRpcPort.second);
-            StringBuilder errMsg =
-                    callFrontNodeSetConfig(stmt, fe, Config.thrift_rpc_timeout_ms, new StringBuilder());
-            if (errMsg.length() > 0) {
-                ErrorReport.reportDdlException(ErrorCode.ERROR_SET_CONFIG_FAILED, errMsg.toString());
-            }
+            errMsg.append(callFrontNodeSetConfig(stmt, fe, timeout, errMsg));
+        }
+        if (!errMsg.isEmpty()) {
+            ErrorReport.reportDdlException(ErrorCode.ERROR_SET_CONFIG_FAILED, errMsg.toString());
         }
     }
 
