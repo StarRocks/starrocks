@@ -175,6 +175,25 @@ public abstract class MVTimelinessArbiter {
         return baseChangedPartitionNames;
     }
 
+    protected void collectBaseTableUpdatePartitionNamesInLoose(MvUpdateInfo mvUpdateInfo) {
+        Map<Table, List<Column>> refBaseTableAndColumns = mv.getRefBaseTablePartitionColumns();
+        // collect & update mv's to refresh partitions based on base table's partition changes
+        collectBaseTableUpdatePartitionNames(refBaseTableAndColumns, mvUpdateInfo);
+        Set<Table> refBaseTables = mv.getRefBaseTablePartitionColumns().keySet();
+        MaterializedView.AsyncRefreshContext context = mv.getRefreshScheme().getAsyncRefreshContext();
+        for (Table table : refBaseTables) {
+            Map<String, MaterializedView.BasePartitionInfo> mvBaseTableVisibleVersionMap =
+                    context.getBaseTableVisibleVersionMap()
+                            .computeIfAbsent(table.getId(), k -> Maps.newHashMap());
+            for (String partitionName : mvBaseTableVisibleVersionMap.keySet()) {
+                if (mvUpdateInfo.getBaseTableToRefreshPartitionNames(table) != null) {
+                    // in loose mode, ignore partition that both exists in baseTable and mv
+                    mvUpdateInfo.getBaseTableToRefreshPartitionNames(table).remove(partitionName);
+                }
+            }
+        }
+    }
+
     /**
      * If base table is materialized view, add partition name to cell mapping into base table partition mapping;
      * otherwise base table(mv) may lose partition names of the real base table changed partitions.

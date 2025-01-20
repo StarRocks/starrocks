@@ -728,6 +728,9 @@ public class MvRewritePartialPartitionTest extends MVTestBase {
             MaterializedView mv = starRocksAssert.getMv("test", "test_loose_mv");
             mv.getPartition("p19910330").getDefaultPhysicalPartition()
                     .setVisibleVersion(Partition.PARTITION_INIT_VERSION, System.currentTimeMillis());
+            long tableId = starRocksAssert.getTable("test", "table_with_day_partition").getId();
+            mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap().get(tableId)
+                    .remove("p19910330");
             String query5 = "select id_date, sum(t1b) from table_with_day_partition" +
                     " where id_date >= '1991-03-30' and id_date < '1991-04-03' group by id_date";
             FeConstants.runningUnitTest = false;
