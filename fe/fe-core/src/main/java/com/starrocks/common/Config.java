@@ -3065,6 +3065,10 @@ public class Config extends ConfigBase {
             "occupying too much meta memory")
     public static int max_mv_task_run_meta_message_values_length = 16;
 
+    @ConfField(mutable = true, comment = "Whether enable to use list partition rather than range partition for " +
+            "all external table partition types")
+    public static boolean enable_mv_list_partition_for_external_table = false;
+
     /**
      * The refresh partition number when refreshing materialized view at once by default.
      */

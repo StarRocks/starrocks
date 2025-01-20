@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Partition;
+import com.starrocks.common.Config;
 import com.starrocks.connector.iceberg.MockIcebergMetadata;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
@@ -1952,5 +1953,64 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
         }
         starRocksAssert.dropMaterializedView(mvName);
         connectContext.getSessionVariable().setEnableViewBasedMvRewrite(false);
+    }
+
+    @Test
+    public void testListMVWithIcebergTable1() {
+        final String mvName = "test_mv1";
+        Config.enable_mv_list_partition_for_external_table = true;
+        try {
+            starRocksAssert.withMaterializedView("create materialized view " + mvName + " " +
+                    "partition by str2date(d,'%Y-%m-%d') " +
+                    "distributed by hash(a) " +
+                    "REFRESH DEFERRED MANUAL " +
+                    "PROPERTIES (\n" +
+                    "'replication_num' = '1'" +
+                    ") " +
+                    "as select a, b, d, bitmap_union(to_bitmap(t1.c))" +
+                    " from iceberg0.partitioned_db.part_tbl1 as t1 " +
+                    " group by a, b, d;");
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("List partition expression can only be ref-base-table's " +
+                    "partition expression but contain"));
+        }
+        Config.enable_mv_list_partition_for_external_table = false;
+    }
+
+    @Test
+    public void testListMVWithIcebergTable2() throws Exception {
+        Config.enable_mv_list_partition_for_external_table = true;
+        final String mvName = "test_mv1";
+        starRocksAssert.withMaterializedView("create materialized view " + mvName + " " +
+                "partition by d " +
+                "distributed by hash(a) " +
+                "REFRESH DEFERRED MANUAL " +
+                "PROPERTIES (\n" +
+                "'replication_num' = '1'" +
+                ") " +
+                "as select a, b, d, bitmap_union(to_bitmap(t1.c))" +
+                " from iceberg0.partitioned_db.part_tbl1 as t1 " +
+                " group by a, b, d;");
+        final MaterializedView mv = getMv(mvName);
+        Assert.assertTrue(mv.getPartitionInfo().isListPartition());
+        Config.enable_mv_list_partition_for_external_table = false;
+    }
+
+    @Test
+    public void testListMVWithIcebergTable3() throws Exception {
+        String mvName = "test_mv1";
+        Config.enable_mv_list_partition_for_external_table = true;
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test_mv1\n" +
+                "PARTITION BY date_trunc('month', ts)\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")\n" +
+                "AS SELECT id, data, ts  FROM `iceberg0`.`partitioned_transforms_db`.`t0_month` as a;");
+        final MaterializedView mv = getMv(mvName);
+        Assert.assertTrue(mv.getPartitionInfo().isListPartition());
+        Config.enable_mv_list_partition_for_external_table = false;
     }
 }
