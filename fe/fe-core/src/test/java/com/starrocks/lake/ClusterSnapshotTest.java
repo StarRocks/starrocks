@@ -208,7 +208,6 @@ public class ClusterSnapshotTest {
         setAutomatedSnapshotOn(false);
         ClusterSnapshotJob job = GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().createAutomatedSnapshotJob();
         job.setState(ClusterSnapshotJobState.FINISHED);
-        job.addAutomatedClusterSnapshot();
         ClusterSnapshot snapshot = GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAutomatedSnapshot();
         Assert.assertTrue(job.getInfo() != null);
         Assert.assertTrue(snapshot.getInfo() != null);
@@ -264,12 +263,6 @@ public class ClusterSnapshotTest {
         GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().replayLog(logSnapshotJob);
         Assert.assertTrue(GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAllJobsInfo()
                                                                                   .getItems().get(0).state == "ERROR");
-
-        Assert.assertTrue(GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAutomatedSnapshot() == null);
-        ClusterSnapshotLog logSnapshot = new ClusterSnapshotLog();
-        logSnapshot.setCreateSnapshot(new ClusterSnapshot(0, "my_name", "my_sv", 12345, -1, 0, 0));
-        GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().replayLog(logSnapshot);
-        Assert.assertTrue(GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAutomatedSnapshot() != null);
     }
 
     @Test

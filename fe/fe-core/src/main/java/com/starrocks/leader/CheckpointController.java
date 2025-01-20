@@ -131,35 +131,29 @@ public class CheckpointController extends FrontendDaemon {
     protected void runCheckpointController() {
         init();
 
-        Pair<Long, Long> getIdsRet = getCheckpointJournalIds();
-        if (getIdsRet == null) {
-            return;
-        }
-
         // ignore return value in normal checkpoint controller
-        runCheckpointControllerWithIds(getIdsRet.first, getIdsRet.second);
+        runCheckpointControllerWithIds(getImageJournalId(), getCheckpointJournalIds());
     }
 
-    public Pair<Long, Long> getCheckpointJournalIds() {
-        long imageJournalId = 0;
-        long maxJournalId = 0;
+    public long getCheckpointJournalIds() {
+        return journal.getFinalizedJournalId();
+    }
 
+    public long getImageJournalId() {
+        long imageJournalId = 0;
         try {
             Storage storage = new Storage(imageDir);
             // get max image version
             imageJournalId = storage.getImageJournalId();
-            // get max finalized journal id
-            maxJournalId = journal.getFinalizedJournalId();
-            LOG.info("checkpoint imageJournalId {}, logJournalId {}", imageJournalId, maxJournalId);
         } catch (IOException e) {
             LOG.error("Failed to get storage info", e);
-            return null;
         }
-
-        return Pair.create(imageJournalId, maxJournalId);
+        return imageJournalId;
     }
 
     public Pair<Boolean, String> runCheckpointControllerWithIds(long imageJournalId, long maxJournalId) {
+        LOG.info("checkpoint imageJournalId {}, logJournalId {}", imageJournalId, maxJournalId);
+
         // Step 1: create image
         Pair<Boolean, String> createImageRet = Pair.create(false, "");
         if (imageJournalId < maxJournalId) {

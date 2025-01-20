@@ -33,15 +33,26 @@ public class ClusterSnapshotCheckpointScheduler extends FrontendDaemon {
     private final CheckpointController feController;
     private final CheckpointController starMgrController;
 
+    private boolean firstRun;
+
     public ClusterSnapshotCheckpointScheduler(CheckpointController feController, CheckpointController starMgrController) {
         super("cluster_snapshot_checkpoint_scheduler", Config.automated_cluster_snapshot_interval_seconds * 1000L);
         this.feController = feController;
         this.starMgrController = starMgrController;
+        this.firstRun = true;
     }
 
     @Override
     protected void runAfterCatalogReady() {
         if (!GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().isAutomatedSnapshotOn()) {
+            return;
+        }
+
+
+        // skip first run when the scheduler start
+        if (firstRun) {
+            GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().resetJobsStateForTheFirstRun();
+            firstRun = false;
             return;
         }
 
@@ -73,20 +84,32 @@ public class ClusterSnapshotCheckpointScheduler extends FrontendDaemon {
             job.setState(ClusterSnapshotJobState.SNAPSHOTING);
             job.logJob();
 
-            Pair<Long, Long> getFEIdsRet = feController.getCheckpointJournalIds();
-            Pair<Boolean, String> createFEImageRet = feController.runCheckpointControllerWithIds(getFEIdsRet.first,
-                                                                                                 consistentIds.first);
-            if (!createFEImageRet.first) {
-                errMsg = "checkpoint failed for FE image: " + createFEImageRet.second;
+            long feImageJournalId = feController.getImageJournalId();
+            long feCheckpointJournalId = consistentIds.first;
+            if (feImageJournalId < feCheckpointJournalId) {
+                Pair<Boolean, String> createFEImageRet = feController.runCheckpointControllerWithIds(feImageJournalId,
+                                                                                                     feCheckpointJournalId);
+                if (!createFEImageRet.first) {
+                    errMsg = "checkpoint failed for FE image: " + createFEImageRet.second;
+                    break;
+                }
+            } else if (feImageJournalId > feCheckpointJournalId) {
+                errMsg = "checkpoint journal id for FE is smaller than image version";
                 break;
             }
             LOG.info("Finished create image for FE image, version: {}", consistentIds.first);
 
-            Pair<Long, Long> getStarMgrIdsRet = starMgrController.getCheckpointJournalIds();
-            Pair<Boolean, String> createStarMgrImageRet =
-                                  starMgrController.runCheckpointControllerWithIds(getStarMgrIdsRet.first, consistentIds.second);
-            if (!createStarMgrImageRet.first) {
-                errMsg = "checkpoint failed for starMgr image: " + createStarMgrImageRet.second;
+            long starMgrImageJournalId = starMgrController.getImageJournalId();
+            long starMgrCheckpointJournalId = consistentIds.second;
+            if (starMgrImageJournalId < starMgrCheckpointJournalId) {
+                Pair<Boolean, String> createStarMgrImageRet =
+                        starMgrController.runCheckpointControllerWithIds(starMgrImageJournalId, starMgrCheckpointJournalId);
+                if (!createStarMgrImageRet.first) {
+                    errMsg = "checkpoint failed for starMgr image: " + createStarMgrImageRet.second;
+                    break;
+                }
+            } else if (starMgrImageJournalId > starMgrCheckpointJournalId) {
+                errMsg = "checkpoint journal id for starMgr is smaller than image version";
                 break;
             }
             LOG.info("Finished create image for starMgr image, version: {}", consistentIds.second);
@@ -112,7 +135,6 @@ public class ClusterSnapshotCheckpointScheduler extends FrontendDaemon {
         } else {
             job.setState(ClusterSnapshotJobState.FINISHED);
             job.logJob();
-            job.addAutomatedClusterSnapshot();
             LOG.info("Finish Cluster Snapshot checkpoint, FE checkpoint journal Id: {}, StarMgr checkpoint journal Id: {}",
                      job.getFeJournalId(), job.getStarMgrJournalId());
         }
