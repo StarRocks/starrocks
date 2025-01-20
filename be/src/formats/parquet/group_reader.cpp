@@ -372,6 +372,12 @@ StatusOr<ColumnReaderPtr> GroupReader::_create_column_reader(const GroupReaderPa
                              ColumnReaderFactory::create(_column_reader_opts, schema_node, column.slot_type(),
                                                          column.t_iceberg_schema_field));
         }
+        if (_param.global_dictmaps->contains(column.slot_id())) {
+            ASSIGN_OR_RETURN(
+                    column_reader,
+                    ColumnReaderFactory::create(std::move(column_reader), _param.global_dictmaps->at(column.slot_id()),
+                                                column.slot_id(), _row_group_metadata->num_rows));
+        }
         if (column_reader == nullptr) {
             // this shouldn't happen but guard
             return Status::InternalError("No valid column reader.");
