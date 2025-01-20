@@ -34,6 +34,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.base.Function;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
@@ -481,6 +482,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         return new ArrayList<>(nameToColumn.values());
     }
 
+    public List<Column> getKeyColumns() {
+        return null;
+    }
+
     public void addColumn(Column column) {
         fullSchema.add(column);
         nameToColumn.put(column.getName(), column);
@@ -502,11 +507,14 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         return null;
     }
 
+<<<<<<< HEAD
     @Override
     public void write(DataOutput out) throws IOException {
         Text.writeString(out, GsonUtils.GSON.toJson(this));
     }
 
+=======
+>>>>>>> ecfeb0e3b ([Enhancement] support all tables using pk/fk optimization (#55220))
     @Override
     public void gsonPostProcess() throws IOException {
         updateSchemaIndex();
@@ -820,5 +828,36 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
 
     public boolean isSupportBackupRestore() {
         return isOlapTableOrMaterializedView() || isOlapView();
+    }
+
+    // Sometimes when we prune a table but want to preserve a single column
+    // for olap table, we could use first key column
+    // for other tables, probably we could choose the most narrow column for performance.
+    // but theoretically we can choose any column.
+    public Column getPresentivateColumn() {
+        List<Column> keyColumns = getKeyColumns();
+        if (keyColumns != null && keyColumns.size() > 0) {
+            return keyColumns.get(0);
+        }
+        List<UniqueConstraint> uniqueConstraintList = getUniqueConstraints();
+        if (uniqueConstraintList != null) {
+            for (UniqueConstraint uc : uniqueConstraintList) {
+                for (ColumnId id : uc.getUniqueColumns()) {
+                    Column c = getColumn(id);
+                    if (c != null) {
+                        return c;
+                    }
+                }
+            }
+        }
+        return getColumns().stream().min((c1, c2) -> {
+            Function<Column, Integer> ff = c -> {
+                if (c.getType().isScalarType()) {
+                    return c.getType().getTypeSize();
+                }
+                return Integer.MAX_VALUE;
+            };
+            return ff.apply(c1) - ff.apply(c2);
+        }).get();
     }
 }
