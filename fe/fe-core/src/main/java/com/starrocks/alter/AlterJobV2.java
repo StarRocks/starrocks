@@ -202,8 +202,10 @@ public abstract class AlterJobV2 implements Writable {
      */
     public synchronized void run() {
         if (isTimeout()) {
-            cancelImpl("Timeout");
-            return;
+            if (cancelImpl("Timeout")) {
+                // If this job can't be cancelled, we should execute it.
+                return;
+            }
         }
 
         // create connectcontext
