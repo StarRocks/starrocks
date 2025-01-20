@@ -38,7 +38,6 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.meta.BlackListSql;
-import com.starrocks.meta.SqlBlackList;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
@@ -161,11 +160,11 @@ public class QueryPlannerTest {
         StmtExecutor stmtExecutor1 = new StmtExecutor(connectContext, statement);
         stmtExecutor1.execute();
 
-        Assert.assertEquals(SqlBlackList.getInstance().sqlBlackListMap.entrySet().size(), 1);
+        Assert.assertEquals(GlobalStateMgr.getCurrentState().getSqlBlackList().getBlackLists().size(), 1);
         long id = -1;
-        for (Map.Entry<String, BlackListSql> entry : SqlBlackList.getInstance().sqlBlackListMap.entrySet()) {
-            id = entry.getValue().id;
-            Assert.assertEquals("select k1 from .+", entry.getKey());
+        for (BlackListSql entry : GlobalStateMgr.getCurrentState().getSqlBlackList().getBlackLists()) {
+            id = entry.id;
+            Assert.assertEquals("select k1 from .+", entry.pattern.pattern());
         }
 
         String sql = "select k1 from test.baseall";
@@ -193,7 +192,7 @@ public class QueryPlannerTest {
                 connectContext.getSessionVariable().getSqlMode());
         StmtExecutor stmtExecutor3 = new StmtExecutor(connectContext, statement);
         stmtExecutor3.execute();
-        Assert.assertEquals(0, SqlBlackList.getInstance().sqlBlackListMap.entrySet().size());
+        Assert.assertEquals(0, GlobalStateMgr.getCurrentState().getSqlBlackList().getBlackLists().size());
     }
 
     @Test
@@ -210,11 +209,11 @@ public class QueryPlannerTest {
         StmtExecutor stmtExecutor1 = new StmtExecutor(connectContext, statement);
         stmtExecutor1.execute();
 
-        Assert.assertEquals(1, SqlBlackList.getInstance().sqlBlackListMap.entrySet().size());
+        Assert.assertEquals(1, GlobalStateMgr.getCurrentState().getSqlBlackList().getBlackLists().size());
         long id = -1;
-        for (Map.Entry<String, BlackListSql> entry : SqlBlackList.getInstance().sqlBlackListMap.entrySet()) {
-            id = entry.getValue().id;
-            Assert.assertEquals("select k1 from .+", entry.getKey());
+        for (BlackListSql entry : GlobalStateMgr.getCurrentState().getSqlBlackList().getBlackLists()) {
+            id = entry.id;
+            Assert.assertEquals("select k1 from .+", entry.pattern.pattern());
         }
 
         String sql = "select k1 from test.baseall";
@@ -241,7 +240,7 @@ public class QueryPlannerTest {
                 connectContext.getSessionVariable().getSqlMode());
         StmtExecutor stmtExecutor3 = new StmtExecutor(connectContext, statement);
         stmtExecutor3.execute();
-        Assert.assertEquals(0, SqlBlackList.getInstance().sqlBlackListMap.entrySet().size());
+        Assert.assertEquals(0, GlobalStateMgr.getCurrentState().getSqlBlackList().getBlackLists().size());
     }
 
     @Test
@@ -258,11 +257,11 @@ public class QueryPlannerTest {
         StmtExecutor stmtExecutor1 = new StmtExecutor(connectContext, statement);
         stmtExecutor1.execute();
 
-        Assert.assertEquals(SqlBlackList.getInstance().sqlBlackListMap.entrySet().size(), 1);
+        Assert.assertEquals(GlobalStateMgr.getCurrentState().getSqlBlackList().getBlackLists().size(), 1);
         long id = -1;
-        for (Map.Entry<String, BlackListSql> entry : SqlBlackList.getInstance().sqlBlackListMap.entrySet()) {
-            id = entry.getValue().id;
-            Assert.assertEquals("( where )", entry.getKey());
+        for (BlackListSql entry : GlobalStateMgr.getCurrentState().getSqlBlackList().getBlackLists()) {
+            id = entry.id;
+            Assert.assertEquals("( where )", entry.pattern.pattern());
         }
 
         String sql4 = "select k1 as awhere from test.baseall";
@@ -283,7 +282,7 @@ public class QueryPlannerTest {
                 connectContext.getSessionVariable().getSqlMode());
         StmtExecutor stmtExecutor3 = new StmtExecutor(connectContext, statement);
         stmtExecutor3.execute();
-        Assert.assertEquals(0, SqlBlackList.getInstance().sqlBlackListMap.entrySet().size());
+        Assert.assertEquals(0, GlobalStateMgr.getCurrentState().getSqlBlackList().getBlackLists().size());
     }
     @Test
     public void testSqlBlackListWithInsert() throws Exception {
@@ -299,11 +298,11 @@ public class QueryPlannerTest {
         StmtExecutor stmtExecutor1 = new StmtExecutor(connectContext, statement);
         stmtExecutor1.execute();
 
-        Assert.assertEquals(SqlBlackList.getInstance().sqlBlackListMap.entrySet().size(), 1);
+        Assert.assertEquals(GlobalStateMgr.getCurrentState().getSqlBlackList().getBlackLists().size(), 1);
         long id = -1;
-        for (Map.Entry<String, BlackListSql> entry : SqlBlackList.getInstance().sqlBlackListMap.entrySet()) {
-            id = entry.getValue().id;
-            Assert.assertEquals("insert into .+ values.+", entry.getKey());
+        for (BlackListSql entry : GlobalStateMgr.getCurrentState().getSqlBlackList().getBlackLists()) {
+            id = entry.id;
+            Assert.assertEquals("insert into .+ values.+", entry.pattern.pattern());
         }
 
         String sql =
@@ -323,7 +322,7 @@ public class QueryPlannerTest {
                 connectContext.getSessionVariable().getSqlMode());
         StmtExecutor stmtExecutor3 = new StmtExecutor(connectContext, statement);
         stmtExecutor3.execute();
-        Assert.assertEquals(0, SqlBlackList.getInstance().sqlBlackListMap.entrySet().size());
+        Assert.assertEquals(0, GlobalStateMgr.getCurrentState().getSqlBlackList().getBlackLists().size());
     }
 
     @Test

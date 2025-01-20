@@ -187,6 +187,7 @@ import com.starrocks.load.routineload.RoutineLoadTaskScheduler;
 import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.memory.MemoryUsageTracker;
 import com.starrocks.memory.ProcProfileCollector;
+import com.starrocks.meta.SqlBlackList;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.BackendIdsUpdateInfo;
 import com.starrocks.persist.EditLog;
@@ -552,6 +553,8 @@ public class GlobalStateMgr {
 
     private final ClusterSnapshotMgr clusterSnapshotMgr;
 
+    private final SqlBlackList sqlBlackList;
+
     public NodeMgr getNodeMgr() {
         return nodeMgr;
     }
@@ -856,6 +859,7 @@ public class GlobalStateMgr {
         this.authorizer = new AuthorizerEPack(accessControlProvider);
         this.ddlStmtExecutor = new DDLStmtExecutor(DDLStmtExecutorVisitorEPack.getInstance());
         this.showExecutor = new ShowExecutor(ShowExecutorVisitorEPack.getInstance());
+        this.sqlBlackList = new SqlBlackList();
         this.temporaryTableCleaner = new TemporaryTableCleaner();
         this.passwordExpiredChecker = new PasswordExpiredChecker();
         this.queryDeployExecutor =
@@ -1669,6 +1673,7 @@ public class GlobalStateMgr {
                 .put(SRMetaBlockID.PIPE_MGR, pipeManager.getRepo()::load)
                 .put(SRMetaBlockIDEPack.MV_LIFECYCLE_MGR, mvLifeCycleAutoKeeper.getMVLifecycleManager()::load)
                 .put(SRMetaBlockID.CLUSTER_SNAPSHOT_MGR, clusterSnapshotMgr::load)
+                .put(SRMetaBlockID.BLACKLIST_MGR, sqlBlackList::load)
                 .build();
 
         Set<SRMetaBlockID> metaMgrMustExists = new HashSet<>(loadImages.keySet());
@@ -1872,6 +1877,7 @@ public class GlobalStateMgr {
                 keyMgr.save(imageWriter);
                 pipeManager.getRepo().save(imageWriter);
                 mvLifeCycleAutoKeeper.getMVLifecycleManager().save(imageWriter);
+                sqlBlackList.save(imageWriter);
             } catch (SRMetaBlockException e) {
                 LOG.error("Save meta block failed ", e);
                 throw new IOException("Save meta block failed ", e);
@@ -2294,6 +2300,10 @@ public class GlobalStateMgr {
 
     public ExportMgr getExportMgr() {
         return this.exportMgr;
+    }
+
+    public SqlBlackList getSqlBlackList() {
+        return this.sqlBlackList;
     }
 
     public MaterializedViewMgr getMaterializedViewMgr() {

@@ -260,7 +260,8 @@ public class EditLogDeserializer {
             .put(OperationType.OP_ALTER_WAREHOUSE, Warehouse.class)
             .put(OperationType.OP_DROP_WAREHOUSE, DropWarehouseLog.class)
             .put(OperationType.OP_CLUSTER_SNAPSHOT_LOG, ClusterSnapshotLog.class)
-
+            .put(OperationType.OP_ADD_SQL_QUERY_BLACK_LIST, SqlBlackListPersistInfo.class)
+            .put(OperationType.OP_DELETE_SQL_QUERY_BLACK_LIST, DeleteSqlBlackLists.class)
             .put(OperationTypeEPack.OP_CREATE_SECURITY_INTEGRATION, SecurityIntegrationPersistInfo.class)
             .put(OperationTypeEPack.OP_ALTER_SECURITY_INTEGRATION, SecurityIntegrationPersistInfo.class)
             .put(OperationTypeEPack.OP_DROP_SECURITY_INTEGRATION, SecurityIntegrationPersistInfo.class)
@@ -285,7 +286,6 @@ public class EditLogDeserializer {
             .put(OperationTypeEPack.OP_DROP_FAILOVER_GROUP, DropFailoverGroupLog.class)
             .put(OperationTypeEPack.OP_UPDATE_FAILOVER_GROUP, UpdateFailoverGroupLog.class)
             .put(OperationTypeEPack.OP_MV_CHANGE, MVChangeLog.class)
-
             .build();
 
     public static Writable deserialize(Short opCode, DataInput in) throws IOException {

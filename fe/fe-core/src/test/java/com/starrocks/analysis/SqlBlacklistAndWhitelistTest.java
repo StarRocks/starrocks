@@ -39,7 +39,7 @@ public class SqlBlacklistAndWhitelistTest {
     @Test
     public void testDelSqlBlacklist() {
         DelSqlBlackListStmt stmt = (DelSqlBlackListStmt) analyzeSuccess("delete sqlblacklist  2, 6;");
-        Assert.assertEquals(Lists.asList(2L, new Long[] {6L}), stmt.getIndexs());
+        Assert.assertEquals(Lists.asList(2L, new Long[]{6L}), stmt.getIndexs());
         Assert.assertNotNull(stmt.getRedirectStatus());
         // bad cases
         analyzeFail("DELETE SQLBLACKLIST");
