@@ -25,6 +25,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.catalog.ArrayType;
+import com.starrocks.catalog.IndexParams;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.ErrorCode;
@@ -37,6 +38,7 @@ import com.starrocks.connector.PlanMode;
 import com.starrocks.datacache.DataCachePopulateMode;
 import com.starrocks.monitor.unit.TimeValue;
 import com.starrocks.mysql.MysqlPassword;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.SessionVariable;
@@ -65,6 +67,7 @@ import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 public class SetStmtAnalyzer {
     public static void analyze(SetStmt setStmt, ConnectContext session) {
@@ -330,6 +333,24 @@ public class SetStmtAnalyzer {
                         EnumUtils.getEnumList(SessionVariableConstants.CountDistinctImplMode.class), ",");
                 throw new SemanticException(String.format("Unsupported count distinct implementation mode: %s, " +
                         "supported list is %s", rewriteModeName, supportedList));
+            }
+        }
+
+        if (variable.equalsIgnoreCase(SessionVariable.ANN_PARAMS)) {
+            String annParams = resolvedExpression.getStringValue();
+            if (!Strings.isNullOrEmpty(annParams)) {
+                Map<String, String> annParamMap = null;
+                try {
+                    java.lang.reflect.Type type = new com.google.gson.reflect.TypeToken<Map<String, String>>() {}.getType();
+                    annParamMap = GsonUtils.GSON.fromJson(annParams, type);
+                } catch (Exception e) {
+                    throw new SemanticException(String.format("Unsupported ann_params: %s, " +
+                            "It should be a Dict JSON string, each key and value of which is string", annParams));
+                }
+
+                for (Map.Entry<String, String> entry : annParamMap.entrySet()) {
+                    IndexParams.getInstance().checkParams(entry.getKey().toUpperCase(), entry.getValue());
+                }
             }
         }
 

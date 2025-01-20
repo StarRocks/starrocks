@@ -29,17 +29,7 @@ public:
     // init from builder meta
     virtual Status init() = 0;
 
-    // add not null data
-    virtual Status add(const Column& data) = 0;
-
-    // add data contains null
-    virtual Status add(const Column& data, const Column& null_map, const size_t offset) = 0;
-
-    // write not null data
-    virtual Status write(const Column& data) = 0;
-
-    // write data contains nulls
-    virtual Status write(const Column& data, const Column& null_map) = 0;
+    virtual Status add(const Column& array_column, const size_t offset) = 0;
 
     // flush data into disk
     virtual Status flush() = 0;
@@ -56,20 +46,14 @@ protected:
     std::string _index_path;
 };
 
-class EmptyVectorIndexBuilder : public VectorIndexBuilder {
+class EmptyVectorIndexBuilder final : public VectorIndexBuilder {
 public:
     EmptyVectorIndexBuilder(std::shared_ptr<TabletIndex> tablet_index, std::string segment_index_path)
             : VectorIndexBuilder(std::move(tablet_index), std::move(segment_index_path)){};
 
     Status init() override { return Status::OK(); }
 
-    Status add(const Column& data) override { return Status::OK(); }
-
-    Status add(const Column& data, const Column& null_map, const size_t offset) override { return Status::OK(); }
-
-    Status write(const Column& data) override { return Status::OK(); }
-
-    Status write(const Column& data, const Column& null_map) override { return Status::OK(); }
+    Status add(const Column& array_column, const size_t offset) override { return Status::OK(); }
 
     Status flush() override {
         RETURN_IF_ERROR(VectorIndexBuilder::flush_empty(_index_path));

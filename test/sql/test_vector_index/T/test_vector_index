@@ -1,5 +1,6 @@
--- name: test_create_vector_index
+-- name: test_create_vector_index @sequential
 ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "true");
+
 CREATE TABLE `t_test_vector_table` (
   `id` bigint(20) NOT NULL COMMENT "",
   `vector1` ARRAY<FLOAT> NOT NULL COMMENT "",
@@ -14,15 +15,23 @@ PROPERTIES (
 "replicated_storage" = "false",
 "compression" = "LZ4"
 );
-CREATE INDEX index_vector2 ON t_test_vector_table (vector2) USING VECTOR ("metric_type" = "l2_distance", "is_vector_normed" = "false", "index_type" = "ivfpq", "dim"="5", "nlist" = "256", "nbits"="10");
+
+DROP INDEX index_vector1 ON t_test_vector_table;
+
+CREATE INDEX index_vector2 ON t_test_vector_table (vector2) USING VECTOR ("metric_type" = "l2_distance", "is_vector_normed" = "false", "index_type" = "ivfpq", "dim"="4", "nlist" = "256", "nbits"="8", "M_IVFPQ"="2");
 DROP INDEX index_vector2 ON t_test_vector_table;
 
-ALTER TABLE t_test_vector_table add index index_vector2 (vector2) USING VECTOR ("metric_type" = "l2_distance", "is_vector_normed" = "false", "index_type" = "ivfpq", "dim"="5", "nlist" = "256", "nbits"="10");
+ALTER TABLE t_test_vector_table add index index_vector2 (vector2) USING VECTOR ("metric_type" = "l2_distance", "is_vector_normed" = "false", "index_type" = "ivfpq", "dim"="4", "nlist" = "256", "nbits"="8", "M_IVFPQ"="2");
 ALTER TABLE t_test_vector_table drop index index_vector2;
 
 DROP TABLE t_test_vector_table;
 
--- name: test_vector_index
+ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "false");
+
+-- name: test_vector_index @sequential
+
+ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "true");
+
 CREATE TABLE `t_test_vector_table` (
   `id` bigint(20) NOT NULL COMMENT "",
   `vector1` ARRAY<FLOAT> NOT NULL COMMENT "",
@@ -43,3 +52,6 @@ select id, approx_l2_distance([1,1,1,1,1], vector1) from t_test_vector_table ord
 select * from (select id, approx_l2_distance([1,1,1,1,1], vector1) score from t_test_vector_table) a where score < 40 order by score limit 1;
 
 DROP TABLE t_test_vector_table;
+
+
+ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "false");
