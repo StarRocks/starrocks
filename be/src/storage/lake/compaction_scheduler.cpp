@@ -351,8 +351,7 @@ void CompactionScheduler::thread_task(int id) {
 }
 
 Status compaction_should_cancel(CompactionTaskContext* context) {
-    RETURN_IF_ERROR(context->callback->is_txn_still_valid());
-    return Status::OK();
+    return context->callback->is_txn_still_valid();
 }
 
 Status CompactionScheduler::do_compaction(std::unique_ptr<CompactionTaskContext> context) {
