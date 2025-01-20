@@ -45,8 +45,6 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.catalog.constraint.ForeignKeyConstraint;
-import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -403,16 +401,6 @@ public class HiveTable extends Table {
         sb.append(", createTime=").append(createTime);
         sb.append('}');
         return sb.toString();
-    }
-
-    @Override
-    public List<UniqueConstraint> getUniqueConstraints() {
-        return uniqueConstraints;
-    }
-
-    @Override
-    public List<ForeignKeyConstraint> getForeignKeyConstraints() {
-        return foreignKeyConstraints;
     }
 
     @Override
