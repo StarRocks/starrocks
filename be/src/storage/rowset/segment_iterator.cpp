@@ -59,6 +59,8 @@
 #include "storage/rowset/rowid_column_iterator.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/short_key_range_option.h"
+#include "storage/runtime_range_pruner.h"
+#include "storage/runtime_range_pruner.hpp"
 #include "storage/storage_engine.h"
 #include "storage/types.h"
 #include "storage/update_manager.h"
@@ -370,7 +372,9 @@ private:
     std::shared_ptr<tenann::IndexMeta> _index_meta;
 #endif
 
-    bool _always_build_rowid() const { return _use_vector_index && !_use_ivfpq; }
+    bool _always_build_rowid() const {
+        return _use_vector_index && !_use_ivfpq;
+    }
 
     bool _use_vector_index;
     std::string _vector_distance_column_name;

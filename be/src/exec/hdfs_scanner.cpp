@@ -24,7 +24,6 @@
 #include "io/shared_buffered_input_stream.h"
 #include "pipeline/fragment_context.h"
 #include "storage/predicate_parser.h"
-#include "storage/runtime_range_pruner.hpp"
 #include "util/compression/compression_utils.h"
 #include "util/compression/stream_compression.h"
 
