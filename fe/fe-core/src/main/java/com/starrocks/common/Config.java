@@ -2570,7 +2570,7 @@ public class Config extends ConfigBase {
      * Whether volume can be created from conf. If it is enabled, a builtin storage volume may be created.
      */
     @ConfField
-    public static boolean enable_load_volume_from_conf = true;
+    public static boolean enable_load_volume_from_conf = false;
     // remote storage related configuration
     @ConfField(comment = "storage type for cloud native table. Available options: " +
             "\"S3\", \"HDFS\", \"AZBLOB\", \"ADLS2\". case-insensitive")
