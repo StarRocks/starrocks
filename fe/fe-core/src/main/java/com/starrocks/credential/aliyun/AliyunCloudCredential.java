@@ -15,6 +15,7 @@
 package com.starrocks.credential.aliyun;
 
 import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 import com.staros.proto.AliyunCredentialInfo;
 import com.staros.proto.AliyunDefaultCredentialInfo;
 import com.staros.proto.AliyunSimpleCredentialInfo;
@@ -103,7 +104,9 @@ public class AliyunCloudCredential implements CloudCredential {
 
     @Override
     public void applyToConfiguration(Configuration configuration) {
-        configuration.set("fs.oss.impl", S3AFileSystem.class.getName());
+        if (Strings.isNullOrEmpty(configuration.get("fs.oss.impl"))) {
+            configuration.set("fs.oss.impl", S3AFileSystem.class.getName());
+        }
         configuration.set(Constants.ACCESS_KEY, accessKey);
         configuration.set(Constants.SECRET_KEY, secretKey);
         configuration.set(Constants.ENDPOINT, endpoint);
