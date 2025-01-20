@@ -1,0 +1,175 @@
+-- name: test_transparent_mv_union_hive2
+create external catalog mv_hive_${uuid0}
+properties
+(
+    "type" = "hive",
+    "hive.catalog.type" = "hive",
+    "hive.metastore.uris" = "${hive_metastore_uris}"
+);
+
+set new_planner_optimize_timeout=10000;
+-- create hive table
+set catalog mv_hive_${uuid0};
+create database mv_hive_db_${uuid0};
+use mv_hive_db_${uuid0};
+
+CREATE TABLE mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 (
+  num int,
+  dt date
+)
+PARTITION BY (dt);
+INSERT INTO mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 VALUES 
+  (1,"2024-11-15"),(2,"2024-11-18"),(3,"2024-11-21"),(4,"2024-11-24"),
+  (1,"2024-12-02"),(2,"2024-12-05"),(3,"2024-12-08"),(4,"2024-12-11"),
+  (1,"2024-12-16"),(2,"2024-12-19"),(3,"2024-12-22"),(4,"2024-12-25"),
+  (2,"2024-11-15"),(3,"2024-11-18"),(4,"2024-11-21"),(5,"2024-11-24"),
+  (2,"2024-12-02"),(3,"2024-12-05"),(4,"2024-12-08"),(5,"2024-12-11");
+
+CREATE TABLE mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2 (
+  num int,
+  dt date
+)
+PARTITION BY (dt);
+INSERT INTO mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2 VALUES 
+  (1,"2024-11-15"),(2,"2024-11-18"),(3,"2024-11-21"),(4,"2024-11-24"),
+  (1,"2024-12-02"),(2,"2024-12-05"),(3,"2024-12-08"),(4,"2024-12-11"),
+  (1,"2024-12-16"),(2,"2024-12-19"),(3,"2024-12-22"),(4,"2024-12-25"),
+  (2,"2024-11-15"),(3,"2024-11-18"),(4,"2024-11-21"),(5,"2024-11-24"),
+  (2,"2024-12-02"),(3,"2024-12-05"),(4,"2024-12-08"),(5,"2024-12-11");
+
+-- create mv
+set catalog default_catalog;
+create database db_${uuid0};
+use db_${uuid0};
+-- set materialized_view_union_rewrite_mode=2;
+
+-- NOTE: test mv with the single table
+CREATE MATERIALIZED VIEW test_mv1 
+PARTITION BY dt 
+REFRESH DEFERRED MANUAL 
+PROPERTIES (
+  "replication_num" = "1",
+  "query_rewrite_consistency" = "checked"
+  -- "partition_ttl"="60 day"
+)
+AS SELECT * FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1;
+
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+INSERT INTO mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 VALUES (1, "2024-11-15"), (1, "2024-11-18"), (1, "2024-11-23"), (4, "2024-12-25");
+function: print_hit_materialized_view("SELECT * FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 where dt > '2024-12-01'  order by 1, 2 limit 3;", "test_mv1", "UNION")
+function: print_hit_materialized_view("SELECT * FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 where dt > '2024-12-01' and num > 4 order by 1, 2 limit 3;", "test_mv1", "UNION")
+function: print_hit_materialized_view("SELECT * FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 where dt > '2024-11-20'  order by 1, 2 limit 3;", "test_mv1", "UNION")
+function: print_hit_materialized_view("SELECT * FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 where dt > '2024-11-20' and num > 4 order by 1, 2 limit 3;", "test_mv1", "UNION")
+function: print_hit_materialized_view("SELECT * FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 order by 1, 2 limit 3;", "test_mv1", "UNION")
+function: print_hit_materialized_view("SELECT * FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 where num > 3 order by 1, 2 limit 3;", "test_mv1", "UNION")
+function: print_hit_materialized_view("SELECT * FROM (SELECT * FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 where num > 3 UNION ALL SELECT * FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 where num > 3) t order by 1, 2 limit 3;", "test_mv1", "UNION")
+SELECT * FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 where dt > '2024-12-01'  order by 1, 2 limit 3;
+SELECT * FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 where dt > '2024-12-01' and num > 4 order by 1, 2 limit 3;
+SELECT * FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 where dt > '2024-11-20'  order by 1, 2 limit 3;
+SELECT * FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 where dt > '2024-11-20' and num > 4 order by 1, 2 limit 3;
+SELECT * FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 order by 1, 2 limit 3;
+SELECT * FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 where num > 3 order by 1, 2 limit 3;
+SELECT * FROM (SELECT * FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 where num > 3 UNION ALL SELECT * FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 where num > 3)t order by 1, 2 limit 3;
+
+-- NOTE: test mv with the single table
+DROP MATERIALIZED VIEW test_mv1;
+CREATE MATERIALIZED VIEW test_mv1 
+PARTITION BY dt 
+REFRESH DEFERRED MANUAL 
+PROPERTIES (
+  "replication_num" = "1",
+  "query_rewrite_consistency" = "loose"
+)
+AS SELECT * FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1;
+
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+INSERT INTO mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 VALUES (1, "2024-11-15"), (1, "2024-11-18"), (1, "2024-11-23"), (4, "2024-12-25");
+function: print_hit_materialized_view("SELECT * FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 where dt > '2024-12-01'  order by 1, 2 limit 3;", "test_mv1", "UNION")
+function: print_hit_materialized_view("SELECT * FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 where dt > '2024-12-01' and num > 4 order by 1, 2 limit 3;", "test_mv1", "UNION")
+function: print_hit_materialized_view("SELECT * FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 where dt > '2024-11-20'  order by 1, 2 limit 3;", "test_mv1", "UNION")
+function: print_hit_materialized_view("SELECT * FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 where dt > '2024-11-20' and num > 4 order by 1, 2 limit 3;", "test_mv1", "UNION")
+function: print_hit_materialized_view("SELECT * FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 order by 1, 2 limit 3;", "test_mv1", "UNION")
+function: print_hit_materialized_view("SELECT * FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 where num > 3 order by 1, 2 limit 3;", "test_mv1", "UNION")
+function: print_hit_materialized_view("SELECT * FROM (SELECT * FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 where num > 3 UNION ALL SELECT * FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 where num > 3) t order by 1, 2 limit 3;", "test_mv1", "UNION")
+SELECT * FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 where dt > '2024-12-01'  order by 1, 2 limit 3;
+SELECT * FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 where dt > '2024-12-01' and num > 4 order by 1, 2 limit 3;
+SELECT * FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 where dt > '2024-11-20'  order by 1, 2 limit 3;
+SELECT * FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 where dt > '2024-11-20' and num > 4 order by 1, 2 limit 3;
+SELECT * FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 order by 1, 2 limit 3;
+SELECT * FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 where num > 3 order by 1, 2 limit 3;
+SELECT * FROM (SELECT * FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 where num > 3 UNION ALL SELECT * FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 where num > 3)t order by 1, 2 limit 3;
+
+-- NOTE: test mv with the single table
+DROP MATERIALIZED VIEW test_mv1;
+CREATE MATERIALIZED VIEW test_mv1 
+PARTITION BY dt 
+REFRESH DEFERRED MANUAL 
+PROPERTIES (
+  "replication_num" = "1",
+  "query_rewrite_consistency" = "loose"
+)
+AS SELECT * FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 where dt > '2024-12-01';
+
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+INSERT INTO mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 VALUES (1, "2024-11-15"), (1, "2024-11-18"), (1, "2024-11-23"), (4, "2024-12-25");
+function: print_hit_materialized_view("SELECT * FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 where dt > '2024-12-01'  order by 1, 2 limit 3;", "test_mv1", "UNION")
+function: print_hit_materialized_view("SELECT * FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 where dt > '2024-12-01' and num > 4 order by 1, 2 limit 3;", "test_mv1", "UNION")
+function: print_hit_materialized_view("SELECT * FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 where dt > '2024-11-20'  order by 1, 2 limit 3;", "test_mv1", "UNION")
+function: print_hit_materialized_view("SELECT * FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 where dt > '2024-11-20' and num > 4 order by 1, 2 limit 3;", "test_mv1", "UNION")
+function: print_hit_materialized_view("SELECT * FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 order by 1, 2 limit 3;", "test_mv1", "UNION")
+function: print_hit_materialized_view("SELECT * FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 where num > 3 order by 1, 2 limit 3;", "test_mv1", "UNION")
+function: print_hit_materialized_view("SELECT * FROM (SELECT * FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 where num > 3 UNION ALL SELECT * FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 where num > 3) t order by 1, 2 limit 3;", "test_mv1", "UNION")
+SELECT * FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 where dt > '2024-12-01'  order by 1, 2 limit 3;
+SELECT * FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 where dt > '2024-12-01' and num > 4 order by 1, 2 limit 3;
+SELECT * FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 where dt > '2024-11-20'  order by 1, 2 limit 3;
+SELECT * FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 where dt > '2024-11-20' and num > 4 order by 1, 2 limit 3;
+SELECT * FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 order by 1, 2 limit 3;
+SELECT * FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 where num > 3 order by 1, 2 limit 3;
+SELECT * FROM (SELECT * FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 where num > 3 UNION ALL SELECT * FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 where num > 3)t order by 1, 2 limit 3;
+
+DROP MATERIALIZED VIEW test_mv1;
+CREATE MATERIALIZED VIEW test_mv1 
+PARTITION BY dt 
+REFRESH DEFERRED MANUAL 
+AS SELECT dt, sum(num) as num FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 where dt > '2024-12-01' GROUP BY dt;
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+INSERT INTO mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 VALUES (1, "2024-11-15"), (4, "2024-12-25");
+function: print_hit_materialized_view("SELECT dt, sum(num) as num FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 where dt > '2024-12-01'  GROUP BY dt order by 1, 2 limit 3;", "test_mv1", "UNION")
+function: print_hit_materialized_view("SELECT dt, sum(num) as num FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 where dt >'2024-12-01' GROUP BY dt having sum(num) > 10 order by 1, 2 limit 3;", "test_mv1", "UNION")
+function: print_hit_materialized_view("SELECT dt, sum(num) as num FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 where dt > '2024-11-20'  GROUP BY dt order by 1, 2 limit 3;", "test_mv1", "UNION")
+function: print_hit_materialized_view("SELECT dt, sum(num) as num FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 where dt >'2024-11-20' GROUP BY dt having sum(num) > 10 order by 1, 2 limit 3;", "test_mv1", "UNION")
+function: print_hit_materialized_view("SELECT dt, sum(num) as num FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 GROUP BY dt order by 1, 2 limit 3;", "test_mv1", "UNION")
+function: print_hit_materialized_view("SELECT dt, sum(num) as num FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 GROUP BY dt having sum(num) > 10 order by 1, 2 limit 3;", "test_mv1", "UNION")
+function: print_hit_materialized_view("SELECT * FROM (SELECT dt, sum(num) as num FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 GROUP BY dt having sum(num) > 10 UNION ALL SELECT dt, sum(num) as num FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 GROUP BY dt) t order by 1, 2 limit 3;", "test_mv1", "UNION")
+SELECT dt, sum(num) as num FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 where dt > '2024-12-01'  GROUP BY dt order by 1, 2 limit 3;
+SELECT dt, sum(num) as num FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 where dt >'2024-12-01' GROUP BY dt having sum(num) > 10 order by 1, 2 limit 3;
+SELECT dt, sum(num) as num FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 where dt > '2024-11-20'  GROUP BY dt order by 1, 2 limit 3;
+SELECT dt, sum(num) as num FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 where dt >'2024-11-20' GROUP BY dt having sum(num) > 10 order by 1, 2 limit 3;
+SELECT dt, sum(num) as num FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 GROUP BY dt order by 1, 2 limit 3;
+SELECT dt, sum(num) as num FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 GROUP BY dt having sum(num) > 10 order by 1, 2 limit 3;
+SELECT * FROM (SELECT dt, sum(num) as num FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 GROUP BY dt having sum(num) > 10 UNION ALL SELECT dt, sum(num) as num FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 GROUP BY dt) t order by 1, 2 limit 3;
+
+DROP MATERIALIZED VIEW test_mv1;
+CREATE MATERIALIZED VIEW test_mv1 
+PARTITION BY dt 
+REFRESH DEFERRED MANUAL 
+AS SELECT t2.dt, sum(t2.num) as num FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 join mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2 on t1.dt=t2.dt where t2.dt > '2024-12-01' GROUP BY t2.dt;
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+INSERT INTO mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 VALUES (1, "2024-11-15"), (4, "2024-12-25");
+
+function: print_hit_materialized_view("SELECT t2.dt, sum(t2.num) as num FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 join mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2 on t1.dt = t2.dt where t2.dt > '2024-12-01' GROUP BY t2.dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT t2.dt, sum(t2.num) as num FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 join mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2 on t1.dt = t2.dt where t2.dt > '2024-12-01' GROUP BY t2.dt having sum(t2.num) > 10 order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT t2.dt, sum(t2.num) as num FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 join mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2 on t1.dt = t2.dt where t2.dt > '2024-11-20' GROUP BY t2.dt order by 1, 2 limit 3;", "test_mv1", "UNION")
+function: print_hit_materialized_view("SELECT t2.dt, sum(t2.num) as num FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 join mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2 on t1.dt = t2.dt where t2.dt > '2024-11-20' GROUP BY t2.dt having sum(t2.num) > 10 order by 1, 2 limit 3;", "test_mv1", "UNION")
+function: print_hit_materialized_view("SELECT t2.dt, sum(t2.num) as num FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 join mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2 on t1.dt = t2.dt GROUP BY t2.dt having sum(t2.num) > 10 order by 1, 2 limit 3;", "test_mv1", "UNION")
+function: print_hit_materialized_view("SELECT * FROM (SELECT t2.dt, sum(t2.num) as num FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 join mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2 on t1.dt = t2.dt where t2.dt > '2024-11-20' GROUP BY t2.dt having sum(t2.num) > 10 UNION ALL SELECT t2.dt, sum(t2.num) as num FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 join mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2 on t1.dt = t2.dt where t2.dt > '2024-11-20' GROUP BY t2.dt having sum(t2.num) > 10) t order by 1, 2 limit 3", "test_mv1", "UNION")
+SELECT t2.dt, sum(t2.num) as num FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 join mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2 on t1.dt = t2.dt where t2.dt > '2024-12-01' GROUP BY t2.dt order by 1, 2 limit 3;
+SELECT t2.dt, sum(t2.num) as num FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 join mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2 on t1.dt = t2.dt where t2.dt > '2024-12-01' GROUP BY t2.dt having sum(t2.num) > 10 order by 1, 2 limit 3;
+SELECT t2.dt, sum(t2.num) as num FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 join mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2 on t1.dt = t2.dt where t2.dt > '2024-11-20' GROUP BY t2.dt order by 1, 2 limit 3;
+SELECT t2.dt, sum(t2.num) as num FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 join mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2 on t1.dt = t2.dt where t2.dt > '2024-11-20' GROUP BY t2.dt having sum(t2.num) > 10 order by 1, 2 limit 3;
+SELECT t2.dt, sum(t2.num) as num FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 join mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2 on t1.dt = t2.dt GROUP BY t2.dt having sum(t2.num) > 10 order by 1, 2 limit 3;
+SELECT * FROM (SELECT t2.dt, sum(t2.num) as num FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 join mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2 on t1.dt = t2.dt where t2.dt > '2024-11-20' GROUP BY t2.dt having sum(t2.num) > 10 UNION ALL SELECT t2.dt, sum(t2.num) as num FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 join mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2 on t1.dt = t2.dt where t2.dt > '2024-11-20' GROUP BY t2.dt having sum(t2.num) > 10) t order by 1, 2 limit 3;
+
+DROP MATERIALIZED VIEW test_mv1;
+drop table mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 force;
+drop table mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2 force;
