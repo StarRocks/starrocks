@@ -357,6 +357,7 @@ public class FunctionSet {
     public static final String ARRAY_GENERATE = "array_generate";
 
     public static final String ARRAY_TO_BITMAP = "array_to_bitmap";
+    public static final String ARRAY_FLATTEN = "array_flatten";
 
     // Bit functions:
     public static final String BITAND = "bitand";

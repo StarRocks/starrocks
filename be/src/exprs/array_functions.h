@@ -196,6 +196,8 @@ public:
     DEFINE_VECTORIZED_FN(array_intersect_any_type);
 
     DEFINE_VECTORIZED_FN(array_sortby_multi);
+
+    DEFINE_VECTORIZED_FN(array_flatten);
 };
 
 } // namespace starrocks

@@ -1723,4 +1723,72 @@ StatusOr<ColumnPtr> ArrayFunctions::repeat(FunctionContext* ctx, const Columns& 
         return dest_column;
     }
 }
+
+StatusOr<ColumnPtr> ArrayFunctions::array_flatten(FunctionContext* ctx, const Columns& columns) {
+    DCHECK_EQ(1, columns.size());
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    size_t chunk_size = columns[0]->size();
+
+    // Helper function to init result array elements and offsets
+    auto build_result_array_elements_and_offsets = [](const ColumnPtr& elements_column, size_t offsets_size) {
+        DCHECK(elements_column->is_array());
+        auto [array_null, elements, offsets] = unpack_array_column(elements_column);
+        ColumnPtr result_elements = elements->clone_empty();
+        auto result_offsets = UInt32Column::create();
+        result_offsets->reserve(offsets_size);
+        result_offsets->append(0);
+        return std::make_pair(result_elements, result_offsets);
+    };
+
+    // Helper function to flatten a single array item
+    auto flatten_array_item = [](const Datum& v, ColumnPtr& result_elements, auto& result_offsets) {
+        if (!v.is_null()) {
+            const auto& items = v.get<DatumArray>();
+            for (const auto& item : items) {
+                if (!item.is_null()) {
+                    const auto& sub_items = item.get<DatumArray>();
+                    for (const auto& sub_item : sub_items) {
+                        result_elements->append_datum(sub_item);
+                    }
+                }
+            }
+        }
+        result_offsets->append(result_elements->size());
+    };
+
+    // Special handle const column
+    if (columns[0]->is_constant()) {
+        auto* const_column = down_cast<ConstColumn*>(columns[0].get());
+        ArrayColumn* const_array = down_cast<ArrayColumn*>(const_column->mutable_data_column()->get());
+
+        auto [result_elements, result_offsets] =
+                build_result_array_elements_and_offsets(const_array->elements_column(), 1);
+        Datum v = const_array->get(0);
+        flatten_array_item(v, result_elements, result_offsets);
+        return ConstColumn::create(ArrayColumn::create(result_elements, result_offsets), chunk_size);
+    }
+
+    const NullableColumn* src_nullable_column = nullptr;
+    ArrayColumn* array_column = nullptr;
+    if (columns[0]->is_nullable()) {
+        src_nullable_column = down_cast<const NullableColumn*>(columns[0].get());
+        array_column = down_cast<ArrayColumn*>(src_nullable_column->data_column().get());
+    } else {
+        array_column = down_cast<ArrayColumn*>(columns[0].get());
+    }
+
+    auto [result_elements, result_offsets] =
+            build_result_array_elements_and_offsets(array_column->elements_column(), array_column->offsets().size());
+    for (size_t i = 0; i < chunk_size; i++) {
+        Datum v = array_column->get(i);
+        flatten_array_item(v, result_elements, result_offsets);
+    }
+
+    auto result = ArrayColumn::create(result_elements, result_offsets);
+    if (src_nullable_column != nullptr) {
+        return NullableColumn::create(result, src_nullable_column->null_column());
+    }
+    return result;
+}
 } // namespace starrocks
