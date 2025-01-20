@@ -2073,7 +2073,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 if (oldEnablePersistentIndex == enablePersistentIndex
                         && persistentIndexType == oldPersistentIndexType) {
                     LOG.info(String.format("table: %s enable_persistent_index is %s persistent_index_type is %s, "
-                            +  "nothing need to do", olapTable.getName(), enablePersistentIndex, persistentIndexType));
+                            + "nothing need to do", olapTable.getName(), enablePersistentIndex, persistentIndexType));
                     return null;
                 }
                 if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE)
@@ -2131,12 +2131,47 @@ public class SchemaChangeHandler extends AlterHandler {
         return null;
     }
 
+<<<<<<< HEAD
+=======
+    public void processLakeTableDropPersistentIndex(AlterClause alterClause, Database db, OlapTable olapTable)
+            throws StarRocksException {
+        if (!olapTable.enablePersistentIndex() ||
+                olapTable.getPersistentIndexType() != TPersistentIndexType.CLOUD_NATIVE) {
+            LOG.warn(String.format("drop persistent index on table %s failed, it must be" +
+                    " cloud_native persistent index", olapTable.getName()));
+            throw new DdlException("drop persistent index only support cloud native index");
+        }
+        Set<Long> dropPindexTablets = ((DropPersistentIndexClause) alterClause).getTabletIds();
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+
+        for (Long tabletId : dropPindexTablets) {
+            try {
+                TabletMeta tabletMeta = invertedIndex.getTabletMeta(tabletId);
+                if (tabletMeta == null) {
+                    throw new DdlException(String.format("tablet %d is not exist", tabletId));
+                }
+                long partitionId = tabletMeta.getPhysicalPartitionId();
+                PhysicalPartition partition = olapTable.getPhysicalPartition(partitionId);
+                MaterializedIndex index = partition.getIndex(tabletMeta.getIndexId());
+                Tablet tablet = index.getTablet(tabletId);
+                LakeTablet lakeTablet = (LakeTablet) tablet;
+                lakeTablet.setRebuildPindexVersion(partition.getVisibleVersion());
+            } catch (Exception e) {
+                LOG.warn(String.format("drop persistent index on tablet %d failed, error: %s",
+                        tabletId, e.getMessage()));
+                throw new DdlException(String.format("drop persistent index on tablet %d failed, error: %s",
+                        tabletId, e.getMessage()));
+            }
+        }
+    }
+
+>>>>>>> 1e977bc24 ([BugFix] Fix bugs of vector index (#55123))
     public void updateTableMeta(Database db, String tableName, Map<String, String> properties,
                                 TTabletMetaType metaType)
             throws DdlException {
         List<Partition> partitions = Lists.newArrayList();
         OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(db.getFullName(), tableName);
+                .getTable(db.getFullName(), tableName);
 
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
@@ -2331,7 +2366,7 @@ public class SchemaChangeHandler extends AlterHandler {
                                              List<String> partitionNames,
                                              Map<String, String> properties) throws DdlException {
         OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(db.getFullName(), tableName);
+                .getTable(db.getFullName(), tableName);
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
         try {
@@ -2375,7 +2410,7 @@ public class SchemaChangeHandler extends AlterHandler {
         // be id -> Set<tablet id>
         Map<Long, Set<Long>> beIdToTabletId = Maps.newHashMap();
         OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(db.getFullName(), tableName);
+                .getTable(db.getFullName(), tableName);
 
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
@@ -2462,7 +2497,7 @@ public class SchemaChangeHandler extends AlterHandler {
         // be id -> <tablet id>
         Map<Long, Set<Long>> beIdToTabletSet = Maps.newHashMap();
         OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(db.getFullName(), tableName);
+                .getTable(db.getFullName(), tableName);
 
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
@@ -2679,6 +2714,16 @@ public class SchemaChangeHandler extends AlterHandler {
 
         if (newIndex.getIndexType() == IndexType.GIN && olapTable.enableReplicatedStorage()) {
             throw new SemanticException("GIN does not support replicated mode");
+        }
+
+        if (newIndex.getIndexType() == IndexType.VECTOR) {
+            Optional<Index> oldVectorIndex =
+                    newIndexes.stream().filter(index -> index.getIndexType() == IndexType.VECTOR).findFirst();
+            if (oldVectorIndex.isPresent()) {
+                throw new SemanticException(
+                        String.format("At most one vector index is allowed for a table, but there is already a vector index [%s]",
+                                oldVectorIndex.get().getIndexName()));
+            }
         }
 
         List<Index> existedIndexes = olapTable.getIndexes();
