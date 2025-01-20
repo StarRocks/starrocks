@@ -52,6 +52,7 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -852,12 +853,28 @@ public class MaterializedViewAnalyzer {
                 // - otherwise use range partition as before.
                 // To be compatible with old implementations, if the partition column is not a string type,
                 // still use range partition.
+<<<<<<< HEAD
                 // TODO: remove this compatibility code in the future, use list partition directly later.
                 if (partitionExprType.isStringType() && (mvPartitionByExpr instanceof SlotRef) &&
                         !(partitionRefTableExpr instanceof FunctionCallExpr)) {
                     statement.setPartitionType(PartitionType.LIST);
                 } else {
                     statement.setPartitionType(PartitionType.RANGE);
+=======
+                // NOTE: If enable_mv_list_partition_for_external_table is true, create list partition mv
+                // for all external tables. Otherwise, use original range partition instead.
+                if (Config.enable_mv_list_partition_for_external_table) {
+                    statement.setPartitionType(PartitionType.LIST);
+                } else {
+                    if (partitionExprType.isStringType() &&
+                            mvPartitionByExprs.stream().allMatch(t -> t instanceof SlotRef) &&
+                            !(partitionRefTableExpr instanceof FunctionCallExpr)) {
+                        statement.setPartitionType(PartitionType.LIST);
+                    } else {
+                        statement.setPartitionType(PartitionType.RANGE);
+                        checkRangePartitionColumnLimit(mvPartitionByExprs);
+                    }
+>>>>>>> a859197705 ([BugFix] Fix mv partition compensation for iceberg table with transform partition in range materialized view (#55151))
                 }
             }
         }
