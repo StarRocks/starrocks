@@ -25,8 +25,8 @@
 #include "storage/column_and_predicate.h"
 #include "storage/column_or_predicate.h"
 #include "storage/column_predicate.h"
-#include "storage/olap_runtime_range_pruner.h"
 #include "storage/predicate_parser.h"
+#include "storage/runtime_range_pruner.h"
 
 namespace starrocks {
 namespace detail {
@@ -222,8 +222,8 @@ struct RuntimeColumnPredicateBuilder {
 };
 } // namespace detail
 
-inline Status OlapRuntimeScanRangePruner::_update(const ColumnIdToGlobalDictMap* global_dictmaps,
-                                                  RuntimeFilterArrivedCallBack&& updater, size_t raw_read_rows) {
+inline Status RuntimeScanRangePruner::_update(const ColumnIdToGlobalDictMap* global_dictmaps,
+                                              RuntimeFilterArrivedCallBack&& updater, size_t raw_read_rows) {
     if (_arrived_runtime_filters_masks.empty()) {
         return Status::OK();
     }
@@ -251,8 +251,8 @@ inline Status OlapRuntimeScanRangePruner::_update(const ColumnIdToGlobalDictMap*
     return Status::OK();
 }
 
-inline auto OlapRuntimeScanRangePruner::_get_predicates(const ColumnIdToGlobalDictMap* global_dictmaps, size_t idx,
-                                                        ObjectPool* pool) -> StatusOr<PredicatesRawPtrs> {
+inline auto RuntimeScanRangePruner::_get_predicates(const ColumnIdToGlobalDictMap* global_dictmaps, size_t idx,
+                                                    ObjectPool* pool) -> StatusOr<PredicatesRawPtrs> {
     // convert to olap filter
     auto slot_desc = _slot_descs[idx];
     return type_dispatch_predicate<StatusOr<PredicatesRawPtrs>>(
@@ -260,7 +260,7 @@ inline auto OlapRuntimeScanRangePruner::_get_predicates(const ColumnIdToGlobalDi
             _unarrived_runtime_filters[idx], slot_desc, _driver_sequence, pool);
 }
 
-inline void OlapRuntimeScanRangePruner::_init(const UnarrivedRuntimeFilterList& params) {
+inline void RuntimeScanRangePruner::_init(const UnarrivedRuntimeFilterList& params) {
     for (size_t i = 0; i < params.slot_descs.size(); ++i) {
         if (_parser->can_pushdown(params.slot_descs[i])) {
             _unarrived_runtime_filters.emplace_back(params.unarrived_runtime_filters[i]);
