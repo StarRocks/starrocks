@@ -2075,7 +2075,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 if (oldEnablePersistentIndex == enablePersistentIndex
                         && persistentIndexType == oldPersistentIndexType) {
                     LOG.info(String.format("table: %s enable_persistent_index is %s persistent_index_type is %s, "
-                            +  "nothing need to do", olapTable.getName(), enablePersistentIndex, persistentIndexType));
+                            + "nothing need to do", olapTable.getName(), enablePersistentIndex, persistentIndexType));
                     return null;
                 }
                 if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE)
@@ -2138,7 +2138,7 @@ public class SchemaChangeHandler extends AlterHandler {
             throws DdlException {
         List<Partition> partitions = Lists.newArrayList();
         OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(db.getFullName(), tableName);
+                .getTable(db.getFullName(), tableName);
 
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
@@ -2333,7 +2333,7 @@ public class SchemaChangeHandler extends AlterHandler {
                                              List<String> partitionNames,
                                              Map<String, String> properties) throws DdlException {
         OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(db.getFullName(), tableName);
+                .getTable(db.getFullName(), tableName);
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
         try {
@@ -2377,7 +2377,7 @@ public class SchemaChangeHandler extends AlterHandler {
         // be id -> Set<tablet id>
         Map<Long, Set<Long>> beIdToTabletId = Maps.newHashMap();
         OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(db.getFullName(), tableName);
+                .getTable(db.getFullName(), tableName);
 
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
@@ -2464,7 +2464,7 @@ public class SchemaChangeHandler extends AlterHandler {
         // be id -> <tablet id>
         Map<Long, Set<Long>> beIdToTabletSet = Maps.newHashMap();
         OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(db.getFullName(), tableName);
+                .getTable(db.getFullName(), tableName);
 
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
@@ -2681,6 +2681,16 @@ public class SchemaChangeHandler extends AlterHandler {
 
         if (newIndex.getIndexType() == IndexType.GIN && olapTable.enableReplicatedStorage()) {
             throw new SemanticException("GIN does not support replicated mode");
+        }
+
+        if (newIndex.getIndexType() == IndexType.VECTOR) {
+            Optional<Index> oldVectorIndex =
+                    newIndexes.stream().filter(index -> index.getIndexType() == IndexType.VECTOR).findFirst();
+            if (oldVectorIndex.isPresent()) {
+                throw new SemanticException(
+                        String.format("At most one vector index is allowed for a table, but there is already a vector index [%s]",
+                                oldVectorIndex.get().getIndexName()));
+            }
         }
 
         List<Index> existedIndexes = olapTable.getIndexes();

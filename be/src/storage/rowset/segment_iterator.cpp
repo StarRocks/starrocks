@@ -407,7 +407,7 @@ SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, Schema schema
         _result_order = _opts.vector_search_option->result_order;
         _use_ivfpq = _opts.vector_search_option->use_ivfpq;
         _query_params = _opts.vector_search_option->query_params;
-        if (_vector_range > 0 && _use_ivfpq) {
+        if (_vector_range >= 0 && _use_ivfpq) {
             _k = _opts.vector_search_option->k * _opts.vector_search_option->pq_refine_factor *
                  _opts.vector_search_option->k_factor;
         } else {
@@ -603,7 +603,7 @@ Status SegmentIterator::_get_row_ranges_by_vector_index() {
 
     {
         SCOPED_RAW_TIMER(&_opts.stats->vector_search_timer);
-        if (_vector_range > 0) {
+        if (_vector_range >= 0) {
             st = _ann_reader->range_search(_query_view, _k, &result_ids, &result_distances, &del_id_filter,
                                            static_cast<float>(_vector_range), _result_order);
         } else {
