@@ -131,16 +131,8 @@ public class MVColumnPruner {
             if (aggregationOperator.isOpRuleBitSet(OP_MV_AGG_PRUNE_COLUMNS)) {
                 Projection newProjection = null;
                 if (aggregationOperator.getProjection() != null) {
-                    Map<ColumnRefOperator, ScalarOperator> newProjectionMap =
-                            aggregationOperator.getProjection()
-                                    .getColumnRefMap().entrySet()
-                                    .stream()
-                                    .filter(e -> requiredOutputColumns.contains(e.getKey()))
-                                    .map(e -> {
-                                        requiredOutputColumns.union(e.getValue().getUsedColumns());
-                                        return Pair.create(e.getKey(), e.getValue());
-                                    }).collect(Collectors.toMap(e -> e.first, e -> e.second));
-                    newProjection = new Projection(newProjectionMap);
+                    newProjection = aggregationOperator.getProjection();
+                    newProjection.getColumnRefMap().values().forEach(s -> requiredOutputColumns.union(s.getUsedColumns()));
                 }
                 List<ColumnRefOperator> newGroupByKeys = aggregationOperator.getGroupingKeys()
                         .stream()
@@ -186,6 +178,8 @@ public class MVColumnPruner {
             if (unionOperator.getProjection() != null) {
                 Projection projection = optExpression.getOp().getProjection();
                 projection.getColumnRefMap().values().forEach(s -> requiredOutputColumns.union(s.getUsedColumns()));
+            } else {
+                requiredOutputColumns.union(unionOperator.getOutputColumnRefOp());
             }
             List<ColumnRefOperator> unionOutputColRefs = unionOperator.getOutputColumnRefOp();
             List<Integer> newUnionOutputIdxes = Lists.newArrayList();
@@ -216,13 +210,10 @@ public class MVColumnPruner {
             List<List<ColumnRefOperator>> newChildOutputColumns = Lists.newArrayList();
             for (int childIdx = 0; childIdx < optExpression.arity(); ++childIdx) {
                 List<ColumnRefOperator> childOutputCols = unionOperator.getChildOutputColumns().get(childIdx);
-                List<ColumnRefOperator> newChildOutputCols = Lists.newArrayList();
-                newUnionOutputIdxes.stream()
+                List<ColumnRefOperator> newChildOutputCols = newUnionOutputIdxes.stream()
                         .map(idx -> childOutputCols.get(idx))
-                        .forEach(x -> {
-                            requiredOutputColumns.union(x);
-                            newChildOutputCols.add(x);
-                        });
+                        .collect(Collectors.toList());
+                requiredOutputColumns.union(newChildOutputCols);
                 newChildOutputColumns.add(newChildOutputCols);
             }
             LogicalUnionOperator newUnionOperator = new LogicalUnionOperator(newUnionOutputColRefs, newChildOutputColumns,
