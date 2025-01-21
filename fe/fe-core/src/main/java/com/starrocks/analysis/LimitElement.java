@@ -34,6 +34,7 @@
 
 package com.starrocks.analysis;
 
+import com.google.common.base.Preconditions;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -46,8 +47,8 @@ public class LimitElement implements ParseNode {
     /////////////////////////////////////////
     // BEGIN: Members that need to be reset()
 
-    private long limit;
-    private long offset;
+    private final Expr limit;
+    private final Expr offset;
 
     // END: Members that need to be reset()
     /////////////////////////////////////////
@@ -56,12 +57,8 @@ public class LimitElement implements ParseNode {
 
     public LimitElement() {
         pos = NodePosition.ZERO;
-        limit = -1;
-        offset = 0;
-    }
-
-    public LimitElement(long limit) {
-        this(0, limit, NodePosition.ZERO);
+        limit = new IntLiteral(-1);
+        offset = new IntLiteral(0);
     }
 
     public LimitElement(long offset, long limit) {
@@ -69,6 +66,12 @@ public class LimitElement implements ParseNode {
     }
 
     public LimitElement(long offset, long limit, NodePosition pos) {
+        this.pos = pos;
+        this.offset = new IntLiteral(offset);
+        this.limit = new IntLiteral(limit);
+    }
+
+    public LimitElement(Expr offset, Expr limit, NodePosition pos) {
         this.pos = pos;
         this.offset = offset;
         this.limit = limit;
@@ -90,11 +93,12 @@ public class LimitElement implements ParseNode {
      * first. If no limit was set, then -1 is returned.
      */
     public long getLimit() {
-        return limit;
+        Preconditions.checkState(limit instanceof LiteralExpr);
+        return ((LiteralExpr) limit).getLongValue();
     }
 
     public boolean hasLimit() {
-        return limit != -1;
+        return getLimit() != -1;
     }
 
     /**
@@ -102,23 +106,32 @@ public class LimitElement implements ParseNode {
      * analyze() first. If no offsetExpr exists, then 0 (the default offset) is returned.
      */
     public long getOffset() {
-        return offset;
+        Preconditions.checkState(offset instanceof LiteralExpr);
+        return ((LiteralExpr) offset).getLongValue();
     }
 
     public boolean hasOffset() {
-        return offset != 0;
+        return getOffset() != 0;
     }
 
     public String toSql() {
-        if (limit == -1) {
+        if (getLimit() == -1) {
             return "";
         }
         StringBuilder sb = new StringBuilder(" LIMIT ");
-        if (offset != 0) {
-            sb.append(offset).append(", ");
+        if (getOffset() != 0) {
+            sb.append(getOffset()).append(", ");
         }
-        sb.append("").append(limit);
+        sb.append("").append(getLimit());
         return sb.toString();
+    }
+
+    public Expr getLimitExpr() {
+        return limit;
+    }
+
+    public Expr getOffsetExpr() {
+        return offset;
     }
 
     @Override
@@ -127,11 +140,11 @@ public class LimitElement implements ParseNode {
     }
 
     public String toDigest() {
-        if (limit == -1) {
+        if (getLimit() == -1) {
             return "";
         }
         StringBuilder sb = new StringBuilder(" limit ");
-        if (offset != 0) {
+        if (getOffset() != 0) {
             sb.append(" ?, ");
         }
         sb.append("").append(" ? ");
