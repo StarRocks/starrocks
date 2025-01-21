@@ -17,9 +17,8 @@ package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Type;
-import com.starrocks.sql.optimizer.Memo;
 import com.starrocks.sql.optimizer.OptExpression;
-import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -43,7 +42,7 @@ public class MergeLimitWithSortRuleTest {
         limit.getInputs().add(sort);
 
         MergeLimitWithSortRule rule = new MergeLimitWithSortRule();
-        List<OptExpression> list = rule.transform(limit, new OptimizerContext(new Memo(), new ColumnRefFactory()));
+        List<OptExpression> list = rule.transform(limit, OptimizerFactory.mockContext(new ColumnRefFactory()));
 
         assertEquals(OperatorType.LOGICAL_TOPN, list.get(0).getOp().getOpType());
         assertEquals(2, ((LogicalTopNOperator) list.get(0).getOp()).getOffset());

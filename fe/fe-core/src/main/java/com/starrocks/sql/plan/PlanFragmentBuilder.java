@@ -240,13 +240,22 @@ public class PlanFragmentBuilder {
                                               List<ColumnRefOperator> outputColumns, ColumnRefFactory columnRefFactory,
                                               List<String> colNames,
                                               TResultSinkType resultSinkType,
-                                              boolean hasOutputFragment) {
+                                              boolean hasOutputFragment, boolean isShortCircuit) {
         UKFKConstraintsCollector.collectColumnConstraints(plan);
-        ExecPlan execPlan = new ExecPlan(connectContext, colNames, plan, outputColumns);
+        ExecPlan execPlan = new ExecPlan(connectContext, colNames, plan, outputColumns, isShortCircuit);
         createOutputFragment(new PhysicalPlanTranslator(columnRefFactory).translate(plan, execPlan), execPlan,
                 outputColumns, hasOutputFragment);
         execPlan.setPlanCount(plan.getPlanCount());
         return finalizeFragments(execPlan, resultSinkType);
+    }
+
+    public static ExecPlan createPhysicalPlan(OptExpression plan, ConnectContext connectContext,
+                                              List<ColumnRefOperator> outputColumns, ColumnRefFactory columnRefFactory,
+                                              List<String> colNames,
+                                              TResultSinkType resultSinkType,
+                                              boolean hasOutputFragment) {
+        return createPhysicalPlan(plan, connectContext, outputColumns, columnRefFactory, colNames, resultSinkType,
+                hasOutputFragment, false);
     }
 
     public static ExecPlan createPhysicalPlanForMV(ConnectContext connectContext,
@@ -257,7 +266,7 @@ public class PlanFragmentBuilder {
                                                    ColumnRefFactory columnRefFactory) throws DdlException {
         List<String> colNames = queryRelation.getColumnOutputNames();
         List<ColumnRefOperator> outputColumns = logicalPlan.getOutputColumn();
-        ExecPlan execPlan = new ExecPlan(connectContext, colNames, optExpr, outputColumns);
+        ExecPlan execPlan = new ExecPlan(connectContext, colNames, optExpr, outputColumns, false);
         PlanFragment planFragment = new PhysicalPlanTranslator(columnRefFactory).translate(optExpr, execPlan);
         // createOutputFragment(planFragment, execPlan, outputColumns, false);
         execPlan.setPlanCount(optExpr.getPlanCount());
@@ -288,7 +297,7 @@ public class PlanFragmentBuilder {
         return execPlan;
     }
 
-    public static TupleDescriptor buildTupleDesc(ExecPlan execPlan, Table table) {
+    private static TupleDescriptor buildTupleDesc(ExecPlan execPlan, Table table) {
         DescriptorTable descriptorTable = execPlan.getDescTbl();
         TupleDescriptor olapTuple = descriptorTable.createTupleDescriptor();
         for (Column column : table.getFullSchema()) {
@@ -332,7 +341,7 @@ public class PlanFragmentBuilder {
                 && !inputFragment.hashLocalBucketShuffleRightOrFullJoin(inputFragment.getPlanRoot())
                 && execPlan.getScanNodes().stream().allMatch(d -> d instanceof OlapScanNode)
                 && (execPlan.getScanNodes().stream().map(d -> ((OlapScanNode) d).getScanTabletIds().size())
-                .reduce(Integer::sum).orElse(2) <= 1)) || execPlan.getPhysicalPlan().getShortCircuit()) {
+                .reduce(Integer::sum).orElse(2) <= 1)) || execPlan.isShortCircuit()) {
             inputFragment.setOutputExprs(outputExprs);
             return;
         }
@@ -656,7 +665,7 @@ public class PlanFragmentBuilder {
 
             projectNode.setLimit(inputFragment.getPlanRoot().getLimit());
             inputFragment.setPlanRoot(projectNode);
-            inputFragment.setShortCircuit(optExpr.getShortCircuit());
+            inputFragment.setShortCircuit(context.isShortCircuit());
             return inputFragment;
         }
 
@@ -959,11 +968,11 @@ public class PlanFragmentBuilder {
                     new PlanFragment(context.getNextFragmentId(), scanNode, DataPartition.RANDOM);
             fragment.setQueryGlobalDicts(node.getGlobalDicts());
             fragment.setQueryGlobalDictExprs(getGlobalDictsExprs(node.getGlobalDictsExpr(), context));
-            fragment.setShortCircuit(optExpr.getShortCircuit());
+            fragment.setShortCircuit(context.isShortCircuit());
             context.getFragments().add(fragment);
 
             // set row store literal
-            if (optExpr.getShortCircuit()) {
+            if (context.isShortCircuit()) {
                 scanNode.computePointScanRangeLocations();
             }
             return fragment;

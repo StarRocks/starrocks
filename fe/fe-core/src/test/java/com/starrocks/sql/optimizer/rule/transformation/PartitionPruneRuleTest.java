@@ -37,9 +37,8 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.PartitionValue;
-import com.starrocks.sql.optimizer.Memo;
 import com.starrocks.sql.optimizer.OptExpression;
-import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
@@ -161,7 +160,7 @@ public class PartitionPruneRuleTest {
 
         assertNull(operator.getSelectedPartitionId());
         OptExpression optExpression =
-                rule.transform(new OptExpression(operator), new OptimizerContext(new Memo(), columnRefFactory)).get(0);
+                rule.transform(new OptExpression(operator), OptimizerFactory.mockContext(columnRefFactory)).get(0);
 
         assertEquals(3, ((LogicalOlapScanOperator) optExpression.getOp()).getSelectedPartitionId().size());
     }
@@ -282,7 +281,7 @@ public class PartitionPruneRuleTest {
 
         assertNull(operator.getSelectedPartitionId());
         OptExpression optExpression =
-                rule.transform(new OptExpression(operator), new OptimizerContext(new Memo(), columnRefFactory)).get(0);
+                rule.transform(new OptExpression(operator), OptimizerFactory.mockContext(columnRefFactory)).get(0);
 
         assertEquals(3, ((LogicalOlapScanOperator) optExpression.getOp()).getSelectedPartitionId().size());
     }
@@ -363,7 +362,7 @@ public class PartitionPruneRuleTest {
         PartitionPruneRule rule = new PartitionPruneRule();
         assertNull(operator.getSelectedPartitionId());
         OptExpression optExpression =
-                rule.transform(new OptExpression(operator), new OptimizerContext(new Memo(), columnRefFactory)).get(0);
+                rule.transform(new OptExpression(operator), OptimizerFactory.mockContext(columnRefFactory)).get(0);
 
         List<Long> selectPartitionIds = ((LogicalOlapScanOperator) optExpression.getOp()).getSelectedPartitionId();
         assertEquals(1, selectPartitionIds.size());
@@ -454,7 +453,7 @@ public class PartitionPruneRuleTest {
         PartitionPruneRule rule = new PartitionPruneRule();
         assertNull(operator.getSelectedPartitionId());
         OptExpression optExpression =
-                rule.transform(new OptExpression(operator), new OptimizerContext(new Memo(), columnRefFactory)).get(0);
+                rule.transform(new OptExpression(operator), OptimizerFactory.mockContext(columnRefFactory)).get(0);
 
         List<Long> selectPartitionIds = ((LogicalOlapScanOperator) optExpression.getOp()).getSelectedPartitionId();
         assertEquals(1, selectPartitionIds.size());

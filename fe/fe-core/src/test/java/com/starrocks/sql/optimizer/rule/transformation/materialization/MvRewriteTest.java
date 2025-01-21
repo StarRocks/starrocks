@@ -29,15 +29,13 @@ import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.schema.MSchema;
 import com.starrocks.schema.MTable;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.OptExpression;
-import com.starrocks.sql.optimizer.Optimizer;
-import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.QueryOptimizer;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
@@ -1853,12 +1851,10 @@ public class MvRewriteTest extends MVTestBase {
 
             MaterializedView mv = getMv("test", "mv_with_window");
 
-            new MockUp<Optimizer>() {
-
+            new MockUp<QueryOptimizer>() {
                 @Mock
-                public OptExpression optimize(ConnectContext connectContext, OptExpression logicOperatorTree,
-                                              PhysicalPropertySet requiredProperty, ColumnRefSet requiredColumns,
-                                              ColumnRefFactory columnRefFactory) {
+                public OptExpression optimize(OptExpression logicOperatorTree, PhysicalPropertySet requiredProperty,
+                                              ColumnRefSet requiredColumns) {
                     throw new RuntimeException("optimize failed");
                 }
             };

@@ -26,8 +26,8 @@ import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.RemoteFileOperations;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.optimizer.Memo;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
@@ -98,7 +98,7 @@ public class HiveStatisticsProviderTest {
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         columnRefFactory = new ColumnRefFactory();
-        optimizerContext = new OptimizerContext(new Memo(), columnRefFactory, connectContext);
+        optimizerContext = OptimizerFactory.mockContext(connectContext, columnRefFactory);
     }
 
     @After
