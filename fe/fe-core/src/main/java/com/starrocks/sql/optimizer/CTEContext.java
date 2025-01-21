@@ -82,6 +82,10 @@ public class CTEContext {
         this.inlineCTERatio = ratio;
     }
 
+    public void setForceInline() {
+        this.inlineCTERatio = -1;
+    }
+
     public void addCTEProduce(int cteId) {
         this.produces.add(cteId);
         cteIdSequence = Math.max(cteId, cteIdSequence);
@@ -105,10 +109,6 @@ public class CTEContext {
             return Optional.of(produceStatistics.get(cteId));
         }
         return Optional.empty();
-    }
-
-    public List<Integer> getAllCTEProduce() {
-        return produces;
     }
 
     public int getCTEConsumeNum(int cteId) {

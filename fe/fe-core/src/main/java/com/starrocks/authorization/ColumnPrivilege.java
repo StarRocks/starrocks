@@ -44,7 +44,6 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.MVTransformerContext;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
@@ -111,10 +110,7 @@ public class ColumnPrivilege {
             TransformerContext transformerContext = new TransformerContext(columnRefFactory, context, mvTransformerContext);
             logicalPlan = new RelationTransformer(transformerContext).transformWithSelectLimit(stmt.getQueryRelation());
 
-            OptimizerOptions optimizerOptions = new OptimizerOptions(OptimizerOptions.OptimizerStrategy.RULE_BASED);
-            optimizerOptions.disableRule(RuleType.GP_SINGLE_TABLE_MV_REWRITE);
-            optimizerOptions.disableRule(RuleType.GP_MULTI_TABLE_MV_REWRITE);
-            optimizerOptions.disableRule(RuleType.GP_PRUNE_EMPTY_OPERATOR);
+            OptimizerOptions optimizerOptions = new OptimizerOptions(OptimizerOptions.OptimizerStrategy.COLUMN_PRIVILEGE);
             Optimizer optimizer =
                     OptimizerFactory.create(OptimizerFactory.initContext(context, columnRefFactory, optimizerOptions));
             optimizedPlan = optimizer.optimize(logicalPlan.getRoot(),

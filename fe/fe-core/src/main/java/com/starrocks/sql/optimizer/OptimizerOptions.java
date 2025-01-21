@@ -23,6 +23,7 @@ public class OptimizerOptions {
         RULE_BASED,
         COST_BASED,
         SHORT_CIRCUIT,
+        COLUMN_PRIVILEGE,
     }
 
     private final OptimizerStrategy optimizerStrategy;
@@ -45,6 +46,10 @@ public class OptimizerOptions {
 
     public boolean isShortCircuit() {
         return optimizerStrategy.equals(OptimizerStrategy.SHORT_CIRCUIT);
+    }
+
+    public boolean isColumnPrivilege() {
+        return optimizerStrategy.equals(OptimizerStrategy.COLUMN_PRIVILEGE);
     }
 
     public void disableRule(RuleType ruleType) {
