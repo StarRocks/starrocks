@@ -834,7 +834,11 @@ public class GlobalStateMgr {
 
     public static void destroyCheckpoint() {
         if (CHECKPOINT != null) {
-            CHECKPOINT.shutdown();
+            try {
+                CHECKPOINT.shutdown();
+            } catch (Exception e) {
+                LOG.warn("exception when destroy checkpoint", e);
+            }
             CHECKPOINT = null;
         }
     }
@@ -1358,7 +1362,7 @@ public class GlobalStateMgr {
         checkpointController.start();
 
         clusterSnapshotCheckpointScheduler = new ClusterSnapshotCheckpointScheduler(checkpointController,
-                                                  StarMgrServer.getCurrentState().getCheckpointController());
+                StarMgrServer.getCurrentState().getCheckpointController());
         clusterSnapshotCheckpointScheduler.start();
 
         keyRotationDaemon.start();
