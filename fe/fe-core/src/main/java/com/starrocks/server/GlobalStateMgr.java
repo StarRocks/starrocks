@@ -1332,14 +1332,8 @@ public class GlobalStateMgr {
         // need to check the "checkpointThreadId" when running.
         checkpointThreadId = checkpointer.getId();
 
-<<<<<<< HEAD
         checkpointer.start();
         LOG.info("checkpointer thread started. thread id is {}", checkpointThreadId);
-=======
-        clusterSnapshotCheckpointScheduler = new ClusterSnapshotCheckpointScheduler(checkpointController,
-                StarMgrServer.getCurrentState().getCheckpointController());
-        clusterSnapshotCheckpointScheduler.start();
->>>>>>> 95f95158a9 ([BugFix] fix resource leak when doing checkpoint (#55270))
 
         keyRotationDaemon.start();
 
