@@ -14,6 +14,7 @@
 
 package com.starrocks.lake.snapshot;
 
+import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.common.Config;
@@ -256,18 +257,23 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
             return;
         }
 
+        List<Long> removeIds = Lists.newArrayList();
         for (Map.Entry<Long, ClusterSnapshotJob> entry : automatedSnapshotJobs.entrySet()) {
             long id = entry.getKey();
             ClusterSnapshotJob job = entry.getValue();
 
             if (job.isFinalState()) {
-                automatedSnapshotJobs.remove(id);
+                removeIds.add(id);
                 --removeCount;
             }
 
             if (removeCount == 0) {
                 break;
             }
+        }
+
+        for (Long removeId : removeIds) {
+            automatedSnapshotJobs.remove(removeId);
         }
     }
 
