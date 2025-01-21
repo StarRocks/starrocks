@@ -133,4 +133,10 @@ public class ConnectorMgr {
         }
         return memoryTrackers;
     }
+
+    public void shutdown() {
+        for (CatalogConnector cc : connectors.values()) {
+            cc.shutdown();
+        }
+    }
 }

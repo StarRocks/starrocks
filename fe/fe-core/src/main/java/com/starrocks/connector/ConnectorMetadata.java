@@ -327,5 +327,8 @@ public interface ConnectorMetadata {
     default CloudConfiguration getCloudConfiguration() {
         throw new StarRocksConnectorException("This connector doesn't support getting cloud configuration");
     }
+
+    default void shutdown() {
+    }
 }
 
