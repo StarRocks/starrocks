@@ -36,7 +36,9 @@ import java.util.List;
 
 public class Trino2SRFunctionCallTransformer extends BaseFunctionCallTransformer {
 
-    public Trino2SRFunctionCallTransformer() { super(); }
+    public Trino2SRFunctionCallTransformer() {
+        super();
+    }
 
     @Override
     public Expr convert(String fnName, List<Expr> children) {

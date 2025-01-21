@@ -28,7 +28,9 @@ import java.util.List;
 
 public class Pinot2SRFunctionCallTransformer extends BaseFunctionCallTransformer {
 
-    public Pinot2SRFunctionCallTransformer() { super(); }
+    public Pinot2SRFunctionCallTransformer() {
+        super();
+    }
 
     @Override
     public Expr convert(String fnName, List<Expr> children) {
