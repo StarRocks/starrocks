@@ -39,7 +39,7 @@ public class ClusterSnapshotJob implements Writable {
      * EXPIRED: Not the latest finished backup snapshot
      * DELETED: Not the lastest finished backup snapshot and the cluster snapshot has been deleted from remote
      */
-    public enum ClusterSnapshotJobState { INITIALIZING, SNAPSHOTING, UPLOADING, FINISHED, ERROR, EXPIRED, DELETED }
+    public enum ClusterSnapshotJobState { INITIALIZING, SNAPSHOTING, UPLOADING, FINISHED, EXPIRED, DELETED, ERROR }
 
     @SerializedName(value = "snapshot")
     private ClusterSnapshot snapshot;
@@ -128,7 +128,7 @@ public class ClusterSnapshotJob implements Writable {
         return state == ClusterSnapshotJobState.DELETED;
     }
 
-    public boolean isFinalizeState() {
+    public boolean isFinalState() {
         return state == ClusterSnapshotJobState.DELETED || state == ClusterSnapshotJobState.ERROR;
     }
 

@@ -57,7 +57,9 @@ Status SchemaClusterSnapshotJobsScanner::_fill_chunk(ChunkPtr* chunk) {
 
             TimestampValue::create_from_unixtime(info.created_time, _runtime_state->timezone_obj()),
 
-            info.finished_time != 0 ? TimestampValue::create_from_unixtime(info.finished_time, _runtime_state->timezone_obj()) : kNullDatum,
+            info.finished_time > 0
+                    ? TimestampValue::create_from_unixtime(info.finished_time, _runtime_state->timezone_obj())
+                    : kNullDatum,
 
             Slice(info.state),
             Slice(info.detail_info),
