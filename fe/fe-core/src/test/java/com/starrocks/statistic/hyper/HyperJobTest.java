@@ -211,8 +211,8 @@ public class HyperJobTest extends DistributedEnvPlanTestBase {
         List<String> sql = jobs.get(1).buildQuerySQL();
         Assert.assertEquals(1, sql.size());
 
-        assertContains(sql.get(0), "with base_cte_table as ( SELECT * FROM (SELECT *  FROM `test`.`t_struct` TABLET(1)" +
-                " SAMPLE('percent'='1')  LIMIT 200000)");
+        assertContains(sql.get(0), "with base_cte_table as ( SELECT * FROM (SELECT * FROM `test`.`t_struct` " +
+                "TABLET(1) SAMPLE('percent'='10')) t_medium_high)");
         assertContains(sql.get(0), "cast(IFNULL(SUM(CHAR_LENGTH(`c2`)) * 0/ COUNT(*), 0) as BIGINT), " +
                 "hex(hll_serialize(IFNULL(hll_raw(`c2`), hll_empty())))," +
                 " cast((COUNT(*) - COUNT(`c2`)) * 0 / COUNT(*) as BIGINT), " +
@@ -251,7 +251,7 @@ public class HyperJobTest extends DistributedEnvPlanTestBase {
 
         };
         PartitionSampler sampler = PartitionSampler.create(table, List.of(pid), Maps.newHashMap());
-        Assert.assertEquals(800000, sampler.getSampleInfo(pid).getSampleRowCount());
+        Assert.assertEquals(5550000, sampler.getSampleInfo(pid).getSampleRowCount());
     }
 
     @AfterClass
