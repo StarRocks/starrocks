@@ -129,8 +129,7 @@ public class JDBCMetaCacheTest {
 
     @Test
     public void testListDatabaseNames() {
-        try {
-            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
+        try (JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource)) {
             dbResult.beforeFirst();
             List<String> result = jdbcMetadata.listDbNames();
             List<String> expectResult = Lists.newArrayList("test");
@@ -142,8 +141,7 @@ public class JDBCMetaCacheTest {
 
     @Test
     public void testGetDb() {
-        try {
-            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
+        try (JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource)) {
             dbResult.beforeFirst();
             Database db = jdbcMetadata.getDb("test");
             Assert.assertEquals("test", db.getOriginName());
@@ -154,8 +152,7 @@ public class JDBCMetaCacheTest {
 
     @Test
     public void testListTableNames() {
-        try {
-            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
+        try (JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource)) {
             List<String> result = jdbcMetadata.listTableNames("test");
             List<String> expectResult = Lists.newArrayList("tbl1", "tbl2", "tbl3");
             Assert.assertEquals(expectResult, result);
@@ -166,8 +163,7 @@ public class JDBCMetaCacheTest {
 
     @Test
     public void testGetTable() {
-        try {
-            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
+        try (JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource)) {
             Table table = jdbcMetadata.getTable("test", "tbl1");
             Assert.assertTrue(table instanceof JDBCTable);
             Table table2 = jdbcMetadata.getTable("test", "tbl1");

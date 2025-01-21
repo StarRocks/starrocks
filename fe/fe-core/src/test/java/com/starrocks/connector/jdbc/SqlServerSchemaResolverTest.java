@@ -110,8 +110,7 @@ public class SqlServerSchemaResolverTest {
                 minTimes = 0;
             }
         };
-        try {
-            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
+        try (JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource)) {
             List<String> result = jdbcMetadata.listDbNames();
             List<String> expectResult = Lists.newArrayList("sqlserver", "template1", "test");
             Assert.assertEquals(expectResult, result);
@@ -133,8 +132,7 @@ public class SqlServerSchemaResolverTest {
                 minTimes = 0;
             }
         };
-        try {
-            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
+        try (JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource)) {
             Database db = jdbcMetadata.getDb("test");
             Assert.assertEquals("test", db.getOriginName());
         } catch (Exception e) {
@@ -160,8 +158,7 @@ public class SqlServerSchemaResolverTest {
                 minTimes = 0;
             }
         };
-        try {
-            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
+        try (JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource)) {
             List<String> result = jdbcMetadata.listTableNames("test");
             List<String> expectResult = Lists.newArrayList("tbl1", "tbl2", "tbl3");
             Assert.assertEquals(expectResult, result);
@@ -187,8 +184,7 @@ public class SqlServerSchemaResolverTest {
                 minTimes = 0;
             }
         };
-        try {
-            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
+        try (JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource)) {
             Table table = jdbcMetadata.getTable("test", "tbl1");
             Assert.assertTrue(table instanceof JDBCTable);
             Assert.assertEquals("catalog.test.tbl1", table.getUUID());
