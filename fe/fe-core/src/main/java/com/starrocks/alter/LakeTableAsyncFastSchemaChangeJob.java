@@ -27,6 +27,7 @@ import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.lake.LakeTable;
+import com.starrocks.persist.LakeTableAsyncFastSchemaChangeJobInfo;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.TabletMetadataUpdateAgentTask;
@@ -64,6 +65,10 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
     // for deserialization
     public LakeTableAsyncFastSchemaChangeJob() {
         super(JobType.SCHEMA_CHANGE);
+    }
+
+    public LakeTableAsyncFastSchemaChangeJob(LakeTableAsyncFastSchemaChangeJobInfo jobInfo) {
+        super(jobInfo);
     }
 
     LakeTableAsyncFastSchemaChangeJob(long jobId, long dbId, long tableId, String tableName, long timeoutMs) {
@@ -152,10 +157,11 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
 
     @Override
     protected void restoreState(LakeTableAlterMetaJobBase job) {
-        this.schemaInfos = new ArrayList<>(((LakeTableAsyncFastSchemaChangeJob) job).schemaInfos);
+        List<IndexSchemaInfo> schemaInfos = ((LakeTableAsyncFastSchemaChangeJob) job).schemaInfos;
+        if (schemaInfos != null && !schemaInfos.isEmpty()) {
+            this.schemaInfos = new ArrayList<>(schemaInfos);
+        }
     }
-
-
 
     private static class IndexSchemaInfo {
         @SerializedName("indexId")
