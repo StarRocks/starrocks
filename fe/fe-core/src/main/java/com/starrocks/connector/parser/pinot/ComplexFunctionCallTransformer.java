@@ -41,118 +41,149 @@ public class ComplexFunctionCallTransformer extends BaseComplexFunctionCallTrans
 
     @Override
     public Expr transform(String functionName, Expr... args) {
+        List<Expr> argumentsList = Arrays.asList(args);
+
         if (functionName.equalsIgnoreCase("datetimeconvert")) {
-            List<Expr> argumentsList = Arrays.asList(args);
-            if (argumentsList.size() < 4 || argumentsList.size() > 5) {
-                throw new SemanticException("The datetimeconvert function must include between 4 and 5 parameters, inclusive.");
-            }
-            // DATETIMECONVERT(columnName, inputFormat, outputFormat, outputGranularity)
-            // DATETIMECONVERT(columnName, inputFormat, outputFormat, outputGranularity, timeZone)
-            // format is <time size>:<time unit>:<time format>:<pattern>, only works for time zie to be 1
-            StringLiteral outputGranularity = (StringLiteral) args[3];
-            List<String> granularity = PinotParserUtils.parseTime(outputGranularity.getValue());
-            StringLiteral outputFormat = (StringLiteral) args[2];
-            List<String> outputFormatList = PinotParserUtils.parseFormat(outputFormat.getValue());
-            String timeFormat = outputFormatList.get(2);
-
-            if (timeFormat.contains("EPOCH")) {
-                IntervalLiteral intervalLiteral = new IntervalLiteral(new IntLiteral(Integer.parseInt(granularity.get(0))),
-                        new UnitIdentifier(granularity.get(1)));
-                FunctionCallExpr timeSlice = new FunctionCallExpr(FunctionSet.TIME_SLICE,
-                        getArgumentsForTimeSlice(argumentsList.get(0),
-                                intervalLiteral.getValue(), intervalLiteral.getUnitIdentifier().getDescription().toLowerCase(),
-                                "floor"));
-
-                FunctionCallExpr timeSliceTZ = timeSlice;
-                if (argumentsList.size() == 5) {
-                    timeSliceTZ = new FunctionCallExpr(FunctionSet.CONVERT_TZ,
-                            new FunctionParams(ImmutableList.of(timeSlice, argumentsList.get(4), new StringLiteral("UTC"))));
-                }
-
-                FunctionCallExpr unixTimestamp = new FunctionCallExpr(FunctionSet.UNIX_TIMESTAMP,
-                        new FunctionParams(ImmutableList.of(timeSliceTZ)));
-                ArithmeticExpr outputTimeUnit = new ArithmeticExpr(ArithmeticExpr.Operator.MULTIPLY, unixTimestamp,
-                        new DecimalLiteral(BigDecimal.valueOf(PinotParserUtils.getMultiplier(outputFormatList.get(1)))));
-                return new FunctionCallExpr(FunctionSet.FLOOR, new FunctionParams(ImmutableList.of(outputTimeUnit)));
-
-            } else {
-                //parse the time pattern of the output
-                String[] timePattern = PinotParserUtils.parseDateFormat(outputFormatList.get(3));
-                String formatValue = PinotParserUtils.convertToStrftimeFormat(timePattern[0]);
-                String timeZone = timePattern[1] == null ? "UTC" : timePattern[1];
-                FunctionCallExpr convertTz = new FunctionCallExpr(FunctionSet.CONVERT_TZ,
-                        new FunctionParams(ImmutableList.of(argumentsList.get(0),
-                                new StringLiteral("UTC"), new StringLiteral(timeZone))));
-
-                IntervalLiteral intervalLiteral = new IntervalLiteral(new IntLiteral(Integer.parseInt(granularity.get(0))),
-                        new UnitIdentifier(granularity.get(1)));
-                FunctionCallExpr timeSlice = new FunctionCallExpr(FunctionSet.TIME_SLICE,
-                        getArgumentsForTimeSlice(convertTz,
-                                intervalLiteral.getValue(), intervalLiteral.getUnitIdentifier().getDescription().toLowerCase(),
-                                "floor"));
-
-                FunctionCallExpr timeSliceTZ = timeSlice;
-                if (argumentsList.size() == 5) {
-                    timeSliceTZ = new FunctionCallExpr(FunctionSet.CONVERT_TZ,
-                            new FunctionParams(ImmutableList.of(timeSlice, argumentsList.get(4), new StringLiteral("UTC"))));
-                }
-
-                return new FunctionCallExpr(FunctionSet.DATE_FORMAT,
-                        new FunctionParams(ImmutableList.of(timeSliceTZ, new StringLiteral(formatValue))));
-            }
+            return transformDateTimeConvert(argumentsList);
         } else if (functionName.equalsIgnoreCase("datetrunc")) {
-            if (args.length < 2 || args.length > 5) {
-                throw new SemanticException("The datetrunc function must include between 2 and 5 parameters, inclusive.");
-            }
-            // DATETRUNC(unit, timeValue)  or DATETRUNC(unit, timeValue, inputTimeUnitStr) output is milliseconds
-            // Transform to unix_timestamp(date_trunc('day',event_timestamp)) * 1000
-            // DATETRUNC(unit, timeValue, inputTimeUnitStr, timeZone) output is milliseconds
-            // Transform to unix_timestamp(convertz_tz(date_trunc('day', event_timestamp), "UTC", timeZone)) * 1000
-            // DATETRUNC(unit, timeValue, inputTimeUnitStr, timeZone, outputTimeUnitStr)
-            // Transform to unix_timestamp(convertz_tz(date_trunc('day', event_timestamp), "UTC", timeZone)),
-            // Output can be NANOSECONDS, MICROSECONDS, MILLISECONDS, SECONDS, MINUTES, HOURS, DAYS
-            if (args.length < 4) {
-                FunctionCallExpr dateTrunc = new FunctionCallExpr(FunctionSet.DATE_TRUNC,
-                        new FunctionParams(ImmutableList.of(args[0], args[1])));
-                FunctionCallExpr unixTimestamp = new FunctionCallExpr(FunctionSet.UNIX_TIMESTAMP,
-                        new FunctionParams(ImmutableList.of(dateTrunc)));
-                return new ArithmeticExpr(ArithmeticExpr.Operator.MULTIPLY, unixTimestamp,
-                        new IntLiteral(1000));
-            } else if (args.length == 4) {
-                FunctionCallExpr dateTrunc = new FunctionCallExpr(FunctionSet.DATE_TRUNC,
-                        new FunctionParams(ImmutableList.of(args[0], args[1])));
-                FunctionCallExpr convertTz = new FunctionCallExpr(FunctionSet.CONVERT_TZ,
-                        new FunctionParams(ImmutableList.of(dateTrunc, args[3],
-                            new StringLiteral("UTC"))));
-                FunctionCallExpr unixTimestamp = new FunctionCallExpr(FunctionSet.UNIX_TIMESTAMP,
-                        new FunctionParams(ImmutableList.of(convertTz)));
-                return new ArithmeticExpr(ArithmeticExpr.Operator.MULTIPLY, unixTimestamp,
-                        new IntLiteral(1000));
-            } else if (args.length == 5) {
-                FunctionCallExpr dateTrunc = new FunctionCallExpr(FunctionSet.DATE_TRUNC,
-                        new FunctionParams(ImmutableList.of(args[0], args[1])));
-                FunctionCallExpr convertTz = new FunctionCallExpr(FunctionSet.CONVERT_TZ,
-                        new FunctionParams(ImmutableList.of(dateTrunc, args[3],
-                            new StringLiteral("UTC"))));
-                FunctionCallExpr unixTimestamp = new FunctionCallExpr(FunctionSet.UNIX_TIMESTAMP,
-                        new FunctionParams(ImmutableList.of(convertTz)));
-                StringLiteral outputTimeUnitStr = (StringLiteral) args[4];
-                ArithmeticExpr outputTimeUnit = new ArithmeticExpr(ArithmeticExpr.Operator.MULTIPLY, unixTimestamp,
-                        new DecimalLiteral(BigDecimal.valueOf(PinotParserUtils.getMultiplier(outputTimeUnitStr.getStringValue()
-                        ))));
-                return new FunctionCallExpr(FunctionSet.FLOOR, new FunctionParams(ImmutableList.of(outputTimeUnit)));
-            }
+            return transformDateTrunc(argumentsList);
         } else if (functionName.equalsIgnoreCase("text_match")) {
-            List<Expr> argumentsList = Arrays.asList(args);
-            if (args.length < 2) {
-                throw new SemanticException("The text_match function must include at least 2 parameters.");
-            }
-            List<String> parsedInput = parseInputString(((StringLiteral) args[1]).getValue());
-            return buildPredicate(parsedInput, argumentsList);
+            return transformTextMatch(argumentsList);
         }
 
-
         return null;
+    }
+
+    private static Expr transformDateTimeConvert(List<Expr> args) {
+        if (args.size() < 4 || args.size() > 5) {
+            throw new SemanticException("The datetimeconvert function must include between 4 and 5 parameters, inclusive.");
+        }
+        // DATETIMECONVERT(columnName, inputFormat, outputFormat, outputGranularity)
+        // DATETIMECONVERT(columnName, inputFormat, outputFormat, outputGranularity, timeZone)
+        // format is <time size>:<time unit>:<time format>:<pattern>, only works for time zie to be 1
+        StringLiteral outputGranularity = (StringLiteral) args.get(3);
+        List<String> granularity = PinotParserUtils.parseTime(outputGranularity.getValue());
+        StringLiteral outputFormat = (StringLiteral) args.get(2);
+        List<String> outputFormatList = PinotParserUtils.parseFormat(outputFormat.getValue());
+        String timeFormat = outputFormatList.get(2);
+
+        if (timeFormat.contains("EPOCH")) {
+            return transformDateTimeConvertEpoch(args, granularity, outputFormatList);
+        } else {
+            return transformDateTimeConvertPattern(args, granularity, outputFormatList);
+        }
+    }
+
+    private static Expr transformDateTimeConvertEpoch(List<Expr> args, List<String> granularity, List<String> outputFormatList) {
+        IntervalLiteral intervalLiteral = new IntervalLiteral(new IntLiteral(Integer.parseInt(granularity.get(0))),
+                new UnitIdentifier(granularity.get(1)));
+        FunctionCallExpr timeSlice = new FunctionCallExpr(FunctionSet.TIME_SLICE,
+                getArgumentsForTimeSlice(args.get(0),
+                        intervalLiteral.getValue(), intervalLiteral.getUnitIdentifier().getDescription().toLowerCase(),
+                        "floor"));
+
+        FunctionCallExpr timeSliceTZ = timeSlice;
+        if (args.size() == 5) {
+            timeSliceTZ = new FunctionCallExpr(FunctionSet.CONVERT_TZ,
+                    new FunctionParams(ImmutableList.of(timeSlice, args.get(4), new StringLiteral("UTC"))));
+        }
+
+        FunctionCallExpr unixTimestamp = new FunctionCallExpr(FunctionSet.UNIX_TIMESTAMP,
+                new FunctionParams(ImmutableList.of(timeSliceTZ)));
+        ArithmeticExpr outputTimeUnit = new ArithmeticExpr(ArithmeticExpr.Operator.MULTIPLY, unixTimestamp,
+                new DecimalLiteral(BigDecimal.valueOf(PinotParserUtils.getMultiplier(outputFormatList.get(1)))));
+        return new FunctionCallExpr(FunctionSet.FLOOR, new FunctionParams(ImmutableList.of(outputTimeUnit)));
+    }
+
+    private static Expr transformDateTimeConvertPattern(List<Expr> args, List<String> granularity, List<String> outputFormatList) {
+        //parse the time pattern of the output
+        String[] timePattern = PinotParserUtils.parseDateFormat(outputFormatList.get(3));
+        String formatValue = PinotParserUtils.convertToStrftimeFormat(timePattern[0]);
+        String timeZone = timePattern[1] == null ? "UTC" : timePattern[1];
+        FunctionCallExpr convertTz = new FunctionCallExpr(FunctionSet.CONVERT_TZ,
+                new FunctionParams(ImmutableList.of(args.get(0),
+                        new StringLiteral("UTC"), new StringLiteral(timeZone))));
+
+        IntervalLiteral intervalLiteral = new IntervalLiteral(new IntLiteral(Integer.parseInt(granularity.get(0))),
+                new UnitIdentifier(granularity.get(1)));
+        FunctionCallExpr timeSlice = new FunctionCallExpr(FunctionSet.TIME_SLICE,
+                getArgumentsForTimeSlice(convertTz,
+                        intervalLiteral.getValue(), intervalLiteral.getUnitIdentifier().getDescription().toLowerCase(),
+                        "floor"));
+
+        FunctionCallExpr timeSliceTZ = timeSlice;
+        if (args.size() == 5) {
+            timeSliceTZ = new FunctionCallExpr(FunctionSet.CONVERT_TZ,
+                    new FunctionParams(ImmutableList.of(timeSlice, args.get(4), new StringLiteral("UTC"))));
+        }
+
+        return new FunctionCallExpr(FunctionSet.DATE_FORMAT,
+                new FunctionParams(ImmutableList.of(timeSliceTZ, new StringLiteral(formatValue))));
+    }
+
+    private static Expr transformDateTrunc(List<Expr> args) {
+        if (args.size() < 2 || args.size() > 5) {
+            throw new SemanticException("The datetrunc function must include between 2 and 5 parameters, inclusive.");
+        }
+        // DATETRUNC(unit, timeValue)  or DATETRUNC(unit, timeValue, inputTimeUnitStr) output is milliseconds
+        // Transform to unix_timestamp(date_trunc('day',event_timestamp)) * 1000
+        // DATETRUNC(unit, timeValue, inputTimeUnitStr, timeZone) output is milliseconds
+        // Transform to unix_timestamp(convertz_tz(date_trunc('day', event_timestamp), "UTC", timeZone)) * 1000
+        // DATETRUNC(unit, timeValue, inputTimeUnitStr, timeZone, outputTimeUnitStr)
+        // Transform to unix_timestamp(convertz_tz(date_trunc('day', event_timestamp), "UTC", timeZone)),
+        // Output can be NANOSECONDS, MICROSECONDS, MILLISECONDS, SECONDS, MINUTES, HOURS, DAYS
+        if (args.size() < 4) {
+            return transformDateTruncBasic(args);
+        } else if (args.size() == 4) {
+            return transformDateTruncWithTimeZone(args);
+        } else if (args.size() == 5) {
+            return transformDateTruncWithOutputTimeUnit(args);
+        }
+        return null;
+    }
+
+    private static Expr transformDateTruncBasic(List<Expr> args) {
+        FunctionCallExpr dateTrunc = new FunctionCallExpr(FunctionSet.DATE_TRUNC,
+                new FunctionParams(ImmutableList.of(args.get(0), args.get(1))));
+        FunctionCallExpr unixTimestamp = new FunctionCallExpr(FunctionSet.UNIX_TIMESTAMP,
+                new FunctionParams(ImmutableList.of(dateTrunc)));
+        return new ArithmeticExpr(ArithmeticExpr.Operator.MULTIPLY, unixTimestamp,
+                new IntLiteral(1000));
+    }
+
+    private static Expr transformDateTruncWithTimeZone(List<Expr> args) {
+        FunctionCallExpr dateTrunc = new FunctionCallExpr(FunctionSet.DATE_TRUNC,
+                new FunctionParams(ImmutableList.of(args.get(0), args.get(1))));
+        FunctionCallExpr convertTz = new FunctionCallExpr(FunctionSet.CONVERT_TZ,
+                new FunctionParams(ImmutableList.of(dateTrunc, args.get(3),
+                        new StringLiteral("UTC"))));
+        FunctionCallExpr unixTimestamp = new FunctionCallExpr(FunctionSet.UNIX_TIMESTAMP,
+                new FunctionParams(ImmutableList.of(convertTz)));
+        return new ArithmeticExpr(ArithmeticExpr.Operator.MULTIPLY, unixTimestamp,
+                new IntLiteral(1000));
+    }
+
+    private static Expr transformDateTruncWithOutputTimeUnit(List<Expr> args) {
+        FunctionCallExpr dateTrunc = new FunctionCallExpr(FunctionSet.DATE_TRUNC,
+                new FunctionParams(ImmutableList.of(args.get(0), args.get(1))));
+        FunctionCallExpr convertTz = new FunctionCallExpr(FunctionSet.CONVERT_TZ,
+                new FunctionParams(ImmutableList.of(dateTrunc, args.get(3),
+                        new StringLiteral("UTC"))));
+        FunctionCallExpr unixTimestamp = new FunctionCallExpr(FunctionSet.UNIX_TIMESTAMP,
+                new FunctionParams(ImmutableList.of(convertTz)));
+        StringLiteral outputTimeUnitStr = (StringLiteral) args.get(4);
+        ArithmeticExpr outputTimeUnit = new ArithmeticExpr(ArithmeticExpr.Operator.MULTIPLY, unixTimestamp,
+                new DecimalLiteral(BigDecimal.valueOf(PinotParserUtils.getMultiplier(outputTimeUnitStr.getStringValue()
+                ))));
+        return new FunctionCallExpr(FunctionSet.FLOOR, new FunctionParams(ImmutableList.of(outputTimeUnit)));
+    }
+
+    private static Expr transformTextMatch(List<Expr> args) {
+        if (args.size() < 2) {
+            throw new SemanticException("The text_match function must include at least 2 parameters.");
+        }
+        List<String> parsedInput = parseInputString(((StringLiteral) args.get(1)).getValue());
+        return buildPredicate(parsedInput, args);
     }
 
     public static Expr buildPredicate(List<String> parsedList, List<Expr> argumentsList) {
