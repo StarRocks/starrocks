@@ -355,5 +355,8 @@ public interface ConnectorMetadata {
                                            ScalarOperator predicate, FileContent fileContent) {
         throw new StarRocksConnectorException("This connector doesn't support getting delete files");
     }
+
+    default void shutdown() {
+    }
 }
 

@@ -103,4 +103,11 @@ public class JDBCConnector implements Connector {
         }
         return metadata;
     }
+
+    @Override
+    public void shutdown() {
+        if (metadata != null) {
+            metadata.shutdown();
+        }
+    }
 }

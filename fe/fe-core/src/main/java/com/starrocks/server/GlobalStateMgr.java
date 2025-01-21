@@ -872,6 +872,11 @@ public class GlobalStateMgr {
 
     public static void destroyCheckpoint() {
         if (CHECKPOINT != null) {
+            try {
+                CHECKPOINT.shutdown();
+            } catch (Exception e) {
+                LOG.warn("exception when destroy checkpoint", e);
+            }
             CHECKPOINT = null;
         }
     }
@@ -1451,7 +1456,7 @@ public class GlobalStateMgr {
         checkpointController.start();
 
         clusterSnapshotCheckpointScheduler = new ClusterSnapshotCheckpointScheduler(checkpointController,
-                                                  StarMgrServer.getCurrentState().getCheckpointController());
+                StarMgrServer.getCurrentState().getCheckpointController());
         clusterSnapshotCheckpointScheduler.start();
 
         keyRotationDaemon.start();
@@ -2821,5 +2826,10 @@ public class GlobalStateMgr {
 
     public WarehouseIdleChecker getWarehouseIdleChecker() {
         return warehouseIdleChecker;
+    }
+
+    public void shutdown() {
+        // in a single thread.
+        connectorMgr.shutdown();
     }
 }
