@@ -88,6 +88,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
+import static com.starrocks.sql.optimizer.operator.OpRuleBit.OP_MV_AGG_PRUNE_COLUMNS;
 import static com.starrocks.sql.optimizer.operator.OpRuleBit.OP_MV_UNION_REWRITE;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.deriveLogicalProperty;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.mergeRanges;
@@ -216,8 +217,11 @@ public class MvPartitionCompensator {
      * @param mvCompensation: materialized view's compensation info
      * @return:  a pair of compensated mv query scan plan(to-refreshed partitions) and its output columns
      */
-    private static Pair<OptExpression, List<ColumnRefOperator>> getMvQueryPlan(MaterializationContext mvContext,
-                                                                               MVCompensation mvCompensation) {
+    private static Pair<OptExpression, List<ColumnRefOperator>> getMVCompensationPlan(
+            MaterializationContext mvContext,
+            MVCompensation mvCompensation,
+            List<ColumnRefOperator> originalOutputColumns,
+            boolean isMVRewrite) {
         final OptExpression mvQueryPlan = mvContext.getMvExpression();
         OptExpression compensateMvQueryPlan = getMvCompensateQueryPlan(mvContext, mvCompensation, mvQueryPlan);
         if (compensateMvQueryPlan == null) {
@@ -233,8 +237,14 @@ public class MvPartitionCompensator {
         deriveLogicalProperty(newMvQueryPlan);
         List<ColumnRefOperator> orgMvQueryOutputColumnRefs = mvContext.getMvOutputColumnRefs();
         List<ColumnRefOperator> mvQueryOutputColumnRefs = duplicator.getMappedColumns(orgMvQueryOutputColumnRefs);
-        newMvQueryPlan.getOp().setOpRuleBit(OP_MV_UNION_REWRITE);
-        return Pair.create(newMvQueryPlan, mvQueryOutputColumnRefs);
+        // For mv rewrite, it's safe to prune aggregate columns in mv compensate plan, but it cannot determine
+        // required columns in the transparent rule.
+        int ruleBit = isMVRewrite ? OP_MV_UNION_REWRITE | OP_MV_AGG_PRUNE_COLUMNS : OP_MV_UNION_REWRITE;
+        newMvQueryPlan.getOp().setOpRuleBit(ruleBit);
+        // Adjust query output columns to mv's output columns to make sure the output columns are the same as
+        // expectOutputColumns which are mv scan operator's output columns.
+        return adjustOptExpressionOutputColumnType(mvContext.getQueryRefFactory(),
+                newMvQueryPlan, mvQueryOutputColumnRefs, originalOutputColumns);
     }
 
     public static OptExpression getMvCompensateQueryPlan(MaterializationContext mvContext,
@@ -266,32 +276,33 @@ public class MvPartitionCompensator {
      */
     public static OptExpression getMvTransparentPlan(MaterializationContext mvContext,
                                                      MVCompensation mvCompensation,
-                                                     List<ColumnRefOperator> originalOutputColumns) {
+                                                     List<ColumnRefOperator> originalOutputColumns,
+                                                     boolean isMVRewrite) {
         Preconditions.checkArgument(originalOutputColumns != null);
         Preconditions.checkState(mvCompensation.getState().isCompensate());
 
-        Pair<OptExpression, List<ColumnRefOperator>> mvScanPlans = getMvScanPlan(mvContext);
-        if (mvScanPlans == null) {
+        final Pair<OptExpression, List<ColumnRefOperator>> mvScanPlan = getMvScanPlan(mvContext);
+        if (mvScanPlan == null) {
             logMVRewrite(mvContext, "Get mv scan transparent plan failed");
             return null;
         }
 
-        Pair<OptExpression, List<ColumnRefOperator>> mvQueryPlans = getMvQueryPlan(mvContext, mvCompensation);
-        if (mvQueryPlans == null) {
+        Pair<OptExpression, List<ColumnRefOperator>> mvCompensationPlan = getMVCompensationPlan(mvContext,
+                mvCompensation, originalOutputColumns, isMVRewrite);
+        if (mvCompensationPlan == null) {
             logMVRewrite(mvContext, "Get mv query transparent plan failed");
             return null;
         }
-        // Adjust query output columns to mv's output columns to make sure the output columns are the same as
-        // expectOutputColumns which are mv scan operator's output columns.
-        mvQueryPlans = adjustOptExpressionOutputColumnType(mvContext.getQueryRefFactory(),
-                mvQueryPlans.first, mvQueryPlans.second, originalOutputColumns);
-
+        // NOTE: mvScanPlan and mvCompensatePlan will output all columns of the mv's defined query,
+        // it may contain more columns than the requiredColumns.
+        // For simple non-blocking operators(scan/join), it can be pruned by normal rules, but for
+        // aggregate operators, it should be handled in MVColumnPruner.
         LogicalUnionOperator unionOperator = new LogicalUnionOperator.Builder()
                 .setOutputColumnRefOp(originalOutputColumns)
-                .setChildOutputColumns(Lists.newArrayList(mvScanPlans.second, mvQueryPlans.second))
+                .setChildOutputColumns(Lists.newArrayList(mvScanPlan.second, mvCompensationPlan.second))
                 .isUnionAll(true)
                 .build();
-        OptExpression result = OptExpression.create(unionOperator, mvScanPlans.first, mvQueryPlans.first);
+        OptExpression result = OptExpression.create(unionOperator, mvScanPlan.first, mvCompensationPlan.first);
         deriveLogicalProperty(result);
         return result;
     }

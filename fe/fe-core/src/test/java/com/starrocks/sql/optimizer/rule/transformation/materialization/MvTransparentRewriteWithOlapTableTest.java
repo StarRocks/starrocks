@@ -226,9 +226,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
                         "SELECT * from mv0 where k1>0 and k2 like 'a%'",
                 };
                 for (String query : sqls) {
-                    System.out.println(query);
                     String plan = getFragmentPlan(query);
-                    System.out.println(plan);
                     PlanTestBase.assertContains(plan, ":UNION", ": mv0", ": m1");
                 }
             }
@@ -531,10 +529,10 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
                         Set<String> mvNames = mv1.getPartitionNames();
                         Assert.assertEquals("[p1]", mvNames.toString());
                         String[] sqls = {
-                                "SELECT * from mv0 where k1=1",
+                                "SELECT k1, agg1 from mv0 where k1=1",
                         };
                         for (String query : sqls) {
-                            String plan = getFragmentPlan(query);
+                            String plan = getFragmentPlan(query, TExplainLevel.VERBOSE);
                             PlanTestBase.assertContains(plan, ":UNION");
                             PlanTestBase.assertContains(plan, "mv0");
                         }
@@ -656,7 +654,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
                         Set<String> mvNames = mv1.getPartitionNames();
                         Assert.assertEquals("[p1]", mvNames.toString());
                         String[] sqls = {
-                                "SELECT * from mv0 where k1=1",
+                                "SELECT k1 from mv0 where k1=1",
                         };
                         for (String query : sqls) {
                             String plan = getFragmentPlan(query);
@@ -719,7 +717,6 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
                         for (int i = 0; i < len; i++) {
                             String query = sqls[i];
                             String plan = getFragmentPlan(query);
-                            System.out.println(plan);
                             PlanTestBase.assertContains(plan, ":UNION");
                             PlanTestBase.assertContains(plan, "mv0");
                             PlanTestBase.assertContains(plan, expects[i]);
@@ -782,7 +779,6 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
                         for (int i = 0; i < len; i++) {
                             String query = sqls[i];
                             String plan = getFragmentPlan(query);
-                            System.out.println(plan);
                             PlanTestBase.assertContains(plan, ":UNION");
                             PlanTestBase.assertContains(plan, "mv0");
                             PlanTestBase.assertContains(plan, expects[i]);
@@ -845,7 +841,6 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
                         for (int i = 0; i < len; i++) {
                             String query = sqls[i];
                             String plan = getFragmentPlan(query);
-                            System.out.println(plan);
                             PlanTestBase.assertContains(plan, ":UNION");
                             PlanTestBase.assertContains(plan, "mv0");
                             PlanTestBase.assertContains(plan, expects[i]);
@@ -895,7 +890,6 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
                         for (int i = 0; i < len; i++) {
                             String query = sqls[i];
                             String plan = getFragmentPlan(query);
-                            System.out.println(plan);
                             PlanTestBase.assertContains(plan, ":UNION");
                             PlanTestBase.assertContains(plan, "mv0");
                             PlanTestBase.assertContains(plan, expects[i]);
@@ -1026,6 +1020,151 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
                                     "  |  child exprs:\n" +
                                     "  |      [9: province, VARCHAR, false] | [11: min(age), SMALLINT, true]\n" +
                                     "  |      [14: province, VARCHAR, false] | [16: min, SMALLINT, true]");
+                        }
+                    });
+        });
+    }
+
+    @Test
+    public void testTransparentRewriteWithAggregateColumnsPrune() {
+        starRocksAssert.withTable(m1, () -> {
+            cluster.runSql("test", "insert into m1 values (1,1,1,1,1), (4,2,1,1,1);");
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv0 " +
+                            " PARTITION BY (k1) " +
+                            " DISTRIBUTED BY HASH(k1) " +
+                            " REFRESH DEFERRED MANUAL " +
+                            " PROPERTIES (\n" +
+                            " 'transparent_mv_rewrite_mode' = 'true'" +
+                            " ) " +
+                            " AS SELECT k1, k2, sum(v1) as agg1 from m1 group by k1, k2;",
+                    () -> {
+                        starRocksAssert.refreshMvPartition(String.format("REFRESH MATERIALIZED VIEW mv0 \n" +
+                                "PARTITION START ('%s') END ('%s')", "1", "3"));
+                        MaterializedView mv1 = getMv("test", "mv0");
+                        Set<String> mvNames = mv1.getPartitionNames();
+                        Assert.assertEquals("[p1]", mvNames.toString());
+
+                        {
+                            String query = "SELECT k1, agg1 from mv0 where k1=1";
+                            String plan = getFragmentPlan(query, TExplainLevel.VERBOSE);
+                            PlanTestBase.assertContains(plan, "  0:UNION\n" +
+                                    "  |  output exprs:\n" +
+                                    "  |      [1, INT, true] | [3, BIGINT, true]\n" +
+                                    "  |  child exprs:\n" +
+                                    "  |      [7: k1, INT, true] | [9: agg1, BIGINT, true]\n" +
+                                    "  |      [10: k1, INT, true] | [15: sum, BIGINT, true]");
+                            PlanTestBase.assertContains(plan, "mv0");
+                            PlanTestBase.assertContains(plan, "  4:AGGREGATE (update finalize)\n" +
+                                    "  |  aggregate: sum[([12: v1, INT, true]); args: INT; result: BIGINT; " +
+                                    "args nullable: true; result nullable: true]\n" +
+                                    "  |  group by: [10: k1, INT, true], [11: k2, VARCHAR, true]");
+                        }
+
+                        {
+                            String query = "SELECT k1, sum(v1) as agg1 from m1 group by k1;";
+                            String plan = getFragmentPlan(query, TExplainLevel.VERBOSE);
+                            PlanTestBase.assertContains(plan, "  0:UNION\n" +
+                                    "  |  output exprs:\n" +
+                                    "  |      [7, INT, true] | [9, BIGINT, true]\n" +
+                                    "  |  child exprs:\n" +
+                                    "  |      [10: k1, INT, true] | [12: agg1, BIGINT, true]\n" +
+                                    "  |      [13: k1, INT, true] | [18: sum, BIGINT, true]");
+                            PlanTestBase.assertContains(plan, "mv0");
+                            PlanTestBase.assertContains(plan, "4:AGGREGATE (update serialize)\n" +
+                                    "  |  STREAMING\n" +
+                                    "  |  aggregate: sum[([15: v1, INT, true]); args: INT; result: BIGINT; " +
+                                    "args nullable: true; result nullable: true]\n" +
+                                    "  |  group by: [13: k1, INT, true]");
+                        }
+                    });
+        });
+    }
+
+
+    @Test
+    public void testTransparentRewriteWithAggregateFilterColumnsPrune() {
+        starRocksAssert.withTable(m1, () -> {
+            cluster.runSql("test", "insert into m1 values (1,1,1,1,1), (4,2,1,1,1);");
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv0 " +
+                            " PARTITION BY (k1) " +
+                            " DISTRIBUTED BY HASH(k1) " +
+                            " REFRESH DEFERRED MANUAL " +
+                            " PROPERTIES (\n" +
+                            " 'transparent_mv_rewrite_mode' = 'true'" +
+                            " ) " +
+                            " AS SELECT k1, k2, sum(v1) as agg1 from m1 group by k1, k2 having sum(v1) > 1;",
+                    () -> {
+                        starRocksAssert.refreshMvPartition(String.format("REFRESH MATERIALIZED VIEW mv0 \n" +
+                                "PARTITION START ('%s') END ('%s')", "1", "3"));
+                        MaterializedView mv1 = getMv("test", "mv0");
+                        Set<String> mvNames = mv1.getPartitionNames();
+                        Assert.assertEquals("[p1]", mvNames.toString());
+                        {
+                            String query = "SELECT k1, sum(v1) as agg1 from m1 group by k1 having sum(v1) > 2;";
+                            String plan = getFragmentPlan(query, TExplainLevel.VERBOSE);
+                            PlanTestBase.assertContains(plan, "  0:UNION\n" +
+                                    "  |  output exprs:\n" +
+                                    "  |      [7, INT, true] | [9, BIGINT, true]\n" +
+                                    "  |  child exprs:\n" +
+                                    "  |      [10: k1, INT, true] | [12: agg1, BIGINT, true]\n" +
+                                    "  |      [13: k1, INT, true] | [18: sum, BIGINT, true]");
+                            PlanTestBase.assertContains(plan, "mv0");
+                            PlanTestBase.assertContains(plan, "4:AGGREGATE (update serialize)\n" +
+                                    "  |  STREAMING\n" +
+                                    "  |  aggregate: sum[([15: v1, INT, true]); args: INT; result: BIGINT; " +
+                                    "args nullable: true; result nullable: true]\n" +
+                                    "  |  group by: [13: k1, INT, true]");
+                        }
+
+                        {
+                            String query = "SELECT k1, sum(v1) as agg1 from m1 group by k1 having sum(v1) > 0;";
+                            String plan = getFragmentPlan(query, TExplainLevel.VERBOSE);
+                            PlanTestBase.assertContains(plan, "  0:UNION\n" +
+                                    "  |  output exprs:\n" +
+                                    "  |      [7, INT, true] | [9, BIGINT, true]\n" +
+                                    "  |  child exprs:\n" +
+                                    "  |      [10: k1, INT, true] | [12: agg1, BIGINT, true]\n" +
+                                    "  |      [13: k1, INT, true] | [18: sum, BIGINT, true]");
+                            PlanTestBase.assertContains(plan, "mv0");
+                            PlanTestBase.assertContains(plan, "4:AGGREGATE (update serialize)\n" +
+                                    "  |  STREAMING\n" +
+                                    "  |  aggregate: sum[([15: v1, INT, true]); args: INT; result: BIGINT; " +
+                                    "args nullable: true; result nullable: true]\n" +
+                                    "  |  group by: [13: k1, INT, true]");
+                        }
+                    });
+        });
+    }
+    @Test
+    public void testTransparentRewriteWithJoinColumnsPrune() {
+        starRocksAssert.withTable(m1, () -> {
+            cluster.runSql("test", "insert into m1 values (1,1,1,1,1), (4,2,1,1,1);");
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv0 " +
+                            " PARTITION BY (ak1) " +
+                            " REFRESH DEFERRED MANUAL " +
+                            " PROPERTIES (\n" +
+                            " 'transparent_mv_rewrite_mode' = 'true'" +
+                            " ) " +
+                            " AS SELECT a.k1 as ak1, a.k2 as ak2, a.v1 as av1," +
+                            "   b.k1 as bk1, b.k2 as bk2, b.v1 as bv1 " +
+                            "   from m1 a join m1 b on a.k1=b.k1;",
+                    () -> {
+                        starRocksAssert.refreshMvPartition(String.format("REFRESH MATERIALIZED VIEW mv0 \n" +
+                                "PARTITION START ('%s') END ('%s')", "1", "3"));
+                        MaterializedView mv1 = getMv("test", "mv0");
+                        Set<String> mvNames = mv1.getPartitionNames();
+                        Assert.assertEquals("[p1]", mvNames.toString());
+
+                        {
+                            String query = "SELECT a.k1, b.v1 from m1 a join m1 b on a.k1=b.k1;";
+                            String plan = getFragmentPlan(query, TExplainLevel.VERBOSE);
+                            PlanTestBase.assertContains(plan, "mv0");
+                            PlanTestBase.assertContains(plan, "  0:UNION\n" +
+                                    "  |  output exprs:\n" +
+                                    "  |      [11, INT, true] | [16, INT, true]\n" +
+                                    "  |  child exprs:\n" +
+                                    "  |      [17: ak1, INT, true] | [22: bv1, INT, true]\n" +
+                                    "  |      [23: k1, INT, true] | [30: v1, INT, true]");
                         }
                     });
         });
