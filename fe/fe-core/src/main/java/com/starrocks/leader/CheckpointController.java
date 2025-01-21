@@ -132,10 +132,10 @@ public class CheckpointController extends FrontendDaemon {
         init();
 
         // ignore return value in normal checkpoint controller
-        runCheckpointControllerWithIds(getImageJournalId(), getCheckpointJournalIds());
+        runCheckpointControllerWithIds(getImageJournalId(), getCheckpointJournalId());
     }
 
-    public long getCheckpointJournalIds() {
+    public long getCheckpointJournalId() {
         return journal.getFinalizedJournalId();
     }
 

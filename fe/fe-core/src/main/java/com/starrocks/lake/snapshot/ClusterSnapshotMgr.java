@@ -167,11 +167,12 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
     }
 
     public synchronized void addJob(ClusterSnapshotJob job) {
+        automatedSnapshotJobs.put(job.getId(), job);
+
         int maxSize = Math.max(Config.max_historical_automated_cluster_snapshot_jobs, 2);
         if (automatedSnapshotJobs.size() > maxSize) {
-            removeAutomatedFinalizeJobs(automatedSnapshotJobs.size() - maxSize + 1);
+            removeAutomatedFinalizeJobs(automatedSnapshotJobs.size() - maxSize);
         }
-        automatedSnapshotJobs.put(job.getId(), job);
     }
 
     public synchronized long getValidDeletionTimeMsByAutomatedSnapshot() {
@@ -224,21 +225,13 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
 
     public void resetAutomatedJobsStateForTheFirstRun() {
         resetLastUnFinishedAutomatedSnapshotJob();
-        clearFinishedAutomatedClusterSnapshotExceptLastestFinished();
+        clearFinishedAutomatedClusterSnapshotExceptLastFinished();
     }
 
-    public void clearFinishedAutomatedClusterSnapshotExceptLastestFinished() {
-        ClusterSnapshotJob lastestFinishedJob = null;
-        for (Map.Entry<Long, ClusterSnapshotJob> entry : automatedSnapshotJobs.descendingMap().entrySet()) {
-            ClusterSnapshotJob job = entry.getValue();
-            if (job.isFinished()) {
-                lastestFinishedJob = job;
-                break;
-            }
-        }
-
-        if (lastestFinishedJob != null) {
-            clearFinishedAutomatedClusterSnapshot(lastestFinishedJob.getSnapshotName());
+    public void clearFinishedAutomatedClusterSnapshotExceptLastFinished() {
+        ClusterSnapshotJob lastFinishedJob = getLastFinishedAutomatedClusterSnapshotJob();
+        if (lastFinishedJob != null) {
+            clearFinishedAutomatedClusterSnapshot(lastFinishedJob.getSnapshotName());
         }
     }
 
