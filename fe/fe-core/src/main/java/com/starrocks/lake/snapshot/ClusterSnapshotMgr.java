@@ -221,22 +221,20 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
     }
 
     public void resetAutomatedJobsStateForTheFirstRun() {
-        resetAllAutomatedFinishedJobsIntoExpiredExceptLastest();
         resetLastUnFinishedAutomatedSnapshotJob();
+        clearFinishedAutomatedClusterSnapshotExceptLastestFinished();
     }
 
-    public void resetAllAutomatedFinishedJobsIntoExpiredExceptLastest() {
-        boolean meetFirstFinished = false;
+    public void clearFinishedAutomatedClusterSnapshotExceptLastestFinished() {
+        ClusterSnapshotJob lastestFinishedJob = null;
         for (Map.Entry<Long, ClusterSnapshotJob> entry : automatedSnapshotJobs.descendingMap().entrySet()) {
             ClusterSnapshotJob job = entry.getValue();
             if (job.isFinished()) {
-                if (meetFirstFinished) {
-                    job.setState(ClusterSnapshotJobState.EXPIRED);
-                    continue;
-                }
-                meetFirstFinished = true;
+                lastestFinishedJob = job;
+                break;
             }
         }
+        clearFinishedAutomatedClusterSnapshot(lastestFinishedJob.getSnapshotName());
     }
 
     public void resetLastUnFinishedAutomatedSnapshotJob() {
