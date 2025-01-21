@@ -414,7 +414,7 @@ public class DatabaseTransactionMgrTest {
         assertTrue(currentTime > TimeUtils.timeStringToLong(txnInfo.get(8)));
         assertEquals("", txnInfo.get(9));
         assertEquals("0", txnInfo.get(10));
-        assertEquals("-1", txnInfo.get(11));
+        assertEquals("[-1]", txnInfo.get(11));
         assertEquals(String.valueOf(Config.stream_load_default_timeout_second * 1000L), txnInfo.get(12));
     }
 
