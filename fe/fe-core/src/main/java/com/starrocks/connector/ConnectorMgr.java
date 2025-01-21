@@ -108,4 +108,33 @@ public class ConnectorMgr {
         this.connectorLock.writeLock().unlock();
     }
 
+<<<<<<< HEAD
+=======
+    public Map<String, MemoryTrackable> getMemTrackers() {
+        Map<String, MemoryTrackable> memoryTrackers = new HashMap<>();
+        readLock();
+        try {
+            for (Map.Entry<String, CatalogConnector> connectorEntry : connectors.entrySet()) {
+                CatalogConnector catalogConnector = connectorEntry.getValue();
+                if (!catalogConnector.supportMemoryTrack()) {
+                    continue;
+                }
+
+                String catalogName = connectorEntry.getKey();
+                String connectorClassName = catalogConnector.normalConnectorClassName();
+                String labelName = connectorClassName + "." + catalogName;
+                memoryTrackers.put(labelName, catalogConnector);
+            }
+        } finally {
+            readUnlock();
+        }
+        return memoryTrackers;
+    }
+
+    public void shutdown() {
+        for (CatalogConnector cc : connectors.values()) {
+            cc.shutdown();
+        }
+    }
+>>>>>>> 95f95158a9 ([BugFix] fix resource leak when doing checkpoint (#55270))
 }
