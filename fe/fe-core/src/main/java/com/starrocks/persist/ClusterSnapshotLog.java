@@ -36,12 +36,12 @@ public class ClusterSnapshotLog implements Writable {
     public ClusterSnapshotLog() {}
 
     public void setAutomatedSnapshotOn(String storageVolumeName) {
-        this.type = ClusterSnapshotLogType.AUTOMATED_ON;
+        this.type = ClusterSnapshotLogType.AUTOMATED_SNAPSHOT_ON;
         this.storageVolumeName = storageVolumeName;
     }
 
     public void setAutomatedSnapshotOff() {
-        this.type = ClusterSnapshotLogType.AUTOMATED_OFF;
+        this.type = ClusterSnapshotLogType.AUTOMATED_SNAPSHOT_OFF;
     }
 
     public void setSnapshotJob(ClusterSnapshotJob job) {
