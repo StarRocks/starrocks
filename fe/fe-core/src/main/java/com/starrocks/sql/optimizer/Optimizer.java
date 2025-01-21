@@ -50,6 +50,7 @@ import com.starrocks.sql.optimizer.rule.transformation.EliminateAggRule;
 import com.starrocks.sql.optimizer.rule.transformation.EliminateConstantCTERule;
 import com.starrocks.sql.optimizer.rule.transformation.ForceCTEReuseRule;
 import com.starrocks.sql.optimizer.rule.transformation.GroupByCountDistinctRewriteRule;
+import com.starrocks.sql.optimizer.rule.transformation.HoistHeavyCostExprsUponTopnRule;
 import com.starrocks.sql.optimizer.rule.transformation.JoinLeftAsscomRule;
 import com.starrocks.sql.optimizer.rule.transformation.MaterializedViewTransparentRewriteRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeProjectWithChildRule;
@@ -554,7 +555,9 @@ public class Optimizer {
         // Limit push must be after the column prune,
         // otherwise the Node containing limit may be prune
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.MERGE_LIMIT);
+        ruleRewriteIterative(tree, rootTaskContext, new HoistHeavyCostExprsUponTopnRule());
         ruleRewriteIterative(tree, rootTaskContext, new PushDownProjectLimitRule());
+        ruleRewriteIterative(tree, rootTaskContext, new HoistHeavyCostExprsUponTopnRule());
 
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownLimitRankingWindowRule());
         rewriteGroupingSets(tree, rootTaskContext, sessionVariable);
