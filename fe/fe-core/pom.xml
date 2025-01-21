@@ -37,9 +37,15 @@ under the License.
     <properties>
         <starrocks.home>${basedir}/../../</starrocks.home>
         <fe_ut_parallel>${env.FE_UT_PARALLEL}</fe_ut_parallel>
+<<<<<<< HEAD
         <jacoco.version>0.8.7</jacoco.version>
         <iceberg.version>1.6.0</iceberg.version>
         <paimon.version>1.0.1</paimon.version>
+=======
+        <jacoco.version>0.8.8</jacoco.version>
+        <iceberg.version>1.7.1</iceberg.version>
+        <paimon.version>0.8.2</paimon.version>
+>>>>>>> b924bf631f ([Enhancement] upgrade iceberg version to 1.7.1 (#55271))
         <delta-kernel.version>4.0.0rc1</delta-kernel.version>
         <staros.version>3.3.2</staros.version>
         <python>python</python>
