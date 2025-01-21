@@ -225,13 +225,13 @@ public class ClusterSnapshotTest {
     public void testReplayClusterSnapshotLog() {
         // create atuomated snapshot request log
         ClusterSnapshotLog logCreate = new ClusterSnapshotLog();
-        logCreate.setAutomatedON(storageVolumeName);
+        logCreate.setAutomatedSnapshotOn(storageVolumeName);
         GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().replayLog(logCreate);
         Assert.assertTrue(GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().isAutomatedSnapshotOn());
 
         // drop automated snapshot request log
         ClusterSnapshotLog logDrop = new ClusterSnapshotLog();
-        logDrop.setAutomatedOFF();
+        logDrop.setAutomatedSnapshotOff();
         GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().replayLog(logDrop);
         Assert.assertTrue(!GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().isAutomatedSnapshotOn());
 

@@ -24,7 +24,7 @@ import java.io.DataInput;
 import java.io.IOException;
 
 public class ClusterSnapshotLog implements Writable {
-    public enum ClusterSnapshotLogType { NONE, AUTOMATED_ON, AUTOMATED_OFF, UPDATE_SNAPSHOT_JOB }
+    public enum ClusterSnapshotLogType { NONE, AUTOMATED_SNAPSHOT_ON, AUTOMATED_SNAPSHOT_OFF, UPDATE_SNAPSHOT_JOB }
     @SerializedName(value = "type")
     private ClusterSnapshotLogType type = ClusterSnapshotLogType.NONE;
     @SerializedName(value = "storageVolumeName")
@@ -35,12 +35,12 @@ public class ClusterSnapshotLog implements Writable {
 
     public ClusterSnapshotLog() {}
 
-    public void setAutomatedON(String storageVolumeName) {
+    public void setAutomatedSnapshotOn(String storageVolumeName) {
         this.type = ClusterSnapshotLogType.AUTOMATED_ON;
         this.storageVolumeName = storageVolumeName;
     }
 
-    public void setAutomatedOFF() {
+    public void setAutomatedSnapshotOff() {
         this.type = ClusterSnapshotLogType.AUTOMATED_OFF;
     }
 
