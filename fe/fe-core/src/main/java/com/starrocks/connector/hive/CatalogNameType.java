@@ -14,22 +14,28 @@
 
 package com.starrocks.connector.hive;
 
-public class ConnectorProcessorName {
+/**
+ * This class will be used for register background refresh in `ConnectorTableMetadataProcessor`.
+ * As the unified catalog feature is implemented, we can not use the catalog name as the key
+ * in the `cacheUpdateProcessors` map of the `ConnectorTableMetadataProcessor`.
+ * So here we introduce this class and use it as the key for that map.
+ */
+public class CatalogNameType {
 
     private final String catalogName;
-    private final String connectorName;
+    private final String catalogType;
 
-    public ConnectorProcessorName(String catalogName, String connectorName) {
+    public CatalogNameType(String catalogName, String catalogType) {
         this.catalogName = catalogName;
-        this.connectorName = connectorName;
+        this.catalogType = catalogType;
     }
 
     public String getCatalogName() {
         return this.catalogName;
     }
 
-    public String getConnectorName() {
-        return this.connectorName;
+    public String getCatalogType() {
+        return this.catalogType;
     }
 
 }

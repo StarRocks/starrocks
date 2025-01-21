@@ -20,7 +20,7 @@ import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.RemoteFileIO;
-import com.starrocks.connector.hive.ConnectorProcessorName;
+import com.starrocks.connector.hive.CatalogNameType;
 import com.starrocks.connector.hive.IHiveMetastore;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
@@ -34,7 +34,7 @@ public class HudiConnector implements Connector {
     public static final List<String> SUPPORTED_METASTORE_TYPE = Lists.newArrayList("hive", "glue", "dlf");
     private final Map<String, String> properties;
     private final String catalogName;
-    private final ConnectorProcessorName processorName;
+    private final CatalogNameType catalogNameType;
     private final HudiConnectorInternalMgr internalMgr;
     private final HudiMetadataFactory metadataFactory;
 
@@ -43,7 +43,7 @@ public class HudiConnector implements Connector {
         CloudConfiguration cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
         HdfsEnvironment hdfsEnvironment = new HdfsEnvironment(cloudConfiguration);
         this.catalogName = context.getCatalogName();
-        this.processorName = new ConnectorProcessorName(catalogName, "hudi_connector");
+        this.catalogNameType = new CatalogNameType(catalogName, "hudi");
         this.internalMgr = new HudiConnectorInternalMgr(catalogName, properties, hdfsEnvironment);
         this.metadataFactory = createMetadataFactory(hdfsEnvironment);
         onCreate();
@@ -77,6 +77,6 @@ public class HudiConnector implements Connector {
     @Override
     public void shutdown() {
         internalMgr.shutdown();
-        GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor().unRegisterCacheUpdateProcessor(processorName);
+        GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor().unRegisterCacheUpdateProcessor(catalogNameType);
     }
 }

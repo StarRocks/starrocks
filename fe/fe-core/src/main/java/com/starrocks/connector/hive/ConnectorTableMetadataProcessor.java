@@ -48,7 +48,7 @@ public class ConnectorTableMetadataProcessor extends FrontendDaemon {
 
     private final Set<BaseTableInfo> registeredTableInfos = Sets.newConcurrentHashSet();
 
-    private final Map<ConnectorProcessorName, CacheUpdateProcessor> cacheUpdateProcessors =
+    private final Map<CatalogNameType, CacheUpdateProcessor> cacheUpdateProcessors =
             new ConcurrentHashMap<>();
 
     private final ExecutorService refreshRemoteFileExecutor;
@@ -58,16 +58,16 @@ public class ConnectorTableMetadataProcessor extends FrontendDaemon {
         registeredTableInfos.add(tableInfo);
     }
 
-    public void registerCacheUpdateProcessor(ConnectorProcessorName processorName, CacheUpdateProcessor cache) {
-        LOG.info("register to update {} metadata cache from {} in the ConnectorTableMetadataProcessor",
-                processorName.getConnectorName(), processorName.getConnectorName());
-        cacheUpdateProcessors.put(processorName, cache);
+    public void registerCacheUpdateProcessor(CatalogNameType catalogNameType, CacheUpdateProcessor cache) {
+        LOG.info("register to update {}:{} metadata cache in the ConnectorTableMetadataProcessor",
+                catalogNameType.getCatalogName(), catalogNameType.getCatalogType());
+        cacheUpdateProcessors.put(catalogNameType, cache);
     }
 
-    public void unRegisterCacheUpdateProcessor(ConnectorProcessorName processorName) {
-        LOG.info("unregister to update {} metadata cache from {} in the ConnectorTableMetadataProcessor",
-                processorName.getConnectorName(), processorName.getConnectorName());
-        cacheUpdateProcessors.remove(processorName);
+    public void unRegisterCacheUpdateProcessor(CatalogNameType catalogNameType) {
+        LOG.info("unregister to update {}:{} metadata cache in the ConnectorTableMetadataProcessor",
+                catalogNameType.getCatalogName(), catalogNameType.getCatalogType());
+        cacheUpdateProcessors.remove(catalogNameType);
     }
 
     public void registerCachingIcebergCatalog(String catalogName, IcebergCatalog icebergCatalog) {
@@ -102,11 +102,11 @@ public class ConnectorTableMetadataProcessor extends FrontendDaemon {
 
     private void refreshCatalogTable() {
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
-        List<ConnectorProcessorName> processorNames = Lists.newArrayList(cacheUpdateProcessors.keySet());
-        for (ConnectorProcessorName processorName : processorNames) {
-            String catalogName = processorName.getCatalogName();
-            LOG.info("Starting to refresh tables from {} in catalog {}", processorName.getConnectorName(), catalogName);
-            CacheUpdateProcessor updateProcessor = cacheUpdateProcessors.get(processorName);
+        List<CatalogNameType> catalogNameTypes = Lists.newArrayList(cacheUpdateProcessors.keySet());
+        for (CatalogNameType catalogNameType : catalogNameTypes) {
+            String catalogName = catalogNameType.getCatalogName();
+            LOG.info("Starting to refresh tables from {}:{} metadata cache", catalogName, catalogNameType.getCatalogType());
+            CacheUpdateProcessor updateProcessor = cacheUpdateProcessors.get(catalogNameType);
             if (updateProcessor == null) {
                 LOG.error("Failed to get cacheUpdateProcessor by catalog {}.", catalogName);
                 continue;
