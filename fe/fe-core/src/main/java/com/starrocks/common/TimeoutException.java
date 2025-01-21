@@ -22,4 +22,8 @@ public class TimeoutException extends StarRocksException {
     public TimeoutException(String msg) {
         super(msg);
     }
+
+    public TimeoutException(String type, long timeout, String errMsg) {
+        super(ErrorCode.ERR_TIMEOUT, type, timeout, errMsg);
+    }
 }
