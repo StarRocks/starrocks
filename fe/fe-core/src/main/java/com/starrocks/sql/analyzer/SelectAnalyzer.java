@@ -29,6 +29,7 @@ import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.UserVariableExpr;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Type;
@@ -189,9 +190,7 @@ public class SelectAnalyzer {
             analyzeState.setOrderSourceExpressions(orderSourceExpressions);
         }
 
-        if (limitElement != null && limitElement.hasLimit()) {
-            analyzeState.setLimit(new LimitElement(limitElement.getOffset(), limitElement.getLimit()));
-        }
+        analyzeState.setLimit(analyzeLimit(limitElement, analyzeState, sourceScope));
     }
 
     private List<Expr> analyzeSelect(SelectList selectList, Relation fromRelation, boolean hasGroupByClause,
@@ -572,6 +571,40 @@ public class SelectAnalyzer {
             }
             analyzeState.setHaving(predicate);
         }
+    }
+
+    private LimitElement analyzeLimit(LimitElement limitElement, AnalyzeState analyzeState, Scope scope) {
+        if (limitElement == null) {
+            return null;
+        }
+
+        Expr limitExpr = limitElement.getLimitExpr();
+        Expr offsetExpr = limitElement.getOffsetExpr();
+        long limit;
+        long offset;
+        analyzeExpression(limitExpr, analyzeState, scope);
+        analyzeExpression(offsetExpr, analyzeState, scope);
+        if (limitExpr.isLiteral()) {
+            limit = limitElement.getLimit();
+        } else if (limitExpr instanceof UserVariableExpr &&
+                ((UserVariableExpr) limitExpr).getValue() instanceof IntLiteral) {
+            limit = ((IntLiteral) ((UserVariableExpr) limitExpr).getValue()).getLongValue();
+        } else {
+            throw new SemanticException("LIMIT clause %s must be number", limitExpr.toMySql());
+        }
+        if (limit == -1) {
+            return null;
+        }
+
+        if (offsetExpr.isLiteral()) {
+            offset = limitElement.getOffset();
+        } else if (offsetExpr instanceof UserVariableExpr &&
+                ((UserVariableExpr) offsetExpr).getValue() instanceof IntLiteral) {
+            offset = ((IntLiteral) ((UserVariableExpr) offsetExpr).getValue()).getLongValue();
+        } else {
+            throw new SemanticException("OFFSET clause %s must be number", offsetExpr.toMySql());
+        }
+        return new LimitElement(offset, limit, limitElement.getPos());
     }
 
     // If alias is same with table column name, we directly use table name.

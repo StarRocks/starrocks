@@ -5572,13 +5572,29 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitLimitElement(StarRocksParser.LimitElementContext context) {
-        if (context.limit.getText().equals("?") || (context.offset != null && context.offset.getText().equals("?"))) {
+        if (context.limit.PARAMETER() != null || (context.offset != null && context.offset.PARAMETER() != null)) {
             throw new ParsingException("using parameter(?) as limit or offset not supported");
         }
-        long limit = Long.parseLong(context.limit.getText());
-        long offset = 0;
+
+        Expr limit;
+        Expr offset = new IntLiteral(0);
+
+        if (context.limit.INTEGER_VALUE() != null) {
+            limit = new IntLiteral(Long.parseLong(context.limit.INTEGER_VALUE().getText()));
+        } else if (context.limit.userVariable() != null) {
+            limit = (UserVariableExpr) visit(context.limit.userVariable());
+        } else {
+            throw new ParsingException("unsupported invalid limit value", createPos(context.limit));
+        }
+
         if (context.offset != null) {
-            offset = Long.parseLong(context.offset.getText());
+            if (context.offset.INTEGER_VALUE() != null) {
+                offset = new IntLiteral(Long.parseLong(context.offset.INTEGER_VALUE().getText()));
+            } else if (context.offset.userVariable() != null) {
+                offset = (UserVariableExpr) visit(context.offset.userVariable());
+            } else {
+                throw new ParsingException("unsupported invalid offset value", createPos(context.offset));
+            }
         }
         return new LimitElement(offset, limit, createPos(context));
     }
