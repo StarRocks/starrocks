@@ -65,6 +65,12 @@ import org.junit.Test;
 import org.mockito.Mockito;
 
 import java.lang.reflect.Field;
+<<<<<<< HEAD
+=======
+import java.nio.file.DirectoryStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+>>>>>>> 1773164e76 ([UT] fix GlobalStateMgrTest.testReloadTables (#55284))
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -278,6 +284,7 @@ public class GlobalStateMgrTest {
         Assert.assertFalse(GlobalStateMgr.getServingState().canSkipBadReplayedJournal(
                 new JournalInconsistentException(OperationType.OP_CREATE_DB_V2, "failed")));
 
+<<<<<<< HEAD
         Config.metadata_journal_ignore_replay_failure = true;
         // when recover_on_load_journal_failed is false, the failure of recoverable operation type can be skipped.
         Assert.assertTrue(GlobalStateMgr.getServingState().canSkipBadReplayedJournal(
@@ -288,6 +295,22 @@ public class GlobalStateMgrTest {
                 new JournalInconsistentException(OperationType.OP_ADD_ANALYZE_STATUS, "failed")));
         Assert.assertFalse(GlobalStateMgr.getServingState().canSkipBadReplayedJournal(
                 new JournalInconsistentException(OperationType.OP_CREATE_DB_V2, "failed")));
+=======
+        // move image file
+        String imagePath = currentState.dumpImage();
+        Path targetPath = Path.of(Config.meta_dir, GlobalStateMgr.IMAGE_DIR, "/v2",
+                Path.of(imagePath).getFileName().toString());
+        Files.move(Path.of(imagePath), targetPath);
+        // Move all checksum files instead of a single file
+        Path checksumDir = Path.of(Config.meta_dir);
+        Path checksumTargetDir = Path.of(Config.meta_dir, GlobalStateMgr.IMAGE_DIR, "/v2");
+        try (DirectoryStream<Path> stream = Files.newDirectoryStream(checksumDir, "checksum.*")) {
+            for (Path file : stream) {
+                Path target = checksumTargetDir.resolve(file.getFileName());
+                Files.move(file, target);
+            }
+        }
+>>>>>>> 1773164e76 ([UT] fix GlobalStateMgrTest.testReloadTables (#55284))
 
         Config.metadata_journal_ignore_replay_failure = originVal;
     }
