@@ -2160,9 +2160,15 @@ sortItem
     : expression ordering = (ASC | DESC)? (NULLS nullOrdering=(FIRST | LAST))?
     ;
 
+limitConstExpr
+    : INTEGER_VALUE
+    | PARAMETER
+    | userVariable
+    ;
+
 limitElement
-    : LIMIT limit =(INTEGER_VALUE|PARAMETER) (OFFSET offset=(INTEGER_VALUE|PARAMETER))?
-    | LIMIT offset =(INTEGER_VALUE|PARAMETER) ',' limit=(INTEGER_VALUE|PARAMETER)
+    : LIMIT limit=limitConstExpr (OFFSET offset=limitConstExpr)?
+    | LIMIT offset=limitConstExpr ',' limit=limitConstExpr
     ;
 
 querySpecification
