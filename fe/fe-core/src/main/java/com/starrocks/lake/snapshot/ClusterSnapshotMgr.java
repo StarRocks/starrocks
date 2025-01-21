@@ -167,7 +167,7 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
     public synchronized void addJob(ClusterSnapshotJob job) {
         int maxSize = Math.max(Config.max_historical_automated_cluster_snapshot_jobs, 2);
         if (automatedSnapshotJobs.size() > maxSize) {
-            removeLastestAutomatedFinalizeJob();
+            removeOldestAutomatedFinalizeJob();
         }
         automatedSnapshotJobs.put(job.getId(), job);
     }
@@ -251,9 +251,9 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
         }
     }
 
-    public void removeLastestAutomatedFinalizeJob() {
+    public void removeOldestAutomatedFinalizeJob() {
         long removeId = -1;
-        for (Map.Entry<Long, ClusterSnapshotJob> entry : automatedSnapshotJobs.descendingMap().entrySet()) {
+        for (Map.Entry<Long, ClusterSnapshotJob> entry : automatedSnapshotJobs.entrySet()) {
             long id = entry.getKey();
             ClusterSnapshotJob job = entry.getValue();
 
