@@ -95,7 +95,8 @@ public class ComplexFunctionCallTransformer extends BaseComplexFunctionCallTrans
         return new FunctionCallExpr(FunctionSet.FLOOR, new FunctionParams(ImmutableList.of(outputTimeUnit)));
     }
 
-    private static Expr transformDateTimeConvertPattern(List<Expr> args, List<String> granularity, List<String> outputFormatList) {
+    private static Expr transformDateTimeConvertPattern(List<Expr> args, List<String> granularity,
+                                                        List<String> outputFormatList) {
         //parse the time pattern of the output
         String[] timePattern = PinotParserUtils.parseDateFormat(outputFormatList.get(3));
         String formatValue = PinotParserUtils.convertToStrftimeFormat(timePattern[0]);
