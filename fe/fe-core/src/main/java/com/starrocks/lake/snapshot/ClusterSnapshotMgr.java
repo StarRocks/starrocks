@@ -194,7 +194,7 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
         return previousAutomatedSnapshotCreatedTimsMs;
     }
 
-    public synchronized boolean checkValidDeletionForTableFromAlterJob(long tableId) {
+    public synchronized boolean isTableSafeToDeleteTablet(long tableId) {
         if (!isAutomatedSnapshotOn()) {
             return true;
         }

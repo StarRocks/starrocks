@@ -334,7 +334,7 @@ public class ClusterSnapshotTest {
         localClusterSnapshotMgr.setAutomatedSnapshotOff();
 
         localClusterSnapshotMgr = new ClusterSnapshotMgr();
-        Assert.assertTrue(localClusterSnapshotMgr.checkValidDeletionForTableFromAlterJob(10));
+        Assert.assertTrue(localClusterSnapshotMgr.isTableSafeToDeleteTablet(10));
         AlterJobV2 alterjob1 = new SchemaChangeJobV2(1, 2, 10, "table1", 100000);
         AlterJobV2 alterjob2 = new SchemaChangeJobV2(2, 2, 11, "table2", 100000);
         alterjob1.setJobState(AlterJobV2.JobState.FINISHED);
@@ -361,19 +361,19 @@ public class ClusterSnapshotTest {
         };
 
         localClusterSnapshotMgr.setAutomatedSnapshotOn(storageVolumeName);
-        Assert.assertTrue(!localClusterSnapshotMgr.checkValidDeletionForTableFromAlterJob(10));
-        Assert.assertTrue(!localClusterSnapshotMgr.checkValidDeletionForTableFromAlterJob(11));
+        Assert.assertTrue(!localClusterSnapshotMgr.isTableSafeToDeleteTablet(10));
+        Assert.assertTrue(!localClusterSnapshotMgr.isTableSafeToDeleteTablet(11));
         ClusterSnapshotJob j1 = localClusterSnapshotMgr.createAutomatedSnapshotJob();
         j1.setState(ClusterSnapshotJobState.FINISHED);
 
-        Assert.assertTrue(!localClusterSnapshotMgr.checkValidDeletionForTableFromAlterJob(10));
-        Assert.assertTrue(!localClusterSnapshotMgr.checkValidDeletionForTableFromAlterJob(11));
+        Assert.assertTrue(!localClusterSnapshotMgr.isTableSafeToDeleteTablet(10));
+        Assert.assertTrue(!localClusterSnapshotMgr.isTableSafeToDeleteTablet(11));
 
         ClusterSnapshotJob j2 = localClusterSnapshotMgr.createAutomatedSnapshotJob();
         j2.setState(ClusterSnapshotJobState.FINISHED);
 
-        Assert.assertTrue(localClusterSnapshotMgr.checkValidDeletionForTableFromAlterJob(10));
-        Assert.assertTrue(localClusterSnapshotMgr.checkValidDeletionForTableFromAlterJob(11));
+        Assert.assertTrue(localClusterSnapshotMgr.isTableSafeToDeleteTablet(10));
+        Assert.assertTrue(localClusterSnapshotMgr.isTableSafeToDeleteTablet(11));
         localClusterSnapshotMgr.setAutomatedSnapshotOff();
     }
 }
