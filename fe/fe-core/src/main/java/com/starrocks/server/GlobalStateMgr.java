@@ -1792,8 +1792,8 @@ public class GlobalStateMgr {
                 keyMgr.save(imageWriter);
                 pipeManager.getRepo().save(imageWriter);
                 warehouseMgr.save(imageWriter);
-                clusterSnapshotMgr.save(imageWriter);
                 sqlBlackList.save(imageWriter);
+                clusterSnapshotMgr.save(imageWriter);
             } catch (SRMetaBlockException e) {
                 LOG.error("Save meta block failed ", e);
                 throw new IOException("Save meta block failed ", e);
