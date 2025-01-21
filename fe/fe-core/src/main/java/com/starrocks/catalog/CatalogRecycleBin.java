@@ -304,8 +304,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         if (originalRecycleTime == null) {
             return true;
         }
-        return originalRecycleTime < GlobalStateMgr.getCurrentState()
-                              .getClusterSnapshotMgr().getValidDeletionTimeMsByAutomatedSnapshot();
+        return GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().isDeletionSafeToExecution(originalRecycleTime);
     }
 
     private synchronized long getAdjustedRecycleTimestamp(long id) {

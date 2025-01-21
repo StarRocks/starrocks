@@ -212,6 +212,10 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
         return valid;
     }
 
+    public boolean isDeletionSafeToExecution(long deletionCreatedTimeMs) {
+        return deletionCreatedTimeMs < getValidDeletionTimeMsByAutomatedSnapshot();
+    }
+
     public TreeMap<Long, ClusterSnapshotJob> getHistoryAutomatedSnapshotJobs() {
         return historyAutomatedSnapshotJobs;
     }
