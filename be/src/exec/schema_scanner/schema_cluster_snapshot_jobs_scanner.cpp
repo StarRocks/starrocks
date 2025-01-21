@@ -57,7 +57,7 @@ Status SchemaClusterSnapshotJobsScanner::_fill_chunk(ChunkPtr* chunk) {
 
             TimestampValue::create_from_unixtime(info.created_time, _runtime_state->timezone_obj()),
 
-            TimestampValue::create_from_unixtime(info.finished_time, _runtime_state->timezone_obj()),
+            info.finished_time != 0 ? TimestampValue::create_from_unixtime(info.finished_time, _runtime_state->timezone_obj()) : kNullDatum,
 
             Slice(info.state),
             Slice(info.detail_info),
@@ -67,13 +67,7 @@ Status SchemaClusterSnapshotJobsScanner::_fill_chunk(ChunkPtr* chunk) {
 
     for (const auto& [slot_id, index] : slot_id_map) {
         Column* column = (*chunk)->get_column_by_slot_id(slot_id).get();
-
-        // finished time
-        if (slot_id == 4 && info.finished_time == 0) {
-            column->append_nulls(1);
-        } else {
-            column->append_datum(datum_array[slot_id - 1]);
-        }
+        column->append_datum(datum_array[slot_id - 1]);
     }
     _index++;
     return {};
