@@ -48,7 +48,6 @@ public class ClusterSnapshotCheckpointScheduler extends FrontendDaemon {
             return;
         }
 
-
         // skip first run when the scheduler start
         if (firstRun) {
             GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().resetAutomatedJobsStateForTheFirstRun();
