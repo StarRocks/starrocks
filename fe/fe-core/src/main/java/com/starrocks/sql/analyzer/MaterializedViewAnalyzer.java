@@ -96,6 +96,8 @@ import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
+import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
@@ -457,14 +459,13 @@ public class MaterializedViewAnalyzer {
                 // Build logical plan for view query
                 OptExprBuilder optExprBuilder = logicalPlan.getRootBuilder();
                 logicalPlan = new LogicalPlan(optExprBuilder, outputColumns, logicalPlan.getCorrelation());
-                Optimizer optimizer = new Optimizer();
+                OptimizerContext optimizerContext = OptimizerFactory.initContext(ctx, columnRefFactory);
+                Optimizer optimizer = OptimizerFactory.create(optimizerContext);
                 PhysicalPropertySet requiredPropertySet = PhysicalPropertySet.EMPTY;
                 OptExpression optimizedPlan = optimizer.optimize(
-                        ctx,
                         logicalPlan.getRoot(),
                         requiredPropertySet,
-                        new ColumnRefSet(logicalPlan.getOutputColumn()),
-                        columnRefFactory);
+                        new ColumnRefSet(logicalPlan.getOutputColumn()));
                 optimizedPlan.deriveMVProperty();
 
                 // TODO: refine rules for mv plan

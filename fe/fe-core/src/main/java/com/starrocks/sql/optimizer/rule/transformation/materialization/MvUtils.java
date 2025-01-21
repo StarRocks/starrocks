@@ -71,8 +71,9 @@ import com.starrocks.sql.optimizer.MvRewritePreprocessor;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.Optimizer;
-import com.starrocks.sql.optimizer.OptimizerConfig;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.OptimizerFactory;
+import com.starrocks.sql.optimizer.OptimizerOptions;
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -478,7 +479,7 @@ public class MvUtils {
     public static Pair<OptExpression, LogicalPlan> getRuleOptimizedLogicalPlan(StatementBase mvStmt,
                                                                                ColumnRefFactory columnRefFactory,
                                                                                ConnectContext connectContext,
-                                                                               OptimizerConfig optimizerConfig,
+                                                                               OptimizerOptions optimizerOptions,
                                                                                boolean inlineView) {
         Preconditions.checkState(mvStmt instanceof QueryStatement);
         Analyzer.analyze(mvStmt, connectContext);
@@ -486,13 +487,13 @@ public class MvUtils {
         TransformerContext transformerContext =
                 new TransformerContext(columnRefFactory, connectContext, inlineView, null);
         LogicalPlan logicalPlan = new RelationTransformer(transformerContext).transform(query);
-        Optimizer optimizer = new Optimizer(optimizerConfig);
+        Optimizer optimizer =
+                OptimizerFactory.create(
+                        OptimizerFactory.initContext(connectContext, columnRefFactory, optimizerOptions));
         OptExpression optimizedPlan = optimizer.optimize(
-                connectContext,
                 logicalPlan.getRoot(),
                 new PhysicalPropertySet(),
-                new ColumnRefSet(logicalPlan.getOutputColumn()),
-                columnRefFactory);
+                new ColumnRefSet(logicalPlan.getOutputColumn()));
         return Pair.create(optimizedPlan, logicalPlan);
     }
 
@@ -1569,12 +1570,13 @@ public class MvUtils {
                                                  ConnectContext connectContext,
                                                  ColumnRefSet requiredColumns,
                                                  ColumnRefFactory columnRefFactory) {
-        OptimizerConfig optimizerConfig = new OptimizerConfig(OptimizerConfig.OptimizerAlgorithm.RULE_BASED);
-        optimizerConfig.disableRule(RuleType.GP_SINGLE_TABLE_MV_REWRITE);
-        optimizerConfig.disableRule(RuleType.GP_MULTI_TABLE_MV_REWRITE);
-        Optimizer optimizer = new Optimizer(optimizerConfig);
-        OptExpression optimizedViewPlan = optimizer.optimize(connectContext, logicalTree,
-                new PhysicalPropertySet(), requiredColumns, columnRefFactory);
+        OptimizerOptions optimizerOptions = OptimizerOptions.newRuleBaseOpt();
+        optimizerOptions.disableRule(RuleType.GP_SINGLE_TABLE_MV_REWRITE);
+        optimizerOptions.disableRule(RuleType.GP_MULTI_TABLE_MV_REWRITE);
+        Optimizer optimizer = OptimizerFactory.create(
+                OptimizerFactory.initContext(connectContext, columnRefFactory, optimizerOptions));
+        OptExpression optimizedViewPlan = optimizer.optimize(logicalTree,
+                new PhysicalPropertySet(), requiredColumns);
         return optimizedViewPlan;
     }
 

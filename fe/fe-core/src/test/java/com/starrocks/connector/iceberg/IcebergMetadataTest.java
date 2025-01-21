@@ -79,8 +79,8 @@ import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.ModifyColumnClause;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.sql.ast.TableRenameClause;
-import com.starrocks.sql.optimizer.Memo;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -794,7 +794,7 @@ public class IcebergMetadataTest extends TableTestBase {
         ColumnRefOperator columnRefOperator2 = new ColumnRefOperator(4, Type.STRING, "data", true);
         colRefToColumnMetaMap.put(columnRefOperator1, new Column("id", Type.INT));
         colRefToColumnMetaMap.put(columnRefOperator2, new Column("data", Type.STRING));
-        OptimizerContext context = new OptimizerContext(new Memo(), new ColumnRefFactory());
+        OptimizerContext context = OptimizerFactory.mockContext(new ColumnRefFactory());
         Assert.assertFalse(context.getSessionVariable().enableIcebergColumnStatistics());
         Assert.assertTrue(context.getSessionVariable().enableReadIcebergPuffinNdv());
         TableVersionRange versionRange = TableVersionRange.withEnd(Optional.of(
@@ -830,7 +830,7 @@ public class IcebergMetadataTest extends TableTestBase {
         TableVersionRange versionRange = TableVersionRange.withEnd(Optional.of(
                 mockedNativeTableB.currentSnapshot().snapshotId()));
         Statistics statistics = metadata.getTableStatistics(
-                new OptimizerContext(null, null, ConnectContext.get()),
+                OptimizerFactory.mockContext(ConnectContext.get(), null),
                 icebergTable, colRefToColumnMetaMap, null, null, -1, versionRange);
         Assert.assertEquals(4.0, statistics.getOutputRowCount(), 0.001);
         Assert.assertEquals(2, statistics.getColumnStatistics().size());
@@ -940,7 +940,7 @@ public class IcebergMetadataTest extends TableTestBase {
         mockedNativeTableA.refresh();
 
         new ConnectContext().setThreadLocalInfo();
-        OptimizerContext context = new OptimizerContext(new Memo(), new ColumnRefFactory(), ConnectContext.get());
+        OptimizerContext context = OptimizerFactory.mockContext(ConnectContext.get(), new ColumnRefFactory());
         context.getSessionVariable().setEnableIcebergColumnStatistics(true);
 
         TableVersionRange version = TableVersionRange.withEnd(Optional.of(
