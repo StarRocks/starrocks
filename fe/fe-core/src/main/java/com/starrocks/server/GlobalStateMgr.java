@@ -1420,16 +1420,8 @@ public class GlobalStateMgr {
         // need to check the "checkpointThreadId" when running.
         checkpointThreadId = checkpointer.getId();
 
-<<<<<<< HEAD
         checkpointer.start();
         LOG.info("checkpointer thread started. thread id is {}", checkpointThreadId);
-=======
-        clusterSnapshotCheckpointScheduler = new ClusterSnapshotCheckpointScheduler(checkpointController,
-                StarMgrServer.getCurrentState().getCheckpointController());
-        clusterSnapshotCheckpointScheduler.start();
-
-        keyRotationDaemon.start();
->>>>>>> 95f95158a9 ([BugFix] fix resource leak when doing checkpoint (#55270))
 
         // heartbeat mgr
         heartbeatMgr.setLeader(nodeMgr.getClusterId(), nodeMgr.getToken(), epoch);
@@ -4243,20 +4235,9 @@ public class GlobalStateMgr {
     public MetaRecoveryDaemon getMetaRecoveryDaemon() {
         return metaRecoveryDaemon;
     }
-<<<<<<< HEAD
-=======
-
-    public VariableMgr getVariableMgr() {
-        return variableMgr;
-    }
-
-    public WarehouseIdleChecker getWarehouseIdleChecker() {
-        return warehouseIdleChecker;
-    }
 
     public void shutdown() {
         // in a single thread.
         connectorMgr.shutdown();
     }
->>>>>>> 95f95158a9 ([BugFix] fix resource leak when doing checkpoint (#55270))
 }
