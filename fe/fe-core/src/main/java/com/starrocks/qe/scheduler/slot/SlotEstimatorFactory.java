@@ -30,7 +30,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import static com.starrocks.sql.optimizer.Utils.computeMaxLEPower2;
+import static com.starrocks.sql.optimizer.Utils.computeMinGEPower2;
 
 public class SlotEstimatorFactory {
     public static SlotEstimator create(QueryQueueOptions opts) {
@@ -50,10 +50,11 @@ public class SlotEstimatorFactory {
     public static class MemoryBasedSlotsEstimator implements SlotEstimator {
         @Override
         public int estimateSlots(QueryQueueOptions opts, ConnectContext context, DefaultCoordinator coord) {
-            final long planMemCosts = (long) context.getAuditEventBuilder().build().planMemCosts;
-            long numSlotsPerWorker = planMemCosts / opts.v2().getNumWorkers() / opts.v2().getMemBytesPerSlot();
+            //            final long planMemCosts = (long) context.getAuditEventBuilder().build().planMemCosts;
+            long memCost = coord.getPredictedCost();
+            long numSlotsPerWorker = memCost / opts.v2().getMemBytesPerSlot();
             numSlotsPerWorker = Math.max(numSlotsPerWorker, 0);
-            numSlotsPerWorker = computeMaxLEPower2((int) numSlotsPerWorker);
+            numSlotsPerWorker = computeMinGEPower2((int) numSlotsPerWorker);
 
             long numSlots = numSlotsPerWorker * opts.v2().getNumWorkers();
             numSlots = Math.max(numSlots, 1);
