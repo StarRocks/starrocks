@@ -24,32 +24,24 @@ import java.io.DataInput;
 import java.io.IOException;
 
 public class ClusterSnapshotLog implements Writable {
-    public enum ClusterSnapshotLogType { NONE, CREATE_SNAPSHOT_PREFIX, DROP_SNAPSHOT, UPDATE_SNAPSHOT_JOB }
+    public enum ClusterSnapshotLogType { NONE, AUTOMATED_ON, AUTOMATED_OFF, UPDATE_SNAPSHOT_JOB }
     @SerializedName(value = "type")
     private ClusterSnapshotLogType type = ClusterSnapshotLogType.NONE;
-    // For CREATE_SNAPSHOT_PREFIX
-    @SerializedName(value = "createSnapshotNamePrefix")
-    private String createSnapshotNamePrefix = "";
     @SerializedName(value = "storageVolumeName")
     private String storageVolumeName = "";
-    // For DROP_SNAPSHOT
-    @SerializedName(value = "dropSnapshotName")
-    private String dropSnapshotName = "";
     // For UPDATE_SNAPSHOT_JOB
     @SerializedName(value = "snapshotJob")
     private ClusterSnapshotJob snapshotJob = null;
 
     public ClusterSnapshotLog() {}
 
-    public void setCreateSnapshotNamePrefix(String createSnapshotNamePrefix, String storageVolumeName) {
-        this.type = ClusterSnapshotLogType.CREATE_SNAPSHOT_PREFIX;
-        this.createSnapshotNamePrefix = createSnapshotNamePrefix;
+    public void setAutomatedON(String storageVolumeName) {
+        this.type = ClusterSnapshotLogType.AUTOMATED_ON;
         this.storageVolumeName = storageVolumeName;
     }
 
-    public void setDropSnapshot(String dropSnapshotName) {
-        this.type = ClusterSnapshotLogType.DROP_SNAPSHOT;
-        this.dropSnapshotName = dropSnapshotName;
+    public void setAutomatedOFF() {
+        this.type = ClusterSnapshotLogType.AUTOMATED_OFF;
     }
 
     public void setSnapshotJob(ClusterSnapshotJob job) {
@@ -61,16 +53,8 @@ public class ClusterSnapshotLog implements Writable {
         return type;
     }
 
-    public String getCreateSnapshotNamePrefix() {
-        return this.createSnapshotNamePrefix;
-    }
-
     public String getStorageVolumeName() {
         return this.storageVolumeName;
-    }
-
-    public String getDropSnapshotName() {
-        return this.dropSnapshotName;
     }
 
     public ClusterSnapshotJob getSnapshotJob() {
@@ -81,6 +65,5 @@ public class ClusterSnapshotLog implements Writable {
         String json = Text.readString(in);
         return GsonUtils.GSON.fromJson(json, ClusterSnapshotLog.class);
     }
-
 
 }

@@ -62,7 +62,7 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
         setAutomatedSnapshotOn(storageVolumeName);
 
         ClusterSnapshotLog log = new ClusterSnapshotLog();
-        log.setCreateSnapshotNamePrefix(AUTOMATED_NAME_PREFIX, storageVolumeName);
+        log.setAutomatedON(storageVolumeName);
         GlobalStateMgr.getCurrentState().getEditLog().logClusterSnapshotLog(log);
     }
 
@@ -81,7 +81,7 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
     // Turn off automated snapshot, use stmt for extension in future
     public void setAutomatedSnapshotOff(AdminSetAutomatedSnapshotOffStmt stmt) {
         ClusterSnapshotLog log = new ClusterSnapshotLog();
-        log.setDropSnapshot(AUTOMATED_NAME_PREFIX);
+        log.setAutomatedOFF();
         GlobalStateMgr.getCurrentState().getEditLog().logClusterSnapshotLog(log);
 
         clearFinishedAutomatedClusterSnapshot(null);
@@ -294,19 +294,13 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
     public void replayLog(ClusterSnapshotLog log) {
         ClusterSnapshotLog.ClusterSnapshotLogType logType = log.getType();
         switch (logType) {
-            case CREATE_SNAPSHOT_PREFIX: {
-                String createSnapshotNamePrefix = log.getCreateSnapshotNamePrefix();
+            case AUTOMATED_ON: {
                 String storageVolumeName = log.getStorageVolumeName();
-                if (createSnapshotNamePrefix.equals(AUTOMATED_NAME_PREFIX)) {
-                    setAutomatedSnapshotOn(storageVolumeName);
-                }
+                setAutomatedSnapshotOn(storageVolumeName);
                 break;
             }
-            case DROP_SNAPSHOT: {
-                String dropSnapshotName = log.getDropSnapshotName();
-                if (dropSnapshotName.equals(AUTOMATED_NAME_PREFIX)) {
-                    setAutomatedSnapshotOff();
-                }
+            case AUTOMATED_OFF: {
+                setAutomatedSnapshotOff();
                 break;
             }
             case UPDATE_SNAPSHOT_JOB: {
