@@ -869,6 +869,11 @@ public class GlobalStateMgr {
 
     public static void destroyCheckpoint() {
         if (CHECKPOINT != null) {
+            try {
+                CHECKPOINT.shutdown();
+            } catch (Exception e) {
+                LOG.warn("exception when destroy checkpoint", e);
+            }
             CHECKPOINT = null;
         }
     }
@@ -4367,5 +4372,10 @@ public class GlobalStateMgr {
 
     public MetaRecoveryDaemon getMetaRecoveryDaemon() {
         return metaRecoveryDaemon;
+    }
+
+    public void shutdown() {
+        // in a single thread.
+        connectorMgr.shutdown();
     }
 }

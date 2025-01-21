@@ -222,4 +222,11 @@ public class JDBCMetadata implements ConnectorMetadata {
         }
     }
 
+
+    @Override
+    public void shutdown() {
+        if (dataSource != null) {
+            dataSource.close();
+        }
+    }
 }

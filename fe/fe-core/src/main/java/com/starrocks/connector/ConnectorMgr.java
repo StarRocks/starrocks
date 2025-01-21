@@ -108,4 +108,9 @@ public class ConnectorMgr {
         this.connectorLock.writeLock().unlock();
     }
 
+    public void shutdown() {
+        for (CatalogConnector cc : connectors.values()) {
+            cc.shutdown();
+        }
+    }
 }
