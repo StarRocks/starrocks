@@ -300,16 +300,8 @@ public interface ConnectorMetadata {
     default CloudConfiguration getCloudConfiguration() {
         throw new StarRocksConnectorException("This connector doesn't support getting cloud configuration");
     }
-<<<<<<< HEAD
-=======
-
-    default Set<DeleteFile> getDeleteFiles(IcebergTable icebergTable, Long snapshotId,
-                                           ScalarOperator predicate, FileContent fileContent) {
-        throw new StarRocksConnectorException("This connector doesn't support getting delete files");
-    }
 
     default void shutdown() {
     }
->>>>>>> 95f95158a9 ([BugFix] fix resource leak when doing checkpoint (#55270))
 }
 

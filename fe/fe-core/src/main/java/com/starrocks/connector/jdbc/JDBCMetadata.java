@@ -222,22 +222,6 @@ public class JDBCMetadata implements ConnectorMetadata {
         }
     }
 
-<<<<<<< HEAD
-=======
-    @Override
-    public void refreshTable(String srDbName, Table table, List<String> partitionNames, boolean onlyCachedPartitions) {
-        JDBCTable jdbcTable = (JDBCTable) table;
-        JDBCTableName jdbcTableName = new JDBCTableName(null, jdbcTable.getCatalogDBName(), jdbcTable.getName());
-        if (!onlyCachedPartitions) {
-            tableInstanceCache.invalidate(jdbcTableName);
-        }
-        partitionNamesCache.invalidate(jdbcTableName);
-        partitionInfoCache.invalidate(jdbcTableName);
-    }
-
-    public void refreshCache(Map<String, String> properties) {
-        createMetaAsyncCacheInstances(properties);
-    }
 
     @Override
     public void shutdown() {
@@ -245,5 +229,4 @@ public class JDBCMetadata implements ConnectorMetadata {
             dataSource.close();
         }
     }
->>>>>>> 95f95158a9 ([BugFix] fix resource leak when doing checkpoint (#55270))
 }
