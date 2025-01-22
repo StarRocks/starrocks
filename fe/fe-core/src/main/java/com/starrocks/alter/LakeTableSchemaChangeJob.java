@@ -84,7 +84,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.stream.Collectors;
 import javax.validation.constraints.NotNull;
 
 public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {

@@ -119,7 +119,7 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
                     job.setState(ClusterSnapshotJobState.DELETED);
                     job.logJob();
                 }
-            } catch (StarRocksException e) {
+            } catch (UserException e) {
                 LOG.warn("Cluster Snapshot delete failed, ", e);
             }
         }
