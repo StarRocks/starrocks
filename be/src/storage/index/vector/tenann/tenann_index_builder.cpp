@@ -77,7 +77,8 @@ Status TenAnnIndexBuilderProxy::init() {
 }
 
 template <bool is_input_normalized>
-static Status valid_input_vector(const ArrayColumn& input_column, const size_t index_dim) {
+static Status valid_input_vector(const ArrayColumn& input_column, const size_t index_dim,
+                                 const uint8_t* is_element_nulls) {
     if (input_column.empty()) {
         return Status::OK();
     }
@@ -99,7 +100,10 @@ static Status valid_input_vector(const ArrayColumn& input_column, const size_t i
         if constexpr (is_input_normalized) {
             double sum = 0;
             for (int j = 0; j < input_dim; j++) {
-                sum += nums[offsets[i] + j] * nums[offsets[i] + j];
+                const size_t offset = offsets[i] + j;
+                if (!is_element_nulls[offset]) {
+                    sum += nums[offset] * nums[offset];
+                }
             }
             if (std::abs(sum - 1) > 1e-3) {
                 return Status::InvalidArgument(
@@ -119,11 +123,12 @@ Status TenAnnIndexBuilderProxy::add(const Column& array_column, const size_t off
     DCHECK(array_col.elements_column()->is_nullable());
     const auto& nullable_elements = down_cast<const NullableColumn&>(array_col.elements());
     const auto& is_element_nulls = nullable_elements.null_column_ref();
+    const uint8_t* is_element_nulls_data = is_element_nulls.raw_data();
 
     if (_is_input_normalized) {
-        RETURN_IF_ERROR(valid_input_vector<true>(array_col, _dim));
+        RETURN_IF_ERROR(valid_input_vector<true>(array_col, _dim, is_element_nulls_data));
     } else {
-        RETURN_IF_ERROR(valid_input_vector<false>(array_col, _dim));
+        RETURN_IF_ERROR(valid_input_vector<false>(array_col, _dim, is_element_nulls_data));
     }
 
     try {
@@ -133,7 +138,7 @@ Status TenAnnIndexBuilderProxy::add(const Column& array_column, const size_t off
                                                 .elem_type = tenann::kFloatType};
         std::vector<int64_t> row_ids(array_col.size());
         std::iota(row_ids.begin(), row_ids.end(), offset);
-        _index_builder->Add({vector_view}, row_ids.data(), is_element_nulls.raw_data());
+        _index_builder->Add({vector_view}, row_ids.data(), is_element_nulls_data);
     } catch (tenann::Error& e) {
         LOG(WARNING) << e.what();
         return Status::InternalError(e.what());
