@@ -514,6 +514,7 @@ set(EXEC_FILES
         ./cache/object_cache/lrucache_module_test.cpp
         ./cache/object_cache/object_cache_test.cpp
         ./util/thrift_rpc_helper_test.cpp
+        ./udf/java/java_native_method_test.cpp
         )
 
 if ("${WITH_STARCACHE}" STREQUAL "ON")
