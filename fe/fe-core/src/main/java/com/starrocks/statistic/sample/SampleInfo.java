@@ -54,7 +54,7 @@ public class SampleInfo {
         this.lowWeightTablets = null;
     }
 
-    public SampleInfo(String dbName, String tableName, double tabletSampleRatio,
+    public SampleInfo(double tabletSampleRatio,
                       long sampleRowCount, long totalRowCount,
                       List<TabletStats> highWeightTablets,
                       List<TabletStats> mediumHighWeightTablets,
