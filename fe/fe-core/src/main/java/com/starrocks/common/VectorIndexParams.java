@@ -140,7 +140,7 @@ public class VectorIndexParams {
         M_IVFPQ(VectorIndexType.IVFPQ) {
             @Override
             public void check(String value) {
-                validateInteger(value, "M_IVFPQ", 2);
+                validateInteger(value, "M_IVFPQ", 1);
             }
         };
 
