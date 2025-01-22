@@ -135,4 +135,39 @@ public class CompactionSchedulerTest {
         Assert.assertEquals(2, list.size());
         Assert.assertTrue(list.get(0).getStartTs() >= list.get(1).getStartTs());
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testCompactionTaskLimit() {
+        CompactionScheduler compactionScheduler = new CompactionScheduler(new CompactionMgr(), null, null, null, "");
+
+        int defaultValue = Config.lake_compaction_max_tasks;
+        // explicitly set config to a value bigger than default -1
+        Config.lake_compaction_max_tasks = 10;
+        Assert.assertEquals(10, compactionScheduler.compactionTaskLimit());
+
+        // reset config to default value
+        Config.lake_compaction_max_tasks = defaultValue;
+
+        Backend b1 = new Backend(10001L, "192.168.0.1", 9050);
+        ComputeNode c1 = new ComputeNode(10001L, "192.168.0.2", 9050);
+        ComputeNode c2 = new ComputeNode(10001L, "192.168.0.3", 9050);
+
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public List<ComputeNode> getAliveComputeNodes(long warehouseId) {
+                return Arrays.asList(b1, c1, c2);
+            }
+
+            @Mock
+            public Warehouse getCompactionWarehouse() {
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                        WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            }
+        };
+
+        Assert.assertEquals(3 * 16, compactionScheduler.compactionTaskLimit());
+    }
+>>>>>>> e886985477 ([Enhancement] Lake compaction scheduler optimize in fe restart scenarios (#54881))
 }
