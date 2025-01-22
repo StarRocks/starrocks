@@ -2907,7 +2907,7 @@ public class OlapTable extends Table {
         }
         if (keysType == KeysType.UNIQUE_KEYS || keysType == KeysType.PRIMARY_KEYS) {
             new UniqueConstraint(null, null, null, getKeyColumns().stream().map(Column::getName).collect(
-                            Collectors.toList())));
+                            Collectors.toList()));
         }
         if (tableProperty != null && tableProperty.getUniqueConstraints() != null) {
             uniqueConstraints.addAll(tableProperty.getUniqueConstraints());
