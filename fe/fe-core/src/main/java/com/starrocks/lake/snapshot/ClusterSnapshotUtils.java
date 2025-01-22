@@ -45,8 +45,7 @@ public class ClusterSnapshotUtils {
 
         StorageVolume sv = GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAutomatedSnapshotSv();
         BrokerDesc brokerDesc = new BrokerDesc(sv.getProperties());
-        String snapshotImagePath = String.join("/", sv.getLocations().get(0),
-                GlobalStateMgr.getCurrentState().getStarOSAgent().getRawServiceId(), "meta/image", snapshotName);
+        String snapshotImagePath = getSnapshotImagePath(sv, snapshotName);
 
         HdfsUtil.deletePath(snapshotImagePath, brokerDesc);
     }

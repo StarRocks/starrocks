@@ -96,7 +96,6 @@ public class ClusterSnapshot {
         item.setSnapshot_name(snapshotName);
         item.setSnapshot_type(type.name());
         item.setCreated_time(createdTimeMs / 1000);
-        item.setFinished_time(finishedTimeMs / 1000);
         item.setFe_jouranl_id(feJournalId);
         item.setStarmgr_jouranl_id(starMgrJournalId);
         item.setProperties("");

@@ -26,7 +26,6 @@ SchemaScanner::ColumnDesc SchemaClusterSnapshotsScanner::_s_columns[] = {
         {"SNAPSHOT_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
         {"SNAPSHOT_TYPE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
         {"CREATED_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
-        {"FINISHED_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
         {"FE_JOURNAL_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(long), true},
         {"STARMGR_JOURNAL_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(long), true},
         {"PROPERTIES", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
@@ -58,8 +57,6 @@ Status SchemaClusterSnapshotsScanner::_fill_chunk(ChunkPtr* chunk) {
             Slice(info.snapshot_type),
 
             TimestampValue::create_from_unixtime(info.created_time, _runtime_state->timezone_obj()),
-
-            TimestampValue::create_from_unixtime(info.finished_time, _runtime_state->timezone_obj()),
 
             info.fe_jouranl_id,
             info.starmgr_jouranl_id,
