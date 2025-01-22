@@ -60,6 +60,12 @@ public class MVColumnPruner {
     }
 
     public OptExpression doPruneColumns(OptExpression optExpression) {
+        // TODO: remove this check after we support more operators.
+        Projection projection = optExpression.getOp().getProjection();
+        // OptExpression after mv rewrite must have projection.
+        if (projection == null) {
+            return optExpression;
+        }
         // OptExpression after mv rewrite must have projection.
         return optExpression.getOp().accept(new ColumnPruneVisitor(), optExpression, null);
     }
@@ -181,8 +187,6 @@ public class MVColumnPruner {
             if (unionOperator.getProjection() != null) {
                 Projection projection = optExpression.getOp().getProjection();
                 projection.getColumnRefMap().values().forEach(s -> requiredOutputColumns.union(s.getUsedColumns()));
-            } else {
-                requiredOutputColumns.union(unionOperator.getOutputColumnRefOp());
             }
             List<ColumnRefOperator> unionOutputColRefs = unionOperator.getOutputColumnRefOp();
             List<Integer> newUnionOutputIdxes = Lists.newArrayList();

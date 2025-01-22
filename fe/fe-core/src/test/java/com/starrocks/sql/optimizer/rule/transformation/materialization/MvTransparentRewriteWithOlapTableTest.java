@@ -1080,7 +1080,6 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
         });
     }
 
-
     @Test
     public void testTransparentRewriteWithAggregateFilterColumnsPrune() {
         starRocksAssert.withTable(m1, () -> {
@@ -1135,6 +1134,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
                     });
         });
     }
+
     @Test
     public void testTransparentRewriteWithJoinColumnsPrune() {
         starRocksAssert.withTable(m1, () -> {
@@ -1165,6 +1165,129 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
                                     "  |  child exprs:\n" +
                                     "  |      [17: ak1, INT, true] | [22: bv1, INT, true]\n" +
                                     "  |      [23: k1, INT, true] | [30: v1, INT, true]");
+                        }
+                    });
+        });
+    }
+
+    @Test
+    public void testTransparentRewriteWithColumnsPrune() {
+        final String ddl = "CREATE TABLE mock_tbl1 (\n" +
+                "data_hour varchar(65533) NOT NULL,\n" +
+                "event_min varchar(65533) NOT NULL,\n" +
+                "mc_id int(11) NULL,\n" +
+                "c_id int(11) NULL,\n" +
+                "target_id int(11) NULL,\n" +
+                "c_slot_id varchar(65533) NULL,\n" +
+                "adx_slot_id int(11) NULL,\n" +
+                "mc_slot_type int(11) NULL,\n" +
+                "mc_slot_id varchar(65533) NULL,\n" +
+                "c_slot_type int(11) NULL,\n" +
+                "adx_c_slot_id int(11) NULL DEFAULT \"-1\",\n" +
+                "conv_type_id varchar(65533) NULL,\n" +
+                "sdkv varchar(65533) NULL,\n" +
+                "pkg varchar(65533) NULL,\n" +
+                "c_pkg varchar(65533) NULL,\n" +
+                "platform varchar(65533) NULL,\n" +
+                "integrate_by int(11) NULL,\n" +
+                "flow_price double NULL DEFAULT \"0.2894\",\n" +
+                "mc_category int(11) NULL,\n" +
+                "mc_tier int(11) NULL,\n" +
+                "version varchar(65533) NULL,\n" +
+                "c_task_id varchar(65533) NULL,\n" +
+                "p_id int(11) NULL DEFAULT \"-1\",\n" +
+                "experiment_id varchar(65533) NULL,\n" +
+                "touch_amount varchar(65533) NULL,\n" +
+                "s_req bigint(20) NULL,\n" +
+                "c_req bigint(20) NULL,\n" +
+                "s_win bigint(20) NULL,\n" +
+                "c_win bigint(20) NULL,\n" +
+                "imp bigint(20) NULL,\n" +
+                "clk bigint(20) NULL,\n" +
+                "c_floor double NULL,\n" +
+                "c_fill_price double NULL,\n" +
+                "c_fee_price double NULL DEFAULT \"0\",\n" +
+                "imp_c_bid_price double NULL DEFAULT \"0\",\n" +
+                "c_req_timeout bigint(20) NULL,\n" +
+                "s_bid_price double NULL,\n" +
+                "s_floor double NULL,\n" +
+                "c_win_price double NULL,\n" +
+                "c_fill_req bigint(20) NULL,\n" +
+                "c_fill_valid bigint(20) NULL DEFAULT \"0\",\n" +
+                "used_time bigint(20) NULL,\n" +
+                "c_used_time bigint(20) NULL DEFAULT \"0\",\n" +
+                "cr double NULL,\n" +
+                "cr_rebate double NULL,\n" +
+                "mc_cr double NULL,\n" +
+                "body_size bigint(20) NULL,\n" +
+                "launch bigint(20) NULL,\n" +
+                "mc_origin_cr double NULL DEFAULT \"0\",\n" +
+                "data_date datetime NOT NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(data_hour, event_min, mc_id)\n" +
+                "PARTITION BY date_trunc('hour', data_date)\n" +
+                "DISTRIBUTED BY HASH(pkg, c_slot_id, mc_id) BUCKETS 6\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");";
+        starRocksAssert.withTable(ddl, () -> {
+            cluster.runSql("test", "insert into mock_tbl1(data_hour, event_min, " +
+                    "mc_id, data_date,pkg, c_slot_id ) values('2025-01-20 05:17:01', '1', '1', " +
+                    "'2025-01-20 05:17:02', '1', '1');");
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test_mv1\n" +
+                            "PARTITION BY (data_date)\n" +
+                            "REFRESH DEFERRED ASYNC\n" +
+                            "PROPERTIES (\n" +
+                            "\"partition_refresh_number\" = \"1\",\n" +
+                            "\"transparent_mv_rewrite_mode\" = \"true\"\n" +
+                            ")\n" +
+                            "AS SELECT date_trunc('day', data_date) AS data_date, to_date(data_date) AS dt, " +
+                            "mc_id, c_id, target_id, mc_slot_type, mc_slot_id, c_slot_id, " +
+                            "adx_slot_id, platform, sdkv, pkg, c_pkg, conv_type_id, c_slot_type, adx_c_slot_id, " +
+                            "c_task_id, p_id, experiment_id, mc_tier, mc_category, " +
+                            "integrate_by, version, sum(c_floor) AS c_floor, sum(imp) AS imp, " +
+                            "sum(cr) AS cr, sum(c_fill_price) AS c_fill_price, " +
+                            "sum(c_fee_price) AS c_fee_price, sum(imp_c_bid_price) AS imp_c_bid_price, " +
+                            "sum(c_req_timeout) AS c_req_timeout, sum(s_bid_price) AS s_bid_price, " +
+                            "sum(mc_cr) AS mc_cr, sum(clk) AS clk, sum(s_floor) AS s_floor, " +
+                            "sum(c_win_price) AS c_win_price, sum(s_req) AS s_req, sum(launch) AS launch, " +
+                            "sum(s_win) AS s_win, sum(c_fill_req) AS c_fill_req, " +
+                            "sum(c_req) AS c_req, sum(used_time) AS used_time, " +
+                            "sum(c_used_time) AS c_used_time, sum(c_win) AS c_win, " +
+                            "sum(body_size) AS body_size, sum(cr_rebate) AS cr_rebate, " +
+                            "sum(mc_origin_cr) AS mc_origin_cr\n" +
+                            "FROM mock_tbl1\n" +
+                            "WHERE data_date >= '2024-10-11 00:00:00'\n" +
+                            "GROUP BY date_trunc('day', data_date), to_date(data_date), " +
+                            "mc_id, c_id, target_id, mc_slot_type, mc_slot_id, " +
+                            "c_slot_id, adx_slot_id, platform, sdkv, pkg, c_pkg, conv_type_id, " +
+                            "c_slot_type, adx_c_slot_id, c_task_id, p_id, " +
+                            "experiment_id, mc_tier, mc_category, integrate_by, version;",
+                    () -> {
+                        starRocksAssert.refreshMV(connectContext, "test_mv1");
+
+                        MaterializedView mv1 = getMv("test", "test_mv1");
+                        Assert.assertTrue(mv1 != null);
+
+                        cluster.runSql("test", "insert into mock_tbl1(data_hour, event_min, mc_id, data_date,pkg, " +
+                                "c_slot_id ) values('2025-01-21 05:17:01', '1', '1', '2025-01-21 05:17:02', '1', '1');\n");
+                        {
+                            String query = "select date_trunc('day', data_date) \n" +
+                                    "from mock_tbl1\n" +
+                                    "group by date_trunc('day', data_date)";
+                            String plan = getFragmentPlan(query, TExplainLevel.VERBOSE);
+                            System.out.println(plan);
+                            PlanTestBase.assertContains(plan, "test_mv1");
+                            PlanTestBase.assertContains(plan, " 0:UNION\n" +
+                                    "  |  output exprs:\n" +
+                                    "  |      [150, DATETIME, true]\n" +
+                                    "  |  child exprs:\n" +
+                                    "  |      [148: date_trunc, DATETIME, true]\n" +
+                                    "  |      [149: date_trunc, DATETIME, true");
+                            PlanTestBase.assertContains(plan, "2:Project\n" +
+                                    "  |  output columns:\n" +
+                                    "  |  148 <-> date_trunc[('day', [98: data_date, DATETIME, false]); " +
+                                    "args: VARCHAR,DATETIME; result: DATETIME; args nullable: false; result nullable: true]");
                         }
                     });
         });
