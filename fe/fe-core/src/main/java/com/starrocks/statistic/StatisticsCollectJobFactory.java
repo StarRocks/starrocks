@@ -498,8 +498,12 @@ public class StatisticsCollectJobFactory {
                         table.getName(), healthy, statisticAutoCollectRatio);
                 return;
             } else if (healthy < Config.statistic_auto_collect_sample_threshold) {
-                if (job.getAnalyzeType() != StatsConstants.AnalyzeType.HISTOGRAM &&
-                        sumDataSize > Config.statistic_auto_collect_small_table_size) {
+                long autoCollectSmallTableSize = Config.statistic_auto_collect_small_table_size;
+                if (table.isPartitioned() && Config.statistic_use_meta_statistics) {
+                    autoCollectSmallTableSize *= 10;
+                }
+
+                if (job.getAnalyzeType() != StatsConstants.AnalyzeType.HISTOGRAM && sumDataSize > autoCollectSmallTableSize) {
                     LOG.debug("statistics job choose sample on real-time update table: {}" +
                                     ", last collect time: {}, current healthy: {}, full collect healthy limit: {}, " +
                                     ", update data size: {}MB, full collect healthy data size limit: <{}MB",
