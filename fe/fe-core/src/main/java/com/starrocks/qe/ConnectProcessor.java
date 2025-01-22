@@ -45,6 +45,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.AuditStatisticsUtil;
@@ -130,7 +131,7 @@ public class ConnectProcessor {
                     WarehouseManager warehouseMgr = GlobalStateMgr.getCurrentState().getWarehouseMgr();
                     String newWarehouseName = parts[1];
                     if (!warehouseMgr.warehouseExists(newWarehouseName)) {
-                        ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_WAREHOUSE_ERROR, newWarehouseName);
+                        throw new StarRocksException(ErrorCode.ERR_UNKNOWN_WAREHOUSE, newWarehouseName);
                     }
                     ctx.setCurrentWarehouse(newWarehouseName);
                 } else {
