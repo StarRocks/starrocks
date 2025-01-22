@@ -39,7 +39,7 @@ import java.util.concurrent.Future;
  */
 public class PortConnectivityChecker extends FrontendDaemon {
     private static final Logger LOG = LogManager.getLogger(PortConnectivityChecker.class);
-    private final ExecutorService executor;
+    protected final ExecutorService executor;
     private final Map<Pair<String, Integer>, Boolean> currentPortStates = new HashMap<>();
 
     private enum PortType {
@@ -96,7 +96,7 @@ public class PortConnectivityChecker extends FrontendDaemon {
         }
     }
 
-    private boolean isPortConnectable(String host, int port) {
+    protected boolean isPortConnectable(String host, int port) {
         long maxRetries = Config.port_connectivity_check_retry_times;
         for (int retry = 1; retry <= maxRetries; retry++) {
             try (Socket socket = new Socket()) {

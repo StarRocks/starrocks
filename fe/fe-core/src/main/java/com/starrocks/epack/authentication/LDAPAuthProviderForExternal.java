@@ -68,6 +68,9 @@ public class LDAPAuthProviderForExternal implements AuthenticationProvider {
 
         try {
             rootCtx = securityIntegration.createDirContextOnConnection();
+            if (rootCtx == null) {
+                throw new Exception("create dir context failed");
+            }
             SearchControls searchControls = new SearchControls();
             searchControls.setSearchScope(SearchControls.SUBTREE_SCOPE);
             String searchFilter = "(" + securityIntegration.getLdapUserSearchAttr() + "=" + username + ")";

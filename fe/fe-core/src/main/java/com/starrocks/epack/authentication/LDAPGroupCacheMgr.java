@@ -142,6 +142,10 @@ public class LDAPGroupCacheMgr extends FrontendDaemon {
         DirContext ctx = null;
         try {
             ctx = securityIntegration.createDirContextOnConnection();
+            if (ctx == null) {
+                throw new IOException("create dir context failed");
+            }
+
             SearchControls controls = new SearchControls();
             controls.setSearchScope(SearchControls.SUBTREE_SCOPE);
             for (String groupDN : groupDNs) {

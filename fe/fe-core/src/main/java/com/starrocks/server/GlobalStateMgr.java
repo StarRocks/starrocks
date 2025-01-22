@@ -139,6 +139,7 @@ import com.starrocks.epack.qe.ShowExecutorVisitorEPack;
 import com.starrocks.epack.sql.analyzer.AnalyzerVisitorEPack;
 import com.starrocks.epack.sql.analyzer.AuthorizerStmtVisitorEPack;
 import com.starrocks.epack.sql.parser.AstBuilderEPack;
+import com.starrocks.epack.system.PortConnectivityCheckerEPack;
 import com.starrocks.epack.warehouse.WarehouseManagerEPack;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.HAProtocol;
@@ -671,7 +672,7 @@ public class GlobalStateMgr {
         // System Manager
         this.nodeMgr = Objects.requireNonNullElseGet(nodeMgr, NodeMgr::new);
         this.heartbeatMgr = new HeartbeatMgr(!isCkptGlobalState);
-        this.portConnectivityChecker = new PortConnectivityChecker();
+        this.portConnectivityChecker = new PortConnectivityCheckerEPack();
 
         // Alter Job Manager
         this.alterJobMgr = new AlterJobMgr(

@@ -18,6 +18,7 @@ import com.google.common.base.Strings;
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationProvider;
 import com.starrocks.authentication.AuthenticationProviderFactory;
+import com.starrocks.common.Pair;
 import com.starrocks.epack.security.SslUtils;
 import com.starrocks.mysql.privilege.AuthPlugin;
 import org.apache.commons.lang3.StringUtils;
@@ -31,6 +32,8 @@ import java.util.HashMap;
 import java.util.Hashtable;
 import java.util.Map;
 import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import javax.naming.Context;
 import javax.naming.NamingException;
 import javax.naming.directory.DirContext;
@@ -48,6 +51,10 @@ public class LDAPSecurityIntegration extends SecurityIntegration {
     public static final String LDAP_SEC_INTEGRATION_PROP_ROOT_DN_KEY = "ldap_bind_root_dn";
     public static final String LDAP_SEC_INTEGRATION_PROP_ROOT_PWD_KEY = "ldap_bind_root_pwd";
     public static final String LDAP_SEC_INTEGRATION_PROP_CACHE_REFRESH_INTERVAL_KEY = "ldap_cache_refresh_interval";
+    public static final String LDAP_SEC_INTEGRATION_PROP_LDAP_SERVER_HOST = "ldap_server_host";
+    public static final String LDAP_SEC_INTEGRATION_LDAP_SERVER_PORT = "ldap_server_port";
+    public static final String LDAP_SEC_INTEGRATION_LDAP_CONN_URL = "ldap_conn_url";
+
     /**
      * When `ldap_group_match_use_member_uid` set to "false",
      * we will not retrieve the member of the group based on `memberUid` attribute.
@@ -64,6 +71,7 @@ public class LDAPSecurityIntegration extends SecurityIntegration {
 
     private static final String LDAPS_SERVER_SSL_DEFAULT_PORT = "636";
 
+    private static final Pattern URL_PATTERN = Pattern.compile("://([\\w.]+):(\\d+)");
 
     /**
      * last refresh time of group membership for all role
@@ -71,6 +79,7 @@ public class LDAPSecurityIntegration extends SecurityIntegration {
      */
     private long lastRefreshTime = -1;
 
+    private volatile boolean isNetWorkReachable = true;
 
     public LDAPSecurityIntegration(String name, Map<String, String> propertyMap) {
         super(name, propertyMap);
@@ -82,15 +91,15 @@ public class LDAPSecurityIntegration extends SecurityIntegration {
     }
 
     public String getLdapServerHost() {
-        return propertyMap.getOrDefault("ldap_server_host", "127.0.0.1");
+        return propertyMap.getOrDefault(LDAP_SEC_INTEGRATION_PROP_LDAP_SERVER_HOST, "127.0.0.1");
     }
 
     public String getLdapServerPort() {
-        return propertyMap.getOrDefault("ldap_server_port", "389");
+        return propertyMap.getOrDefault(LDAP_SEC_INTEGRATION_LDAP_SERVER_PORT, "389");
     }
 
     public String getLdapConnUrl() {
-        return propertyMap.getOrDefault("ldap_conn_url", "");
+        return propertyMap.getOrDefault(LDAP_SEC_INTEGRATION_LDAP_CONN_URL, "");
     }
 
     public boolean isLdapSslConnAllowInsecure() {
@@ -161,6 +170,27 @@ public class LDAPSecurityIntegration extends SecurityIntegration {
         this.lastRefreshTime = lastRefreshTime;
     }
 
+    public void setNetWorkReachable(boolean netWorkReachable) {
+        isNetWorkReachable = netWorkReachable;
+    }
+
+    public Pair<String, Integer> getHostAndPort() {
+        String url = getLdapUrlOnConnection();
+        Matcher matcher = URL_PATTERN.matcher(url);
+        if (matcher.find()) {
+            String host = matcher.group(1);
+            String port = matcher.group(2);
+            try {
+                return Pair.create(host, Integer.parseInt(port));
+            } catch (Exception e) {
+                LOG.warn("get host and port from url: {} failed", url);
+                return null;
+            }
+        } else {
+            return null;
+        }
+    }
+
     @Override
     public String toString() {
         return "name: " + name + ", properties: " + getPropertyMapWithMasking();
@@ -184,6 +214,11 @@ public class LDAPSecurityIntegration extends SecurityIntegration {
 
     public DirContext createDirContextOnConnection(String dn, String pwd)
             throws GeneralSecurityException, IOException, NamingException {
+        if (!isNetWorkReachable) {
+            LOG.warn("network not reachable, url: {}, name: {}", getLdapConnUrl(), name);
+            return null;
+        }
+
         if (Strings.isNullOrEmpty(pwd)) {
             LOG.warn("empty password is not allowed for simple authentication");
             return null;
