@@ -114,7 +114,6 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.scheduler.persist.TaskSchedule;
-import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ShowTemporaryTableStmt;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
@@ -137,8 +136,6 @@ import com.starrocks.sql.ast.AddSqlBlackListStmt;
 import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
 import com.starrocks.sql.ast.AdminRepairTableStmt;
-import com.starrocks.sql.ast.AdminSetAutomatedSnapshotOffStmt;
-import com.starrocks.sql.ast.AdminSetAutomatedSnapshotOnStmt;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
 import com.starrocks.sql.ast.AdminSetPartitionVersionStmt;
 import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
@@ -2603,17 +2600,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitAdminSetAutomatedSnapshotOnStatement(
                      StarRocksParser.AdminSetAutomatedSnapshotOnStatementContext context) {
-        String svName = StorageVolumeMgr.BUILTIN_STORAGE_VOLUME;
-        if (context.svName != null) {
-            svName = getIdentifierName(context.svName);
-        }
-        return new AdminSetAutomatedSnapshotOnStmt(svName, createPos(context));
+        throw new ParsingException("do not support turn on automated snapshot");
     }
 
     @Override
     public ParseNode visitAdminSetAutomatedSnapshotOffStatement(
                      StarRocksParser.AdminSetAutomatedSnapshotOffStatementContext context) {
-        return new AdminSetAutomatedSnapshotOffStmt(createPos(context));
+        throw new ParsingException("do not support turn off automated snapshot");
     }
 
     // ------------------------------------------- Cluster Management Statement ----------------------------------------
