@@ -123,4 +123,13 @@ public class AnalyzeTranslateTest {
                 "GROUP BY `o_orderpriority` ORDER BY `o_orderpriority` ASC ");
 
     }
+
+    @Test
+    public void testParsedTranslateSQL() {
+        String sql = "translate trino select \nto_unixtime(\nTIMESTAMP '2023-04-22 00:00:00'\n)";
+        TranslateStmt parsedStmt = (TranslateStmt) SqlParser.parse(sql,
+                AnalyzeTestUtil.getConnectContext().getSessionVariable()).get(0);
+        Assert.assertEquals("select\nto_unixtime(\nTIMESTAMP '2023-04-22 00:00:00'\n)",
+                parsedStmt.getTranslateSQL());
+    }
 }
