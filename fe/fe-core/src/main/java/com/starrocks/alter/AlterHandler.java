@@ -127,9 +127,8 @@ public abstract class AlterHandler extends FrontendDaemon {
         Iterator<Map.Entry<Long, AlterJobV2>> iterator = alterJobsV2.entrySet().iterator();
         while (iterator.hasNext()) {
             AlterJobV2 alterJobV2 = iterator.next().getValue();
-            long validDeletionTimeMs = GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
-                                                                       .getValidDeletionTimeMsByAutomatedSnapshot();
-            if (alterJobV2.isExpire() && alterJobV2.getFinishedTimeMs() < validDeletionTimeMs) {
+            if (alterJobV2.isExpire() && GlobalStateMgr.getCurrentState()
+                    .getClusterSnapshotMgr().isDeletionSafeToExecute(alterJobV2.getFinishedTimeMs())) {
                 iterator.remove();
                 RemoveAlterJobV2OperationLog log =
                         new RemoveAlterJobV2OperationLog(alterJobV2.getJobId(), alterJobV2.getType());
