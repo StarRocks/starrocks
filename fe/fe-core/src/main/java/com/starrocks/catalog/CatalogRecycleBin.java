@@ -304,8 +304,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         if (originalRecycleTime == null) {
             return true;
         }
-        return originalRecycleTime < GlobalStateMgr.getCurrentState()
-                              .getClusterSnapshotMgr().getValidDeletionTimeMsByAutomatedSnapshot();
+        return GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().isDeletionSafeToExecute(originalRecycleTime);
     }
 
     private synchronized long getAdjustedRecycleTimestamp(long id) {
@@ -415,7 +414,9 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
             Map.Entry<Long, RecycleDatabaseInfo> entry = dbIter.next();
             RecycleDatabaseInfo dbInfo = entry.getValue();
             Database db = dbInfo.getDb();
-            if (timeExpired(db.getId(), currentTimeMs) && checkValidDeletionByClusterSnapshot(db.getId())) {
+            // No need to check cluster snapshot for database dropping.
+            // Because database is just meta data in FE image and not files or data in BE/CN side
+            if (timeExpired(db.getId(), currentTimeMs)) {
                 // erase db
                 dbIter.remove();
                 removeRecycleMarkers(entry.getKey());
