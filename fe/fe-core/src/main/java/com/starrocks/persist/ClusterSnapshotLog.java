@@ -17,7 +17,6 @@ package com.starrocks.persist;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.lake.snapshot.ClusterSnapshot;
 import com.starrocks.lake.snapshot.ClusterSnapshotJob;
 import com.starrocks.persist.gson.GsonUtils;
 
@@ -26,40 +25,24 @@ import java.io.DataOutput;
 import java.io.IOException;
 
 public class ClusterSnapshotLog implements Writable {
-    public enum ClusterSnapshotLogType { NONE, CREATE_SNAPSHOT_PREFIX, DROP_SNAPSHOT, CREATE_SNAPSHOT, UPDATE_SNAPSHOT_JOB }
+    public enum ClusterSnapshotLogType { NONE, AUTOMATED_SNAPSHOT_ON, AUTOMATED_SNAPSHOT_OFF, UPDATE_SNAPSHOT_JOB }
     @SerializedName(value = "type")
     private ClusterSnapshotLogType type = ClusterSnapshotLogType.NONE;
-    // For CREATE_SNAPSHOT_PREFIX
-    @SerializedName(value = "createSnapshotNamePrefix")
-    private String createSnapshotNamePrefix = "";
     @SerializedName(value = "storageVolumeName")
     private String storageVolumeName = "";
-    // For DROP_SNAPSHOT
-    @SerializedName(value = "dropSnapshotName")
-    private String dropSnapshotName = "";
-    // For CREATE_SNAPSHOT
-    @SerializedName(value = "snapshot")
-    private ClusterSnapshot snapshot = null;
     // For UPDATE_SNAPSHOT_JOB
     @SerializedName(value = "snapshotJob")
     private ClusterSnapshotJob snapshotJob = null;
 
     public ClusterSnapshotLog() {}
 
-    public void setCreateSnapshotNamePrefix(String createSnapshotNamePrefix, String storageVolumeName) {
-        this.type = ClusterSnapshotLogType.CREATE_SNAPSHOT_PREFIX;
-        this.createSnapshotNamePrefix = createSnapshotNamePrefix;
+    public void setAutomatedSnapshotOn(String storageVolumeName) {
+        this.type = ClusterSnapshotLogType.AUTOMATED_SNAPSHOT_ON;
         this.storageVolumeName = storageVolumeName;
     }
 
-    public void setDropSnapshot(String dropSnapshotName) {
-        this.type = ClusterSnapshotLogType.DROP_SNAPSHOT;
-        this.dropSnapshotName = dropSnapshotName;
-    }
-
-    public void setCreateSnapshot(ClusterSnapshot snapshot) {
-        this.type = ClusterSnapshotLogType.CREATE_SNAPSHOT;
-        this.snapshot = snapshot;
+    public void setAutomatedSnapshotOff() {
+        this.type = ClusterSnapshotLogType.AUTOMATED_SNAPSHOT_OFF;
     }
 
     public void setSnapshotJob(ClusterSnapshotJob job) {
@@ -71,20 +54,8 @@ public class ClusterSnapshotLog implements Writable {
         return type;
     }
 
-    public String getCreateSnapshotNamePrefix() {
-        return this.createSnapshotNamePrefix;
-    }
-
     public String getStorageVolumeName() {
         return this.storageVolumeName;
-    }
-
-    public String getDropSnapshotName() {
-        return this.dropSnapshotName;
-    }
-
-    public ClusterSnapshot getSnapshot() {
-        return this.snapshot;
     }
 
     public ClusterSnapshotJob getSnapshotJob() {
