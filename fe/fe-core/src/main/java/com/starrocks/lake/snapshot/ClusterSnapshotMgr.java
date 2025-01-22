@@ -42,17 +42,18 @@ import org.apache.logging.log4j.Logger;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
-import java.util.TreeMap;
+import java.util.NavigableMap;
+import java.util.concurrent.ConcurrentSkipListMap;
 
 // only used for AUTOMATED snapshot for now
 public class ClusterSnapshotMgr implements GsonPostProcessable {
     public static final Logger LOG = LogManager.getLogger(ClusterSnapshotMgr.class);
     public static final String AUTOMATED_NAME_PREFIX = "automated_cluster_snapshot";
 
-    @SerializedName(value = "automatedSnapshotSvName")
-    private String automatedSnapshotSvName = "";
+    @SerializedName(value = "storageVolumeName")
+    private volatile String storageVolumeName;
     @SerializedName(value = "automatedSnapshotJobs")
-    private TreeMap<Long, ClusterSnapshotJob> automatedSnapshotJobs = new TreeMap<>();
+    private NavigableMap<Long, ClusterSnapshotJob> automatedSnapshotJobs = new ConcurrentSkipListMap<>();
 
     private ClusterSnapshotCheckpointScheduler clusterSnapshotCheckpointScheduler;
 
@@ -69,15 +70,15 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
     }
 
     protected void setAutomatedSnapshotOn(String storageVolumeName) {
-        automatedSnapshotSvName = storageVolumeName;
+        this.storageVolumeName = storageVolumeName;
     }
 
     public String getAutomatedSnapshotSvName() {
-        return automatedSnapshotSvName;
+        return storageVolumeName;
     }
 
     public boolean isAutomatedSnapshotOn() {
-        return RunMode.isSharedDataMode() && automatedSnapshotSvName != null && !automatedSnapshotSvName.isEmpty();
+        return RunMode.isSharedDataMode() && storageVolumeName != null;
     }
 
     // Turn off automated snapshot, use stmt for extension in future
@@ -93,7 +94,7 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
 
     protected void setAutomatedSnapshotOff() {
         // drop AUTOMATED snapshot
-        automatedSnapshotSvName = "";
+        storageVolumeName = null;
     }
 
     protected void clearFinishedAutomatedClusterSnapshot(String keepSnapshotName) {
@@ -128,7 +129,6 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
         long createTimeMs = System.currentTimeMillis();
         long id = GlobalStateMgr.getCurrentState().getNextId();
         String snapshotName = AUTOMATED_NAME_PREFIX + '_' + String.valueOf(createTimeMs);
-        String storageVolumeName = automatedSnapshotSvName;
         ClusterSnapshotJob job = new ClusterSnapshotJob(id, snapshotName, storageVolumeName, createTimeMs);
         job.logJob();
 
@@ -140,11 +140,11 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
     }
 
     public StorageVolume getAutomatedSnapshotSv() {
-        if (automatedSnapshotSvName.isEmpty()) {
+        if (storageVolumeName == null) {
             return null;
         }
 
-        return GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolumeByName(automatedSnapshotSvName);
+        return GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolumeByName(storageVolumeName);
     }
 
     public ClusterSnapshotJob getLastFinishedAutomatedClusterSnapshotJob() {
@@ -219,7 +219,7 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
         return deletionCreatedTimeMs < getValidDeletionTimeMsByAutomatedSnapshot();
     }
 
-    public TreeMap<Long, ClusterSnapshotJob> getAutomatedSnapshotJobs() {
+    public NavigableMap<Long, ClusterSnapshotJob> getAutomatedSnapshotJobs() {
         return automatedSnapshotJobs;
     }
 
@@ -346,7 +346,7 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
             throws SRMetaBlockEOFException, IOException, SRMetaBlockException {
         ClusterSnapshotMgr data = reader.readJson(ClusterSnapshotMgr.class);
 
-        automatedSnapshotSvName = data.getAutomatedSnapshotSvName();
+        storageVolumeName = data.getAutomatedSnapshotSvName();
         automatedSnapshotJobs = data.getAutomatedSnapshotJobs();
     }
 
