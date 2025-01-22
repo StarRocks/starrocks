@@ -66,7 +66,6 @@ add_library(Formats STATIC
         parquet/schema.cpp
         parquet/stored_column_reader.cpp
         parquet/stored_column_reader_with_index.cpp
-        parquet/page_index_reader.cpp
         parquet/utils.cpp
         parquet/metadata.cpp
         parquet/meta_helper.cpp

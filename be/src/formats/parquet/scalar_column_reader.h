@@ -16,7 +16,6 @@
 
 #include "formats/parquet/column_converter.h"
 #include "formats/parquet/column_reader.h"
-#include "formats/parquet/page_index_reader.h"
 #include "formats/parquet/stored_column_reader.h"
 #include "util/thrift_util.h"
 

@@ -252,13 +252,14 @@ void ParquetUTBase::create_in_predicate_date_conjunct_ctxs(TExprOpcode::type opc
     tExprs->emplace_back(t_expr);
 }
 
-void ParquetUTBase::setup_conjuncts_manager(std::vector<ExprContext*>& conjuncts, TupleDescriptor* tuple_desc,
-                                            RuntimeState* runtime_state, HdfsScannerContext* params) {
+void ParquetUTBase::setup_conjuncts_manager(std::vector<ExprContext*>& conjuncts, const RuntimeFilterProbeCollector* rf,
+                                            TupleDescriptor* tuple_desc, RuntimeState* runtime_state,
+                                            HdfsScannerContext* params) {
     ScanConjunctsManagerOptions opts;
     opts.conjunct_ctxs_ptr = &conjuncts;
     opts.tuple_desc = tuple_desc;
     opts.obj_pool = runtime_state->obj_pool();
-    opts.runtime_filters = runtime_state->obj_pool()->add(new RuntimeFilterProbeCollector());
+    opts.runtime_filters = rf;
     opts.runtime_state = runtime_state;
     opts.enable_column_expr_predicate = true;
     opts.is_olap_scan = false;

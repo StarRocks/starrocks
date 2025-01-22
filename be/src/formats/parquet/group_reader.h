@@ -106,11 +106,7 @@ struct GroupReaderParam {
     ColumnIdToGlobalDictMap* global_dictmaps = &EMPTY_GLOBAL_DICTMAPS;
 };
 
-class PageIndexReader;
-
 class GroupReader {
-    friend class PageIndexReader;
-
 public:
     GroupReader(GroupReaderParam& param, int row_group_number, SkipRowsContextPtr skip_rows_ctx,
                 int64_t row_group_first_row);
