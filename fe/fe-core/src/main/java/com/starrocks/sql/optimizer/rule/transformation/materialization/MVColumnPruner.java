@@ -133,7 +133,7 @@ public class MVColumnPruner {
             // mv plan should be rollup from the original plan.
             // TODO: We can do this in more normal ways rather than only mv rewrite later,
             // issue: https://github.com/StarRocks/starrocks/issues/55285
-            if (aggregationOperator.isOpRuleBitSet(OP_MV_AGG_PRUNE_COLUMNS)) {
+            if (aggregationOperator.isOpRuleMaskSet(OP_MV_AGG_PRUNE_COLUMNS)) {
                 // project
                 Projection newProjection = null;
                 if (aggregationOperator.getProjection() != null) {
