@@ -959,9 +959,6 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
                     });
         });
     }
-<<<<<<< HEAD
-}
-=======
 
     @Test
     public void testTransparentRewriteWithAggregateColumnsPrune() {
@@ -1231,4 +1228,3 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
         });
     }
 }
->>>>>>> 8631ba908 ([BugFix] Prune aggregate non-required columns after mv transparent rewrite (#55286))
