@@ -50,11 +50,11 @@ displayed_sidebar: docs
 
 ### 数据导入
 
-- INSERT OVERWRITE 新增 Dynamic Overwrite 语义，启用后，系统将根据导入的数据自动创建分区或覆盖对应的现有分区，导入不涉及的分区不会被清空或删除，适用于恢复特定分区数据的场景。更多内容，参考 []()。
+- INSERT OVERWRITE 新增 Dynamic Overwrite 语义，启用后，系统将根据导入的数据自动创建分区或覆盖对应的现有分区，导入不涉及的分区不会被清空或删除，适用于恢复特定分区数据的场景。更多内容，参考 [INSERT](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/loading_unloading/INSERT/)。
 - 优化了 INSERT from FILES 导入，使其可以基本取代 Broker Load 成为首选导入方式： 
   - FILES 支持 LIST 远程存储中的文件，并提供文件的基本统计信息。更多内容，参考 [FILES - list_files_only](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/table-functions/files/#list_files_only)。
   - INSERT 支持按名称匹配列，特别适用于导入列很多且列名相同的数据。（默认按位置匹配列。）更多内容，参考 [INSERT 按名称匹配列](https://docs.starrocks.io/zh/docs/loading/InsertInto/#insert-%E6%8C%89%E5%90%8D%E7%A7%B0%E5%8C%B9%E9%85%8D%E5%88%97)。
-  - INSERT 支持指定 PROPERTIES，与其他导入方式保持一致。用户可通过指定 `strict_mode`、`max_filter_ratio` 和 `timeout` 来控制数据导入的行为和质量。更多内容，参考 [](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/loading_unloading/INSERT/#properties)。
+  - INSERT 支持指定 PROPERTIES，与其他导入方式保持一致。用户可通过指定 `strict_mode`、`max_filter_ratio` 和 `timeout` 来控制数据导入的行为和质量。更多内容，参考 [INSERT](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/loading_unloading/INSERT/)。
   - INSERT from FILES 支持将目标表的 Schema 检查下推到 FILES 的扫描阶段，从而更准确地推断源数据 Schema。更多内容，参考 [Target Table Schema 检查下推](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/table-functions/files/#target-table-schema-%E6%A3%80%E6%9F%A5%E4%B8%8B%E6%8E%A8)。
   - FILES 支持合并不同 Schema 的文件。Parquet 和 ORC 文件基于列名合并，CSV 文件基于列位置（顺序）合并。对于不匹配的列，用户可通过指定 `fill_mismatch_column_with` 属性选择填充 NULL 值或报错。更多内容，参考 [合并具有不同 Schema 的文件](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/table-functions/files/#%E5%90%88%E5%B9%B6%E5%85%B7%E6%9C%89%E4%B8%8D%E5%90%8C-schema-%E7%9A%84%E6%96%87%E4%BB%B6)。
   - FILES 支持从 Parquet 文件推断 STRUCT 类型数据。（在早期版本中，STRUCT 数据被推断为 STRING 类型。）更多内容，参考 [推断 Parquet 文件中的 STRUCT 类型](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/table-functions/files/#%E6%8E%A8%E6%96%AD-parquet-%E6%96%87%E4%BB%B6%E4%B8%AD%E7%9A%84-struct-%E7%B1%BB%E5%9E%8B)。
