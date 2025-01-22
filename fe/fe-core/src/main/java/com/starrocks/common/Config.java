@@ -2115,6 +2115,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long statistic_sample_collect_rows = 200000;
 
+    @ConfField(mutable = true)
+    public static double statistics_min_sample_row_ratio = 0.01;
+
     /**
      * The partition size of sample collect, default 1k partitions
      */

@@ -140,7 +140,6 @@ public class TabletSampleManager {
                 + mediumLowWeight.getRowCount() + lowWeight.getRowCount(), 1);
 
         return new SampleInfo(
-                dbName, tableName,
                 sampleTablets * 1.0 / totalTablets,
                 sampleRows, totalRows,
                 highWeightTablets,
