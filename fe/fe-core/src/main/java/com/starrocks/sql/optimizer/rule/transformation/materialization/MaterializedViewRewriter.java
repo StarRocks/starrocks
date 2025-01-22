@@ -552,7 +552,8 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
         if (candidate == null) {
             return null;
         }
-        candidate = new MVColumnPruner().pruneColumns(candidate);
+        final ColumnRefSet requiredOutputColumns = optimizerContext.getTaskContext().getRequiredColumns();
+        candidate = new MVColumnPruner().pruneColumns(candidate, requiredOutputColumns);
         candidate = new MVPartitionPruner(optimizerContext, mvRewriteContext).prunePartition(candidate);
         return candidate;
     }
@@ -1270,7 +1271,7 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
         final List<ColumnRefOperator>  originalOutputColumns = MvUtils.getMvScanOutputColumnRefs(mv, mvScanOperator);
         // build mv scan opt expression with or without compensate
         final OptExpression mvScanOptExpression = mvCompensation.isTransparentRewrite() ?
-                getMvTransparentPlan(materializationContext, mvCompensation, originalOutputColumns) :
+                getMvTransparentPlan(materializationContext, mvCompensation, originalOutputColumns, true) :
                 getMVScanPlanWithoutCompensate(rewriteContext, columnRewriter, mvColumnRefToScalarOp);
         return mvScanOptExpression;
     }
