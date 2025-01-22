@@ -101,7 +101,7 @@ static Status valid_input_vector(const ArrayColumn& input_column, const size_t i
             for (int j = 0; j < input_dim; j++) {
                 sum += nums[offsets[i] + j] * nums[offsets[i] + j];
             }
-            if (std::abs(sum - 1) > 1e-6) {
+            if (std::abs(sum - 1) > 1e-3) {
                 return Status::InvalidArgument(
                         "The input vector is not normalized but `metric_type` is cosine_similarity and "
                         "`is_vector_normed` is true");
