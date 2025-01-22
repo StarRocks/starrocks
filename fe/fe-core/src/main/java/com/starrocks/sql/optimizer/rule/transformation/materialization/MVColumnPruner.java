@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -42,10 +41,13 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static com.starrocks.sql.optimizer.operator.OpRuleBit.OP_MV_AGG_PRUNE_COLUMNS;
+
 public class MVColumnPruner {
     private ColumnRefSet requiredOutputColumns;
 
-    public OptExpression pruneColumns(OptExpression queryExpression) {
+    public OptExpression pruneColumns(OptExpression queryExpression, ColumnRefSet requiredOutputColumns) {
+        this.requiredOutputColumns = requiredOutputColumns;
         if (queryExpression.getOp() instanceof LogicalFilterOperator) {
             OptExpression newQueryOptExpression = doPruneColumns(queryExpression.inputAt(0));
             Operator filterOp = queryExpression.getOp();
@@ -58,13 +60,13 @@ public class MVColumnPruner {
     }
 
     public OptExpression doPruneColumns(OptExpression optExpression) {
+        // TODO: remove this check after we support more operators.
         Projection projection = optExpression.getOp().getProjection();
         // OptExpression after mv rewrite must have projection.
         if (projection == null) {
             return optExpression;
         }
-        Preconditions.checkState(projection != null);
-        requiredOutputColumns = new ColumnRefSet(projection.getOutputColumns());
+        // OptExpression after mv rewrite must have projection.
         return optExpression.getOp().accept(new ColumnPruneVisitor(), optExpression, null);
     }
 
@@ -124,20 +126,60 @@ public class MVColumnPruner {
 
         public OptExpression visitLogicalAggregate(OptExpression optExpression, Void context) {
             LogicalAggregationOperator aggregationOperator = (LogicalAggregationOperator) optExpression.getOp();
-            if (aggregationOperator.getProjection() != null) {
-                Projection projection = aggregationOperator.getProjection();
-                projection.getColumnRefMap().values().forEach(s -> requiredOutputColumns.union(s.getUsedColumns()));
-            }
             if (aggregationOperator.getPredicate() != null) {
                 requiredOutputColumns.union(Utils.extractColumnRef(aggregationOperator.getPredicate()));
             }
-            requiredOutputColumns.union(aggregationOperator.getGroupingKeys());
-            for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggregationOperator.getAggregations().entrySet()) {
-                requiredOutputColumns.union(entry.getKey());
-                requiredOutputColumns.union(Utils.extractColumnRef(entry.getValue()));
+            // It's safe to prune columns if the aggregation operator has been rewritten by mv since the rewritten
+            // mv plan should be rollup from the original plan.
+            // TODO: We can do this in more normal ways rather than only mv rewrite later,
+            // issue: https://github.com/StarRocks/starrocks/issues/55285
+            if (aggregationOperator.isOpRuleBitSet(OP_MV_AGG_PRUNE_COLUMNS)) {
+                // project
+                Projection newProjection = null;
+                if (aggregationOperator.getProjection() != null) {
+                    newProjection = new Projection(aggregationOperator.getProjection().getColumnRefMap());
+                    newProjection.getColumnRefMap().values().forEach(s -> requiredOutputColumns.union(s.getUsedColumns()));
+                }
+                // group by
+                final List<ColumnRefOperator> newGroupByKeys = aggregationOperator.getGroupingKeys()
+                        .stream()
+                        .filter(col -> requiredOutputColumns.contains(col))
+                        .collect(Collectors.toList());
+                requiredOutputColumns.union(newGroupByKeys);
+                // partition by
+                final List<ColumnRefOperator> newPartitionByKeys = aggregationOperator.getPartitionByColumns()
+                        .stream()
+                        .filter(col -> requiredOutputColumns.contains(col))
+                        .collect(Collectors.toList());
+                requiredOutputColumns.union(newPartitionByKeys);
+                // aggregations
+                final Map<ColumnRefOperator, CallOperator> newAggregations = aggregationOperator.getAggregations()
+                        .entrySet()
+                        .stream()
+                        .filter(e -> requiredOutputColumns.contains(e.getKey()))
+                        .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+                newAggregations.values().stream().forEach(s -> requiredOutputColumns.union(s.getUsedColumns()));
+                final LogicalAggregationOperator newAggOp = new LogicalAggregationOperator.Builder()
+                        .withOperator(aggregationOperator)
+                        .setProjection(newProjection)
+                        .setGroupingKeys(newGroupByKeys)
+                        .setPartitionByColumns(newPartitionByKeys)
+                        .setAggregations(newAggregations)
+                        .build();
+                return OptExpression.create(newAggOp, visitChildren(optExpression));
+            } else {
+                if (aggregationOperator.getProjection() != null) {
+                    Projection projection = aggregationOperator.getProjection();
+                    projection.getColumnRefMap().values().forEach(s -> requiredOutputColumns.union(s.getUsedColumns()));
+                }
+                requiredOutputColumns.union(aggregationOperator.getGroupingKeys());
+                for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggregationOperator.getAggregations().entrySet()) {
+                    requiredOutputColumns.union(entry.getKey());
+                    requiredOutputColumns.union(Utils.extractColumnRef(entry.getValue()));
+                }
+                List<OptExpression> children = visitChildren(optExpression);
+                return OptExpression.create(aggregationOperator, children);
             }
-            List<OptExpression> children = visitChildren(optExpression);
-            return OptExpression.create(aggregationOperator, children);
         }
 
         public OptExpression visitLogicalUnion(OptExpression optExpression, Void context) {
@@ -174,14 +216,11 @@ public class MVColumnPruner {
             }
             List<List<ColumnRefOperator>> newChildOutputColumns = Lists.newArrayList();
             for (int childIdx = 0; childIdx < optExpression.arity(); ++childIdx) {
-                List<ColumnRefOperator> childOutputCols = unionOperator.getChildOutputColumns().get(childIdx);
-                List<ColumnRefOperator> newChildOutputCols = Lists.newArrayList();
-                newUnionOutputIdxes.stream()
+                final List<ColumnRefOperator> childOutputCols = unionOperator.getChildOutputColumns().get(childIdx);
+                final List<ColumnRefOperator> newChildOutputCols = newUnionOutputIdxes.stream()
                         .map(idx -> childOutputCols.get(idx))
-                        .forEach(x -> {
-                            requiredOutputColumns.union(x);
-                            newChildOutputCols.add(x);
-                        });
+                        .collect(Collectors.toList());
+                requiredOutputColumns.union(newChildOutputCols);
                 newChildOutputColumns.add(newChildOutputCols);
             }
             LogicalUnionOperator newUnionOperator = new LogicalUnionOperator(newUnionOutputColRefs, newChildOutputColumns,

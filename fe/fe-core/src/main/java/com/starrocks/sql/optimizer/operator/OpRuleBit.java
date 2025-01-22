@@ -30,4 +30,6 @@ public class OpRuleBit {
     public static final int OP_MV_TRANSPARENT_REWRITE = 2;
     // Operator has been partition pruned or not, if partition pruned, no need to prune again.
     public static final int OP_PARTITION_PRUNED = 3;
+    // Operator has been mv transparent union rewrite and needs to prune agg columns.
+    public static final int OP_MV_AGG_PRUNE_COLUMNS = 4;
 }
