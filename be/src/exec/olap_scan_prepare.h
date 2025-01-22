@@ -18,11 +18,8 @@
 #include "exec/olap_common.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
-<<<<<<< HEAD
 #include "storage/olap_runtime_range_pruner.h"
-=======
 #include "runtime/descriptors.h"
->>>>>>> bcacb2035 ([BugFix] Fix TopN RuntimeFilter with nulls first crash with lowcardinality optimize (backport #55163) (#55211))
 #include "storage/predicate_tree/predicate_tree_fwd.h"
 #include "storage/predicate_tree_params.h"
 
