@@ -130,6 +130,7 @@ public class StreamLoadMgr implements MemoryTrackable {
         } finally {
             readUnlock();
         }
+        Table table = checkMeta(db, tableName);
 
         boolean createTask = true;
 
@@ -141,7 +142,7 @@ public class StreamLoadMgr implements MemoryTrackable {
                 task.beginTxn(channelId, channelNum, resp);
                 return;
             }
-            task = createLoadTask(db, tableName, label, user, clientIp, timeoutMillis, channelNum, channelId, warehouseId);
+            task = createLoadTaskWithoutLock(db, table, label, user, clientIp, timeoutMillis, channelNum, channelId, warehouseId);
             LOG.info(new LogBuilder(LogKey.STREAM_LOAD_TASK, task.getId())
                     .add("msg", "create load task").build());
             addLoadTask(task);
@@ -161,10 +162,12 @@ public class StreamLoadMgr implements MemoryTrackable {
         StreamLoadTask task = null;
         Database db = checkDbName(dbName);
         long dbId = db.getId();
+        Table table = checkMeta(db, tableName);
 
         writeLock();
         try {
-            task = createLoadTask(db, tableName, label, user, clientIp, timeoutMillis, isRoutineLoad, warehouseId);
+            task = createLoadTaskWithoutLock(db, table, label, user, clientIp, timeoutMillis, isRoutineLoad,
+                    warehouseId);
             LOG.info(new LogBuilder(LogKey.STREAM_LOAD_TASK, task.getId())
                     .add("msg", "create load task").build());
 
@@ -176,19 +179,8 @@ public class StreamLoadMgr implements MemoryTrackable {
     }
 
     // for sync stream load
-    public StreamLoadTask createLoadTask(Database db, String tableName, String label, String user, String clientIp,
-                                         long timeoutMillis, boolean isRoutineLoad, long warehouseId)
-            throws UserException {
-        Table table;
-        Locker locker = new Locker();
-        locker.lockDatabase(db.getId(), LockType.READ);
-        try {
-            unprotectedCheckMeta(db, tableName);
-            table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
-        } finally {
-            locker.unLockDatabase(db.getId(), LockType.READ);
-        }
-
+    public StreamLoadTask createLoadTaskWithoutLock(Database db, Table table, String label, String user, String clientIp,
+                                         long timeoutMillis, boolean isRoutineLoad, long warehouseId) {
         // init stream load task
         long id = GlobalStateMgr.getCurrentState().getNextId();
         StreamLoadTask streamLoadTask = new StreamLoadTask(id, db, (OlapTable) table,
@@ -196,30 +188,10 @@ public class StreamLoadMgr implements MemoryTrackable {
         return streamLoadTask;
     }
 
-    public StreamLoadTask createLoadTaskWithoutLock(Database db, String tableName, String label, String user, String clientIp,
-                                                    long timeoutMillis, boolean isRoutineLoad, long warehouseId)
-            throws UserException {
-        // init stream load task
-        long id = GlobalStateMgr.getCurrentState().getNextId();
-        StreamLoadTask streamLoadTask = new StreamLoadTask(id, db,
-                (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName),
-                label, user, clientIp, timeoutMillis, System.currentTimeMillis(), isRoutineLoad, warehouseId);
-        return streamLoadTask;
-    }
 
-    public StreamLoadTask createLoadTask(Database db, String tableName, String label, String user, String clientIp,
-                                         long timeoutMillis, int channelNum,
-                                         int channelId, long warehouseId) throws UserException {
-        Table table;
-        Locker locker = new Locker();
-        locker.lockDatabase(db.getId(), LockType.READ);
-        try {
-            unprotectedCheckMeta(db, tableName);
-            table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
-        } finally {
-            locker.unLockDatabase(db.getId(), LockType.READ);
-        }
-
+    private StreamLoadTask createLoadTaskWithoutLock(Database db, Table table, String label, String user,
+                                                     String clientIp, long timeoutMillis, int channelNum,
+                                                     int channelId, long warehouseId) {
         // init stream load task
         long id = GlobalStateMgr.getCurrentState().getNextId();
         StreamLoadTask streamLoadTask = new StreamLoadTask(id, db, (OlapTable) table,
@@ -227,7 +199,17 @@ public class StreamLoadMgr implements MemoryTrackable {
         return streamLoadTask;
     }
 
-    public void unprotectedCheckMeta(Database db, String tblName)
+    private Table checkMeta(Database db, String tableName) throws UserException {
+        Locker locker = new Locker();
+        locker.lockDatabase(db.getId(), LockType.READ);
+        try {
+            return unprotectedCheckMeta(db, tableName);
+        } finally {
+            locker.unLockDatabase(db.getId(), LockType.READ);
+        }
+    }
+
+    private Table unprotectedCheckMeta(Database db, String tblName)
             throws UserException {
         if (tblName == null) {
             throw new AnalysisException("Table name must be specified when calling /begin/transaction/ first time");
@@ -248,6 +230,7 @@ public class StreamLoadMgr implements MemoryTrackable {
         if (!table.isOlapOrCloudNativeTable()) {
             throw new AnalysisException("Only olap/lake table support stream load");
         }
+        return table;
     }
 
     public void replayCreateLoadTask(StreamLoadTask loadJob) {
@@ -257,7 +240,7 @@ public class StreamLoadMgr implements MemoryTrackable {
                 .build());
     }
 
-    public Database checkDbName(String dbName) throws UserException {
+    private Database checkDbName(String dbName) throws UserException {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
         if (db == null) {
             LOG.warn("Database {} does not exist", dbName);
