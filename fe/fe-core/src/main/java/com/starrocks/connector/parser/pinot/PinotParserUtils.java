@@ -228,7 +228,7 @@ public class PinotParserUtils {
     }
 
     public static String[] parseDateFormat(String pattern) {
-        String regex = "^(.*?)( tz\\((.*?)\\))?$";
+        String regex =  "^([\\d\\- :yMdHm]{10,16})( tz\\((.*?)\\))?$";
         Pattern p = Pattern.compile(regex);
         Matcher m = p.matcher(pattern);
 
