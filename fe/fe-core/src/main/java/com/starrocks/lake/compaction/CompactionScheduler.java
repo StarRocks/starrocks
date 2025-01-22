@@ -79,8 +79,6 @@ public class CompactionScheduler extends Daemon {
     private final GlobalStateMgr stateMgr;
     private final ConcurrentHashMap<PartitionIdentifier, CompactionJob> runningCompactions;
     private final SynchronizedCircularQueue<CompactionRecord> history;
-    private boolean finishedWaiting = false;
-    private long waitTxnId = -1;
     private long lastPartitionCleanTime;
     private Set<Long> disabledTables; // copy-on-write
 
@@ -105,29 +103,10 @@ public class CompactionScheduler extends Daemon {
         cleanPhysicalPartition();
 
         // Schedule compaction tasks only when this is a leader FE and all edit logs have finished replay.
-        // In order to ensure that the input rowsets of compaction still exists when doing publishing version, it is
-        // necessary to ensure that the compaction task of the same partition is executed serially, that is, the next
-        // compaction task can be executed only after the status of the previous compaction task changes to visible or
-        // canceled.
-        if (stateMgr.isLeader() && stateMgr.isReady() && allCommittedCompactionsBeforeRestartHaveFinished()) {
+        if (stateMgr.isLeader() && stateMgr.isReady()) {
             schedule();
             history.changeMaxSize(Config.lake_compaction_history_size);
         }
-    }
-
-    // Returns true if all compaction transactions committed before this restart have finished(i.e., of VISIBLE state).
-    private boolean allCommittedCompactionsBeforeRestartHaveFinished() {
-        if (finishedWaiting) {
-            return true;
-        }
-        // Note: must call getMinActiveCompactionTxnId() before getNextTransactionId(), otherwise if there are
-        // no running transactions waitTxnId <= minActiveTxnId will always be false.
-        long minActiveTxnId = transactionMgr.getMinActiveCompactionTxnId();
-        if (waitTxnId < 0) {
-            waitTxnId = transactionMgr.getTransactionIDGenerator().getNextTransactionId();
-        }
-        finishedWaiting = waitTxnId <= minActiveTxnId;
-        return finishedWaiting;
     }
 
     private void schedule() {
