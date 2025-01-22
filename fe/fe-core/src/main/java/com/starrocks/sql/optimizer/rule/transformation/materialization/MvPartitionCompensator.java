@@ -605,7 +605,7 @@ public class MvPartitionCompensator {
                 return null;
             }
         }
-        return MvUtils.convertPartitionKeysToListPredicate(partitionColRef, keys);
+        return MvUtils.convertPartitionKeysToListPredicate(Lists.newArrayList(partitionColRef), keys);
     }
 
     private static ScalarOperator convertPartitionKeysToPredicate(ScalarOperator partitionColumn,

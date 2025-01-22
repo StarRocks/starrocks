@@ -119,7 +119,7 @@ public class OptCompensator extends OptExpressionVisitor<OptExpression, Void> {
         ColumnRefOperator partitionColumnRef = scanOperator.getColumnReference(refBaseTablePartitionCol);
         Preconditions.checkState(partitionColumnRef != null);
 
-        ScalarOperator externalExtraPredicate = convertPartitionKeysToListPredicate(partitionColumnRef,
+        ScalarOperator externalExtraPredicate = convertPartitionKeysToListPredicate(Lists.newArrayList(partitionColumnRef),
                 partitionKeys);
         Preconditions.checkState(externalExtraPredicate != null);
         externalExtraPredicate.setRedundant(true);
