@@ -492,16 +492,11 @@ Status TabletManager::drop_tablets_on_error_root_path(const std::vector<TabletIn
     }
 
     for (const auto& dropped_tablet : dropped_tablets) {
-        {
-            // make sure dropped tablet state is TABLET_SHUTDOWN
-            std::unique_lock l(dropped_tablet->get_header_lock());
-            (void)dropped_tablet->set_tablet_state(TABLET_SHUTDOWN);
-            dropped_tablet->save_meta();
-        }
-
-        DroppedTabletInfo drop_info{.tablet = dropped_tablet, .flag = kMoveFilesToTrash};
-        std::unique_lock l(_shutdown_tablets_lock);
-        _add_shutdown_tablet_unlocked(dropped_tablet->tablet_id(), std::move(drop_info));
+        // make sure dropped tablet state is TABLET_SHUTDOWN IN MEMORY ONLY!
+        // any persistent operation is useless because the disk has failed
+        // and the IO operation should be always failed in this case.
+        std::unique_lock l(dropped_tablet->get_header_lock());
+        (void)dropped_tablet->set_tablet_state(TABLET_SHUTDOWN);
     }
 
     return Status::OK();
