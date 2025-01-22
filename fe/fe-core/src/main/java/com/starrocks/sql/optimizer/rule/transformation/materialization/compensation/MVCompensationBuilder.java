@@ -34,6 +34,7 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.common.PListCell;
+import com.starrocks.sql.common.PRangeCell;
 import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -297,7 +298,7 @@ public class MVCompensationBuilder {
     }
 
     private MVCompensation ofExternalTableCompensation(Table refBaseTable,
-                                                       List<PartitionKey> toRefreshRefTablePartitions) {
+                                                       List<PRangeCell> toRefreshRefTablePartitions) {
         Map<Table, BaseCompensation<?>> compensationMap = Collections.singletonMap(refBaseTable,
                 new ExternalTableCompensation(toRefreshRefTablePartitions));
         return new MVCompensation(sessionVariable, MVTransparentState.COMPENSATE, compensationMap);
@@ -333,7 +334,7 @@ public class MVCompensationBuilder {
                 return MVCompensation.createNoCompensateState(sessionVariable);
             }
             // if mv's to refresh partitions contains any of query's select partition ids, then rewrite with compensate.
-            List<PartitionKey> toRefreshRefTablePartitions = getMVCompensatePartitionsOfExternal(
+            List<PRangeCell> toRefreshRefTablePartitions = getMVCompensatePartitionsOfExternal(
                     refTablePartitionNamesToRefresh, refScanOperator);
             if (toRefreshRefTablePartitions == null) {
                 return MVCompensation.createUnkownState(sessionVariable);
@@ -375,8 +376,8 @@ public class MVCompensationBuilder {
         return refTableCompensatePartitionIds;
     }
 
-    private List<PartitionKey> getMVCompensatePartitionsOfExternal(Set<String> refTablePartitionNamesToRefresh,
-                                                                   LogicalScanOperator refScanOperator)
+    private List<PRangeCell> getMVCompensatePartitionsOfExternal(Set<String> refTablePartitionNamesToRefresh,
+                                                                 LogicalScanOperator refScanOperator)
             throws AnalysisException {
         ScanOperatorPredicates scanOperatorPredicates = null;
         try {
