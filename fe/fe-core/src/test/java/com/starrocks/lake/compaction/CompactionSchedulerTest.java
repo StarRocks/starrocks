@@ -189,7 +189,7 @@ public class CompactionSchedulerTest {
 
     @Test
     public void testCompactionTaskLimit() {
-        CompactionScheduler compactionScheduler = new CompactionScheduler(null, null, null, null, "");
+        CompactionScheduler compactionScheduler = new CompactionScheduler(new CompactionMgr(), null, null, null, "");
 
         int defaultValue = Config.lake_compaction_max_tasks;
         // explicitly set config to a value bigger than default -1
