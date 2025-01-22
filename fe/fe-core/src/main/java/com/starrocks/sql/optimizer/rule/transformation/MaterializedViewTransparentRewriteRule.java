@@ -32,7 +32,11 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import com.starrocks.sql.optimizer.Utils;
+<<<<<<< HEAD
 import com.starrocks.sql.optimizer.operator.Operator;
+=======
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
+>>>>>>> 8631ba9088 ([BugFix] Prune aggregate non-required columns after mv transparent rewrite (#55286))
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
@@ -217,7 +221,7 @@ public class MaterializedViewTransparentRewriteRule extends TransformationRule {
     /**
      * Get transparent plan if possible.
      * What's the transparent plan?
-     * see {@link MvPartitionCompensator#getMvTransparentPlan(MaterializationContext, MVCompensation, List)
+     * see {@link MvPartitionCompensator#getMvTransparentPlan(MaterializationContext, MVCompensation, List, ColumnRefSet)}
      */
     private OptExpression getMvTransparentPlan(MaterializationContext mvContext,
                                                OptExpression input,
@@ -247,7 +251,7 @@ public class MaterializedViewTransparentRewriteRule extends TransformationRule {
             return null;
         }
         OptExpression transparentPlan = MvPartitionCompensator.getMvTransparentPlan(mvContext, mvCompensation,
-                expectOutputColumns);
+                expectOutputColumns, false);
         return transparentPlan;
     }
 
