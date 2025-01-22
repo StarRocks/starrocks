@@ -21,30 +21,43 @@ import java.nio.ByteBuffer;
 
 public final class ColumnDict {
     private final ImmutableMap<ByteBuffer, Integer> dict;
-    private final long collectedVersionTime;
-    private long versionTime;
+    // olap table use time info as version info.
+    // table on lake use num as version, collectedVersion means historical version num,
+    // while version means version in current period.
+    private final long collectedVersion;
+    private long version;
 
-    public ColumnDict(ImmutableMap<ByteBuffer, Integer> dict, long versionTime) {
+    public ColumnDict(ImmutableMap<ByteBuffer, Integer> dict, long version) {
         Preconditions.checkState(dict.size() > 0 && dict.size() <= 256,
                 "dict size %s is illegal", dict.size());
         this.dict = dict;
-        this.collectedVersionTime = versionTime;
-        this.versionTime = versionTime;
+        this.collectedVersion = version;
+        this.version = version;
+    }
+
+    public ColumnDict(ImmutableMap<ByteBuffer, Integer> dict, long collectedVersion, long version) {
+        this.dict = dict;
+        this.collectedVersion = collectedVersion;
+        this.version = version;
     }
 
     public ImmutableMap<ByteBuffer, Integer> getDict() {
         return dict;
     }
 
-    public long getVersionTime() {
-        return versionTime;
+    public long getVersion() {
+        return version;
     }
 
-    public long getCollectedVersionTime() {
-        return collectedVersionTime;
+    public long getCollectedVersion() {
+        return collectedVersion;
     }
 
-    void updateVersionTime(long versionTime) {
-        this.versionTime = versionTime;
+    public int getDictSize() {
+        return dict.size();
+    }
+
+    void updateVersion(long version) {
+        this.version = version;
     }
 }

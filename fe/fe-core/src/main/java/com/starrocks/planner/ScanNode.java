@@ -40,6 +40,7 @@ import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.ColumnAccessPath;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.connector.RemoteFilesSampleStrategy;
 import com.starrocks.datacache.DataCacheOptions;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.optimizer.ScanOptimzeOption;
@@ -178,5 +179,8 @@ public abstract class ScanNode extends PlanNode {
     // will use this number to fair share memory usage between those scan nodes.
     public boolean isRunningAsConnectorOperator() {
         return true;
+    }
+
+    public void setScanSampleStrategy(RemoteFilesSampleStrategy strategy) {
     }
 }

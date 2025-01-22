@@ -529,7 +529,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
                 strings.add(kv.getKey());
                 integers.add(kv.getValue());
             }
-            globalDict.setVersion(dictPair.second.getCollectedVersionTime());
+            globalDict.setVersion(dictPair.second.getCollectedVersion());
             globalDict.setStrings(strings);
             globalDict.setIds(integers);
             result.add(globalDict);
@@ -550,7 +550,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         for (Pair<Integer, ColumnDict> dictPair : sortedDicts) {
             TGlobalDict globalDict = new TGlobalDict();
             globalDict.setColumnId(dictPair.first);
-            globalDict.setVersion(dictPair.second.getCollectedVersionTime());
+            globalDict.setVersion(dictPair.second.getCollectedVersion());
             result.add(globalDict);
         }
         return result;
