@@ -211,6 +211,12 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
 
         sql = "select to_timestamp('2022-02-02', 'yyyy-mm-dd')";
         assertPlanContains(sql, " to_tera_timestamp('2022-02-02', 'yyyy-mm-dd')");
+
+        sql = "select year_of_week('2022-02-02')";
+        assertPlanContains(sql, "<slot 2> : 2022");
+
+        sql = "select yow('2022-02-02')";
+        assertPlanContains(sql, "<slot 2> : 2022");
     }
 
     @Test
