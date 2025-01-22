@@ -73,6 +73,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -643,6 +644,19 @@ public class GlobalTransactionMgr implements MemoryTrackable {
             minId = Math.min(minId, dbTransactionMgr.getMinActiveCompactionTxnId().orElse(Long.MAX_VALUE));
         }
         return minId;
+    }
+
+    /**
+     * Get the map of active txn [txnId, tableId] of compaction transactions.
+     * @return the list of active txn stats of compaction transactions.
+     */
+    public Map<Long, Long> getLakeCompactionActiveTxnStats() {
+        Map<Long, Long> txnIdToTableIdMap = new HashMap<>();
+        for (Map.Entry<Long, DatabaseTransactionMgr> entry : dbIdToDatabaseTransactionMgrs.entrySet()) {
+            DatabaseTransactionMgr dbTransactionMgr = entry.getValue();
+            txnIdToTableIdMap.putAll(dbTransactionMgr.getLakeCompactionActiveTxnMap());
+        }
+        return txnIdToTableIdMap;
     }
 
     /**
