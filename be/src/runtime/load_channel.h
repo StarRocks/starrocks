@@ -123,7 +123,8 @@ public:
     void report_profile(PTabletWriterAddBatchResult* result, bool print_profile);
 
 private:
-    void _add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request, PTabletWriterAddBatchResult* response);
+    void _add_chunk(Chunk* chunk, const MonotonicStopWatch* watch, const PTabletWriterAddChunkRequest& request,
+                    PTabletWriterAddBatchResult* response);
     Status _build_chunk_meta(const ChunkPB& pb_chunk);
     Status _deserialize_chunk(const ChunkPB& pchunk, Chunk& chunk, faststring* uncompressed_buffer);
     bool _should_enable_profile();

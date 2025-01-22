@@ -667,4 +667,78 @@ TEST_F(LoadChannelTestForLakeTablet, test_final_profile) {
     clear_response(&add_chunk_response);
 }
 
+TEST_F(LoadChannelTestForLakeTablet, test_slow_log_profile) {
+    PTabletWriterOpenRequest open_request = _open_request;
+    open_request.set_num_senders(1);
+    PLoadChannelProfileConfig profile_config;
+    profile_config.set_enable_profile(false);
+    _load_channel->set_profile_config(profile_config);
+    open_request.mutable_load_channel_profile_config()->CopyFrom(profile_config);
+
+    PTabletWriterOpenResult open_response;
+    _load_channel->open(nullptr, open_request, &open_response, nullptr);
+    ASSERT_EQ(TStatusCode::OK, open_response.status().status_code());
+
+    constexpr int kChunkSize = 128;
+    constexpr int kChunkSizePerTablet = kChunkSize / 4;
+    auto chunk = generate_data(kChunkSize);
+
+    PTabletWriterAddChunksRequest add_chunks_request;
+    add_chunks_request.set_is_repeated_chunk(true);
+    auto& add_chunk_request = *add_chunks_request.add_requests();
+    PTabletWriterAddBatchResult add_chunk_response;
+    {
+        add_chunk_request.set_index_id(kIndexId);
+        add_chunk_request.set_sender_id(0);
+        add_chunk_request.set_eos(true);
+        add_chunk_request.set_packet_seq(0);
+        add_chunk_request.mutable_id()->set_hi(0);
+        add_chunk_request.mutable_id()->set_lo(0);
+        add_chunk_request.set_sink_id(0);
+        add_chunk_request.set_timeout_ms(0);
+
+        ASSIGN_OR_ABORT(auto chunk_pb, serde::ProtobufChunkSerde::serialize(chunk));
+        add_chunk_request.mutable_chunk()->Swap(&chunk_pb);
+
+        for (int i = 0; i < kChunkSize; i++) {
+            int64_t tablet_id = 10086 + (i / kChunkSizePerTablet);
+            add_chunk_request.add_tablet_ids(tablet_id);
+            add_chunk_request.add_partition_ids(tablet_id < 10088 ? 10 : 11);
+        }
+    }
+
+    auto clear_response = [](PTabletWriterAddBatchResult* response) {
+        PTabletWriterAddBatchResult tmp;
+        response->Swap(&tmp);
+    };
+
+    _load_channel->add_chunks(add_chunks_request, &add_chunk_response);
+    ASSERT_TRUE(add_chunk_response.status().status_code() == TStatusCode::OK);
+    ASSERT_FALSE(add_chunk_response.has_load_channel_profile());
+
+    std::shared_ptr<RuntimeProfile> profile = _load_channel->_root_profile;
+    ASSERT_EQ(print_id(_load_channel->load_id()), *profile->get_info_string("LoadId"));
+    ASSERT_EQ(std::to_string(_load_channel->txn_id()), *profile->get_info_string("TxnId"));
+
+    ASSERT_EQ(1, profile->num_children());
+    RuntimeProfile* channel_profile = profile->get_child(0);
+    ASSERT_EQ(fmt::format("Channel (host={})", BackendOptions::get_localhost()), channel_profile->name());
+    ASSERT_EQ(1, channel_profile->get_counter("IndexNum")->value());
+    ASSERT_EQ(-1, channel_profile->get_counter("LoadMemoryLimit")->value());
+
+    ASSERT_EQ(1, channel_profile->num_children());
+    RuntimeProfile* index_profile = channel_profile->get_child(0);
+    ASSERT_EQ(fmt::format("Index (id={})", kIndexId), index_profile->name());
+    ASSERT_EQ(1, index_profile->get_counter("OpenRpcCount")->value());
+    ASSERT_TRUE(index_profile->get_counter("OpenRpcTime")->value() > 0);
+    ASSERT_EQ(1, index_profile->get_counter("AddChunkRpcCount")->value());
+    ASSERT_TRUE(index_profile->get_counter("AddChunkRpcTime")->value() > 0);
+    ASSERT_EQ(chunk.num_rows(), index_profile->get_counter("AddRowNum")->value());
+    auto* replicas_profile = index_profile->get_child("PeerReplicas");
+    ASSERT_NE(nullptr, replicas_profile);
+    ASSERT_EQ(4, replicas_profile->get_counter("TabletsNum")->value());
+
+    clear_response(&add_chunk_response);
+}
+
 } // namespace starrocks

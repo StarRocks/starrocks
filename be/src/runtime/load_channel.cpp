@@ -156,7 +156,7 @@ void LoadChannel::open(brpc::Controller* cntl, const PTabletWriterOpenRequest& r
     }
 }
 
-void LoadChannel::_add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request,
+void LoadChannel::_add_chunk(Chunk* chunk, const MonotonicStopWatch* watch, const PTabletWriterAddChunkRequest& request,
                              PTabletWriterAddBatchResult* response) {
     _num_chunk++;
     _last_updated_time.store(time(nullptr), std::memory_order_relaxed);
@@ -171,7 +171,8 @@ void LoadChannel::_add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& r
     }
     bool close_channel;
     channel->add_chunk(chunk, request, response, &close_channel);
-    if (close_channel && _should_enable_profile()) {
+    if (close_channel &&
+        (_should_enable_profile() || (watch != nullptr && watch->elapsed_time() > request.timeout_ms() * 1000000))) {
         // If close_channel is true, the channel has been removed from _tablets_channels
         // in TabletsChannel::add_chunk, so there will be no chance to get the channel to
         // update the profile later. So update the profile here
@@ -186,9 +187,9 @@ void LoadChannel::add_chunk(const PTabletWriterAddChunkRequest& request, PTablet
         auto& pchunk = request.chunk();
         RETURN_RESPONSE_IF_ERROR(_build_chunk_meta(pchunk), response);
         RETURN_RESPONSE_IF_ERROR(_deserialize_chunk(pchunk, chunk, &uncompressed_buffer), response);
-        _add_chunk(&chunk, request, response);
+        _add_chunk(&chunk, nullptr, request, response);
     } else {
-        _add_chunk(nullptr, request, response);
+        _add_chunk(nullptr, nullptr, request, response);
     }
     report_profile(response, config::pipeline_print_profile);
 }
@@ -205,6 +206,7 @@ void LoadChannel::add_chunks(const PTabletWriterAddChunksRequest& req, PTabletWr
     faststring uncompressed_buffer;
     std::unique_ptr<Chunk> chunk;
     int eos_count = 0;
+    int64_t timeout_ms = -1;
     for (int i = 0; i < req.requests_size(); i++) {
         auto& request = req.requests(i);
         VLOG_RPC << "tablet writer add chunk, id=" << print_id(request.id()) << ", index_id=" << request.index_id()
@@ -214,13 +216,17 @@ void LoadChannel::add_chunks(const PTabletWriterAddChunksRequest& req, PTabletWr
             eos_count = 1;
         }
 
+        if (timeout_ms == -1) {
+            timeout_ms = request.timeout_ms();
+        }
+
         if (i == 0 && request.has_chunk()) {
             chunk = std::make_unique<Chunk>();
             auto& pchunk = request.chunk();
             RETURN_RESPONSE_IF_ERROR(_build_chunk_meta(pchunk), response);
             RETURN_RESPONSE_IF_ERROR(_deserialize_chunk(pchunk, *chunk, &uncompressed_buffer), response);
         }
-        _add_chunk(chunk.get(), request, response);
+        _add_chunk(chunk.get(), &watch, request, response);
 
         if (response->status().status_code() != TStatusCode::OK) {
             LOG(WARNING) << "tablet writer add chunk, id=" << print_id(request.id())
@@ -230,10 +236,34 @@ void LoadChannel::add_chunks(const PTabletWriterAddChunksRequest& req, PTabletWr
             break;
         }
     }
+
+    int64_t total_time_us = watch.elapsed_time() / 1000;
     StarRocksMetrics::instance()->load_channel_add_chunks_total.increment(1);
     StarRocksMetrics::instance()->load_channel_add_chunks_eos_total.increment(eos_count);
-    StarRocksMetrics::instance()->load_channel_add_chunks_duration_us.increment(watch.elapsed_time() / 1000);
+    StarRocksMetrics::instance()->load_channel_add_chunks_duration_us.increment(total_time_us);
+
     report_profile(response, config::pipeline_print_profile);
+
+    // log profile if rpc timeout
+    if (total_time_us > timeout_ms * 1000) {
+        // update profile
+        auto channels = _get_all_channels();
+        for (auto& channel : channels) {
+            channel->update_profile();
+        }
+
+        std::stringstream ss;
+        _root_profile->pretty_print(&ss);
+        if (timeout_ms > config::load_rpc_slow_log_frequency_threshold_seconds) {
+            LOG(WARNING) << "tablet writer add chunk timeout. txn_id=" << _txn_id << ", cost=" << total_time_us / 1000
+                         << "ms, timeout=" << timeout_ms << "ms, profile=" << ss.str();
+        } else {
+            // reduce slow log print frequency if the log job is small batch and high frequency
+            LOG_EVERY_N(WARNING, 10) << "tablet writer add chunk timeout. txn_id=" << _txn_id
+                                     << ", cost=" << total_time_us / 1000 << "ms, timeout=" << timeout_ms
+                                     << "ms, profile=" << ss.str();
+        }
+    }
 }
 
 void LoadChannel::add_segment(brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
