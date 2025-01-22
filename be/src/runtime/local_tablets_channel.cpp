@@ -76,9 +76,12 @@ LocalTabletsChannel::LocalTabletsChannel(LoadChannel* load_channel, const Tablet
     _add_row_num = ADD_COUNTER(_profile, "AddRowNum", TUnit::UNIT);
     _add_chunk_timer = ADD_TIMER(_profile, "AddChunkRpcTime");
     _wait_flush_timer = ADD_CHILD_TIMER(_profile, "WaitFlushTime", "AddChunkRpcTime");
+    _submit_write_task_timer = ADD_CHILD_TIMER(_profile, "SubmitWriteTaskTime", "AddChunkRpcTime");
+    _submit_commit_task_timer = ADD_CHILD_TIMER(_profile, "SubmitCommitTaskTime", "AddChunkRpcTime");
     _wait_write_timer = ADD_CHILD_TIMER(_profile, "WaitWriteTime", "AddChunkRpcTime");
     _wait_replica_timer = ADD_CHILD_TIMER(_profile, "WaitReplicaTime", "AddChunkRpcTime");
     _wait_txn_persist_timer = ADD_CHILD_TIMER(_profile, "WaitTxnPersistTime", "AddChunkRpcTime");
+    _wait_drain_sender_timer = ADD_CHILD_TIMER(_profile, "WaitDrainSenderTime", "AddChunkRpcTime");
     _tablets_profile = std::make_unique<RuntimeProfile>("TabletsProfile");
 }
 
@@ -248,6 +251,7 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
     std::unordered_map<int64_t, std::vector<int64_t>> node_id_to_abort_tablets;
     context->set_node_id_to_abort_tablets(&node_id_to_abort_tablets);
 
+    auto start_submit_write_task_ts = watch.elapsed_time();
     int64_t wait_memtable_flush_time_us = 0;
     int32_t total_row_num = 0;
     for (int i = 0; i < channel_size; ++i) {
@@ -295,6 +299,7 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
 
         delta_writer->write(req, cb);
     }
+    auto finish_submit_write_task_ts = watch.elapsed_time();
 
     // _channel_row_idx_start_points no longer used, release it to free memory.
     context->_channel_row_idx_start_points.reset();
@@ -305,6 +310,7 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
         close_channel = true;
         _commit_tablets(request, context);
     }
+    auto finish_submit_commit_task_ts = watch.elapsed_time();
 
     // Must reset the context pointer before waiting on the |count_down_latch|,
     // because the |count_down_latch| is decreased in the destructor of the context,
@@ -416,7 +422,9 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
         // unlock write lock so that incremental open can aquire read lock
         lk.unlock();
         // wait for all senders closed, may be timed out
+        auto start_wait_drain_sender_ts = watch.elapsed_time();
         drain_senders(remain * 1000, msg);
+        COUNTER_UPDATE(_wait_drain_sender_timer, watch.elapsed_time() - start_wait_drain_sender_ts);
     }
 
     int64_t last_execution_time_us = 0;
@@ -446,6 +454,8 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
     COUNTER_UPDATE(_add_chunk_timer, watch.elapsed_time());
     COUNTER_UPDATE(_add_row_num, total_row_num);
     COUNTER_UPDATE(_wait_flush_timer, wait_memtable_flush_time_us * 1000);
+    COUNTER_UPDATE(_submit_write_task_timer, finish_submit_write_task_ts - start_submit_write_task_ts);
+    COUNTER_UPDATE(_submit_commit_task_timer, finish_submit_commit_task_ts - finish_submit_write_task_ts);
     COUNTER_UPDATE(_wait_write_timer, wait_writer_ns);
     COUNTER_UPDATE(_wait_replica_timer, wait_replica_ns);
 
