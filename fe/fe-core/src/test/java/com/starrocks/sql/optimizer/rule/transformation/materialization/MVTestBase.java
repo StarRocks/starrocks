@@ -129,6 +129,10 @@ public class MVTestBase extends StarRocksTestBase {
         return getFragmentPlan(sql, TExplainLevel.NORMAL, traceModule);
     }
 
+    public String getFragmentPlan(String sql, TExplainLevel level) throws Exception {
+        return getFragmentPlan(sql, level, null);
+    }
+
     public String getFragmentPlan(String sql, TExplainLevel level, String traceModule) throws Exception {
         Pair<String, Pair<ExecPlan, String>> result =
                 UtFrameUtils.getFragmentPlanWithTrace(connectContext, sql, traceModule);
