@@ -1,8 +1,4 @@
 -- name: test_transparent_mv_union_hive2
-<<<<<<< HEAD
-
-=======
->>>>>>> f34f1a229d ([BugFix] Support more patterns for mv union rewrite by default (#55199))
 create external catalog mv_hive_${uuid0}
 properties
 (
