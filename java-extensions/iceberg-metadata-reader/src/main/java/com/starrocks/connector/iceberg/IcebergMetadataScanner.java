@@ -19,6 +19,7 @@ import com.esotericsoftware.kryo.io.Output;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.connector.share.iceberg.CommonMetadataBean;
 import com.starrocks.connector.share.iceberg.IcebergMetricsBean;
+import com.starrocks.connector.share.iceberg.JavaImmutableMapSerializer;
 import com.starrocks.connector.share.iceberg.UnmodifiableCollectionsSerializer;
 import com.starrocks.jni.connector.ColumnValue;
 import org.apache.iceberg.ContentFile;
@@ -165,6 +166,8 @@ public class IcebergMetadataScanner extends AbstractIcebergMetadataScanner {
         this.kryo = new Kryo();
         this.kryo.register(CommonMetadataBean.class);
         this.kryo.register(IcebergMetricsBean.class);
+        this.kryo.register(Map.of().getClass(), new JavaImmutableMapSerializer());
+        this.kryo.register(Map.of(1, 1).getClass(), new JavaImmutableMapSerializer());
         UnmodifiableCollectionsSerializer.registerSerializers(kryo);
         this.stream = new ByteArrayOutputStream();
         this.output = new Output(stream);
