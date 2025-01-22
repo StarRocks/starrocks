@@ -97,8 +97,8 @@ static Status valid_input_vector(const ArrayColumn& input_column, const size_t i
                                         index_dim, input_dim));
         }
 
-        double sum = 0;
         if constexpr (is_input_normalized) {
+            double sum = 0;
             for (int j = 0; j < input_dim; j++) {
                 const size_t offset = offsets[i] + j;
                 if (!is_element_nulls[offset]) {
