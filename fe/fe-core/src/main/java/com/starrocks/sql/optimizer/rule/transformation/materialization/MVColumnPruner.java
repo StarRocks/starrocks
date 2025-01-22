@@ -18,7 +18,6 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
-import com.starrocks.common.Pair;
 import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -129,28 +128,32 @@ public class MVColumnPruner {
             // TODO: We can do this in more normal ways rather than only mv rewrite later,
             // issue: https://github.com/StarRocks/starrocks/issues/55285
             if (aggregationOperator.isOpRuleBitSet(OP_MV_AGG_PRUNE_COLUMNS)) {
+                // project
                 Projection newProjection = null;
                 if (aggregationOperator.getProjection() != null) {
-                    newProjection = aggregationOperator.getProjection();
+                    newProjection = new Projection(aggregationOperator.getProjection().getColumnRefMap());
                     newProjection.getColumnRefMap().values().forEach(s -> requiredOutputColumns.union(s.getUsedColumns()));
                 }
-                List<ColumnRefOperator> newGroupByKeys = aggregationOperator.getGroupingKeys()
+                // group by
+                final List<ColumnRefOperator> newGroupByKeys = aggregationOperator.getGroupingKeys()
                         .stream()
                         .filter(col -> requiredOutputColumns.contains(col))
                         .collect(Collectors.toList());
-                List<ColumnRefOperator> newPartitionByKeys = aggregationOperator.getPartitionByColumns()
+                requiredOutputColumns.union(newGroupByKeys);
+                // partition by
+                final List<ColumnRefOperator> newPartitionByKeys = aggregationOperator.getPartitionByColumns()
                         .stream()
                         .filter(col -> requiredOutputColumns.contains(col))
                         .collect(Collectors.toList());
-                Map<ColumnRefOperator, CallOperator> newAggregations = aggregationOperator.getAggregations()
+                requiredOutputColumns.union(newPartitionByKeys);
+                // aggregations
+                final Map<ColumnRefOperator, CallOperator> newAggregations = aggregationOperator.getAggregations()
                         .entrySet()
                         .stream()
                         .filter(e -> requiredOutputColumns.contains(e.getKey()))
-                        .map(e -> {
-                            requiredOutputColumns.union(e.getValue().getUsedColumns());
-                            return Pair.create(e.getKey(), e.getValue());
-                        }).collect(Collectors.toMap(e -> e.first, e -> e.second));
-                LogicalAggregationOperator newAggOp = new LogicalAggregationOperator.Builder()
+                        .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+                newAggregations.values().stream().forEach(s -> requiredOutputColumns.union(s.getUsedColumns()));
+                final LogicalAggregationOperator newAggOp = new LogicalAggregationOperator.Builder()
                         .withOperator(aggregationOperator)
                         .setProjection(newProjection)
                         .setGroupingKeys(newGroupByKeys)
@@ -209,8 +212,8 @@ public class MVColumnPruner {
             }
             List<List<ColumnRefOperator>> newChildOutputColumns = Lists.newArrayList();
             for (int childIdx = 0; childIdx < optExpression.arity(); ++childIdx) {
-                List<ColumnRefOperator> childOutputCols = unionOperator.getChildOutputColumns().get(childIdx);
-                List<ColumnRefOperator> newChildOutputCols = newUnionOutputIdxes.stream()
+                final List<ColumnRefOperator> childOutputCols = unionOperator.getChildOutputColumns().get(childIdx);
+                final List<ColumnRefOperator> newChildOutputCols = newUnionOutputIdxes.stream()
                         .map(idx -> childOutputCols.get(idx))
                         .collect(Collectors.toList());
                 requiredOutputColumns.union(newChildOutputCols);
