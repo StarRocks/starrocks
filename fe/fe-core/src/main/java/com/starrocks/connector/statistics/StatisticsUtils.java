@@ -15,6 +15,7 @@
 package com.starrocks.connector.statistics;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.server.GlobalStateMgr;
@@ -28,6 +29,7 @@ import com.starrocks.statistic.StatsConstants;
 import io.trino.hive.$internal.org.apache.commons.lang3.tuple.ImmutableTriple;
 import io.trino.hive.$internal.org.apache.commons.lang3.tuple.Triple;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -66,6 +68,12 @@ public class StatisticsUtils {
         }
 
         return ImmutableTriple.of(splits[0], db, table);
+    }
+
+    public static List<String> getTableNameByUUID(String tableUUID) {
+        String[] splits = tableUUID.split("\\.");
+        Preconditions.checkState(splits.length >= 3);
+        return ImmutableList.of(splits[0], splits[1], splits[2]);
     }
 
     public static Statistics buildDefaultStatistics(Set<ColumnRefOperator> columns) {

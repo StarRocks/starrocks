@@ -23,6 +23,7 @@ import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.connector.CatalogConnector;
+import com.starrocks.connector.RemoteFilesSampleStrategy;
 import com.starrocks.connector.hive.HiveConnectorScanRangeSource;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.datacache.DataCacheOptions;
@@ -276,5 +277,10 @@ public class HdfsScanNode extends ScanNode {
     @Override
     protected boolean supportTopNRuntimeFilter() {
         return true;
+    }
+
+    @Override
+    public void setScanSampleStrategy(RemoteFilesSampleStrategy strategy) {
+        scanRangeSource.setSampleStrategy(strategy);
     }
 }
