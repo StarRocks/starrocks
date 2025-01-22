@@ -89,12 +89,8 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
-<<<<<<< HEAD
-import static com.starrocks.sql.optimizer.operator.Operator.OP_UNION_ALL_BIT;
-=======
 import static com.starrocks.sql.optimizer.operator.OpRuleBit.OP_MV_AGG_PRUNE_COLUMNS;
-import static com.starrocks.sql.optimizer.operator.OpRuleBit.OP_MV_UNION_REWRITE;
->>>>>>> 8631ba9088 ([BugFix] Prune aggregate non-required columns after mv transparent rewrite (#55286))
+import static com.starrocks.sql.optimizer.operator.Operator.OP_UNION_ALL_BIT;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.deriveLogicalProperty;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.mergeRanges;
 
@@ -217,11 +213,7 @@ public class MvPartitionCompensator {
         deriveLogicalProperty(newMvQueryPlan);
         List<ColumnRefOperator> orgMvQueryOutputColumnRefs = mvContext.getMvOutputColumnRefs();
         List<ColumnRefOperator> mvQueryOutputColumnRefs = duplicator.getMappedColumns(orgMvQueryOutputColumnRefs);
-<<<<<<< HEAD
         newMvQueryPlan.getOp().setOpRuleMask(OP_UNION_ALL_BIT);
-        return Pair.create(newMvQueryPlan, mvQueryOutputColumnRefs);
-=======
-        newMvQueryPlan.getOp().setOpRuleBit(OP_MV_UNION_REWRITE);
         if (isMVRewrite) {
             // NOTE: mvScanPlan and mvCompensatePlan will output all columns of the mv's defined query,
             // it may contain more columns than the requiredColumns.
@@ -231,13 +223,12 @@ public class MvPartitionCompensator {
             // required columns in the transparent rule.
             List<LogicalAggregationOperator> list = Lists.newArrayList();
             Utils.extractOperator(newMvQueryPlan, list, op -> op instanceof LogicalAggregationOperator);
-            list.stream().forEach(op -> op.setOpRuleBit(OP_MV_AGG_PRUNE_COLUMNS));
+            list.stream().forEach(op -> op.setOpRuleMask(OP_MV_AGG_PRUNE_COLUMNS));
         }
         // Adjust query output columns to mv's output columns to make sure the output columns are the same as
         // expectOutputColumns which are mv scan operator's output columns.
         return adjustOptExpressionOutputColumnType(mvContext.getQueryRefFactory(),
                 newMvQueryPlan, mvQueryOutputColumnRefs, originalOutputColumns);
->>>>>>> 8631ba9088 ([BugFix] Prune aggregate non-required columns after mv transparent rewrite (#55286))
     }
 
     public static OptExpression getMvCompensateQueryPlan(MaterializationContext mvContext,
