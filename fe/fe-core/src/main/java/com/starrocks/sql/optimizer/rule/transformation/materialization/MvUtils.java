@@ -1450,9 +1450,6 @@ public class MvUtils {
         return baseTableInfos.stream().map(BaseTableInfo::getReadableString).collect(Collectors.joining(","));
     }
 
-<<<<<<< HEAD
-    public static ScalarOperator convertPartitionKeysToListPredicate(List<ScalarOperator> partitionColRefs,
-=======
     public static ScalarOperator convertPartitionKeyRangesToListPredicate(List<? extends ScalarOperator> partitionColRefs,
                                                                           Collection<PRangeCell> pRangeCells,
                                                                           boolean areAllRangePartitionsSingleton) {
@@ -1465,7 +1462,6 @@ public class MvUtils {
     }
 
     public static ScalarOperator convertPartitionKeysToListPredicate(List<? extends ScalarOperator> partitionColRefs,
->>>>>>> a85919770 ([BugFix] Fix mv partition compensation for iceberg table with transform partition in range materialized view (#55151))
                                                                      Collection<PartitionKey> partitionRanges) {
         final List<ScalarOperator> values = Lists.newArrayList();
         if (partitionColRefs.size() == 1) {
