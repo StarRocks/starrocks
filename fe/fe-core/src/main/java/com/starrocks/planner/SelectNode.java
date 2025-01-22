@@ -36,13 +36,26 @@ package com.starrocks.planner;
 
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.analysis.SlotId;
+import com.starrocks.common.Pair;
+import com.starrocks.common.StarRocksException;
+>>>>>>> be65ed6621 ([BugFix] Fix wrong result when query cache work with select node (#55287))
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.TNormalPlanNode;
+import com.starrocks.thrift.TNormalSelectNode;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+<<<<<<< HEAD
+=======
+import java.nio.ByteBuffer;
+import java.util.Arrays;
+>>>>>>> be65ed6621 ([BugFix] Fix wrong result when query cache work with select node (#55287))
 import java.util.List;
 
 /**
@@ -69,6 +82,19 @@ public class SelectNode extends PlanNode {
 
     @Override
     public void computeStats(Analyzer analyzer) {
+    }
+
+    @Override
+    protected void toNormalForm(TNormalPlanNode planNode, FragmentNormalizer normalizer) {
+        TNormalSelectNode selectNode = new TNormalSelectNode();
+        if (commonSlotMap != null) {
+            Pair<List<Integer>, List<ByteBuffer>> slotIdsAndExprs = normalizer.normalizeSlotIdsAndExprs(commonSlotMap);
+            selectNode.setCse_slot_ids(slotIdsAndExprs.first);
+            selectNode.setCse_exprs(slotIdsAndExprs.second);
+        }
+        planNode.setSelect_node(selectNode);
+        planNode.setNode_type(TPlanNodeType.SELECT_NODE);
+        normalizeConjuncts(normalizer, planNode, conjuncts);
     }
 
     @Override
