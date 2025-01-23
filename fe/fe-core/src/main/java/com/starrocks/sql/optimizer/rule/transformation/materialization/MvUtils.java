@@ -66,7 +66,6 @@ import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.MaterializedViewOptimizer;
-import com.starrocks.sql.optimizer.MvRewritePreprocessor;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.Optimizer;
@@ -1238,7 +1237,7 @@ public class MvUtils {
     public static List<ColumnRefOperator> getMvScanOutputColumnRefs(MaterializedView mv,
                                                                     LogicalOlapScanOperator scanMvOp) {
         List<ColumnRefOperator> scanMvOutputColumns = Lists.newArrayList();
-        for (Column column : MvRewritePreprocessor.getMvOutputColumns(mv)) {
+        for (Column column : mv.getOrderedOutputColumns()) {
             scanMvOutputColumns.add(scanMvOp.getColumnReference(column));
         }
         return scanMvOutputColumns;

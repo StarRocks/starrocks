@@ -908,7 +908,7 @@ public class MvRewritePreprocessor {
         materializationContext.setScanMvOperator(scanMvOp);
         // should keep the sequence of schema
         List<ColumnRefOperator> scanMvOutputColumns = Lists.newArrayList();
-        for (Column column : getMvOutputColumns(copiedMV)) {
+        for (Column column : copiedMV.getOrderedOutputColumns()) {
             scanMvOutputColumns.add(scanMvOp.getColumnReference(column));
         }
         Preconditions.checkState(mvOutputColumns.size() == scanMvOutputColumns.size());
@@ -929,6 +929,7 @@ public class MvRewritePreprocessor {
     }
 
     /**
+<<<<<<< HEAD
      * Get mv's ordered columns by defined output columns order.
      * @param mv: mv to check
      * @return: mv's defined output columns in the defined order
@@ -947,6 +948,8 @@ public class MvRewritePreprocessor {
     }
 
     /**
+=======
+>>>>>>> 33ca05901d ([BugFix] Ensure transparent mv's output columns with order (#55355))
      * Make a LogicalOlapScanOperator by using MV's schema which includes:
      * - partition infos.
      * - distribution infos.

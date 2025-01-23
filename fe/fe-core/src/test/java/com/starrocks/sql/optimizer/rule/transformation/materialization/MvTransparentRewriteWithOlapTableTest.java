@@ -1240,4 +1240,62 @@ public class MvTransparentRewriteWithOlapTableTest extends MvRewriteTestBase {
                     });
         });
     }
+
+    @Test
+    public void testTransparentRewriteWithOrderBy() {
+        starRocksAssert.withTable(m1, () -> {
+            cluster.runSql("test", "insert into m1 values (1,1,1,1,1), (4,2,1,1,1);");
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv0 " +
+                            " PARTITION BY (k1) " +
+                            " DISTRIBUTED BY HASH(k1) " +
+                            " ORDER BY (v11, k2, k1) " +
+                            " REFRESH DEFERRED MANUAL " +
+                            " PROPERTIES (\n" +
+                            " 'transparent_mv_rewrite_mode' = 'true'" +
+                            " ) " +
+                            " AS SELECT k1, k2, sum(v1) as v11 from m1 group by k1, k2;",
+                    () -> {
+                        starRocksAssert.refreshMvPartition(String.format("REFRESH MATERIALIZED VIEW mv0 \n" +
+                                "PARTITION START ('%s') END ('%s')", "1", "3"));
+                        MaterializedView mv1 = getMv("test", "mv0");
+                        Set<String> mvNames = mv1.getPartitionNames();
+                        Assert.assertEquals("[p1]", mvNames.toString());
+                        // test: query rewrite
+                        {
+                            final String query = "SELECT k1, k2, sum(v1) as v11 from m1 group by k1, k2;";
+                            final String plan = getFragmentPlan(query);
+                            PlanTestBase.assertContains(plan, ":UNION");
+                            PlanTestBase.assertContains(plan, "mv0");
+                        }
+
+                        // test: query mv directly
+                        {
+                            final String query = "SELECT k1, k2, v11 from mv0 where k1=1";
+                            final String plan = getFragmentPlan(query);
+                            PlanTestBase.assertContains(plan, ":UNION");
+                            PlanTestBase.assertContains(plan, "mv0");
+                            PlanTestBase.assertContains(plan, " OUTPUT EXPRS:3: k1 | 2: k2 | 1: v11\n" +
+                                    "  PARTITION: RANDOM");
+                        }
+
+                        // test: query mv directly
+                        {
+                            final String query = "SELECT k2, v11, k2 from mv0 where k1=1";
+                            final String plan = getFragmentPlan(query);
+                            PlanTestBase.assertContains(plan, ":UNION");
+                            PlanTestBase.assertContains(plan, "mv0");
+                            PlanTestBase.assertContains(plan, "OUTPUT EXPRS:2: k2 | 1: v11 | 2: k2");
+                        }
+
+                        // test: query mv directly
+                        {
+                            final String query = "SELECT * from mv0 where k1=1";
+                            final String plan = getFragmentPlan(query);
+                            PlanTestBase.assertContains(plan, ":UNION");
+                            PlanTestBase.assertContains(plan, "mv0");
+                            PlanTestBase.assertContains(plan, " OUTPUT EXPRS:1: v11 | 2: k2 | 3: k1");
+                        }
+                    });
+        });
+    }
 }
