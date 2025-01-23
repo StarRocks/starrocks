@@ -1,4 +1,4 @@
-position: 50 # float position is supported
+position: 60 # float position is supported
 label: 'Row and column access control'
 collapsible: true
 collapsed: true
