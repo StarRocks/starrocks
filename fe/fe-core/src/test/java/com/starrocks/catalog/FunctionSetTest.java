@@ -16,6 +16,7 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.FunctionName;
+import com.starrocks.sql.analyzer.SemanticException;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -292,6 +293,17 @@ public class FunctionSetTest {
         Assert.assertNotNull(fn);
         Assert.assertEquals(VARCHAR_ARRAY, fn.getReturnType());
         Assert.assertEquals(VARCHAR_ARRAY_ARRAY, fn.getArgs()[0]);
+
+        // coalesce
+        argTypes = new Type[] {INT_ARRAY_ARRAY, DOUBLE_ARRAY};
+        desc = new Function(new FunctionName("coalesce"), argTypes, Type.INVALID, false);
+        try {
+            functionSet.getFunction(desc, Function.CompareMode.IS_SUPERTYPE_OF);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e instanceof SemanticException);
+            Assert.assertTrue(e.getMessage().contains("in the function [coalesce]"));
+        }
     }
 
     @Test
