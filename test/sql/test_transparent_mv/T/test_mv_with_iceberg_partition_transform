@@ -1,0 +1,57 @@
+-- name: test_mv_with_iceberg_partition_transform
+
+-- create mv
+create database db_${uuid0};
+use db_${uuid0};
+
+-- admin set frontend config("enable_mv_list_partition_for_external_table"="false");
+create external catalog mv_iceberg_${uuid0}
+properties
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+
+CREATE MATERIALIZED VIEW test_mv1
+PARTITION BY (date_trunc('month', prcdate))
+REFRESH DEFERRED MANUAL
+PROPERTIES ("replication_num" = "1")
+AS
+  SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.test_iceberg_with_month;
+
+-- partial refresh
+REFRESH MATERIALIZED VIEW test_mv1 PARTITION start('2025-01-01') end('2025-01-03') WITH SYNC MODE;
+
+function: print_hit_materialized_view("SELECT distinct prcdate FROM mv_iceberg_${uuid0}.sql_test_db.test_iceberg_with_month order by prcdate;", "test_mv1")
+function: print_hit_materialized_view("SELECT distinct prcdate FROM mv_iceberg_${uuid0}.sql_test_db.test_iceberg_with_month where prcdate < '2025-01-03' order by prcdate;", "test_mv1")
+function: print_hit_materialized_view("SELECT distinct prcdate FROM mv_iceberg_${uuid0}.sql_test_db.test_iceberg_with_month where prcdate > '2025-01-03' order by prcdate;", "test_mv1")
+SELECT distinct prcdate FROM mv_iceberg_${uuid0}.sql_test_db.test_iceberg_with_month order by prcdate;
+SELECT distinct prcdate FROM mv_iceberg_${uuid0}.sql_test_db.test_iceberg_with_month where prcdate < '2025-01-03' order by prcdate;
+SELECT distinct prcdate FROM mv_iceberg_${uuid0}.sql_test_db.test_iceberg_with_month where prcdate > '2025-01-03' order by prcdate;
+select distinct prcdate from test_mv1 order by prcdate;
+select * from test_mv1 order by prcdate;
+
+REFRESH MATERIALIZED VIEW test_mv1 PARTITION start('2025-01-03') end('2025-01-04') WITH SYNC MODE;
+function: print_hit_materialized_view("SELECT distinct prcdate FROM mv_iceberg_${uuid0}.sql_test_db.test_iceberg_with_month order by prcdate;", "test_mv1")
+function: print_hit_materialized_view("SELECT distinct prcdate FROM mv_iceberg_${uuid0}.sql_test_db.test_iceberg_with_month where prcdate < '2025-01-03' order by prcdate;", "test_mv1")
+function: print_hit_materialized_view("SELECT distinct prcdate FROM mv_iceberg_${uuid0}.sql_test_db.test_iceberg_with_month where prcdate > '2025-01-03' order by prcdate;", "test_mv1")
+SELECT distinct prcdate FROM mv_iceberg_${uuid0}.sql_test_db.test_iceberg_with_month order by prcdate;
+SELECT distinct prcdate FROM mv_iceberg_${uuid0}.sql_test_db.test_iceberg_with_month where prcdate < '2025-01-03' order by prcdate;
+SELECT distinct prcdate FROM mv_iceberg_${uuid0}.sql_test_db.test_iceberg_with_month where prcdate > '2025-01-03' order by prcdate;
+select distinct prcdate from test_mv1 order by prcdate;
+select * from test_mv1 order by prcdate;
+
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+
+function: print_hit_materialized_view("SELECT distinct prcdate FROM mv_iceberg_${uuid0}.sql_test_db.test_iceberg_with_month order by prcdate;", "test_mv1")
+function: print_hit_materialized_view("SELECT distinct prcdate FROM mv_iceberg_${uuid0}.sql_test_db.test_iceberg_with_month where prcdate < '2025-01-03' order by prcdate;", "test_mv1")
+function: print_hit_materialized_view("SELECT distinct prcdate FROM mv_iceberg_${uuid0}.sql_test_db.test_iceberg_with_month where prcdate > '2025-01-03' order by prcdate;", "test_mv1")
+SELECT distinct prcdate FROM mv_iceberg_${uuid0}.sql_test_db.test_iceberg_with_month order by prcdate;
+SELECT distinct prcdate FROM mv_iceberg_${uuid0}.sql_test_db.test_iceberg_with_month where prcdate < '2025-01-03' order by prcdate;
+SELECT distinct prcdate FROM mv_iceberg_${uuid0}.sql_test_db.test_iceberg_with_month where prcdate > '2025-01-03' order by prcdate;
+select distinct prcdate from test_mv1 order by prcdate;
+select * from test_mv1 order by prcdate;
+
+drop database db_${uuid0} force;
+drop catalog mv_iceberg_${uuid0};

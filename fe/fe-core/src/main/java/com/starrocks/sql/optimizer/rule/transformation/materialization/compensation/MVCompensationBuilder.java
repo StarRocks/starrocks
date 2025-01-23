@@ -216,12 +216,12 @@ public class MVCompensationBuilder {
             if (partitionInfo.isRangePartition()) {
                 Map<String, Range<PartitionKey>> refTablePartitionNameWithRanges =
                         mvBaseTableUpdateInfo.getPartitionNameWithRanges();
-                List<PartitionKey> partitionKeys = Lists.newArrayList();
+                List<PRangeCell> partitionKeys = Lists.newArrayList();
                 try {
                     for (String partitionName : refTablePartitionNamesToRefresh) {
                         Preconditions.checkState(refTablePartitionNameWithRanges.containsKey(partitionName));
                         Range<PartitionKey> partitionKeyRange = refTablePartitionNameWithRanges.get(partitionName);
-                        partitionKeys.add(partitionKeyRange.lowerEndpoint());
+                        partitionKeys.add(PRangeCell.of(partitionKeyRange));
                     }
                 } catch (Exception e) {
                     logMVRewrite("Failed to get partition keys for ref base table: {}", refBaseTable.getName(),
@@ -232,7 +232,7 @@ public class MVCompensationBuilder {
             } else {
                 Preconditions.checkArgument(partitionInfo.isListPartition());
                 Map<String, PListCell> partitionNameWithLists = mvBaseTableUpdateInfo.getPartitionNameWithLists();
-                List<PartitionKey> partitionKeys = Lists.newArrayList();
+                List<PRangeCell> partitionKeys = Lists.newArrayList();
                 try {
                     List<Column> partitionCols = refBaseTable.getPartitionColumns();
                     for (String partitionName : refTablePartitionNamesToRefresh) {
@@ -242,6 +242,7 @@ public class MVCompensationBuilder {
                         partitionNameWithLists.get(partitionName)
                                 .toPartitionKeys(partitionCols)
                                 .stream()
+                                .map(PRangeCell::of)
                                 .forEach(partitionKeys::add);
                     }
                 } catch (Exception e) {
@@ -310,7 +311,7 @@ public class MVCompensationBuilder {
     }
 
     private MVCompensation ofExternalTableCompensation(Table refBaseTable,
-                                                       List<PartitionKey> toRefreshRefTablePartitions) {
+                                                       List<PRangeCell> toRefreshRefTablePartitions) {
         Map<Table, BaseCompensation<?>> compensationMap = Collections.singletonMap(refBaseTable,
                 new ExternalTableCompensation(toRefreshRefTablePartitions));
         return new MVCompensation(sessionVariable, MVTransparentState.COMPENSATE, compensationMap);
@@ -358,9 +359,13 @@ public class MVCompensationBuilder {
                 if (selectPartitionNames.stream().noneMatch(refTablePartitionNamesToRefresh::contains)) {
                     return MVCompensation.createNoCompensateState(sessionVariable);
                 }
+                // if all partitions need to refresh, no need rewrite.
+                if (refTablePartitionNamesToRefresh.containsAll(selectPartitionNames)) {
+                    return MVCompensation.createNoRewriteState(sessionVariable);
+                }
             }
             // if mv's to refresh partitions contains any of query's select partition ids, then rewrite with compensation.
-            List<PartitionKey> toRefreshRefTablePartitions = getMVCompensatePartitionsOfExternal(refBaseTable,
+            List<PRangeCell> toRefreshRefTablePartitions = getMVCompensatePartitionsOfExternal(refBaseTable,
                     selectPartitionKeys, refTablePartitionNamesToRefresh, refScanOperator);
             if (toRefreshRefTablePartitions == null) {
                 return MVCompensation.createUnkownState(sessionVariable);
@@ -405,7 +410,7 @@ public class MVCompensationBuilder {
         return refTableCompensatePartitionIds;
     }
 
-    private List<PartitionKey> getMVCompensatePartitionsOfExternal(Table refBaseTable,
+    private List<PRangeCell> getMVCompensatePartitionsOfExternal(Table refBaseTable,
                                                                    List<PartitionKey> selectPartitionKeys,
                                                                    Set<String> refTablePartitionNamesToRefresh,
                                                                    LogicalScanOperator refScanOperator)
@@ -420,21 +425,21 @@ public class MVCompensationBuilder {
         }
     }
 
-    private List<PartitionKey> getMVCompensatePartitionsOfExternalWithPartitionPruner(
+    private List<PRangeCell> getMVCompensatePartitionsOfExternalWithPartitionPruner(
             List<PartitionKey> selectPartitionKeys,
             Set<String> refTablePartitionNamesToRefresh,
             LogicalScanOperator refScanOperator) {
-        List<PartitionKey> refTableCompensatePartitionKeys = Lists.newArrayList();
+        List<PRangeCell> refTableCompensatePartitionKeys = Lists.newArrayList();
         for (PartitionKey partitionKey : selectPartitionKeys) {
             String partitionName = generateMVPartitionName(partitionKey);
             if (refTablePartitionNamesToRefresh.contains(partitionName)) {
-                refTableCompensatePartitionKeys.add(partitionKey);
+                refTableCompensatePartitionKeys.add(PRangeCell.of(partitionKey));
             }
         }
         return refTableCompensatePartitionKeys;
     }
 
-    private List<PartitionKey> getMVCompensatePartitionsOfExternalWithoutPartitionPruner(
+    private List<PRangeCell> getMVCompensatePartitionsOfExternalWithoutPartitionPruner(
             Table refBaseTable,
             Set<String> refTablePartitionNamesToRefresh) {
         MvBaseTableUpdateInfo baseTableUpdateInfo = mvUpdateInfo.getBaseTableUpdateInfos().get(refBaseTable);
@@ -443,7 +448,7 @@ public class MVCompensationBuilder {
         }
 
         Map<String, PCell> nameToPartitionKeys = baseTableUpdateInfo.getNameToPartKeys();
-        List<PartitionKey> partitionKeys = Lists.newArrayList();
+        List<PRangeCell> partitionKeys = Lists.newArrayList();
         MaterializedView mv = mvContext.getMv();
         Map<Table, List<Column>> refBaseTablePartitionColumns = mv.getRefBaseTablePartitionColumns();
         if (!refBaseTablePartitionColumns.containsKey(refBaseTable)) {
@@ -457,10 +462,12 @@ public class MVCompensationBuilder {
                 }
                 PCell pCell = nameToPartitionKeys.get(partitionName);
                 if (pCell instanceof PRangeCell) {
-                    partitionKeys.add(((PRangeCell) pCell).getRange().lowerEndpoint());
+                    partitionKeys.add(((PRangeCell) pCell));
                 } else if (pCell instanceof PListCell) {
-                    List<PartitionKey> keys = ((PListCell) pCell).toPartitionKeys(partitionColumns);
-                    partitionKeys.addAll(keys);
+                    final List<PartitionKey> keys = ((PListCell) pCell).toPartitionKeys(partitionColumns);
+                    keys.stream()
+                            .map(key -> PRangeCell.of(key))
+                            .forEach(partitionKeys::add);
                 }
             }
         } catch (Exception e) {

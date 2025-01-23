@@ -150,6 +150,10 @@ public class MVTestBase extends StarRocksTestBase {
         return table;
     }
 
+    protected MaterializedView getMv(String mvName) {
+        return getMv(DB_NAME, mvName);
+    }
+
     protected MaterializedView getMv(String dbName, String mvName) {
         Table table = getTable(dbName, mvName);
         Assert.assertTrue(table instanceof MaterializedView);
