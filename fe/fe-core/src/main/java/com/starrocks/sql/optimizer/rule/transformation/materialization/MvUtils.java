@@ -61,6 +61,7 @@ import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RandomDistributionDesc;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.sql.common.PRangeCell;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.JoinHelper;
@@ -1430,15 +1431,88 @@ public class MvUtils {
         return baseTableInfos.stream().map(BaseTableInfo::getReadableString).collect(Collectors.joining(","));
     }
 
-    public static ScalarOperator convertPartitionKeysToListPredicate(ScalarOperator partitionColRef,
+    public static ScalarOperator convertPartitionKeyRangesToListPredicate(List<? extends ScalarOperator> partitionColRefs,
+                                                                          Collection<PRangeCell> pRangeCells,
+                                                                          boolean areAllRangePartitionsSingleton) {
+        final List<Range<PartitionKey>> partitionRanges = pRangeCells
+                .stream()
+                .map(PRangeCell::getRange)
+                .collect(Collectors.toList());
+
+        return convertPartitionKeysToListPredicate(partitionColRefs, partitionRanges, areAllRangePartitionsSingleton);
+    }
+
+    public static ScalarOperator convertPartitionKeysToListPredicate(List<? extends ScalarOperator> partitionColRefs,
                                                                      Collection<PartitionKey> partitionRanges) {
-        List<ScalarOperator> values = Lists.newArrayList();
-        for (PartitionKey partitionKey : partitionRanges) {
-            LiteralExpr literalExpr = partitionKey.getKeys().get(0);
-            ConstantOperator upperBound = (ConstantOperator) SqlToScalarOperatorTranslator.translate(literalExpr);
-            values.add(upperBound);
+        final List<ScalarOperator> values = Lists.newArrayList();
+        if (partitionColRefs.size() == 1) {
+            for (PartitionKey key : partitionRanges) {
+                final List<LiteralExpr> literalExprs = key.getKeys();
+                // Preconditions.checkArgument(literalExprs.size() == partitionColRefs.size());
+                final LiteralExpr literalExpr = literalExprs.get(0);
+                final ConstantOperator upperBound = (ConstantOperator) SqlToScalarOperatorTranslator.translate(literalExpr);
+                values.add(upperBound);
+            }
+            return MvUtils.convertToInPredicate(partitionColRefs.get(0), values);
+        } else {
+            for (PartitionKey key : partitionRanges) {
+                List<LiteralExpr> literalExprs = key.getKeys();
+                Preconditions.checkArgument(literalExprs.size() == partitionColRefs.size());
+                // TODO: use row operator instead
+                List<ScalarOperator> predicates = Lists.newArrayList();
+                for (int i = 0; i < literalExprs.size(); i++) {
+                    ScalarOperator partitionColRef = partitionColRefs.get(i);
+                    LiteralExpr literalExpr = literalExprs.get(i);
+                    ConstantOperator upperBound = (ConstantOperator) SqlToScalarOperatorTranslator.translate(literalExpr);
+                    ScalarOperator eq = new BinaryPredicateOperator(BinaryType.EQ, partitionColRef, upperBound);
+                    predicates.add(eq);
+                }
+                values.add(Utils.compoundAnd(predicates));
+            }
+            return Utils.compoundOr(values);
         }
-        return MvUtils.convertToInPredicate(partitionColRef, values);
+    }
+
+    private static ScalarOperator convertPartitionKeysToListPredicate(List<? extends ScalarOperator> partitionColRefs,
+                                                                      Collection<Range<PartitionKey>> partitionRanges,
+                                                                      boolean areAllRangePartitionsSingleton) {
+
+        if (areAllRangePartitionsSingleton) {
+            List<PartitionKey> partitionKeys = partitionRanges
+                    .stream()
+                    .map(Range::lowerEndpoint)
+                    .collect(Collectors.toList());
+            return convertPartitionKeysToListPredicate(partitionColRefs, partitionKeys);
+        } else {
+            final List<ScalarOperator> values = Lists.newArrayList();
+            partitionRanges
+                    .stream()
+                    .map(range -> getPartitionKeyRangePredicate(partitionColRefs, range))
+                    .forEach(values::add);
+            return Utils.compoundOr(values);
+        }
+    }
+
+    private static ScalarOperator getPartitionKeyRangePredicate(List<? extends ScalarOperator> partitionColRefs,
+                                                                Range<PartitionKey> range) {
+        final List<LiteralExpr> lowerLiteralExprs = range.lowerEndpoint().getKeys();
+        final List<LiteralExpr> upperLiteralExprs = range.upperEndpoint().getKeys();
+        Preconditions.checkArgument(lowerLiteralExprs.size() == upperLiteralExprs.size());
+        Preconditions.checkArgument(lowerLiteralExprs.size() == partitionColRefs.size());
+        final List<ScalarOperator> predicates = Lists.newArrayList();
+        for (int i = 0; i < lowerLiteralExprs.size(); i++) {
+            final ScalarOperator partitionColRef = partitionColRefs.get(i);
+            final LiteralExpr lowerLiteralExpr = lowerLiteralExprs.get(i);
+            final LiteralExpr upperLiteralExpr = upperLiteralExprs.get(i);
+            final ConstantOperator lowerBound =
+                    (ConstantOperator) SqlToScalarOperatorTranslator.translate(lowerLiteralExpr);
+            final ConstantOperator upperBound =
+                    (ConstantOperator) SqlToScalarOperatorTranslator.translate(upperLiteralExpr);
+            final ScalarOperator gt = new BinaryPredicateOperator(BinaryType.GE, partitionColRef, lowerBound);
+            final ScalarOperator ls = new BinaryPredicateOperator(BinaryType.LT, partitionColRef, upperBound);
+            predicates.add(Utils.compoundAnd(gt, ls));
+        }
+        return Utils.compoundAnd(predicates);
     }
 
     /**
