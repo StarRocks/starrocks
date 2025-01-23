@@ -382,6 +382,7 @@ TEST_F(LakePersistentIndexTest, test_memtable_full) {
     ASSERT_FALSE(index->is_memtable_full());
     config::l0_max_mem_usage = index->memory_usage();
     ASSERT_TRUE(index->is_memtable_full());
+    config::l0_max_mem_usage = old_l0_max_mem_usage;
 }
 
 } // namespace starrocks::lake
