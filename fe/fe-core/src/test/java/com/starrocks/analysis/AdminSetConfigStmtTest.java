@@ -34,6 +34,7 @@
 
 package com.starrocks.analysis;
 
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
@@ -76,6 +77,15 @@ public class AdminSetConfigStmtTest {
                 (AdminSetConfigStmt) UtFrameUtils.parseStmtWithNewParser(stmt, connectContext);
         DDLStmtExecutor.execute(adminSetConfigStmt, connectContext);
         Assert.assertEquals("5.1.1", GlobalVariable.version);
+    }
+
+    @Test
+    public void testDefaultSessionCatalog() throws Exception {
+        String stmt = "ADMIN SET FRONTEND CONFIG (\"default_session_catalog\" = \"hive\")";
+        AdminSetConfigStmt adminSetConfigStmt =
+                (AdminSetConfigStmt) UtFrameUtils.parseStmtWithNewParser(stmt, connectContext);
+        DDLStmtExecutor.execute(adminSetConfigStmt, connectContext);
+        Assert.assertEquals(Config.default_session_catalog, "hive");
     }
 
     @Test
