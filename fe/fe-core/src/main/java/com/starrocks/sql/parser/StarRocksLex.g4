@@ -493,6 +493,7 @@ DISK: 'DISK';
 BEFORE: 'BEFORE';
 DOUBLE_DOLLAR: '$$';
 FIELD: 'FIELD';
+PERSISTENT: 'PERSISTENT';
 
 EQ  : '=';
 NEQ : '<>' | '!=';
