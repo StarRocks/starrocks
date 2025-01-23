@@ -2351,25 +2351,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new SyncStmt(createPos(context));
     }
 
-<<<<<<< HEAD
-=======
-    @Override
-    public ParseNode visitAdminSetAutomatedSnapshotOnStatement(
-            StarRocksParser.AdminSetAutomatedSnapshotOnStatementContext context) {
-        String svName = StorageVolumeMgr.BUILTIN_STORAGE_VOLUME;
-        if (context.svName != null) {
-            svName = getIdentifierName(context.svName);
-        }
-        return new AdminSetAutomatedSnapshotOnStmt(svName, createPos(context));
-    }
-
-    @Override
-    public ParseNode visitAdminSetAutomatedSnapshotOffStatement(
-            StarRocksParser.AdminSetAutomatedSnapshotOffStatementContext context) {
-        return new AdminSetAutomatedSnapshotOffStmt(createPos(context));
-    }
-
->>>>>>> fa19a876dc ([Enhancement] translate sql use right position when throw exception (#55327))
     // ------------------------------------------- Cluster Management Statement ----------------------------------------
 
     @Override
