@@ -160,12 +160,8 @@ public class MaterializedViewTransparentRewriteRule extends TransformationRule {
                 mv, mvPlanContext, mvUpdateInfo, queryTables);
 
         Map<Column, ColumnRefOperator> columnToColumnRefMap = olapScanOperator.getColumnMetaToColRefMap();
-<<<<<<< HEAD
-        List<Column> mvColumns = mv.getBaseSchema();
-=======
         // use ordered output columns to ensure the order of output columns if the mv contains order-by clause.
         List<Column> mvColumns = mv.getOrderedOutputColumns();
->>>>>>> 33ca05901 ([BugFix] Ensure transparent mv's output columns with order (#55355))
         List<ColumnRefOperator> expectOutputColumns = mvColumns.stream()
                 .map(c -> columnToColumnRefMap.get(c))
                 .collect(Collectors.toList());

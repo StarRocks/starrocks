@@ -1227,9 +1227,6 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
                     });
         });
     }
-<<<<<<< HEAD
-}
-=======
 
     @Test
     public void testTransparentRewriteWithOrderBy() {
@@ -1289,4 +1286,3 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
         });
     }
 }
->>>>>>> 33ca05901 ([BugFix] Ensure transparent mv's output columns with order (#55355))
