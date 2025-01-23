@@ -326,6 +326,10 @@ public class MVCompensationBuilder {
                 } else {
                     return MVCompensation.createUnkownState(sessionVariable);
                 }
+                // if all partitions need to refresh, no need rewrite.
+                if (refTablePartitionNamesToRefresh.containsAll(selectPartitionNames)) {
+                    return MVCompensation.createNoRewriteState(sessionVariable);
+                }
             }
             List<PartitionKey> selectPartitionKeys = scanOperatorPredicates.getSelectedPartitionKeys();
             if (selectPartitionKeys.stream()
