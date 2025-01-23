@@ -43,6 +43,7 @@
 #include <sstream>
 
 #include "agent/master_info.h"
+#include "agent/task_worker_pool.h"
 #include "common/process_exit.h"
 #include "common/status.h"
 #include "gen_cpp/HeartbeatService.h"
@@ -105,15 +106,6 @@ void HeartbeatServer::heartbeat(THeartbeatResult& heartbeat_result, const TMaste
         bool r = update_master_info(master_info);
         LOG_IF(WARNING, !r) << "Fail to update master info, maybe the master info has been updated by another thread "
                                "with a larger epoch";
-    } else if (*res == kNeedUpdateAndReport) {
-        LOG(INFO) << "Updating master info: " << print_master_info(master_info);
-        bool r = update_master_info(master_info);
-        LOG_IF(WARNING, !r) << "Fail to update master info, maybe the master info has been updated by another thread "
-                               "with a larger epoch";
-        if (r) {
-            LOG(INFO) << "Master FE is changed or restarted. report tablet and disk info immediately";
-            _olap_engine->trigger_report();
-        }
     } else {
         DCHECK_EQ(kUnchanged, *res);
         // nothing to do
@@ -125,6 +117,12 @@ void HeartbeatServer::heartbeat(THeartbeatResult& heartbeat_result, const TMaste
 
     if (master_info.__isset.decommissioned_disks) {
         _olap_engine->decommission_disks(master_info.decommissioned_disks);
+    }
+
+    if (master_info.__isset.stop_regular_tablet_report) {
+        ReportOlapTableTaskWorkerPool::set_regular_report_stopped(master_info.stop_regular_tablet_report);
+    } else {
+        ReportOlapTableTaskWorkerPool::set_regular_report_stopped(false);
     }
 
     static auto num_hardware_cores = static_cast<int32_t>(CpuInfo::num_cores());
@@ -270,9 +268,6 @@ StatusOr<HeartbeatServer::CmpResult> HeartbeatServer::compare_master_info(const 
         heartbeat_flags->update(master_info.heartbeat_flags);
     }
 
-    if (curr_master_info->network_address != master_info.network_address) {
-        return kNeedUpdateAndReport;
-    }
     if (*curr_master_info != master_info) {
         return kNeedUpdate;
     }

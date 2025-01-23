@@ -34,6 +34,7 @@ struct TMasterInfo {
     11: optional list<string> disabled_disks
     12: optional list<string> decommissioned_disks
     13: optional bool encrypted;
+    14: optional bool stop_regular_tablet_report; // used for upgrade/downgrade compatibility, can be removed after 3.5
 }
 
 struct TBackendInfo {

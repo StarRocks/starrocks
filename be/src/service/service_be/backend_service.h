@@ -58,6 +58,8 @@ public:
 
     void get_tablet_stat(TTabletStatResult& result) override;
 
+    void get_tablets_info(TGetTabletsInfoResult& result_, const TGetTabletsInfoRequest& request) override;
+
 private:
     AgentServer* _agent_server;
 };

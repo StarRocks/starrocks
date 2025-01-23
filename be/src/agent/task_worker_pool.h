@@ -194,7 +194,13 @@ public:
         _callback_function = _worker_thread_callback;
     }
 
+    static void set_regular_report_stopped(bool stop) { _regular_report_stopped.store(stop); }
+
+    static bool is_regular_report_stopped() { return _regular_report_stopped.load(); }
+
 private:
+    static std::atomic<bool> _regular_report_stopped;
+
     static void* _worker_thread_callback(void* arg_this);
 
     AgentTaskRequestPtr _convert_task(const TAgentTaskRequest& task, time_t recv_time) override {
