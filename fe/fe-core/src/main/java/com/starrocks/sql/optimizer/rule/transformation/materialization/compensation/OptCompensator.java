@@ -20,10 +20,11 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.TableVersionRange;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.common.PRangeCell;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -32,7 +33,9 @@ import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.Snapshot;
 
 import java.util.List;
@@ -42,7 +45,7 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.operator.OpRuleBit.OP_PARTITION_PRUNED;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvPartitionCompensator.SUPPORTED_PARTITION_COMPENSATE_EXTERNAL_SCAN_TYPES;
-import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.convertPartitionKeysToListPredicate;
+import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.convertPartitionKeyRangesToListPredicate;
 
 /**
  * Compensate the scan operator with the partition compensation.
@@ -79,10 +82,10 @@ public class OptCompensator extends OptExpressionVisitor<OptExpression, Void> {
             newScanOperator.resetOpRuleBit(OP_PARTITION_PRUNED);
             return OptExpression.create(newScanOperator);
         } else if (SUPPORTED_PARTITION_COMPENSATE_EXTERNAL_SCAN_TYPES.contains(scanOperator.getOpType())) {
-            List<PartitionKey> partitionKeys = Lists.newArrayList();
+            List<PRangeCell> partitionKeys = Lists.newArrayList();
             if (compensations.containsKey(refBaseTable)) {
                 BaseCompensation<?> compensation = compensations.get(refBaseTable);
-                BaseCompensation<PartitionKey> externalTableCompensation = (BaseCompensation<PartitionKey>) compensation;
+                BaseCompensation<PRangeCell> externalTableCompensation = (BaseCompensation<PRangeCell>) compensation;
                 partitionKeys = externalTableCompensation.getCompensations();
             }
             LogicalScanOperator newScanOperator = getExternalTableCompensatePlan(scanOperator, partitionKeys);
@@ -106,8 +109,7 @@ public class OptCompensator extends OptExpressionVisitor<OptExpression, Void> {
     }
 
     private LogicalScanOperator getExternalTableCompensatePlan(LogicalScanOperator scanOperator,
-                                                               List<PartitionKey> partitionKeys) {
-
+                                                               List<PRangeCell> partitionKeys) {
         Table refBaseTable = scanOperator.getTable();
         final LogicalScanOperator.Builder builder = OperatorBuilderFactory.build(scanOperator);
         // reset original partition predicates to prune partitions/tablets again
@@ -125,16 +127,37 @@ public class OptCompensator extends OptExpressionVisitor<OptExpression, Void> {
                 .stream()
                 .map(col -> scanOperator.getColumnReference(col))
                 .collect(Collectors.toList());
-        ScalarOperator externalExtraPredicate = convertPartitionKeysToListPredicate(partitionColumnRefs, partitionKeys);
-        Preconditions.checkState(externalExtraPredicate != null);
-        externalExtraPredicate.setRedundant(true);
 
-        Preconditions.checkState(externalExtraPredicate != null);
-        ScalarOperator finalPredicate = Utils.compoundAnd(scanOperator.getPredicate(), externalExtraPredicate);
-        builder.setPredicate(finalPredicate);
+        ScalarOperator externalExtraPredicate = null;
         if (scanOperator.getOpType() == OperatorType.LOGICAL_ICEBERG_SCAN) {
-            // refresh iceberg table's metadata
+            PartitionInfo mvPartitionInfo = mv.getPartitionInfo();
             IcebergTable cachedIcebergTable = (IcebergTable) refBaseTable;
+            if (!mvPartitionInfo.isListPartition()) {
+                List<ColumnRefOperator> refPartitionColRefs = refBaseTablePartitionCols
+                        .stream()
+                        .map(col -> scanOperator.getColumnReference(col))
+                        .collect(Collectors.toList());
+                // check whether the iceberg table contains partition transformations
+                final List<PartitionField> partitionFields = Lists.newArrayList();
+                for (Column column : refBaseTablePartitionCols) {
+                    for (PartitionField field : cachedIcebergTable.getNativeTable().spec().fields()) {
+                        final String partitionFieldName = cachedIcebergTable.getNativeTable().schema().findColumnName(field.sourceId());
+                        if (partitionFieldName.equalsIgnoreCase(column.getName())) {
+                            partitionFields.add(field);
+                        }
+                    }
+                }
+                final boolean isContainPartitionTransform = partitionFields
+                        .stream()
+                        .anyMatch(field -> field.transform().dedupName().equalsIgnoreCase("time"));
+                externalExtraPredicate =  convertPartitionKeyRangesToListPredicate(refPartitionColRefs,
+                        partitionKeys, !isContainPartitionTransform);
+            } else {
+                externalExtraPredicate = convertPartitionKeyRangesToListPredicate(partitionColumnRefs,
+                        partitionKeys, true);
+            }
+
+            // refresh iceberg table's metadata
             String catalogName = cachedIcebergTable.getCatalogName();
             String dbName = cachedIcebergTable.getCatalogDBName();
             TableName refTableName = new TableName(catalogName, dbName, cachedIcebergTable.getName());
@@ -148,7 +171,16 @@ public class OptCompensator extends OptExpressionVisitor<OptExpression, Void> {
                     Optional.ofNullable(((IcebergTable) currentTable).getNativeTable().currentSnapshot())
                             .map(Snapshot::snapshotId));
             builder.setTableVersionRange(versionRange);
+        } else {
+            externalExtraPredicate = convertPartitionKeyRangesToListPredicate(partitionColumnRefs, partitionKeys,
+                    true);
         }
+        Preconditions.checkState(externalExtraPredicate != null);
+        externalExtraPredicate.setRedundant(true);
+
+        Preconditions.checkState(externalExtraPredicate != null);
+        ScalarOperator finalPredicate = Utils.compoundAnd(scanOperator.getPredicate(), externalExtraPredicate);
+        builder.setPredicate(finalPredicate);
         return builder.build();
     }
 
