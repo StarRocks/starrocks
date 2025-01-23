@@ -34,7 +34,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
@@ -462,8 +461,7 @@ public class StatisticsCollectJobFactory {
             // 2. if the stats collection is too frequent
             long sumDataSize = 0;
             for (Partition partition : table.getPartitions()) {
-                LocalDateTime partitionUpdateTime = StatisticUtils.getPartitionLastUpdateTime(partition);
-                if (!basicStatsMeta.isUpdatedAfterLoad(partitionUpdateTime)) {
+                if (!StatisticUtils.isPartitionStatsHealthy(table, partition, basicStatsMeta)) {
                     sumDataSize += partition.getDataSize();
                 }
             }
@@ -519,12 +517,7 @@ public class StatisticsCollectJobFactory {
         } else if (job.getAnalyzeType().equals(StatsConstants.AnalyzeType.HISTOGRAM)) {
             createHistogramJob(allTableJobMap, job, db, table, columnNames, columnTypes);
         } else if (job.getAnalyzeType().equals(StatsConstants.AnalyzeType.FULL)) {
-            if (basicStatsMeta == null || basicStatsMeta.isInitJobMeta()) {
-                createFullStatsJob(allTableJobMap, job, LocalDateTime.MIN, db, table, columnNames, columnTypes);
-            } else {
-                createFullStatsJob(allTableJobMap, job, basicStatsMeta.getUpdateTime(), db, table, columnNames,
-                        columnTypes);
-            }
+            createFullStatsJob(allTableJobMap, job, basicStatsMeta, db, table, columnNames, columnTypes);
         } else {
             throw new StarRocksPlannerException("Unknown analyze type " + job.getAnalyzeType(),
                     ErrorType.INTERNAL_ERROR);
@@ -540,10 +533,7 @@ public class StatisticsCollectJobFactory {
         List<Long> partitionIdList;
         if (basicStatsMeta != null) {
             partitionIdList = partitions.stream()
-                    .filter(partition -> {
-                        LocalDateTime partitionUpdateTime = StatisticUtils.getPartitionLastUpdateTime(partition);
-                        return basicStatsMeta.getUpdateTime().isBefore(partitionUpdateTime) && partition.hasData();
-                    })
+                    .filter(partition -> !StatisticUtils.isPartitionStatsHealthy(table, partition, basicStatsMeta))
                     .map(Partition::getId)
                     .collect(Collectors.toList());
         } else {
@@ -567,16 +557,12 @@ public class StatisticsCollectJobFactory {
     }
 
     private static void createFullStatsJob(List<StatisticsCollectJob> allTableJobMap,
-                                           NativeAnalyzeJob job, LocalDateTime statsLastUpdateTime,
+                                           NativeAnalyzeJob job, BasicStatsMeta stats,
                                            Database db, Table table, List<String> columnNames, List<Type> columnTypes) {
         StatsConstants.AnalyzeType analyzeType;
-        List<Partition> partitionList = new ArrayList<>();
-        for (Partition partition : table.getPartitions()) {
-            LocalDateTime partitionUpdateTime = StatisticUtils.getPartitionLastUpdateTime(partition);
-            if (statsLastUpdateTime.isBefore(partitionUpdateTime) && partition.hasData()) {
-                partitionList.add(partition);
-            }
-        }
+        List<Partition> partitionList = table.getPartitions().stream()
+                .filter(partition -> !StatisticUtils.isPartitionStatsHealthy(table, partition, stats))
+                .collect(Collectors.toList());
 
         if (partitionList.stream().anyMatch(p -> p.getDataSize() > Config.statistic_max_full_collect_data_size)) {
             analyzeType = StatsConstants.AnalyzeType.SAMPLE;
