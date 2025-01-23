@@ -15,6 +15,11 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Preconditions;
+<<<<<<< HEAD
+=======
+import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableList;
+>>>>>>> a7438e0a7a ([Enhancement] improve error msg accuracy (#55342))
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.AggregateFunction;
@@ -214,7 +219,16 @@ public class PolymorphicFunctionAnalyzer {
         }
 
         Type[] resolvedArgTypes = resolveArgTypes(fn, inputArgTypes);
-        Type newRetType = deduce.apply(resolvedArgTypes);
+        Type newRetType;
+        try {
+            newRetType = deduce.apply(resolvedArgTypes);
+        } catch (SemanticException e) {
+            String errMsg = e.getMessage();
+            if (!Strings.isNullOrEmpty(fn.functionName())) {
+                errMsg = errMsg.substring(0, errMsg.length() - 1) + " in the function [" + fn.functionName() + "]";
+            }
+            throw  new SemanticException(errMsg);
+        }
 
         // change null type into boolean type
         resolvedArgTypes = AnalyzerUtils.replaceNullTypes2Booleans(resolvedArgTypes);

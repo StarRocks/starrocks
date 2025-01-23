@@ -16,6 +16,7 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.FunctionName;
+import com.starrocks.sql.analyzer.SemanticException;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -267,6 +268,44 @@ public class FunctionSetTest {
         fn = functionSet.getFunction(desc, Function.CompareMode.IS_SUPERTYPE_OF);
         Assert.assertNotNull(fn);
         Assert.assertEquals(fn.functionId, 150216L);
+<<<<<<< HEAD
+=======
+
+        // array_flatten(ARRAY<ARRAY<TINYINT>>)
+        argTypes = new Type[] {TINYINT_ARRAY_ARRAY};
+        desc = new Function(new FunctionName("array_flatten"), argTypes, Type.INVALID, false);
+        fn = functionSet.getFunction(desc, Function.CompareMode.IS_SUPERTYPE_OF);
+        Assert.assertNotNull(fn);
+        Assert.assertEquals(TINYINT_ARRAY, fn.getReturnType());
+        Assert.assertEquals(TINYINT_ARRAY_ARRAY, fn.getArgs()[0]);
+
+        // array_flatten(ARRAY<ARRAY<INT>>)
+        argTypes = new Type[] {INT_ARRAY_ARRAY};
+        desc = new Function(new FunctionName("array_flatten"), argTypes, Type.INVALID, false);
+        fn = functionSet.getFunction(desc, Function.CompareMode.IS_SUPERTYPE_OF);
+        Assert.assertNotNull(fn);
+        Assert.assertEquals(INT_ARRAY, fn.getReturnType());
+        Assert.assertEquals(INT_ARRAY_ARRAY, fn.getArgs()[0]);
+
+        // array_flatten(ARRAY<ARRAY<INT>>)
+        argTypes = new Type[] {VARCHAR_ARRAY_ARRAY};
+        desc = new Function(new FunctionName("array_flatten"), argTypes, Type.INVALID, false);
+        fn = functionSet.getFunction(desc, Function.CompareMode.IS_SUPERTYPE_OF);
+        Assert.assertNotNull(fn);
+        Assert.assertEquals(VARCHAR_ARRAY, fn.getReturnType());
+        Assert.assertEquals(VARCHAR_ARRAY_ARRAY, fn.getArgs()[0]);
+
+        // coalesce
+        argTypes = new Type[] {INT_ARRAY_ARRAY, DOUBLE_ARRAY};
+        desc = new Function(new FunctionName("coalesce"), argTypes, Type.INVALID, false);
+        try {
+            functionSet.getFunction(desc, Function.CompareMode.IS_SUPERTYPE_OF);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e instanceof SemanticException);
+            Assert.assertTrue(e.getMessage().contains("in the function [coalesce]"));
+        }
+>>>>>>> a7438e0a7a ([Enhancement] improve error msg accuracy (#55342))
     }
 
     @Test
