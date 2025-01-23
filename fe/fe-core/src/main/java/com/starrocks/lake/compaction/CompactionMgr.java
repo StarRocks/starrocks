@@ -39,6 +39,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
@@ -164,20 +165,12 @@ public class CompactionMgr {
     }
 
     @NotNull
-<<<<<<< HEAD
     List<PartitionIdentifier> choosePartitionsToCompact(@NotNull Set<PartitionIdentifier> excludes,
             @NotNull Set<Long> excludeTables) {
-        return choosePartitionsToCompact(excludeTables).stream().filter(p -> !excludes.contains(p)).collect(Collectors.toList());
-=======
-    List<PartitionStatisticsSnapshot> choosePartitionsToCompact(@NotNull Set<PartitionIdentifier> excludes,
-                                                                @NotNull Set<Long> excludeTables) {
         Set<Long> copiedExcludeTables = new HashSet<>(excludeTables);
         copiedExcludeTables.addAll(remainedActiveCompactionTxnWhenStart.values());
-        return choosePartitionsToCompact(copiedExcludeTables)
-                .stream()
-                .filter(p -> !excludes.contains(p.getPartition()))
+        return choosePartitionsToCompact(copiedExcludeTables).stream().filter(p -> !excludes.contains(p))
                 .collect(Collectors.toList());
->>>>>>> e886985477 ([Enhancement] Lake compaction scheduler optimize in fe restart scenarios (#54881))
     }
 
     @NotNull
