@@ -119,21 +119,22 @@ public class TaskBuilder {
     }
 
     public static String getAnalyzeMVStmt(String tableName) {
-        ConnectContext ctx = ConnectContext.get();
-        if (ctx == null) {
+        final ConnectContext ctx = ConnectContext.get();
+        return getAnalyzeMVStmt(ctx, tableName);
+    }
+
+    public static String getAnalyzeMVStmt(ConnectContext ctx, String tableName) {
+        if (FeConstants.runningUnitTest || ctx == null) {
             return "";
         }
-        String analyze = ctx.getSessionVariable().getAnalyzeForMV();
+        final String analyze = ctx.getSessionVariable().getAnalyzeForMV();
+        final String async = Config.mv_auto_analyze_async ? " WITH ASYNC MODE" : "";
         String stmt;
-        String async = Config.mv_auto_analyze_async ? " WITH ASYNC MODE" : "";
         if ("sample".equalsIgnoreCase(analyze)) {
             stmt = "ANALYZE SAMPLE TABLE " + tableName + async;
         } else if ("full".equalsIgnoreCase(analyze)) {
             stmt = "ANALYZE TABLE " + tableName + async;
         } else {
-            stmt = "";
-        }
-        if (FeConstants.runningUnitTest) {
             stmt = "";
         }
         return stmt;
