@@ -266,7 +266,8 @@ StatusOr<bool> ChunkPredicateBuilder<E, Type>::parse_conjuncts() {
     }
 
     if (_opts.enable_column_expr_predicate) {
-        VLOG_FILE << "OlapScanConjunctsManager: enable_column_expr_predicate = true. push down column expr predicates";
+        VLOG_FILE << "OlapScanConjunctsManager: enable_column_expr_predicate = true. push down column expr "
+                     "predicates";
         RETURN_IF_ERROR(build_column_expr_predicates());
     }
 
