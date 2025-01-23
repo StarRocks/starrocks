@@ -741,4 +741,14 @@ public class ArrayTypeTest extends PlanTestBase {
                 "  |  output: multi_distinct_count(array_length(array_map" +
                 "(<slot 10> -> CAST(<slot 10> AS DECIMAL64(13,3)) + 1, 5: d_2)))");
     }
+
+    @Test
+    public void testLambdaFunction() throws Exception {
+        String sql = "select dense_rank() over(partition by v1 order by v2), " +
+                "array_filter(v3, x -> array_contains(v3, x)) from tarray";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "3:Project\n" +
+                "  |  <slot 4> : 4: dense_rank()\n" +
+                "  |  <slot 6> : array_filter(3: v3, array_map(<slot 5> -> array_contains(3: v3, <slot 5>), 3: v3))");
+    }
 }
