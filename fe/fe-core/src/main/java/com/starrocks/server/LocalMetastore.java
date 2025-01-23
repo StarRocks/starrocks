@@ -2558,7 +2558,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         try {
             table = db.getTable(tableId);
             if (table.isTemporaryTable()) {
-                table = db.unprotectDropTemporaryTable(tableId, isForceDrop, false);
+                table = db.unprotectDropTemporaryTable(tableId, isForceDrop, true);
                 UUID sessionId = ((OlapTable) table).getSessionId();
                 TemporaryTableMgr temporaryTableMgr = GlobalStateMgr.getCurrentState().getTemporaryTableMgr();
                 temporaryTableMgr.dropTemporaryTable(sessionId, db.getId(), table.getName());

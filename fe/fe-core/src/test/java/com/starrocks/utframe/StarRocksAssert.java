@@ -632,6 +632,10 @@ public class StarRocksAssert {
         return this;
     }
 
+    public Database getDb(String dbName) {
+        return ctx.getGlobalStateMgr().getLocalMetastore().getDb(dbName);
+    }
+
     public StarRocksAssert withView(String sql, ExceptionRunnable action) throws Exception {
         CreateViewStmt createTableStmt = (CreateViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         String viewName = createTableStmt.getTable();
