@@ -67,6 +67,7 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.clone.TabletChecker;
 import com.starrocks.clone.TabletSchedCtx;
+import com.starrocks.common.CloseableLock;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.InternalErrorCode;
@@ -79,9 +80,6 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.datacache.DataCacheMetrics;
 import com.starrocks.memory.MemoryTrackable;
-import com.starrocks.metric.GaugeMetric;
-import com.starrocks.metric.Metric.MetricUnit;
-import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.BackendTabletsInfo;
 import com.starrocks.persist.BatchDeleteReplicaInfo;
 import com.starrocks.persist.ReplicaPersistInfo;
@@ -142,12 +140,14 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
 public class ReportHandler extends Daemon implements MemoryTrackable {
     @Override
     public List<Pair<List<Object>, Long>> getSamples() {
-        synchronized (pendingTaskMap) {
+        try (CloseableLock ignored = CloseableLock.lock(lock.readLock())) {
             List<Pair<List<Object>, Long>> result = new ArrayList<>();
             for (Map<Long, ReportTask> taskMap : pendingTaskMap.values()) {
                 result.add(Pair.create(taskMap.values()
@@ -162,7 +162,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
 
     @Override
     public Map<String, Long> estimateCount() {
-        synchronized (pendingTaskMap) {
+        try (CloseableLock ignored = CloseableLock.lock(lock.readLock())) {
             long count = 0;
             for (Map<Long, ReportTask> taskMap : pendingTaskMap.values()) {
                 count += taskMap.size();
@@ -193,6 +193,8 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
 
     private final Map<ReportType, Map<Long, ReportTask>> pendingTaskMap = Maps.newHashMap();
 
+    private final ReadWriteLock lock = new ReentrantReadWriteLock();
+
     /**
      * Record the mapping of <tablet id, backend id> to the to be dropped time of tablet.
      * We will delay the drop of tablet based on configuration `tablet_report_drop_tablet_delay_sec`
@@ -208,14 +210,6 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
 
     public ReportHandler() {
         super("ReportHandler");
-        GaugeMetric<Long> gaugeQueueSize = new GaugeMetric<Long>(
-                "report_queue_size", MetricUnit.NOUNIT, "report queue size") {
-            @Override
-            public Long getValue() {
-                return (long) reportQueue.size();
-            }
-        };
-        MetricRepo.addMetric(gaugeQueueSize);
         pendingTaskMap.put(ReportType.TABLET_REPORT, Maps.newHashMap());
         pendingTaskMap.put(ReportType.DISK_REPORT, Maps.newHashMap());
         pendingTaskMap.put(ReportType.TASK_REPORT, Maps.newHashMap());
@@ -373,7 +367,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
     }
 
     private void putToQueue(ReportTask reportTask) throws Exception {
-        synchronized (pendingTaskMap) {
+        try (CloseableLock ignored = CloseableLock.lock(lock.writeLock())) {
             if (!pendingTaskMap.containsKey(reportTask.type)) {
                 throw new Exception("Unknown report task type" + reportTask.toString());
             }
@@ -425,6 +419,13 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
             this.activeWorkGroups = activeWorkGroups;
             this.resourceUsage = resourceUsage;
             this.dataCacheMetrics = dataCacheMetrics;
+        }
+
+        public ReportTask(long beId, ReportType type, Map<Long, TTablet> tablets, long reportVersion) {
+            this.beId = beId;
+            this.type = type;
+            this.tablets = tablets;
+            this.reportVersion = reportVersion;
         }
 
         @Override
@@ -2184,13 +2185,28 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
         }
     }
 
+    public int getPendingTabletReportTaskCnt() {
+        try (CloseableLock ignored = CloseableLock.lock(lock.readLock())) {
+            Map<Long, ReportTask> tasks = pendingTaskMap.get(ReportType.TABLET_REPORT);
+            return tasks == null ? 0 : tasks.size();
+        }
+    }
+
+    public void putTabletReportTask(long beId, long reportVersion, Map<Long, TTablet> tablets) throws Exception {
+        putToQueue(new ReportTask(beId, ReportType.TABLET_REPORT, tablets, reportVersion));
+    }
+
+    public int getReportQueueSize() {
+        return reportQueue.size();
+    }
+
     @Override
     protected void runOneCycle() {
         while (true) {
             try {
                 Pair<Long, ReportType> pair = reportQueue.take();
                 ReportTask task = null;
-                synchronized (pendingTaskMap) {
+                try (CloseableLock ignored = CloseableLock.lock(lock.writeLock())) {
                     // using the lastest task
                     task = pendingTaskMap.get(pair.second).get(pair.first);
                     if (task == null) {

@@ -36,6 +36,7 @@
 #include "backend_service.h"
 
 #include "agent/agent_server.h"
+#include "agent/task_worker_pool.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 
@@ -64,6 +65,18 @@ void BackendService::release_snapshot(TAgentResult& return_value, const std::str
 
 void BackendService::publish_cluster_state(TAgentResult& result, const TAgentPublishRequest& request) {
     _agent_server->publish_cluster_state(result, request);
+}
+
+void BackendService::get_tablets_info(TGetTabletsInfoResult& result_, const TGetTabletsInfoRequest& request) {
+    result_.__set_report_version(curr_report_version());
+    result_.__isset.tablets = true;
+    TStatus t_status;
+    Status st_report = StorageEngine::instance()->tablet_manager()->report_all_tablets_info(&result_.tablets);
+    if (!st_report.ok()) {
+        LOG(WARNING) << "Fail to get all tablets info, err=" << st_report.to_string();
+    }
+    st_report.to_thrift(&t_status);
+    result_.status = t_status;
 }
 
 } // namespace starrocks
