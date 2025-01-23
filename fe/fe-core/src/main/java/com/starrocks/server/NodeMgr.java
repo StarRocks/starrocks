@@ -41,10 +41,7 @@ import com.google.gson.annotations.SerializedName;
 import com.google.gson.stream.JsonReader;
 import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.common.Config;
-import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.ha.BDBHA;
@@ -63,13 +60,11 @@ import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryStatisticsInfo;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.AdminSetConfigStmt;
 import com.starrocks.sql.ast.ModifyFrontendAddressClause;
 import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.Frontend;
@@ -77,9 +72,6 @@ import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TGetQueryStatisticsRequest;
 import com.starrocks.thrift.TGetQueryStatisticsResponse;
 import com.starrocks.thrift.TNetworkAddress;
-import com.starrocks.thrift.TSetConfigRequest;
-import com.starrocks.thrift.TSetConfigResponse;
-import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -1150,50 +1142,6 @@ public class NodeMgr {
         }
 
         return statisticsItems;
-    }
-
-    public void setConfig(AdminSetConfigStmt stmt) throws DdlException {
-        setFrontendConfig(stmt.getConfig().getMap());
-
-        List<Frontend> allFrontends = getFrontends(null);
-        int timeout = ConnectContext.get().getExecTimeout() * 1000 + Config.thrift_rpc_timeout_ms;
-        StringBuilder errMsg = new StringBuilder();
-        for (Frontend fe : allFrontends) {
-            if (fe.getHost().equals(getSelfNode().first)) {
-                continue;
-            }
-
-            TSetConfigRequest request = new TSetConfigRequest();
-            request.setKeys(Lists.newArrayList(stmt.getConfig().getKey()));
-            request.setValues(Lists.newArrayList(stmt.getConfig().getValue()));
-            try {
-                TSetConfigResponse response = ThriftRPCRequestExecutor.call(
-                        ThriftConnectionPool.frontendPool,
-                        new TNetworkAddress(fe.getHost(), fe.getRpcPort()),
-                        timeout,
-                        client -> client.setConfig(request));
-                TStatus status = response.getStatus();
-                if (status.getStatus_code() != TStatusCode.OK) {
-                    errMsg.append("set config for fe[").append(fe.getHost()).append("] failed: ");
-                    if (status.getError_msgs() != null && status.getError_msgs().size() > 0) {
-                        errMsg.append(String.join(",", status.getError_msgs()));
-                    }
-                    errMsg.append(";");
-                }
-            } catch (Exception e) {
-                LOG.warn("set remote fe: {} config failed", fe.getHost(), e);
-                errMsg.append("set config for fe[").append(fe.getHost()).append("] failed: ").append(e.getMessage());
-            }
-        }
-        if (errMsg.length() > 0) {
-            ErrorReport.reportDdlException(ErrorCode.ERROR_SET_CONFIG_FAILED, errMsg.toString());
-        }
-    }
-
-    public void setFrontendConfig(Map<String, String> configs) throws DdlException {
-        for (Map.Entry<String, String> entry : configs.entrySet()) {
-            ConfigBase.setMutableConfig(entry.getKey(), entry.getValue());
-        }
     }
 
     public Frontend getMySelf() {

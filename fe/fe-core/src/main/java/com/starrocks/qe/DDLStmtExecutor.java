@@ -22,6 +22,7 @@ import com.starrocks.analysis.ParseNode;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
+import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -734,7 +735,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitAdminSetConfigStatement(AdminSetConfigStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getNodeMgr().setConfig(stmt);
+                ConfigBase.setConfig(stmt);
                 if (stmt.getConfig().containsKey("mysql_server_version")) {
                     String version = stmt.getConfig().getMap().get("mysql_server_version");
                     if (!Strings.isNullOrEmpty(version)) {

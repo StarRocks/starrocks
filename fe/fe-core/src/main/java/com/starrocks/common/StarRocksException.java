@@ -48,8 +48,8 @@ public class StarRocksException extends Exception {
                 ctx.getState().setErrType(QueryState.ErrType.INTERNAL_ERR);
             }
 
-            if (errorCode.getSqlState()[1] == '5' && errorCode.getSqlState()[2] == '3' &&
-                    errorCode.getSqlState()[3] == '4') {
+            if (errorCode.getSqlState()[0] == '5' && errorCode.getSqlState()[1] == '3' &&
+                    errorCode.getSqlState()[2] == '4') {
                 ctx.getState().setErrType(QueryState.ErrType.EXEC_TIME_OUT);
             }
         }

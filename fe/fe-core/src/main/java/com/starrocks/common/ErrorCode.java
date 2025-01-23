@@ -205,8 +205,6 @@ public enum ErrorCode {
             "refresh external table failed: %s"),
     ERROR_CREATE_TABLE_LIKE_UNSUPPORTED_VIEW(5075, new byte[] {'4', '2', '0', '0', '0'},
             "Create table like does not support create view."),
-    ERROR_SET_CONFIG_FAILED(5076, new byte[] {'4', '2', '0', '0', '0'},
-            "set config failed: %s"),
     ERR_QUERY_CANCELLED_BY_CRASH(5077, new byte[] {'X', 'X', '0', '0', '0'},
             "Query cancelled by crash of backends."),
     ERR_BAD_CATALOG_ERROR(5078, new byte[] {'4', '2', '0', '0', '0'},
@@ -229,31 +227,20 @@ public enum ErrorCode {
             "Export job [%s] not found when checking privilege"),
     ERROR_DYNAMIC_PARTITION_HISTORY_PARTITION_NUM_ZERO(5092, new byte[] {'4', '2', '0', '0', '0'},
             "Dynamic history partition num must greater than 0"),
-    ERR_CATALOG_EXISTED_ERROR(5700, new byte[] {'4', '2', '0', '0', '0'},
-            "Catalog '%s' already exists"),
-    ERR_PLAN_VALIDATE_ERROR(6000, new byte[] {'0', '7', '0', '0', '0'},
-            "Incorrect logical plan found in operator: %s. Invalid reason: %s"),
-    ERR_INVALID_DATE_ERROR(6001, new byte[] {'2', '2', '0', '0', '0'}, "Incorrect %s value %s"),
-
-    ERR_BAD_WAREHOUSE_ERROR(6002, new byte[] {'4', '2', '0', '0', '0'},
-            "Unknown warehouse '%s'"),
-
-    ERR_BAD_PIPE_STATEMENT(6010, new byte[] {'4', '2', '0', '0', '0'}, "Bad pipe statement: '%s'"),
-    ERR_UNKNOWN_PIPE(6011, new byte[] {'4', '2', '0', '0', '0'}, "Unknown pipe '%s'"),
-    ERR_PIPE_EXISTS(6012, new byte[] {'4', '2', '0', '0', '0'}, "Pipe exists"),
-    ERR_UNKNOWN_PROPERTY(6013, new byte[] {'4', '2', '0', '0', '0'}, "Unknown property %s"),
-    ERR_INVALID_PARAMETER(6013, new byte[] {'4', '2', '0', '0', '0'}, "Invalid parameter %s"),
-
-    ERR_MISSING_KEY_COLUMNS(6014, new byte[] {'4', '2', '0', '0', '0'},
-            "missing key columns:%s for primary key table"),
-    ERR_MISSING_DEPENDENCY_FOR_GENERATED_COLUMN(6015, new byte[] {'4', '2', '0', '0', '0'},
-            "missing dependency column for generated column %s"),
 
     /*
-     * The following ErrorCode has been reviewed.
-     * If you want to add an error code, please add it in the specific
-     * number segment according to the number segment of your own module.
+      !!!!!!!!!!!!!!!!!!!!!!     IMPORTANT   !!!!!!!!!!!!!!!!!!!!!!
+      <p>
+      The following ErrorCode has been reviewed.
+      If you want to add an error code, please add it in the specific
+      number segment according to the number segment of your own module.
      */
+
+    /**
+     * 5100 - 5199: Configuration
+     */
+    ERROR_SET_CONFIG_FAILED(5101, new byte[] {'F', '0', '0', '0', '0'}, "Set config failed: %s"),
+    ERROR_CONFIG_NOT_EXIST(5102, new byte[] {'F', '0', '0', '0', '0'}, "Config '%s' does not exist or is not mutable"),
 
     /**
      * 5200 - 5299: Authentication and Authorization
@@ -317,6 +304,7 @@ public enum ErrorCode {
             "Can not rename column in internal database: %s"),
     ERR_CANNOT_RENAME_COLUMN_OF_NOT_NORMAL_TABLE(5513, new byte[] {'4', '2', '0', '0', '0'},
             "Can not rename column of table in %s state"),
+    ERR_CATALOG_EXISTED_ERROR(5514, new byte[] {'4', '2', '0', '0', '0'}, "Catalog '%s' already exists"),
 
     /**
      * 5600 - 5699: DML operation failure
@@ -362,18 +350,41 @@ public enum ErrorCode {
             "The interval of the Multi-Range Partition must be greater than 0"),
 
     /**
-     * 10000 - 10099: warehouse
+     * 5800 - 5899: Pipe
      */
-    ERR_UNKNOWN_WAREHOUSE(10001, new byte[] {'4', '2', '0', '0', '0'}, "Warehouse %s not exist."),
-    ERR_WAREHOUSE_EXISTS(10002, new byte[] {'4', '2', '0', '0', '0'}, "Warehouse %s already exists."),
-    ERR_WAREHOUSE_SUSPENDED(10003, new byte[] {'4', '2', '0', '0', '0'}, "Warehouse %s has been suspended."),
-    ERR_WAREHOUSE_UNAVAILABLE(10004, new byte[] {'4', '2', '0', '0', '0'}, "Warehouse %s is not available."),
-    ERR_NO_NODES_IN_WAREHOUSE(10005, new byte[] {'4', '2', '0', '0', '0'},
-            "No alive backend or compute node in warehouse %s."),
-    ERR_INVALID_WAREHOUSE_NAME(10006, new byte[] {'4', '2', '0', '0', '0'}, "Warehouse name can not be null or empty"),
+    ERR_BAD_PIPE_STATEMENT(5800, new byte[] {'4', '2', '0', '0', '0'}, "Bad pipe statement: '%s'"),
+    ERR_UNKNOWN_PIPE(5801, new byte[] {'4', '2', '0', '0', '0'}, "Unknown pipe '%s'"),
+    ERR_PIPE_EXISTS(5802, new byte[] {'4', '2', '0', '0', '0'}, "Pipe exists"),
+    ERR_UNKNOWN_PROPERTY(5803, new byte[] {'4', '2', '0', '0', '0'}, "Unknown property %s"),
 
-    ERR_NOT_SUPPORTED_STATEMENT_IN_SHARED_NOTHING_MODE(10007, new byte[] {'4', '2', '0', '0', '0'},
-            "unsupported statement in shared_nothing mode");
+    /**
+     * 5900 - 5999: warehouse
+     */
+    ERR_UNKNOWN_WAREHOUSE(5901, new byte[] {'4', '2', '0', '0', '0'}, "Warehouse %s not exist."),
+    ERR_WAREHOUSE_EXISTS(5902, new byte[] {'4', '2', '0', '0', '0'}, "Warehouse %s already exists."),
+    ERR_WAREHOUSE_SUSPENDED(5903, new byte[] {'4', '2', '0', '0', '0'}, "Warehouse %s has been suspended."),
+    ERR_WAREHOUSE_UNAVAILABLE(5904, new byte[] {'4', '2', '0', '0', '0'}, "Warehouse %s is not available."),
+    ERR_NO_NODES_IN_WAREHOUSE(5905, new byte[] {'4', '2', '0', '0', '0'},
+            "No alive backend or compute node in warehouse %s."),
+    ERR_INVALID_WAREHOUSE_NAME(5906, new byte[] {'4', '2', '0', '0', '0'}, "Warehouse name can not be null or empty"),
+    ERR_NOT_SUPPORTED_STATEMENT_IN_SHARED_NOTHING_MODE(5907, new byte[] {'4', '2', '0', '0', '0'},
+            "unsupported statement in shared_nothing mode"),
+
+    /**
+     * 6000 - 6100: Planner
+     */
+    ERR_PLAN_VALIDATE_ERROR(6000, new byte[] {'0', '7', '0', '0', '0'},
+            "Incorrect logical plan found in operator: %s. Invalid reason: %s"),
+    ERR_INVALID_DATE_ERROR(6001, new byte[] {'2', '2', '0', '0', '0'}, "Incorrect %s value %s"),
+
+    ERR_INVALID_PARAMETER(6013, new byte[] {'4', '2', '0', '0', '0'}, "Invalid parameter %s"),
+
+    ERR_MISSING_KEY_COLUMNS(6014, new byte[] {'4', '2', '0', '0', '0'},
+            "missing key columns:%s for primary key table"),
+
+    ERR_MISSING_DEPENDENCY_FOR_GENERATED_COLUMN(6015, new byte[] {'4', '2', '0', '0', '0'},
+            "missing dependency column for generated column %s"),
+    ;
 
     public static final String ERR_ACCESS_DENIED_HINT_MSG_FORMAT = "Please ask the admin to grant permission(s) or" +
             " try activating existing roles using <set [default] role>. Current role(s): %s. Inactivated role(s): %s.";

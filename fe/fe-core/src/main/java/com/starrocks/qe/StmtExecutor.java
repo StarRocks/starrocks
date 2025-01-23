@@ -131,7 +131,6 @@ import com.starrocks.qe.feedback.skeleton.SkeletonNode;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.qe.scheduler.FeExecuteCoordinator;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlConnectContext;
@@ -1799,17 +1798,13 @@ public class StmtExecutor {
     }
 
     // Process use warehouse statement
-    private void handleSetWarehouseStmt() throws AnalysisException {
-        if (RunMode.getCurrentRunMode() == RunMode.SHARED_NOTHING) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_NOT_SUPPORTED_STATEMENT_IN_SHARED_NOTHING_MODE);
-        }
-
+    private void handleSetWarehouseStmt() throws StarRocksException {
         SetWarehouseStmt setWarehouseStmt = (SetWarehouseStmt) parsedStmt;
         try {
             WarehouseManager warehouseMgr = GlobalStateMgr.getCurrentState().getWarehouseMgr();
             String newWarehouseName = setWarehouseStmt.getWarehouseName();
             if (!warehouseMgr.warehouseExists(newWarehouseName)) {
-                ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_WAREHOUSE_ERROR, newWarehouseName);
+                throw new StarRocksException(ErrorCode.ERR_UNKNOWN_WAREHOUSE, newWarehouseName);
             }
             context.setCurrentWarehouse(newWarehouseName);
         } catch (Exception e) {
