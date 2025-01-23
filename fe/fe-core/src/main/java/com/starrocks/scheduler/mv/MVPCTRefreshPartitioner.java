@@ -14,6 +14,7 @@
 
 package com.starrocks.scheduler.mv;
 
+import com.google.common.base.Strings;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Column;
