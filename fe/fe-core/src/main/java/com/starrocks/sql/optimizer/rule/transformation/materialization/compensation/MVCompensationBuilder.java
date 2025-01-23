@@ -359,6 +359,10 @@ public class MVCompensationBuilder {
                 if (selectPartitionNames.stream().noneMatch(refTablePartitionNamesToRefresh::contains)) {
                     return MVCompensation.createNoCompensateState(sessionVariable);
                 }
+                // if all partitions need to refresh, no need rewrite.
+                if (refTablePartitionNamesToRefresh.containsAll(selectPartitionNames)) {
+                    return MVCompensation.createNoRewriteState(sessionVariable);
+                }
             }
             // if mv's to refresh partitions contains any of query's select partition ids, then rewrite with compensation.
             List<PRangeCell> toRefreshRefTablePartitions = getMVCompensatePartitionsOfExternal(refBaseTable,
