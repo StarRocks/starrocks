@@ -2602,7 +2602,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitAdminSetAutomatedSnapshotOnStatement(
-                     StarRocksParser.AdminSetAutomatedSnapshotOnStatementContext context) {
+            StarRocksParser.AdminSetAutomatedSnapshotOnStatementContext context) {
         String svName = StorageVolumeMgr.BUILTIN_STORAGE_VOLUME;
         if (context.svName != null) {
             svName = getIdentifierName(context.svName);
@@ -2612,7 +2612,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitAdminSetAutomatedSnapshotOffStatement(
-                     StarRocksParser.AdminSetAutomatedSnapshotOffStatementContext context) {
+            StarRocksParser.AdminSetAutomatedSnapshotOffStatementContext context) {
         return new AdminSetAutomatedSnapshotOffStmt(createPos(context));
     }
 
@@ -5068,11 +5068,23 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitTranslateSQL(StarRocksParser.TranslateSQLContext context) {
         StringBuilder buf = new StringBuilder();
+        int lastLine = context.start.getLine();
+        int lastPosition = 0;
         for (int i = 0; i < context.getChildCount(); ++i) {
+            TerminalNode child = (TerminalNode) context.getChild(i);
             if (i > 0) {
-                buf.append(' ');
+                int currentLine = child.getSymbol().getLine();
+                if (lastLine != currentLine) {
+                    buf.append('\n');
+                    lastLine = currentLine;
+                    lastPosition = 0;
+                }
+
+                buf.append(" ".repeat(child.getSymbol().getCharPositionInLine() - lastPosition));
+                lastPosition = child.getSymbol().getCharPositionInLine();
             }
-            buf.append(context.getChild(i).getText());
+            buf.append(child.getText());
+            lastPosition += child.getText().length();
         }
         return new StringLiteral(buf.toString(), createPos(context));
     }
