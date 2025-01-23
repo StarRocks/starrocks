@@ -35,7 +35,9 @@
 namespace starrocks::lake {
 
 Status SegmentPKEncodeResult::_load() {
-    pk_column->reset_column();
+    // reset pk_column to empty
+    auto clone_pk_column = pk_column->clone_empty();
+    pk_column = std::move(clone_pk_column);
     ChunkUniquePtr chunk_shared_ptr;
     TRY_CATCH_BAD_ALLOC(chunk_shared_ptr = ChunkHelper::new_chunk(_pkey_schema, 4096));
     auto chunk = chunk_shared_ptr.get();
