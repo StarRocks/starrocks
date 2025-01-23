@@ -47,7 +47,7 @@ using std::chrono::milliseconds;
 using std::chrono::steady_clock;
 using std::chrono::duration_cast;
 
-class ConnectorScanOperatorMemShareArbitrator;
+struct ConnectorScanOperatorMemShareArbitrator;
 
 // The context for all fragment of one query in one BE
 class QueryContext : public std::enable_shared_from_this<QueryContext> {
@@ -393,6 +393,7 @@ public:
 
     void collect_query_statistics(const PCollectQueryStatisticsRequest* request,
                                   PCollectQueryStatisticsResult* response);
+    void for_each_active_ctx(const std::function<void(QueryContextPtr)>& func);
 
 private:
     static void _clean_func(QueryContextManager* manager);

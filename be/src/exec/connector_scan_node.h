@@ -27,7 +27,7 @@ namespace starrocks {
 class ConnectorScanner;
 
 namespace pipeline {
-class ConnectorScanOperatorMemShareArbitrator;
+struct ConnectorScanOperatorMemShareArbitrator;
 }
 
 class ConnectorScanNode final : public starrocks::ScanNode {

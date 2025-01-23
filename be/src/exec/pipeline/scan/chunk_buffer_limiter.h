@@ -126,7 +126,13 @@ public:
     ChunkBufferTokenPtr pin(int num_chunks) override;
     void unpin(int num_chunks);
 
-    bool is_full() const override { return _pinned_chunks_counter >= _capacity; }
+    bool is_full() const override {
+        if (_pinned_chunks_counter >= _capacity) {
+            _returned_full_event.store(true, std::memory_order_release);
+            return true;
+        }
+        return false;
+    }
     size_t size() const override { return _pinned_chunks_counter; }
     size_t capacity() const override { return _capacity; }
     size_t default_capacity() const override { return _default_capacity; }
@@ -154,6 +160,8 @@ private:
     std::atomic<int> _pinned_chunks_counter = 0;
 
     std::atomic<bool> _has_full_event{};
+
+    mutable std::atomic<bool> _returned_full_event{};
 };
 
 } // namespace starrocks::pipeline
