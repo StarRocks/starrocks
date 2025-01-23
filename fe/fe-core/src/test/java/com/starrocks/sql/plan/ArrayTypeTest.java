@@ -746,4 +746,14 @@ public class ArrayTypeTest extends PlanTestBase {
                 "  |  \n" +
                 "  0:OlapScanNode");
     }
+
+    @Test
+    public void testLambdaFunction() throws Exception {
+        String sql = "select dense_rank() over(partition by v1 order by v2), " +
+                "array_filter(v3, x -> array_contains(v3, x)) from tarray";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "3:Project\n" +
+                "  |  <slot 4> : 4: dense_rank()\n" +
+                "  |  <slot 6> : array_filter(3: v3, array_map(<slot 5> -> array_contains(3: v3, <slot 5>), 3: v3))");
+    }
 }
