@@ -485,3 +485,57 @@ select c1,c0 from t5 order by c1,c0 desc limit 10;
 12	9
 13	10
 -- !result
+CREATE TABLE `tlow` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` varchar(20) NULL COMMENT "",
+  `c2` varchar(200) NULL COMMENT "",
+  `c3` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`, `c1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`, `c1`) BUCKETS 64
+PROPERTIES (
+"colocate_with" = "${uuid0}",
+"replication_num" = "1",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+set io_tasks_per_scan_operator=1;
+-- result:
+-- !result
+set group_execution_min_scan_rows=1;
+-- result:
+-- !result
+insert into tlow SELECT generate_series, if (generate_series<10, null, generate_series%10), generate_series, generate_series FROM TABLE(generate_series(1,  40960));
+-- result:
+-- !result
+analyze full table tl;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Table tl is not found.')
+-- !result
+select count(distinct c1) from tlow;
+-- result:
+10
+-- !result
+function: wait_global_dict_ready('c1', 'tlow')
+-- result:
+
+-- !result
+select c1 from tlow group by c0, c1 order by c1 nulls first limit 10;
+-- result:
+None
+None
+None
+None
+None
+None
+None
+None
+None
+0
+-- !result

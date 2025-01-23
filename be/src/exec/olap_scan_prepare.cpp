@@ -20,6 +20,7 @@
 #include "exprs/binary_predicate.h"
 #include "exprs/compound_predicate.h"
 #include "exprs/dictmapping_expr.h"
+#include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/in_const_predicate.hpp"
 #include "exprs/is_null_predicate.h"
@@ -265,7 +266,8 @@ StatusOr<bool> ChunkPredicateBuilder<E, Type>::parse_conjuncts() {
     }
 
     if (_opts.enable_column_expr_predicate) {
-        VLOG_FILE << "OlapScanConjunctsManager: enable_column_expr_predicate = true. push down column expr predicates";
+        VLOG_FILE << "OlapScanConjunctsManager: enable_column_expr_predicate = true. push down column expr "
+                     "predicates";
         RETURN_IF_ERROR(build_column_expr_predicates());
     }
 
@@ -545,19 +547,19 @@ Status ChunkPredicateBuilder<E, Type>::normalize_binary_predicate(const SlotDesc
 
 template <BoxedExprType E, CompoundNodeType Type>
 template <LogicalType SlotType, LogicalType MappingType, template <class> class Decoder, class... Args>
-void ChunkPredicateBuilder<E, Type>::normalized_rf_with_null(const JoinRuntimeFilter* rf, Expr* col_ref,
-                                                             Args&&... args) {
+void ChunkPredicateBuilder<E, Type>::normalized_rf_with_null(const JoinRuntimeFilter* rf,
+                                                             const SlotDescriptor* slot_desc, Args&&... args) {
     DCHECK(Type == CompoundNodeType::AND);
-
+    using RFColumnPredicateBuilder = detail::RuntimeColumnPredicateBuilder;
     ObjectPool* pool = _opts.obj_pool;
 
     const auto* filter = down_cast<const RuntimeBloomFilter<MappingType>*>(rf);
     using DecoderType = Decoder<typename RunTimeTypeTraits<MappingType>::CppType>;
     DecoderType decoder(std::forward<Args>(args)...);
-    detail::RuntimeColumnPredicateBuilder::MinMaxParser<RuntimeBloomFilter<MappingType>, DecoderType> parser(filter,
-                                                                                                             &decoder);
-    const TypeDescriptor& col_type = col_ref->type();
+    RFColumnPredicateBuilder::MinMaxParser<RuntimeBloomFilter<MappingType>, DecoderType> parser(filter, &decoder);
 
+    const TypeDescriptor& col_type = slot_desc->type();
+    ColumnRef* col_ref = pool->add(new ColumnRef(slot_desc));
     ColumnPtr const_min_col = parser.template min_const_column<SlotType>(col_type);
     ColumnPtr const_max_col = parser.template max_const_column<SlotType>(col_type);
     VectorizedLiteral* min_literal = pool->add(new VectorizedLiteral(std::move(const_min_col), col_type));
@@ -683,7 +685,7 @@ Status ChunkPredicateBuilder<E, Type>::normalize_join_runtime_filter(const SlotD
                 if (rf->has_null()) {
                     normalized_rf_with_null<SlotType, LowCardDictType,
                                             detail::RuntimeColumnPredicateBuilder::GlobalDictCodeDecoder>(
-                            rf, desc->probe_expr_ctx()->root(), &iter->second.first);
+                            rf, &slot, &iter->second.first);
                 } else {
                     detail::RuntimeColumnPredicateBuilder::build_minmax_range<
                             RangeType, SlotType, LowCardDictType,
@@ -693,7 +695,7 @@ Status ChunkPredicateBuilder<E, Type>::normalize_join_runtime_filter(const SlotD
             } else {
                 if (rf->has_null()) {
                     normalized_rf_with_null<SlotType, SlotType, detail::RuntimeColumnPredicateBuilder::DummyDecoder>(
-                            rf, desc->probe_expr_ctx()->root(), nullptr);
+                            rf, &slot, nullptr);
                 } else {
                     detail::RuntimeColumnPredicateBuilder::build_minmax_range<
                             RangeType, SlotType, SlotType, detail::RuntimeColumnPredicateBuilder::DummyDecoder>(
@@ -703,7 +705,7 @@ Status ChunkPredicateBuilder<E, Type>::normalize_join_runtime_filter(const SlotD
         } else {
             if (rf->has_null()) {
                 normalized_rf_with_null<SlotType, SlotType, detail::RuntimeColumnPredicateBuilder::DummyDecoder>(
-                        rf, desc->probe_expr_ctx()->root(), nullptr);
+                        rf, &slot, nullptr);
             } else {
                 detail::RuntimeColumnPredicateBuilder::build_minmax_range<
                         RangeType, SlotType, SlotType, detail::RuntimeColumnPredicateBuilder::DummyDecoder>(*range, rf,

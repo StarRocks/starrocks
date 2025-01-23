@@ -18,6 +18,7 @@
 #include "exec/olap_common.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
+#include "runtime/descriptors.h"
 #include "storage/olap_runtime_range_pruner.h"
 #include "storage/predicate_tree/predicate_tree_fwd.h"
 #include "storage/predicate_tree_params.h"
@@ -91,7 +92,7 @@ public:
     const UnarrivedRuntimeFilterList& unarrived_runtime_filters() { return rt_ranger_params; }
 
     template <LogicalType SlotType, LogicalType MappingType, template <class> class Decoder, class... Args>
-    void normalized_rf_with_null(const JoinRuntimeFilter* rf, Expr* col_ref, Args&&... args);
+    void normalized_rf_with_null(const JoinRuntimeFilter* rf, const SlotDescriptor* slot_desc, Args&&... args);
 
 private:
     const ScanConjunctsManagerOptions& _opts;
