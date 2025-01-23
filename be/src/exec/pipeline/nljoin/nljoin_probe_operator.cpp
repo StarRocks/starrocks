@@ -130,7 +130,6 @@ Status NLJoinProbeOperator::reset_state(starrocks::RuntimeState* state, const st
 }
 
 bool NLJoinProbeOperator::has_output() const {
-    _check_post_probe();
     return _join_stage != JoinStage::Finished;
 }
 
@@ -603,6 +602,7 @@ Status NLJoinProbeOperator::_permute_right_join(size_t chunk_size) {
 // 2. Apply the conjuncts, and append it to output buffer
 // 3. Maintain match index and implement left join and right join
 StatusOr<ChunkPtr> NLJoinProbeOperator::pull_chunk(RuntimeState* state) {
+    _check_post_probe();
     size_t chunk_size = state->chunk_size();
 
     if (_join_op == TJoinOp::INNER_JOIN) {

@@ -41,6 +41,8 @@ ConjugateOperator::ConjugateOperator(pipeline::OperatorFactory* factory, int32_t
 
 Status ConjugateOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
+    _source_op->set_observer(observer());
+    _sink_op->set_observer(observer());
     RETURN_IF_ERROR(_source_op->prepare(state));
     RETURN_IF_ERROR(_sink_op->prepare(state));
     _source_op->set_runtime_filter_probe_sequence(_runtime_filter_probe_sequence);
