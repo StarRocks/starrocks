@@ -63,6 +63,18 @@ public class MetaUtils {
         }
     }
 
+    public static void checkDbExistInResourceGroupAndReport(String dbName) {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        GlobalStateMgr.getCurrentState().getResourceGroupMgr().getAllResourceGroupNames().forEach(rgName -> {
+            GlobalStateMgr.getCurrentState().getResourceGroupMgr().getResourceGroup(rgName).getClassifiers().forEach(classify -> {
+                if (classify.getDatabases().contains(db.getId())) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_DROP_DATABASE, dbName, rgName);
+                }
+            });
+        });
+
+    }
+
     public static void checkDbNullAndReport(Database db, String name) {
         if (db == null) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, name);

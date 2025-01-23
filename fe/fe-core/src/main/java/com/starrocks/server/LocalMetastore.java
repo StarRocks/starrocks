@@ -460,12 +460,15 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             if (!db.isExist()) {
                 throw new MetaNotFoundException("Database '" + dbName + "' not found");
             }
-            if (!isForceDrop && stateMgr.getGlobalTransactionMgr().existCommittedTxns(db.getId(), null, null)) {
-                throw new DdlException(
-                        "There are still some transactions in the COMMITTED state waiting to be completed. " +
-                                "The database [" + dbName +
-                                "] cannot be dropped. If you want to forcibly drop(cannot be recovered)," +
-                                " please use \"DROP DATABASE <database> FORCE\".");
+            if (!isForceDrop) {
+                if (stateMgr.getGlobalTransactionMgr().existCommittedTxns(db.getId(), null, null)) {
+                    throw new DdlException(
+                            "There are still some transactions in the COMMITTED state waiting to be completed. " +
+                                    "The database [" + dbName +
+                                    "] cannot be dropped. If you want to forcibly drop(cannot be recovered)," +
+                                    " please use \"DROP DATABASE <database> FORCE\".");
+                }
+                MetaUtils.checkDbExistInResourceGroupAndReport(dbName);
             }
 
             // save table names for recycling

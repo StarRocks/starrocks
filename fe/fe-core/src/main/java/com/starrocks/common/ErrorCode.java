@@ -373,7 +373,11 @@ public enum ErrorCode {
     ERR_INVALID_WAREHOUSE_NAME(10006, new byte[] {'4', '2', '0', '0', '0'}, "Warehouse name can not be null or empty"),
 
     ERR_NOT_SUPPORTED_STATEMENT_IN_SHARED_NOTHING_MODE(10007, new byte[] {'4', '2', '0', '0', '0'},
-            "unsupported statement in shared_nothing mode");
+            "unsupported statement in shared_nothing mode"),
+
+    ERR_DROP_DATABASE(10008, new byte[] {'H', 'Y', '0', '0', '0'},
+            "Deleting the database [%s] failed because the database was bound to a resource group [%s]"),
+    ;
 
     public static final String ERR_ACCESS_DENIED_HINT_MSG_FORMAT = "Please ask the admin to grant permission(s) or" +
             " try activating existing roles using <set [default] role>. Current role(s): %s. Inactivated role(s): %s.";
