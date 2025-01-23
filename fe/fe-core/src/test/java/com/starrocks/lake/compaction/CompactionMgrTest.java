@@ -25,13 +25,8 @@ import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.server.GlobalStateMgr;
-<<<<<<< HEAD
-=======
-import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.transaction.GlobalTransactionMgr;
-import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
->>>>>>> e886985477 ([Enhancement] Lake compaction scheduler optimize in fe restart scenarios (#54881))
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
@@ -156,11 +151,11 @@ public class CompactionMgrTest {
         Assert.assertTrue(allPartitions.contains(partition11));
         Assert.assertTrue(allPartitions.contains(partition20));
 
-        List<PartitionStatisticsSnapshot> compactionList =
+        List<PartitionIdentifier> compactionList =
                 compactionManager.choosePartitionsToCompact(new HashSet<>(), new HashSet<>());
         // both partition10 and partition11 are filtered because table1 has active txn
         Assert.assertEquals(1, compactionList.size());
-        Assert.assertSame(partition20, compactionList.get(0).getPartition());
+        Assert.assertSame(partition20, compactionList.get(0));
 
         Set<Long> excludeTables = new HashSet<>();
         excludeTables.add(tableId2);

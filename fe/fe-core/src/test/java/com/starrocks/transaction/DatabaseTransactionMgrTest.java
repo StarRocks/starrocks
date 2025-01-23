@@ -269,7 +269,7 @@ public class DatabaseTransactionMgrTest {
     }
 
     @Test
-    public void getLakeCompactionActiveTxnListTest() throws StarRocksException {
+    public void getLakeCompactionActiveTxnListTest() throws UserException {
         TransactionState.TxnCoordinator feTransactionSource =
                 new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, "fe1");
         long committedCompactionTransactionId = masterTransMgr
@@ -285,7 +285,7 @@ public class DatabaseTransactionMgrTest {
         List<TabletCommitInfo> transTablets = buildTabletCommitInfoList();
         masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, committedCompactionTransactionId, transTablets,
                 Lists.newArrayList(), null);
-        assertEquals(TransactionStatus.COMMITTED, masterDbTransMgr.getTxnState(committedCompactionTransactionId).getStatus());
+        assertEquals(TTransactionStatus.COMMITTED, masterDbTransMgr.getTxnStatus(committedCompactionTransactionId));
 
         long preparedCompactionTransactionId = masterTransMgr
                 .beginTransaction(GlobalStateMgrTestUtil.testDbId1,
