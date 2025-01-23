@@ -85,6 +85,8 @@ public:
     // Return the physical bytes of attachment.
     int64_t construct_brpc_attachment(const PTransmitChunkParamsPtr& _chunk_request, butil::IOBuf& attachment);
 
+    std::string get_name() const override;
+
 private:
     bool _is_large_chunk(size_t sz) const {
         // ref olap_scan_node.cpp release_large_columns

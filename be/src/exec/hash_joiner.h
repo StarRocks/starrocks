@@ -333,6 +333,7 @@ public:
         _probe_observable.add_observer(state, observer);
     }
 
+    // build status changed. notify probe
     auto defer_notify_probe() {
         return DeferOp([this]() { _builder_observable.notify_source_observers(); });
     }

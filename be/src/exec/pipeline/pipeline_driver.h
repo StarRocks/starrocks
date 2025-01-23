@@ -298,6 +298,7 @@ public:
             _output_full_timer_sw->reset();
             break;
         case DriverState::PRECONDITION_BLOCK:
+            DCHECK_EQ(_state, DriverState::READY);
             _precondition_block_timer_sw->reset();
             break;
         case DriverState::PENDING_FINISH:
@@ -392,6 +393,8 @@ public:
             return global_rf_block();
         }
     }
+
+    void set_all_global_rf_timeout() { _all_global_rf_ready_or_timeout = true; }
 
     bool has_precondition() const {
         return !_local_rf_holders.empty() || !_dependencies.empty() || !_global_rf_descriptors.empty();
@@ -505,6 +508,7 @@ public:
 
     PipelineObserver* observer() { return &_observer; }
     void assign_observer();
+    bool is_operator_cancelled() const { return _is_operator_cancelled; }
 
 protected:
     PipelineDriver()
@@ -589,6 +593,8 @@ protected:
     std::atomic<bool> _need_check_reschedule{false};
 
     std::atomic<bool> _has_log_cancelled{false};
+
+    std::atomic<bool> _is_operator_cancelled{false};
 
     PipelineObserver _observer;
 

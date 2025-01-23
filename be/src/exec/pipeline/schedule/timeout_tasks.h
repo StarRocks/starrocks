@@ -34,12 +34,14 @@ private:
 // If the timeout is reached, a cancel_update event is sent to all objects observing _timeout.
 class RFScanWaitTimeout final : public PipelineTimerTask {
 public:
-    RFScanWaitTimeout(FragmentContext* fragment_ctx) : _fragment_ctx(fragment_ctx) {}
+    RFScanWaitTimeout(FragmentContext* fragment_ctx, bool all_rf_timeout = false)
+            : _fragment_ctx(fragment_ctx), _all_rf_timeout(all_rf_timeout) {}
     void add_observer(RuntimeState* state, PipelineObserver* observer) { _timeout.add_observer(state, observer); }
     void Run() override;
 
 private:
     FragmentContext* _fragment_ctx;
+    bool _all_rf_timeout = false;
     Observable _timeout;
 };
 

@@ -17,6 +17,7 @@
 #include <chrono>
 
 #include "exec/pipeline/pipeline_fwd.h"
+#include "runtime/exec_env.h"
 #include "util/time_guard.h"
 
 namespace starrocks::pipeline {
@@ -263,6 +264,17 @@ void PipelineDriverPoller::on_cancel(DriverRawPtr driver, std::vector<DriverRawP
 }
 
 void PipelineDriverPoller::for_each_driver(const ConstDriverConsumer& call) const {
+    auto* env = ExecEnv::GetInstance();
+    env->query_context_mgr()->for_each_active_ctx([&call](const QueryContextPtr& ctx) {
+        ctx->fragment_mgr()->for_each_fragment([&call](const FragmentContextPtr& fragment) {
+            fragment->iterate_drivers([&call](const std::shared_ptr<PipelineDriver>& driver) {
+                if (driver->is_in_blocked()) {
+                    call(driver.get());
+                }
+            });
+        });
+    });
+
     std::shared_lock guard(_local_mutex);
     for (auto* driver : _local_blocked_drivers) {
         call(driver);
