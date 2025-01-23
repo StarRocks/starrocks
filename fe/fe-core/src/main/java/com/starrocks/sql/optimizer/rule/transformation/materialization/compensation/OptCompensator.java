@@ -141,7 +141,8 @@ public class OptCompensator extends OptExpressionVisitor<OptExpression, Void> {
                 final List<PartitionField> partitionFields = Lists.newArrayList();
                 for (Column column : refBaseTablePartitionCols) {
                     for (PartitionField field : cachedIcebergTable.getNativeTable().spec().fields()) {
-                        final String partitionFieldName = cachedIcebergTable.getNativeTable().schema().findColumnName(field.sourceId());
+                        final String partitionFieldName = cachedIcebergTable.getNativeTable()
+                                .schema().findColumnName(field.sourceId());
                         if (partitionFieldName.equalsIgnoreCase(column.getName())) {
                             partitionFields.add(field);
                         }
