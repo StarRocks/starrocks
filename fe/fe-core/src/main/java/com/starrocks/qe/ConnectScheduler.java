@@ -39,6 +39,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeType;
+import com.starrocks.common.CloseableLock;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.ThreadPoolManager;
@@ -294,7 +295,11 @@ public class ConnectScheduler {
 
     public Set<UUID> listAllSessionsId() {
         Set<UUID> sessionIds = new HashSet<>();
-        connectionMap.values().forEach(ctx -> sessionIds.add(ctx.getSessionId()));
+        try (CloseableLock ignored = CloseableLock.lock(this.connStatsLock)) {
+            connectionMap.values().forEach(ctx -> {
+                sessionIds.add(ctx.getSessionId());
+            });
+        }
         return sessionIds;
     }
 
