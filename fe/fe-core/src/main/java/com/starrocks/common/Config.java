@@ -1493,6 +1493,12 @@ public class Config extends ConfigBase {
     @ConfField
     public static int tablet_stat_update_interval_second = 300;  // 5 min
 
+    @ConfField(mutable = true, comment = "time interval to collect tablet info from backend")
+    public static long tablet_collect_interval_seconds = 60;
+
+    @ConfField(mutable = true, comment = "Timeout for calling BE get_tablets_info rpc")
+    public static int tablet_collect_timeout_seconds = 60;
+
     /**
      * The tryLock timeout configuration of globalStateMgr lock.
      * Normally it does not need to change, unless you need to test something.
