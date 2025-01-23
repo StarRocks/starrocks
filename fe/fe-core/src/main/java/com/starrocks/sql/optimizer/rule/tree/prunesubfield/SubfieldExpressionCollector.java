@@ -20,6 +20,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
@@ -91,6 +92,11 @@ public class SubfieldExpressionCollector extends ScalarOperatorVisitor<Void, Voi
             return null;
         }
         complexExpressions.add(subfieldOperator);
+        return null;
+    }
+
+    @Override
+    public Void visitLambdaFunctionOperator(LambdaFunctionOperator operator, Void context) {
         return null;
     }
 
