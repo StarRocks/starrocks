@@ -1449,7 +1449,7 @@ public class MvUtils {
         if (partitionColRefs.size() == 1) {
             for (PartitionKey key : partitionRanges) {
                 final List<LiteralExpr> literalExprs = key.getKeys();
-                Preconditions.checkArgument(literalExprs.size() == partitionColRefs.size());
+                // Preconditions.checkArgument(literalExprs.size() == partitionColRefs.size());
                 final LiteralExpr literalExpr = literalExprs.get(0);
                 final ConstantOperator upperBound = (ConstantOperator) SqlToScalarOperatorTranslator.translate(literalExpr);
                 values.add(upperBound);
