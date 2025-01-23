@@ -312,10 +312,10 @@ void BinaryColumnBase<T>::_build_slices() const {
     _slices_cache = false;
     _slices.clear();
 
-    _slices.reserve(_offsets.size() - 1);
+    _slices.resize(_offsets.size() - 1);
 
     for (size_t i = 0; i < _offsets.size() - 1; ++i) {
-        _slices.emplace_back(_bytes.data() + _offsets[i], _offsets[i + 1] - _offsets[i]);
+        _slices[i] = {_bytes.data() + _offsets[i], _offsets[i + 1] - _offsets[i]};
     }
 
     _slices_cache = true;
@@ -520,12 +520,11 @@ int BinaryColumnBase<T>::compare_at(size_t left, size_t right, const Column& rhs
 template <typename T>
 uint32_t BinaryColumnBase<T>::max_one_element_serialize_size() const {
     uint32_t max_size = 0;
-    T prev_offset = _offsets[0];
-    for (size_t i = 0; i < _offsets.size() - 1; ++i) {
-        T curr_offset = _offsets[i + 1];
+    size_t length = _offsets.size() - 1;
+    for (size_t i = 0; i < length; ++i) {
         // it's safe to cast, because max size of one string is 2^32
-        max_size = std::max(max_size, static_cast<uint32_t>(curr_offset - prev_offset));
-        prev_offset = curr_offset;
+        uint32_t curr_length = _offsets[i + 1] - _offsets[i];
+        max_size = std::max(max_size, curr_length);
     }
     // TODO: may be overflow here, i will solve it later
     return max_size + sizeof(uint32_t);
