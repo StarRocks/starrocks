@@ -121,6 +121,8 @@ protected:
     std::shared_ptr<TabletSchema> _new_tablet_schema_with_generated_column;
     std::shared_ptr<VSchema> _new_schema_with_generated_column;
 
+    RuntimeProfile _dummy_runtime_profile{"dummy"};
+
     int64_t _partition_id = 100;
 };
 
@@ -1279,6 +1281,7 @@ TEST_P(SchemaChangeModifyColumnMultiSegmentOrderTest, test_alter_table) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_base_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
