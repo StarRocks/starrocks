@@ -326,16 +326,18 @@ public class MVCompensationBuilder {
                 } else {
                     return MVCompensation.createUnkownState(sessionVariable);
                 }
-                // if all partitions need to refresh, no need rewrite.
-                if (refTablePartitionNamesToRefresh.containsAll(selectPartitionNames)) {
-                    return MVCompensation.createNoRewriteState(sessionVariable);
-                }
+
             }
             List<PartitionKey> selectPartitionKeys = scanOperatorPredicates.getSelectedPartitionKeys();
-            if (selectPartitionKeys.stream()
+            List<String> selectPartitionNames = selectPartitionKeys.stream()
                     .map(PartitionUtil::generateMVPartitionName)
-                    .noneMatch(x -> refTablePartitionNamesToRefresh.contains(x))) {
+                    .collect(Collectors.toList());
+            if (selectPartitionNames.stream().noneMatch(x -> refTablePartitionNamesToRefresh.contains(x))) {
                 return MVCompensation.createNoCompensateState(sessionVariable);
+            }
+            // if all partitions need to refresh, no need rewrite.
+            if (refTablePartitionNamesToRefresh.containsAll(selectPartitionNames)) {
+                return MVCompensation.createNoRewriteState(sessionVariable);
             }
             // if mv's to refresh partitions contains any of query's select partition ids, then rewrite with compensate.
             List<PRangeCell> toRefreshRefTablePartitions = getMVCompensatePartitionsOfExternal(
