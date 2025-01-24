@@ -65,7 +65,6 @@ Status write_combined_txn_log_parallel(const std::map<int64_t, CombinedTxnLogPB>
         Status submit_status = ExecEnv::GetInstance()->put_combined_txn_log_thread_pool()->submit(task);
         if (!submit_status.ok()) {
             mark_failure(submit_status, &has_error, &final_status);
-            latch.count_down();
             break;
         }
     }
