@@ -1030,6 +1030,7 @@ int meta_tool_main(int argc, char** argv) {
     google::ParseCommandLineFlags(&argc, &argv, true);
     starrocks::date::init_date_cache();
     starrocks::config::disable_storage_page_cache = true;
+    starrocks::MemChunkAllocator::init_instance(nullptr, 2ul * 1024 * 1024 * 1024);
 
     if (empty_args || FLAGS_operation.empty()) {
         show_usage();
@@ -1107,7 +1108,6 @@ int meta_tool_main(int argc, char** argv) {
         }
 
     } else if (FLAGS_operation == "dump_short_key_index") {
-        starrocks::MemChunkAllocator::init_instance(nullptr, 2ul * 1024 * 1024 * 1024);
         if (FLAGS_file == "") {
             std::cout << "no file set for dump short key index" << std::endl;
             return -1;
