@@ -126,7 +126,7 @@ In addition, StarRocks allows you to configure collection policies based on tabl
 
   - When the collection interval is met and the statistics health is higher than the threshold for automatic sampled collection (`statistic_auto_collect_sample_threshold`) and lower than the automatic collection threshold (`statistic_auto_collect_ratio`), full collection is triggered.
 
-  - When the size of the largest partition to collect data (`statistic_max_full_collect_data_size`) is greater than 100 GB, sampled collection is triggered.
+  - When the size of partitions to collect data (`statistic_max_full_collect_data_size`) is greater than 100 GB, sampled collection is triggered.
 
   - Only statistics of partitions whose update time is later than the time of the previous collection task are collected. Statistics of partitions with no data change are not collected.
 
@@ -151,7 +151,7 @@ The following table describes the default settings. If you need to modify them, 
 | statistic_auto_collect_large_table_interval | LONG    | 43200        | The interval for automatically collecting full statistics of large tables. Unit: seconds. Default value: 43200 (12 hours).                               |
 | statistic_auto_collect_ratio          | FLOAT    | 0.8               | The threshold for determining  whether the statistics for automatic collection are healthy. If statistics health is below this threshold, automatic collection is triggered. |
 | statistic_auto_collect_sample_threshold  | DOUBLE | 0.3   | The statistics health threshold for triggering automatic sampled collection. If the health value of statistics is lower than this threshold, automatic sampled collection is triggered. |
-| statistic_max_full_collect_data_size | LONG      | 107374182400      | The size of the largest partition for automatic collection to collect data. Unit: Byte. Default value: 107374182400 (100 GB). If a partition exceeds this value, full collection is discarded and sampled collection is performed instead. |
+| statistic_max_full_collect_data_size | LONG      | 107374182400      | The data size of the partitions for automatic collection to collect data. Unit: Byte. Default value: 107374182400 (100 GB). If the data size exceeds this value, full collection is discarded and sampled collection is performed instead. |
 | statistic_full_collect_buffer | LONG | 20971520 | The maximum buffer size taken by automatic collection tasks. Unit: Byte. Default value: 20971520 (20 MB). |
 | statistic_collect_max_row_count_per_query | INT  | 5000000000        | The maximum number of rows to query for a single analyze task. An analyze task will be split into multiple queries if this value is exceeded. |
 | statistic_collect_too_many_version_sleep | LONG | 600000 | The sleep time of automatic collection tasks if the table on which the collection task runs has too many data versions. Unit: ms. Default value: 600000 (10 minutes).  |
