@@ -34,6 +34,12 @@ import com.starrocks.common.util.LogKey;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.TimeUtils;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+>>>>>>> 7c98728a86 ([BugFix] Fix concurrent issue in olap table listener (#54051))
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.persist.gson.GsonPostProcessable;
@@ -890,7 +896,11 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
                 timeoutMs / 1000);
     }
 
+<<<<<<< HEAD
     public void unprotectedPrepareTxn() throws UserException {
+=======
+    public void unprotectedPrepareTxn() throws StarRocksException, LockTimeoutException {
+>>>>>>> 7c98728a86 ([BugFix] Fix concurrent issue in olap table listener (#54051))
         List<TabletCommitInfo> commitInfos = TabletCommitInfo.fromThrift(coord.getCommitInfos());
         List<TabletFailInfo> failInfos = TabletFailInfo.fromThrift(coord.getFailInfos());
         finishPreparingTimeMs = System.currentTimeMillis();
@@ -898,8 +908,13 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
                 beforeLoadTimeMs, startLoadingTimeMs, startPreparingTimeMs, finishPreparingTimeMs,
                 endTimeMs, numRowsNormal, numRowsAbnormal, numRowsUnselected, numLoadBytesTotal,
                 trackingUrl);
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentGlobalTransactionMgr().prepareTransaction(dbId,
                 txnId, commitInfos, failInfos, txnCommitAttachment);
+=======
+        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().prepareTransaction(
+                dbId, txnId, commitInfos, failInfos, txnCommitAttachment, timeoutMs);
+>>>>>>> 7c98728a86 ([BugFix] Fix concurrent issue in olap table listener (#54051))
     }
 
     public boolean checkNeedRemove(long currentMs, boolean isForce) {
