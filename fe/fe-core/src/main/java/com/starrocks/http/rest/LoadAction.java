@@ -174,7 +174,7 @@ public class LoadAction extends RestBaseAction {
             Collections.shuffle(nodeIds);
         } else {
             SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-            nodeIds = systemInfoService.getNodeSelector().seqChooseBackendIds(1, false, false, null);
+            nodeIds = systemInfoService.getNodeSelector().seqChooseBackendIds(1, true, false, null);
         }
 
         if (CollectionUtils.isEmpty(nodeIds)) {

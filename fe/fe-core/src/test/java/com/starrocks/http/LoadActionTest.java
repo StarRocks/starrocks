@@ -20,13 +20,18 @@ import com.starrocks.load.batchwrite.BatchWriteMgr;
 import com.starrocks.load.batchwrite.RequestCoordinatorBackendResult;
 import com.starrocks.load.batchwrite.TableId;
 import com.starrocks.load.streamload.StreamLoadKvParams;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
+import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.NodeSelector;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpHeaderValues;
 import io.netty.handler.codec.http.HttpResponseStatus;
+import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import okhttp3.OkHttpClient;
@@ -54,7 +59,9 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_ENABLE_BATCH_WRITE;
+import static com.starrocks.server.WarehouseManager.DEFAULT_WAREHOUSE_NAME;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 public class LoadActionTest extends StarRocksHttpTestCase {
@@ -266,5 +273,64 @@ public class LoadActionTest extends StarRocksHttpTestCase {
             }
         }
         client.close();
+    }
+
+    @Test
+    public void testStreamLoadSkipNonAliveNodesForSharedNothing() throws Exception {
+        new MockUp<NodeSelector>() {
+            @Mock
+            public List<Long> seqChooseBackendIds(int backendNum, boolean needAvailable,
+                                                  boolean isCreate, Multimap<String, String> locReq) {
+                assertEquals(1, backendNum);
+                assertTrue(needAvailable);
+                assertFalse(isCreate);
+                return new ArrayList<>();
+            }
+        };
+
+        Map<String, String> map = new HashMap<>();
+        Request request = buildRequest(map);
+        try (Response response = noRedirectClient.newCall(request).execute()) {
+            assertEquals(200, response.code());
+            Map<String, Object> result = parseResponseBody(response);
+            assertEquals("FAILED", result.get("Status"));
+            assertEquals("class com.starrocks.common.DdlException: No backend alive.", result.get("Message"));
+        }
+    }
+
+    @Test
+    public void testStreamLoadSkipNonAliveNodesForSharedData() throws Exception {
+        SystemInfoService service = new SystemInfoService();
+        Backend backend = new Backend(1, "127.0.0.1", 9050);
+        backend.setAlive(false);
+        service.addBackend(backend);
+
+        List<Long> nodeIds = new ArrayList<>();
+        nodeIds.add(1L);
+
+        new MockUp<RunMode>() {
+            @Mock
+            boolean isSharedDataMode() {
+                return true;
+            }
+        };
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(DEFAULT_WAREHOUSE_NAME);
+                result = nodeIds;
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+                result = service;
+            }
+        };
+
+        Map<String, String> map = new HashMap<>();
+        Request request = buildRequest(map);
+        try (Response response = noRedirectClient.newCall(request).execute()) {
+            assertEquals(200, response.code());
+            Map<String, Object> result = parseResponseBody(response);
+            assertEquals("FAILED", result.get("Status"));
+            assertEquals("class com.starrocks.common.DdlException: No backend alive.", result.get("Message"));
+        }
     }
 }
