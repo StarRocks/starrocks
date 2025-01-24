@@ -110,7 +110,11 @@ public:
 
     void append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) override;
 
+<<<<<<< HEAD
     ColumnPtr replicate(const std::vector<uint32_t>& offsets) override;
+=======
+    StatusOr<ColumnPtr> replicate(const Buffer<uint32_t>& offsets) override;
+>>>>>>> d3f50524fb ([BugFix] fix array_map crash (#55383))
 
     bool append_nulls(size_t count) override {
         DCHECK_GT(count, 0);

@@ -157,7 +157,11 @@ public:
         _data.resize(_data.size() + count, DefaultValueGenerator<ValueType>::next_value());
     }
 
+<<<<<<< HEAD
     ColumnPtr replicate(const std::vector<uint32_t>& offsets) override;
+=======
+    StatusOr<ColumnPtr> replicate(const Buffer<uint32_t>& offsets) override;
+>>>>>>> d3f50524fb ([BugFix] fix array_map crash (#55383))
 
     void fill_default(const Filter& filter) override;
 

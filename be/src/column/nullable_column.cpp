@@ -136,9 +136,18 @@ void NullableColumn::append_value_multiple_times(const Column& src, uint32_t ind
     DCHECK_EQ(_null_column->size(), _data_column->size());
 }
 
+<<<<<<< HEAD
 ColumnPtr NullableColumn::replicate(const std::vector<uint32_t>& offsets) {
     return NullableColumn::create(this->_data_column->replicate(offsets),
                                   std::dynamic_pointer_cast<NullColumn>(this->_null_column->replicate(offsets)));
+=======
+StatusOr<ColumnPtr> NullableColumn::replicate(const Buffer<uint32_t>& offsets) {
+    ASSIGN_OR_RETURN(auto data_col, this->_data_column->replicate(offsets));
+
+    ASSIGN_OR_RETURN(auto null_col, this->_null_column->replicate(offsets));
+
+    return NullableColumn::create(data_col, std::dynamic_pointer_cast<NullColumn>(null_col));
+>>>>>>> d3f50524fb ([BugFix] fix array_map crash (#55383))
 }
 
 bool NullableColumn::append_nulls(size_t count) {

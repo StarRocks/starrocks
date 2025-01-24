@@ -252,7 +252,11 @@ public:
         _has_null = true;
         return true;
     }
+<<<<<<< HEAD
     ColumnPtr replicate(const std::vector<uint32_t>& offsets) override;
+=======
+    StatusOr<ColumnPtr> replicate(const Buffer<uint32_t>& offsets) override;
+>>>>>>> d3f50524fb ([BugFix] fix array_map crash (#55383))
 
     size_t memory_usage() const override {
         return _data_column->memory_usage() + _null_column->memory_usage() + sizeof(bool);

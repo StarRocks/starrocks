@@ -220,7 +220,11 @@ public:
         _slices_cache = false;
     }
 
+<<<<<<< HEAD
     ColumnPtr replicate(const std::vector<uint32_t>& offsets) override;
+=======
+    StatusOr<ColumnPtr> replicate(const Buffer<uint32_t>& offsets) override;
+>>>>>>> d3f50524fb ([BugFix] fix array_map crash (#55383))
 
     void fill_default(const Filter& filter) override;
 

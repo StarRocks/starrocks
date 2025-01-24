@@ -525,7 +525,11 @@ public:
         }
     }
 
+<<<<<<< HEAD
     ColumnPtr replicate(const std::vector<uint32_t>& offsets) override {
+=======
+    StatusOr<ColumnPtr> replicate(const Buffer<uint32_t>& offsets) override {
+>>>>>>> d3f50524fb ([BugFix] fix array_map crash (#55383))
         materialized_nullable();
         return NullableColumn::replicate(offsets);
     }

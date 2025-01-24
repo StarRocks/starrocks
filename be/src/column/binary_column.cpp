@@ -120,7 +120,11 @@ void BinaryColumnBase<T>::append_value_multiple_times(const Column& src, uint32_
 
 //TODO(fzh): optimize copy using SIMD
 template <typename T>
+<<<<<<< HEAD
 ColumnPtr BinaryColumnBase<T>::replicate(const std::vector<uint32_t>& offsets) {
+=======
+StatusOr<ColumnPtr> BinaryColumnBase<T>::replicate(const Buffer<uint32_t>& offsets) {
+>>>>>>> d3f50524fb ([BugFix] fix array_map crash (#55383))
     auto dest = std::dynamic_pointer_cast<BinaryColumnBase<T>>(BinaryColumnBase<T>::create());
     auto& dest_offsets = dest->get_offset();
     auto& dest_bytes = dest->get_bytes();
@@ -142,6 +146,14 @@ ColumnPtr BinaryColumnBase<T>::replicate(const std::vector<uint32_t>& offsets) {
             dest_offsets[j + 1] = pos;
         }
     }
+
+    auto ret = dest->upgrade_if_overflow();
+    if (!ret.ok()) {
+        return ret.status();
+    } else if (ret.value() != nullptr) {
+        return ret.value();
+    }
+
     return dest;
 }
 
