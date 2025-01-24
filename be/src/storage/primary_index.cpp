@@ -1257,6 +1257,9 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
                                    << " rowset:" << rowset->rowset_meta()->get_rowset_seg_id() << " segment:" << i
                                    << " reason: " << st.to_string() << " current_size:" << size()
                                    << " updates: " << tablet->updates()->debug_string();
+                        for (auto i = 0; i < chunk->num_rows(); i++) {
+                            LOG(WARNING) << "tablet: " <<  tablet->tablet_id() << ", chunk[" << i << "]: " << chunk->debug_row(i);
+                        }
                         return st;
                     }
                 }
