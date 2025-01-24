@@ -91,7 +91,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
                     FunctionSet.LTRIM, FunctionSet.REGEXP_EXTRACT, FunctionSet.REGEXP_REPLACE, FunctionSet.REPEAT,
                     FunctionSet.REPLACE, FunctionSet.REVERSE, FunctionSet.RIGHT, FunctionSet.RPAD, FunctionSet.RTRIM,
                     FunctionSet.SPLIT_PART, FunctionSet.SUBSTR, FunctionSet.SUBSTRING, FunctionSet.SUBSTRING_INDEX,
-                    FunctionSet.TRIM, FunctionSet.UPPER, FunctionSet.IF);
+                    FunctionSet.TRIM, FunctionSet.UPPER, FunctionSet.IF, FunctionSet.LENGTH, FunctionSet.CHAR_LENGTH);
 
     // array<string> support:
     //  array<string> -> array<string>: array function
