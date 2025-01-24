@@ -16,10 +16,17 @@ package com.starrocks.http;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.google.common.collect.Multimap;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
+import com.starrocks.system.Backend;
 import com.starrocks.system.NodeSelector;
+import com.starrocks.system.SystemInfoService;
+import com.starrocks.warehouse.Cluster;
+import com.starrocks.warehouse.LocalWarehouse;
 import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpHeaderValues;
 import io.netty.handler.codec.http.HttpResponseStatus;
+import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.http.HttpHeaders;
@@ -39,6 +46,12 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+
+import static com.starrocks.server.WarehouseManager.DEFAULT_WAREHOUSE_ID;
+import static com.starrocks.server.WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 public class LoadActionTest extends StarRocksHttpTestCase {
 
@@ -174,5 +187,109 @@ public class LoadActionTest extends StarRocksHttpTestCase {
             }
         }
         client.close();
+    }
+
+    @Test
+    public void testStreamLoadSkipNonAliveNodesForSharedNothing() throws Exception {
+        new MockUp<NodeSelector>() {
+            @Mock
+            public List<Long> seqChooseBackendIds(int backendNum, boolean needAvailable,
+                                                  boolean isCreate, Multimap<String, String> locReq) {
+                assertEquals(1, backendNum);
+                assertTrue(needAvailable);
+                assertFalse(isCreate);
+                return new ArrayList<>();
+            }
+        };
+
+        RequestConfig requestConfig = RequestConfig.custom()
+                .setConnectionRequestTimeout(3000)
+                .build();
+        try (CloseableHttpClient client = HttpClients
+                .custom()
+                .setRedirectStrategy(new DefaultRedirectStrategy() {
+                    @Override
+                    protected boolean isRedirectable(String method) {
+                        return false;
+                    }
+                })
+                .setDefaultRequestConfig(requestConfig)
+                .build()) {
+
+            HttpPut put = buildPutRequest(2, true);
+            try (CloseableHttpResponse response = client.execute(put)) {
+                Assert.assertEquals(HttpResponseStatus.OK.code(), response.getStatusLine().getStatusCode());
+                String body = new BasicResponseHandler().handleResponse(response);
+                Map<String, Object> result =
+                        objectMapper.readValue(body, new TypeReference<Map<String, Object>>() {});
+                assertEquals("FAILED", result.get("Status"));
+                assertEquals("class com.starrocks.common.DdlException: No backend alive.", result.get("Message"));
+            }
+        }
+    }
+
+    @Test
+    public void testStreamLoadSkipNonAliveNodesForSharedData() throws Exception {
+        SystemInfoService service = new SystemInfoService();
+        Backend backend = new Backend(1, "127.0.0.1", 9050);
+        backend.setAlive(false);
+        service.addBackend(backend);
+
+        List<Long> nodeIds = new ArrayList<>();
+        nodeIds.add(1L);
+
+        new MockUp<RunMode>() {
+            @Mock
+            boolean isSharedDataMode() {
+                return true;
+            }
+        };
+
+        new MockUp<Cluster>() {
+            @Mock
+            List<Long> getComputeNodeIds() {
+                return nodeIds;
+            }
+        };
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            SystemInfoService getCurrentSystemInfo() {
+                return service;
+            }
+        };
+
+        LocalWarehouse warehouse = new LocalWarehouse(DEFAULT_WAREHOUSE_ID, DEFAULT_WAREHOUSE_NAME);
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
+                result = warehouse;
+            }
+        };
+
+        RequestConfig requestConfig = RequestConfig.custom()
+                .setConnectionRequestTimeout(3000)
+                .build();
+        try (CloseableHttpClient client = HttpClients
+                .custom()
+                .setRedirectStrategy(new DefaultRedirectStrategy() {
+                    @Override
+                    protected boolean isRedirectable(String method) {
+                        return false;
+                    }
+                })
+                .setDefaultRequestConfig(requestConfig)
+                .build()) {
+
+            HttpPut put = buildPutRequest(2, true);
+            try (CloseableHttpResponse response = client.execute(put)) {
+                Assert.assertEquals(HttpResponseStatus.OK.code(), response.getStatusLine().getStatusCode());
+                String body = new BasicResponseHandler().handleResponse(response);
+                Map<String, Object> result =
+                        objectMapper.readValue(body, new TypeReference<Map<String, Object>>() {});
+                assertEquals("FAILED", result.get("Status"));
+                assertEquals("class com.starrocks.common.DdlException: No backend alive.", result.get("Message"));
+            }
+        }
     }
 }
