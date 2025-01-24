@@ -664,7 +664,9 @@ public class Load {
 
     public static List<Column> getPartialUpateColumns(Table tbl, List<ImportColumnDesc> columnExprs,
              List<Boolean> missAutoIncrementColumn) throws StarRocksException {
-        Set<String> specified = columnExprs.stream().map(desc -> desc.getColumnName()).collect(Collectors.toSet());
+        Set<String> specified = columnExprs.stream()
+                .map(desc -> desc.getColumnName())
+                .collect(Collectors.toCollection(() -> Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER)));
         List<Column> ret = new ArrayList<>();
         for (Column col : tbl.getBaseSchema()) {
             if (specified.contains(col.getName())) {
