@@ -334,9 +334,7 @@ const uint8_t* NullableColumn::deserialize_and_append(const uint8_t* pos) {
 }
 
 void NullableColumn::deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) {
-    for (size_t i = 0; i < chunk_size; ++i) {
-        srcs[i].data = (char*)deserialize_and_append((uint8_t*)srcs[i].data);
-    }
+    _data_column->deserialize_and_append_batch_nullable(srcs, chunk_size, null_column_data(), _has_null);
 }
 
 // Note: the hash function should be same with RawValue::get_hash_value_fvn
