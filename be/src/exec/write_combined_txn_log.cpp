@@ -54,18 +54,23 @@ std::function<void()> create_txn_log_task(const CombinedTxnLogPB* logs, lake::Ta
 }
 
 Status write_combined_txn_log_parallel(const std::map<int64_t, CombinedTxnLogPB>& txn_log_map) {
-    CountDownLatch latch(0);
+    CountDownLatch latch(txn_log_map.size());
     std::atomic<bool> has_error(false);
     Status final_status;
-    for (const auto& [partition_id, logs] : txn_log_map) {
-        auto task_logic =
-                create_txn_log_task(&logs, ExecEnv::GetInstance()->lake_tablet_manager(), &has_error, &final_status);
-        auto task = std::make_shared<AutoCleanRunnable>(std::move(task_logic), [&latch]() { latch.count_down(); });
-        latch.add_count(1);
-        Status submit_status = ExecEnv::GetInstance()->put_combined_txn_log_thread_pool()->submit(task);
-        if (!submit_status.ok()) {
-            mark_failure(submit_status, &has_error, &final_status);
-            break;
+    {
+        std::vector<std::shared_ptr<AutoCleanRunnable>> tasks;
+        for (const auto& [partition_id, logs] : txn_log_map) {
+            auto task_logic = create_txn_log_task(&logs, ExecEnv::GetInstance()->lake_tablet_manager(), &has_error,
+                                                  &final_status);
+            auto task = std::make_shared<AutoCleanRunnable>(std::move(task_logic), [&latch]() { latch.count_down(); });
+            tasks.emplace_back(std::move(task));
+        }
+        for (const auto& task : tasks) {
+            Status submit_status = ExecEnv::GetInstance()->put_combined_txn_log_thread_pool()->submit(task);
+            if (!submit_status.ok()) {
+                mark_failure(submit_status, &has_error, &final_status);
+                break;
+            }
         }
     }
 
