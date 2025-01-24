@@ -72,6 +72,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -225,9 +226,44 @@ public class StatisticUtils {
         }
     }
 
+    // Don't use PartitionVisibleTime for data update checks as it's ineffective for ShareData architecture
+    @Deprecated
     public static LocalDateTime getPartitionLastUpdateTime(Partition partition) {
         long time = partition.getVisibleVersionTime();
         return LocalDateTime.ofInstant(Instant.ofEpochMilli(time), Clock.systemDefaultZone().getZone());
+    }
+
+    /**
+     * In V2: use relative changed row count to decide if a partition is healthy
+     * In V1: use VISIBLE_VERSION, which doesn't work for shared-data
+     */
+    public static boolean isPartitionStatsHealthy(Table table, Partition partition, BasicStatsMeta stats) {
+        long statsRowCount = 0;
+        if (Config.statistic_partition_healthy_v2) {
+            Map<Long, Optional<Long>> tableStatistics = GlobalStateMgr.getCurrentState().getStatisticStorage()
+                    .getTableStatistics(table.getId(), Lists.newArrayList(partition));
+            statsRowCount = tableStatistics.getOrDefault(partition.getId(), Optional.empty()).orElse(0L);
+        }
+
+        return isPartitionStatsHealthy(table, partition, stats, statsRowCount);
+    }
+
+    public static boolean isPartitionStatsHealthy(Table table, Partition partition, BasicStatsMeta stats,
+                                                  long statsRowCount) {
+        if (stats == null || stats.isInitJobMeta()) {
+            return false;
+        }
+        if (!partition.hasData()) {
+            return true;
+        }
+        if (Config.statistic_partition_healthy_v2) {
+            long currentRowCount = partition.getRowCount();
+            double relativeError = 1.0 * Math.abs(statsRowCount - currentRowCount) /
+                    (double) (currentRowCount > 0 ? currentRowCount : 1);
+            return relativeError <= 1 - Config.statistic_partition_health__v2_threshold;
+        } else {
+            return stats.isUpdatedAfterLoad(getPartitionLastUpdateTime(partition));
+        }
     }
 
     public static boolean isEmptyTable(Table table) {
