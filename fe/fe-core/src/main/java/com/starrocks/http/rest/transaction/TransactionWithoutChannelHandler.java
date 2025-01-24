@@ -97,7 +97,7 @@ public class TransactionWithoutChannelHandler implements TransactionOperationHan
         switch (txnStatus) {
             case PREPARED:
                 GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
-                        .commitPreparedTransaction(db, txnId, timeoutMillis);
+                        .commitPreparedTransaction(db.getId(), txnId, timeoutMillis);
                 result.addResultEntry(TransactionResult.TXN_ID_KEY, txnId);
                 result.addResultEntry(TransactionResult.LABEL_KEY, label);
                 break;
