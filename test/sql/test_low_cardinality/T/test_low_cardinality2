@@ -304,6 +304,7 @@ function: wait_global_dict_ready('v4', 's2')
 
 select concat(upper(v2), "1"), max(v3) from s2 where v4 = "BJ" group by upper(v2) order by 1, 2;
 select concat(upper(v4), "1"), max(v3) from s2 where v4 = "BJ" group by upper(v4) order by 1, 2;
+select length(v4), char_length(v4), max(v3) from s2 where v4 = "BJ" group by length(v4), char_length(v4) order by 1, 2;
 
 select count(distinct v3), max(v3), count(distinct v4) as a from s2;
 
