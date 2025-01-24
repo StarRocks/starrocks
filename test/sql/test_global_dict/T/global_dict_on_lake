@@ -31,4 +31,6 @@ select count(c1) from low_card_test where c2 = '1';
 
 drop table low_card_test force;
 
+drop catalog hive_sql_test_${uuid0};
+
 set catalog default_catalog;

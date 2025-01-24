@@ -107,6 +107,9 @@ None
 drop table dict_version_test force;
 -- result:
 -- !result
+drop catalog hive_sql_test_${uuid0};
+-- result:
+-- !result
 set catalog default_catalog;
 -- result:
 -- !result

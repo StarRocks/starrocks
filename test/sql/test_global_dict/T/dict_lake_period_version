@@ -39,4 +39,6 @@ function: assert_no_global_dict('c2', 'dict_version_test')
 
 drop table dict_version_test force;
 
+drop catalog hive_sql_test_${uuid0};
+
 set catalog default_catalog;
