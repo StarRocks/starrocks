@@ -18,12 +18,21 @@
 #include <type_traits>
 
 #include "column/column.h"
+#include "runtime/current_thread.h"
 
 namespace starrocks {
 class FunctionContext;
 }
 
 namespace starrocks {
+
+#define EXCEPTION_SAFE_FUNC_CALL(func) \
+    if (is_exception_safe()) {         \
+        return func;                   \
+    } else {                           \
+        SCOPED_SET_CATCHED(false);     \
+        return func;                   \
+    }
 
 /**
  * For each aggregate function, it may use different agg state kind for Incremental MV:
@@ -55,6 +64,8 @@ using ConstAggDataPtr = const uint8_t*;
 class AggregateFunction {
 public:
     virtual ~AggregateFunction() = default;
+
+    virtual bool is_exception_safe() const { return true; }
 
     // Reset the aggregation state, for aggregate window functions
     virtual void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const {}
@@ -160,13 +171,30 @@ public:
     virtual void update_batch(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column** columns,
                               AggDataPtr* states) const = 0;
 
+    virtual void update_batch_exception_safe(FunctionContext* ctx, size_t chunk_size, size_t state_offset,
+                                             const Column** columns, AggDataPtr* states) const final {
+        EXCEPTION_SAFE_FUNC_CALL(update_batch(ctx, chunk_size, state_offset, columns, states));
+    }
+
     // filter[i] = 0, will be update
     virtual void update_batch_selectively(FunctionContext* ctx, size_t chunk_size, size_t state_offset,
                                           const Column** columns, AggDataPtr* states, const Filter& filter) const = 0;
 
+    virtual void update_batch_selectively_exception_safe(FunctionContext* ctx, size_t chunk_size, size_t state_offset,
+                                                         const Column** columns, AggDataPtr* states,
+                                                         const Filter& filter) const final {
+        EXCEPTION_SAFE_FUNC_CALL(update_batch_selectively(ctx, chunk_size, state_offset, columns, states, filter));
+    }
+
     // update result to single state
     virtual void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
                                            AggDataPtr __restrict state) const = 0;
+
+    virtual void update_batch_single_state_exception_safe(FunctionContext* ctx, size_t chunk_size,
+                                                          const Column** columns,
+                                                          AggDataPtr __restrict state) const final {
+        EXCEPTION_SAFE_FUNC_CALL(update_batch_single_state(ctx, chunk_size, columns, state));
+    }
 
     // For window functions
     // A peer group is all of the rows that are peers within the specified ordering.
@@ -202,9 +230,20 @@ public:
     virtual void merge_batch(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column* column,
                              AggDataPtr* states) const = 0;
 
+    virtual void merge_batch_exception_safe(FunctionContext* ctx, size_t chunk_size, size_t state_offset,
+                                            const Column* column, AggDataPtr* states) const final {
+        EXCEPTION_SAFE_FUNC_CALL(merge_batch(ctx, chunk_size, state_offset, column, states));
+    }
+
     // filter[i] = 0, will be merged
     virtual void merge_batch_selectively(FunctionContext* ctx, size_t chunk_size, size_t state_offset,
                                          const Column* column, AggDataPtr* states, const Filter& filter) const = 0;
+
+    virtual void merge_batch_selectively_exception_safe(FunctionContext* ctx, size_t chunk_size, size_t state_offset,
+                                                        const Column* column, AggDataPtr* states,
+                                                        const Filter& filter) const final {
+        EXCEPTION_SAFE_FUNC_CALL(merge_batch_selectively(ctx, chunk_size, state_offset, column, states, filter));
+    }
 
     // Merge some continuous portion of a chunk to a given state.
     // This will be useful for sorted streaming aggregation.
@@ -212,6 +251,11 @@ public:
     // 'size': the length of the continuous portion
     virtual void merge_batch_single_state(FunctionContext* ctx, AggDataPtr __restrict state, const Column* column,
                                           size_t start, size_t size) const = 0;
+
+    virtual void merge_batch_single_state_exception_safe(FunctionContext* ctx, AggDataPtr __restrict state,
+                                                         const Column* column, size_t start, size_t size) const final {
+        EXCEPTION_SAFE_FUNC_CALL(merge_batch_single_state(ctx, state, column, start, size));
+    }
 
     ///////////////// STREAM MV METHODS /////////////////
 
@@ -420,4 +464,5 @@ using AggregateFunctionPtr = std::shared_ptr<AggregateFunction>;
 
 struct AggregateFunctionEmptyState {};
 
+#undef EXCEPTION_SAFE_FUNC_CALL
 } // namespace starrocks
