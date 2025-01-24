@@ -4,9 +4,9 @@ displayed_sidebar: docs
 
 # StarRocks version 3.4
 
-## 3.4.0 RC-01
+## 3.4.0
 
-Release date: January 13, 2025
+Release date: January 24, 2025
 
 ### Data Lake Analytics
 
