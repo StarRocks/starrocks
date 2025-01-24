@@ -613,7 +613,7 @@ TEST(FixedLengthColumnTest, test_replicate) {
     offsets.push_back(3);
     offsets.push_back(5);
 
-    auto c2 = column->replicate(offsets);
+    auto c2 = column->replicate(offsets).value();
     ASSERT_EQ(5, c2->size());
     ASSERT_EQ(c2->get(0).get_int32(), 7);
     ASSERT_EQ(c2->get(1).get_int32(), 7);

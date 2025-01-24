@@ -254,7 +254,7 @@ public:
         _has_null = true;
         return true;
     }
-    ColumnPtr replicate(const Buffer<uint32_t>& offsets) override;
+    StatusOr<ColumnPtr> replicate(const Buffer<uint32_t>& offsets) override;
 
     size_t memory_usage() const override {
         return _data_column->memory_usage() + _null_column->memory_usage() + sizeof(bool);
