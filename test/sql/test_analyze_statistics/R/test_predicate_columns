@@ -1,4 +1,4 @@
--- name: test_predicate_columns
+-- name: test_predicate_columns @sequential
 admin set frontend config ('enable_statistic_collect_on_first_load'='false');
 -- result:
 -- !result

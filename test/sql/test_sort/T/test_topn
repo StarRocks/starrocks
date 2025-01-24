@@ -126,7 +126,6 @@ set io_tasks_per_scan_operator=1;
 set group_execution_min_scan_rows=1;
 
 insert into tlow SELECT generate_series, if (generate_series<10, null, generate_series%10), generate_series, generate_series FROM TABLE(generate_series(1,  40960));
-analyze full table tl;
 select count(distinct c1) from tlow;
 function: wait_global_dict_ready('c1', 'tlow')
 
