@@ -112,3 +112,21 @@ select  (sum(murmur_hash3_32(ifnull(__c_0,0))+murmur_hash3_32(ifnull(a,0))+murmu
 select  (sum(murmur_hash3_32(ifnull(__c_0,0))+murmur_hash3_32(ifnull(a,0))+murmur_hash3_32(ifnull(b,0)))) as fingerprint from (select (count(DISTINCT c1)) as __c_0 ,max_by(c2,concat(coalesce(c2,'NULL'),c3)) a,min_by(c2,concat(coalesce(c2,'NULL'),c3)) b from t0) as t;
 select  (sum(murmur_hash3_32(ifnull(c2,0))+murmur_hash3_32(ifnull(a,0))+murmur_hash3_32(ifnull(b,0)))) as fingerprint from (select c2,max_by(c0,coalesce(c0,0)*1000+c1) over(partition by c2) a,min_by(c0,coalesce(c0,0)*1000+c1) over(partition by c2) b from t0) as t;
 select  (sum(murmur_hash3_32(ifnull(c0,0))+murmur_hash3_32(ifnull(a,0))+murmur_hash3_32(ifnull(b,0)))) as fingerprint from (select c0,max_by(c2,concat(coalesce(c2,'NULL'),c3)) over(partition by c1) a,min_by(c2,concat(coalesce(c2,'NULL'),c3)) over(partition by c1) b from t0) as t;
+
+-- name: test_max_min_by_support_window
+CREATE TABLE exam (
+    subject_id INT,
+    subject STRING,
+    exam_result INT
+) DISTRIBUTED BY HASH(`subject_id`) PROPERTIES ("replication_num" = "1");
+
+
+insert into exam values
+    (1,'math',90),
+    (2,'english',70),
+    (3,'physics',95),
+    (4,'chemistry',85),
+    (5,'music',95),
+    (6,'biology',null);
+
+SELECT max_by(subject, exam_result) over(partition by subject_id) FROM exam;
