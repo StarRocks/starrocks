@@ -101,6 +101,8 @@ class NullableAggregateFunctionBase : public AggregateFunctionStateHelper<State>
     static constexpr bool is_result_always_nullable = !std::is_same_v<AggNullPred, AggNonNullPred<NestedState>>;
 
 public:
+    bool is_exception_safe() const override { return nested_function->is_exception_safe(); }
+
     explicit NullableAggregateFunctionBase(NestedAggregateFunctionPtr nested_function_,
                                            AggNullPred null_pred = AggNullPred())
             : nested_function(std::move(nested_function_)), null_pred(std::move(null_pred)) {}
