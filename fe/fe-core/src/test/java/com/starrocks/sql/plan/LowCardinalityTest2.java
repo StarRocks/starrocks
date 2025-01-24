@@ -305,6 +305,15 @@ public class LowCardinalityTest2 extends PlanTestBase {
     }
 
     @Test
+    public void testDecodeNodeRewriteLength() throws Exception {
+        String sql = "select length(dept_name), char_length(dept_name) from dept group by dept_name,state";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan, plan.contains("  2:Project\n" +
+                "  |  <slot 4> : DictDecode(6: dept_name, [length(<place-holder>)])\n" +
+                "  |  <slot 5> : DictDecode(6: dept_name, [char_length(<place-holder>)])"));
+    }
+
+    @Test
     public void testDecodeNodeRewrite5() throws Exception {
         String sql = "select S_ADDRESS from supplier where S_ADDRESS " +
                 "like '%Customer%Complaints%' group by S_ADDRESS ";
