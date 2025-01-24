@@ -264,7 +264,7 @@ Status AggGroupState::output_changes(size_t chunk_size, const Columns& group_by_
             auto detail_result_chunk = std::make_shared<Chunk>();
             SlotId slot_id = 0;
             for (size_t j = 0; j < group_by_columns.size(); j++) {
-                auto replicated_col = group_by_columns[j]->replicate(replicate_offsets);
+                ASSIGN_OR_RETURN(auto replicated_col, group_by_columns[j]->replicate(replicate_offsets))
                 detail_result_chunk->append_column(replicated_col, slot_id++);
             }
             // TODO: take care slot_ids.

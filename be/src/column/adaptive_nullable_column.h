@@ -523,7 +523,7 @@ public:
         }
     }
 
-    ColumnPtr replicate(const Buffer<uint32_t>& offsets) override {
+    StatusOr<ColumnPtr> replicate(const Buffer<uint32_t>& offsets) override {
         materialized_nullable();
         return NullableColumn::replicate(offsets);
     }

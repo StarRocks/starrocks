@@ -373,7 +373,7 @@ PARALLEL_TEST(NullableColumnTest, test_replicate) {
     offsets.push_back(2);
     offsets.push_back(4);
     offsets.push_back(7);
-    auto c2 = column->replicate(offsets);
+    auto c2 = column->replicate(offsets).value();
 
     ASSERT_EQ(1, c2->get(0).get_int32());
     ASSERT_EQ(1, c2->get(1).get_int32());

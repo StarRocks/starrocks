@@ -1144,7 +1144,7 @@ PARALLEL_TEST(ArrayColumnTest, test_replicate) {
     off.push_back(5);
     off.push_back(7);
 
-    auto res = column->replicate(off);
+    auto res = column->replicate(off).value();
 
     ASSERT_EQ("[1,2,3]", res->debug_item(0));
     ASSERT_EQ("[1,2,3]", res->debug_item(1));

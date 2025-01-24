@@ -62,7 +62,7 @@ void FixedLengthColumnBase<T>::append_value_multiple_times(const Column& src, ui
 
 //TODO(fzh): optimize copy using SIMD
 template <typename T>
-ColumnPtr FixedLengthColumnBase<T>::replicate(const Buffer<uint32_t>& offsets) {
+StatusOr<ColumnPtr> FixedLengthColumnBase<T>::replicate(const Buffer<uint32_t>& offsets) {
     auto dest = this->clone_empty();
     auto& dest_data = down_cast<FixedLengthColumnBase<T>&>(*dest);
     dest_data._data.resize(offsets.back());

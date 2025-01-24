@@ -349,7 +349,7 @@ PARALLEL_TEST(ConstColumnTest, test_replicate) {
     offsets.push_back(5);
     offsets.push_back(7);
 
-    auto c2 = c1->replicate(offsets);
+    auto c2 = c1->replicate(offsets).value();
 
     ASSERT_EQ(7, c2->size());
     ASSERT_EQ(1, c2->get(6).get_int32());

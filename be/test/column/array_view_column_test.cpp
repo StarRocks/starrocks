@@ -176,7 +176,7 @@ PARALLEL_TEST(ArrayViewColumnTest, test_other_manipulations) {
         auto array_view_column =
                 std::dynamic_pointer_cast<ArrayViewColumn>(ArrayViewColumn::from_array_column(array_column));
         Buffer<uint32_t> offsets{0, 2, 3, 6};
-        auto column = array_view_column->replicate(offsets);
+        auto column = array_view_column->replicate(offsets).value();
         ASSERT_TRUE(column->is_array_view());
         auto result = std::dynamic_pointer_cast<ArrayViewColumn>(column);
         ASSERT_EQ(result->size(), 6);
