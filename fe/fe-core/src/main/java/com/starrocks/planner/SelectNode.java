@@ -38,6 +38,8 @@ import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
 import com.starrocks.common.UserException;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.TNormalPlanNode;
+import com.starrocks.thrift.TNormalSelectNode;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import org.apache.logging.log4j.LogManager;
@@ -69,6 +71,14 @@ public class SelectNode extends PlanNode {
 
     @Override
     public void computeStats(Analyzer analyzer) {
+    }
+
+    @Override
+    protected void toNormalForm(TNormalPlanNode planNode, FragmentNormalizer normalizer) {
+        TNormalSelectNode selectNode = new TNormalSelectNode();
+        planNode.setSelect_node(selectNode);
+        planNode.setNode_type(TPlanNodeType.SELECT_NODE);
+        normalizeConjuncts(normalizer, planNode, conjuncts);
     }
 
     @Override
