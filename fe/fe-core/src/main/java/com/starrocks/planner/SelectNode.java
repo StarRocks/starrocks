@@ -37,14 +37,18 @@ package com.starrocks.planner;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotId;
+import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.TNormalPlanNode;
+import com.starrocks.thrift.TNormalSelectNode;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TSelectNode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -82,6 +86,19 @@ public class SelectNode extends PlanNode {
 
     @Override
     public void computeStats(Analyzer analyzer) {
+    }
+
+    @Override
+    protected void toNormalForm(TNormalPlanNode planNode, FragmentNormalizer normalizer) {
+        TNormalSelectNode selectNode = new TNormalSelectNode();
+        if (commonSlotMap != null) {
+            Pair<List<Integer>, List<ByteBuffer>> slotIdsAndExprs = normalizer.normalizeSlotIdsAndExprs(commonSlotMap);
+            selectNode.setCse_slot_ids(slotIdsAndExprs.first);
+            selectNode.setCse_exprs(slotIdsAndExprs.second);
+        }
+        planNode.setSelect_node(selectNode);
+        planNode.setNode_type(TPlanNodeType.SELECT_NODE);
+        normalizeConjuncts(normalizer, planNode, conjuncts);
     }
 
     @Override
