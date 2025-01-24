@@ -21,7 +21,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.connector.ConnectorViewDefinition;
 import com.starrocks.connector.exception.StarRocksConnectorException;
-import com.starrocks.connector.iceberg.IcebergApiConverter;
 import com.starrocks.connector.iceberg.IcebergCatalog;
 import com.starrocks.connector.iceberg.IcebergCatalogType;
 import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
@@ -54,7 +53,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import static com.google.common.base.Preconditions.checkArgument;
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
 import static com.starrocks.connector.iceberg.IcebergApiConverter.convertDbNameToNamespace;
 import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ICEBERG_CUSTOM_PROPERTIES_PREFIX;
@@ -226,24 +224,8 @@ public class IcebergRESTCatalog implements IcebergCatalog {
     }
 
     @Override
-    public boolean createView(ConnectorViewDefinition definition, boolean replace) {
-        Schema schema = IcebergApiConverter.toIcebergApiSchema(definition.getColumns());
-        Namespace ns = convertDbNameToNamespace(definition.getDatabaseName());
-        ViewBuilder viewBuilder = delegate.buildView(TableIdentifier.of(ns, definition.getViewName()));
-        viewBuilder = viewBuilder.withSchema(schema)
-                .withQuery("starrocks", definition.getInlineViewDef())
-                .withDefaultNamespace(ns)
-                .withDefaultCatalog(definition.getCatalogName())
-                .withProperties(buildProperties(definition))
-                .withLocation(defaultTableLocation(ns, definition.getViewName()));
-
-        if (replace) {
-            viewBuilder.createOrReplace();
-        } else {
-            viewBuilder.create();
-        }
-
-        return true;
+    public ViewBuilder getViewBuilder(TableIdentifier identifier) {
+        return delegate.buildView(identifier);
     }
 
     @Override
@@ -279,20 +261,7 @@ public class IcebergRESTCatalog implements IcebergCatalog {
     }
 
     @Override
-    public String defaultTableLocation(Namespace ns, String tableName) {
-        Map<String, String> properties = delegate.loadNamespaceMetadata(ns);
-        String databaseLocation = properties.get(LOCATION_PROPERTY);
-        checkArgument(databaseLocation != null, "location must be set for %s.%s", ns, tableName);
-
-        if (databaseLocation.endsWith("/")) {
-            return databaseLocation + tableName;
-        } else {
-            return databaseLocation + "/" + tableName;
-        }
-    }
-
-    @Override
-    public Map<String, Object> loadNamespaceMetadata(Namespace ns) {
+    public Map<String, String> loadNamespaceMetadata(Namespace ns) {
         return ImmutableMap.copyOf(delegate.loadNamespaceMetadata(ns));
     }
 
