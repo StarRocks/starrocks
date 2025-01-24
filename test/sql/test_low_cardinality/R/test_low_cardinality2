@@ -307,11 +307,11 @@ insert into s2 select * from s2;
 -- !result
 [UC] analyze full table s1;
 -- result:
-test_db_597f05742dee11efbc9b7b0d31512d80.s1	analyze	status	OK
+test_db_3569e679a63f46fcb95f5e935f2b4716.s1	analyze	status	OK
 -- !result
 [UC] analyze full table s2;
 -- result:
-test_db_597f05742dee11efbc9b7b0d31512d80.s2	analyze	status	OK
+test_db_3569e679a63f46fcb95f5e935f2b4716.s2	analyze	status	OK
 -- !result
 function: wait_global_dict_ready('v3', 's1')
 -- result:
@@ -337,6 +337,10 @@ select concat(upper(v2), "1"), max(v3) from s2 where v4 = "BJ" group by upper(v2
 select concat(upper(v4), "1"), max(v3) from s2 where v4 = "BJ" group by upper(v4) order by 1, 2;
 -- result:
 BJ1	Jiangxi
+-- !result
+select length(v4), char_length(v4), max(v3) from s2 where v4 = "BJ" group by length(v4), char_length(v4) order by 1, 2;
+-- result:
+2	2	Jiangxi
 -- !result
 select count(distinct v3), max(v3), count(distinct v4) as a from s2;
 -- result:
@@ -484,7 +488,7 @@ FROM
 -- !result
 [UC] analyze full table supplier;
 -- result:
-test_db_597f05742dee11efbc9b7b0d31512d80.supplier	analyze	status	OK
+test_db_3569e679a63f46fcb95f5e935f2b4716.supplier	analyze	status	OK
 -- !result
 function: wait_global_dict_ready('s_region', 'supplier')
 -- result:
@@ -508,7 +512,7 @@ select l.S_NAME,l.mx_addr from agged_supplier_5 l right join [shuffle] supplier 
 3	3
 4	4
 -- !result
- with a as ( select s_region, S_NAME from supplier where S_SUPPKEY < 10 limit 10 ), b as ( select max(upper(s_region)) as mx from a group by S_NAME ), c as ( select lower(mx) = lower('lw') from b )select *from c;
+with a as ( select s_region, S_NAME from supplier where S_SUPPKEY < 10 limit 10 ), b as ( select max(upper(s_region)) as mx from a group by S_NAME ), c as ( select lower(mx) = lower('lw') from b )select *from c;
 -- result:
 0
 0
