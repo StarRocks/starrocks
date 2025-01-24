@@ -1964,6 +1964,12 @@ public class Config extends ConfigBase {
             "the job status but improve the robustness")
     public static double statistic_full_statistics_failure_tolerance_ratio = 0.05;
 
+    @ConfField(mutable = true, comment = "Enable V2 health calculation based on changed rows")
+    public static boolean statistic_partition_healthy_v2 = true;
+
+    @ConfField(mutable = true, comment = "Health threshold for partitions")
+    public static double statistic_partition_health__v2_threshold = 0.95;
+
     @ConfField(mutable = true)
     public static long statistic_auto_collect_small_table_size = 5L * 1024 * 1024 * 1024; // 5G
 
