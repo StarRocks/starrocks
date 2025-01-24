@@ -59,7 +59,6 @@ import com.starrocks.backup.Status.ErrCode;
 import com.starrocks.backup.mv.MvBackupInfo;
 import com.starrocks.backup.mv.MvRestoreContext;
 import com.starrocks.binlog.BinlogConfig;
-import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.catalog.LocalTablet.TabletHealthStatus;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
@@ -2943,8 +2942,7 @@ public class OlapTable extends Table {
      */
     @Override
     public boolean hasForeignKeyConstraints() {
-        return tableProperty != null && tableProperty.getForeignKeyConstraints() != null &&
-                !tableProperty.getForeignKeyConstraints().isEmpty();
+        return tableProperty != null && CollectionUtils.isNotEmpty(getForeignKeyConstraints());
     }
 
     @Override

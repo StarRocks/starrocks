@@ -5316,13 +5316,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             idToDb.put(db.getId(), db);
             fullNameToDb.put(db.getFullName(), db);
             stateMgr.getGlobalTransactionMgr().addDatabaseTransactionMgr(db.getId());
-            db.getTables().stream().filter(tbl -> !tbl.isMaterializedView()).forEach(tbl -> {
-                try {
-                    tbl.onReload();
-                } catch (Throwable e) {
-                    LOG.error("reload table failed: {}", tbl, e);
-                }
-            });
         }
 
         // put built-in database into local metastore
