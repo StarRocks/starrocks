@@ -1651,7 +1651,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Long
 - Unit: bytes
 - Is mutable: Yes
-- Description: The size of the largest partition for the automatic collection of statistics. If a partition exceeds this value, then sampled collection is performed instead of full.
+- Description: The data size threshold for the automatic collection of statistics. If the total size exceeds this value, then sampled collection is performed instead of full.
 - Introduced in: -
 
 ##### statistic_collect_max_row_count_per_query
