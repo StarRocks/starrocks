@@ -126,7 +126,7 @@ StarRocks 提供灵活的信息采集方式，您可以根据业务场景选择�
 
   - 满足采集间隔的条件下，健康度高于抽样采集阈值，低于采集阈值时，触发全量采集，通过 `statistic_auto_collect_ratio` 配置。
 
-  - 当采集的最大分区大小大于 100G 时，触发抽样采集，通过 `statistic_max_full_collect_data_size` 配置。
+  - 当采集的分区数据总量大于 100G 时，触发抽样采集，通过 `statistic_max_full_collect_data_size` 配置。
 
   - 采集任务只会对分区更新时间晚于上次采集任务时间的分区进行采集，未发生修改的分区不进行采集。
 
@@ -152,7 +152,7 @@ StarRocks 提供灵活的信息采集方式，您可以根据业务场景选择�
 | statistic_auto_collect_large_table_interval | LONG    | 43200        | 自动全量采集任务的大表采集间隔，默认 12 小时，单位：秒。                               |
 | statistic_auto_collect_ratio                | DOUBLE  | 0.8          | 触发自动统计信息收集的健康度阈值。如果统计信息的健康度小于该阈值，则触发自动采集。           |
 | statistic_auto_collect_sample_threshold     | DOUBLE  | 0.3          | 触发自动统计信息抽样收集的健康度阈值。如果统计信息的健康度小于该阈值，则触发自动抽样采集。       |
-| statistic_max_full_collect_data_size        | LONG    | 107374182400 | 自动统计信息采集的最大分区大小，默认 100 GB。单位：Byte。如果超过该值，则放弃全量采集，转为对该表进行抽样采集。 |
+| statistic_max_full_collect_data_size        | LONG    | 107374182400 | 自动统计信息采集的单次任务最大数据量，默认 100 GB。单位：Byte。如果超过该值，则放弃全量采集，转为对该表进行抽样采集。 |
 | statistic_full_collect_buffer               | LONG    | 20971520     | 自动全量采集任务写入的缓存大小，单位：Byte。默认值：20971520（20 MB）。                              |
 | statistic_collect_max_row_count_per_query   | LONG    | 5000000000   | 统计信息采集单次最多查询的数据行数。统计信息任务会按照该配置自动拆分为多次任务执行。 |
 | statistic_collect_too_many_version_sleep    | LONG    | 600000       | 当统计信息表的写入版本过多时 (Too many tablet 异常)，自动采集任务的休眠时间。单位：毫秒。默认值：600000（10 分钟）。 |
