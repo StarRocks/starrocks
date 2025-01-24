@@ -41,6 +41,8 @@ class JavaUDAFAggregateFunction : public AggregateFunction {
 public:
     using State = JavaUDAFState;
 
+    bool is_exception_safe() const override { return false; }
+
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state, size_t row_num) const final {
         CHECK(false) << "unreadable path";
     }

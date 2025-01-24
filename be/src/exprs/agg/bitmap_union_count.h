@@ -25,6 +25,8 @@ namespace starrocks {
 class BitmapUnionCountAggregateFunction final
         : public AggregateFunctionBatchHelper<BitmapValue, BitmapUnionCountAggregateFunction> {
 public:
+    bool is_exception_safe() const override { return false; }
+
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
         this->data(state).clear();
     }
