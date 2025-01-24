@@ -5,7 +5,7 @@ keywords: ['iceberg']
 ---
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
-import QSTip from '../../_assets/commonMarkdown/quickstart-iceberg-tip.mdx'
+import QSTip from '../../../_assets/commonMarkdown/quickstart-iceberg-tip.mdx'
 
 # Iceberg catalog
 
@@ -14,8 +14,8 @@ import QSTip from '../../_assets/commonMarkdown/quickstart-iceberg-tip.mdx'
 An Iceberg catalog is a type of external catalog that is supported by StarRocks from v2.4 onwards. With Iceberg catalogs, you can:
 
 - Directly query data stored in Iceberg without the need to manually create tables.
-- Use [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) or asynchronous materialized views (which are supported from v2.5 onwards) to process data stored in Iceberg and load the data into StarRocks.
-- Perform operations on StarRocks to create or drop Iceberg databases and tables, or sink data from StarRocks tables to Parquet-formatted Iceberg tables by using [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) (this feature is supported from v3.1 onwards).
+- Use [INSERT INTO](../../../sql-reference/sql-statements/loading_unloading/INSERT.md) or asynchronous materialized views (which are supported from v2.5 onwards) to process data stored in Iceberg and load the data into StarRocks.
+- Perform operations on StarRocks to create or drop Iceberg databases and tables, or sink data from StarRocks tables to Parquet-formatted Iceberg tables by using [INSERT INTO](../../../sql-reference/sql-statements/loading_unloading/INSERT.md) (this feature is supported from v3.1 onwards).
 
 To ensure successful SQL workloads on your Iceberg cluster, your StarRocks cluster must be able to access the storage system and metastore of your Iceberg cluster. StarRocks supports the following storage systems and metastores:
 
@@ -62,7 +62,7 @@ The following authentication methods are recommended:
 
 Of the above-mentioned three authentication methods, instance profile is the most widely used.
 
-For more information, see [Preparation for authentication in AWS IAM](../../integrations/authenticate_to_aws_resources.md#preparations).
+For more information, see [Preparation for authentication in AWS IAM](../../../integrations/authenticate_to_aws_resources.md#preparations).
 
 </TabItem>
 
@@ -232,7 +232,7 @@ Description: The access key of your AWS IAM user. If you use the IAM user-based 
 Required: No
 Description: The secret key of your AWS IAM user. If you use the IAM user-based authentication method to access AWS Glue, you must specify this parameter.
 
-For information about how to choose an authentication method for accessing AWS Glue and how to configure an access control policy in the AWS IAM Console, see [Authentication parameters for accessing AWS Glue](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue).
+For information about how to choose an authentication method for accessing AWS Glue and how to configure an access control policy in the AWS IAM Console, see [Authentication parameters for accessing AWS Glue](../../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue).
 
 </TabItem>
 <TabItem value="REST" label="REST">
@@ -421,7 +421,7 @@ Description: The access key of your IAM user. If you use the IAM user-based auth
 Required: No
 Description:  The secret key of your IAM user. If you use the IAM user-based authentication method to access AWS S3, you must specify this parameter.
 
-For information about how to choose an authentication method for accessing AWS S3 and how to configure an access control policy in AWS IAM Console, see [Authentication parameters for accessing AWS S3](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3).
+For information about how to choose an authentication method for accessing AWS S3 and how to configure an access control policy in AWS IAM Console, see [Authentication parameters for accessing AWS S3](../../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3).
 
 </TabItem>
 
@@ -657,7 +657,7 @@ Description: The service account that you want to impersonate.
 
 A set of parameters about how StarRocks update the cache of the Iceberg metadata. This parameter set is optional.
 
-From v3.3.3 onwards, StarRocks supports the [periodic metadata refresh strategy](#appendix-periodic-metadata-refresh-strategy). In most cases, you can ignore `MetadataUpdateParams` and do not need to tune the policy parameters in it, because the default values of these parameters already provide you with an out-of-the-box performance. You can adjust the Iceberg metadata caching plan using the system variable [`plan_mode`](../../sql-reference/System_variable.md#plan_mode).
+From v3.3.3 onwards, StarRocks supports the [periodic metadata refresh strategy](#appendix-periodic-metadata-refresh-strategy). In most cases, you can ignore `MetadataUpdateParams` and do not need to tune the policy parameters in it, because the default values of these parameters already provide you with an out-of-the-box performance. You can adjust the Iceberg metadata caching plan using the system variable [`plan_mode`](../../../sql-reference/System_variable.md#plan_mode).
 
 | **Parameter**                                 | **Default**           | **Description**                                              |
 | :-------------------------------------------- | :-------------------- | :----------------------------------------------------------- |
@@ -1004,13 +1004,13 @@ PROPERTIES
 
 ### View Iceberg catalogs
 
-You can use [SHOW CATALOGS](../../sql-reference/sql-statements/Catalog/SHOW_CATALOGS.md) to query all catalogs in the current StarRocks cluster:
+You can use [SHOW CATALOGS](../../../sql-reference/sql-statements/Catalog/SHOW_CATALOGS.md) to query all catalogs in the current StarRocks cluster:
 
 ```SQL
 SHOW CATALOGS;
 ```
 
-You can also use [SHOW CREATE CATALOG](../../sql-reference/sql-statements/Catalog/SHOW_CREATE_CATALOG.md) to query the creation statement of an external catalog. The following example queries the creation statement of an Iceberg catalog named `iceberg_catalog_glue`:
+You can also use [SHOW CREATE CATALOG](../../../sql-reference/sql-statements/Catalog/SHOW_CREATE_CATALOG.md) to query the creation statement of an external catalog. The following example queries the creation statement of an Iceberg catalog named `iceberg_catalog_glue`:
 
 ```SQL
 SHOW CREATE CATALOG iceberg_catalog_glue;
@@ -1022,7 +1022,7 @@ SHOW CREATE CATALOG iceberg_catalog_glue;
 
 You can use one of the following methods to switch to an Iceberg catalog and a database in it:
 
-- Use [SET CATALOG](../../sql-reference/sql-statements/Catalog/SET_CATALOG.md) to specify an Iceberg catalog in the current session, and then use [USE](../../sql-reference/sql-statements/Database/USE.md) to specify an active database:
+- Use [SET CATALOG](../../../sql-reference/sql-statements/Catalog/SET_CATALOG.md) to specify an Iceberg catalog in the current session, and then use [USE](../../../sql-reference/sql-statements/Database/USE.md) to specify an active database:
 
   ```SQL
   -- Switch to a specified catalog in the current session:
@@ -1031,7 +1031,7 @@ You can use one of the following methods to switch to an Iceberg catalog and a d
   USE <db_name>
   ```
 
-- Directly use [USE](../../sql-reference/sql-statements/Database/USE.md) to switch to an Iceberg catalog and a database in it:
+- Directly use [USE](../../../sql-reference/sql-statements/Database/USE.md) to switch to an Iceberg catalog and a database in it:
 
   ```SQL
   USE <catalog_name>.<db_name>
@@ -1041,7 +1041,7 @@ You can use one of the following methods to switch to an Iceberg catalog and a d
 
 ### Drop an Iceberg catalog
 
-You can use [DROP CATALOG](../../sql-reference/sql-statements/Catalog/DROP_CATALOG.md) to drop an external catalog.
+You can use [DROP CATALOG](../../../sql-reference/sql-statements/Catalog/DROP_CATALOG.md) to drop an external catalog.
 
 The following example drops an Iceberg catalog named `iceberg_catalog_glue`:
 
@@ -1071,7 +1071,7 @@ You can use one of the following syntaxes to view the schema of an Iceberg table
 
 ### Query an Iceberg table
 
-1. Use [SHOW DATABASES](../../sql-reference/sql-statements/Database/SHOW_DATABASES.md) to view the databases in your Iceberg cluster:
+1. Use [SHOW DATABASES](../../../sql-reference/sql-statements/Database/SHOW_DATABASES.md) to view the databases in your Iceberg cluster:
 
    ```SQL
    SHOW DATABASES FROM <catalog_name>
@@ -1079,7 +1079,7 @@ You can use one of the following syntaxes to view the schema of an Iceberg table
 
 2. [Switch to an Iceberg catalog and a database in it](#switch-to-an-iceberg-catalog-and-a-database-in-it).
 
-3. Use [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) to query the destination table in the specified database:
+3. Use [SELECT](../../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) to query the destination table in the specified database:
 
    ```SQL
    SELECT count(*) FROM <table_name> LIMIT 10
@@ -1089,11 +1089,11 @@ You can use one of the following syntaxes to view the schema of an Iceberg table
 
 ### Create an Iceberg database
 
-Similar to the internal catalog of StarRocks, if you have the [CREATE DATABASE](../../administration/user_privs/privilege_item.md#catalog) privilege on an Iceberg catalog, you can use the [CREATE DATABASE](../../sql-reference/sql-statements/Database/CREATE_DATABASE.md) statement to create databases in that Iceberg catalog. This feature is supported from v3.1 onwards.
+Similar to the internal catalog of StarRocks, if you have the [CREATE DATABASE](../../../administration/user_privs/privilege_item.md#catalog) privilege on an Iceberg catalog, you can use the [CREATE DATABASE](../../../sql-reference/sql-statements/Database/CREATE_DATABASE.md) statement to create databases in that Iceberg catalog. This feature is supported from v3.1 onwards.
 
 :::tip
 
-You can grant and revoke privileges by using [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) and [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md).
+You can grant and revoke privileges by using [GRANT](../../../sql-reference/sql-statements/account-management/GRANT.md) and [REVOKE](../../../sql-reference/sql-statements/account-management/REVOKE.md).
 
 :::
 
@@ -1142,7 +1142,7 @@ The `prefix` varies based on the storage system you use:
 
 ### Drop an Iceberg database
 
-Similar to the internal databases of StarRocks, if you have the [DROP](../../administration/user_privs/privilege_item.md#database) privilege on an Iceberg database, you can use the [DROP DATABASE](../../sql-reference/sql-statements/Database/DROP_DATABASE.md) statement to drop that Iceberg database. This feature is supported from v3.1 onwards. You can only drop empty databases.
+Similar to the internal databases of StarRocks, if you have the [DROP](../../../administration/user_privs/privilege_item.md#database) privilege on an Iceberg database, you can use the [DROP DATABASE](../../../sql-reference/sql-statements/Database/DROP_DATABASE.md) statement to drop that Iceberg database. This feature is supported from v3.1 onwards. You can only drop empty databases.
 
 When you drop an Iceberg database, the database's file path on your HDFS cluster or cloud storage will not be dropped along with the database.
 
@@ -1156,7 +1156,7 @@ DROP DATABASE <database_name>;
 
 ### Create an Iceberg table
 
-Similar to the internal databases of StarRocks, if you have the [CREATE TABLE](../../administration/user_privs/privilege_item.md#database) privilege on an Iceberg database, you can use the [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) or [CREATE TABLE AS SELECT ../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.mdELECT.md) statement to create a table in that Iceberg database. This feature is supported from v3.1 onwards.
+Similar to the internal databases of StarRocks, if you have the [CREATE TABLE](../../../administration/user_privs/privilege_item.md#database) privilege on an Iceberg database, you can use the [CREATE TABLE](../../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) or [CREATE TABLE AS SELECT ../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.mdELECT.md) statement to create a table in that Iceberg database. This feature is supported from v3.1 onwards.
 
 [Switch to an Iceberg catalog and a database in it](#switch-to-an-iceberg-catalog-and-a-database-in-it), and then use the following syntax to create an Iceberg table in that database.
 
@@ -1222,7 +1222,7 @@ Description: The file format of the Iceberg table. Only the Parquet format is su
 
 ###### compression_codec
 
-Description: The compression algorithm used for the Iceberg table. The supported compression algorithms are SNAPPY, GZIP, ZSTD, and LZ4. Default value: `gzip`. This property is deprecated in v3.2.3, since which version the compression algorithm used for sinking data to Iceberg tables is uniformly controlled by the session variable [connector_sink_compression_codec](../../sql-reference/System_variable.md#connector_sink_compression_codec).
+Description: The compression algorithm used for the Iceberg table. The supported compression algorithms are SNAPPY, GZIP, ZSTD, and LZ4. Default value: `gzip`. This property is deprecated in v3.2.3, since which version the compression algorithm used for sinking data to Iceberg tables is uniformly controlled by the session variable [connector_sink_compression_codec](../../../sql-reference/System_variable.md#connector_sink_compression_codec).
 
 ---
 
@@ -1262,7 +1262,7 @@ Description: The compression algorithm used for the Iceberg table. The supported
 
 ### Sink data to an Iceberg table
 
-Similar to the internal tables of StarRocks, if you have the [INSERT](../../administration/user_privs/privilege_item.md#table) privilege on an Iceberg table, you can use the [INSERT](../../sql-reference/sql-statements/loading_unloading/INSERT.md) statement to sink the data of a StarRocks table to that Iceberg table (currently only Parquet-formatted Iceberg tables are supported). This feature is supported from v3.1 onwards.
+Similar to the internal tables of StarRocks, if you have the [INSERT](../../../administration/user_privs/privilege_item.md#table) privilege on an Iceberg table, you can use the [INSERT](../../../sql-reference/sql-statements/loading_unloading/INSERT.md) statement to sink the data of a StarRocks table to that Iceberg table (currently only Parquet-formatted Iceberg tables are supported). This feature is supported from v3.1 onwards.
 
 [Switch to an Iceberg catalog and a database in it](#switch-to-an-iceberg-catalog-and-a-database-in-it), and then use the following syntax to sink the data of StarRocks table to a Parquet-formatted Iceberg table in that database.
 
@@ -1369,7 +1369,7 @@ The partitions into which you want to load data. You must specify all partition 
 
 ### Drop an Iceberg table
 
-Similar to the internal tables of StarRocks, if you have the [DROP](../../administration/user_privs/privilege_item.md#table) privilege on an Iceberg table, you can use the [DROP TABLE](../../sql-reference/sql-statements/table_bucket_part_index/DROP_TABLE.md) statement to drop that Iceberg table. This feature is supported from v3.1 onwards.
+Similar to the internal tables of StarRocks, if you have the [DROP](../../../administration/user_privs/privilege_item.md#table) privilege on an Iceberg table, you can use the [DROP TABLE](../../../sql-reference/sql-statements/table_bucket_part_index/DROP_TABLE.md) statement to drop that Iceberg table. This feature is supported from v3.1 onwards.
 
 When you drop an Iceberg table, the table's file path and data on your HDFS cluster or cloud storage will not be dropped along with the table.
 
@@ -1392,7 +1392,7 @@ StarRocks uses the Least Recently Used (LRU) algorithm to cache and evict data. 
 - StarRocks first attempts to retrieve the requested metadata from the memory. If the metadata cannot be hit in the memory, StarRock attempts to retrieve the metadata from the disks. The metadata that StarRocks has retrieved from the disks will be loaded into the memory. If the metadata cannot be hit in the disks either, StarRock retrieves the metadata from the remote storage and caches the retrieved metadata in the memory.
 - StarRocks writes the metadata evicted out of the memory into the disks, but it directly discards the metadata evicted out of the disks.
 
-From v3.3.3 onwards, StarRocks supports the [periodic metadata refresh strategy](#appendix-periodic-metadata-refresh-strategy). You can adjust the Iceberg metadata caching plan using the system variable [`plan_mode`](../../sql-reference/System_variable.md#plan_mode).
+From v3.3.3 onwards, StarRocks supports the [periodic metadata refresh strategy](#appendix-periodic-metadata-refresh-strategy). You can adjust the Iceberg metadata caching plan using the system variable [`plan_mode`](../../../sql-reference/System_variable.md#plan_mode).
 
 #### FE Configurations on Iceberg metadata caching
 
@@ -1470,4 +1470,4 @@ From v3.3.3 onwards, StarRocks supports the [periodic metadata refresh strategy]
 
   StarRocks is designed to automatically select the appropriate metadata retrieval method based on various factors, including the number of FE and BE/CN nodes, their CPU core counts, and the number of manifest files required for the current query. This adaptive approach ensures that the system dynamically optimizes metadata retrieval without the need for manual adjustment of metadata-related parameters. By doing so, StarRocks provides a seamless experience, balancing between distributed and local plans to achieve optimal query performance under different conditions.
 
-You can adjust the Iceberg metadata caching plan using the system variable [`plan_mode`](../../sql-reference/System_variable.md#plan_mode).
+You can adjust the Iceberg metadata caching plan using the system variable [`plan_mode`](../../../sql-reference/System_variable.md#plan_mode).

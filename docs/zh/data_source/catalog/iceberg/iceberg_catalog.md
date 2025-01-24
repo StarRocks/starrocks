@@ -9,8 +9,8 @@ keywords: ['iceberg']
 Iceberg Catalog 是一种 External Catalog。StarRocks 从 2.4 版本开始支持 Iceberg Catalog。您可以：
 
 - 无需手动建表，通过 Iceberg Catalog 直接查询 Iceberg 内的数据。
-- 通过 [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) 或异步物化视图（2.5 版本及以上）将 Iceberg 内的数据进行加工建模，并导入至 StarRocks。
-- 在 StarRocks 侧创建或删除 Iceberg 库表，或通过 [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) 把 StarRocks 表数据写入到 Parquet 格式的 Iceberg 表中（3.1 版本及以上）。
+- 通过 [INSERT INTO](../../../sql-reference/sql-statements/loading_unloading/INSERT.md) 或异步物化视图（2.5 版本及以上）将 Iceberg 内的数据进行加工建模，并导入至 StarRocks。
+- 在 StarRocks 侧创建或删除 Iceberg 库表，或通过 [INSERT INTO](../../../sql-reference/sql-statements/loading_unloading/INSERT.md) 把 StarRocks 表数据写入到 Parquet 格式的 Iceberg 表中（3.1 版本及以上）。
 
 为保证正常访问 Iceberg 内的数据，StarRocks 集群必须能够访问 Iceberg 集群的存储系统和元数据服务。目前 StarRocks 支持以下存储系统和元数据服务：
 
@@ -46,7 +46,7 @@ StarRocks 查询 Iceberg 数据时，注意以下几点：
 - Assumed Role
 - IAM User
 
-有关 StarRocks 访问 AWS 认证鉴权的详细内容，参见[配置 AWS 认证方式 - 准备工作](../../integrations/authenticate_to_aws_resources.md#准备工作)。
+有关 StarRocks 访问 AWS 认证鉴权的详细内容，参见[配置 AWS 认证方式 - 准备工作](../../../integrations/authenticate_to_aws_resources.md#准备工作)。
 
 ### HDFS
 
@@ -168,7 +168,7 @@ StarRocks 访问 Iceberg 集群元数据服务的相关参数配置。
 | aws.glue.access_key           | 否       | IAM User 的 Access Key。采用 IAM User 鉴权方式访问 AWS Glue 时，必须指定此参数。 |
 | aws.glue.secret_key           | 否       | IAM User 的 Secret Key。采用 IAM User 鉴权方式访问 AWS Glue 时，必须指定此参数。 |
 
-有关如何选择用于访问 AWS Glue 的鉴权方式、以及如何在 AWS IAM 控制台配置访问控制策略，参见[访问 AWS Glue 的认证参数](../../integrations/authenticate_to_aws_resources.md#访问-aws-glue-的认证参数)。
+有关如何选择用于访问 AWS Glue 的鉴权方式、以及如何在 AWS IAM 控制台配置访问控制策略，参见[访问 AWS Glue 的认证参数](../../../integrations/authenticate_to_aws_resources.md#访问-aws-glue-的认证参数)。
 
 ##### REST
 
@@ -286,7 +286,7 @@ StarRocks 访问 Iceberg 集群文件存储的相关参数配置。
 | aws.s3.access_key           | 否       | IAM User 的 Access Key。采用 IAM User 鉴权方式访问 AWS S3 时，必须指定此参数。 |
 | aws.s3.secret_key           | 否       | IAM User 的 Secret Key。采用 IAM User 鉴权方式访问 AWS S3 时，必须指定此参数。 |
 
-有关如何选择用于访问 AWS S3 的鉴权方式、以及如何在 AWS IAM 控制台配置访问控制策略，参见[访问 AWS S3 的认证参数](../../integrations/authenticate_to_aws_resources.md#访问-aws-s3-的认证参数)。
+有关如何选择用于访问 AWS S3 的鉴权方式、以及如何在 AWS IAM 控制台配置访问控制策略，参见[访问 AWS S3 的认证参数](../../../integrations/authenticate_to_aws_resources.md#访问-aws-s3-的认证参数)。
 
 ##### 阿里云 OSS
 
@@ -520,7 +520,7 @@ Iceberg Catalog 从 3.0 版本起支持 Google GCS。
 
 指定元数据缓存更新策略的一组参数。StarRocks 根据该策略更新缓存的 Iceberg 元数据。此组参数为可选。
 
-自 v3.3.3 起，StarRocks 采用[元数据周期性后台刷新方案](#附录元数据周期性后台刷新方案)，开箱即用。因此，一般情况下，您可以忽略 `MetadataUpdateParams`，无需对其中的策略参数进行调优。大多数情况下，推荐您通过系统变量 [`plan_mode`](../../sql-reference/System_variable.md#plan_mode) 调整 Iceberg Catalog 元数据检索方案。
+自 v3.3.3 起，StarRocks 采用[元数据周期性后台刷新方案](#附录元数据周期性后台刷新方案)，开箱即用。因此，一般情况下，您可以忽略 `MetadataUpdateParams`，无需对其中的策略参数进行调优。大多数情况下，推荐您通过系统变量 [`plan_mode`](../../../sql-reference/System_variable.md#plan_mode) 调整 Iceberg Catalog 元数据检索方案。
 
 如果 Iceberg 数据更新频率较高，那么您可以对这些参数进行调优，从而优化该方案的性能。
 
@@ -846,13 +846,13 @@ PROPERTIES
 
 ## 查看 Iceberg Catalog
 
-您可以通过 [SHOW CATALOGS](../../sql-reference/sql-statements/Catalog/SHOW_CATALOGS.md) 查询当前所在 StarRocks 集群里所有 Catalog：
+您可以通过 [SHOW CATALOGS](../../../sql-reference/sql-statements/Catalog/SHOW_CATALOGS.md) 查询当前所在 StarRocks 集群里所有 Catalog：
 
 ```SQL
 SHOW CATALOGS;
 ```
 
-您也可以通过 [SHOW CREATE CATALOG](../../sql-reference/sql-statements/Catalog/SHOW_CREATE_CATALOG.md) 查询某个 External Catalog 的创建语句。例如，通过如下命令查询 Iceberg Catalog `iceberg_catalog_glue` 的创建语句：
+您也可以通过 [SHOW CREATE CATALOG](../../../sql-reference/sql-statements/Catalog/SHOW_CREATE_CATALOG.md) 查询某个 External Catalog 的创建语句。例如，通过如下命令查询 Iceberg Catalog `iceberg_catalog_glue` 的创建语句：
 
 ```SQL
 SHOW CREATE CATALOG iceberg_catalog_glue;
@@ -862,7 +862,7 @@ SHOW CREATE CATALOG iceberg_catalog_glue;
 
 您可以通过如下方法切换至目标 Iceberg Catalog 和数据库：
 
-- 先通过 [SET CATALOG](../../sql-reference/sql-statements/Catalog/SET_CATALOG.md) 指定当前会话生效的 Iceberg Catalog，然后再通过 [USE](../../sql-reference/sql-statements/Database/USE.md) 指定数据库：
+- 先通过 [SET CATALOG](../../../sql-reference/sql-statements/Catalog/SET_CATALOG.md) 指定当前会话生效的 Iceberg Catalog，然后再通过 [USE](../../../sql-reference/sql-statements/Database/USE.md) 指定数据库：
 
   ```SQL
   -- 切换当前会话生效的 Catalog：
@@ -871,7 +871,7 @@ SHOW CREATE CATALOG iceberg_catalog_glue;
   USE <db_name>
   ```
 
-- 通过 [USE](../../sql-reference/sql-statements/Database/USE.md) 直接将会话切换到目标 Iceberg Catalog 下的指定数据库：
+- 通过 [USE](../../../sql-reference/sql-statements/Database/USE.md) 直接将会话切换到目标 Iceberg Catalog 下的指定数据库：
 
   ```SQL
   USE <catalog_name>.<db_name>
@@ -879,7 +879,7 @@ SHOW CREATE CATALOG iceberg_catalog_glue;
 
 ## 删除 Iceberg Catalog
 
-您可以通过 [DROP CATALOG](../../sql-reference/sql-statements/Catalog/DROP_CATALOG.md) 删除某个 External Catalog。
+您可以通过 [DROP CATALOG](../../../sql-reference/sql-statements/Catalog/DROP_CATALOG.md) 删除某个 External Catalog。
 
 例如，通过如下命令删除 Iceberg Catalog `iceberg_catalog_glue`：
 
@@ -905,7 +905,7 @@ DROP Catalog iceberg_catalog_glue;
 
 ## 查询 Iceberg 表数据
 
-1. 通过 [SHOW DATABASES](../../sql-reference/sql-statements/Database/SHOW_DATABASES.md) 查看指定 Catalog 所属的 Iceberg 集群中的数据库：
+1. 通过 [SHOW DATABASES](../../../sql-reference/sql-statements/Database/SHOW_DATABASES.md) 查看指定 Catalog 所属的 Iceberg 集群中的数据库：
 
    ```SQL
    SHOW DATABASES FROM <catalog_name>
@@ -913,7 +913,7 @@ DROP Catalog iceberg_catalog_glue;
 
 2. [切换至目标 Iceberg Catalog 和数据库](#切换-iceberg-catalog-和数据库)。
 
-3. 通过 [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) 查询目标数据库中的目标表：
+3. 通过 [SELECT](../../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) 查询目标数据库中的目标表：
 
    ```SQL
    SELECT count(*) FROM <table_name> LIMIT 10
@@ -921,11 +921,11 @@ DROP Catalog iceberg_catalog_glue;
 
 ## 创建 Iceberg 数据库
 
-同 StarRocks 内部数据目录 (Internal Catalog) 一致，如果您拥有 Iceberg Catalog 的 [CREATE DATABASE](../../administration/user_privs/privilege_item.md#数据目录权限-catalog) 权限，那么您可以使用 [CREATE DATABASE](../../sql-reference/sql-statements/Database/CREATE_DATABASE.md) 在该 Iceberg Catalog 内创建数据库。本功能自 3.1 版本起开始支持。
+同 StarRocks 内部数据目录 (Internal Catalog) 一致，如果您拥有 Iceberg Catalog 的 [CREATE DATABASE](../../../administration/user_privs/privilege_item.md#数据目录权限-catalog) 权限，那么您可以使用 [CREATE DATABASE](../../../sql-reference/sql-statements/Database/CREATE_DATABASE.md) 在该 Iceberg Catalog 内创建数据库。本功能自 3.1 版本起开始支持。
 
 > **说明**
 >
-> 您可以通过 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
+> 您可以通过 [GRANT](../../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
 
 [切换至目标 Iceberg Catalog](#切换-iceberg-catalog-和数据库)，然后通过如下语句创建 Iceberg 数据库：
 
@@ -952,11 +952,11 @@ CREATE DATABASE <database_name>
 
 ## 删除 Iceberg 数据库
 
-同 StarRocks 内部数据库一致，如果您拥有 Iceberg 数据库的 [DROP](../../administration/user_privs/privilege_item.md#数据库权限-database) 权限，那么您可以使用 [DROP DATABASE](../../sql-reference/sql-statements/Database/DROP_DATABASE.md) 来删除该 Iceberg 数据库。本功能自 3.1 版本起开始支持。仅支持删除空数据库。
+同 StarRocks 内部数据库一致，如果您拥有 Iceberg 数据库的 [DROP](../../../administration/user_privs/privilege_item.md#数据库权限-database) 权限，那么您可以使用 [DROP DATABASE](../../../sql-reference/sql-statements/Database/DROP_DATABASE.md) 来删除该 Iceberg 数据库。本功能自 3.1 版本起开始支持。仅支持删除空数据库。
 
 > **说明**
 >
-> 您可以通过 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
+> 您可以通过 [GRANT](../../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
 
 删除数据库操作并不会将 HDFS 或对象存储上的对应文件路径删除。
 
@@ -968,11 +968,11 @@ DROP DATABASE <database_name>;
 
 ## 创建 Iceberg 表
 
-同 StarRocks 内部数据库一致，如果您拥有 Iceberg 数据库的 [CREATE TABLE](../../administration/user_privs/privilege_item.md#数据库权限-database) 权限，那么您可以使用 [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) 或 [CREATE TABLE AS SELECT (CTAS)](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) 在该 Iceberg 数据库下创建表。本功能自 3.1 版本起开始支持。
+同 StarRocks 内部数据库一致，如果您拥有 Iceberg 数据库的 [CREATE TABLE](../../../administration/user_privs/privilege_item.md#数据库权限-database) 权限，那么您可以使用 [CREATE TABLE](../../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) 或 [CREATE TABLE AS SELECT (CTAS)](../../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) 在该 Iceberg 数据库下创建表。本功能自 3.1 版本起开始支持。
 
 > **说明**
 >
-> 您可以通过 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
+> 您可以通过 [GRANT](../../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
 
 [切换至目标 Iceberg Catalog 和数据库](#切换-iceberg-catalog-和数据库)。然后通过如下语法创建 Iceberg 表：
 
@@ -1032,7 +1032,7 @@ PARTITION BY (par_col1[, par_col2...])
 | ----------------- | ------------------------------------------------------------ |
 | location          | Iceberg 表所在的文件路径。使用 HMS 作为元数据服务时，您无需指定 `location` 参数。使用 AWS Glue 作为元数据服务时：<ul><li>如果在创建当前数据库时指定了 `location` 参数，那么在当前数据库下建表时不需要再指定 `location` 参数，StarRocks 默认把表建在当前数据库所在的文件路径下。</li><li>如果在创建当前数据库时没有指定 `location` 参数，那么在当前数据库建表时必须指定 `location` 参数。</li></ul> |
 | file_format       | Iceberg 表的文件格式。当前仅支持 Parquet 格式。默认值：`parquet`。 |
-| compression_codec | Iceberg 表的压缩格式。当前支持 SNAPPY、GZIP、ZSTD 和 LZ4。默认值：`gzip`。该属性自 3.2.3 版本起弃用，此后写入 Iceberg 表时的压缩算法统一由会话变量 [connector_sink_compression_codec](../../sql-reference/System_variable.md#connector_sink_compression_codec) 控制。 |
+| compression_codec | Iceberg 表的压缩格式。当前支持 SNAPPY、GZIP、ZSTD 和 LZ4。默认值：`gzip`。该属性自 3.2.3 版本起弃用，此后写入 Iceberg 表时的压缩算法统一由会话变量 [connector_sink_compression_codec](../../../sql-reference/System_variable.md#connector_sink_compression_codec) 控制。 |
 
 ### 示例
 
@@ -1068,11 +1068,11 @@ PARTITION BY (par_col1[, par_col2...])
 
 ## 向 Iceberg 表中插入数据
 
-同 StarRocks 内表一致，如果您拥有 Iceberg 表的 [INSERT](../../administration/user_privs/privilege_item.md#表权限-table) 权限，那么您可以使用 [INSERT](../../sql-reference/sql-statements/loading_unloading/INSERT.md) 将 StarRocks 表数据写入到该 Iceberg 表中（当前仅支持写入到 Parquet 格式的 Iceberg 表）。本功能自 3.1 版本起开始支持。
+同 StarRocks 内表一致，如果您拥有 Iceberg 表的 [INSERT](../../../administration/user_privs/privilege_item.md#表权限-table) 权限，那么您可以使用 [INSERT](../../../sql-reference/sql-statements/loading_unloading/INSERT.md) 将 StarRocks 表数据写入到该 Iceberg 表中（当前仅支持写入到 Parquet 格式的 Iceberg 表）。本功能自 3.1 版本起开始支持。
 
 > **说明**
 >
-> 您可以通过 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
+> 您可以通过 [GRANT](../../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
 
 [切换至目标 Iceberg Catalog 和数据库](#切换-iceberg-catalog-和数据库)，然后通过如下语法将 StarRocks 表数据写入到 Parquet 格式的 Iceberg 表中：
 
@@ -1157,11 +1157,11 @@ PARTITION (par_col1=<value> [, par_col2=<value>...])
 
 ## 删除 Iceberg 表
 
-同 StarRocks 内表一致，在拥有 Iceberg 表的 [DROP](../../administration/user_privs/privilege_item.md#表权限-table) 权限的情况下，您可以使用 [DROP TABLE](../../sql-reference/sql-statements/table_bucket_part_index/DROP_TABLE.md) 来删除该 Iceberg 表。本功能自 3.1 版本起开始支持。
+同 StarRocks 内表一致，在拥有 Iceberg 表的 [DROP](../../../administration/user_privs/privilege_item.md#表权限-table) 权限的情况下，您可以使用 [DROP TABLE](../../../sql-reference/sql-statements/table_bucket_part_index/DROP_TABLE.md) 来删除该 Iceberg 表。本功能自 3.1 版本起开始支持。
 
 > **说明**
 >
-> 您可以通过 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
+> 您可以通过 [GRANT](../../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
 
 删除表操作并不会将 HDFS 或对象存储上的对应文件路径和数据删除。
 
@@ -1194,7 +1194,7 @@ StarRocks 采用 Least Recently Used (LRU) 策略来缓存和淘汰数据，基�
 | iceberg_metadata_disk_cache_expiration_seconds   | 秒       | `604800`，即一周                                     | 磁盘中的缓存自最后一次访问后的过期时间。                     |
 | iceberg_metadata_cache_max_entry_size            | 字节     | `8388608`，即 8 MB                                   | 缓存的单个文件最大大小，以防止单个文件过大挤占其他文件空间。超过此大小的文件不会缓存，如果查询命中则会直接访问远端元数据文件。 |
 
-自 v3.3.3 起，Iceberg Catalog 支持 [元数据周期性后台刷新方案](#附录元数据周期性后台刷新方案)。您可以通过系统变量 [`plan_mode`](../../sql-reference/System_variable.md#plan_mode) 调整 Iceberg Catalog 元数据检索方案。
+自 v3.3.3 起，Iceberg Catalog 支持 [元数据周期性后台刷新方案](#附录元数据周期性后台刷新方案)。您可以通过系统变量 [`plan_mode`](../../../sql-reference/System_variable.md#plan_mode) 调整 Iceberg Catalog 元数据检索方案。
 
 您可以通过以下 FE 配置项来设置 Iceberg 元数据缓存刷新行为：
 
@@ -1222,4 +1222,4 @@ StarRocks 采用 Least Recently Used (LRU) 策略来缓存和淘汰数据，基�
 
   默认设置下，StarRocks 可以根据各种因素自动选择合适的元数据检索方法，包括 FE/BE/CN 节点的数量、核心数以及当前查询所需读取的 Manifest 文件数量。这种自适应的方法确保系统可以动态优化元数据的检索，无需手动调整元数据相关的参数。通过该方案，StarRocks 能在不同条件下平衡分布式和本地方案，实现最佳的查询性能，为用户提供无缝体验。
 
-您可以通过系统变量 [`plan_mode`](../../sql-reference/System_variable.md#plan_mode) 调整 Iceberg Catalog 元数据检索方案。
+您可以通过系统变量 [`plan_mode`](../../../sql-reference/System_variable.md#plan_mode) 调整 Iceberg Catalog 元数据检索方案。
