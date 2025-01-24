@@ -23,7 +23,7 @@ Currently, StarRocks provides two types of catalogs: internal catalog and extern
 
 - **External catalog** acts like a link to externally managed metastores, which grants StarRocks direct access to external data sources. You can query external data directly with zero data loading or migration. Currently, StarRocks supports the following types of external catalogs:
   - [Hive catalog](../catalog/hive_catalog.md): used to query data from Hive.
-  - [Iceberg catalog](../catalog/iceberg_catalog.md): used to query data from Iceberg.
+  - [Iceberg catalog](./iceberg/iceberg_catalog.md): used to query data from Iceberg.
   - [Hudi catalog](../catalog/hudi_catalog.md): used to query data from Hudi.
   - [Delta Lake catalog](../catalog/deltalake_catalog.md): used to query data from Delta Lake.
   - [JDBC catalog](../catalog/jdbc_catalog.md): used to query data from JDBC-compatible data sources.

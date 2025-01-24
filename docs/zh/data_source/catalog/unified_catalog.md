@@ -27,7 +27,7 @@ Unified Catalog 是一种 External Catalog，自 3.2 版本起支持。通过 Un
 
 ## 使用说明
 
-- 有关 Unified Catalog 支持的文件格式和数据类型，请参见 [Hive catalog](../catalog/hive_catalog.md)、[Iceberg catalog](../catalog/iceberg_catalog.md)、[Hudi catalog](../catalog/hudi_catalog.md)、[Delta Lake catalog](../catalog/deltalake_catalog.md) 和 [Kudu catalog](../catalog/kudu_catalog.md) 文档中“使用说明”部分。
+- 有关 Unified Catalog 支持的文件格式和数据类型，请参见 [Hive catalog](../catalog/hive_catalog.md)、[Iceberg catalog](./iceberg/iceberg_catalog.md)、[Hudi catalog](../catalog/hudi_catalog.md)、[Delta Lake catalog](../catalog/deltalake_catalog.md) 和 [Kudu catalog](../catalog/kudu_catalog.md) 文档中“使用说明”部分。
 
 - 部分操作只能用于特定的表格式。例如，[CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) 和 [DROP TABLE](../../sql-reference/sql-statements/table_bucket_part_index/DROP_TABLE.md) 当前只支持 Hive 和 Iceberg 表，[REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/table_bucket_part_index/REFRESH_EXTERNAL_TABLE.md) 只支持 Hive 和 Hudi 表。
 
@@ -936,7 +936,7 @@ ENGINE = {|hive|iceberg}
 [partition_desc]
 ```
 
-有关创建 Hive 表和 Iceberg 表的详细信息，请参见[创建 Hive 表](../catalog/hive_catalog.md#创建-hive-表)和[创建 Iceberg 表](../catalog/iceberg_catalog.md#创建-iceberg-表)。
+有关创建 Hive 表和 Iceberg 表的详细信息，请参见[创建 Hive 表](../catalog/hive_catalog.md#创建-hive-表)和[创建 Iceberg 表](./iceberg/iceberg_catalog.md#创建-iceberg-表)。
 
 例如，通过如下语句，创建一张 Hive 表 `hive_table`：
 
@@ -974,7 +974,7 @@ PARTITION (par_col1=<value> [, par_col2=<value>...])
 { VALUES ( { expression | DEFAULT } [, ...] ) [, ...] | query }
 ```
 
-有关向 Hive 表和 Iceberg 表中插入数据的详细信息，请参见[向 Hive 表中插入数据](../catalog/hive_catalog.md#向-hive-表中插入数据)和[向 Iceberg 表中插入数据](../catalog/iceberg_catalog.md#向-iceberg-表中插入数据)。
+有关向 Hive 表和 Iceberg 表中插入数据的详细信息，请参见[向 Hive 表中插入数据](../catalog/hive_catalog.md#向-hive-表中插入数据)和[向 Iceberg 表中插入数据](./iceberg/iceberg_catalog.md#向-iceberg-表中插入数据)。
 
 例如，通过如下语句，向 Hive 表 `hive_table` 中写入如下数据：
 
@@ -1002,7 +1002,7 @@ VALUES
 DROP TABLE <table_name>
 ```
 
-有关删除 Hive 表和 Iceberg 表的详细信息，请参见[删除 Hive 表](../catalog/hive_catalog.md#删除-hive-表)和[删除 Iceberg 表](../catalog/iceberg_catalog.md#删除-iceberg-表)。
+有关删除 Hive 表和 Iceberg 表的详细信息，请参见[删除 Hive 表](../catalog/hive_catalog.md#删除-hive-表)和[删除 Iceberg 表](./iceberg/iceberg_catalog.md#删除-iceberg-表)。
 
 例如，通过如下语句，删除 Hive 表 `hive_table`：
 

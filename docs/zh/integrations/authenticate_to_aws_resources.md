@@ -172,7 +172,7 @@ StarRocks 中 Instance Profile、Assumed Role、以及 IAM User 三种认证方�
 StarRocks 支持以下类型的 External Catalog：
 
 - [Hive catalog](../data_source/catalog/hive_catalog.md)
-- [Iceberg catalog](../data_source/catalog/iceberg_catalog.md)
+- [Iceberg catalog](../data_source/catalog/iceberg/iceberg_catalog.md)
 - [Hudi catalog](../data_source/catalog/hudi_catalog.md)
 - [Delta Lake catalog](../data_source/catalog/deltalake_catalog.md)
 
