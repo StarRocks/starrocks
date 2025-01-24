@@ -1652,7 +1652,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型：Long
 - 单位：bytes
 - 是否动态：是
-- 描述：自动统计信息采集的最大分区大小。如果超过该值，则放弃全量采集，转为对该表进行抽样采集。
+- 描述：自动统计信息采集的单次任务最大数据量。如果超过该值，则放弃全量采集，转为对该表进行抽样采集。
 - 引入版本：-
 
 ##### statistic_collect_max_row_count_per_query
