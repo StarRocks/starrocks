@@ -14,7 +14,6 @@
 
 #include "exec/topn_node.h"
 
-#include <any>
 #include <memory>
 
 #include "exec/chunks_sorter.h"
@@ -22,7 +21,6 @@
 #include "exec/chunks_sorter_heap_sort.h"
 #include "exec/chunks_sorter_topn.h"
 #include "exec/pipeline/limit_operator.h"
-#include "exec/pipeline/noop_sink_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/sort/local_merge_sort_source_operator.h"
 #include "exec/pipeline/sort/local_parallel_merge_sort_source_operator.h"
@@ -34,7 +32,6 @@
 #include "exec/pipeline/sort/spillable_partition_sort_sink_operator.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/pipeline/spill_process_channel.h"
-#include "exec/pipeline/spill_process_operator.h"
 #include "gutil/casts.h"
 #include "runtime/current_thread.h"
 
@@ -311,11 +308,13 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> TopNNode::_decompose_to_
 
     OperatorFactoryPtr sink_operator;
 
-    int64_t max_buffered_rows = 1024000;
-    int64_t max_buffered_bytes = 16 * 1024 * 1024;
+    int64_t max_buffered_rows = ChunksSorterFullSort::kDefaultMaxBufferRows;
+    int64_t max_buffered_bytes = ChunksSorterFullSort::kDefaultMaxBufferBytes;
     if (_tnode.sort_node.__isset.max_buffered_bytes) {
-        max_buffered_rows = _tnode.sort_node.max_buffered_rows;
         max_buffered_bytes = _tnode.sort_node.max_buffered_bytes;
+    }
+    if (_tnode.sort_node.__isset.max_buffered_rows) {
+        max_buffered_rows = _tnode.sort_node.max_buffered_rows;
     }
 
     sink_operator = std::make_shared<SinkFactory>(
