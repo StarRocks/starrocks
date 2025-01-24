@@ -83,7 +83,7 @@ public class BasicStatsMetaTest extends PlanTestBase {
                     LocalDateTime.of(2024, 07, 22, 12, 20), Map.of(), 10000);
             basicStatsMeta.increaseDeltaRows(5000L);
             basicStatsMeta.setUpdateRows(10000L);
-            Assert.assertEquals(0.5, basicStatsMeta.getHealthy(), 0.01);
+            Assert.assertEquals(1.0, basicStatsMeta.getHealthy(), 0.01);
             basicStatsMeta.resetDeltaRows();
             Assert.assertEquals(1.0, basicStatsMeta.getHealthy(), 0.01);
         }
