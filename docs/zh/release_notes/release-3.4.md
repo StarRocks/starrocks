@@ -16,6 +16,7 @@ displayed_sidebar: docs
   - 引入了分段 LRU (SLRU) 缓存淘汰策略，有效防止偶发大查询导致的缓存污染，提高缓存命中率，减少查询性能波动。在有大查询污染的模拟测试中，基于 SLRU 的查询性能能提升 70% 至数倍。 更多内容，参考 [Data Cache - 缓存淘汰机制](https://docs.starrocks.io/zh/docs/data_source/data_cache/#%E7%BC%93%E5%AD%98%E6%B7%98%E6%B1%B0%E6%9C%BA%E5%88%B6)。
   - 优化了 Data Cache 的自适应 I/O 策略。系统会根据缓存磁盘的负载和性能，自适应地将部分查询请求路由到远端存储，从而提升整体访问吞吐能力。
   - 统一了存算分离架构和数据湖查询场景中使用的 Data Cache 实例，以及相关的参数和指标，简化配置，并提升资源使用率。更多内容，参考 [Data Cache](https://docs.starrocks.io/zh/docs/using_starrocks/caching/block_cache/)。
+  - 支持了数据湖查询场景中 Data Cache 缓存数据持久化，BE 重启后可复用之前的缓存数据，减少查询性能的波动。
 - 支持通过查询自动触发 ANALYZE 任务自动收集外部表统计信息，相较于元数据文件，可提供更准确的 NDV 信息，从而优化查询计划并提升查询性能。更多内容，参考 [查询触发采集](https://docs.starrocks.io/zh/docs/using_starrocks/Cost_based_optimizer/#%E6%9F%A5%E8%AF%A2%E8%A7%A6%E5%8F%91%E9%87%87%E9%9B%86)。
 - 提供针对 Iceberg 的 Time Travel 查询功能，可通过指定 TIMESTAMP 或 VERSION，从指定的 BRANCH 或 TAG 读取数据。
 - 支持数据湖查询的异步查询片段投递。通过让 FE 获取文件和 BE 执行查询并行执行，消除了 BE 必须在 FE 获取所有文件之后才能执行查询的限制，从而降低涉及大量未缓存文件的数据湖查询的整体延迟。同时减少因缓存文件列表而带给 FE 的内存压力，提升查询稳定性。（目前已实现对 Hudi 和 Delta Lake 的优化，对 Iceberg 的优化仍在开发中。）
