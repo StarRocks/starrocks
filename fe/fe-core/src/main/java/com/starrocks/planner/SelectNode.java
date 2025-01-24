@@ -37,12 +37,8 @@ package com.starrocks.planner;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotId;
-<<<<<<< HEAD
-import com.starrocks.common.UserException;
-=======
 import com.starrocks.common.Pair;
-import com.starrocks.common.StarRocksException;
->>>>>>> be65ed6621 ([BugFix] Fix wrong result when query cache work with select node (#55287))
+import com.starrocks.common.UserException;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TNormalPlanNode;
 import com.starrocks.thrift.TNormalSelectNode;
