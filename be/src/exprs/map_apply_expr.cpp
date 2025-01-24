@@ -121,7 +121,9 @@ StatusOr<ColumnPtr> MapApplyExpr::evaluate_checked(ExprContext* context, Chunk* 
                 return Status::InternalError(fmt::format("The size of the captured column {} is less than map's size.",
                                                          captured->get_name()));
             }
-            cur_chunk->append_column(captured->replicate(input_map->offsets_column()->get_data()), id);
+
+            ASSIGN_OR_RETURN(auto replicated_col, captured->replicate(input_map->offsets_column()->get_data()));
+            cur_chunk->append_column(replicated_col, id);
         }
         // evaluate the lambda expression
         if (cur_chunk->num_rows() <= chunk->num_rows() * 8) {
