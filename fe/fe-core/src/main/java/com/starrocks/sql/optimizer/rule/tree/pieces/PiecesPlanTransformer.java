@@ -201,7 +201,8 @@ class PiecesPlanTransformer {
                 context.columnRefConverter.convertRef(ref, columnMetaToIdMap.get(c));
             });
 
-            pieces.algebra = scan.getTable().getUUID() + ":" + scan.getTable().getName();
+            pieces.algebra = scan.getTable().getUUID() + ":" + scan.getTable().getName() +
+                    (scan.getTableVersionRange().isEmpty() ? "" : ":" + scan.getTableVersionRange()); ;
             return pieces;
         }
     }
