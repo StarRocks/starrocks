@@ -80,6 +80,11 @@ public:
     // If the count is already zero, this has no effect.
     void count_down() { count_down(1); }
 
+    void add_count(int delta) {
+        std::lock_guard lock(lock_);
+        count_ += delta;
+    }
+
     // Wait until the count on the latch reaches zero.
     // If the count is already zero, this returns immediately.
     void wait() const {

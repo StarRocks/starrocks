@@ -39,14 +39,14 @@ TEST_F(WriteCombinedTxnLogTest, test_write_combined_txn_log_parallel) {
     trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
     auto fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get("put_combined_txn_log_success");
     fp->setMode(trigger_mode);
-    ASSERT_TRUE(write_combined_txn_log(txn_log_map).ok());
+    ASSERT_TRUE(write_combined_txn_log_parallel(txn_log_map).ok());
     trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
     fp->setMode(trigger_mode);
 
     trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
     fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get("put_combined_txn_log_fail");
     fp->setMode(trigger_mode);
-    ASSERT_FALSE(write_combined_txn_log(txn_log_map).ok());
+    ASSERT_FALSE(write_combined_txn_log_parallel(txn_log_map).ok());
     trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
     fp->setMode(trigger_mode);
 }
