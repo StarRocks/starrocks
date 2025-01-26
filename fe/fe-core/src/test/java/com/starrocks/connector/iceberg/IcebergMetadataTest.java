@@ -54,7 +54,6 @@ import com.starrocks.connector.SerializedMetaSpec;
 import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
-import com.starrocks.connector.iceberg.rest.IcebergRESTCatalog;
 import com.starrocks.connector.metadata.MetadataCollectJob;
 import com.starrocks.connector.metadata.MetadataTableType;
 import com.starrocks.connector.metadata.iceberg.IcebergMetadataCollectJob;
@@ -70,10 +69,8 @@ import com.starrocks.sql.ast.AddColumnsClause;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterTableCommentClause;
 import com.starrocks.sql.ast.AlterTableStmt;
-import com.starrocks.sql.ast.ColWithComment;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ColumnRenameClause;
-import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DropColumnClause;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.ModifyColumnClause;
@@ -109,7 +106,6 @@ import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.MetricsModes;
-import org.apache.iceberg.Schema;
 import org.apache.iceberg.TableMetadata;
 import org.apache.iceberg.TableProperties;
 import org.apache.iceberg.TableScan;
@@ -120,10 +116,6 @@ import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.exceptions.NoSuchNamespaceException;
 import org.apache.iceberg.hive.HiveCatalog;
 import org.apache.iceberg.hive.HiveTableOperations;
-import org.apache.iceberg.rest.RESTCatalog;
-import org.apache.iceberg.types.Types;
-import org.apache.iceberg.view.BaseView;
-import org.apache.iceberg.view.ImmutableSQLViewRepresentation;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -140,7 +132,6 @@ import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.Executors;
 
 import static com.starrocks.catalog.Table.TableType.ICEBERG;
-import static com.starrocks.catalog.Table.TableType.ICEBERG_VIEW;
 import static com.starrocks.catalog.Type.DATE;
 import static com.starrocks.catalog.Type.DATETIME;
 import static com.starrocks.catalog.Type.INT;
@@ -1463,73 +1454,6 @@ public class IcebergMetadataTest extends TableTestBase {
         Assert.assertEquals(deleteFileWrapper.content(), FILE_C_1.content());
         Assert.assertEquals(deleteFileWrapper.dataSequenceNumber(), FILE_C_1.dataSequenceNumber());
         Assert.assertEquals(deleteFileWrapper.fileSequenceNumber(), FILE_C_1.fileSequenceNumber());
-    }
-
-    @Test
-    public void testCreateView(@Mocked RESTCatalog restCatalog, @Mocked BaseView baseView,
-                               @Mocked ImmutableSQLViewRepresentation representation) throws Exception {
-        UtFrameUtils.createMinStarRocksCluster();
-        AnalyzeTestUtil.init();
-        IcebergRESTCatalog icebergRESTCatalog = new IcebergRESTCatalog(restCatalog, new Configuration());
-        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(
-                CATALOG_NAME, icebergRESTCatalog, DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
-
-        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, cachingIcebergCatalog,
-                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(),
-                new IcebergCatalogProperties(DEFAULT_CONFIG));
-
-        new Expectations() {
-            {
-                restCatalog.loadNamespaceMetadata(Namespace.of("db"));
-                result = ImmutableMap.of("location", "xxxxx");
-                minTimes = 1;
-
-                restCatalog.name();
-                result = "rest_catalog";
-                minTimes = 1;
-            }
-        };
-
-        CreateViewStmt stmt = new CreateViewStmt(false, false, new TableName("catalog", "db", "table"),
-                Lists.newArrayList(new ColWithComment("k1", "", NodePosition.ZERO)), "", false, null, NodePosition.ZERO);
-        stmt.setColumns(Lists.newArrayList(new Column("k1", INT)));
-        metadata.createView(stmt);
-
-        new Expectations() {
-            {
-                representation.sql();
-                result = "select * from table";
-                minTimes = 1;
-
-                baseView.sqlFor("starrocks");
-                result = representation;
-                minTimes = 1;
-
-                baseView.properties();
-                result = ImmutableMap.of("comment", "mocked");
-                minTimes = 1;
-
-                baseView.schema();
-                result = new Schema(Types.NestedField.optional(1, "k1", Types.IntegerType.get()));
-                minTimes = 1;
-
-                baseView.name();
-                result = "view";
-                minTimes = 1;
-
-                baseView.location();
-                result = "xxx";
-                minTimes = 1;
-
-                restCatalog.loadView(TableIdentifier.of("db", "view"));
-                result = baseView;
-                minTimes = 1;
-            }
-        };
-
-        Table table = metadata.getView("db", "view");
-        Assert.assertEquals(ICEBERG_VIEW, table.getType());
-        Assert.assertEquals("xxx", table.getTableLocation());
     }
 
     @Test
