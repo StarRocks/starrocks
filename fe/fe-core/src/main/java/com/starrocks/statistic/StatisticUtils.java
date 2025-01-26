@@ -194,6 +194,7 @@ public class StatisticUtils {
         try {
             future = GlobalStateMgr.getCurrentAnalyzeMgr().getAnalyzeTaskThreadPool()
                     .submit(() -> {
+                        analyzeStatus.setStartTime(LocalDateTime.now());
                         StatisticExecutor statisticExecutor = new StatisticExecutor();
                         ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
                         statsConnectCtx.setThreadLocalInfo();
