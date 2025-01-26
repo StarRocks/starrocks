@@ -1947,10 +1947,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     }
                 }
             }
-
-            GlobalStateMgr.getCurrentState().getNodeMgr().setFrontendConfig(configs, request.isIs_persistent(),
+            ConfigBase.setFrontendConfig(configs, request.isIs_persistent(),
                     request.getUser_identity());
-            ConfigBase.setFrontendConfig(configs);
             return new TSetConfigResponse(new TStatus(TStatusCode.OK));
         } catch (DdlException e) {
             TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);

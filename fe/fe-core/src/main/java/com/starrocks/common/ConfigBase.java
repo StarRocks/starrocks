@@ -38,7 +38,6 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.Util;
-import org.apache.commons.lang3.StringUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
@@ -50,6 +49,7 @@ import com.starrocks.thrift.TSetConfigRequest;
 import com.starrocks.thrift.TSetConfigResponse;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -471,9 +471,9 @@ public class ConfigBase {
         return configs;
     }
 
-    public static synchronized void setConfig(AdminSetConfigStmt stmt) throws InvalidConfException {
-        setFrontendConfig(stmt.getConfig().getMap());
-
+    public static synchronized void setConfig(AdminSetConfigStmt stmt) throws DdlException {
+        String user = ConnectContext.get().getCurrentUserIdentity().getUser();
+        setFrontendConfig(stmt.getConfig().getMap(), stmt.isPersistent(), user);
         List<Frontend> allFrontends = GlobalStateMgr.getCurrentState().getNodeMgr().getFrontends(null);
         int timeout = ConnectContext.get().getExecTimeout() * 1000 + Config.thrift_rpc_timeout_ms;
         StringBuilder errMsg = new StringBuilder();
@@ -481,37 +481,45 @@ public class ConfigBase {
             if (fe.getHost().equals(GlobalStateMgr.getCurrentState().getNodeMgr().getSelfNode().first)) {
                 continue;
             }
-
-            TSetConfigRequest request = new TSetConfigRequest();
-            request.setKeys(Lists.newArrayList(stmt.getConfig().getKey()));
-            request.setValues(Lists.newArrayList(stmt.getConfig().getValue()));
-            try {
-                TSetConfigResponse response = ThriftRPCRequestExecutor.call(
-                        ThriftConnectionPool.frontendPool,
-                        new TNetworkAddress(fe.getHost(), fe.getRpcPort()),
-                        timeout,
-                        client -> client.setConfig(request));
-                TStatus status = response.getStatus();
-                if (status.getStatus_code() != TStatusCode.OK) {
-                    errMsg.append("set config for fe[").append(fe.getHost()).append("] failed: ");
-                    if (status.getError_msgs() != null && !status.getError_msgs().isEmpty()) {
-                        errMsg.append(String.join(",", status.getError_msgs()));
-                    }
-                    errMsg.append(";");
-                }
-            } catch (Exception e) {
-                LOG.warn("set remote fe: {} config failed", fe.getHost(), e);
-                errMsg.append("set config for fe[").append(fe.getHost()).append("] failed: ").append(e.getMessage());
-            }
+            errMsg.append(callFrontNodeSetConfig(stmt, fe, timeout, errMsg));
         }
-        if (errMsg.length() > 0) {
-            throw new InvalidConfException(ErrorCode.ERROR_SET_CONFIG_FAILED, errMsg.toString());
+        if (!errMsg.isEmpty()) {
+            ErrorReport.reportDdlException(ErrorCode.ERROR_SET_CONFIG_FAILED, errMsg.toString());
         }
     }
 
-    public static synchronized void setFrontendConfig(Map<String, String> configs) throws InvalidConfException {
+    private static synchronized StringBuilder callFrontNodeSetConfig(AdminSetConfigStmt stmt, Frontend fe, int timeout,
+                                                                     StringBuilder errMsg) {
+        TSetConfigRequest request = new TSetConfigRequest();
+        request.setKeys(Lists.newArrayList(stmt.getConfig().getKey()));
+        request.setValues(Lists.newArrayList(stmt.getConfig().getValue()));
+        request.setIs_persistent(stmt.isPersistent());
+        request.setUser_identity(ConnectContext.get().getCurrentUserIdentity().getUser());
+        try {
+            TSetConfigResponse response = ThriftRPCRequestExecutor.call(
+                    ThriftConnectionPool.frontendPool,
+                    new TNetworkAddress(fe.getHost(), fe.getRpcPort()),
+                    timeout,
+                    client -> client.setConfig(request));
+            TStatus status = response.getStatus();
+            if (status.getStatus_code() != TStatusCode.OK) {
+                errMsg.append("set config for fe[").append(fe.getHost()).append("] failed: ");
+                if (status.getError_msgs() != null && status.getError_msgs().size() > 0) {
+                    errMsg.append(String.join(",", status.getError_msgs()));
+                }
+                errMsg.append(";");
+            }
+        } catch (Exception e) {
+            LOG.warn("set remote fe: {} config failed", fe.getHost(), e);
+            errMsg.append("set config for fe[").append(fe.getHost()).append("] failed: ").append(e.getMessage());
+        }
+        return errMsg;
+    }
+
+    public static synchronized void setFrontendConfig(Map<String, String> configs, boolean isPersisted, String userIdentity)
+            throws InvalidConfException {
         for (Map.Entry<String, String> entry : configs.entrySet()) {
-            ConfigBase.setMutableConfig(entry.getKey(), entry.getValue());
+            ConfigBase.setMutableConfig(entry.getKey(), entry.getValue(), isPersisted, userIdentity);
         }
     }
 }
