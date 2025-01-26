@@ -119,7 +119,9 @@ import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.optimizer.LogicalPlanPrinter;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
-import com.starrocks.sql.optimizer.OptimizerConfig;
+import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.OptimizerFactory;
+import com.starrocks.sql.optimizer.OptimizerOptions;
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -847,21 +849,19 @@ public class UtFrameUtils {
     public static OptExpression getQueryOptExpression(ConnectContext connectContext,
                                                       ColumnRefFactory columnRefFactory,
                                                       LogicalPlan logicalPlan,
-                                                      OptimizerConfig optimizerConfig) {
+                                                      OptimizerOptions optimizerOptions) {
         OptExpression optimizedPlan;
         try (Timer t = Tracers.watchScope("Optimizer")) {
             Optimizer optimizer = null;
-            if (optimizerConfig != null) {
-                optimizer = new Optimizer(optimizerConfig);
-            } else {
-                optimizer = new Optimizer();
+            OptimizerContext context = OptimizerFactory.mockContext(connectContext, columnRefFactory);
+            if (optimizerOptions != null) {
+                context.setOptimizerOptions(optimizerOptions);
             }
+            optimizer = OptimizerFactory.create(context);
             optimizedPlan = optimizer.optimize(
-                        connectContext,
                         logicalPlan.getRoot(),
                         new PhysicalPropertySet(),
-                        new ColumnRefSet(logicalPlan.getOutputColumn()),
-                        columnRefFactory);
+                    new ColumnRefSet(logicalPlan.getOutputColumn()));
         }
         return optimizedPlan;
     }
@@ -1442,9 +1442,9 @@ public class UtFrameUtils {
             Assert.fail("Parse query failed:" + DebugUtil.getStackTrace(e));
         }
         LogicalPlan logicalPlan = UtFrameUtils.getQueryLogicalPlan(connectContext, columnRefFactory, statement);
-        OptimizerConfig optimizerConfig = new OptimizerConfig(OptimizerConfig.OptimizerAlgorithm.RULE_BASED);
+        OptimizerOptions optimizerOptions = new OptimizerOptions(OptimizerOptions.OptimizerStrategy.RULE_BASED);
         OptExpression optExpression = UtFrameUtils.getQueryOptExpression(connectContext, columnRefFactory,
-                logicalPlan, optimizerConfig);
+                logicalPlan, optimizerOptions);
         return optExpression;
     }
 

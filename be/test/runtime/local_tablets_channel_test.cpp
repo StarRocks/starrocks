@@ -233,6 +233,9 @@ TEST_F(LocalTabletsChannelTest, test_profile) {
     ASSERT_TRUE(profile->get_counter("OpenRpcTime")->value() > 0);
     ASSERT_EQ(1, profile->get_counter("AddChunkRpcCount")->value());
     ASSERT_TRUE(profile->get_counter("AddChunkRpcTime")->value() > 0);
+    ASSERT_TRUE(profile->get_counter("SubmitWriteTaskTime")->value() > 0);
+    ASSERT_TRUE(profile->get_counter("SubmitCommitTaskTime")->value() > 0);
+    ASSERT_EQ(0, profile->get_counter("WaitDrainSenderTime")->value());
     ASSERT_EQ(chunk.num_rows(), profile->get_counter("AddRowNum")->value());
     auto* primary_replicas_profile = profile->get_child("PrimaryReplicas");
     ASSERT_NE(nullptr, primary_replicas_profile);

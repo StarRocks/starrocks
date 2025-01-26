@@ -20,8 +20,12 @@ import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.UpdateStmt;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class DMLStmtAnalyzer {
+    private static final Logger LOGGER = LoggerFactory.getLogger(DMLStmtAnalyzer.DMLStmtAnalyzerVisitor.class);
+
     public static void analyze(DmlStmt stmt, ConnectContext context) {
         new DMLStmtAnalyzer.DMLStmtAnalyzerVisitor().analyze(stmt, context);
     }

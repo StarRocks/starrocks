@@ -1493,6 +1493,12 @@ public class Config extends ConfigBase {
     @ConfField
     public static int tablet_stat_update_interval_second = 300;  // 5 min
 
+    @ConfField(mutable = true, comment = "time interval to collect tablet info from backend")
+    public static long tablet_collect_interval_seconds = 60;
+
+    @ConfField(mutable = true, comment = "Timeout for calling BE get_tablets_info rpc")
+    public static int tablet_collect_timeout_seconds = 60;
+
     /**
      * The tryLock timeout configuration of globalStateMgr lock.
      * Normally it does not need to change, unless you need to test something.
@@ -2082,6 +2088,12 @@ public class Config extends ConfigBase {
             "the job status but improve the robustness")
     public static double statistic_full_statistics_failure_tolerance_ratio = 0.05;
 
+    @ConfField(mutable = true, comment = "Enable V2 health calculation based on changed rows")
+    public static boolean statistic_partition_healthy_v2 = true;
+
+    @ConfField(mutable = true, comment = "Health threshold for partitions")
+    public static double statistic_partition_health__v2_threshold = 0.95;
+
     @ConfField(mutable = true)
     public static long statistic_auto_collect_small_table_size = 5L * 1024 * 1024 * 1024; // 5G
 
@@ -2114,6 +2126,9 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long statistic_sample_collect_rows = 200000;
+
+    @ConfField(mutable = true)
+    public static double statistics_min_sample_row_ratio = 0.01;
 
     /**
      * The partition size of sample collect, default 1k partitions
@@ -3134,6 +3149,10 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "The max length for mv task run extra message's values(set/map) to avoid " +
             "occupying too much meta memory")
     public static int max_mv_task_run_meta_message_values_length = 16;
+
+    @ConfField(mutable = true, comment = "Whether enable to use list partition rather than range partition for " +
+            "all external table partition types")
+    public static boolean enable_mv_list_partition_for_external_table = false;
 
     /**
      * The refresh partition number when refreshing materialized view at once by default.

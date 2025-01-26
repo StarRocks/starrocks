@@ -27,6 +27,7 @@ import java.util.Objects;
 import java.util.Set;
 
 public class Projection {
+    // output column ref -> expression
     private final Map<ColumnRefOperator, ScalarOperator> columnRefMap;
     // Used for common operator compute result reuse, we need to compute
     // common sub operators firstly in BE

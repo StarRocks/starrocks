@@ -356,4 +356,33 @@ TEST_F(LakePersistentIndexTest, test_insert_delete) {
     config::l0_max_mem_usage = l0_max_mem_usage;
 }
 
+TEST_F(LakePersistentIndexTest, test_memtable_full) {
+    auto tablet_id = _tablet_metadata->id();
+    auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
+    ASSERT_OK(index->init(_tablet_metadata->sstable_meta()));
+
+    size_t old_l0_max_mem_usage = config::l0_max_mem_usage;
+    config::l0_max_mem_usage = 1073741824;
+    using Key = uint64_t;
+    vector<Key> keys;
+    vector<Slice> key_slices;
+    vector<IndexValue> values;
+    const int N = 10000;
+    keys.reserve(N);
+    key_slices.reserve(N);
+    for (int i = 0; i < N; i++) {
+        keys.emplace_back(i);
+        key_slices.emplace_back((uint8_t*)(&keys[i]), sizeof(Key));
+        values.emplace_back(i * 2);
+    }
+    ASSERT_OK(index->insert(N, key_slices.data(), values.data(), 0));
+
+    ASSERT_FALSE(index->is_memtable_full());
+    config::l0_max_mem_usage = index->memory_usage() + 1;
+    ASSERT_FALSE(index->is_memtable_full());
+    config::l0_max_mem_usage = index->memory_usage();
+    ASSERT_TRUE(index->is_memtable_full());
+    config::l0_max_mem_usage = old_l0_max_mem_usage;
+}
+
 } // namespace starrocks::lake

@@ -59,6 +59,7 @@ import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -95,6 +96,8 @@ import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
+import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
@@ -456,14 +459,13 @@ public class MaterializedViewAnalyzer {
                 // Build logical plan for view query
                 OptExprBuilder optExprBuilder = logicalPlan.getRootBuilder();
                 logicalPlan = new LogicalPlan(optExprBuilder, outputColumns, logicalPlan.getCorrelation());
-                Optimizer optimizer = new Optimizer();
+                OptimizerContext optimizerContext = OptimizerFactory.initContext(ctx, columnRefFactory);
+                Optimizer optimizer = OptimizerFactory.create(optimizerContext);
                 PhysicalPropertySet requiredPropertySet = PhysicalPropertySet.EMPTY;
                 OptExpression optimizedPlan = optimizer.optimize(
-                        ctx,
                         logicalPlan.getRoot(),
                         requiredPropertySet,
-                        new ColumnRefSet(logicalPlan.getOutputColumn()),
-                        columnRefFactory);
+                        new ColumnRefSet(logicalPlan.getOutputColumn()));
                 optimizedPlan.deriveMVProperty();
 
                 // TODO: refine rules for mv plan
@@ -1028,14 +1030,19 @@ public class MaterializedViewAnalyzer {
                 // - otherwise use range partition as before.
                 // To be compatible with old implementations, if the partition column is not a string type,
                 // still use range partition.
-                // TODO: remove this compatibility code in the future, use list partition directly later.
-                if (partitionExprType.isStringType() &&
-                        mvPartitionByExprs.stream().allMatch(t -> t instanceof SlotRef) &&
-                        !(partitionRefTableExpr instanceof FunctionCallExpr)) {
+                // NOTE: If enable_mv_list_partition_for_external_table is true, create list partition mv
+                // for all external tables. Otherwise, use original range partition instead.
+                if (Config.enable_mv_list_partition_for_external_table) {
                     statement.setPartitionType(PartitionType.LIST);
                 } else {
-                    statement.setPartitionType(PartitionType.RANGE);
-                    checkRangePartitionColumnLimit(mvPartitionByExprs);
+                    if (partitionExprType.isStringType() &&
+                            mvPartitionByExprs.stream().allMatch(t -> t instanceof SlotRef) &&
+                            !(partitionRefTableExpr instanceof FunctionCallExpr)) {
+                        statement.setPartitionType(PartitionType.LIST);
+                    } else {
+                        statement.setPartitionType(PartitionType.RANGE);
+                        checkRangePartitionColumnLimit(mvPartitionByExprs);
+                    }
                 }
             }
         }

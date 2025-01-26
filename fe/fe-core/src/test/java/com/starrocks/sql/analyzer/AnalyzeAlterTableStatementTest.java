@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Lists;
@@ -76,7 +75,7 @@ public class AnalyzeAlterTableStatementTest {
     }
 
     @Test(expected = SemanticException.class)
-    public void testCompactionClause()  {
+    public void testCompactionClause() {
         new MockUp<RunMode>() {
             @Mock
             public RunMode getCurrentRunMode() {

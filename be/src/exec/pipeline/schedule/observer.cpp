@@ -46,8 +46,8 @@ void PipelineObserver::_do_update(int event) {
     auto sink = driver->sink_operator();
     auto source = driver->source_operator();
 
-    if (auto state = driver->driver_state(); state == DriverState::INPUT_EMPTY || state == DriverState::OUTPUT_FULL) {
-        TRACE_SCHEDULE_LOG << "notify driver:" << driver << " state:" << driver->driver_state()
+    if (!driver->is_finished() && !driver->pending_finish()) {
+        TRACE_SCHEDULE_LOG << "notify driver:" << driver << " state:" << driver->driver_state() << " event:" << event
                            << " in_block_queue:" << driver->is_in_blocked()
                            << " source finished:" << source->is_finished()
                            << " operator has output:" << source->has_output()
@@ -82,6 +82,13 @@ std::string Observable::to_string() const {
         str += observer->driver()->to_readable_string() + "\n";
     }
     return str;
+}
+
+void Observable::notify_runtime_filter_timeout() {
+    for (auto* observer : _observers) {
+        observer->driver()->set_all_global_rf_timeout();
+        observer->source_trigger();
+    }
 }
 
 } // namespace starrocks::pipeline

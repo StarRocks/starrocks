@@ -140,10 +140,11 @@ import com.starrocks.lake.StarMgrMetaSyncer;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.compaction.CompactionControlScheduler;
 import com.starrocks.lake.compaction.CompactionMgr;
-import com.starrocks.lake.snapshot.ClusterSnapshotCheckpointScheduler;
 import com.starrocks.lake.snapshot.ClusterSnapshotMgr;
 import com.starrocks.lake.vacuum.AutovacuumDaemon;
 import com.starrocks.leader.CheckpointController;
+import com.starrocks.leader.ReportHandler;
+import com.starrocks.leader.TabletCollector;
 import com.starrocks.leader.TaskRunStateSynchronizer;
 import com.starrocks.listener.GlobalLoadJobListenerBus;
 import com.starrocks.load.DeleteMgr;
@@ -365,8 +366,6 @@ public class GlobalStateMgr {
     private CheckpointWorker checkpointWorker;
     private boolean checkpointWorkerStarted = false;
 
-    private ClusterSnapshotCheckpointScheduler clusterSnapshotCheckpointScheduler = null;
-
     private HAProtocol haProtocol = null;
 
     private final JournalObservable journalObservable;
@@ -524,6 +523,8 @@ public class GlobalStateMgr {
     private final ClusterSnapshotMgr clusterSnapshotMgr;
 
     private final SqlBlackList sqlBlackList;
+    private final ReportHandler reportHandler;
+    private final TabletCollector tabletCollector;
 
     public NodeMgr getNodeMgr() {
         return nodeMgr;
@@ -830,10 +831,18 @@ public class GlobalStateMgr {
                         "query-deploy", true);
 
         this.warehouseIdleChecker = new WarehouseIdleChecker();
+
+        this.reportHandler = new ReportHandler();
+        this.tabletCollector = new TabletCollector();
     }
 
     public static void destroyCheckpoint() {
         if (CHECKPOINT != null) {
+            try {
+                CHECKPOINT.shutdown();
+            } catch (Exception e) {
+                LOG.warn("exception when destroy checkpoint", e);
+            }
             CHECKPOINT = null;
         }
     }
@@ -1328,12 +1337,6 @@ public class GlobalStateMgr {
         createBuiltinStorageVolume();
         resourceGroupMgr.createBuiltinResourceGroupsIfNotExist();
         keyMgr.initDefaultMasterKey();
-
-        // if leader change and the last cluster snapshot job has not been finished/error
-        // make the state as error, becase the job can not be continued in new leader.
-        if (clusterSnapshotMgr != null) {
-            clusterSnapshotMgr.resetLastUnFinishedAutomatedSnapshotJob();
-        }
     }
 
     public void setFrontendNodeType(FrontendNodeType newType) {
@@ -1355,10 +1358,6 @@ public class GlobalStateMgr {
         // start checkpoint thread
         checkpointController = new CheckpointController("global_state_checkpoint_controller", journal, "");
         checkpointController.start();
-
-        clusterSnapshotCheckpointScheduler = new ClusterSnapshotCheckpointScheduler(checkpointController,
-                                                  StarMgrServer.getCurrentState().getCheckpointController());
-        clusterSnapshotCheckpointScheduler.start();
 
         keyRotationDaemon.start();
 
@@ -1437,6 +1436,13 @@ public class GlobalStateMgr {
         temporaryTableCleaner.start();
 
         connectorTableTriggerAnalyzeMgr.start();
+
+        if (RunMode.isSharedDataMode()) {
+            clusterSnapshotMgr.startCheckpointScheduler(checkpointController,
+                                                        StarMgrServer.getCurrentState().getCheckpointController());
+        }
+        reportHandler.start();
+        tabletCollector.start();
     }
 
     // start threads that should run on all FE
@@ -1796,6 +1802,7 @@ public class GlobalStateMgr {
                 pipeManager.getRepo().save(imageWriter);
                 warehouseMgr.save(imageWriter);
                 sqlBlackList.save(imageWriter);
+                clusterSnapshotMgr.save(imageWriter);
             } catch (SRMetaBlockException e) {
                 LOG.error("Save meta block failed ", e);
                 throw new IOException("Save meta block failed ", e);
@@ -2707,5 +2714,14 @@ public class GlobalStateMgr {
 
     public WarehouseIdleChecker getWarehouseIdleChecker() {
         return warehouseIdleChecker;
+    }
+
+    public void shutdown() {
+        // in a single thread.
+        connectorMgr.shutdown();
+    }
+
+    public ReportHandler getReportHandler() {
+        return reportHandler;
     }
 }

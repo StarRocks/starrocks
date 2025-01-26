@@ -31,6 +31,8 @@ struct BitmapValuePacked {
 class BitmapIntersectAggregateFunction final
         : public AggregateFunctionBatchHelper<BitmapValuePacked, BitmapIntersectAggregateFunction> {
 public:
+    bool is_exception_safe() const override { return false; }
+
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr state, size_t row_num) const override {
         const auto* col = down_cast<const BitmapColumn*>(columns[0]);
         if (!this->data(state).initial) {

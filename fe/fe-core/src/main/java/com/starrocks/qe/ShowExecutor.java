@@ -374,18 +374,18 @@ public class ShowExecutor {
                         }
                     }
                 }
-
-                List<ShowMaterializedViewStatus> mvStatusList =
-                        listMaterializedViewStatus(dbName, materializedViews, singleTableMVs);
-                List<List<String>> rowSets = mvStatusList.stream().map(ShowMaterializedViewStatus::toResultSet)
-                        .collect(Collectors.toList());
-                return new ShowResultSet(statement.getMetaData(), rowSets);
             } catch (Exception e) {
                 LOG.warn("listMaterializedViews failed:", e);
                 throw e;
             } finally {
                 locker.unLockDatabase(db.getId(), LockType.READ);
             }
+
+            List<ShowMaterializedViewStatus> mvStatusList =
+                    listMaterializedViewStatus(dbName, materializedViews, singleTableMVs);
+            List<List<String>> rowSets = mvStatusList.stream().map(ShowMaterializedViewStatus::toResultSet)
+                    .collect(Collectors.toList());
+            return new ShowResultSet(statement.getMetaData(), rowSets);
         }
 
         @Override

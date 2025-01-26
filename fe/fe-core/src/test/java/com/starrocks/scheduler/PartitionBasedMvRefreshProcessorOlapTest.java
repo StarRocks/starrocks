@@ -25,6 +25,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.RuntimeProfile;
@@ -43,6 +44,7 @@ import com.starrocks.sql.LoadPlanner;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
@@ -247,6 +249,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                 .getTable(testDb.getFullName(), "union_all_mv"));
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+
         try {
             // base table partition insert data
             String insertSql = "insert into tbl5 partition(p4) values('2022-04-01', '2021-04-01 00:02:11', 3, 10);";
@@ -2543,5 +2546,84 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                     }
                 });
         Config.enable_mv_refresh_query_rewrite = true;
+    }
+
+    @Test
+    public void testTaskRunWithSessionVariables() {
+        starRocksAssert.withTable(new MTable("mockTbl", "k2",
+                        List.of(
+                                "k1 date",
+                                "k2 int",
+                                "v1 int"
+                        ),
+                        "k1",
+                        List.of(
+                                "PARTITION p0 values [('2021-12-01'),('2022-01-01'))",
+                                "PARTITION p1 values [('2022-01-01'),('2022-02-01'))",
+                                "PARTITION p2 values [('2022-02-01'),('2022-03-01'))"
+                        )
+                ).withValues(List.of(
+                        "'2021-12-02',2,10",
+                        "'2022-01-02',2,10",
+                        "'2022-02-02',2,10"
+                )),
+                () -> {
+                    starRocksAssert.withMaterializedView("create materialized view mock_mv0 \n" +
+                                    "partition by k1 \n" +
+                                    "distributed by hash(k2) buckets 10\n" +
+                                    "refresh deferred manual\n" +
+                                    "properties(" +
+                                    "   'replication_num' = '1', " +
+                                    "   'partition_refresh_number'='1'" +
+                                    ")\n" +
+                                    "as select k1, k2 from mockTbl;",
+                            (obj) -> {
+                                final String mvName = (String) obj;
+                                final Database db =
+                                        GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
+                                final MaterializedView mv =
+                                        ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                                .getTable(db.getFullName(), mvName));
+                                final Task task = TaskBuilder.buildMvTask(mv, db.getFullName());
+                                final TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+                                taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+
+                                final TaskRunStatus status = taskRun.getStatus();
+                                new MockUp<TaskRun>() {
+                                    @Mock
+                                    public ConnectContext buildTaskRunConnectContext() {
+                                        ConnectContext context = new ConnectContext();
+                                        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+                                        context.setCurrentCatalog(task.getCatalogName());
+                                        context.setDatabase(task.getDbName());
+                                        context.setQualifiedUser(status.getUser());
+                                        if (status.getUserIdentity() != null) {
+                                            context.setCurrentUserIdentity(status.getUserIdentity());
+                                        } else {
+                                            context.setCurrentUserIdentity(
+                                                    UserIdentity.createAnalyzedUserIdentWithIp(status.getUser(), "%"));
+                                        }
+                                        context.setCurrentRoleIds(context.getCurrentUserIdentity());
+                                        context.getState().reset();
+                                        context.setQueryId(UUID.fromString(status.getQueryId()));
+                                        context.setIsLastStmt(true);
+                                        context.getSessionVariable().setAnalyzeForMv("full");
+                                        context.setThreadLocalInfo();
+                                        return context;
+                                    }
+                                };
+                                FeConstants.runningUnitTest = false;
+                                // refresh materialized view
+                                taskRun.executeTaskRun();
+                                FeConstants.runningUnitTest = true;
+
+                                final PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor)
+                                        taskRun.getProcessor();
+                                final MvTaskRunContext mvTaskRunContext = processor.getMvContext();
+                                final String postRun = mvTaskRunContext.getPostRun();
+                                Assert.assertTrue(postRun.contains("ANALYZE TABLE "));
+                            });
+                }
+        );
     }
 }

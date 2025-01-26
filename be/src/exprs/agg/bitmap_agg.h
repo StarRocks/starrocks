@@ -30,6 +30,8 @@ public:
     using InputColumnType = RunTimeColumnType<LT>;
     using InputCppType = RunTimeCppType<LT>;
 
+    bool is_exception_safe() const override { return false; }
+
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr state, size_t row_num) const override {
         const auto* col = down_cast<const InputColumnType*>(columns[0]);
         auto value = col->get_data()[row_num];

@@ -84,6 +84,14 @@ public class ThreadPoolManager {
 
     private static final long KEEP_ALIVE_TIME = 60L;
 
+    private static final ThreadPoolExecutor DICT_CACHE_THREAD =
+            ThreadPoolManager.newDaemonCacheThreadPool(Config.dict_collect_thread_pool_size, "cache-dict",
+            false);
+
+    public static ThreadPoolExecutor getDictCacheThread() {
+        return DICT_CACHE_THREAD;
+    }
+
     public static void registerAllThreadPoolMetric() {
         for (Map.Entry<String, ThreadPoolExecutor> entry : nameToThreadPoolMap.entrySet()) {
             registerThreadPoolMetric(entry.getKey(), entry.getValue());

@@ -46,7 +46,6 @@ import com.google.gson.ToNumberPolicy;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.VectorSearchOptions;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.CompressionUtils;
@@ -54,6 +53,7 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.PlanMode;
 import com.starrocks.datacache.DataCachePopulateMode;
 import com.starrocks.monitor.unit.TimeValue;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.VariableMgr.VarAttr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -85,6 +85,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.io.Serializable;
 import java.lang.reflect.Field;
+import java.lang.reflect.Type;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -2217,6 +2218,18 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableParallelPrepareMetadata = enableParallelPrepareMetadata;
     }
 
+    public void setAnnParams(String annParams) {
+        this.annParams = annParams;
+    }
+
+    public Map<String, String> getAnnParams() {
+        if (Strings.isNullOrEmpty(annParams)) {
+            return Maps.newHashMap();
+        }
+        Type type = new com.google.gson.reflect.TypeToken<Map<String, String>>() {}.getType();
+        return GsonUtils.GSON.fromJson(annParams, type);
+    }
+
     public String getHiveTempStagingDir() {
         return hiveTempStagingDir;
     }
@@ -2424,7 +2437,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enablePhasedScheduler = false;
 
     @VarAttr(name = ENABLE_PIPELINE_EVENT_SCHEDULER)
-    private boolean enablePipelineEventScheduler = false;
+    private boolean enablePipelineEventScheduler = true;
 
     @VarAttr(name = PHASED_SCHEDULER_MAX_CONCURRENCY)
     private int phasedSchedulerMaxConcurrency = 2;
@@ -4664,7 +4677,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setConnector_io_tasks_slow_io_latency_ms(connectorIoTasksSlowIoLatency);
         tResult.setConnector_scan_use_query_mem_ratio(connectorScanUseQueryMemRatio);
         tResult.setScan_use_query_mem_ratio(scanUseQueryMemRatio);
-        tResult.setAnn_params(VectorSearchOptions.readAnnParams(annParams));
+        tResult.setAnn_params(getAnnParams());
         tResult.setPq_refine_factor(pqRefineFactor);
         tResult.setK_factor(kFactor);
         tResult.setEnable_collect_table_level_scan_stats(enableCollectTableLevelScanStats);

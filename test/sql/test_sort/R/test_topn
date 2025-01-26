@@ -514,10 +514,6 @@ set group_execution_min_scan_rows=1;
 insert into tlow SELECT generate_series, if (generate_series<10, null, generate_series%10), generate_series, generate_series FROM TABLE(generate_series(1,  40960));
 -- result:
 -- !result
-analyze full table tl;
--- result:
-E: (1064, 'Getting analyzing error. Detail message: Table tl is not found.')
--- !result
 select count(distinct c1) from tlow;
 -- result:
 10
