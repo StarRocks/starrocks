@@ -17,6 +17,7 @@
 #include "formats/parquet/column_converter.h"
 #include "formats/parquet/column_reader.h"
 #include "formats/parquet/stored_column_reader.h"
+#include "formats/parquet/utils.h"
 #include "util/thrift_util.h"
 
 namespace starrocks::parquet {
@@ -145,6 +146,7 @@ public:
     }
 
     void set_can_lazy_decode(bool can_lazy_decode) override {
+        _can_lazy_convert = can_lazy_decode;
         _can_lazy_decode = can_lazy_decode && _col_type->is_string_type() && column_all_pages_dict_encoded();
     }
 
@@ -170,6 +172,15 @@ public:
     }
 
 private:
+    template <bool LAZY_DECODE, bool LAZY_CONVERT>
+    Status _read_range_impl(const Range<uint64_t>& range, const Filter* filter, ColumnContentType content_type,
+                            ColumnPtr& dst);
+
+    template <bool LAZY_DECODE, bool LAZY_CONVERT>
+    Status _fill_dst_column_impl(ColumnPtr& dst, ColumnPtr& src);
+
+    Status _dict_decode(ColumnPtr& dst, ColumnPtr& src);
+
     std::unique_ptr<ColumnConverter> _converter;
 
     std::unique_ptr<ColumnDictFilterContext> _dict_filter_ctx;
@@ -177,11 +188,13 @@ private:
 
     // _can_lazy_decode means string type and all page dict code
     bool _can_lazy_decode = false;
+    bool _can_lazy_convert = false;
     // we use lazy decode adaptively because of RLE && decoder may be better than filter && decoder
     static constexpr double FILTER_RATIO = 0.2;
     bool _need_lazy_decode = false;
     // dict code
-    ColumnPtr _dict_code = nullptr;
+    ColumnPtr _tmp_code_column = nullptr;
+    ColumnPtr _tmp_intermediate_column = nullptr;
     ColumnPtr _ori_column = nullptr;
 };
 
