@@ -187,7 +187,12 @@ public class IcebergRESTCatalog implements IcebergCatalog {
 
     @Override
     public List<String> listTables(String dbName) {
+<<<<<<< HEAD
         List<TableIdentifier> tableIdentifiers = delegate.listTables(Namespace.of(dbName));
+=======
+        Namespace ns = convertDbNameToNamespace(dbName);
+        List<TableIdentifier> tableIdentifiers = new ArrayList<>(delegate.listTables(ns));
+>>>>>>> e52cb9e626 ([BugFix] Fix bugs for iceberg rest catalog (#55416))
         List<TableIdentifier> viewIdentifiers = new ArrayList<>();
         try {
             viewIdentifiers = delegate.listViews(Namespace.of(dbName));
@@ -248,8 +253,14 @@ public class IcebergRESTCatalog implements IcebergCatalog {
         return true;
     }
 
+<<<<<<< HEAD
     public boolean dropView(String dbName, String viewName) {
         return delegate.dropView(TableIdentifier.of(dbName, viewName));
+=======
+    @Override
+    public boolean dropView(String dbName, String viewName) {
+        return delegate.dropView(TableIdentifier.of(convertDbNameToNamespace(dbName), viewName));
+>>>>>>> e52cb9e626 ([BugFix] Fix bugs for iceberg rest catalog (#55416))
     }
 
     @Override

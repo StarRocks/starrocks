@@ -187,6 +187,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         return delegate.createView(connectorViewDefinition, replace);
     }
 
+    @Override
     public boolean dropView(String dbName, String viewName) {
         return delegate.dropView(dbName, viewName);
     }
