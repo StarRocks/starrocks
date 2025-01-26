@@ -304,7 +304,7 @@ public class GlobalTransactionMgr implements MemoryTrackable {
             dbTransactionMgr.prepareTransaction(transactionId, tabletCommitInfos, tabletFailInfos, attachment, true);
             LOG.debug("prepare transaction: {} success", transactionId);
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(dbId, tableId, LockType.WRITE);
+            locker.unLockTablesWithIntensiveDbLock(db, tableId, LockType.WRITE);
         }
     }
 
