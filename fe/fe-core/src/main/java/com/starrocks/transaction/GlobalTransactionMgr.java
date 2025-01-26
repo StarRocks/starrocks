@@ -275,13 +275,37 @@ public class GlobalTransactionMgr implements MemoryTrackable {
                                    List<TabletFailInfo> tabletFailInfos,
                                    TxnCommitAttachment txnCommitAttachment)
             throws UserException {
-        if (Config.disable_load_job) {
-            throw new TransactionCommitFailedException("disable_load_job is set to true, all load jobs are prevented");
-        }
+        // timeout is 0, means no timeout
+        prepareTransaction(dbId, transactionId, tabletCommitInfos, tabletFailInfos, txnCommitAttachment, 0);
+    }
 
+    public void prepareTransaction(
+            @NotNull long dbId, long transactionId, @NotNull List<TabletCommitInfo> tabletCommitInfos,
+            @NotNull List<TabletFailInfo> tabletFailInfos,
+            @Nullable TxnCommitAttachment attachment, long timeoutMs) throws UserException {
+        TransactionState transactionState = getTransactionState(dbId, transactionId);
+        List<Long> tableId = transactionState.getTableIdList();
         LOG.debug("try to pre commit transaction: {}", transactionId);
-        DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
-        dbTransactionMgr.prepareTransaction(transactionId, tabletCommitInfos, tabletFailInfos, txnCommitAttachment, true);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        if (db == null) {
+            LOG.warn("Database {} does not exist", dbId);
+            throw new UserException("Database[" + dbId + "] does not exist");
+        }
+        Locker locker = new Locker();
+        if (!locker.tryLockTablesWithIntensiveDbLock(db, tableId, LockType.WRITE, timeoutMs, TimeUnit.MILLISECONDS)) {
+            throw new UserException("get database write lock timeout, database=" + dbId + ", timeout=" + timeoutMs + "ms");
+        }
+        try {
+            if (Config.disable_load_job) {
+                throw new TransactionCommitFailedException("disable_load_job is set to true, all load jobs are prevented");
+            }
+
+            DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
+            dbTransactionMgr.prepareTransaction(transactionId, tabletCommitInfos, tabletFailInfos, attachment, true);
+            LOG.debug("prepare transaction: {} success", transactionId);
+        } finally {
+            locker.unLockTablesWithIntensiveDbLock(db, tableId, LockType.WRITE);
+        }
     }
 
     public void commitPreparedTransaction(long dbId, long transactionId, long timeoutMillis)

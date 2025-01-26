@@ -17,7 +17,6 @@ package com.starrocks.http;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.google.common.collect.ImmutableMap;
-import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
@@ -660,7 +659,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                             anyLong, anyLong,
                             (List<TabletCommitInfo>) any,
                             (List<TabletFailInfo>) any,
-                            (TxnCommitAttachment) any);
+                            (TxnCommitAttachment) any, anyLong);
                     times = 1;
                     result = new UserException("prepare transaction error");
 
@@ -694,7 +693,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                             anyLong, anyLong,
                             (List<TabletCommitInfo>) any,
                             (List<TabletFailInfo>) any,
-                            (TxnCommitAttachment) any);
+                            (TxnCommitAttachment) any, anyLong);
                     times = 1;
                 }
             };
@@ -901,7 +900,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                     times = 1;
                     result = newTxnState(txnId, label, LoadJobSourceType.FRONTEND_STREAMING, TransactionStatus.PREPARED);
 
-                    globalTransactionMgr.commitPreparedTransaction((Database) any, anyLong, anyLong);
+                    globalTransactionMgr.commitPreparedTransaction(anyLong, anyLong, anyLong);
                     times = 1;
                     result = new UserException("commit prepared transaction error");
                 }
@@ -936,7 +935,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                     times = 1;
                     result = newTxnState(txnId, label, LoadJobSourceType.FRONTEND_STREAMING, TransactionStatus.PREPARED);
 
-                    globalTransactionMgr.commitPreparedTransaction((Database) any, anyLong, anyLong);
+                    globalTransactionMgr.commitPreparedTransaction(anyLong, anyLong, anyLong);
                     times = 1;
                 }
             };
@@ -1051,7 +1050,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                             newTxnState(txnId, label, LoadJobSourceType.BYPASS_WRITE, TransactionStatus.PREPARED)
                     );
 
-                    globalTransactionMgr.commitPreparedTransaction((Database) any, anyLong, anyLong);
+                    globalTransactionMgr.commitPreparedTransaction(anyLong, anyLong, anyLong);
                     times = 1;
                     result = new UserException("commit prepared transaction error");
                 }
@@ -1081,7 +1080,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                             newTxnState(txnId, label, LoadJobSourceType.BYPASS_WRITE, TransactionStatus.PREPARED)
                     );
 
-                    globalTransactionMgr.commitPreparedTransaction((Database) any, anyLong, anyLong);
+                    globalTransactionMgr.commitPreparedTransaction(anyLong, anyLong, anyLong);
                     times = 1;
                 }
             };
@@ -1128,10 +1127,10 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                         anyLong, anyLong,
                         (List<TabletCommitInfo>) any,
                         (List<TabletFailInfo>) any,
-                        (TxnCommitAttachment) any);
+                        (TxnCommitAttachment) any, anyLong);
                 times = 1;
 
-                globalTransactionMgr.commitPreparedTransaction((Database) any, anyLong, anyLong);
+                globalTransactionMgr.commitPreparedTransaction(anyLong, anyLong, anyLong);
                 times = 1;
             }
         };
