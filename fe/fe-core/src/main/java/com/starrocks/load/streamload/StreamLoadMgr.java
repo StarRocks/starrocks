@@ -43,6 +43,7 @@ import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TUniqueId;
 import com.starrocks.warehouse.WarehouseLoadInfoBuilder;
 import com.starrocks.warehouse.WarehouseLoadStatusInfo;
 import io.netty.handler.codec.http.HttpHeaders;
@@ -108,14 +109,16 @@ public class StreamLoadMgr implements MemoryTrackable {
         lock = new ReentrantReadWriteLock(true);
     }
 
-    public void beginLoadTask(String dbName, String tableName, String label, String user, String clientIp, long timeoutMillis,
-                              int channelNum, int channelId, TransactionResult resp) throws UserException {
-        beginLoadTask(dbName, tableName, label, user, clientIp, timeoutMillis, channelNum, channelId, resp,
+    public void beginLoadTaskFromFrontend(String dbName, String tableName, String label, String user,
+                                          String clientIp, long timeoutMillis, int channelNum,
+                                          int channelId, TransactionResult resp) throws UserException {
+        beginLoadTaskFromFrontend(dbName, tableName, label, user, clientIp, timeoutMillis, channelNum, channelId, resp,
                 WarehouseManager.DEFAULT_WAREHOUSE_ID);
     }
 
-    public void beginLoadTask(String dbName, String tableName, String label, String user, String clientIp, long timeoutMillis,
-                              int channelNum, int channelId, TransactionResult resp, long warehouseId) throws UserException {
+    public void beginLoadTaskFromFrontend(String dbName, String tableName, String label, String user,
+                                          String clientIp, long timeoutMillis, int channelNum, int channelId,
+                                          TransactionResult resp, long warehouseId) throws UserException {
         StreamLoadTask task = null;
         Database db = checkDbName(dbName);
         long dbId = db.getId();
@@ -124,7 +127,7 @@ public class StreamLoadMgr implements MemoryTrackable {
         try {
             task = idToStreamLoadTask.get(label);
             if (task != null) {
-                task.beginTxn(channelId, channelNum, resp);
+                task.beginTxnFromFrontend(channelId, channelNum, resp);
                 return;
             }
         } finally {
@@ -139,14 +142,14 @@ public class StreamLoadMgr implements MemoryTrackable {
             // double check here
             task = idToStreamLoadTask.get(label);
             if (task != null) {
-                task.beginTxn(channelId, channelNum, resp);
+                task.beginTxnFromFrontend(channelId, channelNum, resp);
                 return;
             }
             task = createLoadTaskWithoutLock(db, table, label, user, clientIp, timeoutMillis, channelNum, channelId, warehouseId);
             LOG.info(new LogBuilder(LogKey.STREAM_LOAD_TASK, task.getId())
                     .add("msg", "create load task").build());
             addLoadTask(task);
-            task.beginTxn(channelId, channelNum, resp);
+            task.beginTxnFromFrontend(channelId, channelNum, resp);
             createTask = true;
         } finally {
             writeUnlock();
@@ -157,8 +160,10 @@ public class StreamLoadMgr implements MemoryTrackable {
     }
 
     // for sync stream load task
-    public void beginLoadTask(String dbName, String tableName, String label, String user, String clientIp, long timeoutMillis,
-                              TransactionResult resp, boolean isRoutineLoad, long warehouseId) throws UserException {
+    public void beginLoadTaskFromBackend(String dbName, String tableName, String label, TUniqueId requestId,
+                                         String user, String clientIp, long timeoutMillis,
+                                         TransactionResult resp, boolean isRoutineLoad, long warehouseId) throws
+            UserException {
         StreamLoadTask task = null;
         Database db = checkDbName(dbName);
         long dbId = db.getId();
@@ -171,7 +176,7 @@ public class StreamLoadMgr implements MemoryTrackable {
             LOG.info(new LogBuilder(LogKey.STREAM_LOAD_TASK, task.getId())
                     .add("msg", "create load task").build());
 
-            task.beginTxn(0, 1, resp);
+            task.beginTxnFromBackend(requestId, resp);
             addLoadTask(task);
         } finally {
             writeUnlock();
