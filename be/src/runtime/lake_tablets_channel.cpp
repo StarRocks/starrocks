@@ -185,8 +185,13 @@ private:
     std::unique_ptr<MemPool> _mem_pool;
     bool _is_incremental_channel{false};
     lake::DeltaWriterFinishMode _finish_mode{lake::DeltaWriterFinishMode::kWriteTxnLog};
+<<<<<<< HEAD
 
     std::set<int64_t> _immutable_partition_ids;
+=======
+    TxnLogCollector _txn_log_collector;
+
+>>>>>>> b4b3ce880a ([BugFix] Fix backend crash due to _immutable_partition_ids unsafe concurrent access (#55085))
     std::map<string, string> _column_to_expr_value;
 
     // Profile counters
@@ -469,7 +474,8 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
             response->add_immutable_tablet_ids(tablet_id);
             response->add_immutable_partition_ids(writer->partition_id());
             immutable_tablet_ids.insert(tablet_id);
-            _immutable_partition_ids.insert(writer->partition_id());
+
+            _insert_immutable_partition(writer->partition_id());
         }
     }
 
@@ -524,7 +530,7 @@ static void null_callback(const Status& status) {
 }
 
 void LakeTabletsChannel::_flush_stale_memtables() {
-    if (_immutable_partition_ids.empty() && config::stale_memtable_flush_time_sec <= 0) {
+    if (_is_immutable_partition_empty() && config::stale_memtable_flush_time_sec <= 0) {
         return;
     }
     bool high_mem_usage = false;
@@ -538,7 +544,7 @@ void LakeTabletsChannel::_flush_stale_memtables() {
         bool log_flushed = false;
         auto last_write_ts = writer->last_write_ts();
         if (last_write_ts > 0) {
-            if (_immutable_partition_ids.count(writer->partition_id()) > 0) {
+            if (_has_immutable_partition(writer->partition_id())) {
                 if (high_mem_usage) {
                     log_flushed = true;
                     writer->flush(null_callback);

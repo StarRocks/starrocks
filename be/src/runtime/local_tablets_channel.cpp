@@ -380,8 +380,9 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
         if (writer->is_immutable() && immutable_tablet_ids.count(tablet_id) == 0) {
             response->add_immutable_tablet_ids(tablet_id);
             response->add_immutable_partition_ids(writer->partition_id());
-            _immutable_partition_ids.insert(writer->partition_id());
             immutable_tablet_ids.insert(tablet_id);
+
+            _insert_immutable_partition(writer->partition_id());
         }
     }
 
@@ -454,7 +455,7 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
 }
 
 void LocalTabletsChannel::_flush_stale_memtables() {
-    if (_immutable_partition_ids.empty() && config::stale_memtable_flush_time_sec <= 0) {
+    if (_is_immutable_partition_empty() && config::stale_memtable_flush_time_sec <= 0) {
         return;
     }
     bool high_mem_usage = false;
@@ -477,7 +478,7 @@ void LocalTabletsChannel::_flush_stale_memtables() {
         bool need_flush = false;
         auto last_write_ts = writer->last_write_ts();
         if (last_write_ts > 0) {
-            if (_immutable_partition_ids.count(writer->partition_id()) > 0) {
+            if (_has_immutable_partition(writer->partition_id())) {
                 if (high_mem_usage) {
                     // immutable tablet flush stale memtable immediately when high mem usage
                     need_flush = true;
