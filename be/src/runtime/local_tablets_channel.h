@@ -218,7 +218,10 @@ private:
     mutable bthread::Mutex _status_lock;
     Status _status = Status::OK();
 
+<<<<<<< HEAD
     std::set<int64_t> _immutable_partition_ids;
+=======
+>>>>>>> b4b3ce880a ([BugFix] Fix backend crash due to _immutable_partition_ids unsafe concurrent access (#55085))
     std::map<string, string> _column_to_expr_value;
 };
 
