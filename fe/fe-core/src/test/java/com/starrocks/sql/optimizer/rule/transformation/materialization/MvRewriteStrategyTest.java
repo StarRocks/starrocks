@@ -18,6 +18,8 @@ import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
+import com.starrocks.sql.optimizer.OptimizerFactory;
+import com.starrocks.sql.optimizer.QueryOptimizer;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
@@ -40,11 +42,11 @@ public class MvRewriteStrategyTest extends MVTestBase {
         try {
             StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             QueryStatement queryStatement = (QueryStatement) stmt;
-            ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-            LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, connectContext)
+            LogicalPlan logicalPlan =
+                    new RelationTransformer(optimizer.getContext().getColumnRefFactory(), connectContext)
                     .transformWithSelectLimit(queryStatement.getQueryRelation());
-            return optimizer.optimize(connectContext, logicalPlan.getRoot(), new PhysicalPropertySet(),
-                    new ColumnRefSet(logicalPlan.getOutputColumn()), columnRefFactory);
+            return optimizer.optimize(logicalPlan.getRoot(), new PhysicalPropertySet(),
+                    new ColumnRefSet(logicalPlan.getOutputColumn()));
         } catch (Exception e) {
             Assert.fail(e.getMessage());
             return null;
@@ -59,7 +61,8 @@ public class MvRewriteStrategyTest extends MVTestBase {
                 " as" +
                 " select t1a, id_date, t1b from table_with_partition");
         String sql =  "select t1a, id_date, t1b from table_with_partition";
-        Optimizer optimizer = new Optimizer();
+        QueryOptimizer optimizer = (QueryOptimizer) OptimizerFactory.create(
+                OptimizerFactory.mockContext(connectContext, new ColumnRefFactory()));
         OptExpression optExpression = optimize(optimizer, sql);
         Assert.assertTrue(optExpression != null);
         MvRewriteStrategy mvRewriteStrategy = optimizer.getMvRewriteStrategy();

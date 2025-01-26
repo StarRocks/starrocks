@@ -34,12 +34,14 @@ public class HiveConnector implements Connector {
     public static final String HIVE_METASTORE_CONNECTION_POOL_SIZE = "hive.metastore.connection.pool.size";
     private final Map<String, String> properties;
     private final String catalogName;
+    private final CatalogNameType catalogNameType;
     private final HiveConnectorInternalMgr internalMgr;
     private final HiveMetadataFactory metadataFactory;
 
     public HiveConnector(ConnectorContext context) {
         this.properties = context.getProperties();
         this.catalogName = context.getCatalogName();
+        this.catalogNameType = new CatalogNameType(catalogName, "hive");
         CloudConfiguration cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
         HdfsEnvironment hdfsEnvironment = new HdfsEnvironment(cloudConfiguration);
         this.internalMgr = new HiveConnectorInternalMgr(catalogName, properties, hdfsEnvironment);
@@ -83,7 +85,7 @@ public class HiveConnector implements Connector {
                     internalMgr.isEnableBackgroundRefreshHiveMetadata()) {
                 updateProcessor
                         .ifPresent(processor -> GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor()
-                                .registerCacheUpdateProcessor(catalogName, updateProcessor.get()));
+                                .registerCacheUpdateProcessor(catalogNameType, updateProcessor.get()));
             }
         }
     }
@@ -93,6 +95,6 @@ public class HiveConnector implements Connector {
         internalMgr.shutdown();
         metadataFactory.getCacheUpdateProcessor().ifPresent(HiveCacheUpdateProcessor::invalidateAll);
         GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor().unRegisterCacheUpdateProcessor(catalogName);
-        GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor().unRegisterCacheUpdateProcessor(catalogName);
+        GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor().unRegisterCacheUpdateProcessor(catalogNameType);
     }
 }

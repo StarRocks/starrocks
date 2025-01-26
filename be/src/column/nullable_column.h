@@ -254,7 +254,7 @@ public:
         _has_null = true;
         return true;
     }
-    ColumnPtr replicate(const Buffer<uint32_t>& offsets) override;
+    StatusOr<ColumnPtr> replicate(const Buffer<uint32_t>& offsets) override;
 
     size_t memory_usage() const override {
         return _data_column->memory_usage() + _null_column->memory_usage() + sizeof(bool);
@@ -282,6 +282,12 @@ public:
         _data_column.swap(src);
         null_column_data().insert(null_column_data().end(), _data_column->size(), 0);
         update_has_null();
+    }
+
+    void swap_null_column(Column& rhs) {
+        auto& r = down_cast<NullableColumn&>(rhs);
+        _null_column->swap_column(*r._null_column);
+        std::swap(_has_null, r._has_null);
     }
 
     void reset_column() override {

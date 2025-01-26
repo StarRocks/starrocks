@@ -157,7 +157,6 @@ public class FunctionSet {
 
     // Vector Index functions:
     public static final String APPROX_COSINE_SIMILARITY = "approx_cosine_similarity";
-    public static final String APPROX_COSINE_SIMILARITY_NORM = "approx_cosine_similarity_norm";
     public static final String APPROX_L2_DISTANCE = "approx_l2_distance";
 
     // Geo functions:
@@ -358,6 +357,7 @@ public class FunctionSet {
     public static final String ARRAY_GENERATE = "array_generate";
 
     public static final String ARRAY_TO_BITMAP = "array_to_bitmap";
+    public static final String ARRAY_FLATTEN = "array_flatten";
 
     // Bit functions:
     public static final String BITAND = "bitand";
@@ -652,7 +652,6 @@ public class FunctionSet {
     public static final Set<String> VECTOR_COMPUTE_FUNCTIONS =
             ImmutableSet.<String>builder()
                     .add(APPROX_COSINE_SIMILARITY)
-                    .add(APPROX_COSINE_SIMILARITY_NORM)
                     .add(APPROX_L2_DISTANCE)
                     .build();
 

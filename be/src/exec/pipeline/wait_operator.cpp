@@ -34,6 +34,7 @@ Status WaitSourceOperator::prepare(RuntimeState* state) {
         _wait_timer_task = std::move(timer);
         timespec abstime = butil::microseconds_to_timespec(butil::gettimeofday_us());
         abstime.tv_nsec += _wait_time_ns;
+        butil::timespec_normalize(&abstime);
         RETURN_IF_ERROR(fragment_ctx->pipeline_timer()->schedule(_wait_timer_task.get(), abstime));
     }
     return Status::OK();

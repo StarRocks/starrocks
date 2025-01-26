@@ -161,7 +161,7 @@ public:
 
     void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol = false) const override;
 
-    ColumnPtr replicate(const Buffer<uint32_t>& offsets) override;
+    StatusOr<ColumnPtr> replicate(const Buffer<uint32_t>& offsets) override;
 
     std::string get_name() const override { return "array-view-" + _elements->get_name(); }
 

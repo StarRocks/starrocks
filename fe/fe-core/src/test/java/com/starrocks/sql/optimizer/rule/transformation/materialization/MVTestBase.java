@@ -51,6 +51,7 @@ import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
+import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -128,6 +129,10 @@ public class MVTestBase extends StarRocksTestBase {
         return getFragmentPlan(sql, TExplainLevel.NORMAL, traceModule);
     }
 
+    public String getFragmentPlan(String sql, TExplainLevel level) throws Exception {
+        return getFragmentPlan(sql, level, null);
+    }
+
     public String getFragmentPlan(String sql, TExplainLevel level, String traceModule) throws Exception {
         Pair<String, Pair<ExecPlan, String>> result =
                 UtFrameUtils.getFragmentPlanWithTrace(connectContext, sql, traceModule);
@@ -144,6 +149,10 @@ public class MVTestBase extends StarRocksTestBase {
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), mvName);
         Assert.assertNotNull(table);
         return table;
+    }
+
+    protected MaterializedView getMv(String mvName) {
+        return getMv(DB_NAME, mvName);
     }
 
     protected MaterializedView getMv(String dbName, String mvName) {
@@ -224,13 +233,11 @@ public class MVTestBase extends StarRocksTestBase {
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
         LogicalPlan logicalPlan =
                 new RelationTransformer(columnRefFactory, connectContext).transformWithSelectLimit(query);
-        Optimizer optimizer = new Optimizer();
+        Optimizer optimizer = OptimizerFactory.create(OptimizerFactory.mockContext(connectContext, columnRefFactory));
         return optimizer.optimize(
-                connectContext,
                 logicalPlan.getRoot(),
                 new PhysicalPropertySet(),
-                new ColumnRefSet(logicalPlan.getOutputColumn()),
-                columnRefFactory);
+                new ColumnRefSet(logicalPlan.getOutputColumn()));
     }
 
     public List<PhysicalScanOperator> getScanOperators(OptExpression root, String name) {

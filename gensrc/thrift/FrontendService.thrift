@@ -1957,12 +1957,11 @@ struct TClusterSnapshotsItem {
     1: optional string snapshot_name;
     2: optional string snapshot_type;
     3: optional i64 created_time;
-    4: optional i64 finished_time;
-    5: optional i64 fe_jouranl_id;
-    6: optional i64 starmgr_jouranl_id;
-    7: optional string properties;
-    8: optional string storage_volume;
-    9: optional string storage_path;
+    4: optional i64 fe_jouranl_id;
+    5: optional i64 starmgr_jouranl_id;
+    6: optional string properties;
+    7: optional string storage_volume;
+    8: optional string storage_path;
 }
 
 struct TClusterSnapshotsRequest {

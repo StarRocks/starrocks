@@ -35,9 +35,11 @@ public class ClusterSnapshotJob implements Writable {
      * SNAPSHOTING: Doing checkpoint/image generation by replaying log for image both for FE and StarMgr and
      *              then upload the image into remote storage
      * UPLOADING: Uploading image file into remote storage
-     * FINISHED: Finish backup snapshot                 
+     * FINISHED: Finish backup snapshot
+     * EXPIRED: Not the latest finished backup snapshot
+     * DELETED: Not the lastest finished backup snapshot and the cluster snapshot has been deleted from remote
      */
-    public enum ClusterSnapshotJobState { INITIALIZING, SNAPSHOTING, UPLOADING, FINISHED, ERROR }
+    public enum ClusterSnapshotJobState { INITIALIZING, SNAPSHOTING, UPLOADING, FINISHED, EXPIRED, DELETED, ERROR }
 
     @SerializedName(value = "snapshot")
     private ClusterSnapshot snapshot;
@@ -46,8 +48,8 @@ public class ClusterSnapshotJob implements Writable {
     @SerializedName(value = "errMsg")
     private String errMsg;
 
-    public ClusterSnapshotJob(long id, String snapshotName, String storageVolumeName, long createdTime) {
-        this.snapshot = new ClusterSnapshot(id, snapshotName, storageVolumeName, createdTime, -1, 0, 0);
+    public ClusterSnapshotJob(long id, String snapshotName, String storageVolumeName, long createdTimeMs) {
+        this.snapshot = new ClusterSnapshot(id, snapshotName, storageVolumeName, createdTimeMs, -1, 0, 0);
         this.state = ClusterSnapshotJobState.INITIALIZING;
         this.errMsg = "";
     }
@@ -55,7 +57,8 @@ public class ClusterSnapshotJob implements Writable {
     public void setState(ClusterSnapshotJobState state) {
         this.state = state;
         if (state == ClusterSnapshotJobState.FINISHED) {
-            snapshot.setFinishedTime(System.currentTimeMillis());
+            snapshot.setFinishedTimeMs(System.currentTimeMillis());
+            GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().clearFinishedAutomatedClusterSnapshot(getSnapshotName());
         }
     }
 
@@ -75,12 +78,12 @@ public class ClusterSnapshotJob implements Writable {
         return snapshot.getStorageVolumeName();
     }
 
-    public long getCreatedTime() {
-        return snapshot.getCreatedTime();
+    public long getCreatedTimeMs() {
+        return snapshot.getCreatedTimeMs();
     }
 
-    public long getFinishedTime() {
-        return snapshot.getFinishedTime();
+    public long getFinishedTimeMs() {
+        return snapshot.getFinishedTimeMs();
     }
 
     public long getFeJournalId() {
@@ -95,14 +98,38 @@ public class ClusterSnapshotJob implements Writable {
         return snapshot.getId();
     }
 
+    public ClusterSnapshot getSnapshot() {
+        return snapshot;
+    }
+
     public ClusterSnapshotJobState getState() {
         return state;
     }
 
     public boolean isUnFinishedState() {
-        return state == ClusterSnapshotJobState.SNAPSHOTING ||
-               state == ClusterSnapshotJobState.UPLOADING ||
-               state == ClusterSnapshotJobState.FINISHED;
+        return state == ClusterSnapshotJobState.INITIALIZING ||
+               state == ClusterSnapshotJobState.SNAPSHOTING ||
+               state == ClusterSnapshotJobState.UPLOADING;
+    }
+
+    public boolean isError() {
+        return state == ClusterSnapshotJobState.ERROR;
+    }
+
+    public boolean isFinished() {
+        return state == ClusterSnapshotJobState.FINISHED;
+    }
+
+    public boolean isExpired() {
+        return state == ClusterSnapshotJobState.EXPIRED;
+    }
+
+    public boolean isDeleted() {
+        return state == ClusterSnapshotJobState.DELETED;
+    }
+
+    public boolean isFinalState() {
+        return state == ClusterSnapshotJobState.DELETED || state == ClusterSnapshotJobState.ERROR;
     }
 
     public void logJob() {
@@ -111,20 +138,12 @@ public class ClusterSnapshotJob implements Writable {
         GlobalStateMgr.getCurrentState().getEditLog().logClusterSnapshotLog(log);
     }
 
-    public void addAutomatedClusterSnapshot() {
-        if (state == ClusterSnapshotJobState.FINISHED) {
-            GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().addAutomatedClusterSnapshot(this.snapshot);
-            LOG.info("Finish automated cluster snapshot job successfully, job id: {}, snapshot name: {}",
-                     getId(), getSnapshotName());
-        }
-    }
-
     public TClusterSnapshotJobsItem getInfo() {
         TClusterSnapshotJobsItem item = new TClusterSnapshotJobsItem();
         item.setSnapshot_name(getSnapshotName());
         item.setJob_id(getId());
-        item.setCreated_time(getCreatedTime() / 1000);
-        item.setFinished_time(getFinishedTime() / 1000);
+        item.setCreated_time(getCreatedTimeMs() / 1000);
+        item.setFinished_time(getFinishedTimeMs() / 1000);
         item.setState(state.name());
         item.setDetail_info("");
         item.setError_message(errMsg);

@@ -59,8 +59,8 @@ public class JoinPredicatePushdown {
 
     private OptExpression joinOptExpression;
 
-    private List<ScalarOperator> leftPushDown;
-    private List<ScalarOperator> rightPushDown;
+    private final List<ScalarOperator> leftPushDown;
+    private final List<ScalarOperator> rightPushDown;
 
     /**
      * Whether to do complete equivalence derive in

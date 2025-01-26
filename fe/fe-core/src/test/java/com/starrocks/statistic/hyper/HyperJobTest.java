@@ -43,6 +43,9 @@ import com.starrocks.statistic.base.ColumnStats;
 import com.starrocks.statistic.base.PartitionSampler;
 import com.starrocks.statistic.base.PrimitiveTypeColumnStats;
 import com.starrocks.statistic.base.SubFieldColumnStats;
+import com.starrocks.statistic.base.TabletSampler;
+import com.starrocks.statistic.sample.SampleInfo;
+import com.starrocks.statistic.sample.TabletStats;
 import com.starrocks.utframe.StarRocksAssert;
 import mockit.Mock;
 import mockit.MockUp;
@@ -191,6 +194,13 @@ public class HyperJobTest extends DistributedEnvPlanTestBase {
     public void testSampleJobs() {
         Pair<List<String>, List<Type>> pair = initColumn(List.of("c1", "c2", "c3"));
 
+        new MockUp<SampleInfo>() {
+            @Mock
+            public List<TabletStats> getMediumHighWeightTablets() {
+                return List.of(new TabletStats(1, pid, 5000000));
+            }
+        };
+
         List<HyperQueryJob> jobs = HyperQueryJob.createSampleQueryJobs(connectContext, db, table, pair.first,
                 pair.second, List.of(pid), 1, sampler);
 
@@ -201,8 +211,8 @@ public class HyperJobTest extends DistributedEnvPlanTestBase {
         List<String> sql = jobs.get(1).buildQuerySQL();
         Assert.assertEquals(1, sql.size());
 
-        assertContains(sql.get(0), "with base_cte_table as " +
-                "(SELECT * FROM `test`.`t_struct` LIMIT 200000) ");
+        assertContains(sql.get(0), "with base_cte_table as ( SELECT * FROM (SELECT * FROM `test`.`t_struct` " +
+                "TABLET(1) SAMPLE('percent'='10')) t_medium_high)");
         assertContains(sql.get(0), "cast(IFNULL(SUM(CHAR_LENGTH(`c2`)) * 0/ COUNT(*), 0) as BIGINT), " +
                 "hex(hll_serialize(IFNULL(hll_raw(`c2`), hll_empty())))," +
                 " cast((COUNT(*) - COUNT(`c2`)) * 0 / COUNT(*) as BIGINT), " +
@@ -229,6 +239,19 @@ public class HyperJobTest extends DistributedEnvPlanTestBase {
         assertContains(sql.get(1), "hex(hll_serialize(IFNULL(hll_raw(`c6`.`c`.`b`), hll_empty()))), ");
         assertContains(sql.get(1), "cast((COUNT(*) - COUNT(`c6`.`c`.`b`)) * 0 / COUNT(*) as BIGINT), " +
                 "IFNULL(MAX(`c6`.`c`.`b`), ''), IFNULL(MIN(`c6`.`c`.`b`), ''), cast(-1.0 as BIGINT) FROM base_cte_table");
+    }
+
+    @Test
+    public void testSampleRows() {
+        new MockUp<TabletSampler>() {
+            @Mock
+            public List<TabletStats> sample() {
+                return List.of(new TabletStats(1, pid, 5000000));
+            }
+
+        };
+        PartitionSampler sampler = PartitionSampler.create(table, List.of(pid), Maps.newHashMap());
+        Assert.assertEquals(5550000, sampler.getSampleInfo(pid).getSampleRowCount());
     }
 
     @AfterClass

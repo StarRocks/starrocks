@@ -25,7 +25,7 @@
 
 namespace starrocks {
 
-ColumnPtr ArrayViewColumn::replicate(const Buffer<uint32_t>& offsets) {
+StatusOr<ColumnPtr> ArrayViewColumn::replicate(const Buffer<uint32_t>& offsets) {
     auto dest_size = offsets.size() - 1;
     auto new_offsets = UInt32Column::create();
     auto new_lengths = UInt32Column::create();

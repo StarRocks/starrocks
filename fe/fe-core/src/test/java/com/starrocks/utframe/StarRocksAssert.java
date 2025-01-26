@@ -65,6 +65,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.load.routineload.RoutineLoadMgr;
@@ -894,7 +895,7 @@ public class StarRocksAssert {
             withMaterializedView(sql);
             action.run();
         } catch (Exception e) {
-            Assert.fail(e.getMessage());
+            Assert.fail(DebugUtil.getStackTrace(e));
         } finally {
             // Create mv may fail.
             if (!Strings.isNullOrEmpty(mvName)) {

@@ -766,7 +766,8 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
             TRACE_SCHEDULE_LOG << src->get_name() << " " << src->support_event_scheduler();
             TRACE_SCHEDULE_LOG << sink->get_name() << " " << sink->support_event_scheduler();
         });
-
+        // TODO: using observer implement wait dependencs event
+        all_support_event_scheduler = all_support_event_scheduler && !runtime_state->enable_wait_dependent_event();
         if (all_support_event_scheduler) {
             _fragment_ctx->init_event_scheduler();
             RETURN_IF_ERROR(_fragment_ctx->set_pipeline_timer(exec_env->pipeline_timer()));

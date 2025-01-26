@@ -40,6 +40,8 @@ import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
+import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
@@ -95,15 +97,14 @@ public class UpdatePlanner {
             session.getSessionVariable().setEnableLocalShuffleAgg(false);
 
             long tableId = targetTable.getId();
-            Optimizer optimizer = new Optimizer();
-            optimizer.setUpdateTableId(tableId);
+            OptimizerContext optimizerContext = OptimizerFactory.initContext(session, columnRefFactory);
+            optimizerContext.setUpdateTableId(tableId);
 
+            Optimizer optimizer = OptimizerFactory.create(optimizerContext);
             OptExpression optimizedPlan = optimizer.optimize(
-                    session,
                     optExprBuilder.getRoot(),
                     new PhysicalPropertySet(),
-                    new ColumnRefSet(outputColumns),
-                    columnRefFactory);
+                    new ColumnRefSet(outputColumns));
             ExecPlan execPlan = PlanFragmentBuilder.createPhysicalPlan(optimizedPlan, session,
                     outputColumns, columnRefFactory, colNames, TResultSinkType.MYSQL_PROTOCAL, false);
             DescriptorTable descriptorTable = execPlan.getDescTbl();

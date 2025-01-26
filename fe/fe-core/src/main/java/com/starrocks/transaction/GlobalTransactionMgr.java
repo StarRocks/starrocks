@@ -72,6 +72,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -274,13 +275,32 @@ public class GlobalTransactionMgr implements MemoryTrackable {
                                    List<TabletFailInfo> tabletFailInfos,
                                    TxnCommitAttachment txnCommitAttachment)
             throws StarRocksException {
-        if (Config.disable_load_job) {
-            throw new TransactionCommitFailedException("disable_load_job is set to true, all load jobs are prevented");
-        }
+        // timeout is 0, means no timeout
+        prepareTransaction(dbId, transactionId, tabletCommitInfos, tabletFailInfos, txnCommitAttachment, 0);
+    }
 
+    public void prepareTransaction(
+            @NotNull long dbId, long transactionId, @NotNull List<TabletCommitInfo> tabletCommitInfos,
+            @NotNull List<TabletFailInfo> tabletFailInfos,
+            @Nullable TxnCommitAttachment attachment, long timeoutMs) throws StarRocksException {
+        TransactionState transactionState = getTransactionState(dbId, transactionId);
+        List<Long> tableId = transactionState.getTableIdList();
         LOG.debug("try to pre commit transaction: {}", transactionId);
-        DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
-        dbTransactionMgr.prepareTransaction(transactionId, tabletCommitInfos, tabletFailInfos, txnCommitAttachment, true);
+        Locker locker = new Locker();
+        if (!locker.tryLockTablesWithIntensiveDbLock(dbId, tableId, LockType.WRITE, timeoutMs, TimeUnit.MILLISECONDS)) {
+            throw new StarRocksException("get database write lock timeout, database=" + dbId + ", timeout=" + timeoutMs + "ms");
+        }
+        try {
+            if (Config.disable_load_job) {
+                throw new TransactionCommitFailedException("disable_load_job is set to true, all load jobs are prevented");
+            }
+
+            DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
+            dbTransactionMgr.prepareTransaction(transactionId, tabletCommitInfos, tabletFailInfos, attachment, true);
+            LOG.debug("prepare transaction: {} success", transactionId);
+        } finally {
+            locker.unLockTablesWithIntensiveDbLock(dbId, tableId, LockType.WRITE);
+        }
     }
 
     public void commitPreparedTransaction(long dbId, long transactionId, long timeoutMillis)
@@ -645,6 +665,19 @@ public class GlobalTransactionMgr implements MemoryTrackable {
             minId = Math.min(minId, dbTransactionMgr.getMinActiveCompactionTxnId().orElse(Long.MAX_VALUE));
         }
         return minId;
+    }
+
+    /**
+     * Get the map of active txn [txnId, tableId] of compaction transactions.
+     * @return the list of active txn stats of compaction transactions.
+     */
+    public Map<Long, Long> getLakeCompactionActiveTxnStats() {
+        Map<Long, Long> txnIdToTableIdMap = new HashMap<>();
+        for (Map.Entry<Long, DatabaseTransactionMgr> entry : dbIdToDatabaseTransactionMgrs.entrySet()) {
+            DatabaseTransactionMgr dbTransactionMgr = entry.getValue();
+            txnIdToTableIdMap.putAll(dbTransactionMgr.getLakeCompactionActiveTxnMap());
+        }
+        return txnIdToTableIdMap;
     }
 
     /**

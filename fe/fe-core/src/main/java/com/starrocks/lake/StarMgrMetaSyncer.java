@@ -309,6 +309,10 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                 if (!table.isCloudNativeTableOrMaterializedView()) {
                     continue;
                 }
+                if (!GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().isTableSafeToDeleteTablet(table.getId())) {
+                    LOG.debug("table: {} can not be synced meta for now, because of automated cluster snapshot", table.getName());
+                    continue;
+                }
                 try {
                     syncTableMetaAndColocationInfoInternal(db, (OlapTable) table, true /* forceDeleteData */);
                 } catch (Exception e) {
@@ -454,6 +458,10 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
         }
         if (!table.isCloudNativeTableOrMaterializedView()) {
             throw new DdlException("only support cloud table or cloud mv.");
+        }
+        if (!GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().isTableSafeToDeleteTablet(table.getId())) {
+            throw new DdlException("table: " + table.getName() +
+                                   " can not be synced meta for now, because of automated cluster snapshot");
         }
 
         syncTableMetaAndColocationInfoInternal(db, (OlapTable) table, forceDeleteData);

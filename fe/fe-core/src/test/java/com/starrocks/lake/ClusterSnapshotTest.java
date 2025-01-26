@@ -14,7 +14,11 @@
 
 package com.starrocks.lake.snapshot;
 
+import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.AlterTest;
+import com.starrocks.alter.MaterializedViewHandler;
+import com.starrocks.alter.SchemaChangeHandler;
+import com.starrocks.alter.SchemaChangeJobV2;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -66,6 +70,8 @@ public class ClusterSnapshotTest {
     private ClusterSnapshotMgr clusterSnapshotMgr = new ClusterSnapshotMgr();
     private boolean initSv = false;
 
+    private long nextId = 0;
+
     @BeforeClass
     public static void beforeClass() throws Exception {
         AlterTest.beforeClass();
@@ -103,7 +109,8 @@ public class ClusterSnapshotTest {
 
             @Mock
             public long getNextId() {
-                return 0L;
+                nextId = nextId + 1;
+                return nextId;
             }
         };
 
@@ -201,7 +208,6 @@ public class ClusterSnapshotTest {
         setAutomatedSnapshotOn(false);
         ClusterSnapshotJob job = GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().createAutomatedSnapshotJob();
         job.setState(ClusterSnapshotJobState.FINISHED);
-        job.addAutomatedClusterSnapshot();
         ClusterSnapshot snapshot = GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAutomatedSnapshot();
         Assert.assertTrue(job.getInfo() != null);
         Assert.assertTrue(snapshot.getInfo() != null);
@@ -219,13 +225,13 @@ public class ClusterSnapshotTest {
     public void testReplayClusterSnapshotLog() {
         // create atuomated snapshot request log
         ClusterSnapshotLog logCreate = new ClusterSnapshotLog();
-        logCreate.setCreateSnapshotNamePrefix(ClusterSnapshotMgr.AUTOMATED_NAME_PREFIX, storageVolumeName);
+        logCreate.setAutomatedSnapshotOn(storageVolumeName);
         GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().replayLog(logCreate);
         Assert.assertTrue(GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().isAutomatedSnapshotOn());
 
         // drop automated snapshot request log
         ClusterSnapshotLog logDrop = new ClusterSnapshotLog();
-        logDrop.setDropSnapshot(ClusterSnapshotMgr.AUTOMATED_NAME_PREFIX);
+        logDrop.setAutomatedSnapshotOff();
         GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().replayLog(logDrop);
         Assert.assertTrue(!GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().isAutomatedSnapshotOn());
 
@@ -257,20 +263,14 @@ public class ClusterSnapshotTest {
         GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().replayLog(logSnapshotJob);
         Assert.assertTrue(GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAllJobsInfo()
                                                                                   .getItems().get(0).state == "ERROR");
-
-        Assert.assertTrue(GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAutomatedSnapshot() == null);
-        ClusterSnapshotLog logSnapshot = new ClusterSnapshotLog();
-        logSnapshot.setCreateSnapshot(new ClusterSnapshot(0, "my_name", "my_sv", 12345, -1, 0, 0));
-        GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().replayLog(logSnapshot);
-        Assert.assertTrue(GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAutomatedSnapshot() != null);
     }
 
     @Test
     public void testCheckpointScheduler() {
         new MockUp<CheckpointController>() {
             @Mock
-            public Pair<Long, Long> getCheckpointJournalIds() {
-                return Pair.create(1L, 2L);
+            public long getImageJournalId() {
+                return 1L;
             }
 
             @Mock
@@ -309,5 +309,71 @@ public class ClusterSnapshotTest {
             }
         }
         setAutomatedSnapshotOff(false);
+    }
+
+    @Test
+    public void testDeletionControl() {
+        new MockUp<RunMode>() {
+            @Mock
+            public boolean isSharedDataMode() {
+                return true;
+            }
+        };
+
+        ClusterSnapshotMgr localClusterSnapshotMgr = new ClusterSnapshotMgr();
+        Assert.assertTrue(localClusterSnapshotMgr.getValidDeletionTimeMsByAutomatedSnapshot() == Long.MAX_VALUE);
+        localClusterSnapshotMgr.setAutomatedSnapshotOn(storageVolumeName);
+        Assert.assertEquals(localClusterSnapshotMgr.getValidDeletionTimeMsByAutomatedSnapshot(), 0L);
+
+        ClusterSnapshotJob job1 = localClusterSnapshotMgr.createAutomatedSnapshotJob();
+        job1.setState(ClusterSnapshotJobState.FINISHED);
+        Assert.assertEquals(localClusterSnapshotMgr.getValidDeletionTimeMsByAutomatedSnapshot(), 0L);
+        ClusterSnapshotJob job2 = localClusterSnapshotMgr.createAutomatedSnapshotJob();
+        job2.setState(ClusterSnapshotJobState.FINISHED);
+        Assert.assertEquals(localClusterSnapshotMgr.getValidDeletionTimeMsByAutomatedSnapshot(), job1.getCreatedTimeMs());
+        localClusterSnapshotMgr.setAutomatedSnapshotOff();
+
+        localClusterSnapshotMgr = new ClusterSnapshotMgr();
+        Assert.assertTrue(localClusterSnapshotMgr.isTableSafeToDeleteTablet(10));
+        AlterJobV2 alterjob1 = new SchemaChangeJobV2(1, 2, 10, "table1", 100000);
+        AlterJobV2 alterjob2 = new SchemaChangeJobV2(2, 2, 11, "table2", 100000);
+        alterjob1.setJobState(AlterJobV2.JobState.FINISHED);
+        alterjob1.setFinishedTimeMs(1000);
+        alterjob2.setJobState(AlterJobV2.JobState.FINISHED);
+        alterjob2.setFinishedTimeMs(1000);
+
+
+        MaterializedViewHandler rollupHandler = new MaterializedViewHandler();
+        SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
+        schemaChangeHandler.addAlterJobV2(alterjob1);
+        schemaChangeHandler.addAlterJobV2(alterjob2);
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public SchemaChangeHandler getSchemaChangeHandler() {
+                return schemaChangeHandler;
+            }
+
+            @Mock
+            public MaterializedViewHandler getRollupHandler() {
+                return rollupHandler;
+            }
+        };
+
+        localClusterSnapshotMgr.setAutomatedSnapshotOn(storageVolumeName);
+        Assert.assertTrue(!localClusterSnapshotMgr.isTableSafeToDeleteTablet(10));
+        Assert.assertTrue(!localClusterSnapshotMgr.isTableSafeToDeleteTablet(11));
+        ClusterSnapshotJob j1 = localClusterSnapshotMgr.createAutomatedSnapshotJob();
+        j1.setState(ClusterSnapshotJobState.FINISHED);
+
+        Assert.assertTrue(!localClusterSnapshotMgr.isTableSafeToDeleteTablet(10));
+        Assert.assertTrue(!localClusterSnapshotMgr.isTableSafeToDeleteTablet(11));
+
+        ClusterSnapshotJob j2 = localClusterSnapshotMgr.createAutomatedSnapshotJob();
+        j2.setState(ClusterSnapshotJobState.FINISHED);
+
+        Assert.assertTrue(localClusterSnapshotMgr.isTableSafeToDeleteTablet(10));
+        Assert.assertTrue(localClusterSnapshotMgr.isTableSafeToDeleteTablet(11));
+        localClusterSnapshotMgr.setAutomatedSnapshotOff();
     }
 }
