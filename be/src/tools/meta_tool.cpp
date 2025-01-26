@@ -96,14 +96,9 @@ using starrocks::PrimaryKeyDump;
 
 DEFINE_string(root_path, "", "storage root path");
 DEFINE_string(operation, "",
-<<<<<<< HEAD
-              "valid operation: get_meta, flag, load_meta, delete_meta, delete_rowset_meta, "
-              "show_meta, check_table_meta_consistency, print_lake_metadata, print_lake_txn_log");
-=======
               "valid operation: get_meta, flag, load_meta, delete_meta, delete_rowset_meta, get_persistent_index_meta, "
               "delete_persistent_index_meta, show_meta, check_table_meta_consistency, print_lake_metadata, "
               "print_lake_txn_log, print_lake_schema");
->>>>>>> 2d41b74802 ([Enhancement] Support get persistent index meta in meta tool (#55424))
 DEFINE_int64(tablet_id, 0, "tablet_id for tablet meta");
 DEFINE_string(tablet_uid, "", "tablet_uid for tablet meta");
 DEFINE_int64(table_id, 0, "table id for table meta");
