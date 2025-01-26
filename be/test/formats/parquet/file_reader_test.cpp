@@ -825,8 +825,8 @@ StatusOr<HdfsScannerContext*> FileReaderTest::_create_context_for_filter_row_gro
     ctx->partition_values.emplace_back(partition_col5);
 
     TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
-    ParquetUTBase::setup_conjuncts_manager(ctx->conjunct_ctxs_by_slot[slot_id], _rf_probe_collector,
-                                           tuple_desc, _runtime_state, ctx);
+    ParquetUTBase::setup_conjuncts_manager(ctx->conjunct_ctxs_by_slot[slot_id], _rf_probe_collector, tuple_desc,
+                                           _runtime_state, ctx);
 
     return ctx;
 }
@@ -870,8 +870,8 @@ StatusOr<HdfsScannerContext*> FileReaderTest::_create_context_for_filter_page_in
     ctx->partition_values.emplace_back(partition_col5);
 
     TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
-    ParquetUTBase::setup_conjuncts_manager(ctx->conjunct_ctxs_by_slot[slot_id], _rf_probe_collector,
-                                           tuple_desc, _runtime_state, ctx);
+    ParquetUTBase::setup_conjuncts_manager(ctx->conjunct_ctxs_by_slot[slot_id], _rf_probe_collector, tuple_desc,
+                                           _runtime_state, ctx);
 
     return ctx;
 }
