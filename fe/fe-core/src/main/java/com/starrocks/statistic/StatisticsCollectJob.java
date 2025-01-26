@@ -294,7 +294,10 @@ public abstract class StatisticsCollectJob {
 
         @Override
         public int compare(StatisticsCollectJob o1, StatisticsCollectJob o2) {
-            return o1.getPriority().compareTo(o2.getPriority());
+            if (o1.getPriority() != null && o2.getPriority() != null) {
+                return o1.getPriority().compareTo(o2.getPriority());
+            }
+            return 0;
         }
     }
 }
