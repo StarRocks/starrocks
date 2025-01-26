@@ -14,6 +14,7 @@
 
 package com.starrocks.statistic;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
@@ -45,6 +46,7 @@ import org.apache.velocity.app.VelocityEngine;
 
 import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -60,6 +62,7 @@ public abstract class StatisticsCollectJob {
     protected final StatsConstants.AnalyzeType type;
     protected final StatsConstants.ScheduleType scheduleType;
     protected final Map<String, String> properties;
+    protected int priority = 0;
 
     protected StatisticsCollectJob(Database db, Table table, List<String> columnNames,
                                    StatsConstants.AnalyzeType type, StatsConstants.ScheduleType scheduleType,
@@ -129,6 +132,22 @@ public abstract class StatisticsCollectJob {
 
     public boolean isAnalyzeTable() {
         return CollectionUtils.isEmpty(columnNames);
+    }
+
+    /**
+     * Healthy is [0.0, 1.0], lower healthy means higher priority
+     */
+    public void setPriorityWithHealthy(double healthy) {
+        Preconditions.checkArgument(healthy >= 0.0 && healthy <= 1.0);
+        this.priority = (int) (100 - 100 * healthy);
+    }
+
+    public void setPriority(int priority) {
+        this.priority = priority;
+    }
+
+    public int getPriority() {
+        return this.priority;
     }
 
     protected void setDefaultSessionVariable(ConnectContext context) {
@@ -241,5 +260,23 @@ public abstract class StatisticsCollectJob {
         sb.append(", properties=").append(properties);
         sb.append('}');
         return sb.toString();
+    }
+
+    public static class ComparatorWithPriority
+            implements Comparator<StatisticsCollectJob> {
+
+        @Override
+        public int compare(StatisticsCollectJob o1, StatisticsCollectJob o2) {
+            // Compare by job priority first
+            if (o1.getPriority() != o2.getPriority()) {
+                return Integer.compare(o1.getPriority(), o2.getPriority());
+            }
+            // If priority is the same, compare by type
+            if (!o1.getType().equals(o2.getType())) {
+                return o1.getType().compareTo(o2.getType());
+            }
+            // If type is the same, compare by scheduleType
+            return o1.getScheduleType().compareTo(o2.getScheduleType());
+        }
     }
 }
