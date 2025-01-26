@@ -14,6 +14,8 @@
 
 #include "runtime/int128_to_double.h"
 
+#include <glog/logging.h>
+
 #include <climits>
 #include <cstdint>
 
@@ -85,6 +87,8 @@ double __wrap___floattidf(__int128 a) {
         dst_t f;
         dst_rep_t i;
     } rep = {.i = result};
+
+    DCHECK(std::abs(rep.f - static_cast<double>(a)) < 0.001);
     return rep.f;
 }
 } // namespace starrocks
