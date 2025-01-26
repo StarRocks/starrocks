@@ -16,6 +16,7 @@ package com.starrocks.load;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.FeConstants;
@@ -220,6 +221,15 @@ public class DeletePruneTest {
         deleteStmt = (DeleteStmt) UtFrameUtils.parseStmtWithNewParser(deleteSQL, ctx);
         res = deleteHandler.extractPartitionNamesByCondition(deleteStmt, tbl);
         Assert.assertEquals(Lists.newArrayList("p20200101", "p20200102"), res);
+
+        // exceptional
+        deleteSQL = "delete from test_delete3 where date in ('2020-01-01') ";
+        deleteStmt = (DeleteStmt) UtFrameUtils.parseStmtWithNewParser(deleteSQL, ctx);
+        DeleteStmt exceptionStmt = new DeleteStmt(TableName.fromString("not_exists"), deleteStmt.getPartitionNames(),
+                deleteStmt.getWherePredicate());
+        exceptionStmt.setDeleteConditions(deleteStmt.getDeleteConditions());
+        res = deleteHandler.extractPartitionNamesByCondition(exceptionStmt, tbl);
+        Assert.assertEquals(Lists.newArrayList("p20200102", "p20200101"), res);
     }
 
     @Test
